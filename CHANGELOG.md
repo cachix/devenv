@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed orphaned daemon processes when a foreground `devenv up` was started while a daemon was already running. The foreground process would overwrite the daemon's PID file and socket, and on exit delete them — leaving the daemon and its children unmanageable. Foreground `up` now rejects with "Processes already running" when a daemon is active. Also prevented the throwaway manager in `devenv processes down` from deleting the daemon's runtime files on drop.
+
 ### Improvements
 
 - Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.

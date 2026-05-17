@@ -1599,6 +1599,20 @@ impl Devenv {
                 return self.spawn_daemon_processes(config).await;
             }
 
+            // Check if a daemon is already running. Without this guard a
+            // foreground `devenv up` would overwrite the daemon's PID file
+            // and socket, and its Drop would delete them — orphaning the
+            // daemon and its child processes.
+            let pid_file = self.native_manager_pid_file();
+            if let Ok(processes::PidStatus::Running(pid)) =
+                processes::check_pid_file(&pid_file).await
+            {
+                bail!(
+                    "Processes already running with PID {}. Stop them first with: devenv processes down",
+                    pid
+                );
+            }
+
             let tasks_runner =
                 tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
                     .build()
@@ -1798,9 +1812,12 @@ impl Devenv {
         // Determine which manager is running and create appropriate instance
         let manager: Box<dyn processes::ProcessManager> = if self.native_manager_pid_file().exists()
         {
-            // Native process manager is running
+            // Native process manager is running — create a control client
+            // that won't delete the daemon's runtime files on drop
             let runtime_dir = self.process_runtime_dir()?.clone();
-            Box::new(processes::NativeProcessManager::new(runtime_dir)?)
+            let mut manager = processes::NativeProcessManager::new(runtime_dir)?;
+            manager.set_control_client();
+            Box::new(manager)
         } else if self.processes_pid().exists() {
             // Process-compose is running
             // We don't need the procfile_script for stopping, just use a dummy path
