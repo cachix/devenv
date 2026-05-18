@@ -82,6 +82,29 @@ jobs:
           devenv_path=$(nix build -L --print-out-paths --system ${{ inputs.system }} .#devenv)
           echo "path=$devenv_path" >> $GITHUB_OUTPUT
 
+      # Verify that evaluating devenv-tasks via the module system produces the same store path
+      # as building it directly via the flake. Uses plain nixpkgs-unstable as the simulated
+      # user pkgs to prove the module ignores user's nixpkgs.
+      - name: Verify devenv-tasks module hash matches flake hash
+        run: |
+          flake_path=$(nix build --print-out-paths --no-link \
+            --system ${{ inputs.system }} .#devenv-tasks)
+
+          module_path=$(nix eval --raw --impure --expr "
+            let
+              pkgs = import (builtins.getFlake \"github:NixOS/nixpkgs/nixpkgs-unstable\")
+                { system = \"${{ inputs.system }}\"; };
+            in \"\${import ./src/modules/tasks/package.nix { inherit pkgs; lib = pkgs.lib; }}\"
+          ")
+
+          if [ "$flake_path" != "$module_path" ]; then
+            echo "devenv-tasks hash mismatch!"
+            echo "  flake:  $flake_path"
+            echo "  module: $module_path"
+            exit 1
+          fi
+          echo "devenv-tasks hashes match: $flake_path"
+
       # Run feature-gated tests that can't run in the Nix sandbox (package.nix check phase):
       # - test-nix-store: Nix store access (devenv-nix-backend)
       # - test-pty: PTY/devpts (devenv-reload, devenv-shell)
