@@ -4,52 +4,7 @@ let
   listenType = import ./lib/listen.nix { inherit lib; };
   readyType = import ./lib/ready.nix { inherit lib; };
 
-  # Attempt to evaluate devenv-tasks using the exact nixpkgs used by the root devenv flake.
-  # If the locked input is not what we expect, fall back to evaluating with the user's nixpkgs.
-  #
-  # In theory:
-  #   - The tasks binary will be built by CI and uploaded to devenv.cachix.org
-  #   - Only bumps to the nixpkgs in the root devenv flake will trigger a re-eval of devenv-tasks
-  devenv-tasks =
-    let
-      lock = builtins.fromJSON (builtins.readFile ./../../flake.lock);
-      lockedNixpkgs = lock.nodes.nixpkgs.locked;
-      lockedRustOverlay = lock.nodes.rust-overlay.locked or null;
-      # Fetch rust-overlay if it's in the lock file
-      rustOverlaySource =
-        if lockedRustOverlay != null && lockedRustOverlay.type == "github" then
-          pkgs.fetchFromGitHub
-            {
-              inherit (lockedRustOverlay) owner repo rev;
-              hash = lockedRustOverlay.narHash;
-            }
-        else
-          null;
-      devenvPkgs =
-        if lockedNixpkgs.type == "github" then
-          let
-            source = pkgs.fetchFromGitHub {
-              inherit (lockedNixpkgs) owner repo rev;
-              hash = lock.nodes.nixpkgs.locked.narHash;
-            };
-            # rust-overlay default.nix returns an overlay function when imported
-            rustOverlay = if rustOverlaySource != null then import rustOverlaySource else null;
-            overlays = lib.optional (rustOverlay != null) rustOverlay;
-          in
-          import source { inherit overlays; system = pkgs.stdenv.system; }
-        else
-          pkgs;
-      # Use rust-overlay's stable Rust for buildRustCrate
-      rustToolchain =
-        if devenvPkgs ? rust-bin
-        then devenvPkgs.rust-bin.stable.latest.default
-        else devenvPkgs.rustc;
-      workspace = devenvPkgs.callPackage ./../../nix/workspace.nix {
-        rustc = rustToolchain;
-        cargo = rustToolchain;
-      };
-    in
-    workspace.crates.devenv-tasks;
+  devenv-tasks = import ./tasks/package.nix { inherit pkgs lib; };
 
   taskType = types.submodule
     ({ name, config, ... }:
