@@ -5,6 +5,7 @@
 ### Bug Fixes
 
 - Fixed orphaned daemon processes when a foreground `devenv up` was started while a daemon was already running. The foreground process would overwrite the daemon's PID file and socket, and on exit delete them — leaving the daemon and its children unmanageable. Foreground `up` now rejects with "Processes already running" when a daemon is active. Also prevented the throwaway manager in `devenv processes down` from deleting the daemon's runtime files on drop.
+- Fixed the shell hook spawning a nested `devenv shell` when the user manually entered `devenv shell` (so `DEVENV_ROOT` was set but `_DEVENV_HOOK_DIR` was not). The "already inside a devenv shell" early-return now keys off `DEVENV_ROOT` again, while the cd-out `exit` still requires `_DEVENV_HOOK_DIR` so direnv-exported `DEVENV_ROOT` in the outer shell does not close the terminal. Follow-up to [#2815](https://github.com/cachix/devenv/pull/2815).
 
 ### Improvements
 
