@@ -70,7 +70,7 @@ use once_cell::sync::OnceCell;
 use crate::anyhow_ext::AnyhowToMiette;
 use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
 use crate::cnix_store::CNixStore;
-use crate::error::{dedent_lines, select_raw_error};
+use crate::error::format_eval_error;
 use crate::umask_guard::UmaskGuard;
 
 /// Initialize Nix FFI globals, register the calling thread with the GC,
@@ -555,17 +555,11 @@ impl NixCBackend {
     }
 
     fn enrich_eval_error(&self, err: miette::Error, context: &str) -> miette::Error {
-        // Flatten into a single diagnostic. Nix already emits a complete
-        // tree-style trace; letting miette render the FFI cause chain on top
-        // of that produces deep continuation indent under `─▶` arrows.
-        //
-        // Skip warning-prefixed log entries: Nix occasionally emits warnings
-        // (e.g. restricted-settings notices during init) through the FFI logger
-        // at error verbosity, which would otherwise shadow the actual error —
-        // for syntax errors the real message only arrives via the FFI return.
-        let nix_errors = self.nix_log_bridge.peek_pre_repl_errors();
-        let raw = select_raw_error(&nix_errors, || format!("{err:#}"));
-        miette!("{context}: {}", dedent_lines(&raw))
+        // Always render the eval-returned error (`{err:#}` flattens the FFI
+        // cause chain), never a log line captured during evaluation — a Nix
+        // warning forwarded at error verbosity could otherwise shadow the real
+        // error. See `error::format_eval_error` for the rendering rules.
+        miette::Report::from(format_eval_error(&format!("{err:#}"), context))
     }
 
     fn eval_attr_uncached(
