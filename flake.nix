@@ -48,15 +48,14 @@
   inputs.nixd = {
     url = "github:nix-community/nixd";
     inputs = {
-      # nixd requires nixComponents_2_33 which was dropped
-      # nixpkgs.follows = "nixpkgs";
+      nixpkgs.follows = "nixpkgs";
       flake-parts.follows = "flake-parts";
     };
   };
   inputs.crate2nix = {
     # https://github.com/nix-community/crate2nix/issues/439
     url = "github:rossng/crate2nix/ba5dd398e31ee422fbe021767eb83b0650303a6e";
-    inputs.nixpkgs.follows = "nixpkgs";
+    flake = false;
   };
   inputs.rust-overlay = {
     url = "github:oxalica/rust-overlay";
@@ -64,6 +63,7 @@
   };
   inputs.ghostty = {
     url = "github:ghostty-org/ghostty";
+    flake = false;
   };
 
   outputs =
@@ -96,8 +96,8 @@
                 inherit (inputs.nix.packages.${system}.nix) libs;
               };
               nixd = inputs.nixd.packages.${system}.nixd;
-              crate2nix = inputs.crate2nix.packages.${system}.default;
-              libghostty-vt = inputs.ghostty.packages.${system}.libghostty-vt;
+              crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
+              libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" { };
             })
           ];
           pkgs = import nixpkgs { inherit overlays system; };
@@ -114,7 +114,7 @@
         {
           inherit (workspace.crates) devenv devenv-tasks;
           default = self.packages.${system}.devenv;
-          crate2nix = inputs.crate2nix.packages.${system}.default;
+          crate2nix = pkgs.crate2nix;
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           devenv-image = import ./containers/devenv/image.nix {

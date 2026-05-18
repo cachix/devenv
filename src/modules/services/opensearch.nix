@@ -26,7 +26,6 @@ let
     text = cfg.logging;
   };
 
-
   startScript = pkgs.writeShellScript "opensearch-startup" ''
     set -e
 
@@ -44,6 +43,9 @@ let
 
     rm -f "$OPENSEARCH_DATA/modules"
     ln -sf ${cfg.package}/modules "$OPENSEARCH_DATA/modules"
+
+    rm -f "$OPENSEARCH_DATA/agent"
+    ln -sf ${cfg.package}/agent "$OPENSEARCH_DATA/agent"
 
     # Create config dir
     mkdir -m 0700 -p "$OPENSEARCH_DATA/config"
