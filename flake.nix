@@ -48,8 +48,7 @@
   inputs.nixd = {
     url = "github:nix-community/nixd";
     inputs = {
-      # nixd requires nixComponents_2_33 which was dropped
-      # nixpkgs.follows = "nixpkgs";
+      nixpkgs.follows = "nixpkgs";
       flake-parts.follows = "flake-parts";
     };
   };
