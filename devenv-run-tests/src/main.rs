@@ -392,69 +392,69 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
                 .into_diagnostic()?;
         }
 
-        // Now load config from the current directory (which might be temp dir)
-        let mut config = Config::load_from(&devenv_root)?;
-        for input in args.override_inputs.chunks_exact(2) {
-            config
-                .override_input_url(&input[0], &input[1])
-                .wrap_err(format!(
-                    "Failed to override input {} with {}",
-                    &input[0], &input[1]
-                ))?;
-        }
-
-        // Override the input for the devenv module
-        config
-            .add_input(
-                "devenv",
-                &format!("git+file:{}?dir=src/modules", cwd.display()),
-                &[],
-            )
-            .wrap_err("Failed to add devenv input")?;
-
-        let nix_settings = NixSettings {
-            backend: config.backend.clone(),
-            ..NixSettings::default()
-        };
-        let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
-        let secret_settings = SecretSettings::resolve(SecretOptions::default(), &config);
-        let options = DevenvOptions {
-            inputs: config.inputs,
-            imports: config.imports,
-            git_root: config.git_root,
-            nixpkgs_config,
-            nix_settings,
-            secret_settings,
-            devenv_root: Some(devenv_root.clone()),
-            devenv_dotfile: Some(devenv_dotfile),
-            ..Default::default()
-        };
-        let devenv = Devenv::new(options).await?;
-
         eprintln!("  Running {dir_name}");
 
         // A script to run inside the shell before the test.
         let setup_script = ".setup.sh";
 
-        // Run .setup.sh if it exists
-        if PathBuf::from(setup_script).exists() {
-            eprintln!("    Running {setup_script}");
-            let output = devenv
-                .run_in_shell(
-                    format!("./{setup_script}"),
-                    &[],
-                    Some("Running setup script"),
-                )
-                .await?;
-            if !output.status.success() {
-                return Err(miette::miette!(
-                    "Setup script failed. Status code: {}",
-                    output.status.code().unwrap_or(1)
-                ));
-            }
-        }
-
         let status: miette::Result<()> = if test_config.use_shell {
+            // Now load config from the current directory (which might be temp dir)
+            let mut config = Config::load_from(&devenv_root)?;
+            for input in args.override_inputs.chunks_exact(2) {
+                config
+                    .override_input_url(&input[0], &input[1])
+                    .wrap_err(format!(
+                        "Failed to override input {} with {}",
+                        &input[0], &input[1]
+                    ))?;
+            }
+
+            // Override the input for the devenv module
+            config
+                .add_input(
+                    "devenv",
+                    &format!("git+file:{}?dir=src/modules", cwd.display()),
+                    &[],
+                )
+                .wrap_err("Failed to add devenv input")?;
+
+            let nix_settings = NixSettings {
+                backend: config.backend.clone(),
+                ..NixSettings::default()
+            };
+            let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
+            let secret_settings = SecretSettings::resolve(SecretOptions::default(), &config);
+            let options = DevenvOptions {
+                inputs: config.inputs,
+                imports: config.imports,
+                git_root: config.git_root,
+                nixpkgs_config,
+                nix_settings,
+                secret_settings,
+                devenv_root: Some(devenv_root.clone()),
+                devenv_dotfile: Some(devenv_dotfile),
+                ..Default::default()
+            };
+            let devenv = Devenv::new(options).await?;
+
+            // Run .setup.sh if it exists
+            if PathBuf::from(setup_script).exists() {
+                eprintln!("    Running {setup_script}");
+                let output = devenv
+                    .run_in_shell(
+                        format!("./{setup_script}"),
+                        &[],
+                        Some("Running setup script"),
+                    )
+                    .await?;
+                if !output.status.success() {
+                    return Err(miette::miette!(
+                        "Setup script failed. Status code: {}",
+                        output.status.code().unwrap_or(1)
+                    ));
+                }
+            }
+
             devenv.test(devenv::VerbosityLevel::Normal).await
         } else {
             // Run .test.sh directly - it must exist when run_test_sh is false
