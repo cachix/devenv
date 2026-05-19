@@ -281,6 +281,26 @@ fn build_activity_prefix(
     prefix
 }
 
+/// Like `build_activity_prefix`, but renders a process status dot whose shape
+/// encodes the lifecycle state (see `process_status_dot`) instead of a spinner.
+fn build_process_prefix(
+    depth: usize,
+    glyph: &'static str,
+    color: Color,
+    pulse: bool,
+) -> Vec<AnyElement<'static>> {
+    let mut prefix = HierarchyPrefixComponent::new(depth).render();
+
+    prefix.push(
+        element!(View(margin_right: 1) {
+            StatusDot(glyph: glyph.to_string(), color: Some(color), pulse: pulse)
+        })
+        .into_any(),
+    );
+
+    prefix
+}
+
 /// Render a single activity (owned version)
 #[component]
 fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -700,10 +720,11 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             let status_text = Some(format!("{}{}", status_str, ports_suffix));
 
-            // Process prefix: spinner when running, no indicator when stopped
-            // but not yet completed, checkmark/X when completed.
-            let show_spinner = completed.is_none() && is_active;
-            let prefix = build_activity_prefix(*depth, *completed, show_spinner);
+            // Process prefix: a status dot whose shape encodes the lifecycle
+            // state; transient states pulse instead of animating a spinner.
+            let (dot_glyph, dot_color, dot_pulse) =
+                process_status_dot(&process_data.status, *completed, *shutting_down);
+            let prefix = build_process_prefix(*depth, dot_glyph, dot_color, dot_pulse);
 
             // Hide elapsed time for not-started/stopped processes
             let process_elapsed = if matches!(process_data.status, ProcessStatus::NotStarted)
