@@ -36,11 +36,29 @@ pub const COLOR_FAILED: Color = Color::AnsiValue(160);
 pub const COLOR_INFO: Color = Color::AnsiValue(39);
 /// Gold for selected/interactive items
 pub const COLOR_INTERACTIVE: Color = Color::AnsiValue(220);
+/// Yellow for transient/in-progress process states (starting, waiting, draining)
+pub const COLOR_TRANSIENT: Color = Color::AnsiValue(214);
 
 /// Spinner animation frames (braille dots pattern)
 pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 /// Spinner animation interval in milliseconds
 pub const SPINNER_INTERVAL_MS: u64 = 80;
+
+/// Process status dot glyphs. Shape encodes lifecycle so state reads without
+/// relying on color (color only reinforces): inert ring, half = transitioning,
+/// fisheye = alive, full = ready.
+/// Inert / not started.
+pub const DOT_INERT: &str = "◌";
+/// Idle ring (waiting on deps, or cleanly stopped).
+pub const DOT_RING: &str = "○";
+/// Transitioning (starting / restarting / draining).
+pub const DOT_HALF: &str = "◐";
+/// Running without a readiness probe (alive, unverified).
+pub const DOT_RUNNING: &str = "◉";
+/// Ready (readiness probe passed).
+pub const DOT_READY: &str = "●";
+/// Interval between pulse (dim/bright) toggles for transient dots, in ms.
+pub const PULSE_INTERVAL_MS: u64 = 500;
 
 /// Success checkmark character
 pub const CHECKMARK: &str = "✓";

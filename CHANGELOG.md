@@ -4,10 +4,13 @@
 
 ### Bug Fixes
 
-- Fixed orphaned daemon processes when a foreground `devenv up` was started while a daemon was already running. The foreground process would overwrite the daemon's PID file and socket, and on exit delete them — leaving the daemon and its children unmanageable. Foreground `up` now rejects with "Processes already running" when a daemon is active. Also prevented the throwaway manager in `devenv processes down` from deleting the daemon's runtime files on drop.
+- Fixed `devenv up` corrupting a running daemon's PID file and socket when started in the foreground, leaving the daemon unmanageable. Foreground `up` now rejects with "Processes already running" when a daemon is active.
+- Fixed shell hook spawning a nested `devenv shell` when `devenv shell` was entered manually. Follow-up to [#2815](https://github.com/cachix/devenv/pull/2815).
+- Fixed "zoxide: infinite loop detected" when using `zoxide init --cmd=cd fish` and `cd`-ing into a devenv project. The fish hook now defers spawning `devenv shell` to the next prompt instead of spawning inline inside the PWD event handler, so in-progress shell state never leaks into the devenv shell ([#2841](https://github.com/cachix/devenv/issues/2841)).
 
 ### Improvements
 
+- The TUI now shows each process's state as a status dot whose shape encodes the lifecycle (waiting, starting, running, ready, stopped, failed) instead of an identical spinner on every process. The shape carries the state so it reads without relying on color; transient states gently pulse to signal progress.
 - Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.
 
 ### Breaking Changes

@@ -7,20 +7,19 @@ _devenv_hook() {
     local previous_exit_status=$?
     [[ "$_DEVENV_HOOK_PWD" == "$PWD" ]] && return $previous_exit_status
 
-    # Inside a hook-spawned devenv shell: exit when leaving the project
-    # directory. `_DEVENV_HOOK_DIR` is the marker — set only on shells we
-    # spawned below. `DEVENV_ROOT` alone is not enough: direnv (and other
-    # tools) may export it into the user's outer shell, and an unguarded
-    # `exit` there closes the terminal.
-    if [[ -n "${_DEVENV_HOOK_DIR:-}" && -n "${DEVENV_ROOT:-}" ]]; then
-        case "$PWD" in
-            "${DEVENV_ROOT}"|"${DEVENV_ROOT}"/*) ;;
-            *)
-                # Save target directory so the parent shell can cd there after exit
-                printf '%s' "$PWD" > "${DEVENV_ROOT}/.devenv/exit-dir"
-                exit $previous_exit_status
-                ;;
-        esac
+    # `DEVENV_ROOT` set means a devenv shell is already active — hook does
+    # nothing. Hook-spawned shells (marked by `_DEVENV_HOOK_DIR`) additionally
+    # `exit` when cd-ing outside the project so the parent shell can follow.
+    if [[ -n "${DEVENV_ROOT:-}" ]]; then
+        if [[ -n "${_DEVENV_HOOK_DIR:-}" ]]; then
+            case "$PWD" in
+                "${DEVENV_ROOT}"|"${DEVENV_ROOT}"/*) ;;
+                *)
+                    printf '%s' "$PWD" > "${DEVENV_ROOT}/.devenv/exit-dir"
+                    exit $previous_exit_status
+                    ;;
+            esac
+        fi
         _DEVENV_HOOK_PWD="$PWD"
         return $previous_exit_status
     fi

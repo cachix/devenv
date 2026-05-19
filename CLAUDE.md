@@ -161,6 +161,7 @@ When updating the changelog:
 3. Group entries under **Bug Fixes**, **Improvements**, or **Breaking Changes**.
 4. Link GitHub issues when referenced in commit messages (search for `Fixes`/`Closes`/`#` in commit bodies).
 5. The unreleased section sits above the last release entry.
+6. Write for users, not maintainers: describe the symptom and user-visible outcome. Omit implementation details (internal variable names, struct names, code paths). One or two sentences max.
 
 ## Files That Should Not Be Edited
 
