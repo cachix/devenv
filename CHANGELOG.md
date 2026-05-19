@@ -6,6 +6,7 @@
 
 - Fixed `devenv up` corrupting a running daemon's PID file and socket when started in the foreground, leaving the daemon unmanageable. Foreground `up` now rejects with "Processes already running" when a daemon is active.
 - Fixed shell hook spawning a nested `devenv shell` when `devenv shell` was entered manually. Follow-up to [#2815](https://github.com/cachix/devenv/pull/2815).
+- Fixed "zoxide: infinite loop detected" when using `zoxide init --cmd=cd fish` and `cd`-ing into a devenv project. The fish hook now defers spawning `devenv shell` to the next prompt instead of spawning inline inside the PWD event handler, so in-progress shell state never leaks into the devenv shell ([#2841](https://github.com/cachix/devenv/issues/2841)).
 
 ### Improvements
 
