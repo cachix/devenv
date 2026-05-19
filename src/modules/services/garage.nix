@@ -1,7 +1,13 @@
-{ pkgs, lib, config, ... }:
+# Devenv module for Garage:
+# The shipped module has a bug, as the configure does not get executed.
+{ pkgs
+, lib
+, config
+, ...
+}:
 
 let
-  cfg = config.services.garage;
+  cfg = config.custodian.services.garage;
   types = lib.types;
 
   parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
@@ -41,6 +47,7 @@ let
 
   configureScript = ''
     set -euo pipefail
+
     GARAGE="${cfg.package}/bin/garage -c ${configFile}"
 
     # Apply the cluster layout once. Garage rejects S3 traffic until at
@@ -60,7 +67,7 @@ let
   '';
 in
 {
-  options.services.garage = {
+  options.custodian.services.garage = {
     enable = lib.mkEnableOption "Garage S3-compatible object storage";
 
     package = lib.mkOption {
@@ -166,11 +173,10 @@ in
       ports.rpc.allocate = 3901;
       exec = "exec ${cfg.package}/bin/garage -c ${configFile} server";
       ready.exec = ''
-        ${pkgs.curl}/bin/curl -sf \
-          -H "Authorization: Bearer ${cfg.adminToken}" \
-          "http://${adminHost}:${toString allocatedAdminPort}/v1/health"
+        ${pkgs.curl}/bin/curl -f -H 'Authorization: Bearer ${cfg.adminToken}' 'http://${adminHost}:${toString allocatedAdminPort}/v1/health'
       '';
-      before = [ "devenv:garage:configure" ];
+
+      after = [ "devenv:garage:setup" ];
     };
 
     env = {
@@ -184,13 +190,11 @@ in
       exec = ''
         mkdir -p "${config.env.DEVENV_STATE}/garage/meta" "${config.env.DEVENV_STATE}/garage/data"
       '';
-      before = [ "devenv:processes:garage" ];
     };
 
-    # Apply the cluster layout once garage is accepting connections so
-    # bucket commands can't race against a node with no role assigned.
-    tasks."devenv:garage:configure" = {
+    processes.garage-configure = {
       exec = configureScript;
+      after = [ "devenv:processes:garage@ready" ];
     };
   };
 }
