@@ -1,5 +1,3 @@
-# Devenv module for Garage:
-# The shipped module has a bug, as the configure does not get executed.
 { pkgs
 , lib
 , config
@@ -7,7 +5,7 @@
 }:
 
 let
-  cfg = config.custodian.services.garage;
+  cfg = config.services.garage;
   types = lib.types;
 
   parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
@@ -67,7 +65,7 @@ let
   '';
 in
 {
-  options.custodian.services.garage = {
+  options.services.garage = {
     enable = lib.mkEnableOption "Garage S3-compatible object storage";
 
     package = lib.mkOption {
