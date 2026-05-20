@@ -721,12 +721,13 @@ pub enum Commands {
         target: Option<PathBuf>,
         #[arg(
             long,
+            conflicts_with = "no_skip_envrc",
+            help = "Skip .envrc file (default).",
             env = "DEVENV_SKIP_ENVRC",
-            value_parser = clap::builder::BoolishValueParser::new(),
-            help = "Skip .envrc file (default)."
+            value_parser = clap::builder::BoolishValueParser::new()
          )]
         skip_envrc: bool,
-        #[arg(long, help = "Include .envrc file.")]
+        #[arg(long, conflicts_with = "skip_envrc", help = "Include .envrc file.")]
         no_skip_envrc: bool,
     },
 
