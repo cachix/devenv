@@ -717,7 +717,13 @@ fn is_flag(arg: &std::ffi::OsString) -> bool {
 #[derive(Subcommand, Clone)]
 pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, and .gitignore.")]
-    Init { target: Option<PathBuf> },
+    Init {
+        target: Option<PathBuf>,
+        #[arg(long, help = "Include .envrc file.")]
+        envrc: bool,
+        #[arg(long, help = "Skip .envrc file.")]
+        no_envrc: bool,
+    },
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
     Generate,
