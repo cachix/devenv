@@ -719,10 +719,10 @@ pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, and .gitignore.")]
     Init {
         target: Option<PathBuf>,
+        #[arg(long, help = "Skip .envrc file (default).")]
+        skip_envrc: bool,
         #[arg(long, help = "Include .envrc file.")]
-        envrc: bool,
-        #[arg(long, help = "Skip .envrc file.")]
-        no_envrc: bool,
+        no_skip_envrc: bool,
     },
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
