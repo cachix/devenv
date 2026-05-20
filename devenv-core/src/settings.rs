@@ -131,6 +131,8 @@ pub struct NixOptions {
     pub nix_options: Vec<String>,
     pub nix_debugger: Option<bool>,
     pub backend: Option<NixBackendType>,
+    /// Backend log verbosity (display threshold).
+    pub verbosity: Option<crate::internal_log::Verbosity>,
 }
 
 /// Resolved Nix build settings.
@@ -150,6 +152,31 @@ pub struct NixSettings {
     /// When true, bypass Nix's fetcher cache (equivalent to `nix --refresh`).
     /// Sets `tarball-ttl` to 0 so inputs resolve to the latest revision.
     pub refresh_fetchers: bool,
+    /// Display threshold for Nix backend log output.
+    ///
+    /// Messages above this level are dropped before they reach
+    /// tracing/TUI/console. Independent of the backend's internal floor
+    /// (e.g. the C FFI backend always runs at least Talkative so that
+    /// file-tracking events flow).
+    pub verbosity: crate::internal_log::Verbosity,
+}
+
+/// Minimum verbosity the C FFI backend needs to function.
+///
+/// `lvlTalkative` is required so the evaluator emits "evaluating file"
+/// activities used for lorri-style file tracking.
+pub const NIX_BACKEND_FLOOR: crate::internal_log::Verbosity =
+    crate::internal_log::Verbosity::Talkative;
+
+impl NixSettings {
+    /// FFI verbosity: floored to the backend's minimum requirement.
+    ///
+    /// Returned value is what backends should pass to their underlying
+    /// log/verbosity API. The display threshold (`verbosity`) is still used
+    /// downstream to drop messages the user didn't ask for.
+    pub fn ffi_verbosity(&self) -> crate::internal_log::Verbosity {
+        self.verbosity.max(NIX_BACKEND_FLOOR)
+    }
 }
 
 impl Default for NixSettings {
@@ -165,6 +192,7 @@ impl Default for NixSettings {
             nix_debugger: false,
             backend: NixBackendType::default(),
             refresh_fetchers: false,
+            verbosity: NIX_BACKEND_FLOOR,
         }
     }
 }
@@ -186,6 +214,7 @@ impl NixSettings {
             nix_debugger: options.nix_debugger.unwrap_or(false),
             backend: options.backend.unwrap_or_else(|| config.backend.clone()),
             refresh_fetchers: false,
+            verbosity: options.verbosity.unwrap_or(NIX_BACKEND_FLOOR),
         }
     }
 }

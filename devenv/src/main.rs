@@ -209,12 +209,31 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
     let command = cli.command;
 
     // UI options: verbosity, log level, tracing, TUI. Pure CLI + env, no config.
-    let verbosity = resolve_verbosity(&cli.cli_options);
+    let debug_mode = cli.cli_options.debug;
+    let verbosity = if debug_mode {
+        // Debug mode opens up every dial: activity filters in the TUI/console
+        // also widen.
+        VerbosityLevel::Verbose
+    } else {
+        resolve_verbosity(&cli.cli_options)
+    };
     let quiet = matches!(verbosity, VerbosityLevel::Quiet);
-    let log_level = match verbosity {
-        VerbosityLevel::Verbose => devenv_tracing::Level::Debug,
-        VerbosityLevel::Quiet => devenv_tracing::Level::Warn,
-        VerbosityLevel::Normal => devenv_tracing::Level::default(),
+    let log_level = if debug_mode {
+        devenv_tracing::Level::Trace
+    } else {
+        match verbosity {
+            VerbosityLevel::Verbose => devenv_tracing::Level::Debug,
+            VerbosityLevel::Quiet => devenv_tracing::Level::Warn,
+            VerbosityLevel::Normal => devenv_tracing::Level::default(),
+        }
+    };
+    // Nix backend display verbosity. `--debug` forces Vomit, otherwise honour
+    // `--nix-verbosity` / `DEVENV_NIX_VERBOSITY`, falling back to the backend
+    // floor (Talkative).
+    let nix_verbosity_override = if debug_mode {
+        Some(devenv_core::Verbosity::Vomit)
+    } else {
+        cli.cli_options.nix_verbosity.map(Into::into)
     };
     // `resolve()` folds legacy `--trace-output` into `tracing_specs`,
     // so a single walk covers env, --trace-to, and --trace-output.
@@ -290,8 +309,9 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
     }
 
     // Resolve settings from CLI + Config (pure functions, no mutation).
-    let mut nix_settings =
-        NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
+    let mut nix_options = devenv_core::NixOptions::from(cli.nix_args);
+    nix_options.verbosity = nix_verbosity_override;
+    let mut nix_settings = NixSettings::resolve(nix_options, &config);
     if matches!(command, Commands::Update { .. }) {
         nix_settings.refresh_fetchers = true;
     }

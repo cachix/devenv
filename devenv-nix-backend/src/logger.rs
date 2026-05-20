@@ -46,25 +46,28 @@ pub struct NixLoggerSetup {
 /// The logger must be kept alive for the duration of Nix operations.
 /// The bridge is used to track eval activities dynamically via `begin_eval`/`end_eval`
 /// and to collect input operations for caching via observers.
-pub fn setup_nix_logger() -> Result<NixLoggerSetup> {
+///
+/// `display_verbosity` is the user-facing threshold. The FFI is configured at
+/// `max(display_verbosity, Talkative)` so that the evaluator keeps emitting
+/// "evaluating file" activities used for lorri-style file tracking. Messages
+/// above the display threshold are dropped before reaching the bridge.
+pub fn setup_nix_logger(display_verbosity: Verbosity) -> Result<NixLoggerSetup> {
     let bridge = NixLogBridge::new();
 
     let mut context = Context::new();
 
-    // Set verbosity to Talkative so we receive "evaluating file" messages
-    // These messages are emitted at lvlTalkative (4) and are needed to show
-    // the "Evaluating" activity in the UI
+    // Floor the FFI verbosity at Talkative so that "evaluating file" activities
+    // (lvlTalkative = 4) keep flowing; without them the "Evaluating" UI
+    // activity disappears.
+    let ffi_level = display_verbosity.max(Verbosity::Talkative);
     unsafe {
-        nix_bindings_bindgen_raw::set_verbosity(
-            context.ptr(),
-            nix_bindings_bindgen_raw::verbosity_NIX_LVL_TALKATIVE,
-        );
+        nix_bindings_bindgen_raw::set_verbosity(context.ptr(), ffi_level as u32);
     }
 
     let on_start = create_start_callback(Arc::clone(&bridge));
     let on_stop = create_stop_callback(Arc::clone(&bridge));
     let on_result = create_result_callback(Arc::clone(&bridge));
-    let on_log = create_log_callback(Arc::clone(&bridge));
+    let on_log = create_log_callback(Arc::clone(&bridge), display_verbosity);
 
     let logger = ActivityLoggerBuilder::new()
         .on_start(on_start)
@@ -163,6 +166,7 @@ fn create_result_callback(
 /// Create a callback that handles log messages from FFI
 fn create_log_callback(
     bridge: Arc<NixLogBridge>,
+    display_threshold: Verbosity,
 ) -> impl Fn(i32, &str) + Clone + Send + Sync + 'static {
     move |level: i32, msg: &str| {
         // Convert level to Verbosity
@@ -174,6 +178,13 @@ fn create_log_callback(
         if level == 0 {
             // Level 0 = Error
             bridge.store_pre_repl_error(msg.to_string());
+        }
+
+        // Drop messages above the user-facing threshold. Errors always pass
+        // through so that store_pre_repl_error has had a chance to capture
+        // them above.
+        if verbosity > display_threshold {
+            return;
         }
 
         let log = InternalLog::Msg {
@@ -201,7 +212,7 @@ mod tests {
         let _gc_registration = gc_register_my_thread();
 
         // Create logger - this registers the activity callbacks
-        let _setup = setup_nix_logger().expect("Failed to setup logger");
+        let _setup = setup_nix_logger(Verbosity::Talkative).expect("Failed to setup logger");
 
         // If we get here without panicking, the logger was set up correctly
         assert!(true, "Logger setup should not panic");
@@ -215,7 +226,7 @@ mod tests {
         let _gc_registration = gc_register_my_thread();
 
         // Create logger - this registers the activity callbacks
-        let setup = setup_nix_logger().expect("Failed to setup logger");
+        let setup = setup_nix_logger(Verbosity::Talkative).expect("Failed to setup logger");
 
         // Begin eval scope - guard calls end_eval on drop
         let _eval_guard = setup.bridge.begin_eval(1);

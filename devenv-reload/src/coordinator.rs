@@ -285,7 +285,7 @@ impl ShellCoordinator {
                         new_state,
                         WatchedPathState::Missing | WatchedPathState::Unreadable
                     ) {
-                        tracing::warn!(
+                        tracing::trace!(
                             "Watched path became unavailable, forcing reload: {:?}",
                             path
                         );

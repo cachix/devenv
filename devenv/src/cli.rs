@@ -303,6 +303,7 @@ impl From<NixCliArgs> for NixOptions {
             nix_options: cli.nix_options,
             nix_debugger: cli.nix_debugger.then_some(true),
             backend: cli.backend,
+            verbosity: None,
         }
     }
 }
@@ -503,6 +504,35 @@ pub struct TracingCliArgs {
     pub trace_format: TraceFormat,
 }
 
+/// CLI mirror of `devenv_core::internal_log::Verbosity`.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+pub enum NixVerbosityArg {
+    Error,
+    Warn,
+    Notice,
+    Info,
+    Talkative,
+    Chatty,
+    Debug,
+    Vomit,
+}
+
+impl From<NixVerbosityArg> for devenv_core::Verbosity {
+    fn from(value: NixVerbosityArg) -> Self {
+        use devenv_core::Verbosity::*;
+        match value {
+            NixVerbosityArg::Error => Error,
+            NixVerbosityArg::Warn => Warn,
+            NixVerbosityArg::Notice => Notice,
+            NixVerbosityArg::Info => Info,
+            NixVerbosityArg::Talkative => Talkative,
+            NixVerbosityArg::Chatty => Chatty,
+            NixVerbosityArg::Debug => Debug,
+            NixVerbosityArg::Vomit => Vomit,
+        }
+    }
+}
+
 #[derive(clap::Args, Clone, Debug)]
 #[command(next_help_heading = "Global options")]
 pub struct CliOptions {
@@ -517,6 +547,25 @@ pub struct CliOptions {
         help = "Silence all logs"
     )]
     pub quiet: bool,
+
+    #[arg(
+        long,
+        global = true,
+        env = "DEVENV_DEBUG",
+        help = "Enable all debug output: trace-level devenv logs and vomit-level Nix logs.",
+        long_help = "Master debug switch. Sets the devenv tracing filter to TRACE and the Nix backend to Vomit verbosity. Overrides --verbose and --nix-verbosity."
+    )]
+    pub debug: bool,
+
+    #[arg(
+        long,
+        global = true,
+        env = "DEVENV_NIX_VERBOSITY",
+        value_enum,
+        help = "Display threshold for Nix backend logs.",
+        long_help = "Filters which Nix backend log messages reach the UI. The backend's internal verbosity is floored at `talkative` regardless of this setting so that file-tracking events keep working."
+    )]
+    pub nix_verbosity: Option<NixVerbosityArg>,
 
     #[arg(
         long,

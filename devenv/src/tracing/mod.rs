@@ -27,6 +27,7 @@ pub enum Level {
     #[default]
     Info,
     Debug,
+    Trace,
 }
 
 impl From<Level> for LevelFilter {
@@ -37,6 +38,7 @@ impl From<Level> for LevelFilter {
             Level::Warn => LevelFilter::WARN,
             Level::Info => LevelFilter::INFO,
             Level::Debug => LevelFilter::DEBUG,
+            Level::Trace => LevelFilter::TRACE,
         }
     }
 }

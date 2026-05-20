@@ -14,6 +14,7 @@
 
 ### Improvements
 
+- Added `--debug` (env: `DEVENV_DEBUG`) as a master debug switch that raises the devenv tracing filter to TRACE and the Nix backend's log verbosity to Vomit. Added `--nix-verbosity` (env: `DEVENV_NIX_VERBOSITY`) to set the Nix backend display threshold independently; the backend's internal verbosity is floored at `talkative` so file-tracking events keep flowing.
 - `devenv repl` now exposes `inputs` alongside `devenv` and `pkgs`, so you can inspect inputs declared in `devenv.yaml` directly from the REPL (e.g. `inputs.nixpkgs.lib.version`).
 - The TUI now shows each process's state as a status dot whose shape encodes the lifecycle (waiting, starting, running, ready, stopped, failed) instead of an identical spinner on every process. The shape carries the state so it reads without relying on color; transient states gently pulse to signal progress.
 - Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.

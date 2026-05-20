@@ -417,8 +417,9 @@ impl Devenv {
                 let (flake_settings, fetchers_settings) = crate::backend::build_settings()?;
 
                 // Install the activity logger before locking.
-                let logger_setup = devenv_nix_backend::logger::setup_nix_logger()
-                    .wrap_err("Failed to set up activity logger")?;
+                let logger_setup =
+                    devenv_nix_backend::logger::setup_nix_logger(nix_settings.verbosity)
+                        .wrap_err("Failed to set up activity logger")?;
 
                 let fingerprint =
                     devenv_nix_backend::lock::with_lock_scope(&logger_setup.bridge, || {
