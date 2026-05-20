@@ -84,7 +84,7 @@ fn main_inner() -> Result<()> {
             } => {
                 let verbosity = resolve_verbosity(&cli.cli_options);
                 let skip_envrc =
-                    devenv_core::settings::flag(*skip_envrc, *no_skip_envrc).unwrap_or_default();
+                    devenv_core::settings::flag(*skip_envrc, *no_skip_envrc).unwrap_or(true);
                 return commands::init::run(target.as_deref(), verbosity, skip_envrc);
             }
             Commands::Inputs {
