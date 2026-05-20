@@ -2,9 +2,13 @@
 //!
 //! Every event is normalized into a call to [`ConsoleOutput::begin`],
 //! [`end`], [`log`], or [`message`]. Each of those funnels through
-//! [`ConsoleOutput::write`] — the sole writer of stdout/stderr and the only
+//! [`ConsoleOutput::write`] — the sole writer of stderr and the only
 //! caller of [`ConsoleOutput::show_at`]. New event variants therefore cannot
 //! regress the verbosity contract: there is no other way to emit a line.
+//!
+//! All output goes to stderr. stdout is owned by the caller's command
+//! result (e.g. `devenv eval` JSON), so writing diagnostics there breaks
+//! pipelines like `devenv eval … | jq`.
 //!
 //! [`end`]: ConsoleOutput::end
 //! [`log`]: ConsoleOutput::log
@@ -76,6 +80,7 @@ struct PendingTask {
 }
 
 #[derive(Copy, Clone)]
+#[allow(dead_code)]
 enum Sink {
     Stdout,
     Stderr,
@@ -326,12 +331,11 @@ impl ConsoleOutput {
                 .map(|e| e.log_level)
                 .unwrap_or(ActivityLevel::Info)
         };
-        let sink = if is_error { Sink::Stderr } else { Sink::Stdout };
         let visible = self.show_at(level);
         // Indent so chunks nest visually under their activity's start line.
         for chunk in line.split('\n') {
             if visible {
-                self.write(level, sink, format_args!("  {chunk}"));
+                self.write(level, Sink::Stderr, format_args!("  {chunk}"));
             } else if let Some(entry) = self.entries.get_mut(&id) {
                 entry.suppressed_logs.push(chunk.to_string());
             }
