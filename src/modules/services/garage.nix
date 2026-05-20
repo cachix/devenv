@@ -43,26 +43,101 @@ let
     ${cfg.extraConfig}
   '';
 
-  configureScript = ''
-    set -euo pipefail
+  garageFunctions = ''
+    function garageHealthEndpoint() {
+      ${lib.getExe pkgs.curl} \
+        -f -H 'Authorization: Bearer ${cfg.adminToken}' \
+        'http://${adminHost}:${toString allocatedAdminPort}/v1/health' 2>/dev/null
+    }
 
-    GARAGE="${cfg.package}/bin/garage -c ${configFile}"
+    function garageHealthy() {
+      if garageHealthEndpoint | ${lib.getExe pkgs.jq} -e '.status == "healthy"'; then
+        return 0
+      fi
 
-    # Apply the cluster layout once. Garage rejects S3 traffic until at
-    # least one node has a role, so this step is mandatory before the
-    # buckets can be touched.
-    if $GARAGE status 2>/dev/null | grep -q "NO ROLE ASSIGNED"; then
-      NODE_ID=$($GARAGE node id 2>/dev/null | cut -d@ -f1)
-      $GARAGE layout assign -z dc1 -c 1G "$NODE_ID"
-      $GARAGE layout apply --version 1
-    fi
+      return 1
+    }
 
-    for bucket in ${lib.escapeShellArgs cfg.buckets}; do
-      $GARAGE bucket create "$bucket" 2>/dev/null || true
-    done
-
-    ${cfg.afterStart}
+    function garageRunning() {
+      garageHealthEndpoint
+    }
   '';
+
+  configureScript =
+    pkgs.writeShellScriptBin "configure"
+      # bash
+      ''
+        set -euo pipefail
+        ${garageFunctions}
+
+        GARAGE="${cfg.package}/bin/garage -c ${configFile}"
+
+        until garageRunning; do
+          echo "Garage not ready, waiting..."
+          sleep 1
+        done
+
+        echo "Garage ready."
+        echo "Configuring layout ..."
+        # Apply the cluster layout once. Garage rejects S3 traffic until at
+        # least one node has a role, so this step is mandatory before the
+        # buckets can be touched.
+        if $GARAGE status 2>/dev/null | grep -q "NO ROLE ASSIGNED"; then
+          NODE_ID=$($GARAGE node id 2>/dev/null | cut -d@ -f1)
+          $GARAGE layout assign -z dc1 -c 1G "$NODE_ID"
+          $GARAGE layout apply --version 1
+        fi
+
+        echo "Create all buckets ..."
+        for bucket in ${lib.concatMapStringsSep " " (x: "'${x}'") cfg.buckets}; do
+          if $GARAGE bucket info "$bucket" &>/dev/null; then
+              echo "Bucket '$bucket' already exists, skipping"
+          else
+            echo "Create bucket '$bucket'."
+            $GARAGE bucket create "$bucket"
+          fi
+        done
+
+        ${cfg.afterStart}
+      '';
+
+  readyScript =
+    pkgs.writeShellScriptBin "ready"
+      # bash
+      ''
+        set -euo pipefail
+        ${garageFunctions}
+
+        GARAGE="${cfg.package}/bin/garage -c ${configFile}"
+
+        garageHealthy || {
+            echo "Garage not ready."
+            exit 1
+        }
+
+        # Check that all buckets are created.
+        for bucket in ${lib.concatMapStringsSep " " (x: "'${x}'") cfg.buckets}; do
+          if $GARAGE bucket info "$bucket" &>/dev/null; then
+            echo "Bucket '$bucket' exists."
+          else
+            echo "Bucket '$bucket' does not yet exist, waiting..."
+            exit 1
+          fi
+        done
+
+        echo "Garage ready and setup."
+      '';
+
+  startScript =
+    pkgs.writeShellScriptBin "start"
+      # bash
+      ''
+        echo "Setup folders."
+        mkdir -p "${config.env.DEVENV_STATE}/garage/meta" \
+          "${config.env.DEVENV_STATE}/garage/data"
+
+        exec ${cfg.package}/bin/garage -c ${configFile} server
+      '';
 in
 {
   options.services.garage = {
@@ -169,12 +244,8 @@ in
       ports.s3.allocate = baseS3Port;
       ports.admin.allocate = baseAdminPort;
       ports.rpc.allocate = 3901;
-      exec = "exec ${cfg.package}/bin/garage -c ${configFile} server";
-      ready.exec = ''
-        ${pkgs.curl}/bin/curl -f -H 'Authorization: Bearer ${cfg.adminToken}' 'http://${adminHost}:${toString allocatedAdminPort}/v1/health'
-      '';
-
-      after = [ "devenv:garage:setup" ];
+      exec = "exec ${startScript}/bin/start";
+      ready.exec = "exec ${readyScript}/bin/ready";
     };
 
     env = {
@@ -184,15 +255,9 @@ in
       GARAGE_CONFIG_FILE = "${configFile}";
     };
 
-    tasks."devenv:garage:setup" = {
-      exec = ''
-        mkdir -p "${config.env.DEVENV_STATE}/garage/meta" "${config.env.DEVENV_STATE}/garage/data"
-      '';
-    };
-
     processes.garage-configure = {
-      exec = configureScript;
-      after = [ "devenv:processes:garage@ready" ];
+      exec = "exec ${configureScript}/bin/configure";
+      after = [ "devenv:processes:garage@started" ];
     };
   };
 }
