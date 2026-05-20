@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed the "N files" counter under "Evaluating shell" inflating from generic Nix log lines. Now only counts actual file read operations.
 - Fixed `devenv up`/`test`/`tasks` failing with `error: could not find a flake.nix file` when the devenv shell is loaded from a remote flake via direnv ([#2599](https://github.com/cachix/devenv/issues/2599)).
 - Fixed `devenv shell` printing internal reload warnings (e.g. "Watched path became unavailable, forcing reload") to the user's terminal, clobbering scrollback, prompts, and editors. 
 - Fixed `devenv up` corrupting a running daemon's PID file and socket when started in the foreground, leaving the daemon unmanageable. Foreground `up` now rejects with "Processes already running" when a daemon is active.
