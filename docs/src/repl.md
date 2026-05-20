@@ -16,6 +16,7 @@ This assembles your devenv configuration and drops you into a Nix REPL where you
     - `devenv.shell` &mdash; the dev shell derivation.
     - `devenv.build` &mdash; declared `outputs.*` derivations.
 - `pkgs` &mdash; the nixpkgs package set as configured by your project (same as `devenv.pkgs`).
+- `inputs` &mdash; the resolved inputs declared in `devenv.yaml` (e.g. `inputs.nixpkgs`).
 
 ## Examples
 
