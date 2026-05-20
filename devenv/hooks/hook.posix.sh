@@ -38,12 +38,14 @@ _devenv_hook() {
         # Cache PWD before launching so a SIGINT/failure inside devenv shell
         # doesn't leave us re-launching on every prompt redraw.
         _DEVENV_HOOK_PWD="$PWD"
-        (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" devenv shell)
         local exit_dir_file="$project_dir/.devenv/exit-dir"
+        # Drop stale state from an earlier failed cleanup before launching a new shell.
+        command rm -f "$exit_dir_file"
+        (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" devenv shell)
         if [[ -f "$exit_dir_file" ]]; then
             local target_dir
             target_dir=$(cat "$exit_dir_file")
-            rm -f "$exit_dir_file"
+            command rm -f "$exit_dir_file"
             if [[ -d "$target_dir" ]]; then
                 cd "$target_dir"
                 _DEVENV_HOOK_PWD="$PWD"

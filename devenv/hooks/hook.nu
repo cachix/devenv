@@ -27,13 +27,15 @@ $env.config = ($env.config | upsert hooks.env_change.PWD (
         if $result.exit_code == 0 {
             let dir = ($result.stdout | str trim)
             if $dir != "" {
+                let exit_dir_file = ($dir + "/.devenv/exit-dir")
+                # Drop stale state from an earlier failed cleanup before launching a new shell.
+                ^rm -f $exit_dir_file
                 do { cd $dir; ^devenv shell }
                 $env._DEVENV_HOOK_UNTRUSTED = ""
                 # If the devenv shell exited due to cd outside the project, follow the user there
-                let exit_dir_file = ($dir + "/.devenv/exit-dir")
                 if ($exit_dir_file | path exists) {
                     let target_dir = (open $exit_dir_file | str trim)
-                    rm -f $exit_dir_file
+                    ^rm -f $exit_dir_file
                     if ($target_dir | path exists) {
                         cd $target_dir
                     }
@@ -63,13 +65,15 @@ $env.config = ($env.config | upsert hooks.pre_prompt (
         if $result.exit_code == 0 {
             let dir = ($result.stdout | str trim)
             if $dir != "" {
+                let exit_dir_file = ($dir + "/.devenv/exit-dir")
+                # Drop stale state from an earlier failed cleanup before launching a new shell.
+                ^rm -f $exit_dir_file
                 do { cd $dir; ^devenv shell }
                 $env._DEVENV_HOOK_UNTRUSTED = ""
                 # If the devenv shell exited due to cd outside the project, follow the user there
-                let exit_dir_file = ($dir + "/.devenv/exit-dir")
                 if ($exit_dir_file | path exists) {
                     let target_dir = (open $exit_dir_file | str trim)
-                    rm -f $exit_dir_file
+                    ^rm -f $exit_dir_file
                     if ($target_dir | path exists) {
                         cd $target_dir
                     }
