@@ -108,6 +108,9 @@ secretspec = { git = "https://github.com/cachix/secretspec", tag = "v0.10.1", de
 ] }
 semver = "1"
 serde = { version = "1.0.228", features = ["derive"] }
+# default-features = false drops the `reqwest` feature (remote https
+# imports); we only read a local cachix config and want no network stack.
+serde_dhall = { version = "0.13.0", default-features = false }
 serde_json = "1.0.149"
 serde_repr = "0.1.20"
 serde_with = "3"

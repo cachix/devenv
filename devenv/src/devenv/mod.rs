@@ -11,7 +11,7 @@ use devenv_cache_core::compute_string_hash;
 use devenv_core::{
     Backend, BuildOptions, Evaluator, VerbosityLevel,
     bootstrap_args::BootstrapArgs,
-    cachix::{CachixManager, CachixPaths},
+    cachix::{CACHIX_AUTH_TOKEN_ENV, CachixManager, CachixPaths},
     config::{Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_config::NixConfig,
@@ -346,14 +346,6 @@ impl Devenv {
             nixpkgs: options.nixpkgs_config.clone(),
         });
 
-        // Create CachixPaths for Nix backend
-        let cachix_paths = CachixPaths {
-            trusted_keys: cachix_trusted_keys,
-            netrc: devenv_dotfile.join("netrc"),
-            daemon_socket: None,
-        };
-        let cachix_manager = Arc::new(CachixManager::new(cachix_paths));
-
         // Create eval-cache pool (framework layer concern, used by backends)
         let eval_cache_pool = Arc::new(OnceCell::new());
 
@@ -401,6 +393,19 @@ impl Devenv {
 
         let mut secretspec_cell: OnceCell<ResolvedSecrets> = OnceCell::new();
         resolve_secretspec_into(&devenv_root, &secret_settings, &mut secretspec_cell)?;
+
+        // Create the cachix manager after secretspec so a `CACHIX_AUTH_TOKEN`
+        // secret can authenticate pulls (netrc) and pushes (daemon env) even
+        // when it isn't exported into the environment.
+        let cachix_auth_token = secretspec_cell
+            .get()
+            .and_then(|resolved| resolved.secrets.get(CACHIX_AUTH_TOKEN_ENV).cloned());
+        let cachix_paths = CachixPaths {
+            trusted_keys: cachix_trusted_keys,
+            netrc: devenv_dotfile.join("netrc"),
+            daemon_socket: None,
+        };
+        let cachix_manager = Arc::new(CachixManager::new(cachix_paths, cachix_auth_token));
 
         let store_settings = cachix_manager
             .store_settings(None)
