@@ -10,17 +10,21 @@ $ devenv repl
 
 This assembles your devenv configuration and drops you into a Nix REPL where you can explore:
 
-- `config` &mdash; the final resolved devenv configuration
-- `pkgs` &mdash; the nixpkgs package set
-- Any other inputs defined in `devenv.yaml`
+- `devenv` &mdash; the evaluated devenv attribute set:
+    - `devenv.config` &mdash; the final resolved configuration (options like `languages`, `packages`, `services`).
+    - `devenv.options` / `devenv.optionsJSON` &mdash; option definitions and their JSON-serialized form.
+    - `devenv.shell` &mdash; the dev shell derivation.
+    - `devenv.build` &mdash; declared `outputs.*` derivations.
+- `pkgs` &mdash; the nixpkgs package set as configured by your project (same as `devenv.pkgs`).
+- `inputs` &mdash; the resolved inputs declared in `devenv.yaml` (e.g. `inputs.nixpkgs`).
 
 ## Examples
 
 ```nix
-nix-repl> config.packages
+nix-repl> devenv.config.packages
 [ «derivation /nix/store/...» ]
 
-nix-repl> config.languages.python.enable
+nix-repl> devenv.config.languages.python.enable
 true
 
 nix-repl> pkgs.hello.version

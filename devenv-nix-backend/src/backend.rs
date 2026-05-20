@@ -911,6 +911,13 @@ impl NixCBackend {
             env.insert("pkgs", &pkgs)
                 .to_miette()
                 .wrap_err("Failed to inject pkgs into REPL scope")?;
+            let inputs = eval_state
+                .require_attrs_select(&devenv_attrs, "inputs")
+                .to_miette()
+                .wrap_err("Failed to get inputs attribute from devenv")?;
+            env.insert("inputs", &inputs)
+                .to_miette()
+                .wrap_err("Failed to inject inputs into REPL scope")?;
             nix_cmd::run_repl_simple(&mut eval_state, Some(&mut env))
                 .to_miette()
                 .wrap_err("REPL failed")?

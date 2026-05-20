@@ -21,8 +21,8 @@
 
 ### Developer experience
 
-- **[Terminal UI](https://devenv.sh/blog/2025/03/05/devenv-v20-a-fresh-interface-to-nix/#terminal-ui)** with live build progress, task hierarchy, and error details
-- **[Native shell reloading](https://devenv.sh/blog/2025/03/05/devenv-v20-a-fresh-interface-to-nix/#native-shell-reloading)** that rebuilds in the background while your shell stays interactive
+- **[Terminal UI](https://devenv.sh/blog/2026/03/05/devenv-20-a-fresh-interface-to-nix/#terminal-ui)** with live build progress, task hierarchy, and error details
+- **[Native shell reloading](https://devenv.sh/blog/2026/03/05/devenv-20-a-fresh-interface-to-nix/#native-shell-reloading)** that rebuilds in the background while your shell stays interactive
 - **[Instant environments](https://devenv.sh/blog/2024/10/03/devenv-13-instant-developer-environments-with-nix-caching/)** with incremental Nix evaluation caching (sub 100ms when nothing changed)
 - **[LSP for devenv.nix](https://devenv.sh/lsp/)** with autocomplete, hover docs, and go to definition via bundled nixd
 - **[Ad hoc environments](https://devenv.sh/ad-hoc-developer-environments/)** from the CLI without any config files (`--option languages.rust.enable:bool true`)

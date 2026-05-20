@@ -527,6 +527,7 @@ rec {
         config
         options
         project
+        inputs
         ;
       bash = pkgs.bash;
       shell = config.shell;
