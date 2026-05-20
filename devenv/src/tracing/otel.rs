@@ -12,8 +12,7 @@ use tracing_subscriber::{Layer, Registry, layer::SubscriberExt, util::Subscriber
 use super::devenv_layer::DevenvLayer;
 use super::span_ids::SpanIdLayer;
 use super::{
-    Level, OtlpProtocol, TraceOutputSpec, TracingGuard, build_cli_layer, create_filter,
-    create_local_boxed_layer,
+    Level, OtlpProtocol, TraceOutputSpec, TracingGuard, create_filter, create_local_boxed_layer,
 };
 use url::Url;
 
@@ -62,8 +61,6 @@ pub(super) fn init_tracing_unified(level: Level, specs: &[TraceOutputSpec]) -> T
     let mut guards: Vec<Box<dyn Send>> = Vec::new();
 
     let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
-
-    layers.push(build_cli_layer());
 
     // Render layers
     for spec in specs
