@@ -1439,4 +1439,76 @@ mod tests {
         assert_eq!(cli.shell_args.profiles, vec!["test".to_string()]);
         assert!(matches!(cli.command, Commands::Test { .. }));
     }
+
+    #[test]
+    fn init_command_skip_envrc_default() {
+        let argv = preprocess_profile_args(osargs(["devenv", "init"]));
+        let cli = Cli::parse_from(argv);
+        if let Commands::Init {
+            target,
+            skip_envrc,
+            no_skip_envrc,
+        } = cli.command
+        {
+            assert!(target.is_none());
+            assert!(!skip_envrc);
+            assert!(!no_skip_envrc);
+        } else {
+            panic!("Expected Init command");
+        }
+    }
+
+    #[test]
+    fn init_command_skip_envrc_flag() {
+        let argv = preprocess_profile_args(osargs(["devenv", "init", "--skip-envrc"]));
+        let cli = Cli::parse_from(argv);
+        if let Commands::Init {
+            target,
+            skip_envrc,
+            no_skip_envrc,
+        } = cli.command
+        {
+            assert!(target.is_none());
+            assert!(skip_envrc);
+            assert!(!no_skip_envrc);
+        } else {
+            panic!("Expected Init command");
+        }
+    }
+
+    #[test]
+    fn init_command_no_skip_envrc_flag() {
+        let argv = preprocess_profile_args(osargs(["devenv", "init", "--no-skip-envrc"]));
+        let cli = Cli::parse_from(argv);
+        if let Commands::Init {
+            target,
+            skip_envrc,
+            no_skip_envrc,
+        } = cli.command
+        {
+            assert!(target.is_none());
+            assert!(!skip_envrc);
+            assert!(no_skip_envrc);
+        } else {
+            panic!("Expected Init command");
+        }
+    }
+
+    #[test]
+    fn init_command_with_target_and_skip_envrc() {
+        let argv = preprocess_profile_args(osargs(["devenv", "init", "/tmp/test", "--skip-envrc"]));
+        let cli = Cli::parse_from(argv);
+        if let Commands::Init {
+            target,
+            skip_envrc,
+            no_skip_envrc,
+        } = cli.command
+        {
+            assert_eq!(target, Some(PathBuf::from("/tmp/test")));
+            assert!(skip_envrc);
+            assert!(!no_skip_envrc);
+        } else {
+            panic!("Expected Init command");
+        }
+    }
 }
