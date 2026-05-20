@@ -597,6 +597,39 @@ impl CachedEval {
         }
     }
 
+    /// Persist a cache miss, refusing to store if any tracked input file was
+    /// modified after `eval_start`.
+    ///
+    /// When a file changes mid-evaluation, the snapshot hash can describe the
+    /// new contents while the result still reflects the old contents. Storing
+    /// that pair would let a later lookup validate against the new hash and
+    /// return the stale result.
+    ///
+    /// We deliberately do not invalidate any pre-existing row on the skip
+    /// path: an inherited stale row will be rejected by validation on the
+    /// next lookup (its stored hash no longer matches disk), and a
+    /// concurrent process may have just written a valid entry under the same
+    /// key which we must not erase. The normal store path replaces by key
+    /// atomically inside `insert_eval_with_inputs`.
+    async fn finalize_store(
+        &self,
+        service: &CachingEvalService,
+        key: &EvalCacheKey,
+        json: &str,
+        inputs: Vec<Input>,
+        eval_start: SystemTime,
+    ) {
+        if any_input_modified_after(&inputs, eval_start) {
+            debug!(
+                key_hash = %key.key_hash,
+                attr_name = %key.attr_name,
+                "Tracked input modified during evaluation; refusing to cache stale result"
+            );
+            return;
+        }
+        self.store_eval(service, key, json, inputs).await;
+    }
+
     /// Evaluate with transparent caching, returning a JSON string.
     ///
     /// The `eval_fn` closure is only called on cache miss. It should perform
@@ -632,9 +665,11 @@ impl CachedEval {
             return Ok((json, true));
         }
 
+        let eval_start = SystemTime::now();
         let result = run_eval().await?;
         let inputs = self.input_tracker.snapshot_inputs(&self.config);
-        self.store_eval(service, key, &result, inputs).await;
+        self.finalize_store(service, key, &result, inputs, eval_start)
+            .await;
         Ok((result, false))
     }
 
@@ -675,12 +710,32 @@ impl CachedEval {
             return Ok((value, true));
         }
 
+        let eval_start = SystemTime::now();
         let result = run_eval().await?;
         let inputs = self.input_tracker.snapshot_inputs(&self.config);
         let json = serde_json::to_string(&result).map_err(CacheError::from)?;
-        self.store_eval(service, key, &json, inputs).await;
+        self.finalize_store(service, key, &json, inputs, eval_start)
+            .await;
         Ok((result, false))
     }
+}
+
+/// Returns true if any file in `inputs` has an on-disk mtime strictly newer
+/// than `threshold`.
+///
+/// Re-stats each file rather than reading the snapshot's `modified_at`, which
+/// is truncated to second precision; we want sub-second precision to catch
+/// fast writes within the same wall-clock second as eval start.
+fn any_input_modified_after(inputs: &[Input], threshold: SystemTime) -> bool {
+    inputs.iter().any(|input| {
+        let Input::File(desc) = input else {
+            return false;
+        };
+        match std::fs::metadata(&desc.path).and_then(|m| m.modified()) {
+            Ok(mtime) => mtime > threshold,
+            Err(_) => false,
+        }
+    })
 }
 
 // =============================================================================
@@ -1318,6 +1373,104 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+    }
+
+    /// Regression for #2745: if `devenv.nix` is modified while evaluation is
+    /// in flight, the recorded file hash describes the post-write contents
+    /// while the result reflects the pre-write contents. Storing that pair
+    /// would let a later lookup validate against the new hash and return the
+    /// stale result, surfacing as missing tasks until the cache DB is wiped.
+    #[sqlx::test]
+    async fn test_input_modified_during_eval_skips_cache(pool: SqlitePool) {
+        use devenv_core::internal_log::{InternalLog, Verbosity};
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_file = temp_dir.path().join("devenv.nix");
+        std::fs::write(&temp_file, "{}").unwrap();
+
+        let log_bridge = devenv_core::nix_log_bridge::NixLogBridge::new();
+        let service = CachingEvalService::new(pool.clone());
+        let cached_eval =
+            CachedEval::with_cache(service, log_bridge.clone(), CachingConfig::default());
+
+        let key = EvalCacheKey::from_test_string("(import /test {})", "config.tasks");
+        let activity = devenv_activity::activity!(INFO, evaluate, "test");
+
+        let file_path = temp_file.clone();
+        let bridge_for_closure = log_bridge.clone();
+        cached_eval
+            .eval(&key, &activity, || async {
+                // Tell the tracker Nix evaluated this file.
+                bridge_for_closure.process_internal_log(InternalLog::Msg {
+                    level: Verbosity::Talkative,
+                    msg: format!("evaluating file '{}'", file_path.display()),
+                    raw_msg: None,
+                });
+
+                // Simulate a concurrent edit landing after eval_start by
+                // pushing mtime to a value strictly greater than now. Using
+                // an explicit future timestamp avoids any sleep in tests.
+                let future = SystemTime::now() + std::time::Duration::from_secs(3600);
+                std::fs::File::options()
+                    .write(true)
+                    .open(&file_path)
+                    .unwrap()
+                    .set_modified(future)
+                    .unwrap();
+
+                Ok::<_, miette::Error>(r#"{"stale":true}"#.to_string())
+            })
+            .await
+            .unwrap();
+
+        assert!(
+            db::get_eval_by_key_hash(&pool, &key.key_hash)
+                .await
+                .unwrap()
+                .is_none(),
+            "cache must not store an entry when a tracked input was modified during evaluation"
+        );
+    }
+
+    #[test]
+    fn test_any_input_modified_after_detects_post_threshold_mtime() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("f.txt");
+        std::fs::write(&file_path, "x").unwrap();
+
+        let threshold = SystemTime::now();
+        let future = threshold + std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&file_path)
+            .unwrap()
+            .set_modified(future)
+            .unwrap();
+
+        let inputs = vec![Input::File(
+            FileInputDesc::new(file_path, SystemTime::now()).unwrap(),
+        )];
+        assert!(any_input_modified_after(&inputs, threshold));
+    }
+
+    #[test]
+    fn test_any_input_modified_after_ignores_pre_threshold_mtime() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("f.txt");
+        std::fs::write(&file_path, "x").unwrap();
+
+        let past = SystemTime::now() - std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&file_path)
+            .unwrap()
+            .set_modified(past)
+            .unwrap();
+
+        let inputs = vec![Input::File(
+            FileInputDesc::new(file_path, SystemTime::now()).unwrap(),
+        )];
+        assert!(!any_input_modified_after(&inputs, SystemTime::now()));
     }
 
     /// The persistent `InputTracker` should observe every op dispatched
