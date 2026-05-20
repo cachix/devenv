@@ -719,7 +719,12 @@ pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, and .gitignore.")]
     Init {
         target: Option<PathBuf>,
-        #[arg(long, help = "Skip .envrc file (default).")]
+        #[arg(
+            long,
+            env = "DEVENV_SKIP_ENVRC",
+            value_parser = clap::builder::BoolishValueParser::new(),
+            help = "Skip .envrc file (default)."
+         )]
         skip_envrc: bool,
         #[arg(long, help = "Include .envrc file.")]
         no_skip_envrc: bool,
