@@ -166,6 +166,32 @@ The port number for the HTTP server to listen on\.
 
 
 
+### services\.wiremock\.rootDir
+
+
+
+Path to the WireMock root directory containing mappings and files\.
+Cannot be set together with ` mappings `\.
+See [https://wiremock\.org/docs/standalone/java-jar/\#command-line-options](https://wiremock\.org/docs/standalone/java-jar/\#command-line-options) for more information\.
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
+
+
 ### services\.wiremock\.verbose
 
 
