@@ -1,3 +1,0 @@
-inputs:
-  conan-flake:
-    url: git+https://codeberg.org/tarcisio/conan-flake
