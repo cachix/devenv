@@ -124,6 +124,19 @@
         }
       );
 
+      nixosTests = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        if pkgs.stdenv.isLinux then
+          import ./nixos-tests {
+            inherit pkgs;
+            devenv = self.packages.${system}.devenv;
+          }
+        else { }
+      );
+
       modules = ./src/modules;
 
       templates =
