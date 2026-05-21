@@ -25,12 +25,14 @@ schemars.workspace = true
 semver.workspace = true
 schematic.workspace = true
 serde.workspace = true
+serde_dhall.workspace = true
 serde_json.workspace = true
 serde_repr.workspace = true
 serde_yaml.workspace = true
 ser_nix.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+xdg.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

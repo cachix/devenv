@@ -137,6 +137,7 @@ impl CachixIntegration {
             socket_path,
             binary,
             dry_run: false,
+            auth_token: cachix_manager.resolve_auth_token(),
         };
 
         let owned = match OwnedDaemon::spawn(spawn_config, ConnectionParams::default()).await {

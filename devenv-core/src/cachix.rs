@@ -9,9 +9,14 @@ use serde::{Deserialize, Deserializer};
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::OnceCell;
 use tracing::{debug, warn};
+
+/// Name of the environment variable holding the Cachix auth token, also
+/// used as the secretspec secret name. Single source of truth so the
+/// env-read, secretspec lookup, and daemon child env can't drift.
+pub const CACHIX_AUTH_TOKEN_ENV: &str = "CACHIX_AUTH_TOKEN";
 
 /// Paths specific to Cachix operations
 #[derive(Debug, Clone)]
@@ -26,15 +31,66 @@ pub struct CachixPaths {
 pub struct CachixManager {
     pub paths: CachixPaths,
     netrc_path: Arc<OnceCell<String>>,
+    /// Auth token supplied out of band (e.g. resolved from secretspec),
+    /// used when `CACHIX_AUTH_TOKEN` is absent from the environment.
+    auth_token_override: Option<String>,
+    /// Memoized result of [`CachixManager::resolve_auth_token`]. Resolution
+    /// can read and Dhall-evaluate the cachix config from disk, and runs
+    /// from several call sites per invocation; cache it once.
+    resolved_token: OnceLock<Option<String>>,
 }
 
 impl CachixManager {
-    /// Create a new CachixManager
-    pub fn new(paths: CachixPaths) -> Self {
+    /// Create a new CachixManager.
+    ///
+    /// `auth_token_override` is an optional token from an external secret
+    /// store (secretspec); see [`CachixManager::resolve_auth_token`] for
+    /// how it slots into the resolution precedence.
+    pub fn new(paths: CachixPaths, auth_token_override: Option<String>) -> Self {
         Self {
             paths,
             netrc_path: Arc::new(OnceCell::new()),
+            auth_token_override,
+            resolved_token: OnceLock::new(),
         }
+    }
+
+    /// Resolve the Cachix auth token used for authenticating pulls
+    /// (netrc) and pushes (the daemon subprocess env).
+    ///
+    /// Precedence:
+    /// 1. `CACHIX_AUTH_TOKEN` environment variable (non-empty).
+    /// 2. A token supplied out of band (secretspec) via [`CachixManager::new`].
+    /// 3. `authToken` from the cachix CLI config (`cachix.dhall`), as
+    ///    written by `cachix authtoken`.
+    ///
+    /// Returns `None` when no source yields a token, in which case
+    /// access falls back to unauthenticated (public caches still work).
+    ///
+    /// The result is memoized: the precedence sources are stable for the
+    /// lifetime of an invocation, so we resolve once and reuse it across
+    /// the (several) call sites.
+    pub fn resolve_auth_token(&self) -> Option<String> {
+        self.resolved_token
+            .get_or_init(|| self.resolve_auth_token_uncached())
+            .clone()
+    }
+
+    fn resolve_auth_token_uncached(&self) -> Option<String> {
+        if let Ok(token) = env::var(CACHIX_AUTH_TOKEN_ENV)
+            && !token.is_empty()
+        {
+            return Some(token);
+        }
+        if let Some(token) = self.auth_token_override.as_ref().filter(|t| !t.is_empty()) {
+            debug!("cachix: CACHIX_AUTH_TOKEN unset, using token from secretspec");
+            return Some(token.clone());
+        }
+        let token = read_dhall_auth_token();
+        if token.is_some() {
+            debug!("cachix: CACHIX_AUTH_TOKEN unset, using authToken from cachix config");
+        }
+        token
     }
 
     /// Get global Nix settings that must be applied BEFORE store creation
@@ -44,9 +100,10 @@ impl CachixManager {
     pub fn get_global_settings(&self) -> Result<HashMap<String, String>> {
         let mut settings = HashMap::new();
 
-        // If CACHIX_AUTH_TOKEN exists, set netrc-file path
-        // The actual file will be created later when we know which caches to configure
-        if env::var("CACHIX_AUTH_TOKEN").is_ok() {
+        // If an auth token is available (env, secretspec, or cachix
+        // config), set the netrc-file path. The actual file is created
+        // later when we know which caches to configure.
+        if self.resolve_auth_token().is_some() {
             let netrc_path_str = self.paths.netrc.to_string_lossy().to_string();
             settings.insert("netrc-file".to_string(), netrc_path_str);
         }
@@ -59,7 +116,7 @@ impl CachixManager {
     /// This should be called after we know which caches to configure.
     /// It creates the netrc file with authentication for the given caches.
     pub async fn ensure_netrc_file(&self, pull_caches: &[String]) -> Result<()> {
-        if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
+        if let Some(auth_token) = self.resolve_auth_token() {
             // Only create if we haven't already
             if self.netrc_path.get().is_none() {
                 let netrc_path = self.paths.netrc.clone();
@@ -211,6 +268,42 @@ impl Drop for CachixManager {
     }
 }
 
+/// Path to the cachix CLI config, mirroring cachix's own XDG resolution
+/// (`$XDG_CONFIG_HOME/cachix/cachix.dhall`, else `$HOME/.config/...`).
+fn cachix_config_path() -> Option<PathBuf> {
+    xdg::BaseDirectories::new().get_config_file("cachix/cachix.dhall")
+}
+
+/// Read and extract `authToken` from the cachix dhall config, if present.
+fn read_dhall_auth_token() -> Option<String> {
+    let path = cachix_config_path()?;
+    let content = std::fs::read_to_string(&path).ok()?;
+    parse_dhall_auth_token(&content).filter(|t| !t.is_empty())
+}
+
+/// Extract `authToken` from the contents of a cachix dhall config.
+///
+/// Deserializes the record with the Dhall library, reading only the
+/// `authToken` field (the `binaryCaches` field and any others are
+/// ignored). Returns `None` if the config can't be evaluated or has no
+/// string `authToken`, so the caller degrades to unauthenticated access
+/// rather than guessing.
+fn parse_dhall_auth_token(content: &str) -> Option<String> {
+    #[derive(Deserialize)]
+    struct CachixDhallConfig {
+        #[serde(rename = "authToken")]
+        auth_token: String,
+    }
+
+    match serde_dhall::from_str(content).parse::<CachixDhallConfig>() {
+        Ok(config) => Some(config.auth_token),
+        Err(e) => {
+            debug!("cachix: could not read authToken from cachix config: {e}");
+            None
+        }
+    }
+}
+
 /// Cachix module configuration (from devenv.config.cachix)
 #[derive(Deserialize, Default, Clone)]
 pub struct CachixConfig {
@@ -316,4 +409,70 @@ pub fn detect_missing_caches(
     }
 
     (missing_caches, missing_public_keys)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The exact record-literal shape `cachix authtoken` writes: the
+    /// value sits on its own line and `binaryCaches` follows.
+    #[test]
+    fn parses_real_cachix_config_format() {
+        let config = "\
+{ authToken =
+    \"eyJhbGciOiJIUzI1NiJ9.eyJkYXQiOjF9.In3NX31SdYBx3F6b6npo0pvjE3nlMbqn5E8xVGL9M_s\"
+, binaryCaches =
+  [ { name = \"mycache\"
+    , secretKey = \"abc123==\"
+    }
+  ]
+}
+";
+        assert_eq!(
+            parse_dhall_auth_token(config).as_deref(),
+            Some("eyJhbGciOiJIUzI1NiJ9.eyJkYXQiOjF9.In3NX31SdYBx3F6b6npo0pvjE3nlMbqn5E8xVGL9M_s")
+        );
+    }
+
+    #[test]
+    fn ignores_other_fields() {
+        // Only `authToken` is read; `binaryCaches` (and anything else) is
+        // ignored.
+        let config = r#"{ authToken = "tok", binaryCaches = [] : List Text }"#;
+        assert_eq!(parse_dhall_auth_token(config).as_deref(), Some("tok"));
+    }
+
+    #[test]
+    fn handles_escaped_quotes_and_backslashes() {
+        let config = r#"{ authToken = "a\"b\\c" }"#;
+        assert_eq!(parse_dhall_auth_token(config).as_deref(), Some("a\"b\\c"));
+    }
+
+    #[test]
+    fn evaluates_comments_and_concatenation() {
+        // The Dhall library evaluates the expression, so comments and
+        // text concatenation are handled, not just literals.
+        let config = "{ authToken = {- prefix -} \"to\" ++ \"ken\" -- trailing\n }";
+        assert_eq!(parse_dhall_auth_token(config).as_deref(), Some("token"));
+    }
+
+    #[test]
+    fn rejects_non_string_value() {
+        // A non-Text value can't deserialize into the token; degrade to None.
+        let config = r#"{ authToken = 42 }"#;
+        assert_eq!(parse_dhall_auth_token(config), None);
+    }
+
+    #[test]
+    fn returns_none_when_field_absent() {
+        let config = r#"{ binaryCaches = [] : List Text }"#;
+        assert_eq!(parse_dhall_auth_token(config), None);
+    }
+
+    #[test]
+    fn returns_none_on_invalid_dhall() {
+        let config = r#"{ authToken = "unterminated"#;
+        assert_eq!(parse_dhall_auth_token(config), None);
+    }
 }
