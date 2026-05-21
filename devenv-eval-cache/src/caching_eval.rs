@@ -107,13 +107,13 @@ impl CachingEvalService {
     ) -> Result<Option<CachedEvalResult>, CacheError> {
         // Force refresh bypasses cache
         if self.config.force_refresh {
-            trace!(key_hash = %key.key_hash, "Force refresh enabled, skipping cache");
+            debug!(key_hash = %key.key_hash, "force refresh enabled, skipping cache");
             return Ok(None);
         }
 
         // Look up the cached eval
         let Some(eval_row) = db::get_eval_by_key_hash(&self.pool, &key.key_hash).await? else {
-            trace!(key_hash = %key.key_hash, "Eval not found in cache");
+            debug!(key_hash = %key.key_hash, "eval not found in cache");
             return Ok(None);
         };
 
@@ -129,7 +129,7 @@ impl CachingEvalService {
             debug!(
                 key_hash = %key.key_hash,
                 attr_name = %key.attr_name,
-                "Cached eval invalidated due to input changes"
+                "cached eval invalidated due to input changes"
             );
             return Ok(None);
         }
@@ -137,10 +137,10 @@ impl CachingEvalService {
         // Update timestamp
         db::update_eval_updated_at(&self.pool, eval_row.id).await?;
 
-        trace!(
+        debug!(
             key_hash = %key.key_hash,
             attr_name = %key.attr_name,
-            "Cache hit"
+            "cache hit"
         );
 
         Ok(Some(CachedEvalResult {
@@ -171,12 +171,12 @@ impl CachingEvalService {
         )
         .await?;
 
-        trace!(
+        debug!(
             key_hash = %key.key_hash,
             attr_name = %key.attr_name,
             num_inputs = inputs.len(),
             eval_id = eval_id,
-            "Stored eval result in cache"
+            "stored eval result in cache"
         );
 
         Ok(eval_id)
@@ -254,10 +254,10 @@ impl CachingEvalService {
         // Compute new input hash
         let new_input_hash = Input::compute_input_hash(&all_inputs);
         if new_input_hash != eval_row.input_hash {
-            trace!(
+            debug!(
                 cached_hash = %eval_row.input_hash,
                 new_hash = %new_input_hash,
-                "Input hash mismatch"
+                "input hash mismatch"
             );
             return Ok(false);
         }
@@ -279,19 +279,19 @@ impl CachingEvalService {
                         // File is still valid
                     }
                     FileState::Modified { .. } | FileState::Removed => {
-                        trace!(
-                            "File '{}' modified or removed, cache invalid",
+                        debug!(
+                            "file '{}' modified or removed, cache invalid",
                             row.path.display()
                         );
                         return Ok(false);
                     }
                 },
                 Ok(Err(e)) => {
-                    trace!(error = %e, "Error checking file state");
+                    trace!(error = %e, "error checking file state");
                     return Ok(false);
                 }
                 Err(e) => {
-                    trace!(error = %e, "Task join error");
+                    trace!(error = %e, "task join error");
                     return Ok(false);
                 }
             }
@@ -307,14 +307,14 @@ impl CachingEvalService {
             match check_env_state(&desc) {
                 Ok(FileState::Unchanged) => {}
                 Ok(FileState::Modified { .. } | FileState::Removed) => {
-                    trace!("Env var '{}' modified or removed, cache invalid", row.name);
+                    debug!("env var '{}' modified or removed, cache invalid", row.name);
                     return Ok(false);
                 }
                 Ok(FileState::MetadataModified { .. }) => {
                     // Env vars don't have metadata, this shouldn't happen
                 }
                 Err(e) => {
-                    trace!(error = %e, "Error checking env state");
+                    trace!(error = %e, "error checking env state");
                     return Ok(false);
                 }
             }
@@ -517,10 +517,10 @@ impl CachedEval {
             })
             .collect::<Result<Vec<_>, serde_json::Error>>()?;
 
-        trace!(
+        debug!(
             eval_id = eval_id,
             num_specs = specs.len(),
-            "Replaying resource allocations from cache"
+            "replaying resource allocations from cache"
         );
 
         rm.replay_all(&specs)
@@ -536,13 +536,13 @@ impl CachedEval {
     ) {
         let specs = rm.snapshot_all();
         if !specs.is_empty() {
-            trace!(
+            debug!(
                 eval_id = eval_id,
                 num_specs = specs.len(),
-                "Storing resource allocations in cache"
+                "storing resource allocations in cache"
             );
             if let Err(e) = db::insert_resource_specs(&service.pool, eval_id, &specs).await {
-                warn!(error = %e, "Failed to store resource specs in cache");
+                warn!(error = %e, "failed to store resource specs in cache");
             }
         }
     }
@@ -623,7 +623,7 @@ impl CachedEval {
             debug!(
                 key_hash = %key.key_hash,
                 attr_name = %key.attr_name,
-                "Tracked input modified during evaluation; refusing to cache stale result"
+                "tracked input modified during evaluation; refusing to cache stale result"
             );
             return;
         }
@@ -818,7 +818,7 @@ impl<E> CachingEvalState<E> {
     /// # Returns
     /// An `UncachedEvalState` that provides access to the underlying eval state.
     pub fn uncached(&self, reason: UncachedReason) -> UncachedEvalState<'_, E> {
-        tracing::debug!(?reason, "Bypassing eval cache");
+        tracing::debug!(?reason, "bypassing eval cache");
         UncachedEvalState {
             eval_state: &self.eval_state,
             _reason: reason,
