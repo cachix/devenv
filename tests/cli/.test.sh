@@ -1,66 +1,73 @@
-set -xe
+#!/usr/bin/env bash
+set -euo pipefail
 
-rm devenv.yaml || true
-devenv shell -- env | grep "DEVENV_CMDLINE"
-devenv shell -- env | grep "DEVENV_CLI_TEST_VAR=hello-from-task"
+#
+# Smoke tests for the devenv CLI surface.
+#
+
+step() { echo; echo "── $* ──"; }
+fail() { echo "✗ $*" >&2; exit 1; }
+
+rm -f devenv.yaml
+
+step "shell exports cmdline + task-defined env vars"
+devenv shell -- env | grep -q DEVENV_CMDLINE
+devenv shell -- env | grep -q "DEVENV_CLI_TEST_VAR=hello-from-task"
+
+step "build + inspect a single package attribute"
 devenv build languages.python.package
-devenv shell ls -- -la | grep ".test.sh"
-devenv shell ls ../ | grep "cli"
-devenv info | grep "python3-"
-devenv show | grep "python3-"
-devenv search ncdu 2>&1 | grep -E "Found [0-9]+ packages and [0-9]+ options for 'ncdu'"
-RUST_LOG=trace devenv --verbose --trace-output file:search-trace.log search '^ncdu$' 2>&1 | grep -E "Found [0-9]+ packages and [0-9]+ options"
-grep "cache hit" search-trace.log | grep "optionsJSON"
-devenv search xyznonexistentpackagexyz 2>&1 | grep -E "Found 0 packages and 0 options"
 
-# there should be no processes
-devenv up && exit 1
+step "shell forwards arguments verbatim and to subdirs"
+devenv shell ls -- -la | grep -q "\.test\.sh"
+devenv shell ls ../ | grep -q "cli"
 
-# Test profile error handling with no profiles defined
-echo "Testing profile error handling..."
-error_output=$(devenv --profile some-profile info 2>&1 || true)
-if echo "$error_output" | grep -q "Profile 'some-profile' not found"; then
-	echo "✓ Profile error handling works correctly"
-else
-	echo "✗ Profile error handling failed: $error_output"
-	exit 1
-fi
+step "info/show surface enabled languages"
+devenv info | grep -q "python3-"
+devenv show | grep -q "python3-"
 
-# Test --from flag with absolute path
-echo "Testing --from with absolute path..."
+step "search returns packages and writes trace cache hits"
+devenv search ncdu 2>&1 \
+  | grep -Eq "Found [0-9]+ packages and [0-9]+ options for 'ncdu'"
+RUST_LOG=trace devenv --verbose --trace-output file:search-trace.log \
+  search '^ncdu$' 2>&1 \
+  | grep -Eq "Found [0-9]+ packages and [0-9]+ options"
+grep "cache hit" search-trace.log | grep -q optionsJSON \
+  || fail "expected an optionsJSON cache hit in search-trace.log"
+devenv search xyznonexistentpackagexyz 2>&1 \
+  | grep -Eq "Found 0 packages and 0 options"
+
+step "up fails when no processes are defined"
+if devenv up; then fail "devenv up should fail without processes"; fi
+
+step "unknown profile is reported clearly"
+out=$(devenv --profile some-profile info 2>&1 || true)
+echo "$out" | grep -q "Profile 'some-profile' not found" \
+  || fail "expected 'Profile not found' error, got: $out"
+
+step "--from loads an external project and ignores local devenv.nix"
 from_test_dir="$(cd from-test && pwd)"
-output=$(devenv --from "path:$from_test_dir" info)
-echo "$output" | grep -q "languages.rust" || exit 1
-! echo "$output" | grep -q "python3" || exit 1
-echo "✓ --from with absolute path works and doesn't load local devenv.nix"
+for path in "path:$from_test_dir" "path:./from-test"; do
+  out=$(devenv --from "$path" info)
+  echo "$out" | grep -q "languages.rust" || fail "--from=$path missing languages.rust"
+  ! echo "$out" | grep -q "python3" || fail "--from=$path leaked local python3"
+done
 
-# Test --from flag with relative path
-echo "Testing --from with relative path..."
-output=$(devenv --from path:./from-test info)
-echo "$output" | grep -q "languages.rust" || exit 1
-! echo "$output" | grep -q "python3" || exit 1
-echo "✓ --from with relative path works and doesn't load local devenv.nix"
-
-# Test that --from allows building without local devenv.nix
-echo "Testing --from without local devenv.nix..."
-mkdir -p test-from-only
-cd test-from-only
-output=$(devenv --from "path:$from_test_dir" info)
-echo "$output" | grep -q "languages.rust" || exit 1
-cd ..
+step "--from works in a directory without devenv.nix"
+mkdir -p test-from-only && pushd test-from-only >/dev/null
+out=$(devenv --from "path:$from_test_dir" info)
+echo "$out" | grep -q "languages.rust" || fail "--from didn't load remote project"
+popd >/dev/null
 rm -rf test-from-only
-echo "✓ --from works without local devenv.nix"
 
-# Test -O packages:pkgs appends packages
-echo "Testing -O packages:pkgs..."
+step "-O packages:pkgs appends ad-hoc packages"
 devenv -O packages:pkgs "hello" shell -- hello | grep -q "Hello, world"
-echo "✓ -O packages:pkgs works"
 
-# Containers
+# Containers are Linux-only.
 if [[ "$(uname)" == "Linux" ]]; then
-	devenv container build shell && exit 1
-	devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin --follows nixpkgs
-	devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
-	devenv container build shell | grep image-shell.json
-	devenv gc
+  step "container build fails without required inputs, then succeeds"
+  if devenv container build shell; then fail "container build should fail without inputs"; fi
+  devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin --follows nixpkgs
+  devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
+  devenv container build shell | grep -q image-shell.json
+  devenv gc
 fi
