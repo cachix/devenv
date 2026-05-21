@@ -2578,62 +2578,6 @@ list of string
 
 
 
-## conan.enable
-
-
-
-Whether to enable conan integration (through conan-flake).
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-
-```nix
-false
-```
-
-
-
-*Example:*
-
-```nix
-true
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/conan.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/conan.nix)
-
-
-
-## conan.config
-
-
-
-conan configuration.
-
-
-
-*Type:*
-attribute set
-
-
-
-*Default:*
-
-```nix
-{ }
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/conan.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/conan.nix)
-
-
-
 ## container.isBuilding
 
 
@@ -2790,6 +2734,8 @@ list of anything
 
 ## containers.\<name>.fromImage
 
+
+
 An existing OCI base image to build on top of, built with nix2container’s pullImage.
 
 
@@ -2835,8 +2781,6 @@ false
 
 
 ## containers.\<name>.layers
-
-
 
 The layers to create.
 
@@ -6043,6 +5987,8 @@ submodule
 
 ## git-hooks.hooks.biome.enable
 
+
+
 Whether to enable this pre-commit hook.
 
 
@@ -6100,8 +6046,6 @@ null or string or absolute path
 
 
 ## git-hooks.hooks.biome.settings.configPath
-
-
 
 Path to the configuration JSON file
 
@@ -8316,6 +8260,8 @@ false
 
 ## git-hooks.hooks.isort.settings.flags
 
+
+
 Flags passed to isort. See all available [here](https://pycqa.github.io/isort/docs/configuration/options.html).
 
 
@@ -8361,8 +8307,6 @@ one of “”, “black”, “django”, “pycharm”, “google”, “open_s
 
 
 ## git-hooks.hooks.lacheck
-
-
 
 lacheck hook
 
