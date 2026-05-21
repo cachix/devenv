@@ -28,8 +28,12 @@ $ devenv up
 To stop detached processes:
 
 ```shell-session
-$ devenv processes down
+$ devenv down
 ```
+
+!!! tip "New in devenv 2.1.3"
+
+    `devenv down` is a shorthand for `devenv processes down`.
 
 To wait for all processes to become ready (useful in CI):
 

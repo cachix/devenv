@@ -834,6 +834,10 @@ async fn dispatch_command(
         Commands::Up { up_args } => {
             run_up_args(devenv, up_args, config_strict_ports, command_rx, verbosity).await
         }
+        Commands::Down {} => {
+            devenv.down().await?;
+            Ok(CommandResult::Done)
+        }
         Commands::Processes { command } => match command {
             ProcessesCommand::Up { up_args } => {
                 run_up_args(devenv, up_args, config_strict_ports, command_rx, verbosity).await
