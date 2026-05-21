@@ -16,19 +16,6 @@ devenv search xyznonexistentpackagexyz 2>&1 | grep -E "Found 0 packages and 0 op
 # there should be no processes
 devenv up && exit 1
 
-# Skip container tests on macOS
-if [[ "$(uname)" == "Darwin" ]]; then
-	echo "Skipping container tests on macOS"
-	exit 0
-fi
-
-# containers
-devenv container build shell && exit 1
-devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin --follows nixpkgs
-devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
-devenv container build shell | grep image-shell.json
-devenv gc
-
 # Test profile error handling with no profiles defined
 echo "Testing profile error handling..."
 error_output=$(devenv --profile some-profile info 2>&1 || true)
@@ -68,3 +55,12 @@ echo "✓ --from works without local devenv.nix"
 echo "Testing -O packages:pkgs..."
 devenv -O packages:pkgs "hello" shell -- hello | grep -q "Hello, world"
 echo "✓ -O packages:pkgs works"
+
+# Containers
+if [[ "$(uname)" == "Linux" ]]; then
+	devenv container build shell && exit 1
+	devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin --follows nixpkgs
+	devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
+	devenv container build shell | grep image-shell.json
+	devenv gc
+fi
