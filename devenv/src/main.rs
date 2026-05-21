@@ -23,7 +23,7 @@ use std::{
     os, panic,
     path::{Path, PathBuf},
     process::{self, Command},
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, Once, OnceLock, Weak},
     time::Duration,
 };
 use tempfile::TempDir;
@@ -460,6 +460,77 @@ fn handoff() -> (RenderSide, BackendSide) {
     )
 }
 
+/// Current shutdown handle for the signal thread to drive. Updated each `run()`
+/// (the secrets-retry loop builds a fresh `Shutdown` per attempt).
+static SIGNAL_SHUTDOWN: OnceLock<Mutex<Weak<Shutdown>>> = OnceLock::new();
+static SIGNAL_THREAD: Once = Once::new();
+
+/// Handle SIGINT/SIGTERM/SIGHUP on a dedicated OS thread.
+///
+/// We don't route these through `tokio::signal`: devenv runs several tokio
+/// runtimes (renderer, backend, owner) and tokio's signal delivery is tied to
+/// one runtime's driver, so signals were silently dropped while a shell session
+/// held the runtime — which is what left `devenv shell` orphaned (and burning
+/// CPU) when its terminal closed. A `signal-hook` thread is runtime-independent
+/// and uses sigaction (no signal-mask blocking), so child processes — including
+/// the inner shell — keep their normal signal behavior. (tokio signals are still
+/// used for non-lifecycle signals like SIGWINCH in the shell session.)
+///
+/// On a signal we always abort any in-flight Nix evaluation. If an interactive
+/// shell is running we kill its inner shell and exit immediately (the tokio
+/// teardown path isn't reliable while a shell session holds the runtime, and the
+/// inner shell, living in its own session, would otherwise be orphaned). For
+/// other commands we drive graceful shutdown; a second signal force-exits.
+fn install_signal_handler(shutdown: &Arc<Shutdown>) {
+    let slot = SIGNAL_SHUTDOWN.get_or_init(|| Mutex::new(Weak::new()));
+    *slot.lock().unwrap() = Arc::downgrade(shutdown);
+
+    SIGNAL_THREAD.call_once(|| {
+        use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
+        use signal_hook::iterator::Signals;
+
+        let mut signals = match Signals::new([SIGINT, SIGTERM, SIGHUP]) {
+            Ok(signals) => signals,
+            Err(e) => {
+                tracing::warn!("failed to install signal handler: {e}");
+                return;
+            }
+        };
+
+        std::thread::Builder::new()
+            .name("devenv-signals".into())
+            .spawn(move || {
+                for signal in signals.forever() {
+                    // Abort any in-flight Nix evaluation so it stops promptly.
+                    devenv_nix_backend::trigger_interrupt();
+
+                    if devenv_shell::terminate_active_shell() {
+                        // An interactive shell is running: its inner shell has
+                        // been killed; exit now. Use _exit, not process::exit:
+                        // this thread isn't registered with Boehm GC, and
+                        // running atexit handlers (GC/Nix teardown) from here can
+                        // deadlock. The tokio teardown path is also unreliable
+                        // while a shell session holds the runtime.
+                        unsafe { nix::libc::_exit(128 + signal) };
+                    }
+
+                    // Other commands: drive graceful shutdown; a second signal
+                    // force-exits.
+                    match SIGNAL_SHUTDOWN
+                        .get()
+                        .and_then(|m| m.lock().unwrap().upgrade())
+                    {
+                        Some(shutdown) => shutdown.handle_interrupt(),
+                        // No live Shutdown to drive (between run() attempts): the
+                        // Nix interrupt above already fired, so nothing else to do.
+                        None => tracing::debug!("signal received with no active shutdown handle"),
+                    }
+                }
+            })
+            .expect("failed to spawn devenv-signals thread");
+    });
+}
+
 /// Single entry point for all command execution.
 ///
 /// Both TUI and direct modes share the same structure:
@@ -467,6 +538,9 @@ fn handoff() -> (RenderSide, BackendSide) {
 /// 2. Backend runs on a dedicated GC-registered thread
 /// 3. TUI runs on the main thread (if enabled), otherwise we just wait
 fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Result<()> {
+    // Install the signal handler before spawning the backend/worker threads.
+    install_signal_handler(&shutdown);
+
     let (renderer, _activity_guard) = Renderer::init(&ui);
 
     let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
@@ -502,8 +576,6 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
         .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
         .spawn(move || {
             build_gc_runtime().block_on(async {
-                shutdown_clone.install_signals().await;
-
                 let output = run_backend(backend, shutdown_clone.clone(), backend_side).await;
 
                 // Fallback for paths that didn't run cleanup themselves

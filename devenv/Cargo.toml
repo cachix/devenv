@@ -37,6 +37,7 @@ miette.workspace = true
 nix.workspace = true
 schemars.workspace = true
 serde.workspace = true
+signal-hook.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true

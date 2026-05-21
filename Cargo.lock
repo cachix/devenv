@@ -1843,6 +1843,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shell-escape",
+ "signal-hook 0.4.4",
  "similar 3.1.0",
  "sqlx",
  "tempfile",

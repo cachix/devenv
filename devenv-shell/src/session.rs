@@ -30,8 +30,8 @@ use libghostty_vt::style::{Style, StyleColor, Underline};
 use libghostty_vt::terminal::{Options as TerminalOptions, Point, Terminal};
 use portable_pty::PtySize;
 use std::fmt::Write as FmtWrite;
-use std::io::{self, IsTerminal, Read, Write};
-use std::sync::Arc;
+use std::io::{self, Read, Write};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc as tokio_mpsc, oneshot};
@@ -40,6 +40,49 @@ use tokio::sync::{mpsc as tokio_mpsc, oneshot};
 const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
 const KEYBIND_LIST_WATCHED: [u8; 2] = [0x1b, 0x17]; // Ctrl-Alt-W
 const KEYBIND_TOGGLE_ERROR: [u8; 2] = [0x1b, 0x05]; // Ctrl-Alt-E
+
+/// The inner shell's PTY for the currently running session, if any.
+///
+/// Lets the process-wide signal handler (which runs on its own OS thread, since
+/// tokio's signal delivery is unreliable across devenv's multiple runtimes)
+/// reach in and kill the inner shell on SIGINT/SIGTERM/SIGHUP. Without this the
+/// inner shell — which lives in its own session via the PTY — would outlive a
+/// terminated `devenv` and leave an orphan.
+static ACTIVE_SHELL_PTY: Mutex<Option<Arc<Pty>>> = Mutex::new(None);
+
+/// Kill the inner shell of the active session, if one is running.
+///
+/// Returns `true` if a shell was active (and was asked to die). Intended to be
+/// called from a signal handler thread; after this returns `true` the caller
+/// should exit the process — the inner shell won't outlive us.
+pub fn terminate_active_shell() -> bool {
+    let guard = ACTIVE_SHELL_PTY.lock().unwrap();
+    match guard.as_ref() {
+        Some(pty) => {
+            // kill() must stay non-blocking: the signal thread holds this lock
+            // across the call, and blocking here would stall signal handling.
+            let _ = pty.kill();
+            true
+        }
+        None => false,
+    }
+}
+
+/// Registers the active session's PTY for the lifetime of the guard.
+struct ActiveShellGuard;
+
+impl ActiveShellGuard {
+    fn register(pty: Arc<Pty>) -> Self {
+        *ACTIVE_SHELL_PTY.lock().unwrap() = Some(pty);
+        ActiveShellGuard
+    }
+}
+
+impl Drop for ActiveShellGuard {
+    fn drop(&mut self) {
+        *ACTIVE_SHELL_PTY.lock().unwrap() = None;
+    }
+}
 
 fn dump_row_from_cells(buf: &mut String, vt: &Terminal<'_, '_>, point: Point, cells: &[Cell]) {
     // TODO(libghostty-rs): Style::is_default() returns true for RGB-bg-only styles
@@ -645,6 +688,10 @@ impl ShellSession {
 
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
 
+        // Expose the inner shell to the signal handler so it can be killed if
+        // devenv is terminated; cleared when this session ends.
+        let _active_shell_guard = ActiveShellGuard::register(Arc::clone(&pty));
+
         // Handle TUI handoff if present
         if let Some(handoff) = handoff {
             // Signal TUI that initial build is complete and we're ready for terminal
@@ -663,9 +710,56 @@ impl ShellSession {
         tracing::trace!("session: raw mode active");
 
         let injected_stdin = io.stdin.is_some();
+        // Whether stdin is the real controlling terminal. Gates the cursor-position
+        // query and the hangup watchdog: both only make sense against a real TTY,
+        // not injected (tests) or piped (non-interactive) stdin.
+        let stdin_is_tty = !injected_stdin && crate::terminal::is_tty();
         let stdout_raw: Box<dyn Write + Send> = io.stdout.unwrap_or_else(|| Box::new(io::stdout()));
         let mut stdout: Box<dyn Write + Send> = Box::new(io::BufWriter::new(stdout_raw));
         let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
+
+        // Hangup watchdog. When the controlling terminal hangs up (host terminal
+        // or tab closed) poll() reports POLLHUP on stdin. This is a belt-and-
+        // suspenders companion to the signal handler: a closed terminal also
+        // raises SIGHUP, but detecting the hangup directly guarantees we never
+        // linger as a CPU-burning orphan. Kills the inner shell, then exits.
+        #[cfg(unix)]
+        if stdin_is_tty {
+            use std::os::unix::io::AsRawFd;
+            let fd = io::stdin().as_raw_fd();
+            let pty_for_hangup = Arc::clone(&pty);
+            std::thread::Builder::new()
+                .name("session-hangup".into())
+                .spawn(move || {
+                    loop {
+                        // events = 0 → poll wakes only on POLLHUP/POLLERR/POLLNVAL
+                        // (always reported), never on readable input, so this
+                        // blocks until hangup instead of busy-looping.
+                        let mut pfd = libc::pollfd {
+                            fd,
+                            events: 0,
+                            revents: 0,
+                        };
+                        let r = unsafe { libc::poll(&mut pfd, 1, -1) };
+                        if r < 0 {
+                            if io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+                                continue;
+                            }
+                            break;
+                        }
+                        if pfd.revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0 {
+                            let _ = pty_for_hangup.kill();
+                            // _exit, not process::exit: this thread isn't
+                            // registered with Boehm GC, so running atexit
+                            // handlers (GC/Nix teardown) from here can deadlock.
+                            // 128 + SIGHUP: a terminal hangup is a SIGHUP, even
+                            // though we detected it via poll() rather than the signal.
+                            unsafe { libc::_exit(128 + libc::SIGHUP) };
+                        }
+                    }
+                })
+                .expect("failed to spawn session-hangup thread");
+        }
 
         // Query cursor position FIRST before any terminal resets.
         // This tells us where TUI left the cursor after its final render.
@@ -673,7 +767,7 @@ impl ShellSession {
         // via stdin, so this would hang if stdin is not a TTY.
         // crossterm::cursor::position() handles the DSR query, parsing, and has a
         // built-in 2s timeout for environments that don't respond (Docker, CI).
-        let cursor_row = if !injected_stdin && io::stdin().is_terminal() {
+        let cursor_row = if stdin_is_tty {
             match crossterm::cursor::position() {
                 Ok((_col, row)) => row + 1, // crossterm returns 0-based, we need 1-based
                 Err(e) => {
@@ -853,21 +947,25 @@ impl ShellSession {
             )
         });
 
-        // Wait for VT thread without blocking the tokio runtime
-        let exit_code = tokio::task::spawn_blocking(move || {
+        // Wait for VT thread without blocking the tokio runtime.
+        let join_result = tokio::task::spawn_blocking(move || {
             vt_handle.join().unwrap_or(Err(SessionError::ChannelClosed))
         })
         .await
-        .map_err(|_| SessionError::ChannelClosed)??;
+        .map_err(|_| SessionError::ChannelClosed)
+        .and_then(|r| r);
 
+        // Always kill the inner shell and notify the coordinator, even when the
+        // VT thread failed. Otherwise an error here would skip teardown: the
+        // inner shell (in its own session) would be orphaned and the coordinator
+        // would wait forever for an `Exited` that never comes.
         let _ = pty.kill();
-
-        // Notify coordinator that shell exited
+        let exit_code = join_result.as_ref().ok().copied().flatten();
         if let Err(e) = event_tx.try_send(ShellEvent::Exited { exit_code }) {
             tracing::trace!("failed to send Exited event: {e}");
         }
 
-        Ok(exit_code)
+        join_result
     }
 
     /// Main event loop handling stdin, PTY output, and coordinator commands.
@@ -1270,5 +1368,62 @@ impl ShellSession {
 impl Default for ShellSession {
     fn default() -> Self {
         Self::with_defaults()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use portable_pty::CommandBuilder;
+
+    /// Regression test for devenv#2845: the signal handler must be able to find
+    /// and kill the active session's inner shell. If it can't, closing the
+    /// terminal leaves an orphaned `devenv` (and inner shell) burning CPU.
+    ///
+    /// This lives in the lib-test binary, the only place that touches the
+    /// process-global `ACTIVE_SHELL_PTY`, so it has exclusive access.
+    #[test]
+    fn terminate_active_shell_kills_registered_inner_shell() {
+        assert!(
+            !terminate_active_shell(),
+            "no session registered yet, nothing to terminate"
+        );
+
+        // A long-lived inner shell, registered the way `ShellSession::run` does.
+        let mut cmd = CommandBuilder::new("sleep");
+        cmd.arg("60");
+        let size = PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        let pty = Arc::new(Pty::spawn(cmd, size).expect("spawn inner pty"));
+        let guard = ActiveShellGuard::register(Arc::clone(&pty));
+
+        // The signal handler path can now reach in and kill it.
+        assert!(terminate_active_shell(), "registered inner shell not found");
+
+        // Confirm the inner shell actually died. The kill is synchronous; the
+        // bounded poll is only a safety net against a hang.
+        let mut status = None;
+        for _ in 0..500 {
+            status = pty.try_wait().expect("try_wait");
+            if status.is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            status.is_some(),
+            "inner shell still running after terminate_active_shell"
+        );
+
+        // Ending the session (dropping the guard) clears the registration.
+        drop(guard);
+        assert!(
+            !terminate_active_shell(),
+            "registration should be cleared when the session ends"
+        );
     }
 }
