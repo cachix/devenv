@@ -1,17 +1,11 @@
 use super::span_timings::SpanTimings;
 
-use console::style;
 use std::{
     fmt,
     sync::atomic::{AtomicBool, Ordering},
 };
 use tracing::{Event, Subscriber, field::Field, span};
-use tracing_subscriber::{
-    field::Visit,
-    fmt::{FmtContext, FormatEvent, FormatFields, format::Writer},
-    layer,
-    registry::LookupSpan,
-};
+use tracing_subscriber::{field::Visit, layer, registry::LookupSpan};
 
 /// Capture additional context during a span.
 #[derive(Debug)]
@@ -48,10 +42,9 @@ macro_rules! with_event_from_span {
 /// `devenv.ui.message` attribute) open and close. Each event sets
 /// `devenv.span_end = false` (Start) or `true` (End); `--trace-to` exporters
 /// (JSON / pretty / OTLP) use these to surface activity boundaries with their
-/// user-friendly message and total duration. The default stderr CLI is
-/// rendered by the activity channel consumer
-/// ([`crate::console::ConsoleOutput`]); [`DevenvFormat`] filters synthetic
-/// events out by detecting `devenv.span_end`.
+/// user-friendly message and total duration. The activity channel consumer
+/// ([`crate::console::ConsoleOutput`] or the TUI) renders activities to the
+/// terminal.
 ///
 /// Field convention (each name has a single type, no overloading):
 /// - `devenv.ui.message` (String, span attribute): the activity's display name.
@@ -185,84 +178,5 @@ where
         if event.metadata().level() == &tracing::Level::ERROR {
             self.has_error.store(true, Ordering::SeqCst);
         }
-    }
-}
-
-/// Renders WARN/ERROR `tracing` events to stderr with a status prefix.
-///
-/// Activity start/complete output is emitted via the activity channel and
-/// rendered by [`crate::console::ConsoleOutput`] (or the TUI). Synthetic span
-/// events emitted by [`DevenvLayer`] are skipped here — they exist for the
-/// `--trace-to` exporters only.
-#[derive(Default)]
-pub struct DevenvFormat;
-
-impl<S, F> FormatEvent<S, F> for DevenvFormat
-where
-    S: Subscriber + for<'a> LookupSpan<'a>,
-    F: for<'a> FormatFields<'a> + 'static,
-{
-    fn format_event(
-        &self,
-        _ctx: &FmtContext<'_, S, F>,
-        mut writer: Writer<'_>,
-        event: &Event<'_>,
-    ) -> fmt::Result {
-        #[derive(Default)]
-        struct EventVisitor {
-            message: Option<String>,
-            is_span_synthetic: bool,
-        }
-
-        impl Visit for EventVisitor {
-            fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-                if field.name() == "message" {
-                    self.message = Some(format!("{value:?}"));
-                }
-            }
-
-            fn record_str(&mut self, field: &Field, value: &str) {
-                if field.name() == "message" {
-                    self.message = Some(value.to_string());
-                }
-            }
-
-            fn record_bool(&mut self, field: &Field, _value: bool) {
-                if field.name() == "devenv.span_end" {
-                    self.is_span_synthetic = true;
-                }
-            }
-        }
-
-        let mut visitor = EventVisitor::default();
-        event.record(&mut visitor);
-
-        // Synthetic span events are for trace exporters only — the channel
-        // consumer renders activities to the terminal.
-        if visitor.is_span_synthetic {
-            return Ok(());
-        }
-
-        let Some(msg) = visitor.message else {
-            return Ok(());
-        };
-        let level = *event.metadata().level();
-
-        // User-facing one-shot messages go through `devenv_activity::message`,
-        // not via this formatter. Only WARN/ERROR are surfaced as a fallback
-        // for backend-internal warnings without an activity channel companion.
-        if !matches!(level, tracing::Level::ERROR | tracing::Level::WARN) {
-            return Ok(());
-        }
-
-        if writer.has_ansi_escapes() {
-            match level {
-                tracing::Level::ERROR => write!(writer, "{} ", style("✖").red())?,
-                tracing::Level::WARN => write!(writer, "{} ", style("•").yellow())?,
-                _ => {}
-            }
-        }
-
-        writeln!(writer, "{msg}")
     }
 }

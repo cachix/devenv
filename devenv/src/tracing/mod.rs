@@ -5,7 +5,7 @@ mod otel;
 mod span_ids;
 mod span_timings;
 
-use devenv_layer::{DevenvFormat, DevenvLayer};
+use devenv_layer::DevenvLayer;
 use span_ids::{SpanContext, SpanIdLayer};
 
 pub use crate::cli::{OtlpProtocol, TraceFormat, TraceOutputSpec, TraceSink};
@@ -141,6 +141,7 @@ pub fn init_tracing_default() -> TracingGuard {
 /// only to the explicit `TraceOutputSpec` sinks — they never write to stderr
 /// directly. Activity start/complete output is produced separately by the
 /// activity channel consumers ([`crate::console::ConsoleOutput`] or the TUI).
+/// Use `--trace-to` to surface raw events for debugging.
 ///
 /// Each `TraceOutputSpec` adds an export layer with its own format and destination.
 /// Multiple outputs can be active simultaneously (e.g. pretty to stderr + JSON to file).
@@ -192,27 +193,9 @@ where
     }
 }
 
-/// Renders WARN/ERROR `tracing` events to stderr alongside the activity
-/// channel. Lower levels never reach the terminal — `--trace-to` is the
-/// escape hatch for debug/trace output.
-pub(crate) fn build_cli_layer<S>() -> Box<dyn Layer<S> + Send + Sync>
-where
-    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
-{
-    let ansi = io::stderr().is_terminal();
-    Box::new(
-        tracing_subscriber::fmt::layer()
-            .event_format(DevenvFormat)
-            .with_writer(io::stderr)
-            .with_ansi(ansi),
-    )
-}
-
 /// Init tracing with only local-format specs (no OTLP).
 fn init_tracing_local(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
     let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
-
-    layers.push(build_cli_layer());
 
     for spec in specs {
         if let Some(layer) = create_local_boxed_layer(spec) {

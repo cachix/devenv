@@ -210,7 +210,8 @@ in
                   };
                 };
 
-                # Escape hatch (environment handled separately)
+                # User escape hatch. `environment` is a list and is merged
+                # separately below; recursiveUpdate would replace it wholesale.
                 pcAttrs = removeAttrs value.process-compose [ "environment" ];
 
                 # Merge depends_on from `before` lists of other processes.
@@ -219,15 +220,21 @@ in
                 beforeDeps = beforeDepsMap.${name} or { };
                 existingDepsOn = pcAttrs.depends_on or { };
                 mergedDepsOn = beforeDeps // existingDepsOn;
-                pcAttrsWithBefore = pcAttrs // lib.optionalAttrs (mergedDepsOn != { }) {
-                  depends_on = mergedDepsOn;
-                };
+
+                # Derived process-compose attrs from devenv's abstractions.
+                derived = { inherit command; }
+                  // typedAvailability
+                  // typedProbe;
+
+                # User leaves win over derived defaults at any depth.
+                # Without recursiveUpdate, setting `process-compose.readiness_probe.failure_threshold`
+                # would replace the entire derived `readiness_probe` (losing `exec.command`).
+                # Same hazard for `availability` and any other derived attrset.
+                merged = lib.recursiveUpdate derived pcAttrs;
               in
-              { inherit command; }
-              // typedAvailability
-              // typedProbe
-              // pcAttrsWithBefore
+              merged
               // { environment = envList ++ pcEnv; }
+              // lib.optionalAttrs (mergedDepsOn != { }) { depends_on = mergedDepsOn; }
               // lib.optionalAttrs (!value.start.enable) { disabled = true; }
             )
             config.processes;

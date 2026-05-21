@@ -13,10 +13,18 @@ let
 
   # Helper function to wrap commands with nix develop
   #
-  # This is skipped if the user is already in a shell launched by direnv.
-  # We trust that direnv will handle reloads.
+  # This is skipped if the user is already in a devenv shell loaded by direnv.
+  # direnv watches flake.nix/flake.lock and reloads the env automatically, so
+  # re-entering would be wasted work. Outside direnv (raw `nix develop`, fresh
+  # invocation, foreign-flake consumer), we re-enter to pick up any changes;
+  # nix resolves `.` by walking up for flake.nix and surfaces its own error if
+  # none is found.
+  #
+  # `$DIRENV_DIR` is exported by direnv on every load. `$DEVENV_IN_DIRENV_SHELL`
+  # is the legacy opt-in flag from the official templates; honored for
+  # backwards compatibility with older `.envrc` files.
   wrapWithNixDevelop = command: args: ''
-    if [[ -n "$IN_NIX_SHELL" && "$DEVENV_IN_DIRENV_SHELL" == "true" ]]; then
+    if [[ -n "$DEVENV_PROFILE" && ( -n "$DIRENV_DIR" || "$DEVENV_IN_DIRENV_SHELL" == "true" ) ]]; then
       exec ${command} ${args}
     else
       exec nix develop .#${shellName} --impure ${nixFlags} -c ${command} ${args}

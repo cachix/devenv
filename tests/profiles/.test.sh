@@ -231,13 +231,15 @@ else
   exit 1
 fi
 
-# Test 15: CLI parsing - profile without subcommand (issue #2206)
-echo "Test 15: CLI parsing - profile without subcommand"
-version_output=$(devenv --profile basic 2>&1)
-if echo "$version_output" | grep -q "devenv.*(.*)"; then
-  echo "✓ Profile flag parses correctly without subcommand (shows version)"
+# Test 15: CLI parsing - profile parses cleanly without consuming a subcommand (issue #2206)
+# Regression was clap eating the next arg as the profile value. Use `version`
+# as a benign subcommand: if --profile parses correctly, version still runs.
+echo "Test 15: CLI parsing - profile flag does not consume the subcommand"
+version_output=$(devenv --profile basic version 2>&1)
+if echo "$version_output" | grep -Eq "devenv [0-9]+\.[0-9]+\.[0-9]+"; then
+  echo "✓ Profile flag parses without swallowing the subcommand"
 else
-  echo "✗ Profile flag parsing failed without subcommand: $version_output"
+  echo "✗ Profile flag broke subcommand parsing: $version_output"
   exit 1
 fi
 

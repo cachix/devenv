@@ -119,7 +119,29 @@ When any output targets stdout or stderr, the TUI is automatically disabled.
 
 Environment variable `DEVENV_TRACE_TO` accepts comma-separated specs (e.g. `DEVENV_TRACE_TO=pretty:stderr,json:file:/tmp/t.json`).
 
-Legacy flags `--trace-output` and `--trace-format` (env: `DEVENV_TRACE_OUTPUT`, `DEVENV_TRACE_FORMAT`) are still supported but hidden.
+### Authoring trace events
+
+`tracing` (`trace!`, `debug!`, `info!`, `warn!`, `error!`) is for **developers** debugging devenv itself — visible via `--trace-to` or `RUST_LOG`.
+**User-facing output is the activity system**, not `tracing`.
+Use `activity!(...)`, `instrument_activity`, or `message(level, "...")` to surface anything the user should see in the TUI or non-TUI console.
+
+Level choice:
+
+- `error!` — operation failed, user needs to know.
+- `warn!` — degraded path that succeeded (fallback used, retry happened).
+- `info!` — major lifecycle events worth noting in a normal run.
+- `debug!` — diagnostics useful when something goes wrong (cache hits/misses, decision points, request boundaries). Enabled by `--verbose`. Cost: small.
+- `trace!` — fine-grained internal flow (per-iteration, per-byte, per-state-transition). Enabled only by explicit `RUST_LOG=trace`. Cost: can be hot.
+
+Rule of thumb: if an operator debugging a production issue would want it → `debug!`. If only the library author tracing internal flow would want it → `trace!`.
+
+Message style: lowercase, no leading capital, no trailing period. Structured fields carry the data. Examples:
+
+```rust
+debug!(key_hash = %key, "cache hit");
+trace!(error = %e, "task join error");
+warn!(path = %p.display(), "failed to read file, falling back to default");
+```
 
 ## Code Style
 

@@ -280,7 +280,7 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
 
         let from_input = devenv_core::config::Input {
             url: Some(url),
-            flake: true,
+            flake: false,
             follows: None,
             inputs: BTreeMap::new(),
             overlays: Vec::new(),

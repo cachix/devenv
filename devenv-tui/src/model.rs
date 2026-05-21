@@ -499,7 +499,6 @@ impl ActivityModel {
                 self.handle_activity_complete(id, outcome);
             }
             Evaluate::Log { id, line, .. } => {
-                // Evaluate logs count files
                 self.handle_activity_log(id, line, false);
             }
             Evaluate::Op { id, op, .. } => {
@@ -968,9 +967,6 @@ impl ActivityModel {
                     } else {
                         build.log_stdout_lines.push(line);
                     }
-                }
-                ActivityVariant::Evaluating(eval) => {
-                    eval.files_evaluated += 1;
                 }
                 ActivityVariant::Task(task) => {
                     task.last_log_line = Some(line);

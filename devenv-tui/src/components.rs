@@ -1,6 +1,7 @@
 //! Reusable UI components for the TUI
 
 use crate::model::{Activity, ActivityVariant, NixActivityState};
+use devenv_activity::ProcessStatus;
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
 use std::collections::VecDeque;
@@ -9,7 +10,9 @@ use std::time::Duration;
 // Import shared UI constants from devenv-shell
 pub use devenv_shell::{
     CHECKMARK, COLOR_ACTIVE, COLOR_ACTIVE_NESTED, COLOR_COMPLETED, COLOR_FAILED, COLOR_HIERARCHY,
-    COLOR_INFO, COLOR_INTERACTIVE, COLOR_SECONDARY, SPINNER_FRAMES, SPINNER_INTERVAL_MS, XMARK,
+    COLOR_INFO, COLOR_INTERACTIVE, COLOR_SECONDARY, COLOR_TRANSIENT, DOT_HALF, DOT_INERT,
+    DOT_READY, DOT_RING, DOT_RUNNING, PULSE_INTERVAL_MS, SPINNER_FRAMES, SPINNER_INTERVAL_MS,
+    XMARK,
 };
 
 /// Self-animating spinner component.
@@ -76,6 +79,78 @@ pub fn StatusIndicator(
             }
         }
     }
+}
+
+/// Map a process status to its status-dot glyph, color, and whether it pulses.
+///
+/// Shape carries the lifecycle so the state reads without relying on color
+/// (color only reinforces); `pulse` marks transient states so motion signals
+/// "in progress" without an animated spinner.
+pub fn process_status_dot(
+    status: &ProcessStatus,
+    completed: Option<bool>,
+    shutting_down: bool,
+) -> (&'static str, Color, bool) {
+    // Global shutdown: every still-active process is draining.
+    if shutting_down && status.is_active() {
+        return (DOT_HALF, COLOR_HIERARCHY, true);
+    }
+    match status {
+        ProcessStatus::NotStarted => (DOT_INERT, COLOR_HIERARCHY, false),
+        ProcessStatus::Waiting => (DOT_RING, COLOR_TRANSIENT, true),
+        ProcessStatus::Starting | ProcessStatus::Restarting => (DOT_HALF, COLOR_TRANSIENT, true),
+        ProcessStatus::Running => (DOT_RUNNING, COLOR_COMPLETED, false),
+        ProcessStatus::Ready => (DOT_READY, COLOR_COMPLETED, false),
+        ProcessStatus::Stopping => (DOT_HALF, COLOR_HIERARCHY, true),
+        ProcessStatus::Stopped if completed == Some(false) => (XMARK, COLOR_FAILED, false),
+        ProcessStatus::Stopped => (DOT_RING, COLOR_HIERARCHY, false),
+    }
+}
+
+/// Process status dot. Static glyph for stable states; transient states
+/// (`pulse = true`) breathe between `color` and gray to signal liveness
+/// without the busy churn of a spinner.
+#[derive(Default, Props)]
+pub struct StatusDotProps {
+    pub glyph: String,
+    pub color: Option<Color>,
+    pub pulse: bool,
+}
+
+#[cfg(feature = "deterministic-tui")]
+#[component]
+pub fn StatusDot(_hooks: Hooks, props: &StatusDotProps) -> impl Into<AnyElement<'static>> {
+    let color = props.color.unwrap_or(COLOR_ACTIVE);
+    element! {
+        Text(content: props.glyph.clone(), color: color)
+    }
+}
+
+#[cfg(not(feature = "deterministic-tui"))]
+#[component]
+pub fn StatusDot(mut hooks: Hooks, props: &StatusDotProps) -> impl Into<AnyElement<'static>> {
+    let color = props.color.unwrap_or(COLOR_ACTIVE);
+
+    // Hooks must be called unconditionally and in a stable order every render
+    // (iocraft rules of hooks); `pulse` can flip as a process changes state,
+    // so always register them and gate only the rendering.
+    let mut bright = hooks.use_state(|| true);
+    hooks.use_future(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(PULSE_INTERVAL_MS)).await;
+            let Some(val) = bright.try_get() else {
+                break;
+            };
+            bright.set(!val);
+        }
+    });
+
+    let shown = if props.pulse && !bright.get() {
+        COLOR_HIERARCHY
+    } else {
+        color
+    };
+    element!(Text(content: props.glyph.clone(), color: shown))
 }
 
 /// Build logs viewport height for collapsed preview (press 'e' to expand to fullscreen)
