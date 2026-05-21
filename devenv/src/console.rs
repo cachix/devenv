@@ -79,13 +79,6 @@ struct PendingTask {
     log_level: ActivityLevel,
 }
 
-#[derive(Copy, Clone)]
-#[allow(dead_code)]
-enum Sink {
-    Stdout,
-    Stderr,
-}
-
 pub struct ConsoleOutput {
     rx: mpsc::UnboundedReceiver<ActivityEvent>,
     verbosity: VerbosityLevel,
@@ -96,9 +89,8 @@ pub struct ConsoleOutput {
     /// Display names of fetches we already announced, used to dedup duplicate
     /// Substitute/CopyPath pairs Nix emits for the same store path.
     active_fetch_names: HashSet<String>,
-    // `new()` wraps these in `LineWriter` so writes coalesce per line
-    // instead of re-locking stdout/stderr per fragment.
-    stdout: Box<dyn Write + Send>,
+    // `new()` wraps this in `LineWriter` so writes coalesce per line
+    // instead of re-locking stderr per fragment.
     stderr: Box<dyn Write + Send>,
 }
 
@@ -110,18 +102,16 @@ impl ConsoleOutput {
             entries: HashMap::new(),
             pending_tasks: HashMap::new(),
             active_fetch_names: HashSet::new(),
-            stdout: Box::new(LineWriter::new(io::stdout())),
             stderr: Box::new(LineWriter::new(io::stderr())),
         }
     }
 
-    /// Test-only: injects writers, skipping `LineWriter` so tests can
+    /// Test-only: injects the writer, skipping `LineWriter` so tests can
     /// read raw buffers.
     #[cfg(test)]
-    fn with_writers(
+    fn with_writer(
         rx: mpsc::UnboundedReceiver<ActivityEvent>,
         verbosity: VerbosityLevel,
-        stdout: Box<dyn Write + Send>,
         stderr: Box<dyn Write + Send>,
     ) -> Self {
         Self {
@@ -130,7 +120,6 @@ impl ConsoleOutput {
             entries: HashMap::new(),
             pending_tasks: HashMap::new(),
             active_fetch_names: HashSet::new(),
-            stdout,
             stderr,
         }
     }
@@ -273,11 +262,7 @@ impl ConsoleOutput {
             log_level,
             suppressed_logs: BoundedLog::new(MAX_SUPPRESSED_LINES),
         };
-        self.write(
-            level,
-            Sink::Stderr,
-            format_args!("{} {}", style("•").blue(), entry.name),
-        );
+        self.write(level, format_args!("{} {}", style("•").blue(), entry.name));
         self.entries.insert(id, entry);
     }
 
@@ -292,16 +277,11 @@ impl ConsoleOutput {
         } else {
             entry.level
         };
-        // On failure, dump anything the verbosity gate had hidden — to
-        // stderr regardless of original sink, since these are now error
-        // context.
+        // On failure, dump anything the verbosity gate had hidden, since
+        // these are now error context.
         if outcome.is_error() && !entry.suppressed_logs.is_empty() {
             for chunk in entry.suppressed_logs.iter() {
-                self.write(
-                    ActivityLevel::Error,
-                    Sink::Stderr,
-                    format_args!("  {chunk}"),
-                );
+                self.write(ActivityLevel::Error, format_args!("  {chunk}"));
             }
         }
         let mark = match outcome {
@@ -313,7 +293,6 @@ impl ConsoleOutput {
         let duration = HumanReadableDuration(entry.start.elapsed());
         self.write(
             level,
-            Sink::Stderr,
             format_args!(
                 "{mark} {} in {duration}{}",
                 entry.name,
@@ -335,7 +314,7 @@ impl ConsoleOutput {
         // Indent so chunks nest visually under their activity's start line.
         for chunk in line.split('\n') {
             if visible {
-                self.write(level, Sink::Stderr, format_args!("  {chunk}"));
+                self.write(level, format_args!("  {chunk}"));
             } else if let Some(entry) = self.entries.get_mut(&id) {
                 entry.suppressed_logs.push(chunk.to_string());
             }
@@ -348,19 +327,16 @@ impl ConsoleOutput {
             ActivityLevel::Warn => style("•").yellow(),
             _ => style("•").blue(),
         };
-        self.write(level, Sink::Stderr, format_args!("{prefix} {text}"));
+        self.write(level, format_args!("{prefix} {text}"));
     }
 
     /// **The single output gate.** Every byte this module emits goes through
     /// here. The verbosity check lives nowhere else.
-    fn write(&mut self, level: ActivityLevel, sink: Sink, args: fmt::Arguments) {
+    fn write(&mut self, level: ActivityLevel, args: fmt::Arguments) {
         if !self.show_at(level) {
             return;
         }
-        let _ = match sink {
-            Sink::Stdout => writeln!(self.stdout, "{args}"),
-            Sink::Stderr => writeln!(self.stderr, "{args}"),
-        };
+        let _ = writeln!(self.stderr, "{args}");
     }
 
     fn show_at(&self, level: ActivityLevel) -> bool {
@@ -447,38 +423,19 @@ mod tests {
 
     struct Harness {
         console: ConsoleOutput,
-        stdout: SharedBuffer,
         stderr: SharedBuffer,
     }
 
     impl Harness {
         fn new(verbosity: VerbosityLevel) -> Self {
             let (_tx, rx) = mpsc::unbounded_channel::<ActivityEvent>();
-            let stdout = SharedBuffer::new();
             let stderr = SharedBuffer::new();
-            let console = ConsoleOutput::with_writers(
-                rx,
-                verbosity,
-                stdout.clone().into_box(),
-                stderr.clone().into_box(),
-            );
-            Self {
-                console,
-                stdout,
-                stderr,
-            }
+            let console = ConsoleOutput::with_writer(rx, verbosity, stderr.clone().into_box());
+            Self { console, stderr }
         }
 
         fn dispatch(&mut self, event: ActivityEvent) {
             self.console.handle(event);
-        }
-
-        fn combined(&self) -> String {
-            format!(
-                "=== stderr ===\n{}=== stdout ===\n{}",
-                self.stderr.contents(),
-                self.stdout.contents()
-            )
         }
     }
 
@@ -560,7 +517,7 @@ mod tests {
         h.dispatch(task_log(1, "all hooks passed", false));
         h.dispatch(task_complete(1, ActivityOutcome::Success));
 
-        let out = h.combined();
+        let out = h.stderr.contents();
         assert!(
             !out.contains("all hooks passed"),
             "stdout line should remain suppressed on success, got:\n{out}"
@@ -581,14 +538,14 @@ mod tests {
         h.dispatch(task_log(1, "step 2", false));
         h.dispatch(task_complete(1, ActivityOutcome::Failed));
 
-        let stdout = h.stdout.contents();
+        let stderr = h.stderr.contents();
         // Each line streamed exactly once.
         assert_eq!(
-            stdout.matches("step 1").count(),
+            stderr.matches("step 1").count(),
             1,
-            "line should appear exactly once, got stdout:\n{stdout}"
+            "line should appear exactly once, got stderr:\n{stderr}"
         );
-        assert_eq!(stdout.matches("step 2").count(), 1);
+        assert_eq!(stderr.matches("step 2").count(), 1);
     }
 
     /// `is_error: true` lines are Error-level → always live; replay must
@@ -619,7 +576,7 @@ mod tests {
         h.dispatch(task_log(1, "SC2148 error", false));
         h.dispatch(task_complete(1, ActivityOutcome::Failed));
 
-        let out = h.combined();
+        let out = h.stderr.contents();
         assert!(
             out.contains("SC2148"),
             "suppressed line must replay on fail even at Quiet, got:\n{out}"
@@ -636,11 +593,11 @@ mod tests {
         h.dispatch(task_log(1, "trace line", false));
         h.dispatch(task_complete(1, ActivityOutcome::Failed));
 
-        let stdout = h.stdout.contents();
+        let stderr = h.stderr.contents();
         assert_eq!(
-            stdout.matches("trace line").count(),
+            stderr.matches("trace line").count(),
             1,
-            "line should appear exactly once at Verbose, got stdout:\n{stdout}"
+            "line should appear exactly once at Verbose, got stderr:\n{stderr}"
         );
     }
 
