@@ -1,40 +1,65 @@
-{ pkgs, lib, config, ... }:
+{ pkgs
+, lib
+, config
+, ...
+}:
 
 let
   cfg = config.services.minio;
   types = lib.types;
   json = pkgs.formats.json { };
 
+  # Port allocation: extract port from address strings
+  parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
+  parseHost = addr: lib.head (lib.splitString ":" addr);
+
+  baseApiPort = parsePort cfg.listenAddress;
+  baseConsolePort = parsePort cfg.consoleAddress;
+  allocatedApiPort = config.processes.minio.ports.api.value;
+  allocatedConsolePort = config.processes.minio.ports.console.value;
+  apiHost = parseHost cfg.listenAddress;
+  consoleHost = parseHost cfg.consoleAddress;
+  apiAddr = "${apiHost}:${toString allocatedApiPort}";
+  consoleAddr = "${consoleHost}:${toString allocatedConsolePort}";
+
   serverCommand = lib.escapeShellArgs [
     "${cfg.package}/bin/minio"
     "server"
     "--json"
     "--address"
-    cfg.listenAddress
+    apiAddr
     "--console-address"
-    cfg.consoleAddress
+    consoleAddr
     "--config-dir=${config.env.MINIO_CONFIG_DIR}"
     config.env.MINIO_DATA_DIR
   ];
 
-  startScript = ''
-    mkdir -p "$MINIO_DATA_DIR" "$MINIO_CONFIG_DIR"
-    for bucket in ${lib.escapeShellArgs cfg.buckets}; do
-      mkdir -p "$MINIO_DATA_DIR/$bucket"
-    done
-  '' + (if cfg.afterStart != "" then ''
-    ${serverCommand} &
+  startScript = pkgs.writeShellScriptBin "minio" (
+    ''
+      mkdir -p "$MINIO_DATA_DIR" "$MINIO_CONFIG_DIR"
+      for bucket in ${lib.escapeShellArgs cfg.buckets}; do
+        mkdir -p "$MINIO_DATA_DIR/$bucket"
+      done
+    ''
+    + (
+      if cfg.afterStart != "" then
+        ''
+          ${serverCommand} &
 
-    while ! mc admin info local >& /dev/null; do
-      sleep 1
-    done
+          while ! mc admin info local >& /dev/null; do
+            sleep 1
+          done
 
-    ${cfg.afterStart}
+          ${cfg.afterStart}
 
-    wait
-  '' else ''
-    exec ${serverCommand}
-  '');
+          wait
+        ''
+      else
+        ''
+          exec ${serverCommand}
+        ''
+    )
+  );
 
   clientWrapper = pkgs.writeShellScriptBin "mc" ''
     mkdir -p "$MINIO_CLIENT_CONFIG_DIR"
@@ -142,8 +167,23 @@ in
       }
     ];
 
-    processes.minio.exec = "${startScript}";
+    processes.minio = {
+      ports.api.allocate = baseApiPort;
+      ports.console.allocate = baseConsolePort;
 
+      exec = "exec ${lib.getExe startScript}";
+
+      ready = {
+        http.get = {
+          host = "localhost";
+          port = baseApiPort;
+          path = "/minio/health/ready";
+        };
+      };
+    };
+
+    env.MINIO_PORT = allocatedApiPort;
+    env.MINIO_CONSOLE_PORT = allocatedConsolePort;
     env.MINIO_DATA_DIR = config.env.DEVENV_STATE + "/minio/data";
     env.MINIO_CONFIG_DIR = config.env.DEVENV_STATE + "/minio/config";
     env.MINIO_REGION = "${cfg.region}";
@@ -159,12 +199,11 @@ in
     services.minio.clientConfig = lib.mkBefore {
       version = "10";
       aliases.local = {
-        url = "http://${if lib.hasPrefix ":" cfg.listenAddress then "localhost:${cfg.listenAddress}" else cfg.listenAddress}";
+        url = "http://${apiAddr}";
         inherit (cfg) accessKey secretKey;
         api = "S3v4";
         path = "auto";
       };
     };
-
   };
 }
