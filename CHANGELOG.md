@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv shell`/`devenv update` failing with `authentication required but no callback set` when a `url."ssh://git@github.com/".insteadOf` git config rewrites GitHub HTTPS URLs to SSH. GitHub flake inputs now resolve over SSH using your ssh-agent ([#2842](https://github.com/cachix/devenv/issues/2842)).
 - Fixed the "N files" counter under "Evaluating shell" inflating from generic Nix log lines. Now only counts actual file read operations.
 - Fixed `devenv up`/`test`/`tasks` failing with `error: could not find a flake.nix file` when the devenv shell is loaded from a remote flake via direnv ([#2599](https://github.com/cachix/devenv/issues/2599)).
 - Fixed `devenv shell` printing internal reload warnings (e.g. "Watched path became unavailable, forcing reload") to the user's terminal, clobbering scrollback, prompts, and editors. 
@@ -12,12 +13,16 @@
 - Fixed "zoxide: infinite loop detected" when using `zoxide init --cmd=cd fish` and `cd`-ing into a devenv project. The fish hook now defers spawning `devenv shell` to the next prompt instead of spawning inline inside the PWD event handler, so in-progress shell state never leaks into the devenv shell ([#2841](https://github.com/cachix/devenv/issues/2841)).
 - The nushell hook now matches the bash/zsh/fish behavior: outer shells with `DEVENV_ROOT` exported (e.g. via direnv) no longer `exit` on cd-out, and manually-entered `devenv shell` no longer respawns a nested shell.
 - Fixed stale task and option results that lingered when `devenv.nix` was edited while a command was already evaluating. The eval cache no longer stores results whose tracked input files were modified mid-evaluation, so the next run no longer needs `.devenv/nix-eval-cache.db*` to be wiped to see the new definitions ([#2745](https://github.com/cachix/devenv/issues/2745)).
+- Fixed long lines in `devenv shell` getting a hard newline inserted at the wrap point when copying to clipboard. The shell now preserves the soft-wrap when flushing wrapped output into the terminal's scrollback, so clipboard copy keeps the original single line ([#2865](https://github.com/cachix/devenv/issues/2865)).
+- Fixed files declared with the `files` option not being regenerated when an auto-loaded (`devenv allow`) shell reloaded after `devenv update`. enterShell tasks (including `devenv:files`) now re-run on hot-reload, matching a fresh shell entry, instead of only updating environment variables ([#2864](https://github.com/cachix/devenv/issues/2864)).
 
 ### Improvements
 
+- Cachix now authenticates pulls and pushes without `CACHIX_AUTH_TOKEN` exported in the environment: when the variable is unset, devenv resolves the token from a `CACHIX_AUTH_TOKEN` secretspec secret, then from the auth token stored by the Cachix CLI (`cachix authtoken`) in `~/.config/cachix/cachix.dhall`. The resolved token is passed to the cachix push daemon as well.
 - `devenv repl` now exposes `inputs` alongside `devenv` and `pkgs`, so you can inspect inputs declared in `devenv.yaml` directly from the REPL (e.g. `inputs.nixpkgs.lib.version`).
 - The TUI now shows each process's state as a status dot whose shape encodes the lifecycle (waiting, starting, running, ready, stopped, failed) instead of an identical spinner on every process. The shape carries the state so it reads without relying on color; transient states gently pulse to signal progress.
 - Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.
+- Added `devenv down` as a shorthand for `devenv processes down`, mirroring `devenv up` ([#2862](https://github.com/cachix/devenv/issues/2862)).
 
 ### Breaking Changes
 

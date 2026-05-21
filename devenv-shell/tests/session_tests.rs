@@ -343,6 +343,55 @@ async fn test_overflow_preserved_in_scrollback() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_wrapped_line_preserved_in_scrollback() {
+    let (io, _stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+
+    // Print a 100-char single-token line (wraps once at col 80), then push it
+    // off the 24-row viewport so it lands in native scrollback.
+    let marker = "X".repeat(100);
+    let cmd = format!(
+        "printf '%s\\n' '{}'; for i in $(seq 1 30); do echo line$i; done; echo DONE; exit 0",
+        marker
+    );
+    cmd_tx.send(spawn_cmd(&cmd)).await.unwrap();
+
+    let collected = read_until(&mut stdout_ours, b"DONE", Duration::from_secs(5));
+
+    let mut vt = Terminal::new(TerminalOptions {
+        cols: 80,
+        rows: 24,
+        max_scrollback: DEFAULT_MAX_SCROLLBACK,
+    })
+    .unwrap();
+    vt.vt_write(&collected);
+
+    let total = vt.total_rows().unwrap_or(0);
+    let mut found_wrapped = false;
+    for y in 0..total {
+        let point = screen_point(y as u32);
+        if !row_plain_text(&vt, point).contains("XXXXXXXXXX") {
+            continue;
+        }
+        let row = vt.grid_ref(point).unwrap().row().unwrap();
+        if row.is_wrapped().unwrap_or(false) {
+            found_wrapped = true;
+            break;
+        }
+    }
+    assert!(
+        found_wrapped,
+        "expected the wrapped line in scrollback to keep its soft-wrap bit"
+    );
+
+    let _ = handle.await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_overflow_viewport_shows_tail() {
     let (io, _stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);

@@ -10,6 +10,7 @@
 
 use anyhow::{Context, Result, anyhow};
 use devenv_activity::{Activity, activity};
+use devenv_core::cachix::CACHIX_AUTH_TOKEN_ENV;
 use devenv_core::nix_log_bridge::extract_package_name;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -57,6 +58,13 @@ pub struct DaemonSpawnConfig {
     pub binary: PathBuf,
     /// Run in dry-run mode (no actual uploads)
     pub dry_run: bool,
+    /// Auth token to pass to the daemon via `CACHIX_AUTH_TOKEN`.
+    ///
+    /// When `Some`, it is set on the child process environment so pushes
+    /// authenticate even if the token was not exported globally (e.g. it
+    /// came from secretspec or the cachix dhall config). When `None`, the
+    /// daemon falls back to its own resolution (inherited env / dhall).
+    pub auth_token: Option<String>,
 }
 
 /// Configuration for connecting to a cachix daemon
@@ -254,6 +262,13 @@ impl DaemonProcess {
         cmd.arg("--socket")
             .arg(&config.socket_path)
             .arg(&config.cache_name);
+
+        // Pass the resolved auth token to the daemon's environment so
+        // pushes authenticate even when the token isn't exported globally
+        // (secretspec / cachix dhall config). Scoped to the child only.
+        if let Some(token) = config.auth_token.as_ref().filter(|t| !t.is_empty()) {
+            cmd.env(CACHIX_AUTH_TOKEN_ENV, token);
+        }
 
         let mut child = cmd
             .stdout(Stdio::null())
@@ -829,6 +844,7 @@ mod tests {
             socket_path: PathBuf::from("/tmp/test.sock"),
             binary: PathBuf::from("/nix/store/xxx-cachix/bin/cachix"),
             dry_run: true,
+            auth_token: None,
         };
         assert_eq!(config.cache_name, "my-cache");
         assert_eq!(config.socket_path, PathBuf::from("/tmp/test.sock"));
@@ -911,6 +927,7 @@ mod tests {
             socket_path: PathBuf::from("/tmp/test.sock"),
             binary: PathBuf::from("cachix"),
             dry_run: false,
+            auth_token: None,
         };
         assert!(!config.dry_run);
     }

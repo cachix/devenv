@@ -7,7 +7,8 @@
 //! still reach it during shutdown.
 
 use crate::Devenv;
-use crate::devenv::ShellCommand;
+use crate::devenv::{ShellCommand, format_shell_exports};
+use devenv_core::VerbosityLevel;
 use devenv_nix_backend::{NIX_STACK_SIZE, gc_register_current_thread};
 use devenv_reload::{BuildError, WatcherHandle};
 use std::path::{Path, PathBuf};
@@ -85,9 +86,15 @@ impl DevenvClient {
 
 /// Spawn the owner on a dedicated thread.
 ///
+/// `verbosity` controls how the enterShell tasks re-run during reload report
+/// progress.
+///
 /// Returns the `Devenv` once all `DevenvClient`s drop and the request channel
 /// closes.
-pub fn spawn_owner(devenv: Devenv) -> (DevenvClient, JoinHandle<Devenv>) {
+pub fn spawn_owner(
+    devenv: Devenv,
+    verbosity: VerbosityLevel,
+) -> (DevenvClient, JoinHandle<Devenv>) {
     let (tx, mut rx) = mpsc::channel::<DevenvRequest>(32);
     let handle = std::thread::Builder::new()
         .name("devenv-reload-owner".into())
@@ -100,7 +107,7 @@ pub fn spawn_owner(devenv: Devenv) -> (DevenvClient, JoinHandle<Devenv>) {
                 .expect("failed to build current-thread runtime for Devenv owner");
             rt.block_on(async move {
                 while let Some(req) = rx.recv().await {
-                    handle_request(&devenv, req).await;
+                    handle_request(&devenv, req, verbosity).await;
                 }
                 devenv
             })
@@ -109,7 +116,7 @@ pub fn spawn_owner(devenv: Devenv) -> (DevenvClient, JoinHandle<Devenv>) {
     (DevenvClient { tx }, handle)
 }
 
-async fn handle_request(devenv: &Devenv, req: DevenvRequest) {
+async fn handle_request(devenv: &Devenv, req: DevenvRequest, verbosity: VerbosityLevel) {
     match req {
         DevenvRequest::PrepareExec { cmd, args, reply } => {
             let _ = reply.send(devenv.prepare_exec(cmd, &args).await);
@@ -119,7 +126,8 @@ async fn handle_request(devenv: &Devenv, req: DevenvRequest) {
             watcher,
             reply,
         } => {
-            let _ = reply.send(run_build_reload_env(devenv, &reload_file, &watcher).await);
+            let _ =
+                reply.send(run_build_reload_env(devenv, &reload_file, &watcher, verbosity).await);
         }
         DevenvRequest::AddWatchPaths { watcher, reply } => {
             add_watch_paths(devenv, &watcher).await;
@@ -132,16 +140,27 @@ async fn run_build_reload_env(
     devenv: &Devenv,
     reload_file: &Path,
     watcher: &WatcherHandle,
+    verbosity: VerbosityLevel,
 ) -> Result<(), BuildError> {
     devenv
         .invalidate_for_reload()
         .await
         .map_err(|e| BuildError::new(format!("Failed to invalidate state for reload: {}", e)))?;
 
-    let env_script = devenv
+    let mut env_script = devenv
         .print_dev_env(false)
         .await
         .map_err(|e| BuildError::new(format!("Failed to build environment: {}", e)))?;
+
+    // Re-run enterShell tasks so task-managed state (e.g. files created by the
+    // `files` option via devenv:files) is refreshed on reload, matching what
+    // happens on a fresh shell entry. Append their env exports so changes like
+    // an updated PATH propagate into the live shell.
+    let (exports, _messages) = devenv
+        .run_enter_shell_tasks(None, verbosity)
+        .await
+        .map_err(|e| BuildError::new(format!("Failed to run enterShell tasks: {}", e)))?;
+    env_script.push_str(&format_shell_exports(&exports));
 
     let temp_path = reload_file.with_extension("sh.tmp");
     std::fs::write(&temp_path, &env_script)

@@ -749,6 +749,9 @@ pub enum Commands {
         up_args: UpArgs,
     },
 
+    #[command(about = "Stop processes running in the background. https://devenv.sh/processes/")]
+    Down {},
+
     Processes {
         #[command(subcommand)]
         command: ProcessesCommand,
@@ -1351,6 +1354,16 @@ mod tests {
                 assert!(up_args.no_strict_ports);
             }
             _ => panic!("expected `devenv up` command"),
+        }
+    }
+
+    #[test]
+    fn down_alias_parses() {
+        let cli = Cli::parse_from(["devenv", "down"]);
+
+        match cli.command {
+            Commands::Down {} => {}
+            _ => panic!("expected `devenv down` command"),
         }
     }
 

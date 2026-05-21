@@ -597,7 +597,7 @@ async fn run_backend(
         let shell = devenv.shell_settings.shell.clone();
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
-        let (client, owner_handle) = devenv::reload::spawn_owner(devenv);
+        let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
             devenv: client,
             cmd,
@@ -833,6 +833,10 @@ async fn dispatch_command(
             .map_or(CommandResult::Done, CommandResult::Print)),
         Commands::Up { up_args } => {
             run_up_args(devenv, up_args, config_strict_ports, command_rx, verbosity).await
+        }
+        Commands::Down {} => {
+            devenv.down().await?;
+            Ok(CommandResult::Done)
         }
         Commands::Processes { command } => match command {
             ProcessesCommand::Up { up_args } => {

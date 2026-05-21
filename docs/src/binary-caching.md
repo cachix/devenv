@@ -14,6 +14,19 @@ You don't need to install Cachix client, devenv will handle binary caching for y
 
 After that you'll need to set `CACHIX_AUTH_TOKEN=XXX` with either [a personal auth token](https://app.cachix.org/personal-auth-tokens) or a per cache token (that you can create in cache settings).
 
+!!! tip "New in version 2.1.3"
+
+    If `CACHIX_AUTH_TOKEN` is not set in the environment, devenv resolves the
+    token from, in order:
+
+    1. a `CACHIX_AUTH_TOKEN` secret declared in [secretspec](integrations/secretspec.md), then
+    2. the auth token stored by the Cachix CLI (`cachix authtoken`) in
+       `$XDG_CONFIG_HOME/cachix/cachix.dhall` (usually `~/.config/cachix/cachix.dhall`).
+
+    The resolved token is used for both pulling from private caches and
+    pushing (it is passed to the cachix push daemon), so neither requires
+    exporting the token into your environment.
+
 ## Pull
 
 Configure your new cache:
