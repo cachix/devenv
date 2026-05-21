@@ -10,7 +10,7 @@ devenv info | grep "python3-"
 devenv show | grep "python3-"
 devenv search ncdu 2>&1 | grep -E "Found [0-9]+ packages and [0-9]+ options for 'ncdu'"
 RUST_LOG=trace devenv --verbose --trace-output file:search-trace.log search '^ncdu$' 2>&1 | grep -E "Found [0-9]+ packages and [0-9]+ options"
-grep "Cache hit" search-trace.log | grep "optionsJSON"
+grep "cache hit" search-trace.log | grep "optionsJSON"
 devenv search xyznonexistentpackagexyz 2>&1 | grep -E "Found 0 packages and 0 options"
 
 # there should be no processes
