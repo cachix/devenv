@@ -5,7 +5,7 @@ set -exu
 # Regression test for https://github.com/cachix/devenv/issues/2335
 
 if [[ "$(uname)" == "Darwin" ]]; then
-  lib_path_var="DYLD_LIBRARY_PATH"
+  lib_path_var="DYLD_FALLBACK_LIBRARY_PATH"
 else
   lib_path_var="LD_LIBRARY_PATH"
 fi
