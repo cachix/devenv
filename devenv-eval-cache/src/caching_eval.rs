@@ -137,7 +137,7 @@ impl CachingEvalService {
         // Update timestamp
         db::update_eval_updated_at(&self.pool, eval_row.id).await?;
 
-        trace!(
+        debug!(
             key_hash = %key.key_hash,
             attr_name = %key.attr_name,
             "Cache hit"
