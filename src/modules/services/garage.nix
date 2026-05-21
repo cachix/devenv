@@ -224,6 +224,27 @@ in
         Additional `garage.toml` snippet appended to the generated config.
       '';
     };
+
+    ui = {
+      enable = lib.mkEnableOption "Enable a simple web UI.";
+
+      start = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          If the service is by default started or must be manually started.
+        '';
+      };
+
+      port = lib.mkOption {
+        type = types.port;
+        default = 3919;
+        example = 3919;
+        description = ''
+          On which port the UI should run.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -258,6 +279,16 @@ in
     processes.garage-configure = {
       exec = "exec ${configureScript}/bin/configure";
       after = [ "devenv:processes:garage@started" ];
+    };
+
+    processes.garage-web-ui = lib.mkIf cfg.ui.enable {
+      exec = "${lib.getExe pkgs.garage-webui}";
+      start.enable = cfg.ui.start;
+      env = {
+        CONFIG_PATH = "${configFile}";
+        PORT = lib.toString cfg.ui.port;
+      };
+      after = [ "devenv:processes:garage@ready" ];
     };
   };
 }
