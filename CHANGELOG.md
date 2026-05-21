@@ -13,6 +13,7 @@
 - The nushell hook now matches the bash/zsh/fish behavior: outer shells with `DEVENV_ROOT` exported (e.g. via direnv) no longer `exit` on cd-out, and manually-entered `devenv shell` no longer respawns a nested shell.
 - Fixed stale task and option results that lingered when `devenv.nix` was edited while a command was already evaluating. The eval cache no longer stores results whose tracked input files were modified mid-evaluation, so the next run no longer needs `.devenv/nix-eval-cache.db*` to be wiped to see the new definitions ([#2745](https://github.com/cachix/devenv/issues/2745)).
 - Fixed long lines in `devenv shell` getting a hard newline inserted at the wrap point when copying to clipboard. The shell now preserves the soft-wrap when flushing wrapped output into the terminal's scrollback, so clipboard copy keeps the original single line ([#2865](https://github.com/cachix/devenv/issues/2865)).
+- Fixed files declared with the `files` option not being regenerated when an auto-loaded (`devenv allow`) shell reloaded after `devenv update`. enterShell tasks (including `devenv:files`) now re-run on hot-reload, matching a fresh shell entry, instead of only updating environment variables ([#2864](https://github.com/cachix/devenv/issues/2864)).
 
 ### Improvements
 

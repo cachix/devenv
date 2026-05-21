@@ -597,7 +597,7 @@ async fn run_backend(
         let shell = devenv.shell_settings.shell.clone();
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
-        let (client, owner_handle) = devenv::reload::spawn_owner(devenv);
+        let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
             devenv: client,
             cmd,
