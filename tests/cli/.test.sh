@@ -46,16 +46,19 @@ echo "$out" | grep -q "Profile 'some-profile' not found" \
 
 step "--from loads an external project and ignores local devenv.nix"
 from_test_dir="$(cd from-test && pwd)"
+# from-test enables languages.rust, this project enables languages.python.
+# Pulling rust-toolchain into the package list while dropping python3 proves
+# we used the --from devenv.nix, not the local one.
 for path in "path:$from_test_dir" "path:./from-test"; do
   out=$(devenv --from "$path" info)
-  echo "$out" | grep -q "languages.rust" || fail "--from=$path missing languages.rust"
+  echo "$out" | grep -q "rust-toolchain" || fail "--from=$path missing rust toolchain"
   ! echo "$out" | grep -q "python3" || fail "--from=$path leaked local python3"
 done
 
 step "--from works in a directory without devenv.nix"
 mkdir -p test-from-only && pushd test-from-only >/dev/null
 out=$(devenv --from "path:$from_test_dir" info)
-echo "$out" | grep -q "languages.rust" || fail "--from didn't load remote project"
+echo "$out" | grep -q "rust-toolchain" || fail "--from didn't load remote project"
 popd >/dev/null
 rm -rf test-from-only
 
