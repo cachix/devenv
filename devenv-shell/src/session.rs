@@ -365,18 +365,38 @@ impl Renderer {
                 let count = remaining.min(batch_size);
                 let mut drawn = 0;
 
+                // Pre-clear destination rows so soft-wrapped continuation rows
+                // (which skip MoveTo+Clear below) land on clean rows.
                 for i in 0..count {
-                    if screen_y >= vt_scrollback {
-                        break;
-                    }
                     queue!(
                         stdout,
                         cursor::MoveTo(0, i as u16),
                         Clear(ClearType::CurrentLine)
                     )?;
-                    self.write_row_content(stdout, vt, screen_point(screen_y as u32))?;
+                }
+
+                // After a soft-wrapped row, skip MoveTo so the outer terminal's
+                // pending-wrap carries over instead of becoming a hard newline.
+                let mut prev_was_wrap_source = false;
+
+                for i in 0..count {
+                    if screen_y >= vt_scrollback {
+                        break;
+                    }
+                    let row_point = screen_point(screen_y as u32);
+                    let row = vt.grid_ref(row_point).and_then(|gr| gr.row()).ok();
+                    let is_continuation = row
+                        .and_then(|r| r.is_wrap_continuation().ok())
+                        .unwrap_or(false);
+                    let is_wrap_source = row.and_then(|r| r.is_wrapped().ok()).unwrap_or(false);
+
+                    if !(is_continuation && prev_was_wrap_source) {
+                        queue!(stdout, cursor::MoveTo(0, i as u16))?;
+                    }
+                    self.write_row_content(stdout, vt, row_point)?;
                     screen_y += 1;
                     drawn += 1;
+                    prev_was_wrap_source = is_wrap_source;
                 }
 
                 if drawn > 0 {
