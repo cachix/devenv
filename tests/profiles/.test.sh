@@ -232,12 +232,14 @@ else
 fi
 
 # Test 15: CLI parsing - profile without subcommand (issue #2206)
+# Without a subcommand, devenv prints help (see 9436d0fdac). The --profile
+# flag must still parse cleanly rather than triggering a clap argument error.
 echo "Test 15: CLI parsing - profile without subcommand"
-version_output=$(devenv --profile basic 2>&1)
-if echo "$version_output" | grep -q "devenv.*(.*)"; then
-  echo "✓ Profile flag parses correctly without subcommand (shows version)"
+help_output=$(devenv --profile basic 2>&1 || true)
+if echo "$help_output" | grep -q "Usage: devenv"; then
+  echo "✓ Profile flag parses correctly without subcommand (shows help)"
 else
-  echo "✗ Profile flag parsing failed without subcommand: $version_output"
+  echo "✗ Profile flag parsing failed without subcommand: $help_output"
   exit 1
 fi
 
