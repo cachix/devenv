@@ -1432,7 +1432,11 @@ impl Config {
         let yaml = serde_yaml::to_string(&self)
             .into_diagnostic()
             .wrap_err("Failed to serialize config to YAML")?;
-        std::fs::write(YAML_CONFIG, yaml)
+        let content = format!(
+            "# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json\n{}",
+            yaml
+        );
+        std::fs::write(YAML_CONFIG, content)
             .into_diagnostic()
             .wrap_err("Failed to write devenv.yaml")?;
         Ok(())
