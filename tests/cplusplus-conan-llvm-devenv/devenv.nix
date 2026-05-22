@@ -23,9 +23,14 @@
 
   enterTest = ''
     ${pkgs.lib.getExe config.languages.cplusplus.package} --version
+    ${pkgs.lib.getExe config.languages.cplusplus.package} --version \
+      | grep clang
     ${pkgs.lib.getExe config.languages.cplusplus.cmake.package} --version
+    ${pkgs.lib.getExe config.languages.cplusplus.lsp.package} --version \
+      | grep ${pkgs.lib.escapeShellArg config.languages.cplusplus.lsp.package.version}
     ${pkgs.lib.getExe config.languages.cplusplus.conan.package} --version
     echo "enable:"${pkgs.lib.escapeShellArg config.languages.cplusplus.tools.enable}":" | grep "enable:1:"
-    ${pkgs.lib.getExe config.languages.cplusplus.conan.package} profile show | grep "cmake/"${pkgs.lib.escapeShellArg config.languages.cplusplus.cmake.package.version}
+    ${pkgs.lib.getExe config.languages.cplusplus.conan.package} profile show \
+      | grep "cmake/"${pkgs.lib.escapeShellArg config.languages.cplusplus.cmake.package.version}
   '';
 }
