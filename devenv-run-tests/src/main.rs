@@ -1,7 +1,7 @@
 use clap::Parser;
 use devenv::{
-    Config, Devenv, DevenvOptions, NixSettings, SecretOptions, SecretSettings,
-    tracing as devenv_tracing,
+    Config, Devenv, DevenvOptions, NixSettings, SecretOptions, SecretSettings, VerbosityLevel,
+    activity as devenv_activity, console as devenv_console, tracing as devenv_tracing,
 };
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use miette::{IntoDiagnostic, Result, WrapErr};
@@ -12,6 +12,7 @@ use std::{
     process::{Command, ExitCode, Stdio},
 };
 use tempfile::TempDir;
+use tokio::sync::oneshot;
 
 const ALL_SYSTEMS: &[&str] = &[
     "x86_64-linux",
@@ -517,7 +518,25 @@ async fn main() -> Result<ExitCode> {
     // If DEVENV_RUN_TESTS is set, run the tests.
     if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
         let args = Args::parse();
-        match execute_command(&args).await {
+
+        // Wire activity events to ConsoleOutput so devenv.test()'s build/eval/
+        // process output surfaces to stderr. Without this, events go nowhere.
+        let (activity_rx, handle) = devenv_activity::init();
+        let activity_guard = handle.install();
+        let (done_tx, done_rx) = oneshot::channel::<()>();
+        let console_task = tokio::spawn(async move {
+            devenv_console::ConsoleOutput::new(activity_rx, VerbosityLevel::Normal)
+                .run(done_rx)
+                .await;
+        });
+
+        let result = execute_command(&args).await;
+
+        let _ = done_tx.send(());
+        drop(activity_guard);
+        let _ = console_task.await;
+
+        match result {
             Ok(_) => return Ok(ExitCode::SUCCESS),
             Err(err) => {
                 eprintln!("Error: {err}");
