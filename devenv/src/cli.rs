@@ -721,14 +721,11 @@ pub enum Commands {
         target: Option<PathBuf>,
         #[arg(
             long,
-            conflicts_with = "no_skip_envrc",
-            help = "Skip .envrc file (default).",
-            env = "DEVENV_SKIP_ENVRC",
+            help = "Include .envrc file.",
+            env = "DEVENV_INCLUDE_ENVRC",
             value_parser = clap::builder::BoolishValueParser::new()
          )]
-        skip_envrc: bool,
-        #[arg(long, conflicts_with = "skip_envrc", help = "Include .envrc file.")]
-        no_skip_envrc: bool,
+        include_envrc: bool,
     },
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
@@ -1446,67 +1443,44 @@ mod tests {
         let cli = Cli::parse_from(argv);
         if let Commands::Init {
             target,
-            skip_envrc,
-            no_skip_envrc,
+            include_envrc,
         } = cli.command
         {
             assert!(target.is_none());
-            assert!(!skip_envrc);
-            assert!(!no_skip_envrc);
+            assert!(!include_envrc);
         } else {
             panic!("Expected Init command");
         }
     }
 
     #[test]
-    fn init_command_skip_envrc_flag() {
-        let argv = preprocess_profile_args(osargs(["devenv", "init", "--skip-envrc"]));
+    fn init_command_include_envrc_flag() {
+        let argv = preprocess_profile_args(osargs(["devenv", "init", "--include-envrc"]));
         let cli = Cli::parse_from(argv);
         if let Commands::Init {
             target,
-            skip_envrc,
-            no_skip_envrc,
+            include_envrc,
         } = cli.command
         {
             assert!(target.is_none());
-            assert!(skip_envrc);
-            assert!(!no_skip_envrc);
+            assert!(include_envrc);
         } else {
             panic!("Expected Init command");
         }
     }
 
     #[test]
-    fn init_command_no_skip_envrc_flag() {
-        let argv = preprocess_profile_args(osargs(["devenv", "init", "--no-skip-envrc"]));
+    fn init_command_with_target_and_include_envrc() {
+        let argv =
+            preprocess_profile_args(osargs(["devenv", "init", "/tmp/test", "--include-envrc"]));
         let cli = Cli::parse_from(argv);
         if let Commands::Init {
             target,
-            skip_envrc,
-            no_skip_envrc,
-        } = cli.command
-        {
-            assert!(target.is_none());
-            assert!(!skip_envrc);
-            assert!(no_skip_envrc);
-        } else {
-            panic!("Expected Init command");
-        }
-    }
-
-    #[test]
-    fn init_command_with_target_and_skip_envrc() {
-        let argv = preprocess_profile_args(osargs(["devenv", "init", "/tmp/test", "--skip-envrc"]));
-        let cli = Cli::parse_from(argv);
-        if let Commands::Init {
-            target,
-            skip_envrc,
-            no_skip_envrc,
+            include_envrc,
         } = cli.command
         {
             assert_eq!(target, Some(PathBuf::from("/tmp/test")));
-            assert!(skip_envrc);
-            assert!(!no_skip_envrc);
+            assert!(include_envrc);
         } else {
             panic!("Expected Init command");
         }

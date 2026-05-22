@@ -79,13 +79,10 @@ fn main_inner() -> Result<()> {
             }
             Commands::Init {
                 target,
-                skip_envrc,
-                no_skip_envrc,
+                include_envrc,
             } => {
                 let verbosity = resolve_verbosity(&cli.cli_options);
-                let skip_envrc =
-                    devenv_core::settings::flag(*skip_envrc, *no_skip_envrc).unwrap_or(true);
-                return commands::init::run(target.as_deref(), verbosity, skip_envrc);
+                return commands::init::run(target.as_deref(), verbosity, *include_envrc);
             }
             Commands::Inputs {
                 command: InputsCommand::Add { name, url, follows },

@@ -56,7 +56,7 @@ const TEMPLATES: &[Template] = &[
     },
 ];
 
-pub fn run(target: Option<&Path>, verbosity: VerbosityLevel, skip_envrc: bool) -> Result<()> {
+pub fn run(target: Option<&Path>, verbosity: VerbosityLevel, include_envrc: bool) -> Result<()> {
     let _console = devenv_console::install(verbosity);
 
     let target = match target {
@@ -71,7 +71,7 @@ pub fn run(target: Option<&Path>, verbosity: VerbosityLevel, skip_envrc: bool) -
         .wrap_err_with(|| format!("Failed to create {}", target.display()))?;
 
     for tmpl in TEMPLATES {
-        if tmpl.source == "envrc" && skip_envrc {
+        if tmpl.source == "envrc" && !include_envrc {
             continue;
         }
         let file = PROJECT_DIR.get_file(tmpl.source).ok_or_else(|| {
