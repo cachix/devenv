@@ -1429,6 +1429,13 @@ impl Config {
     }
 
     pub fn write(&self) -> Result<()> {
+        let root_dir = std::env::current_dir()
+            .into_diagnostic()
+            .wrap_err("Failed to get current directory")?;
+        self.write_to(&root_dir)
+    }
+
+    fn write_to(&self, root_dir: &Path) -> Result<()> {
         let yaml = serde_yaml::to_string(&self)
             .into_diagnostic()
             .wrap_err("Failed to serialize config to YAML")?;
@@ -1436,7 +1443,7 @@ impl Config {
             "# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json\n{}",
             yaml
         );
-        std::fs::write(YAML_CONFIG, content)
+        std::fs::write(root_dir.join(YAML_CONFIG), content)
             .into_diagnostic()
             .wrap_err("Failed to write devenv.yaml")?;
         Ok(())
@@ -2231,5 +2238,31 @@ permitted_insecure_packages: ["from-top"]
         let cfg = load_yaml(yaml).nixpkgs_config("x86_64-linux");
         assert!(cfg.allow_unfree);
         assert_eq!(cfg.permitted_insecure_packages, vec!["from-top"]);
+    }
+
+    #[test]
+    fn config_write_includes_schema_comment() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let base_path = temp_dir.path();
+
+        let mut config = Config::default();
+        config
+            .add_input("nixpkgs-python", "github:cachix/nixpkgs-python", &[])
+            .expect("Failed to add an input to config");
+        config
+            .write_to(base_path)
+            .expect("Failed to write config file");
+
+        let yaml_path = base_path.join(YAML_CONFIG);
+        let read_content = fs::read_to_string(&yaml_path).expect("Failed to read devenv.yaml");
+        assert!(
+            read_content.starts_with(
+                "# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json\n"
+            ),
+            "Config file should start with schema comment, but got: {}",
+            read_content
+        );
     }
 }
