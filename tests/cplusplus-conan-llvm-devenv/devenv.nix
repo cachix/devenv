@@ -20,6 +20,7 @@
       };
     };
   };
+
   enterTest = ''
     ${pkgs.lib.getExe config.languages.cplusplus.package} --version
     ${pkgs.lib.getExe config.languages.cplusplus.cmake.package} --version
