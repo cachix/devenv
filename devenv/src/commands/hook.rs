@@ -142,8 +142,8 @@ fn is_trusted(abs_str: &str) -> Result<bool> {
 fn allow_path(project_dir: &Path) -> Result<()> {
     let abs_str = canonical_str(project_dir)?;
 
-    if !project_dir.join("devenv.yaml").exists() {
-        miette::bail!("No devenv.yaml found in {abs_str}");
+    if !project_dir.join("devenv.nix").exists() {
+        miette::bail!("No devenv.nix found in {abs_str}");
     }
 
     let db_path = trust_db_path()?;
@@ -179,7 +179,7 @@ fn revoke_path(project_dir: &Path) -> Result<()> {
 fn find_project(start: &Path) -> Option<PathBuf> {
     let mut dir = start.to_path_buf();
     loop {
-        if dir.join("devenv.yaml").exists() {
+        if dir.join("devenv.nix").exists() {
             return Some(dir);
         }
         if !dir.pop() {
@@ -248,14 +248,14 @@ mod tests {
     fn test_find_project() {
         let dir = TempDir::new().unwrap();
 
-        // No devenv.yaml
+        // No devenv.nix
         assert!(find_project(dir.path()).is_none());
 
-        // Add devenv.yaml
-        fs::write(dir.path().join("devenv.yaml"), "inputs:\n").unwrap();
+        // Add devenv.nix
+        fs::write(dir.path().join("devenv.nix"), "{ }\n").unwrap();
         assert_eq!(find_project(dir.path()), Some(dir.path().to_path_buf()));
 
-        // Subdirectory should find parent's devenv.yaml
+        // Subdirectory should find parent's devenv.nix
         let sub = dir.path().join("sub").join("deep");
         fs::create_dir_all(&sub).unwrap();
         assert_eq!(find_project(&sub), Some(dir.path().to_path_buf()));
@@ -266,7 +266,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let project = dir.path().join("myproject");
         fs::create_dir_all(&project).unwrap();
-        fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
+        fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
         set_devenv_home(&devenv_home_dir);
@@ -291,7 +291,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let project = dir.path().join("myproject");
         fs::create_dir_all(&project).unwrap();
-        fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
+        fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
         set_devenv_home(&devenv_home_dir);
@@ -305,8 +305,8 @@ mod tests {
         allow_path(&project).unwrap();
         assert!(is_trusted(&abs_str).unwrap());
 
-        // Changing devenv.yaml should not invalidate trust
-        fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n  new:\n").unwrap();
+        // Changing devenv.nix should not invalidate trust
+        fs::write(project.join("devenv.nix"), "{ pkgs, ... }: { }\n").unwrap();
         assert!(is_trusted(&abs_str).unwrap());
 
         unset_devenv_home();
@@ -317,7 +317,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let project = dir.path().join("myproject");
         fs::create_dir_all(&project).unwrap();
-        fs::write(project.join("devenv.yaml"), "inputs:\n  nixpkgs:\n").unwrap();
+        fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
         set_devenv_home(&devenv_home_dir);

@@ -26,6 +26,8 @@
 
 ### Breaking Changes
 
+- **Shell hook auto-activation**: The shell hook (`devenv hook bash`/`zsh`/`fish`/`nu`) and `devenv allow` now detect a project by looking for `devenv.nix` instead of `devenv.yaml`. Projects with only a `devenv.yaml` and no `devenv.nix` will no longer auto-activate; add a `devenv.nix` to restore activation.
+
 ## 2.1.2 (2026-05-13)
 
 ### Bug Fixes
