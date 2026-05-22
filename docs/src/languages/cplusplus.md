@@ -22,7 +22,7 @@ languages.cplusplus = {
 };
 ```
 
-### Setting up the [Conan](https://conan.io/) package manager
+## Setting up the [Conan](https://conan.io/) package manager
 
 Add `conan-flake` to your inputs:
 
@@ -30,7 +30,7 @@ Add `conan-flake` to your inputs:
 $ devenv inputs add conan-flake git+https://codeberg.org/tarcisio/conan-flake
 ```
 
-You can check [the list of available options](/reference/options.md#conanenable). The [`conan.config`](/reference/options.md#conanconfig) option, however, maps the whole of the options available in the [`conan-flake`](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
+You can check [the list of available options](/reference/options/#languagescplusplusenable). The [`languages.cplusplus.conan.config`](/reference/options/#languagescplusplusconanconfig) option, however, maps the whole of the options available in the [`conan-flake`](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
 
 Config the `devenv.nix` file accordingly. For example, the following code would configure Conan to use the same CMake available in the developmemnt shell:
 
@@ -54,7 +54,7 @@ Config the `devenv.nix` file accordingly. For example, the following code would 
 }
 ```
 
-#### In Action:
+### In Action:
 
 ```shell-session
 $ devenv shell
