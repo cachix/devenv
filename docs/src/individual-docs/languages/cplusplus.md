@@ -44,7 +44,7 @@ languages.cplusplus = {
 };
 ```
 
-By default, when the Conan package is enabled:
+By default, when Conan is enabled:
 
 - The default C++ package is set to `config.stdenv.cc`
 - Conan is configured to use the same CMake available in the developmemnt shell
@@ -82,6 +82,34 @@ If you would like to integrate with the LLVM compiler infrastructure:
             }
           )
           pkgs.llvmPackages.clangUseLLVM;
+        # By default: compiler.libcxx=libstdc++11, so undo it:
+        compilerLibCxx = null;
+      };
+    };
+  };
+}
+```
+
+Or even:
+
+```nix
+{ pkgs, ... }:
+
+{
+  stdenv = pkgs.overrideCC
+    (
+      pkgs.llvmPackages.libcxxStdenv.override {
+        targetPlatform.useLLVM = true;
+      }
+    )
+    pkgs.llvmPackages.clangUseLLVM;
+
+  languages.cplusplus = {
+    enable = true;
+    conan = {
+      enable = true;
+      install.enable = true;
+      config = {
         # By default: compiler.libcxx=libstdc++11, so undo it:
         compilerLibCxx = null;
       };
