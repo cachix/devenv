@@ -9,8 +9,9 @@ languages.cplusplus = {
 ```
 
 This will automatically:
+
 - Use `clang` as the default C++ package
-- Install it along with `cmake` and other tools
+- Install it along with CMake and other tools
 
 Alternatively, you can manually specify packages:
 
@@ -29,29 +30,24 @@ Add `conan-flake` to your inputs:
 $ devenv inputs add conan-flake git+https://codeberg.org/tarcisio/conan-flake
 ```
 
-You can check [the list of available options](/reference/options.md#languagescplusplusenable). The [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option, however, maps the whole of the options available in the [`conan-flake`](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
+You can check [the list of available options](/reference/options.md#languagescplusplusconanenable). The [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option, however, maps the whole of the options available in the [`conan-flake`](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
 
-Config the `devenv.nix` file accordingly. For example, the following code would configure Conan to use the same CMake available in the developmemnt shell:
+Config the `devenv.nix` file accordingly. For example:
 
 ```nix
-{ inputs, ... }:
-
-{
+languages.cplusplus = {
+  enable = true;
   conan = {
     enable = true;
-    config = {
-      platformToolRequires = {
-        cmake = pkgs.cmake.version;
-      };
-      devShell = {
-        packages = [
-          pkgs.cmake
-        ];
-      };
-    };
+    install.enable = true;
   };
-}
+};
 ```
+
+By default, when the Conan package is enabled:
+
+- The default C++ package is set to `config.stdenv.cc`
+- Conan is configured to use the same CMake available in the developmemnt shell
 
 ### In Action:
 
@@ -70,28 +66,24 @@ conan profile show # This would show the default profile.
 If you would like to integrate with the LLVM compiler infrastructure:
 
 ```nix
-{ inputs, pkgs, ... }:
+{ pkgs, ... }:
 
 {
-  conan = {
+  languages.cplusplus = {
     enable = true;
-    config = {
-      stdenv = pkgs.overrideCC
-        (
-          pkgs.llvmPackages.libcxxStdenv.override {
-            targetPlatform.useLLVM = true;
-          }
-        )
-        pkgs.llvmPackages.clangUseLLVM;
-      # By default: compiler.libcxx=libstdc++11, so undo it:
-      compilerLibCxx = null;
-      platformToolRequires = {
-        cmake = pkgs.cmake.version;
-      };
-      devShell = {
-        packages = [
-          pkgs.cmake
-        ];
+    conan = {
+      enable = true;
+      install.enable = true;
+      config = {
+        stdenv = pkgs.overrideCC
+          (
+            pkgs.llvmPackages.libcxxStdenv.override {
+              targetPlatform.useLLVM = true;
+            }
+          )
+          pkgs.llvmPackages.clangUseLLVM;
+        # By default: compiler.libcxx=libstdc++11, so undo it:
+        compilerLibCxx = null;
       };
     };
   };
