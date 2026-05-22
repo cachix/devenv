@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv shell` lingering as a background process, often pinned at 100%+ CPU, after its terminal window or tab was closed. The shell now reacts to the SIGHUP/SIGINT/SIGTERM that already trigger devenv's graceful shutdown by killing the inner shell, instead of orphaning it ([#2845](https://github.com/cachix/devenv/issues/2845)).
 - Fixed `devenv shell`/`devenv update` failing with `authentication required but no callback set` when a `url."ssh://git@github.com/".insteadOf` git config rewrites GitHub HTTPS URLs to SSH. GitHub flake inputs now resolve over SSH using your ssh-agent ([#2842](https://github.com/cachix/devenv/issues/2842)).
 - Fixed the "N files" counter under "Evaluating shell" inflating from generic Nix log lines. Now only counts actual file read operations.
 - Fixed `devenv up`/`test`/`tasks` failing with `error: could not find a flake.nix file` when the devenv shell is loaded from a remote flake via direnv ([#2599](https://github.com/cachix/devenv/issues/2599)).

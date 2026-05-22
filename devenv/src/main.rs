@@ -611,6 +611,7 @@ async fn run_backend(
             dotfile,
             task_exports,
             task_messages,
+            shutdown: shutdown.clone(),
         })
         .await
         .map(|exit_code| match exit_code {
@@ -1004,6 +1005,7 @@ struct ReloadShellArgs {
     dotfile: std::path::PathBuf,
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
+    shutdown: Arc<Shutdown>,
 }
 
 /// Run shell with hot-reload.
@@ -1032,6 +1034,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         dotfile,
         task_exports,
         task_messages,
+        shutdown,
     } = args;
 
     // Watch files come from the eval cache during the first build.
@@ -1065,15 +1068,22 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         terminal_ready_rx,
     });
 
-    let shell_session = ShellSession::with_defaults().with_status_line(is_interactive);
+    let shell_session = ShellSession::with_defaults()
+        .with_status_line(is_interactive)
+        .with_shutdown_token(shutdown.cancellation_token());
     let session_result = shell_session
         .run(command_rx, event_tx, handoff, SessionIo::default())
         .await
         .into_diagnostic()
         .wrap_err("Shell session error");
 
-    // Await the coordinator even on error: it owns the DevenvClient, and the
-    // owner thread's join() deadlocks until that client drops.
+    // The coordinator's main loop selects on its internal channel; the file
+    // watcher task keeps a sender alive, so the channel never closes on its
+    // own. Abort to unblock — dropping the future also drops the builder
+    // (and the DevenvClient it holds), which is what the owner thread's
+    // join() waits on. Without this, devenv hangs forever after the session
+    // exits because nothing else releases the client.
+    coordinator_handle.abort();
     let _ = coordinator_handle.await;
 
     session_result
