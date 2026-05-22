@@ -614,9 +614,15 @@ async fn run_backend(
             shutdown: shutdown.clone(),
         })
         .await
-        .map(|exit_code| match exit_code {
-            Some(code) => CommandResult::ExitCode(code as i32),
-            None => CommandResult::Done,
+        .map(|exit_code| {
+            // On signalled shutdown the watcher injects `PtyExit(None)`;
+            // recover `128 + sig` so callers see e.g. SIGHUP as 129.
+            let resolved =
+                exit_code.or_else(|| shutdown.last_signal().map(|sig| (128 + sig as i32) as u32));
+            match resolved {
+                Some(code) => CommandResult::ExitCode(code as i32),
+                None => CommandResult::Done,
+            }
         });
         let devenv = tokio::task::block_in_place(|| owner_handle.join())
             .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
@@ -1077,12 +1083,13 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         .into_diagnostic()
         .wrap_err("Shell session error");
 
-    // The coordinator's main loop selects on its internal channel; the file
-    // watcher task keeps a sender alive, so the channel never closes on its
-    // own. Abort to unblock — dropping the future also drops the builder
-    // (and the DevenvClient it holds), which is what the owner thread's
-    // join() waits on. Without this, devenv hangs forever after the session
-    // exits because nothing else releases the client.
+    // Cancel any in-flight Nix eval so the build's `spawn_blocking` task
+    // releases the builder before we abort the coordinator.
+    devenv_nix_backend::trigger_interrupt();
+
+    // The coordinator's file-watcher task keeps the internal channel sender
+    // alive, so awaiting it would hang. Abort drops the builder (and the
+    // `DevenvClient` it holds), letting the owner thread join.
     coordinator_handle.abort();
     let _ = coordinator_handle.await;
 

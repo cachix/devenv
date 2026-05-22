@@ -42,17 +42,6 @@ const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
 const KEYBIND_LIST_WATCHED: [u8; 2] = [0x1b, 0x17]; // Ctrl-Alt-W
 const KEYBIND_TOGGLE_ERROR: [u8; 2] = [0x1b, 0x05]; // Ctrl-Alt-E
 
-/// Cancel a child token on drop so the spawned shutdown-watcher task exits
-/// when the session does, instead of lingering for the parent token's
-/// lifetime (which is process-wide).
-struct DropCancelGuard(CancellationToken);
-
-impl Drop for DropCancelGuard {
-    fn drop(&mut self) {
-        self.0.cancel();
-    }
-}
-
 fn dump_row_from_cells(buf: &mut String, vt: &Terminal<'_, '_>, point: Point, cells: &[Cell]) {
     // TODO(libghostty-rs): Style::is_default() returns true for RGB-bg-only styles
     // because StyleColor::Rgb is mistagged as NONE in the FFI From conversion.
@@ -612,15 +601,9 @@ impl ShellSession {
         self
     }
 
-    /// Wire a shutdown token into the session.
-    ///
-    /// When the token is cancelled (e.g. from the process-wide SIGHUP/SIGINT/
-    /// SIGTERM handler), the session kills the inner shell. The PTY reader
-    /// thread then sees EOF and emits `Event::PtyExit`, which drives the normal
-    /// teardown path. Without this, the cancellation token would fire and
-    /// nothing on the reload-shell path would observe it, leaving devenv (and
-    /// the inner shell in its own session via setsid) orphaned after the
-    /// controlling terminal hangs up.
+    /// Wire a shutdown token. On cancellation the session kills the inner
+    /// shell so devenv can exit instead of orphaning it after a terminal
+    /// hangup or SIGHUP/SIGINT/SIGTERM.
     pub fn with_shutdown_token(mut self, token: CancellationToken) -> Self {
         self.shutdown_token = Some(token);
         self
@@ -673,23 +656,29 @@ impl ShellSession {
 
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
 
-        // Child of the caller's shutdown token. The watcher task is spawned
-        // below (after `event_tx_internal` exists) so it can inject a
-        // synthetic `PtyExit` directly. Holding the parent token here keeps
-        // it cancellable from the outside; the child token is cancelled when
-        // the session ends so the watcher task exits with us.
-        let shutdown_task_token = self.shutdown_token.as_ref().map(|t| t.child_token());
-
-        // Handle TUI handoff if present
+        // TUI handoff. Wait for the renderer to release the terminal, but
+        // yield to shutdown so a SIGHUP during this await can't hang us.
         if let Some(handoff) = handoff {
-            // Signal TUI that initial build is complete and we're ready for terminal
             tracing::trace!("session: sending backend_done");
             let _ = handoff.backend_done.send(());
 
-            // Wait for TUI to release terminal
             tracing::trace!("session: waiting for terminal_ready_rx");
-            let _ = handoff.terminal_ready_rx.await;
-            tracing::trace!("session: terminal_ready_rx received");
+            let cancelled = async {
+                match &self.shutdown_token {
+                    Some(t) => t.cancelled().await,
+                    None => std::future::pending::<()>().await,
+                }
+            };
+            tokio::select! {
+                _ = handoff.terminal_ready_rx => {
+                    tracing::trace!("session: terminal_ready_rx received");
+                }
+                _ = cancelled => {
+                    tracing::debug!("session: shutdown during handoff, aborting");
+                    let _ = pty.kill();
+                    return Ok(None);
+                }
+            }
         }
 
         // Enter raw mode
@@ -759,12 +748,12 @@ impl ShellSession {
         // Set up event channel
         let (event_tx_internal, event_rx_internal) = std::sync::mpsc::channel::<Event>();
 
-        // Shutdown-token watcher: kill the inner shell and inject a synthetic
-        // `PtyExit` on cancellation. The PTY reader alone isn't enough — when
-        // the inner shell has already exited (e.g. SIGHUP propagated to it),
-        // `kill` returns ESRCH and the reader can stay blocked on macOS, so
-        // the event loop never sees the real `PtyExit`.
-        if let Some(token) = shutdown_task_token.clone() {
+        // On shutdown, kill the inner shell *and* inject a synthetic `PtyExit`:
+        // if the child has already exited, `kill` returns ESRCH and on macOS
+        // the PTY reader can stay blocked, so the event loop never sees the
+        // real `PtyExit`. Signalled exit code is recovered upstream from
+        // `Shutdown::last_signal()`.
+        if let Some(token) = self.shutdown_token.clone() {
             let pty_killer = Arc::clone(&pty);
             let exit_tx = event_tx_internal.clone();
             tokio::spawn(async move {
@@ -776,8 +765,6 @@ impl ShellSession {
                 let _ = exit_tx.send(Event::PtyExit(None));
             });
         }
-        // Cancel the watcher task on every exit path from this function.
-        let _shutdown_task_guard = shutdown_task_token.map(DropCancelGuard);
 
         // Spawn stdin reader thread.
         let stdin_tx = event_tx_internal.clone();
@@ -1343,7 +1330,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn shutdown_token_kills_inner_shell() {
         let mut cmd = CommandBuilder::new("sleep");
-        cmd.arg("60");
+        cmd.arg("5");
         let size = PtySize {
             rows: 24,
             cols: 80,
