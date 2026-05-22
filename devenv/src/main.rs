@@ -77,9 +77,12 @@ fn main_inner() -> Result<()> {
             Commands::DaemonProcesses { config_file } => {
                 return commands::daemon_processes::run(config_file);
             }
-            Commands::Init { target } => {
+            Commands::Init {
+                target,
+                include_envrc,
+            } => {
                 let verbosity = resolve_verbosity(&cli.cli_options);
-                return commands::init::run(target.as_deref(), verbosity);
+                return commands::init::run(target.as_deref(), verbosity, *include_envrc);
             }
             Commands::Inputs {
                 command: InputsCommand::Add { name, url, follows },
