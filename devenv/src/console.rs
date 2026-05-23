@@ -479,6 +479,34 @@ mod tests {
         })
     }
 
+    fn operation_start(id: u64, name: &str) -> ActivityEvent {
+        ActivityEvent::Operation(Operation::Start {
+            id,
+            name: name.to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        })
+    }
+
+    fn operation_log(id: u64, line: &str, is_error: bool) -> ActivityEvent {
+        ActivityEvent::Operation(Operation::Log {
+            id,
+            line: line.to_string(),
+            is_error,
+            timestamp: Timestamp::now(),
+        })
+    }
+
+    fn operation_complete(id: u64, outcome: ActivityOutcome) -> ActivityEvent {
+        ActivityEvent::Operation(Operation::Complete {
+            id,
+            outcome,
+            timestamp: Timestamp::now(),
+        })
+    }
+
     /// Regression: `devenv test --no-tui` previously swallowed git-hook
     /// stdout because hidden-by-verbosity lines were dropped, not buffered.
     #[test]
@@ -616,6 +644,30 @@ mod tests {
         let out = h.stderr.contents();
         assert!(out.contains("context line"));
         assert!(out.contains("(dependency failed)"));
+    }
+
+    /// `Operation::Log` lines reach stderr live (stdout and stderr both).
+    #[test]
+    fn operation_log_is_forwarded_to_console() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(operation_start(1, "Running tests"));
+        h.dispatch(operation_log(1, "+ echo hello", false));
+        h.dispatch(operation_log(1, "boom on stderr", true));
+        h.dispatch(operation_complete(1, ActivityOutcome::Success));
+
+        let out = h.stderr.contents();
+        assert!(
+            out.contains("  + echo hello"),
+            "Operation::Log stdout line must reach stderr, got:\n{out}"
+        );
+        assert!(
+            out.contains("  boom on stderr"),
+            "Operation::Log stderr line must reach stderr, got:\n{out}"
+        );
+        assert!(
+            out.contains("✓ Running tests"),
+            "Operation completion marker should appear, got:\n{out}"
+        );
     }
 
     /// Buffer is capped; oldest lines evict so memory stays bounded
