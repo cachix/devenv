@@ -7209,6 +7209,11 @@ rec {
             features = [ "process" "fs" "io-util" "macros" "rt-multi-thread" "sync" "time" "sync" "rt" "signal" "io-util" ];
           }
           {
+            name = "tokio-util";
+            packageId = "tokio-util";
+            features = [ "io" ];
+          }
+          {
             name = "tracing";
             packageId = "tracing";
             features = [ "valuable" ];
