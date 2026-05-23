@@ -68,6 +68,7 @@ tracing-opentelemetry = { workspace = true, optional = true }
 
 [dev-dependencies]
 devenv-nix-backend-macros.workspace = true
+devenv-activity = { workspace = true, features = ["test-helpers"] }
 
 [features]
 default = ["otlp-grpc"]

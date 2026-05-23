@@ -389,7 +389,7 @@ pub fn install(verbosity: VerbosityLevel) -> ConsoleGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devenv_activity::{TaskInfo, Timestamp};
+    use devenv_activity::test_helpers::*;
     use std::sync::{Arc, Mutex};
 
     #[derive(Clone)]
@@ -442,69 +442,8 @@ mod tests {
         }
     }
 
-    fn task_hierarchy(id: u64, name: &str, show_output: bool) -> ActivityEvent {
-        ActivityEvent::Task(Task::Hierarchy {
-            tasks: vec![TaskInfo {
-                id,
-                name: name.to_string(),
-                show_output,
-                is_process: false,
-            }],
-            edges: vec![],
-            timestamp: Timestamp::now(),
-        })
-    }
-
-    fn task_start(id: u64) -> ActivityEvent {
-        ActivityEvent::Task(Task::Start {
-            id,
-            timestamp: Timestamp::now(),
-        })
-    }
-
-    fn task_log(id: u64, line: &str, is_error: bool) -> ActivityEvent {
-        ActivityEvent::Task(Task::Log {
-            id,
-            line: line.to_string(),
-            is_error,
-            timestamp: Timestamp::now(),
-        })
-    }
-
-    fn task_complete(id: u64, outcome: ActivityOutcome) -> ActivityEvent {
-        ActivityEvent::Task(Task::Complete {
-            id,
-            outcome,
-            timestamp: Timestamp::now(),
-        })
-    }
-
-    fn operation_start(id: u64, name: &str) -> ActivityEvent {
-        ActivityEvent::Operation(Operation::Start {
-            id,
-            name: name.to_string(),
-            parent: None,
-            detail: None,
-            level: ActivityLevel::Info,
-            timestamp: Timestamp::now(),
-        })
-    }
-
-    fn operation_log(id: u64, line: &str, is_error: bool) -> ActivityEvent {
-        ActivityEvent::Operation(Operation::Log {
-            id,
-            line: line.to_string(),
-            is_error,
-            timestamp: Timestamp::now(),
-        })
-    }
-
-    fn operation_complete(id: u64, outcome: ActivityOutcome) -> ActivityEvent {
-        ActivityEvent::Operation(Operation::Complete {
-            id,
-            outcome,
-            timestamp: Timestamp::now(),
-        })
+    fn hierarchy(id: u64, name: &str, show_output: bool) -> ActivityEvent {
+        task_hierarchy_single(id, name, None, show_output, false)
     }
 
     /// Regression: `devenv test --no-tui` previously swallowed git-hook
@@ -512,7 +451,7 @@ mod tests {
     #[test]
     fn failing_task_replays_suppressed_stdout() {
         let mut h = Harness::new(VerbosityLevel::Normal);
-        h.dispatch(task_hierarchy(1, "devenv:git-hooks:run", false));
+        h.dispatch(hierarchy(1, "devenv:git-hooks:run", false));
         h.dispatch(task_start(1));
         h.dispatch(task_log(1, "shellcheck................Failed", false));
         h.dispatch(task_log(
@@ -543,7 +482,7 @@ mod tests {
     #[test]
     fn successful_task_does_not_replay_suppressed_stdout() {
         let mut h = Harness::new(VerbosityLevel::Normal);
-        h.dispatch(task_hierarchy(1, "devenv:git-hooks:run", false));
+        h.dispatch(hierarchy(1, "devenv:git-hooks:run", false));
         h.dispatch(task_start(1));
         h.dispatch(task_log(1, "all hooks passed", false));
         h.dispatch(task_complete(1, ActivityOutcome::Success));
@@ -563,7 +502,7 @@ mod tests {
     #[test]
     fn show_output_tasks_stream_live_no_duplicate_on_fail() {
         let mut h = Harness::new(VerbosityLevel::Normal);
-        h.dispatch(task_hierarchy(1, "devenv:my:task", true));
+        h.dispatch(hierarchy(1, "devenv:my:task", true));
         h.dispatch(task_start(1));
         h.dispatch(task_log(1, "step 1", false));
         h.dispatch(task_log(1, "step 2", false));
@@ -584,7 +523,7 @@ mod tests {
     #[test]
     fn stderr_lines_shown_live_and_not_duplicated_on_fail() {
         let mut h = Harness::new(VerbosityLevel::Normal);
-        h.dispatch(task_hierarchy(1, "devenv:my:task", false));
+        h.dispatch(hierarchy(1, "devenv:my:task", false));
         h.dispatch(task_start(1));
         h.dispatch(task_log(1, "boom", true));
         h.dispatch(task_complete(1, ActivityOutcome::Failed));
@@ -602,7 +541,7 @@ mod tests {
     #[test]
     fn quiet_verbosity_still_replays_on_failure() {
         let mut h = Harness::new(VerbosityLevel::Quiet);
-        h.dispatch(task_hierarchy(1, "devenv:git-hooks:run", false));
+        h.dispatch(hierarchy(1, "devenv:git-hooks:run", false));
         h.dispatch(task_start(1));
         h.dispatch(task_log(1, "SC2148 error", false));
         h.dispatch(task_complete(1, ActivityOutcome::Failed));
@@ -619,7 +558,7 @@ mod tests {
     #[test]
     fn verbose_streams_live_no_duplicate_on_fail() {
         let mut h = Harness::new(VerbosityLevel::Verbose);
-        h.dispatch(task_hierarchy(1, "devenv:my:task", false));
+        h.dispatch(hierarchy(1, "devenv:my:task", false));
         h.dispatch(task_start(1));
         h.dispatch(task_log(1, "trace line", false));
         h.dispatch(task_complete(1, ActivityOutcome::Failed));
@@ -636,7 +575,7 @@ mod tests {
     #[test]
     fn dependency_failed_replays_when_logs_present() {
         let mut h = Harness::new(VerbosityLevel::Normal);
-        h.dispatch(task_hierarchy(1, "devenv:enterTest", false));
+        h.dispatch(hierarchy(1, "devenv:enterTest", false));
         h.dispatch(task_start(1));
         h.dispatch(task_log(1, "context line", false));
         h.dispatch(task_complete(1, ActivityOutcome::DependencyFailed));
@@ -670,13 +609,146 @@ mod tests {
         );
     }
 
+    /// `Build::Log` lines reach stderr live with `Building <name>` header.
+    #[test]
+    fn build_log_streams_live() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(build_start(1, "hello-1.0"));
+        h.dispatch(build_log(1, "compiling foo.c", false));
+        h.dispatch(build_complete(1, ActivityOutcome::Success));
+
+        let out = h.stderr.contents();
+        assert!(out.contains("• Building hello-1.0"), "got:\n{out}");
+        assert!(out.contains("  compiling foo.c"), "got:\n{out}");
+        assert!(out.contains("✓ Building hello-1.0"), "got:\n{out}");
+    }
+
+    /// `Command::Log` lines reach stderr live; wrapper start hidden at Trace.
+    #[test]
+    fn command_log_streams_live() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(command_start(1, "git status"));
+        h.dispatch(command_log(1, "branch main", false));
+        h.dispatch(command_complete(1, ActivityOutcome::Success));
+
+        let out = h.stderr.contents();
+        assert!(out.contains("  branch main"), "got:\n{out}");
+        assert!(
+            !out.contains("• git status"),
+            "Command wrapper start should be hidden at Trace, got:\n{out}"
+        );
+    }
+
+    /// `Process::Log` lines reach stderr live.
+    #[test]
+    fn process_log_streams_live() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(process_start(1, "postgres"));
+        h.dispatch(process_log(1, "listening on 5432", false));
+        h.dispatch(process_log(1, "fatal", true));
+        h.dispatch(process_complete(1, ActivityOutcome::Success));
+
+        let out = h.stderr.contents();
+        assert!(out.contains("  listening on 5432"), "got:\n{out}");
+        assert!(out.contains("  fatal"), "got:\n{out}");
+    }
+
+    /// Fetch dedup: `Query` kind never produces a start line.
+    #[test]
+    fn fetch_query_kind_is_skipped() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(fetch_start(1, FetchKind::Query, "abc"));
+        let out = h.stderr.contents();
+        assert!(
+            out.is_empty(),
+            "Query fetches must not emit output, got:\n{out}"
+        );
+    }
+
+    /// Fetch dedup: `.narinfo` Downloads are noise, suppressed.
+    #[test]
+    fn fetch_narinfo_download_is_skipped() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(fetch_start(1, FetchKind::Download, "abc123.narinfo"));
+        let out = h.stderr.contents();
+        assert!(
+            out.is_empty(),
+            ".narinfo Downloads must not emit output, got:\n{out}"
+        );
+    }
+
+    /// Fetch dedup: Nix emits a Substitute Download and a CopyPath Download
+    /// for the same store path. Same display string → announced once.
+    #[test]
+    fn fetch_duplicate_display_name_deduplicated() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(fetch_start(1, FetchKind::Download, "hello-1.0"));
+        h.dispatch(fetch_start(2, FetchKind::Download, "hello-1.0"));
+
+        let out = h.stderr.contents();
+        assert_eq!(
+            out.matches("Downloading hello-1.0").count(),
+            1,
+            "duplicate display string must be skipped, got:\n{out}"
+        );
+    }
+
+    /// Fetch kinds map to distinct display verbs.
+    #[test]
+    fn fetch_kinds_render_distinct_verbs() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(fetch_start(1, FetchKind::Download, "a"));
+        h.dispatch(fetch_start(2, FetchKind::Tree, "b"));
+        h.dispatch(fetch_start(3, FetchKind::Copy, "c"));
+
+        let out = h.stderr.contents();
+        assert!(out.contains("Downloading a"), "got:\n{out}");
+        assert!(out.contains("Fetching b"), "got:\n{out}");
+        assert!(out.contains("Copying c"), "got:\n{out}");
+    }
+
+    /// Tasks announced via `Hierarchy` but never started must emit nothing.
+    #[test]
+    fn pending_task_without_start_emits_nothing() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(hierarchy(1, "devenv:never:runs", false));
+        let out = h.stderr.contents();
+        assert!(out.is_empty(), "got:\n{out}");
+    }
+
+    /// `Message` renders distinct prefixes per level.
+    #[test]
+    fn message_levels_render_distinct_prefixes() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(message(ActivityLevel::Error, "boom"));
+        h.dispatch(message(ActivityLevel::Warn, "careful"));
+        h.dispatch(message(ActivityLevel::Info, "fyi"));
+
+        let out = h.stderr.contents();
+        assert!(out.contains("✖ boom"), "got:\n{out}");
+        assert!(out.contains("• careful"), "got:\n{out}");
+        assert!(out.contains("• fyi"), "got:\n{out}");
+    }
+
+    /// Progress and status variants are intentionally ignored — no output.
+    #[test]
+    fn progress_and_status_variants_emit_nothing() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(operation_progress(1, 1, 10));
+        h.dispatch(task_progress(2, 1, 10));
+        h.dispatch(process_status(3, devenv_activity::ProcessStatus::Running));
+
+        let out = h.stderr.contents();
+        assert!(out.is_empty(), "got:\n{out}");
+    }
+
     /// Buffer is capped; oldest lines evict so memory stays bounded
     /// even for tasks emitting megabytes of stdout. Tail (most useful
     /// on failure) survives.
     #[test]
     fn suppressed_logs_buffer_is_bounded() {
         let mut h = Harness::new(VerbosityLevel::Normal);
-        h.dispatch(task_hierarchy(1, "devenv:my:task", false));
+        h.dispatch(hierarchy(1, "devenv:my:task", false));
         h.dispatch(task_start(1));
         let overflow = MAX_SUPPRESSED_LINES + 50;
         for i in 0..overflow {
