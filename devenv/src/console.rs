@@ -247,7 +247,10 @@ impl ConsoleOutput {
             ActivityEvent::Operation(Operation::Complete { id, outcome, .. }) => {
                 self.end(id, outcome)
             }
-            ActivityEvent::Operation(_) => {}
+            ActivityEvent::Operation(Operation::Log {
+                id, line, is_error, ..
+            }) => self.log(id, &line, is_error),
+            ActivityEvent::Operation(Operation::Progress { .. }) => {}
 
             ActivityEvent::Message(msg) => self.message(msg.level, &msg.text),
             ActivityEvent::SetExpected(_) | ActivityEvent::Shell(_) => {}
