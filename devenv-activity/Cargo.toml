@@ -28,3 +28,9 @@ devenv-activity-macros.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[features]
+default = []
+# Exports `test_helpers` module with `ActivityEvent` builders used by
+# downstream test suites (devenv, devenv-tui). Always on under `cfg(test)`.
+test-helpers = []

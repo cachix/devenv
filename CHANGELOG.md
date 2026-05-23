@@ -15,6 +15,7 @@
 - Fixed stale task and option results that lingered when `devenv.nix` was edited while a command was already evaluating. The eval cache no longer stores results whose tracked input files were modified mid-evaluation, so the next run no longer needs `.devenv/nix-eval-cache.db*` to be wiped to see the new definitions ([#2745](https://github.com/cachix/devenv/issues/2745)).
 - Fixed long lines in `devenv shell` getting a hard newline inserted at the wrap point when copying to clipboard. The shell now preserves the soft-wrap when flushing wrapped output into the terminal's scrollback, so clipboard copy keeps the original single line ([#2865](https://github.com/cachix/devenv/issues/2865)).
 - Fixed files declared with the `files` option not being regenerated when an auto-loaded (`devenv allow`) shell reloaded after `devenv update`. enterShell tasks (including `devenv:files`) now re-run on hot-reload, matching a fresh shell entry, instead of only updating environment variables ([#2864](https://github.com/cachix/devenv/issues/2864)).
+- Fixed `devenv test --no-tui` (and any other non-TUI invocation) silently discarding all output from the `enterTest` script, so the test runner's output, traces, and failure messages never reached the terminal or CI logs. Output from commands run in the shell is now printed in non-TUI mode.
 
 ### Improvements
 
@@ -23,8 +24,12 @@
 - The TUI now shows each process's state as a status dot whose shape encodes the lifecycle (waiting, starting, running, ready, stopped, failed) instead of an identical spinner on every process. The shape carries the state so it reads without relying on color; transient states gently pulse to signal progress.
 - Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.
 - Added `devenv down` as a shorthand for `devenv processes down`, mirroring `devenv up` ([#2862](https://github.com/cachix/devenv/issues/2862)).
+- Bumped secretspec to 0.11, which adds a `[providers]` alias map in `secretspec.toml` and support for a key prefix in the AWS Secrets Manager provider.
+- Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).
 
 ### Breaking Changes
+
+- **Shell hook auto-activation**: The shell hook (`devenv hook bash`/`zsh`/`fish`/`nu`) and `devenv allow` now detect a project by looking for `devenv.nix` instead of `devenv.yaml`. Projects with only a `devenv.yaml` and no `devenv.nix` will no longer auto-activate; add a `devenv.nix` to restore activation.
 
 ## 2.1.2 (2026-05-13)
 

@@ -42,6 +42,8 @@ mod instrument;
 mod propagation;
 mod serde_valuable;
 mod stack;
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod test_helpers;
 mod timestamp;
 
 // Re-export the instrument_activity proc macro

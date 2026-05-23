@@ -717,7 +717,16 @@ fn is_flag(arg: &std::ffi::OsString) -> bool {
 #[derive(Subcommand, Clone)]
 pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, and .gitignore.")]
-    Init { target: Option<PathBuf> },
+    Init {
+        target: Option<PathBuf>,
+        #[arg(
+            long,
+            help = "Include .envrc file.",
+            env = "DEVENV_INCLUDE_ENVRC",
+            value_parser = clap::builder::BoolishValueParser::new()
+         )]
+        include_envrc: bool,
+    },
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
     Generate,
@@ -1439,5 +1448,54 @@ mod tests {
         let cli = Cli::parse_from(argv);
         assert_eq!(cli.shell_args.profiles, vec!["test".to_string()]);
         assert!(matches!(cli.command, Commands::Test { .. }));
+    }
+
+    #[test]
+    fn init_command_skip_envrc_default() {
+        let argv = preprocess_profile_args(osargs(["devenv", "init"]));
+        let cli = Cli::parse_from(argv);
+        if let Commands::Init {
+            target,
+            include_envrc,
+        } = cli.command
+        {
+            assert!(target.is_none());
+            assert!(!include_envrc);
+        } else {
+            panic!("Expected Init command");
+        }
+    }
+
+    #[test]
+    fn init_command_include_envrc_flag() {
+        let argv = preprocess_profile_args(osargs(["devenv", "init", "--include-envrc"]));
+        let cli = Cli::parse_from(argv);
+        if let Commands::Init {
+            target,
+            include_envrc,
+        } = cli.command
+        {
+            assert!(target.is_none());
+            assert!(include_envrc);
+        } else {
+            panic!("Expected Init command");
+        }
+    }
+
+    #[test]
+    fn init_command_with_target_and_include_envrc() {
+        let argv =
+            preprocess_profile_args(osargs(["devenv", "init", "/tmp/test", "--include-envrc"]));
+        let cli = Cli::parse_from(argv);
+        if let Commands::Init {
+            target,
+            include_envrc,
+        } = cli.command
+        {
+            assert_eq!(target, Some(PathBuf::from("/tmp/test")));
+            assert!(include_envrc);
+        } else {
+            panic!("Expected Init command");
+        }
     }
 }

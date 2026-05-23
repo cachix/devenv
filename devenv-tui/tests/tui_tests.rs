@@ -4,10 +4,8 @@
 //! These tests verify that when activity events are fed into the model,
 //! the TUI renders the expected output.
 
-use devenv_activity::{
-    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Evaluate, Fetch, FetchKind, Message,
-    Operation, Process, Task, TaskInfo, Timestamp,
-};
+use devenv_activity::test_helpers::*;
+use devenv_activity::{ActivityLevel, ActivityOutcome, FetchKind, TaskInfo};
 use devenv_tui::{ActivityModel, RenderContext, UiState, view::view};
 use iocraft::prelude::*;
 
@@ -26,48 +24,6 @@ fn new_test_model() -> (ActivityModel, UiState) {
     (model, ui_state)
 }
 
-/// Helper to create a task hierarchy event for a single task
-fn task_hierarchy_single(
-    id: u64,
-    name: &str,
-    parent: Option<u64>,
-    show_output: bool,
-    is_process: bool,
-) -> ActivityEvent {
-    let edges = if let Some(p) = parent {
-        vec![(p, id)]
-    } else {
-        vec![]
-    };
-    ActivityEvent::Task(Task::Hierarchy {
-        tasks: vec![TaskInfo {
-            id,
-            name: name.to_string(),
-            show_output,
-            is_process,
-        }],
-        edges,
-        timestamp: Timestamp::now(),
-    })
-}
-
-/// Helper to create a task hierarchy event for multiple tasks
-fn task_hierarchy_multi(tasks: Vec<TaskInfo>, edges: Vec<(u64, u64)>) -> ActivityEvent {
-    ActivityEvent::Task(Task::Hierarchy {
-        tasks,
-        edges,
-        timestamp: Timestamp::now(),
-    })
-}
-
-/// Helper to create a task start event
-fn task_start(id: u64) -> ActivityEvent {
-    ActivityEvent::Task(Task::Start {
-        id,
-        timestamp: Timestamp::now(),
-    })
-}
-
 /// Test that an empty model renders correctly.
 #[test]
 fn test_empty_model() {
@@ -81,21 +37,11 @@ fn test_empty_model() {
 fn test_single_build_activity() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Build(Build::Start {
-        id: 1,
-        name: "Building hello-world".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let event = build_start(1, "Building hello-world");
 
     model.apply_activity_event(event);
 
-    let phase_event = ActivityEvent::Build(Build::Phase {
-        id: 1,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    });
+    let phase_event = build_phase(1, "buildPhase");
 
     model.apply_activity_event(phase_event);
 
@@ -108,23 +54,11 @@ fn test_single_build_activity() {
 fn test_download_with_progress() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Fetch(Fetch::Start {
-        id: 1,
-        kind: FetchKind::Download,
-        name: "Downloading nixpkgs".to_string(),
-        parent: None,
-        url: None,
-        timestamp: Timestamp::now(),
-    });
+    let event = fetch_start(1, FetchKind::Download, "Downloading nixpkgs");
 
     model.apply_activity_event(event);
 
-    let progress_event = ActivityEvent::Fetch(Fetch::Progress {
-        id: 1,
-        current: 5000,
-        total: Some(10000),
-        timestamp: Timestamp::now(),
-    });
+    let progress_event = fetch_progress(1, 5000, Some(10000));
 
     model.apply_activity_event(progress_event);
 
@@ -156,35 +90,13 @@ fn test_task_running() {
 fn test_multiple_activities() {
     let (mut model, ui_state) = new_test_model();
 
-    let build_event = ActivityEvent::Build(Build::Start {
-        id: 1,
-        name: "Building package-a".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build_event = build_start(1, "Building package-a");
 
-    let build_phase_event = ActivityEvent::Build(Build::Phase {
-        id: 1,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    });
+    let build_phase_event = build_phase(1, "buildPhase");
 
-    let download_event = ActivityEvent::Fetch(Fetch::Start {
-        id: 2,
-        kind: FetchKind::Download,
-        name: "Downloading package-b".to_string(),
-        parent: None,
-        url: None,
-        timestamp: Timestamp::now(),
-    });
+    let download_event = fetch_start(2, FetchKind::Download, "Downloading package-b");
 
-    let download_progress_event = ActivityEvent::Fetch(Fetch::Progress {
-        id: 2,
-        current: 2500,
-        total: Some(5000),
-        timestamp: Timestamp::now(),
-    });
+    let download_progress_event = fetch_progress(2, 2500, Some(5000));
 
     model.apply_activity_event(build_event);
     model.apply_activity_event(build_phase_event);
@@ -217,11 +129,7 @@ fn test_task_success() {
     ));
     model.apply_activity_event(task_start(1));
 
-    let complete_event = ActivityEvent::Task(Task::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Success,
-        timestamp: Timestamp::now(),
-    });
+    let complete_event = task_complete(1, ActivityOutcome::Success);
 
     model.apply_activity_event(complete_event);
 
@@ -237,11 +145,7 @@ fn test_task_failed() {
     model.apply_activity_event(task_hierarchy_single(1, "Tests failed", None, false, false));
     model.apply_activity_event(task_start(1));
 
-    let complete_event = ActivityEvent::Task(Task::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Failed,
-        timestamp: Timestamp::now(),
-    });
+    let complete_event = task_complete(1, ActivityOutcome::Failed);
 
     model.apply_activity_event(complete_event);
 
@@ -264,30 +168,11 @@ fn test_task_failed_shows_logs() {
     model.apply_activity_event(task_start(1));
 
     // Send log events - these should be visible because the task fails
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 1,
-        line: "Running test suite...".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 1,
-        line: "FAILED: assertion error in test_foo".to_string(),
-        is_error: true,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 1,
-        line: "Expected: 42, Got: 0".to_string(),
-        is_error: true,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(task_log(1, "Running test suite...", false));
+    model.apply_activity_event(task_log(1, "FAILED: assertion error in test_foo", true));
+    model.apply_activity_event(task_log(1, "Expected: 42, Got: 0", true));
 
-    let complete_event = ActivityEvent::Task(Task::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Failed,
-        timestamp: Timestamp::now(),
-    });
+    let complete_event = task_complete(1, ActivityOutcome::Failed);
     model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -309,18 +194,8 @@ fn test_task_show_output_true() {
     model.apply_activity_event(task_start(1));
 
     // Send log events
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 1,
-        line: "VISIBLE_OUTPUT_LINE_1".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 1,
-        line: "VISIBLE_OUTPUT_LINE_2".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(task_log(1, "VISIBLE_OUTPUT_LINE_1", false));
+    model.apply_activity_event(task_log(1, "VISIBLE_OUTPUT_LINE_2", false));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -341,18 +216,8 @@ fn test_task_show_output_false() {
     model.apply_activity_event(task_start(1));
 
     // Send log events - these should be filtered out
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 1,
-        line: "HIDDEN_OUTPUT_LINE_1".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 1,
-        line: "HIDDEN_OUTPUT_LINE_2".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(task_log(1, "HIDDEN_OUTPUT_LINE_1", false));
+    model.apply_activity_event(task_log(1, "HIDDEN_OUTPUT_LINE_2", false));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -363,13 +228,7 @@ fn test_task_show_output_false() {
 fn test_evaluating_activity() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Evaluate(Evaluate::Start {
-        id: 1,
-        name: "Building shell".to_string(),
-        level: ActivityLevel::Info,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let event = evaluate_start(1, "Building shell", ActivityLevel::Info);
 
     model.apply_activity_event(event);
 
@@ -382,14 +241,13 @@ fn test_evaluating_activity() {
 fn test_query_activity() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Fetch(Fetch::Start {
-        id: 1,
-        kind: FetchKind::Query,
-        name: "7xyndmr0mgfissin0h5ggzb0b2i5drbz-cargo-vendor-dir".to_string(),
-        parent: None,
-        url: Some("https://some-cache.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let event = fetch_start_with(
+        1,
+        FetchKind::Query,
+        "7xyndmr0mgfissin0h5ggzb0b2i5drbz-cargo-vendor-dir",
+        None,
+        Some("https://some-cache.org"),
+    );
 
     model.apply_activity_event(event);
 
@@ -402,14 +260,7 @@ fn test_query_activity() {
 fn test_fetch_tree_activity() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Fetch(Fetch::Start {
-        id: 1,
-        kind: FetchKind::Tree,
-        name: "Fetching github:NixOS/nixpkgs".to_string(),
-        parent: None,
-        url: None,
-        timestamp: Timestamp::now(),
-    });
+    let event = fetch_start(1, FetchKind::Tree, "Fetching github:NixOS/nixpkgs");
 
     model.apply_activity_event(event);
 
@@ -422,23 +273,17 @@ fn test_fetch_tree_activity() {
 fn test_download_with_substituter() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Fetch(Fetch::Start {
-        id: 1,
-        kind: FetchKind::Download,
-        name: "Downloading package".to_string(),
-        parent: None,
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let event = fetch_start_with(
+        1,
+        FetchKind::Download,
+        "Downloading package",
+        None,
+        Some("https://cache.nixos.org"),
+    );
 
     model.apply_activity_event(event);
 
-    let progress_event = ActivityEvent::Fetch(Fetch::Progress {
-        id: 1,
-        current: 1000,
-        total: Some(2000),
-        timestamp: Timestamp::now(),
-    });
+    let progress_event = fetch_progress(1, 1000, Some(2000));
 
     model.apply_activity_event(progress_event);
 
@@ -452,63 +297,44 @@ fn test_nested_evaluation_with_children() {
     let (mut model, ui_state) = new_test_model();
 
     // Parent: Nix evaluation
-    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
-        id: 100,
-        name: "Building shell".to_string(),
-        level: ActivityLevel::Info,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let eval_event = evaluate_start(100, "Building shell", ActivityLevel::Info);
     model.apply_activity_event(eval_event);
 
     // Child: Fetch triggered during evaluation
-    let fetch_event = ActivityEvent::Fetch(Fetch::Start {
-        id: 101,
-        kind: FetchKind::Tree,
-        name: "github:NixOS/nixpkgs".to_string(),
-        parent: Some(100),
-        url: None,
-        timestamp: Timestamp::now(),
-    });
+    let fetch_event = fetch_start_with(
+        101,
+        FetchKind::Tree,
+        "github:NixOS/nixpkgs",
+        Some(100),
+        None,
+    );
     model.apply_activity_event(fetch_event);
 
     // Child: Build triggered during evaluation
-    let build_event = ActivityEvent::Build(Build::Start {
-        id: 102,
-        name: "hello-2.12".to_string(),
-        parent: Some(100),
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build_event = build_start_with(102, "hello-2.12", Some(100));
     model.apply_activity_event(build_event);
 
-    let build_phase = ActivityEvent::Build(Build::Phase {
-        id: 102,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    });
+    let build_phase = build_phase(102, "buildPhase");
     model.apply_activity_event(build_phase);
 
     // Child: Download triggered during evaluation
-    let download_event = ActivityEvent::Fetch(Fetch::Start {
-        id: 103,
-        kind: FetchKind::Download,
-        name: "openssl-3.0.0".to_string(),
-        parent: Some(100),
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let download_event = fetch_start_with(
+        103,
+        FetchKind::Download,
+        "openssl-3.0.0",
+        Some(100),
+        Some("https://cache.nixos.org"),
+    );
     model.apply_activity_event(download_event);
 
     // Grandchild: Download triggered during build (nested 2 levels)
-    let nested_download_event = ActivityEvent::Fetch(Fetch::Start {
-        id: 104,
-        kind: FetchKind::Download,
-        name: "glibc-2.35".to_string(),
-        parent: Some(102),
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let nested_download_event = fetch_start_with(
+        104,
+        FetchKind::Download,
+        "glibc-2.35",
+        Some(102),
+        Some("https://cache.nixos.org"),
+    );
     model.apply_activity_event(nested_download_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -521,14 +347,13 @@ fn test_activity_with_details() {
     let (mut model, ui_state) = new_test_model();
 
     // Create an operation with a detail
-    let parent_event = ActivityEvent::Operation(Operation::Start {
-        id: 1,
-        name: "Building shell".to_string(),
-        parent: None,
-        detail: Some("nix eval --json .#devenv.config".to_string()),
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    });
+    let parent_event = operation_start_with(
+        1,
+        "Building shell",
+        None,
+        Some("nix eval --json .#devenv.config"),
+        ActivityLevel::Info,
+    );
     model.apply_activity_event(parent_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -541,61 +366,21 @@ fn test_multiple_parallel_builds() {
     let (mut model, ui_state) = new_test_model();
 
     // Start multiple builds at different phases
-    let build1 = ActivityEvent::Build(Build::Start {
-        id: 1,
-        name: "hello-2.12".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build1 = build_start(1, "hello-2.12");
     model.apply_activity_event(build1);
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 1,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_phase(1, "buildPhase"));
 
-    let build2 = ActivityEvent::Build(Build::Start {
-        id: 2,
-        name: "openssl-3.0.0".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build2 = build_start(2, "openssl-3.0.0");
     model.apply_activity_event(build2);
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 2,
-        phase: "configurePhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_phase(2, "configurePhase"));
 
-    let build3 = ActivityEvent::Build(Build::Start {
-        id: 3,
-        name: "python-3.11.5".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build3 = build_start(3, "python-3.11.5");
     model.apply_activity_event(build3);
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 3,
-        phase: "installPhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_phase(3, "installPhase"));
 
-    let build4 = ActivityEvent::Build(Build::Start {
-        id: 4,
-        name: "gcc-12.3.0".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build4 = build_start(4, "gcc-12.3.0");
     model.apply_activity_event(build4);
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 4,
-        phase: "unpackPhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_phase(4, "unpackPhase"));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -607,82 +392,44 @@ fn test_parallel_downloads_and_builds() {
     let (mut model, ui_state) = new_test_model();
 
     // Two builds running
-    let build1 = ActivityEvent::Build(Build::Start {
-        id: 1,
-        name: "hello-2.12".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build1 = build_start(1, "hello-2.12");
     model.apply_activity_event(build1);
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 1,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_phase(1, "buildPhase"));
 
-    let build2 = ActivityEvent::Build(Build::Start {
-        id: 2,
-        name: "curl-8.1.0".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build2 = build_start(2, "curl-8.1.0");
     model.apply_activity_event(build2);
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 2,
-        phase: "configurePhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_phase(2, "configurePhase"));
 
     // Three downloads in progress
-    let download1 = ActivityEvent::Fetch(Fetch::Start {
-        id: 3,
-        kind: FetchKind::Download,
-        name: "openssl-3.0.0".to_string(),
-        parent: None,
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let download1 = fetch_start_with(
+        3,
+        FetchKind::Download,
+        "openssl-3.0.0",
+        None,
+        Some("https://cache.nixos.org"),
+    );
     model.apply_activity_event(download1);
-    model.apply_activity_event(ActivityEvent::Fetch(Fetch::Progress {
-        id: 3,
-        current: 15_000_000,
-        total: Some(30_000_000),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(fetch_progress(3, 15_000_000, Some(30_000_000)));
 
-    let download2 = ActivityEvent::Fetch(Fetch::Start {
-        id: 4,
-        kind: FetchKind::Download,
-        name: "glibc-2.37".to_string(),
-        parent: None,
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let download2 = fetch_start_with(
+        4,
+        FetchKind::Download,
+        "glibc-2.37",
+        None,
+        Some("https://cache.nixos.org"),
+    );
     model.apply_activity_event(download2);
-    model.apply_activity_event(ActivityEvent::Fetch(Fetch::Progress {
-        id: 4,
-        current: 8_000_000,
-        total: Some(10_000_000),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(fetch_progress(4, 8_000_000, Some(10_000_000)));
 
-    let download3 = ActivityEvent::Fetch(Fetch::Start {
-        id: 5,
-        kind: FetchKind::Download,
-        name: "python-3.11.5".to_string(),
-        parent: None,
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let download3 = fetch_start_with(
+        5,
+        FetchKind::Download,
+        "python-3.11.5",
+        None,
+        Some("https://cache.nixos.org"),
+    );
     model.apply_activity_event(download3);
-    model.apply_activity_event(ActivityEvent::Fetch(Fetch::Progress {
-        id: 5,
-        current: 1_000_000,
-        total: Some(50_000_000),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(fetch_progress(5, 1_000_000, Some(50_000_000)));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -693,22 +440,16 @@ fn test_parallel_downloads_and_builds() {
 fn test_indeterminate_progress() {
     let (mut model, ui_state) = new_test_model();
 
-    let event = ActivityEvent::Fetch(Fetch::Start {
-        id: 1,
-        kind: FetchKind::Download,
-        name: "large-file.tar.gz".to_string(),
-        parent: None,
-        url: Some("https://example.com/large-file".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let event = fetch_start_with(
+        1,
+        FetchKind::Download,
+        "large-file.tar.gz",
+        None,
+        Some("https://example.com/large-file"),
+    );
     model.apply_activity_event(event);
 
-    let progress_event = ActivityEvent::Fetch(Fetch::Progress {
-        id: 1,
-        current: 42_000_000,
-        total: None,
-        timestamp: Timestamp::now(),
-    });
+    let progress_event = fetch_progress(1, 42_000_000, None);
     model.apply_activity_event(progress_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -721,67 +462,43 @@ fn test_deep_nesting() {
     let (mut model, ui_state) = new_test_model();
 
     // Level 0: Root evaluation
-    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
-        id: 1,
-        name: "Building shell".to_string(),
-        level: ActivityLevel::Info,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let eval_event = evaluate_start(1, "Building shell", ActivityLevel::Info);
     model.apply_activity_event(eval_event);
 
     // Level 1: Build triggered during evaluation
-    let build_event = ActivityEvent::Build(Build::Start {
-        id: 2,
-        name: "wrapper-scripts".to_string(),
-        parent: Some(1),
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build_event = build_start_with(2, "wrapper-scripts", Some(1));
     model.apply_activity_event(build_event);
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 2,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_phase(2, "buildPhase"));
 
     // Level 2: Fetch triggered during build
-    let fetch_event = ActivityEvent::Fetch(Fetch::Start {
-        id: 3,
-        kind: FetchKind::Download,
-        name: "bash-5.2".to_string(),
-        parent: Some(2),
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let fetch_event = fetch_start_with(
+        3,
+        FetchKind::Download,
+        "bash-5.2",
+        Some(2),
+        Some("https://cache.nixos.org"),
+    );
     model.apply_activity_event(fetch_event);
-    model.apply_activity_event(ActivityEvent::Fetch(Fetch::Progress {
-        id: 3,
-        current: 500_000,
-        total: Some(1_000_000),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(fetch_progress(3, 500_000, Some(1_000_000)));
 
     // Level 3: Nested dependency fetch
-    let nested_fetch = ActivityEvent::Fetch(Fetch::Start {
-        id: 4,
-        kind: FetchKind::Download,
-        name: "readline-8.2".to_string(),
-        parent: Some(3),
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let nested_fetch = fetch_start_with(
+        4,
+        FetchKind::Download,
+        "readline-8.2",
+        Some(3),
+        Some("https://cache.nixos.org"),
+    );
     model.apply_activity_event(nested_fetch);
 
     // Level 4: Even deeper
-    let deep_fetch = ActivityEvent::Fetch(Fetch::Start {
-        id: 5,
-        kind: FetchKind::Download,
-        name: "ncurses-6.4".to_string(),
-        parent: Some(4),
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    });
+    let deep_fetch = fetch_start_with(
+        5,
+        FetchKind::Download,
+        "ncurses-6.4",
+        Some(4),
+        Some("https://cache.nixos.org"),
+    );
     model.apply_activity_event(deep_fetch);
 
     let output = render_to_string(&model, &ui_state);
@@ -797,34 +514,22 @@ fn test_many_concurrent_activities() {
     for i in 0..8 {
         match i % 4 {
             0 => {
-                model.apply_activity_event(ActivityEvent::Build(Build::Start {
-                    id: i as u64 + 1,
-                    name: format!("package-{}", i),
-                    parent: None,
-                    derivation_path: None,
-                    timestamp: Timestamp::now(),
-                }));
-                model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-                    id: i as u64 + 1,
-                    phase: "buildPhase".to_string(),
-                    timestamp: Timestamp::now(),
-                }));
+                model.apply_activity_event(build_start(i as u64 + 1, format!("package-{}", i)));
+                model.apply_activity_event(build_phase(i as u64 + 1, "buildPhase"));
             }
             1 => {
-                model.apply_activity_event(ActivityEvent::Fetch(Fetch::Start {
-                    id: i as u64 + 1,
-                    kind: FetchKind::Download,
-                    name: format!("dependency-{}", i),
-                    parent: None,
-                    url: Some("https://cache.nixos.org".to_string()),
-                    timestamp: Timestamp::now(),
-                }));
-                model.apply_activity_event(ActivityEvent::Fetch(Fetch::Progress {
-                    id: i as u64 + 1,
-                    current: (i as u64 + 1) * 1_000_000,
-                    total: Some(10_000_000),
-                    timestamp: Timestamp::now(),
-                }));
+                model.apply_activity_event(fetch_start_with(
+                    i as u64 + 1,
+                    FetchKind::Download,
+                    format!("dependency-{}", i),
+                    None,
+                    Some("https://cache.nixos.org"),
+                ));
+                model.apply_activity_event(fetch_progress(
+                    i as u64 + 1,
+                    (i as u64 + 1) * 1_000_000,
+                    Some(10_000_000),
+                ));
             }
             2 => {
                 model.apply_activity_event(task_hierarchy_single(
@@ -837,13 +542,11 @@ fn test_many_concurrent_activities() {
                 model.apply_activity_event(task_start(i as u64 + 1));
             }
             _ => {
-                model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
-                    id: i as u64 + 1,
-                    name: "Building shell".to_string(),
-                    level: ActivityLevel::Info,
-                    parent: None,
-                    timestamp: Timestamp::now(),
-                }));
+                model.apply_activity_event(evaluate_start(
+                    i as u64 + 1,
+                    "Building shell",
+                    ActivityLevel::Info,
+                ));
             }
         };
     }
@@ -858,62 +561,26 @@ fn test_mixed_completed_and_active() {
     let (mut model, ui_state) = new_test_model();
 
     // Completed build
-    model.apply_activity_event(ActivityEvent::Build(Build::Start {
-        id: 1,
-        name: "dependency-a".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Build(Build::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Success,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_start(1, "dependency-a"));
+    model.apply_activity_event(build_complete(1, ActivityOutcome::Success));
 
     // Failed build
-    model.apply_activity_event(ActivityEvent::Build(Build::Start {
-        id: 2,
-        name: "dependency-b".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Build(Build::Complete {
-        id: 2,
-        outcome: ActivityOutcome::Failed,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_start(2, "dependency-b"));
+    model.apply_activity_event(build_complete(2, ActivityOutcome::Failed));
 
     // Active build
-    model.apply_activity_event(ActivityEvent::Build(Build::Start {
-        id: 3,
-        name: "main-package".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 3,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_start(3, "main-package"));
+    model.apply_activity_event(build_phase(3, "buildPhase"));
 
     // Active download
-    model.apply_activity_event(ActivityEvent::Fetch(Fetch::Start {
-        id: 4,
-        kind: FetchKind::Download,
-        name: "runtime-dep".to_string(),
-        parent: None,
-        url: Some("https://cache.nixos.org".to_string()),
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Fetch(Fetch::Progress {
-        id: 4,
-        current: 3_000_000,
-        total: Some(5_000_000),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(fetch_start_with(
+        4,
+        FetchKind::Download,
+        "runtime-dep",
+        None,
+        Some("https://cache.nixos.org"),
+    ));
+    model.apply_activity_event(fetch_progress(4, 3_000_000, Some(5_000_000)));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -925,14 +592,12 @@ fn test_standalone_error_message() {
     let (mut model, ui_state) = new_test_model();
 
     // Add a standalone error message (no parent activity)
-    let error_event = ActivityEvent::Message(Message {
-        id: 100,
-        level: ActivityLevel::Error,
-        text: "error: attribute 'nonExistentPackage' not found".to_string(),
-        details: None,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let error_event = message_with(
+        100,
+        ActivityLevel::Error,
+        "error: attribute 'nonExistentPackage' not found",
+        None,
+    );
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -945,24 +610,20 @@ fn test_multiple_error_messages() {
     let (mut model, ui_state) = new_test_model();
 
     // Add multiple standalone error messages
-    let error1 = ActivityEvent::Message(Message {
-        id: 100,
-        level: ActivityLevel::Error,
-        text: "error: attribute 'foo' not found".to_string(),
-        details: None,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let error1 = message_with(
+        100,
+        ActivityLevel::Error,
+        "error: attribute 'foo' not found",
+        None,
+    );
     model.apply_activity_event(error1);
 
-    let error2 = ActivityEvent::Message(Message {
-        id: 101,
-        level: ActivityLevel::Error,
-        text: "error: while evaluating 'bar': infinite recursion".to_string(),
-        details: None,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let error2 = message_with(
+        101,
+        ActivityLevel::Error,
+        "error: while evaluating 'bar': infinite recursion",
+        None,
+    );
     model.apply_activity_event(error2);
 
     let output = render_to_string(&model, &ui_state);
@@ -975,24 +636,16 @@ fn test_error_message_with_parent() {
     let (mut model, ui_state) = new_test_model();
 
     // Start an evaluation
-    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
-        id: 1,
-        name: "Building shell".to_string(),
-        level: ActivityLevel::Info,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let eval_event = evaluate_start(1, "Building shell", ActivityLevel::Info);
     model.apply_activity_event(eval_event);
 
     // Add an error message attached to the evaluation
-    let error_event = ActivityEvent::Message(Message {
-        id: 100,
-        level: ActivityLevel::Error,
-        text: "error: undefined variable 'pkgs'".to_string(),
-        details: None,
-        parent: Some(1),
-        timestamp: Timestamp::now(),
-    });
+    let error_event = message_with(
+        100,
+        ActivityLevel::Error,
+        "error: undefined variable 'pkgs'",
+        Some(1),
+    );
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -1005,24 +658,16 @@ fn test_warning_message_with_parent() {
     let (mut model, ui_state) = new_test_model();
 
     // Start an evaluation
-    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
-        id: 1,
-        name: "Building shell".to_string(),
-        level: ActivityLevel::Info,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let eval_event = evaluate_start(1, "Building shell", ActivityLevel::Info);
     model.apply_activity_event(eval_event);
 
     // Add a warning message attached to the evaluation
-    let warn_event = ActivityEvent::Message(Message {
-        id: 100,
-        level: ActivityLevel::Warn,
-        text: "warning: deprecated option 'services.foo' used".to_string(),
-        details: None,
-        parent: Some(1),
-        timestamp: Timestamp::now(),
-    });
+    let warn_event = message_with(
+        100,
+        ActivityLevel::Warn,
+        "warning: deprecated option 'services.foo' used",
+        Some(1),
+    );
     model.apply_activity_event(warn_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -1035,29 +680,17 @@ fn test_error_with_active_builds() {
     let (mut model, ui_state) = new_test_model();
 
     // Start a build
-    let build_event = ActivityEvent::Build(Build::Start {
-        id: 1,
-        name: "hello-2.12".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    });
+    let build_event = build_start(1, "hello-2.12");
     model.apply_activity_event(build_event);
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 1,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_phase(1, "buildPhase"));
 
     // Add an error message
-    let error_event = ActivityEvent::Message(Message {
-        id: 100,
-        level: ActivityLevel::Error,
-        text: "error: builder for '/nix/store/...-hello.drv' failed".to_string(),
-        details: None,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let error_event = message_with(
+        100,
+        ActivityLevel::Error,
+        "error: builder for '/nix/store/...-hello.drv' failed",
+        None,
+    );
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -1070,24 +703,19 @@ fn test_error_message_with_details() {
     let (mut model, ui_state) = new_test_model();
 
     // Start an evaluation
-    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
-        id: 1,
-        name: "Building shell".to_string(),
-        level: ActivityLevel::Info,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let eval_event = evaluate_start(1, "Building shell", ActivityLevel::Info);
     model.apply_activity_event(eval_event);
 
     // Add an error message with details (stack trace)
-    let error_event = ActivityEvent::Message(Message {
-        id: 100,
-        level: ActivityLevel::Error,
-        text: "error: undefined variable 'pkgs'".to_string(),
-        details: Some("error:\n       … while evaluating\n         at devenv.nix:10:5\n\n       error: undefined variable 'pkgs'".to_string()),
-        parent: Some(1),
-        timestamp: Timestamp::now(),
-    });
+    let error_event = message_with_details(
+        100,
+        ActivityLevel::Error,
+        "error: undefined variable 'pkgs'",
+        Some(
+            "error:\n       … while evaluating\n         at devenv.nix:10:5\n\n       error: undefined variable 'pkgs'",
+        ),
+        Some(1),
+    );
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -1100,24 +728,11 @@ fn test_error_message_without_details() {
     let (mut model, ui_state) = new_test_model();
 
     // Start an evaluation
-    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
-        id: 1,
-        name: "Building shell".to_string(),
-        level: ActivityLevel::Info,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let eval_event = evaluate_start(1, "Building shell", ActivityLevel::Info);
     model.apply_activity_event(eval_event);
 
     // Add an error message without details
-    let error_event = ActivityEvent::Message(Message {
-        id: 100,
-        level: ActivityLevel::Error,
-        text: "error: simple error".to_string(),
-        details: None,
-        parent: Some(1),
-        timestamp: Timestamp::now(),
-    });
+    let error_event = message_with(100, ActivityLevel::Error, "error: simple error", Some(1));
     model.apply_activity_event(error_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -1134,40 +749,28 @@ fn test_evaluate_failed_shows_error_details() {
     let (mut model, ui_state) = new_test_model();
 
     // Start an evaluation
-    let eval_event = ActivityEvent::Evaluate(Evaluate::Start {
-        id: 1,
-        name: "Evaluating shell".to_string(),
-        level: ActivityLevel::Info,
-        parent: None,
-        timestamp: Timestamp::now(),
-    });
+    let eval_event = evaluate_start(1, "Evaluating shell", ActivityLevel::Info);
     model.apply_activity_event(eval_event);
 
     // Add an error message with details (as nix_log_bridge does for eval errors)
-    let error_event = ActivityEvent::Message(Message {
-        id: 100,
-        level: ActivityLevel::Error,
-        text: "Evaluation error: Failed to get drvPath from shell derivation".to_string(),
-        details: Some(
+    let error_event = message_with_details(
+        100,
+        ActivityLevel::Error,
+        "Evaluation error: Failed to get drvPath from shell derivation",
+        Some(
             "… while evaluating the option `packages':\n\
              … while evaluating definitions from `languages/rust.nix':\n\
              \n\
              error: To use 'languages.rust.channel', run the following command:\n\
              \n\
-             $ devenv inputs add rust-overlay github:oxalica/rust-overlay --follows nixpkgs"
-                .to_string(),
+             $ devenv inputs add rust-overlay github:oxalica/rust-overlay --follows nixpkgs",
         ),
-        parent: Some(1),
-        timestamp: Timestamp::now(),
-    });
+        Some(1),
+    );
     model.apply_activity_event(error_event);
 
     // Complete the evaluation with failure
-    let complete_event = ActivityEvent::Evaluate(Evaluate::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Failed,
-        timestamp: Timestamp::now(),
-    });
+    let complete_event = evaluate_complete(1, ActivityOutcome::Failed);
     model.apply_activity_event(complete_event);
 
     // Simulate the child error message expiring: backdate it past the linger duration,
@@ -1176,15 +779,12 @@ fn test_evaluate_failed_shows_error_details() {
         child.completed_at = Some(std::time::Instant::now() - std::time::Duration::from_secs(10));
     }
     for i in 0..5 {
-        let filler = ActivityEvent::Message(Message {
-            id: 200 + i,
-            level: ActivityLevel::Info,
-            text: format!("evaluating file {i}"),
-            details: None,
-            parent: Some(1),
-            timestamp: Timestamp::now(),
-        });
-        model.apply_activity_event(filler);
+        model.apply_activity_event(message_with(
+            200 + i,
+            ActivityLevel::Info,
+            format!("evaluating file {i}"),
+            Some(1),
+        ));
     }
 
     let output = render_to_string(&model, &ui_state);
@@ -1197,42 +797,16 @@ fn test_devenv_failed_shows_logs() {
     let (mut model, ui_state) = new_test_model();
 
     // Start a devenv operation
-    let start_event = ActivityEvent::Operation(Operation::Start {
-        id: 1,
-        name: "devenv shell".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    });
+    let start_event = operation_start_with(1, "devenv shell", None, None, ActivityLevel::Info);
     model.apply_activity_event(start_event);
 
     // Send log events - these should be visible because the operation fails
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
-        id: 1,
-        line: "Running enterShell hook...".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
-        id: 1,
-        line: "error: command 'foo' not found".to_string(),
-        is_error: true,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
-        id: 1,
-        line: "hint: did you mean 'bar'?".to_string(),
-        is_error: true,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_log(1, "Running enterShell hook...", false));
+    model.apply_activity_event(operation_log(1, "error: command 'foo' not found", true));
+    model.apply_activity_event(operation_log(1, "hint: did you mean 'bar'?", true));
 
     // Complete with failure
-    let complete_event = ActivityEvent::Operation(Operation::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Failed,
-        timestamp: Timestamp::now(),
-    });
+    let complete_event = operation_complete(1, ActivityOutcome::Failed);
     model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, &ui_state);
@@ -1246,7 +820,7 @@ fn test_task_additional_parents() {
 
     // Emit hierarchy: two parent tasks and a shared dependency
     // The "build" task (id=3) has primary parent 1 (test:unit) and additional parent 2 (test:integration)
-    let hierarchy = task_hierarchy_multi(
+    let hierarchy = task_hierarchy(
         vec![
             TaskInfo {
                 id: 1,
@@ -1289,7 +863,7 @@ fn test_task_additional_parents() {
 fn test_selectable_ids_dedup_for_multi_parent_tasks() {
     let (mut model, mut ui_state) = new_test_model();
 
-    let hierarchy = task_hierarchy_multi(
+    let hierarchy = task_hierarchy(
         vec![
             TaskInfo {
                 id: 1,
@@ -1318,18 +892,8 @@ fn test_selectable_ids_dedup_for_multi_parent_tasks() {
     model.apply_activity_event(hierarchy);
 
     // Add logs so tasks 1 and 3 are selectable.
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 1,
-        line: "log-1".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Task(Task::Log {
-        id: 3,
-        line: "log-3".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(task_log(1, "log-1", false));
+    model.apply_activity_event(task_log(3, "log-3", false));
 
     let selectable = model.get_selectable_activity_ids(&ui_state);
     assert_eq!(selectable, vec![1, 3]);
@@ -1353,7 +917,7 @@ fn test_task_queued_state() {
     let (mut model, ui_state) = new_test_model();
 
     // Emit hierarchy for three tasks but only start one
-    let hierarchy = task_hierarchy_multi(
+    let hierarchy = task_hierarchy(
         vec![
             TaskInfo {
                 id: 1,
@@ -1402,11 +966,7 @@ fn test_task_skipped_never_started() {
 
     // Complete with Skipped without ever calling task_start
     // This simulates a task that was skipped due to caching or no command
-    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Skipped,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(task_complete(1, ActivityOutcome::Skipped));
 
     let output = render_to_string(&model, &ui_state);
     // Task should show as skipped with zero duration
@@ -1419,7 +979,7 @@ fn test_task_dependency_failed_never_started() {
     let (mut model, ui_state) = new_test_model();
 
     // Emit hierarchy with dependency relationship
-    let hierarchy = task_hierarchy_multi(
+    let hierarchy = task_hierarchy(
         vec![
             TaskInfo {
                 id: 1,
@@ -1440,18 +1000,10 @@ fn test_task_dependency_failed_never_started() {
 
     // Start and fail the dependency
     model.apply_activity_event(task_start(1));
-    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Failed,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(task_complete(1, ActivityOutcome::Failed));
 
     // The dependent task never starts, just gets DependencyFailed
-    model.apply_activity_event(ActivityEvent::Task(Task::Complete {
-        id: 2,
-        outcome: ActivityOutcome::DependencyFailed,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(task_complete(2, ActivityOutcome::DependencyFailed));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -1463,7 +1015,7 @@ fn test_task_deep_nesting() {
     let (mut model, ui_state) = new_test_model();
 
     // Create a deep hierarchy: root -> level1 -> level2 -> level3
-    let hierarchy = task_hierarchy_multi(
+    let hierarchy = task_hierarchy(
         vec![
             TaskInfo {
                 id: 1,
@@ -1515,7 +1067,7 @@ fn test_task_multiple_under_same_parent() {
     let (mut model, ui_state) = new_test_model();
 
     // Create a parent with multiple children
-    let hierarchy = task_hierarchy_multi(
+    let hierarchy = task_hierarchy(
         vec![
             TaskInfo {
                 id: 1,
@@ -1572,7 +1124,7 @@ fn test_task_diamond_dependency() {
     //   A      B
     //    \    /
     //     shared
-    let hierarchy = task_hierarchy_multi(
+    let hierarchy = task_hierarchy(
         vec![
             TaskInfo {
                 id: 1,
@@ -1632,37 +1184,18 @@ fn test_overflow_clips_top_keeps_bottom() {
 
     // Create several completed activities (these should get clipped at the top)
     for i in 1..=5 {
-        model.apply_activity_event(ActivityEvent::Build(Build::Start {
-            id: i,
-            name: format!("completed-build-{}", i),
-            parent: None,
-            derivation_path: None,
-            timestamp: Timestamp::now(),
-        }));
-        model.apply_activity_event(ActivityEvent::Build(Build::Complete {
-            id: i,
-            outcome: ActivityOutcome::Success,
-            timestamp: Timestamp::now(),
-        }));
+        model.apply_activity_event(build_start(i, format!("completed-build-{}", i)));
+        model.apply_activity_event(build_complete(i, ActivityOutcome::Success));
     }
 
     // Create a running process with logs (this should remain visible at the bottom)
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
-        id: 10,
-        name: "web-server".to_string(),
-        parent: None,
-        command: None,
-        ports: vec![],
-        ready_probe: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Process(Process::Log {
-        id: 10,
-        line: "Listening on port 3000".to_string(),
-        is_error: false,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(process_start_with(
+        10,
+        "web-server",
+        None,
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_log(10, "Listening on port 3000", false));
 
     let output = render_to_string(&model, &ui_state);
 
@@ -1695,43 +1228,21 @@ fn test_overflow_clips_top_keeps_bottom() {
 fn test_hide_stopped_processes_filters_manually_stopped_processes_but_keeps_failures() {
     let (mut model, mut ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 100,
-        name: "Running processes".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        100,
+        "Running processes",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
     for (id, name) in [(1, "clean-stop"), (2, "failed-stop"), (3, "running")] {
-        model.apply_activity_event(ActivityEvent::Process(Process::Start {
-            id,
-            name: name.to_string(),
-            parent: Some(100),
-            command: None,
-            ports: vec![],
-            ready_probe: None,
-            level: ActivityLevel::Info,
-            timestamp: Timestamp::now(),
-        }));
+        model.apply_activity_event(process_start_with(id, name, Some(100), ActivityLevel::Info));
     }
 
-    model.apply_activity_event(ActivityEvent::Process(Process::Status {
-        id: 1,
-        status: devenv_activity::ProcessStatus::Running,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Process(Process::Status {
-        id: 1,
-        status: devenv_activity::ProcessStatus::Stopped,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Process(Process::Complete {
-        id: 2,
-        outcome: ActivityOutcome::Failed,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(process_status(1, devenv_activity::ProcessStatus::Running));
+    model.apply_activity_event(process_status(1, devenv_activity::ProcessStatus::Stopped));
+    model.apply_activity_event(process_complete(2, ActivityOutcome::Failed));
 
     let visible_before: Vec<_> = model
         .get_display_activities(&ui_state)
@@ -1765,30 +1276,21 @@ fn test_hide_stopped_processes_filters_manually_stopped_processes_but_keeps_fail
 fn test_previous_hide_stopped_processes_coverage_used_completed_success() {
     let (mut model, mut ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 100,
-        name: "Running processes".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        100,
+        "Running processes",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
-        id: 1,
-        name: "clean-stop".to_string(),
-        parent: Some(100),
-        command: None,
-        ports: vec![],
-        ready_probe: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Process(Process::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Success,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(process_start_with(
+        1,
+        "clean-stop".to_string(),
+        Some(100),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_complete(1, ActivityOutcome::Success));
 
     ui_state.hide_stopped_processes = true;
 
@@ -1807,30 +1309,21 @@ fn test_previous_hide_stopped_processes_coverage_used_completed_success() {
 fn test_toggle_hide_stopped_processes_clears_hidden_selection() {
     let (mut model, mut ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 100,
-        name: "Running processes".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        100,
+        "Running processes",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
-        id: 1,
-        name: "clean-stop".to_string(),
-        parent: Some(100),
-        command: None,
-        ports: vec![],
-        ready_probe: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Process(Process::Status {
-        id: 1,
-        status: devenv_activity::ProcessStatus::Stopped,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(process_start_with(
+        1,
+        "clean-stop".to_string(),
+        Some(100),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_status(1, devenv_activity::ProcessStatus::Stopped));
 
     ui_state.selected_activity = Some(1);
     ui_state.toggle_hide_stopped_processes();
@@ -1848,41 +1341,28 @@ fn test_toggle_hide_stopped_processes_clears_hidden_selection() {
 fn test_hide_stopped_processes_removes_hidden_processes_from_selection() {
     let (mut model, mut ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 100,
-        name: "Running processes".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        100,
+        "Running processes",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
-        id: 1,
-        name: "clean-stop".to_string(),
-        parent: Some(100),
-        command: None,
-        ports: vec![],
-        ready_probe: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Process(Process::Status {
-        id: 1,
-        status: devenv_activity::ProcessStatus::Stopped,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(process_start_with(
+        1,
+        "clean-stop".to_string(),
+        Some(100),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_status(1, devenv_activity::ProcessStatus::Stopped));
 
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
-        id: 2,
-        name: "running".to_string(),
-        parent: Some(100),
-        command: None,
-        ports: vec![],
-        ready_probe: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(process_start_with(
+        2,
+        "running".to_string(),
+        Some(100),
+        ActivityLevel::Info,
+    ));
 
     let selectable_before = model.get_selectable_activity_ids(&ui_state);
     assert_eq!(selectable_before, vec![1, 2]);
@@ -1898,14 +1378,13 @@ fn test_hide_stopped_processes_removes_hidden_processes_from_selection() {
 fn test_cachix_push_started() {
     let (mut model, ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 1,
-        name: "Pushing to my-cache".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        1,
+        "Pushing to my-cache",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -1916,22 +1395,15 @@ fn test_cachix_push_started() {
 fn test_cachix_push_progress() {
     let (mut model, ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 1,
-        name: "Pushing to my-cache".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        1,
+        "Pushing to my-cache",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
-        id: 1,
-        done: 3,
-        expected: 10,
-        detail: Some("hello-2.12".to_string()),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_progress_with(1, 3, 10, Some("hello-2.12")));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -1942,28 +1414,17 @@ fn test_cachix_push_progress() {
 fn test_cachix_push_success() {
     let (mut model, ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 1,
-        name: "Pushing to my-cache".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        1,
+        "Pushing to my-cache",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
-        id: 1,
-        done: 10,
-        expected: 10,
-        detail: None,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_progress(1, 10, 10));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Success,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -1974,50 +1435,31 @@ fn test_cachix_push_success() {
 fn test_cachix_push_with_failures() {
     let (mut model, ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 1,
-        name: "Pushing to my-cache".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        1,
+        "Pushing to my-cache",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
-        id: 1,
-        done: 5,
-        expected: 10,
-        detail: Some("openssl-3.0.0".to_string()),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_progress_with(1, 5, 10, Some("openssl-3.0.0")));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
-        id: 1,
-        line: "openssl-3.0.0: HTTP 403: Access Denied".to_string(),
-        is_error: true,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_log(
+        1,
+        "openssl-3.0.0: HTTP 403: Access Denied",
+        true,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Log {
-        id: 1,
-        line: "glibc-2.37: HTTP 500: Internal Server Error".to_string(),
-        is_error: true,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_log(
+        1,
+        "glibc-2.37: HTTP 500: Internal Server Error",
+        true,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
-        id: 1,
-        done: 8,
-        expected: 10,
-        detail: None,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_progress(1, 8, 10));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Complete {
-        id: 1,
-        outcome: ActivityOutcome::Failed,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Failed));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
@@ -2030,56 +1472,42 @@ fn test_processes_alphabetical_order() {
     let (mut model, ui_state) = new_test_model();
 
     // Create the "Running processes" parent operation (matches real usage)
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 100,
-        name: "Running processes".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        100,
+        "Running processes",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
     // Start processes in non-alphabetical order (z, a, m)
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
-        id: 1,
-        name: "zookeeper".to_string(),
-        parent: Some(100),
-        command: None,
-        ports: vec![],
-        ready_probe: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
-        id: 2,
-        name: "api-server".to_string(),
-        parent: Some(100),
-        command: None,
-        ports: vec![],
-        ready_probe: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(process_start_with(
+        1,
+        "zookeeper".to_string(),
+        Some(100),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_start_with(
+        2,
+        "api-server".to_string(),
+        Some(100),
+        ActivityLevel::Info,
+    ));
 
     // Add "Evaluating Nix" as a child of "Running processes" (happens during process manager eval)
-    model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
-        id: 3,
-        name: "Evaluating Nix".to_string(),
-        parent: Some(100),
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(evaluate_start_with(
+        3,
+        "Evaluating Nix",
+        ActivityLevel::Info,
+        Some(100),
+    ));
 
-    model.apply_activity_event(ActivityEvent::Process(Process::Start {
-        id: 4,
-        name: "mysql".to_string(),
-        parent: Some(100),
-        command: None,
-        ports: vec![],
-        ready_probe: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(process_start_with(
+        4,
+        "mysql".to_string(),
+        Some(100),
+        ActivityLevel::Info,
+    ));
 
     let output = render_to_string(&model, &ui_state);
 
@@ -2108,35 +1536,18 @@ fn test_processes_alphabetical_order() {
 fn test_cachix_push_alongside_build() {
     let (mut model, ui_state) = new_test_model();
 
-    model.apply_activity_event(ActivityEvent::Build(Build::Start {
-        id: 1,
-        name: "hello-2.12".to_string(),
-        parent: None,
-        derivation_path: None,
-        timestamp: Timestamp::now(),
-    }));
-    model.apply_activity_event(ActivityEvent::Build(Build::Phase {
-        id: 1,
-        phase: "buildPhase".to_string(),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(build_start(1, "hello-2.12"));
+    model.apply_activity_event(build_phase(1, "buildPhase"));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
-        id: 2,
-        name: "Pushing to my-cache".to_string(),
-        parent: None,
-        detail: None,
-        level: ActivityLevel::Info,
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_start_with(
+        2,
+        "Pushing to my-cache",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
 
-    model.apply_activity_event(ActivityEvent::Operation(Operation::Progress {
-        id: 2,
-        done: 3,
-        expected: 7,
-        detail: Some("python-3.11.5".to_string()),
-        timestamp: Timestamp::now(),
-    }));
+    model.apply_activity_event(operation_progress_with(2, 3, 7, Some("python-3.11.5")));
 
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
