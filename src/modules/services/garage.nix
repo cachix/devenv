@@ -89,7 +89,7 @@ let
         fi
 
         echo "Create all buckets ..."
-        for bucket in ${lib.concatMapStringsSep " " (x: "'${x}'") cfg.buckets}; do
+        for bucket in ${lib.escapeShellArgs cfg.buckets}; do
           if $GARAGE bucket info "$bucket" &>/dev/null; then
               echo "Bucket '$bucket' already exists, skipping"
           else
@@ -116,7 +116,7 @@ let
         }
 
         # Check that all buckets are created.
-        for bucket in ${lib.concatMapStringsSep " " (x: "'${x}'") cfg.buckets}; do
+        for bucket in ${lib.escapeShellArgs cfg.buckets}; do
           if $GARAGE bucket info "$bucket" &>/dev/null; then
             echo "Bucket '$bucket' exists."
           else
@@ -226,13 +226,14 @@ in
     };
 
     ui = {
-      enable = lib.mkEnableOption "Enable a simple web UI.";
+      enable = lib.mkEnableOption "a simple web UI";
 
       start = lib.mkOption {
         type = types.bool;
         default = false;
         description = ''
-          If the service is by default started or must be manually started.
+          Whether to start the web UI automatically. When false it can be
+          started manually. Only applies when `ui.enable = true`.
         '';
       };
 
