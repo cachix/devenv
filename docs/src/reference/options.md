@@ -28505,6 +28505,94 @@ string
 
 
 
+## services.garage.ui.enable
+
+
+
+Whether to enable Enable a simple web UI…
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/garage.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/garage.nix)
+
+
+
+## services.garage.ui.port
+
+
+
+On which port the UI should run.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+3919
+```
+
+
+
+*Example:*
+
+```nix
+3919
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/garage.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/garage.nix)
+
+
+
+## services.garage.ui.start
+
+
+
+If the service is by default started or must be manually started.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/garage.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/garage.nix)
+
+
+
 ## services.httpbin.enable
 
 

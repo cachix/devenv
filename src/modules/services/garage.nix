@@ -1,4 +1,8 @@
-{ pkgs, lib, config, ... }:
+{ pkgs
+, lib
+, config
+, ...
+}:
 
 let
   cfg = config.services.garage;
@@ -39,25 +43,101 @@ let
     ${cfg.extraConfig}
   '';
 
-  configureScript = ''
-    set -euo pipefail
-    GARAGE="${cfg.package}/bin/garage -c ${configFile}"
+  garageFunctions = ''
+    function garageHealthEndpoint() {
+      ${lib.getExe pkgs.curl} \
+        -f -H 'Authorization: Bearer ${cfg.adminToken}' \
+        'http://${adminHost}:${toString allocatedAdminPort}/v1/health' 2>/dev/null
+    }
 
-    # Apply the cluster layout once. Garage rejects S3 traffic until at
-    # least one node has a role, so this step is mandatory before the
-    # buckets can be touched.
-    if $GARAGE status 2>/dev/null | grep -q "NO ROLE ASSIGNED"; then
-      NODE_ID=$($GARAGE node id 2>/dev/null | cut -d@ -f1)
-      $GARAGE layout assign -z dc1 -c 1G "$NODE_ID"
-      $GARAGE layout apply --version 1
-    fi
+    function garageHealthy() {
+      if garageHealthEndpoint | ${lib.getExe pkgs.jq} -e '.status == "healthy"'; then
+        return 0
+      fi
 
-    for bucket in ${lib.escapeShellArgs cfg.buckets}; do
-      $GARAGE bucket create "$bucket" 2>/dev/null || true
-    done
+      return 1
+    }
 
-    ${cfg.afterStart}
+    function garageRunning() {
+      garageHealthEndpoint
+    }
   '';
+
+  configureScript =
+    pkgs.writeShellScriptBin "configure"
+      # bash
+      ''
+        set -euo pipefail
+        ${garageFunctions}
+
+        GARAGE="${cfg.package}/bin/garage -c ${configFile}"
+
+        until garageRunning; do
+          echo "Garage not ready, waiting..."
+          sleep 1
+        done
+
+        echo "Garage ready."
+        echo "Configuring layout ..."
+        # Apply the cluster layout once. Garage rejects S3 traffic until at
+        # least one node has a role, so this step is mandatory before the
+        # buckets can be touched.
+        if $GARAGE status 2>/dev/null | grep -q "NO ROLE ASSIGNED"; then
+          NODE_ID=$($GARAGE node id 2>/dev/null | cut -d@ -f1)
+          $GARAGE layout assign -z dc1 -c 1G "$NODE_ID"
+          $GARAGE layout apply --version 1
+        fi
+
+        echo "Create all buckets ..."
+        for bucket in ${lib.concatMapStringsSep " " (x: "'${x}'") cfg.buckets}; do
+          if $GARAGE bucket info "$bucket" &>/dev/null; then
+              echo "Bucket '$bucket' already exists, skipping"
+          else
+            echo "Create bucket '$bucket'."
+            $GARAGE bucket create "$bucket"
+          fi
+        done
+
+        ${cfg.afterStart}
+      '';
+
+  readyScript =
+    pkgs.writeShellScriptBin "ready"
+      # bash
+      ''
+        set -euo pipefail
+        ${garageFunctions}
+
+        GARAGE="${cfg.package}/bin/garage -c ${configFile}"
+
+        garageHealthy || {
+            echo "Garage not ready."
+            exit 1
+        }
+
+        # Check that all buckets are created.
+        for bucket in ${lib.concatMapStringsSep " " (x: "'${x}'") cfg.buckets}; do
+          if $GARAGE bucket info "$bucket" &>/dev/null; then
+            echo "Bucket '$bucket' exists."
+          else
+            echo "Bucket '$bucket' does not yet exist, waiting..."
+            exit 1
+          fi
+        done
+
+        echo "Garage ready and setup."
+      '';
+
+  startScript =
+    pkgs.writeShellScriptBin "start"
+      # bash
+      ''
+        echo "Setup folders."
+        mkdir -p "${config.env.DEVENV_STATE}/garage/meta" \
+          "${config.env.DEVENV_STATE}/garage/data"
+
+        exec ${cfg.package}/bin/garage -c ${configFile} server
+      '';
 in
 {
   options.services.garage = {
@@ -144,6 +224,27 @@ in
         Additional `garage.toml` snippet appended to the generated config.
       '';
     };
+
+    ui = {
+      enable = lib.mkEnableOption "Enable a simple web UI.";
+
+      start = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          If the service is by default started or must be manually started.
+        '';
+      };
+
+      port = lib.mkOption {
+        type = types.port;
+        default = 3919;
+        example = 3919;
+        description = ''
+          On which port the UI should run.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -164,13 +265,8 @@ in
       ports.s3.allocate = baseS3Port;
       ports.admin.allocate = baseAdminPort;
       ports.rpc.allocate = 3901;
-      exec = "exec ${cfg.package}/bin/garage -c ${configFile} server";
-      ready.exec = ''
-        ${pkgs.curl}/bin/curl -sf \
-          -H "Authorization: Bearer ${cfg.adminToken}" \
-          "http://${adminHost}:${toString allocatedAdminPort}/v1/health"
-      '';
-      before = [ "devenv:garage:configure" ];
+      exec = "exec ${startScript}/bin/start";
+      ready.exec = "exec ${readyScript}/bin/ready";
     };
 
     env = {
@@ -180,17 +276,19 @@ in
       GARAGE_CONFIG_FILE = "${configFile}";
     };
 
-    tasks."devenv:garage:setup" = {
-      exec = ''
-        mkdir -p "${config.env.DEVENV_STATE}/garage/meta" "${config.env.DEVENV_STATE}/garage/data"
-      '';
-      before = [ "devenv:processes:garage" ];
+    processes.garage-configure = {
+      exec = "exec ${configureScript}/bin/configure";
+      after = [ "devenv:processes:garage@started" ];
     };
 
-    # Apply the cluster layout once garage is accepting connections so
-    # bucket commands can't race against a node with no role assigned.
-    tasks."devenv:garage:configure" = {
-      exec = configureScript;
+    processes.garage-web-ui = lib.mkIf cfg.ui.enable {
+      exec = "${lib.getExe pkgs.garage-webui}";
+      start.enable = cfg.ui.start;
+      env = {
+        CONFIG_PATH = "${configFile}";
+        PORT = lib.toString cfg.ui.port;
+      };
+      after = [ "devenv:processes:garage@ready" ];
     };
   };
 }
