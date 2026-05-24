@@ -294,7 +294,7 @@ string
 
 
 
-Whether to enable Enable a simple web UI…
+Whether to enable a simple web UI\.
 
 
 
@@ -358,7 +358,8 @@ On which port the UI should run\.
 
 
 
-If the service is by default started or must be manually started\.
+Whether to start the web UI automatically\. When false it can be
+started manually\. Only applies when ` ui.enable = true `\.
 
 
 
