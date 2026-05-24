@@ -74,6 +74,12 @@ For **task** dependencies:
 - `@succeeded` (default) — wait for the task to exit with code 0
 - `@completed` — wait for the task to finish, regardless of exit code (soft dependency, does not propagate failure)
 
+See [Dependency states](tasks.md#dependency-states) for the full semantics, and [Execution modes](tasks.md#execution-modes) for how `devenv up` and `devenv tasks run` decide which dependencies to schedule.
+
+!!! warning "Setup tasks that run after a process"
+
+    `devenv up` schedules processes in `before` mode, which runs each process's upstream dependencies but **not** tasks that run *after* it. A setup or configure task wired downstream of a process — e.g. `processes.<name>.before = [ "devenv:<name>:configure" ]` — is skipped under `devenv up` and never runs. Use `devenv up --mode all`, or see [Processes as tasks](tasks.md#processes-as-tasks) for details.
+
 ## Using Pre-built Services
 
 Devenv provides many pre-configured services with proper process management. See the [Services documentation](services/index.md) for available services like:
