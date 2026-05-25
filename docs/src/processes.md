@@ -43,6 +43,48 @@ $ devenv processes wait --timeout 120
 
 The default timeout is 120 seconds.
 
+## Controlling when processes start
+
+!!! tip "New in devenv 2.1.3"
+
+Each process has a `start.enable` option that controls when it starts. It accepts:
+
+- `true` (default) — start with `devenv up`.
+- `false` — never auto-start. The process is still registered and visible in the TUI as stopped; start it manually (select it and press Enter, or `devenv processes start <name>`).
+- `"shell"` — start when you enter `devenv shell` and stop it when you exit the shell. It is also started by `devenv up`.
+
+Set the default for every process with `process.start`, and override per process with `processes.<name>.start.enable`:
+
+```nix title="devenv.nix"
+{
+  # Default: tie every process to the shell lifecycle.
+  process.start = "shell";
+
+  processes.web.exec = "npm run dev";
+
+  # Override a single process to only start with `devenv up`.
+  processes.worker = {
+    exec = "worker --queue jobs";
+    start.enable = true;
+  };
+}
+```
+
+With `start.enable = "shell"`, a single `devenv shell` starts your processes in the background, drops you into a shell with your tools, and stops the processes when you exit — replacing the `devenv up -d && devenv shell` two-step (and the matching `exit` + `devenv processes down`).
+
+The `"shell"` start mode requires the native process manager (the default for devenv 2.0+).
+
+### Attaching with `devenv up`
+
+If a process manager is already running (for example started by `devenv shell` or `devenv up -d`), running `devenv up` attaches to it over its control socket and starts the remaining up-enabled processes, instead of failing with "Processes already running".
+
+Pressing Ctrl-C detaches the foreground view. The processes keep running for as long as the manager does:
+
+- If the manager was started by `devenv up -d`, it persists until you run `devenv down`.
+- If the manager was started by `devenv shell`, the manager and every process inside it (including ones an attached `devenv up` started) stop when you exit that shell.
+
+Attaching is supported by the native process manager.
+
 ## Dependencies
 
 Processes can depend on other processes and tasks using `after` and `before`:

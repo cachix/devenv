@@ -553,7 +553,19 @@ impl Devenv {
         self.devenv_dotfile.join("processes.pid")
     }
 
-    async fn processes_running(&self) -> bool {
+    pub async fn processes_running(&self) -> bool {
+        // Native manager: in-process (test/up --detach) or a separate daemon.
+        if self.native_process_manager.get().is_some() {
+            return true;
+        }
+        if matches!(
+            processes::check_pid_file(&self.native_manager_pid_file()).await,
+            Ok(processes::PidStatus::Running(_))
+        ) {
+            return true;
+        }
+
+        // process-compose.
         if self.processes_pid().exists()
             && let Ok(pid_str) = fs::read_to_string(self.processes_pid()).await
             && let Ok(pid) = pid_str.trim().parse::<i32>()
@@ -646,6 +658,326 @@ impl Devenv {
         self.process_runtime_dir()
             .map(|dir| dir.join("native-manager.pid"))
             .unwrap_or_else(|_| self.devenv_dotfile.join("native-manager.pid"))
+    }
+
+    /// Names of processes that `devenv up` should start: process tasks whose
+    /// `start.enable` is true. Nix coerces both `true` and `"shell"` to true
+    /// here, so this covers the up-enabled set; `false` processes are excluded.
+    fn up_enabled_process_names(task_configs: &[tasks::TaskConfig]) -> Vec<String> {
+        task_configs
+            .iter()
+            .filter_map(|t| {
+                let name = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)?;
+                let enabled = t.process.as_ref().is_some_and(|p| p.start.enable);
+                enabled.then(|| name.to_string())
+            })
+            .collect()
+    }
+
+    /// Override per-process auto-start so that only the `shell_names` subset is
+    /// launched, while every other process is registered as not-started (so a
+    /// later `devenv up` can attach and start the up-enabled ones). Used when
+    /// building the daemon config for `devenv shell`.
+    fn set_shell_autostart(task_configs: &mut [tasks::TaskConfig], shell_names: &[String]) {
+        let shell_set: HashSet<&str> = shell_names.iter().map(String::as_str).collect();
+        for t in task_configs.iter_mut() {
+            if let Some(name) = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)
+                && let Some(process) = t.process.as_mut()
+            {
+                process.start.enable = shell_set.contains(name);
+            }
+        }
+    }
+
+    /// Map a manager process phase to the TUI's process status.
+    fn phase_to_process_status(phase: processes::ProcessPhase) -> devenv_activity::ProcessStatus {
+        use devenv_activity::ProcessStatus as S;
+        use processes::ProcessPhase as P;
+        match phase {
+            P::NotStarted => S::NotStarted,
+            P::Stopped => S::Stopped,
+            P::Waiting => S::Waiting,
+            P::Starting => S::Starting,
+            P::Ready => S::Ready,
+            P::Exited | P::GaveUp => S::Stopped,
+        }
+    }
+
+    /// Attach to a running native manager and start the requested processes
+    /// (defaulting to the up-enabled set). Honours `after`/`before` ordering by
+    /// topologically sorting and waiting for each process to be ready before
+    /// launching its dependents — mirroring the task DAG. Processes that are
+    /// already running are left as-is and treated as ready.
+    async fn attach_start_up_processes(
+        &self,
+        task_configs: &[tasks::TaskConfig],
+        requested: &[String],
+    ) -> Result<Vec<String>> {
+        let names = if requested.is_empty() {
+            Self::up_enabled_process_names(task_configs)
+        } else {
+            requested.to_vec()
+        };
+        let ordered = Self::topo_sort_process_names(&names, task_configs);
+        for name in &ordered {
+            match self
+                .native_api_request(&processes::ApiRequest::Start { name: name.clone() })
+                .await?
+            {
+                processes::ApiResponse::Ok => {}
+                processes::ApiResponse::Error { message }
+                    if message.contains("already running") => {}
+                processes::ApiResponse::Error { message } => {
+                    warn!(process = %name, "failed to start process on running manager: {}", message);
+                    continue;
+                }
+                other => bail!("Unexpected response starting {}: {:?}", name, other),
+            }
+            self.wait_process_ready(name).await?;
+        }
+        Ok(ordered)
+    }
+
+    /// Poll the daemon for `name` until it is ready (or fails), so the attach
+    /// path can sequence dependent starts the way the task DAG does.
+    async fn wait_process_ready(&self, name: &str) -> Result<()> {
+        let timeout = std::time::Duration::from_secs(120);
+        let start = std::time::Instant::now();
+        loop {
+            match self
+                .native_api_request(&processes::ApiRequest::Status {
+                    name: name.to_string(),
+                })
+                .await?
+            {
+                processes::ApiResponse::ProcessDetail { info } => match info.phase {
+                    processes::ProcessPhase::Ready => return Ok(()),
+                    processes::ProcessPhase::Exited
+                    | processes::ProcessPhase::GaveUp
+                    | processes::ProcessPhase::Stopped => bail!(
+                        "process '{}' failed before becoming ready (phase: {:?})",
+                        name,
+                        info.phase
+                    ),
+                    _ => {}
+                },
+                processes::ApiResponse::Error { message } => bail!("{}", message),
+                other => bail!("Unexpected response for status of {}: {:?}", name, other),
+            }
+            if start.elapsed() > timeout {
+                bail!("Timed out waiting for '{}' to be ready", name);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+
+    /// Topologically sort process names by their `after`/`before` task deps,
+    /// restricted to the input set. Independent siblings keep their original
+    /// order; cycles fall back to original order for the remaining nodes.
+    fn topo_sort_process_names(
+        names: &[String],
+        task_configs: &[tasks::TaskConfig],
+    ) -> Vec<String> {
+        let in_set: HashSet<String> = names.iter().cloned().collect();
+        let resolve = |task_name: &str| -> Option<String> {
+            task_name
+                .strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)
+                .map(|s| s.to_string())
+                .filter(|p| in_set.contains(p))
+        };
+        let mut deps: HashMap<String, Vec<String>> =
+            names.iter().map(|n| (n.clone(), Vec::new())).collect();
+        for t in task_configs {
+            let Some(proc) = resolve(&t.name) else {
+                continue;
+            };
+            for a in &t.after {
+                if let Some(dep) = resolve(a) {
+                    deps.get_mut(&proc).unwrap().push(dep);
+                }
+            }
+            for b in &t.before {
+                if let Some(dependent) = resolve(b) {
+                    deps.get_mut(&dependent).unwrap().push(proc.clone());
+                }
+            }
+        }
+        let mut in_degree: HashMap<String, usize> =
+            deps.iter().map(|(k, v)| (k.clone(), v.len())).collect();
+        let mut result = Vec::with_capacity(names.len());
+        let mut emitted: HashSet<String> = HashSet::new();
+        loop {
+            let mut progress = false;
+            for name in names {
+                if emitted.contains(name) || in_degree[name] != 0 {
+                    continue;
+                }
+                result.push(name.clone());
+                emitted.insert(name.clone());
+                for (other, other_deps) in &deps {
+                    if emitted.contains(other) {
+                        continue;
+                    }
+                    let removed = other_deps.iter().filter(|d| *d == name).count();
+                    if removed > 0
+                        && let Some(e) = in_degree.get_mut(other)
+                    {
+                        *e = e.saturating_sub(removed);
+                    }
+                }
+                progress = true;
+            }
+            if !progress {
+                break;
+            }
+        }
+        for name in names {
+            if !emitted.contains(name) {
+                result.push(name.clone());
+            }
+        }
+        result
+    }
+
+    /// New log lines to emit from a polled "last N lines" snapshot.
+    ///
+    /// The daemon's `Logs` API returns a tail window, so as output grows old
+    /// lines scroll off the top. We emit the lines after the last one we already
+    /// emitted; if it scrolled out of the window, we emit the whole window.
+    fn delta_lines(prev_last: &mut Option<String>, text: &str) -> Vec<String> {
+        let lines: Vec<&str> = text.lines().collect();
+        let start = match prev_last {
+            Some(last) => lines
+                .iter()
+                .rposition(|l| l == last)
+                .map(|i| i + 1)
+                .unwrap_or(0),
+            None => 0,
+        };
+        if let Some(l) = lines.last() {
+            *prev_last = Some((*l).to_string());
+        }
+        lines[start..].iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// Foreground view while attached to a running daemon: poll the control
+    /// socket and mirror process state, ports, and logs into the activity system
+    /// so the TUI renders the process list and the status-line summary. Returns
+    /// when the user interrupts (Ctrl-C) or the daemon goes away, leaving the
+    /// daemon and its processes running.
+    async fn run_attached_foreground(&self) -> Result<()> {
+        struct ProcState {
+            activity: Activity,
+            last_stdout: Option<String>,
+            last_stderr: Option<String>,
+        }
+
+        let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
+        let parent_id = parent.id();
+        let token = self.shutdown.cancellation_token();
+        let mut procs: HashMap<String, ProcState> = HashMap::new();
+
+        loop {
+            match self.native_api_request(&processes::ApiRequest::List).await {
+                Ok(processes::ApiResponse::ProcessList { processes }) => {
+                    for info in &processes {
+                        let state = procs.entry(info.name.clone()).or_insert_with(|| {
+                            let activity = devenv_activity::start!(
+                                Activity::process(&info.name)
+                                    .parent(Some(parent_id))
+                                    .ports(info.ports.clone())
+                            );
+                            ProcState {
+                                activity,
+                                last_stdout: None,
+                                last_stderr: None,
+                            }
+                        });
+                        state
+                            .activity
+                            .set_status(Self::phase_to_process_status(info.phase));
+                    }
+
+                    // Mirror recent log output for each process.
+                    for info in &processes {
+                        let logs = self
+                            .native_api_request(&processes::ApiRequest::Logs {
+                                name: info.name.clone(),
+                                lines: Some(50),
+                            })
+                            .await;
+                        if let Ok(processes::ApiResponse::ProcessLogs { stdout, stderr }) = logs
+                            && let Some(state) = procs.get_mut(&info.name)
+                        {
+                            for line in Self::delta_lines(&mut state.last_stdout, &stdout) {
+                                state.activity.log(line);
+                            }
+                            for line in Self::delta_lines(&mut state.last_stderr, &stderr) {
+                                state.activity.error(line);
+                            }
+                        }
+                    }
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    debug!(error = %e, "attached manager no longer reachable");
+                    break;
+                }
+            }
+
+            tokio::select! {
+                _ = token.cancelled() => break,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Enable process port allocation. Must be called before the dev-env / task
+    /// config evaluation that resolves process ports (see the PTY shell path in
+    /// `main.rs`), mirroring what `up()`/`test()` do before assemble.
+    pub async fn enable_process_ports(&self, strict: bool) {
+        self.port_allocator.set_strict(strict);
+        self.port_allocator.set_enabled(true);
+        self.reserve_running_ports().await;
+    }
+
+    /// Start the `start.enable = "shell"` processes as a detached daemon when
+    /// entering an interactive `devenv shell`. All processes are registered with
+    /// the daemon (so a later `devenv up` can attach and start the up-enabled
+    /// ones), but only the shell subset is auto-started here.
+    ///
+    /// Reuses the already-computed enterShell `task_exports` to avoid re-running
+    /// enterShell tasks. The caller must enable port allocation
+    /// (`enable_process_ports`) before the dev-env evaluation and must ensure no
+    /// manager is already running.
+    pub async fn start_shell_processes(
+        &self,
+        shell_names: &[String],
+        task_exports: BTreeMap<String, String>,
+    ) -> Result<()> {
+        let mut envs = self.configure_shell().await?;
+        envs.extend(task_exports);
+
+        // Auto-start only the shell subset; register the rest as not-started.
+        let mut task_configs = self.load_tasks().await?;
+        Self::set_shell_autostart(&mut task_configs, shell_names);
+
+        let options = ProcessOptions {
+            detach: true,
+            log_to_file: true,
+            daemon: true,
+            ..Default::default()
+        };
+        self.start_processes(
+            vec![],
+            devenv_tasks::RunMode::All,
+            envs,
+            options,
+            Some(task_configs),
+        )
+        .await?;
+        Ok(())
     }
 
     /// Get the path to the .devenv/state directory
@@ -1031,6 +1363,19 @@ impl Devenv {
             })
             .await?;
         Ok(*value)
+    }
+
+    /// Names of processes with `start.enable = "shell"`, which start when
+    /// entering `devenv shell` and stop on shell exit.
+    pub async fn shell_start_processes(&self) -> Result<Vec<String>> {
+        let json = self
+            .backend
+            .eval_devenv(&["devenv.config.process.shellStartProcesses"])
+            .await?;
+        let names: Vec<String> = serde_json::from_str(json.trim())
+            .into_diagnostic()
+            .wrap_err("Failed to parse process.shellStartProcesses")?;
+        Ok(names)
     }
 
     #[instrument_activity("Loading tasks")]
@@ -1631,21 +1976,24 @@ impl Devenv {
             if options.daemon {
                 // Spawn a separate daemon process via re-exec to avoid
                 // fork-safety issues in this multithreaded process.
-                return self.spawn_daemon_processes(config).await;
+                return self.spawn_daemon_processes(config, &processes).await;
             }
 
-            // Check if a daemon is already running. Without this guard a
-            // foreground `devenv up` would overwrite the daemon's PID file
-            // and socket, and its Drop would delete them — orphaning the
-            // daemon and its child processes.
+            // If a manager is already running (e.g. started by `devenv up -d` or
+            // by `devenv shell`), attach to it over the control socket and start
+            // the up-enabled processes instead of starting a second manager
+            // (which would clobber the daemon's PID file/socket and orphan it).
             let pid_file = self.native_manager_pid_file();
-            if let Ok(processes::PidStatus::Running(pid)) =
-                processes::check_pid_file(&pid_file).await
-            {
-                bail!(
-                    "Processes already running with PID {}. Stop them first with: devenv processes down",
-                    pid
-                );
+            if matches!(
+                processes::check_pid_file(&pid_file).await,
+                Ok(processes::PidStatus::Running(_))
+            ) {
+                let started = self
+                    .attach_start_up_processes(&config.tasks, &processes)
+                    .await?;
+                info!(?started, "attached to running process manager");
+                self.run_attached_foreground().await?;
+                return Ok(RunMode::Detached);
             }
 
             let tasks_runner =
@@ -1746,15 +2094,24 @@ impl Devenv {
     /// Instead of fork (which is unsafe in multithreaded programs), this
     /// re-execs the current binary with a hidden `daemon-processes` subcommand.
     /// The daemon runs in a new session (`setsid`) so it survives the parent.
-    async fn spawn_daemon_processes(&self, config: tasks::Config) -> Result<RunMode> {
+    async fn spawn_daemon_processes(
+        &self,
+        config: tasks::Config,
+        processes: &[String],
+    ) -> Result<RunMode> {
         let pid_file = self.native_manager_pid_file();
 
-        // Check if already running
-        if let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await {
-            bail!(
-                "Processes already running with PID {}. Stop them first with: devenv processes down",
-                pid
-            );
+        // If a manager is already running, attach to it and start the requested
+        // processes rather than spawning a second daemon.
+        if matches!(
+            processes::check_pid_file(&pid_file).await,
+            Ok(processes::PidStatus::Running(_))
+        ) {
+            let started = self
+                .attach_start_up_processes(&config.tasks, processes)
+                .await?;
+            info!(?started, "attached to running process manager");
+            return Ok(RunMode::Detached);
         }
 
         // Serialize the task config for the daemon
@@ -2581,6 +2938,179 @@ fn resolve_secretspec_into(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn process_task(name: &str, enable: bool) -> tasks::TaskConfig {
+        tasks::TaskConfig {
+            name: format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, name),
+            process: Some(processes::ProcessConfig {
+                start: processes::config::StartConfig { enable },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_up_enabled_process_names() {
+        let configs = vec![
+            process_task("alpha", true),
+            process_task("beta", false),
+            tasks::TaskConfig {
+                name: "devenv:not-a-process".to_string(),
+                ..Default::default()
+            },
+        ];
+        assert_eq!(
+            Devenv::up_enabled_process_names(&configs),
+            vec!["alpha".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_set_shell_autostart() {
+        let mut configs = vec![
+            process_task("web", true),
+            process_task("db", true),
+            process_task("off", false),
+            tasks::TaskConfig {
+                name: "devenv:other".to_string(),
+                ..Default::default()
+            },
+        ];
+        Devenv::set_shell_autostart(&mut configs, &["db".to_string()]);
+        let enabled = |i: usize| configs[i].process.as_ref().unwrap().start.enable;
+        // Only the shell subset auto-starts; everything else is registered as
+        // not-started so an attaching `devenv up` can start the up-enabled ones.
+        assert!(!enabled(0), "web should not auto-start in shell");
+        assert!(enabled(1), "db is the shell process and should auto-start");
+        assert!(!enabled(2), "off stays not-started");
+        assert!(configs[3].process.is_none(), "non-process task untouched");
+    }
+
+    fn process_task_with_deps(name: &str, after: &[&str], before: &[&str]) -> tasks::TaskConfig {
+        let prefix = devenv_tasks::PROCESS_TASK_PREFIX;
+        tasks::TaskConfig {
+            name: format!("{}{}", prefix, name),
+            after: after.iter().map(|a| format!("{}{}", prefix, a)).collect(),
+            before: before.iter().map(|b| format!("{}{}", prefix, b)).collect(),
+            process: Some(processes::ProcessConfig {
+                start: processes::config::StartConfig { enable: true },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_topo_sort_no_deps_preserves_order() {
+        let configs = vec![
+            process_task_with_deps("a", &[], &[]),
+            process_task_with_deps("b", &[], &[]),
+            process_task_with_deps("c", &[], &[]),
+        ];
+        let names: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(Devenv::topo_sort_process_names(&names, &configs), names);
+    }
+
+    #[test]
+    fn test_topo_sort_after() {
+        // beta `after` alpha -> alpha first even when listed second.
+        let configs = vec![
+            process_task_with_deps("beta", &["alpha"], &[]),
+            process_task_with_deps("alpha", &[], &[]),
+        ];
+        let names: Vec<String> = ["beta", "alpha"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            Devenv::topo_sort_process_names(&names, &configs),
+            vec!["alpha".to_string(), "beta".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_topo_sort_before() {
+        // alpha `before` beta -> alpha first.
+        let configs = vec![
+            process_task_with_deps("alpha", &[], &["beta"]),
+            process_task_with_deps("beta", &[], &[]),
+        ];
+        let names: Vec<String> = ["beta", "alpha"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            Devenv::topo_sort_process_names(&names, &configs),
+            vec!["alpha".to_string(), "beta".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_topo_sort_chain() {
+        // c after b after a -> a, b, c regardless of input order.
+        let configs = vec![
+            process_task_with_deps("a", &[], &[]),
+            process_task_with_deps("b", &["a"], &[]),
+            process_task_with_deps("c", &["b"], &[]),
+        ];
+        let names: Vec<String> = ["c", "a", "b"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            Devenv::topo_sort_process_names(&names, &configs),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_topo_sort_deps_outside_subset_ignored() {
+        // beta after gamma, but gamma isn't in the requested subset.
+        let configs = vec![
+            process_task_with_deps("beta", &["gamma"], &[]),
+            process_task_with_deps("alpha", &[], &[]),
+            process_task_with_deps("gamma", &[], &[]),
+        ];
+        let names: Vec<String> = ["beta", "alpha"].iter().map(|s| s.to_string()).collect();
+        // Independent of each other within the subset; original order preserved.
+        assert_eq!(
+            Devenv::topo_sort_process_names(&names, &configs),
+            vec!["beta".to_string(), "alpha".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_topo_sort_cycle_falls_back() {
+        // a after b, b after a -> a cycle; output contains both names exactly once.
+        let configs = vec![
+            process_task_with_deps("a", &["b"], &[]),
+            process_task_with_deps("b", &["a"], &[]),
+        ];
+        let names: Vec<String> = ["a", "b"].iter().map(|s| s.to_string()).collect();
+        let out = Devenv::topo_sort_process_names(&names, &configs);
+        assert_eq!(out.len(), 2);
+        assert!(out.contains(&"a".to_string()));
+        assert!(out.contains(&"b".to_string()));
+    }
+
+    #[test]
+    fn test_delta_lines() {
+        // First poll emits the whole snapshot and remembers the last line.
+        let mut last = None;
+        assert_eq!(
+            Devenv::delta_lines(&mut last, "a\nb\nc\n"),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+        assert_eq!(last.as_deref(), Some("c"));
+
+        // Next poll: only lines after the previously-seen last line.
+        assert_eq!(
+            Devenv::delta_lines(&mut last, "b\nc\nd\ne"),
+            vec!["d".to_string(), "e".to_string()]
+        );
+        assert_eq!(last.as_deref(), Some("e"));
+
+        // No new output -> nothing emitted.
+        assert!(Devenv::delta_lines(&mut last, "c\nd\ne").is_empty());
+
+        // Window scrolled past the last seen line -> emit the whole window.
+        assert_eq!(
+            Devenv::delta_lines(&mut last, "x\ny\nz"),
+            vec!["x".to_string(), "y".to_string(), "z".to_string()]
+        );
+    }
 
     #[test]
     fn test_print_tasks_tree_flat_hierarchy_sorted() {

@@ -630,6 +630,16 @@ async fn run_backend(
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd, args } = command {
+        // `start.enable = "shell"` processes start (as a detached daemon) when
+        // entering an interactive shell and stop on exit. Decide up front so we
+        // can enable port allocation before the dev-env eval below resolves
+        // process ports. Leave already-running processes alone.
+        let shell_start_names = devenv.shell_start_processes().await?;
+        let start_shell_procs = !shell_start_names.is_empty() && !devenv.processes_running().await;
+        if start_shell_procs {
+            devenv.enable_process_ports(config_strict_ports).await;
+        }
+
         // Pre-compute shell environment while we still own Devenv directly.
         // This must happen while TUI is active since get_dev_environment has #[activity].
         let dotfile = devenv.dotfile().to_path_buf();
@@ -639,6 +649,12 @@ async fn run_backend(
         let shell = devenv.shell_settings.shell.clone();
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
+
+        if start_shell_procs {
+            devenv
+                .start_shell_processes(&shell_start_names, task_exports.clone())
+                .await?;
+        }
 
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
@@ -670,6 +686,12 @@ async fn run_backend(
         });
         let devenv = tokio::task::block_in_place(|| owner_handle.join())
             .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
+        // The shell owns the daemon it spawned: tear it down on exit. Anything
+        // an attached `devenv up` started inside it is bound to the shell's
+        // lifetime and stops here too.
+        if start_shell_procs && let Err(e) = devenv.down().await {
+            tracing::warn!("failed to stop shell-owned process manager on exit: {}", e);
+        }
         return debugger_or_err(result, nix_debugger, devenv);
     }
 

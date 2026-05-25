@@ -64,6 +64,9 @@ pub struct ProcessInfo {
     pub name: String,
     pub phase: ProcessPhase,
     pub restart_count: usize,
+    /// Configured ports, formatted as "name:port" (e.g. ["http:8080"]).
+    #[serde(default)]
+    pub ports: Vec<String>,
 }
 
 /// Response sent by the native manager API socket.
@@ -1277,10 +1280,23 @@ impl NativeProcessManager {
                 (ProcessPhase::from(status.phase), status.restart_count)
             }
         };
+        let config = match entry {
+            ProcessEntry::NotStarted { config, .. }
+            | ProcessEntry::Stopped { config, .. }
+            | ProcessEntry::Waiting { config, .. } => config,
+            ProcessEntry::Active(handle) => &handle.resources.config,
+        };
+        let mut ports: Vec<String> = config
+            .ports
+            .iter()
+            .map(|(n, p)| format!("{n}:{p}"))
+            .collect();
+        ports.sort();
         ProcessInfo {
             name: name.to_string(),
             phase,
             restart_count,
+            ports,
         }
     }
 
