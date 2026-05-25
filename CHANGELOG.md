@@ -20,7 +20,7 @@
 
 ### Improvements
 
-- Cachix now authenticates pulls and pushes without `CACHIX_AUTH_TOKEN` exported in the environment: when the variable is unset, devenv resolves the token from a `CACHIX_AUTH_TOKEN` secretspec secret, then from the auth token stored by the Cachix CLI (`cachix authtoken`) in `~/.config/cachix/cachix.dhall`. The resolved token is passed to the cachix push daemon as well.
+- Cachix now authenticates pulls and pushes without `CACHIX_AUTH_TOKEN` exported in the environment: when the variable is unset, devenv resolves the token from a `CACHIX_AUTH_TOKEN` secretspec secret, then from the auth token stored by the Cachix CLI (`cachix authtoken`) in `~/.config/cachix/cachix.dhall`. The resolved token is passed to the cachix push daemon as well. The secretspec secret name is configurable via `secretspec.cachix_auth_token` in `devenv.yaml` for backends whose policy (e.g. an OpenBao/Vault policy) only grants access to the token under a different name.
 - `devenv repl` now exposes `inputs` alongside `devenv` and `pkgs`, so you can inspect inputs declared in `devenv.yaml` directly from the REPL (e.g. `inputs.nixpkgs.lib.version`).
 - The TUI now shows each process's state as a status dot whose shape encodes the lifecycle (waiting, starting, running, ready, stopped, failed) instead of an identical spinner on every process. The shape carries the state so it reads without relying on color; transient states gently pulse to signal progress.
 - Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.
