@@ -72,6 +72,11 @@ pub struct DevenvOptions {
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
     pub devenv_state: Option<PathBuf>,
+    /// Directory to run the interactive shell and `-- cmd` in. Set when the
+    /// project root was discovered in a parent directory, so commands run from
+    /// where the user invoked devenv rather than the (chdir'd) root. `None`
+    /// inherits the process working directory.
+    pub shell_cwd: Option<PathBuf>,
     pub shutdown: Arc<tokio_shutdown::Shutdown>,
     pub is_testing: bool,
 }
@@ -93,6 +98,7 @@ impl DevenvOptions {
             devenv_root: None,
             devenv_dotfile: None,
             devenv_state: None,
+            shell_cwd: None,
             shutdown,
             is_testing: false,
         }
@@ -225,6 +231,8 @@ pub struct Devenv {
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
     devenv_state: Option<PathBuf>,
+    // Where to run the interactive shell / `-- cmd`. See `DevenvOptions::shell_cwd`.
+    shell_cwd: Option<PathBuf>,
     devenv_dot_gc: PathBuf,
     devenv_home_gc: PathBuf,
     devenv_tmp: PathBuf,
@@ -507,6 +515,7 @@ impl Devenv {
             devenv_root,
             devenv_dotfile,
             devenv_state: options.devenv_state,
+            shell_cwd: options.shell_cwd,
             devenv_dot_gc,
             devenv_home_gc,
             devenv_tmp,
@@ -588,6 +597,12 @@ impl Devenv {
     /// Get the path to the .devenv directory
     pub fn dotfile(&self) -> &Path {
         &self.devenv_dotfile
+    }
+
+    /// Directory the interactive shell / `-- cmd` should run in, when the
+    /// project root was discovered in a parent directory.
+    pub fn shell_cwd(&self) -> Option<&Path> {
+        self.shell_cwd.as_deref()
     }
 
     /// Get the process runtime directory, creating it on first access.
@@ -736,6 +751,13 @@ impl Devenv {
         let bash = self.get_bash_path().await?;
 
         let mut shell_cmd = process::Command::new(&bash);
+
+        // When the project root was discovered in a parent directory, run from
+        // where the user actually invoked devenv rather than the root we
+        // chdir'd into. The env is root-scoped; the working directory is not.
+        if let Some(cwd) = &self.shell_cwd {
+            shell_cmd.current_dir(cwd);
+        }
 
         // The Nix output ends with "exec bash" which would start a new shell without
         // the devenv environment. Strip it for ALL modes - we handle shell execution ourselves.

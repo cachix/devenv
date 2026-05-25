@@ -1,0 +1,3 @@
+{ pkgs, ... }: {
+  packages = [ pkgs.hello ];
+}
