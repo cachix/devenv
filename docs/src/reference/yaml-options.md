@@ -212,6 +212,20 @@ Set to `true` to enforce that the CLI version matches the modules version
 
 !!! tip "New in version 2.1"
 
+## secretspec.cachix_auth_token
+
+Name of the secretspec secret to read the Cachix auth token from
+when `CACHIX_AUTH_TOKEN` is not set in the environment.
+
+This is the secret name declared in `secretspec.toml`, not the
+token value. Use this when your secretspec backend (e.g. an
+OpenBao/Vault policy) only grants access to a secret under a name
+other than the default `CACHIX_AUTH_TOKEN`.
+
+*Type:* `string` · *Default:* `CACHIX_AUTH_TOKEN`
+
+!!! tip "New in version 2.1.3"
+
 ## secretspec.enable
 
 Enable [secretspec integration](../integrations/secretspec.md).

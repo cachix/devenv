@@ -399,6 +399,7 @@ pub struct Config {
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SecretspecConfig {
     /// Enable [secretspec integration](../integrations/secretspec.md).
     ///
@@ -418,6 +419,19 @@ pub struct SecretspecConfig {
     /// Added in 1.8.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub provider: Option<String>,
+    /// Name of the secretspec secret to read the Cachix auth token from
+    /// when `CACHIX_AUTH_TOKEN` is not set in the environment.
+    ///
+    /// This is the secret name declared in `secretspec.toml`, not the
+    /// token value. Use this when your secretspec backend (e.g. an
+    /// OpenBao/Vault policy) only grants access to a secret under a name
+    /// other than the default `CACHIX_AUTH_TOKEN`.
+    ///
+    /// Default: `CACHIX_AUTH_TOKEN`.
+    ///
+    /// Added in 2.1.3.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub cachix_auth_token: Option<String>,
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105

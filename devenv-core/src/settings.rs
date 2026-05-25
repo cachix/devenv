@@ -353,6 +353,7 @@ impl SecretSettings {
                 enable,
                 provider: options.secretspec_provider.or(base.provider),
                 profile: options.secretspec_profile.or(base.profile),
+                cachix_auth_token: base.cachix_auth_token,
             })
         } else {
             config.secretspec.clone()
@@ -695,7 +696,7 @@ mod tests {
             secretspec: Some(SecretspecConfig {
                 enable: true,
                 provider: Some("gcp".into()),
-                profile: None,
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -716,6 +717,7 @@ mod tests {
                 enable: true,
                 provider: Some("gcp".into()),
                 profile: Some("prod".into()),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -734,6 +736,7 @@ mod tests {
                 enable: true,
                 provider: Some("gcp".into()),
                 profile: Some("prod".into()),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -775,8 +778,8 @@ mod tests {
         let config = Config {
             secretspec: Some(SecretspecConfig {
                 enable: false,
-                provider: None,
                 profile: Some("prod".into()),
+                ..Default::default()
             }),
             ..Default::default()
         };
