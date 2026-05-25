@@ -24,6 +24,7 @@ libghostty-vt-sys.workspace = true
 
 # Async runtime
 tokio = { workspace = true, features = ["sync", "rt", "signal", "io-util"] }
+tokio-util.workspace = true
 
 # Shell escaping
 shell-escape.workspace = true

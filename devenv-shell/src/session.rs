@@ -35,6 +35,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc as tokio_mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
 
 /// Keybind byte sequences (ESC + Ctrl key).
 const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
@@ -557,6 +558,7 @@ pub struct ShellSession {
     config: SessionConfig,
     size: PtySize,
     status_line: StatusLine,
+    shutdown_token: Option<CancellationToken>,
 }
 
 impl ShellSession {
@@ -570,6 +572,7 @@ impl ShellSession {
             config,
             size,
             status_line,
+            shutdown_token: None,
         }
     }
 
@@ -595,6 +598,14 @@ impl ShellSession {
     pub fn with_status_line(mut self, show: bool) -> Self {
         self.config.show_status_line = show;
         self.status_line.set_enabled(show);
+        self
+    }
+
+    /// Wire a shutdown token. On cancellation the session kills the inner
+    /// shell so devenv can exit instead of orphaning it after a terminal
+    /// hangup or SIGHUP/SIGINT/SIGTERM.
+    pub fn with_shutdown_token(mut self, token: CancellationToken) -> Self {
+        self.shutdown_token = Some(token);
         self
     }
 
@@ -645,16 +656,29 @@ impl ShellSession {
 
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
 
-        // Handle TUI handoff if present
+        // TUI handoff. Wait for the renderer to release the terminal, but
+        // yield to shutdown so a SIGHUP during this await can't hang us.
         if let Some(handoff) = handoff {
-            // Signal TUI that initial build is complete and we're ready for terminal
             tracing::trace!("session: sending backend_done");
             let _ = handoff.backend_done.send(());
 
-            // Wait for TUI to release terminal
             tracing::trace!("session: waiting for terminal_ready_rx");
-            let _ = handoff.terminal_ready_rx.await;
-            tracing::trace!("session: terminal_ready_rx received");
+            let cancelled = async {
+                match &self.shutdown_token {
+                    Some(t) => t.cancelled().await,
+                    None => std::future::pending::<()>().await,
+                }
+            };
+            tokio::select! {
+                _ = handoff.terminal_ready_rx => {
+                    tracing::trace!("session: terminal_ready_rx received");
+                }
+                _ = cancelled => {
+                    tracing::debug!("session: shutdown during handoff, aborting");
+                    let _ = pty.kill();
+                    return Ok(None);
+                }
+            }
         }
 
         // Enter raw mode
@@ -724,7 +748,25 @@ impl ShellSession {
         // Set up event channel
         let (event_tx_internal, event_rx_internal) = std::sync::mpsc::channel::<Event>();
 
-        // Spawn stdin reader thread
+        // On shutdown, kill the inner shell *and* inject a synthetic `PtyExit`:
+        // if the child has already exited, `kill` returns ESRCH and on macOS
+        // the PTY reader can stay blocked, so the event loop never sees the
+        // real `PtyExit`. Signalled exit code is recovered upstream from
+        // `Shutdown::last_signal()`.
+        if let Some(token) = self.shutdown_token.clone() {
+            let pty_killer = Arc::clone(&pty);
+            let exit_tx = event_tx_internal.clone();
+            tokio::spawn(async move {
+                token.cancelled().await;
+                tracing::debug!("session: shutdown requested, tearing down inner shell");
+                if let Err(e) = pty_killer.kill() {
+                    tracing::debug!("session: inner shell kill returned {e}");
+                }
+                let _ = exit_tx.send(Event::PtyExit(None));
+            });
+        }
+
+        // Spawn stdin reader thread.
         let stdin_tx = event_tx_internal.clone();
         std::thread::Builder::new()
             .name("session-stdin".into())
@@ -1270,5 +1312,55 @@ impl ShellSession {
 impl Default for ShellSession {
     fn default() -> Self {
         Self::with_defaults()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use portable_pty::CommandBuilder;
+
+    /// Regression test for devenv#2845: when the process-wide shutdown token is
+    /// cancelled (e.g. from the SIGHUP/SIGINT/SIGTERM handler), the inner shell
+    /// must die with it. Otherwise the PTY (in its own session via setsid)
+    /// outlives devenv and orphans, burning CPU after the terminal closes.
+    ///
+    /// Exercises the same wiring `ShellSession::run` installs after PTY spawn:
+    /// a tokio task that, on `token.cancelled()`, calls `pty.kill()`.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shutdown_token_kills_inner_shell() {
+        let mut cmd = CommandBuilder::new("sleep");
+        cmd.arg("5");
+        let size = PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        let pty = Arc::new(Pty::spawn(cmd, size).expect("spawn inner pty"));
+
+        let token = CancellationToken::new();
+        let pty_killer = Arc::clone(&pty);
+        let token_for_task = token.clone();
+        tokio::spawn(async move {
+            token_for_task.cancelled().await;
+            let _ = pty_killer.kill();
+        });
+
+        token.cancel();
+
+        // The kill is asynchronous; poll briefly for the child to reap.
+        let mut status = None;
+        for _ in 0..500 {
+            status = pty.try_wait().expect("try_wait");
+            if status.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            status.is_some(),
+            "inner shell still running after shutdown token cancellation"
+        );
     }
 }

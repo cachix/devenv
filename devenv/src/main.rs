@@ -614,11 +614,18 @@ async fn run_backend(
             dotfile,
             task_exports,
             task_messages,
+            shutdown: shutdown.clone(),
         })
         .await
-        .map(|exit_code| match exit_code {
-            Some(code) => CommandResult::ExitCode(code as i32),
-            None => CommandResult::Done,
+        .map(|exit_code| {
+            // On signalled shutdown the watcher injects `PtyExit(None)`;
+            // recover `128 + sig` so callers see e.g. SIGHUP as 129.
+            let resolved =
+                exit_code.or_else(|| shutdown.last_signal().map(|sig| (128 + sig as i32) as u32));
+            match resolved {
+                Some(code) => CommandResult::ExitCode(code as i32),
+                None => CommandResult::Done,
+            }
         });
         let devenv = tokio::task::block_in_place(|| owner_handle.join())
             .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
@@ -1007,6 +1014,7 @@ struct ReloadShellArgs {
     dotfile: std::path::PathBuf,
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
+    shutdown: Arc<Shutdown>,
 }
 
 /// Run shell with hot-reload.
@@ -1035,6 +1043,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         dotfile,
         task_exports,
         task_messages,
+        shutdown,
     } = args;
 
     // Watch files come from the eval cache during the first build.
@@ -1068,15 +1077,23 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         terminal_ready_rx,
     });
 
-    let shell_session = ShellSession::with_defaults().with_status_line(is_interactive);
+    let shell_session = ShellSession::with_defaults()
+        .with_status_line(is_interactive)
+        .with_shutdown_token(shutdown.cancellation_token());
     let session_result = shell_session
         .run(command_rx, event_tx, handoff, SessionIo::default())
         .await
         .into_diagnostic()
         .wrap_err("Shell session error");
 
-    // Await the coordinator even on error: it owns the DevenvClient, and the
-    // owner thread's join() deadlocks until that client drops.
+    // Cancel any in-flight Nix eval so the build's `spawn_blocking` task
+    // releases the builder before we abort the coordinator.
+    devenv_nix_backend::trigger_interrupt();
+
+    // The coordinator's file-watcher task keeps the internal channel sender
+    // alive, so awaiting it would hang. Abort drops the builder (and the
+    // `DevenvClient` it holds), letting the owner thread join.
+    coordinator_handle.abort();
     let _ = coordinator_handle.await;
 
     session_result
