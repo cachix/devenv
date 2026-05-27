@@ -3577,7 +3577,7 @@ string
 *Default:*
 
 ```nix
-"2.0.6"
+"2.1.2"
 ```
 
 *Declared by:*
@@ -30724,7 +30724,7 @@ pkgs.mongodb-ce
 
 
 
-Additional arguments passed to ` mongod `.
+Additional arguments passed to ` mongod `. Note: --port, --dbpath, --replSet, --keyFile, --auth/–noauth are handled automatically.
 
 
 
@@ -30758,11 +30758,35 @@ list of strings concatenated with “\\n”
 
 
 
+## services.mongodb.basePort
+
+
+
+Base port for the MongoDB nodes. Devenv will find free ports starting from this.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+27017
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
+
+
 ## services.mongodb.initDatabasePassword
 
 
 
-This used in conjunction with initDatabaseUsername, create a new user and set that user’s password. This user is created in the admin authentication database and given the role of root, which is a “superuser” role.
+Password for the initial root user.
 
 
 
@@ -30794,7 +30818,7 @@ string
 
 
 
-This used in conjunction with initDatabasePassword, create a new user and set that user’s password. This user is created in the admin authentication database and given the role of root, which is a “superuser” role.
+Initial root user. Enabling this will also enable mandatory authentication and keyFile for replication when replication is enabled and auth is enabled.
 
 
 
@@ -30826,7 +30850,7 @@ string
 
 
 
-Whether to enable MongoDB replication with a 1-node replica-set…
+Whether to enable MongoDB replication…
 
 
 
@@ -30847,6 +30871,30 @@ false
 
 ```nix
 true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
+
+
+## services.mongodb.replication.numNodes
+
+
+
+Number of nodes in the replica-set.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+
+```nix
+1
 ```
 
 *Declared by:*
