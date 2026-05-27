@@ -123,7 +123,7 @@ false
 
 
 
-### services\.clickhouse\.keeperPort
+### services\.clickhouse\.keeper\.port
 
 
 
@@ -140,6 +140,30 @@ Which port to run clickhouse keeper service on\.
 
 ```nix
 9181
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/clickhouse\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+### services\.clickhouse\.keeper\.raft\.port
+
+
+
+Which http port to use clickhouse keeper for raft consensus\.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+9234
 ```
 
 *Declared by:*
@@ -188,30 +212,6 @@ Which port to run clickhouse on\.
 
 ```nix
 9000
-```
-
-*Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/clickhouse\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
-
-
-
-### services\.clickhouse\.raftPort
-
-
-
-Which http port to use clickhouse keeper for raft consensus\.
-
-
-
-*Type:*
-16 bit unsigned integer; between 0 and 65535 (both inclusive)
-
-
-
-*Default:*
-
-```nix
-9234
 ```
 
 *Declared by:*
