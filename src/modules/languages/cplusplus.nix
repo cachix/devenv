@@ -100,7 +100,7 @@ in
 
     #
     (lib.mkIf (cfg.enable && cfg.conan.enable) {
-      languages.cplusplus.conan.config.stdenv = lib.mkDefault config.stdenv;
+      languages.cplusplus.conan.config.stdenv = lib.mkDefault (if config.stdenv.hasCC then config.stdenv else pkgs.stdenv);
       languages.cplusplus.conan.config.package = lib.mkDefault cfg.conan.package;
       languages.cplusplus.conan.config.platformToolRequires = lib.mkDefault {
         cmake = cfg.cmake.package.version;
