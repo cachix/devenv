@@ -178,6 +178,11 @@ in
               let
                 command =
                   if !value.start.enable then value.exec
+                  # Interactive processes must be a direct child of the process-compose PTY.
+                  # Routing them through `devenv-tasks` pipes their stdout/stderr and breaks
+                  # interactivity (no prompt, block-buffered output). They therefore bypass
+                  # the task runner and lose before/after task-dependency handling.
+                  else if value.process-compose.is_interactive or false then value.exec
                   else if value.process-compose.is_elevated or false
                   then config.process.taskCommandsBase.${name}
                   else config.process.taskCommands.${name};

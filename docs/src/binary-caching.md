@@ -27,6 +27,19 @@ After that you'll need to set `CACHIX_AUTH_TOKEN=XXX` with either [a personal au
     pushing (it is passed to the cachix push daemon), so neither requires
     exporting the token into your environment.
 
+    The secretspec secret name defaults to `CACHIX_AUTH_TOKEN` and is
+    overridable via [`secretspec.cachix_auth_token`](reference/yaml-options.md#secretspeccachix_auth_token)
+    in `devenv.yaml`. Override it when your secretspec backend's policy
+    (e.g. OpenBao/Vault) only grants access to the token under a
+    different name:
+
+    ```yaml title="devenv.yaml"
+    secretspec:
+      enable: true
+      provider: openbao
+      cachix_auth_token: MY_TEAM_CACHIX_TOKEN
+    ```
+
 ## Pull
 
 Configure your new cache:

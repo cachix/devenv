@@ -402,12 +402,20 @@ impl Devenv {
         let mut secretspec_cell: OnceCell<ResolvedSecrets> = OnceCell::new();
         resolve_secretspec_into(&devenv_root, &secret_settings, &mut secretspec_cell)?;
 
-        // Create the cachix manager after secretspec so a `CACHIX_AUTH_TOKEN`
-        // secret can authenticate pulls (netrc) and pushes (daemon env) even
-        // when it isn't exported into the environment.
+        // Create the cachix manager after secretspec so a secretspec secret
+        // can authenticate pulls (netrc) and pushes (daemon env) even when
+        // `CACHIX_AUTH_TOKEN` isn't exported into the environment.
+        //
+        // The lookup key defaults to `CACHIX_AUTH_TOKEN` and is overridable
+        // via `secretspec.cachix_auth_token` in devenv.yaml.
+        let cachix_auth_token_secret = secret_settings
+            .secretspec
+            .as_ref()
+            .and_then(|c| c.cachix_auth_token.as_deref())
+            .unwrap_or(CACHIX_AUTH_TOKEN_ENV);
         let cachix_auth_token = secretspec_cell
             .get()
-            .and_then(|resolved| resolved.secrets.get(CACHIX_AUTH_TOKEN_ENV).cloned());
+            .and_then(|resolved| resolved.secrets.get(cachix_auth_token_secret).cloned());
         let cachix_paths = CachixPaths {
             trusted_keys: cachix_trusted_keys,
             netrc: devenv_dotfile.join("netrc"),
