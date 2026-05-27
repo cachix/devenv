@@ -27290,6 +27290,78 @@ Which http port to run clickhouse on.
 
 
 
+## services.clickhouse.keeper.enable
+
+
+
+Whether to enable keeper_server in ClickHouse.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.keeperPort
+
+
+
+Which port to run clickhouse keeper service on.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+9181
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.macros.enable
+
+
+
+Whether to enable macros in ClickHouse.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
 ## services.clickhouse.port
 
 
@@ -27308,6 +27380,122 @@ Which port to run clickhouse on.
 ```nix
 9000
 ```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.raftPort
+
+
+
+Which http port to use clickhouse keeper for raft consensus.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+9234
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.remoteServers.enable
+
+
+
+Whether to enable remote_servers in ClickHouse.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.timezone
+
+
+
+Which timezone to use for ClickHouse.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.usersConfig
+
+
+
+Your ` users.yaml ` as a Nix attribute set.
+Check the [documentation](https://clickhouse.com/docs/operations/configuration-files\#user-settings)
+for possible options.
+
+
+
+*Type:*
+YAML 1.1 value
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+````nix
+{
+  profiles = {};
+
+  users = {
+    default = {
+      profile = "default";
+      password_sha256_hex = "36dd292533174299fb0c34665df468bb881756ca9eaf9757d0cfde38f9ededa1";  # `echo -n verysecret | sha256sum`
+    };
+  };
+}
+
+````
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
