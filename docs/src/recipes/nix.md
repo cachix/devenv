@@ -66,6 +66,19 @@ This example adds Elixir install scripts to `~/.mix/escripts`:
 }
 ```
 
+### Skip the C compiler toolchain
+
+If your project doesn't need a C compiler toolchain, set [`stdenv`](/reference/options.md#stdenv) to `pkgs.stdenvNoCC` to drop it from the shell.
+This saves a few hundred MB of storage and shell startup time:
+
+```nix title="devenv.nix"
+{ pkgs, ... }: {
+  stdenv = pkgs.stdenvNoCC;
+}
+```
+
+This is equivalent to using nixpkgs' `mkShellNoCC` instead of `mkShell`.
+
 ### Escape Nix curly braces inside shell scripts
 
 ```nix title="devenv.nix"
