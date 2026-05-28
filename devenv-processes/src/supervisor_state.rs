@@ -815,11 +815,14 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
         assert_eq!(state.phase(), SupervisorPhase::Starting);
 
-        state.on_event(
-            Event::ProcessExit {
-                status: ExitStatus::Success,
-            },
-            now,
+        assert_eq!(
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Success,
+                },
+                now,
+            ),
+            Action::None
         );
         assert_eq!(state.phase(), SupervisorPhase::Exited);
     }
@@ -831,11 +834,14 @@ mod tests {
         let config = config_with_policy(RestartPolicy::OnFailure);
         let mut state = SupervisorState::new(&config, now);
 
-        state.on_event(
-            Event::ProcessExit {
-                status: ExitStatus::Success,
-            },
-            now,
+        assert_eq!(
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Success,
+                },
+                now,
+            ),
+            Action::None
         );
         assert_eq!(state.phase(), SupervisorPhase::Exited);
     }
