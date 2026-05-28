@@ -13,7 +13,12 @@ function _devenv_hook --on-variable PWD
             switch $PWD
                 case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
                 case '*'
-                    printf '%s' $PWD > "$DEVENV_ROOT/.devenv/exit-dir"
+                    # Only signal the outer hook when it provided a nonce; a
+                    # bare `devenv shell` has no parent waiting to read this.
+                    if test -n "$_DEVENV_EXIT_NONCE"
+                        printf '%s\n%s' "$_DEVENV_EXIT_NONCE" "$PWD" \
+                            > "$DEVENV_ROOT/.devenv/exit-dir"
+                    end
                     exit
             end
         end
@@ -48,14 +53,20 @@ end
 # Spawn devenv shell in $project_dir and follow the user if they cd'd out.
 function _devenv_hook_activate
     set -l project_dir $argv[1]
-    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir devenv shell
+    # Per-session nonce: a stale .devenv/exit-dir from any prior session
+    # (e.g. left behind because a user-defined `rm` swallowed the cleanup)
+    # will not match and is ignored.
+    set -l nonce "$fish_pid-"(random)(random)"-"(date +%s)
+    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir \
+        _DEVENV_EXIT_NONCE=$nonce devenv shell
     # If the devenv shell exited due to cd outside the project, follow the user there
     set -l exit_dir_file "$project_dir/.devenv/exit-dir"
     if test -f "$exit_dir_file"
-        set -l target_dir (cat "$exit_dir_file")
+        set -l content (cat "$exit_dir_file" | string collect)
+        set -l parts (string split -m 1 \n -- "$content")
         rm -f "$exit_dir_file"
-        if test -d "$target_dir"
-            builtin cd "$target_dir"
+        if test (count $parts) -eq 2 -a "$parts[1]" = "$nonce" -a -d "$parts[2]"
+            builtin cd "$parts[2]"
         end
     end
 end

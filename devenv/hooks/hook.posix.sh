@@ -15,7 +15,12 @@ _devenv_hook() {
             case "$PWD" in
                 "${DEVENV_ROOT}"|"${DEVENV_ROOT}"/*) ;;
                 *)
-                    printf '%s' "$PWD" > "${DEVENV_ROOT}/.devenv/exit-dir"
+                    # Only signal the outer hook when it provided a nonce; a
+                    # bare `devenv shell` has no parent waiting to read this.
+                    if [[ -n "${_DEVENV_EXIT_NONCE:-}" ]]; then
+                        printf '%s\n%s' "$_DEVENV_EXIT_NONCE" "$PWD" \
+                            > "${DEVENV_ROOT}/.devenv/exit-dir"
+                    fi
                     exit $previous_exit_status
                     ;;
             esac
@@ -38,13 +43,23 @@ _devenv_hook() {
         # Cache PWD before launching so a SIGINT/failure inside devenv shell
         # doesn't leave us re-launching on every prompt redraw.
         _DEVENV_HOOK_PWD="$PWD"
-        (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" devenv shell)
+        # Per-session nonce: a stale .devenv/exit-dir from any prior session
+        # (e.g. left behind because a user-defined `rm` swallowed the cleanup)
+        # will not match and is ignored.
+        local nonce="$$-${RANDOM}${RANDOM}-${SECONDS}"
+        (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" \
+            _DEVENV_EXIT_NONCE="$nonce" devenv shell)
         local exit_dir_file="$project_dir/.devenv/exit-dir"
         if [[ -f "$exit_dir_file" ]]; then
-            local target_dir
-            target_dir=$(cat "$exit_dir_file")
+            local content got_nonce target_dir
+            content=$(cat "$exit_dir_file")
             rm -f "$exit_dir_file"
-            if [[ -d "$target_dir" ]]; then
+            # First line is the nonce, the rest is the target path (which may
+            # itself contain newlines). A file with no newline is stale/malformed
+            # and ignored by the leading newline test.
+            got_nonce=${content%%$'\n'*}
+            target_dir=${content#*$'\n'}
+            if [[ "$content" == *$'\n'* && "$got_nonce" == "$nonce" && -d "$target_dir" ]]; then
                 cd "$target_dir"
                 _DEVENV_HOOK_PWD="$PWD"
             fi
