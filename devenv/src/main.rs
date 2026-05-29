@@ -87,6 +87,11 @@ fn main_inner() -> Result<()> {
             Commands::Inputs {
                 command: InputsCommand::Add { name, url, follows },
             } => {
+                // `inputs add` is dispatched before `resolve()` runs discovery,
+                // so do it here too: edit the enclosing project's `devenv.yaml`
+                // (the one `devenv shell` would use) rather than silently
+                // creating a stray one in the current subdirectory.
+                enter_discovered_project_root()?;
                 return commands::inputs::add(name, url, follows);
             }
             _ => {}
@@ -208,6 +213,47 @@ impl TestDirs {
     }
 }
 
+/// chdir into the discovered project `root` and keep `$PWD` in sync with the
+/// new working directory.
+///
+/// Shared by both discovery sites: the early dispatch path (`inputs add`, via
+/// [`enter_discovered_project_root`]) and [`resolve`]. A chdir failure is
+/// fatal — silently staying put would write to the wrong project.
+fn enter_root(root: &Path) -> Result<()> {
+    env::set_current_dir(root)
+        .into_diagnostic()
+        .wrap_err_with(|| {
+            format!(
+                "Failed to chdir to discovered project root: {}",
+                root.display()
+            )
+        })?;
+    // Safety: both callers run single-threaded during early command dispatch /
+    // `resolve()`, before any tokio runtime or thread is spawned, so no other
+    // thread can be reading the environment concurrently.
+    unsafe {
+        env::set_var("PWD", root);
+    }
+    Ok(())
+}
+
+/// For commands dispatched before `resolve()` (e.g. `inputs add`): if invoked
+/// from a subdirectory of a project, chdir up to the directory containing
+/// `devenv.nix` so the command operates on the enclosing project, matching
+/// where `devenv shell` would run.
+fn enter_discovered_project_root() -> Result<()> {
+    // Best-effort discovery: if the cwd can't be read or there's no enclosing
+    // `devenv.nix` above it, run where we are (matches `resolve()`).
+    let Ok(cwd) = env::current_dir() else {
+        return Ok(());
+    };
+    let Some(root) = devenv_core::paths::find_project_root(&cwd).filter(|r| r.as_path() != cwd)
+    else {
+        return Ok(());
+    };
+    enter_root(&root)
+}
+
 /// Resolve CLI + config files + environment into UI and backend options.
 fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptions)> {
     let command = cli.command;
@@ -230,18 +276,7 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
     // run there. The devenv environment is root-scoped; the cwd is not.
     let shell_cwd = discovered_root.as_ref().and_then(|_| original_cwd.clone());
     if let Some(root) = &discovered_root {
-        env::set_current_dir(root)
-            .into_diagnostic()
-            .wrap_err_with(|| {
-                format!(
-                    "Failed to chdir to discovered project root: {}",
-                    root.display()
-                )
-            })?;
-        // Safety: resolve() runs single-threaded before tokio starts.
-        unsafe {
-            env::set_var("PWD", root);
-        }
+        enter_root(root)?;
     }
 
     // UI options: verbosity, log level, tracing, TUI. Pure CLI + env, no config.
