@@ -73,6 +73,16 @@ pub struct Config {
     /// via depends_on while devenv-tasks handles non-process dependencies (migrations, etc).
     #[serde(default)]
     pub ignore_process_deps: bool,
+    /// When true, the foreground run exits once no process is live (all exited
+    /// or settled). When false, it stays alive until a shutdown signal. External
+    /// managers (process-compose) set this so they can track this process's PID.
+    #[serde(default)]
+    pub exit_on_idle: bool,
+    /// Who runs the supervision loop for processes registered through this Config.
+    /// Native (default) → devenv-tasks supervises (restart/probe/watchdog/watch).
+    /// External → host (process-compose, mprocs, ...) owns lifecycle.
+    #[serde(default)]
+    pub supervisor: devenv_processes::Supervisor,
 }
 
 impl TryFrom<serde_json::Value> for Config {

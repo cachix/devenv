@@ -5,6 +5,7 @@ use devenv_event_sources::{
     ExecProbe, FileWatcher, FileWatcherConfig, HttpGetProbe, NotifyMessage, TcpProbe,
 };
 use futures::future::Either;
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
@@ -17,6 +18,45 @@ use crate::manager::ProcessResources;
 use crate::supervisor_state::{
     Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
 };
+
+/// Lifecycle requests delivered into the supervisor's loop.
+///
+/// The supervisor is the sole driver of its job, so a `Restart` or `Stop` here
+/// can't race its restart policy. Each command carries an ack the manager awaits.
+pub enum SupervisorCommand {
+    /// Restart the job with a fresh restart budget.
+    Restart { ack: oneshot::Sender<()> },
+    /// Stop the job and end the supervisor task.
+    Stop { ack: oneshot::Sender<()> },
+}
+
+/// Grace period before SIGKILL when stopping a process via a `Stop` command.
+const STOP_GRACE: Duration = Duration::from_secs(5);
+
+/// RAII accounting for a live supervisor. Incremented when a supervisor is
+/// spawned, decremented (and `completion` notified) when its task ends for any
+/// reason — a terminal phase, give-up, or an external `abort()`.
+struct LiveGuard {
+    live: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    completion: std::sync::Arc<tokio::sync::Notify>,
+}
+
+impl LiveGuard {
+    fn new(
+        live: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        completion: std::sync::Arc<tokio::sync::Notify>,
+    ) -> Self {
+        live.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self { live, completion }
+    }
+}
+
+impl Drop for LiveGuard {
+    fn drop(&mut self) {
+        self.live.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.completion.notify_one();
+    }
+}
 
 /// Handle a successful probe by marking the process as ready.
 fn handle_probe_success(
@@ -31,6 +71,15 @@ fn handle_probe_success(
     let _ = status_tx.send(state.status());
 }
 
+/// Processes without a readiness probe are ready as soon as their child is
+/// launched. Keep the state machine aligned with the manager's initial status
+/// after every kind of restart.
+fn mark_ready_without_probe(config: &crate::config::ProcessConfig, state: &mut SupervisorState) {
+    if !config.has_readiness_probe() {
+        let _ = state.on_event(Event::Ready, Instant::now());
+    }
+}
+
 /// Spawn a supervision task that monitors a job and handles restarts.
 ///
 /// Uses `SupervisorState` for all restart/watchdog decisions.
@@ -38,13 +87,24 @@ fn handle_probe_success(
 pub fn spawn_supervisor(
     resources: &ProcessResources,
     shutdown: CancellationToken,
+    mut cmd_rx: mpsc::Receiver<SupervisorCommand>,
+    startup_result: Option<(
+        mpsc::UnboundedReceiver<String>,
+        oneshot::Sender<std::result::Result<(), String>>,
+    )>,
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
     let job = resources.job.clone();
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
+    // Increment synchronously so the live count reflects this supervisor the
+    // moment `launch`/`restart` returns, before any await point.
+    let live_guard = LiveGuard::new(resources.live.clone(), resources.completion.clone());
     let name = config.name.clone();
+
+    // Under an external supervisor, host owns probes/watcher entirely.
+    let supervise_locally = config.supervisor == crate::config::Supervisor::Native;
 
     // Probe timing from ready config
     let initial_delay = Duration::from_secs(config.ready.as_ref().map_or(0, |r| r.initial_delay));
@@ -52,14 +112,14 @@ pub fn spawn_supervisor(
     let probe_timeout = Duration::from_secs(config.ready.as_ref().map_or(5, |r| r.probe_timeout));
 
     // Exec probe command (from ready.exec, only when not using notify)
-    let exec_probe_cmd = if !config.ready.as_ref().is_some_and(|r| r.notify) {
+    let exec_probe_cmd = if supervise_locally && !config.ready.as_ref().is_some_and(|r| r.notify) {
         config.ready.as_ref().and_then(|r| r.exec.clone())
     } else {
         None
     };
 
     // HTTP probe URL (from ready.http.get, only when not using notify)
-    let http_probe_url = if !config.ready.as_ref().is_some_and(|r| r.notify) {
+    let http_probe_url = if supervise_locally && !config.ready.as_ref().is_some_and(|r| r.notify) {
         config.ready.as_ref().and_then(|r| {
             r.http.as_ref().and_then(|h| {
                 h.get
@@ -73,36 +133,53 @@ pub fn spawn_supervisor(
 
     // TCP probe for readiness (listen sockets or allocated ports, without notify or exec/http)
     // Only use TCP probe as fallback when no explicit exec or http probe is configured.
-    let tcp_probe_addresses: Option<Vec<String>> =
-        if !config.ready.as_ref().is_some_and(|r| r.notify)
-            && exec_probe_cmd.is_none()
-            && http_probe_url.is_none()
-        {
-            // Explicit listen socket: probe only the configured address.
-            // Allocated port: probe both IPv4 and IPv6 loopback since we don't
-            // know which interface the process will bind to (e.g. vite uses tcp6).
-            config
-                .listen
-                .iter()
-                .find_map(|spec| {
-                    if spec.kind == ListenKind::Tcp {
-                        spec.address.clone().map(|addr| vec![addr])
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| {
-                    config
-                        .ports
-                        .values()
-                        .next()
-                        .map(|port| vec![format!("127.0.0.1:{}", port), format!("[::1]:{}", port)])
-                })
-        } else {
-            None
-        };
+    let tcp_probe_addresses: Option<Vec<String>> = if supervise_locally
+        && !config.ready.as_ref().is_some_and(|r| r.notify)
+        && exec_probe_cmd.is_none()
+        && http_probe_url.is_none()
+    {
+        // Explicit listen socket: probe only the configured address.
+        // Allocated port: probe both IPv4 and IPv6 loopback since we don't
+        // know which interface the process will bind to (e.g. vite uses tcp6).
+        config
+            .listen
+            .iter()
+            .find_map(|spec| {
+                if spec.kind == ListenKind::Tcp {
+                    spec.address.clone().map(|addr| vec![addr])
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
+                config
+                    .ports
+                    .values()
+                    .next()
+                    .map(|port| vec![format!("127.0.0.1:{}", port), format!("[::1]:{}", port)])
+            })
+    } else {
+        None
+    };
 
     tokio::spawn(async move {
+        // Owns the live-count slot for the duration of this task; decrements on
+        // drop (terminal break, give-up, or abort).
+        let _live_guard = live_guard;
+
+        // The supervisor is the sole driver of its job: start it here so there
+        // is no window between launch and supervision where a fast process could
+        // exit before the loop watches it. The spawn hook is already set on the job.
+        job.start().await;
+        if let Some((mut error_rx, result_tx)) = startup_result {
+            if let Ok(error) = error_rx.try_recv() {
+                job.delete().await;
+                let _ = result_tx.send(Err(error));
+                return;
+            }
+            let _ = result_tx.send(Ok(()));
+        }
+
         let mut state = SupervisorState::new(&config, Instant::now());
 
         // TCP probe: signals the supervisor loop when the port becomes reachable.
@@ -137,11 +214,27 @@ pub fn spawn_supervisor(
             )
         });
 
+        // Under External the host owns file-watch reloads; pass empty paths
+        // so FileWatcher pends forever in the select arm.
+        let empty_paths: Vec<std::path::PathBuf> = Vec::new();
+        let empty_strs: Vec<String> = Vec::new();
         let mut file_watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: &config.watch.paths,
-                extensions: &config.watch.extensions,
-                ignore: &config.watch.ignore,
+                paths: if supervise_locally {
+                    &config.watch.paths
+                } else {
+                    &empty_paths
+                },
+                extensions: if supervise_locally {
+                    &config.watch.extensions
+                } else {
+                    &empty_strs
+                },
+                ignore: if supervise_locally {
+                    &config.watch.ignore
+                } else {
+                    &empty_strs
+                },
                 recursive: true,
                 ..Default::default()
             },
@@ -154,6 +247,11 @@ pub fn spawn_supervisor(
         let mut current_deadline = state.next_deadline();
         let deadline_fut = make_deadline_future(current_deadline);
         tokio::pin!(deadline_fut);
+        // watchexec can deliver an exit notification for the process replaced
+        // by an explicit stop/start after the new child is already running.
+        // Discard exactly that notification; the following one belongs to the
+        // replacement child and is handled normally.
+        let mut discard_replaced_exit = false;
 
         /// Refresh the pinned deadline future if the state machine's deadline changed.
         macro_rules! refresh_deadline {
@@ -202,6 +300,41 @@ pub fn spawn_supervisor(
                 _ = shutdown.cancelled() => {
                     debug!("Shutdown requested for {}", name);
                     break;
+                }
+
+                Some(cmd) = cmd_rx.recv() => {
+                    if shutdown.is_cancelled() { break 'supervisor; }
+                    match cmd {
+                        SupervisorCommand::Restart { ack } => {
+                            activity.log("Restart requested");
+                            // Restart atomically at the job layer. watchexec
+                            // still publishes the replaced child's exit, so
+                            // the job-wait arm discards that one notification.
+                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2))
+                                .await;
+                            // The restart ticket can resolve after the graceful
+                            // stop while the queued Start is still pending. A
+                            // no-op job control is a barrier behind that Start.
+                            job.run(|_| {}).await;
+                            discard_replaced_exit = true;
+                            state.reset_for_external_restart(Instant::now());
+                            mark_ready_without_probe(&config, &mut state);
+                            respawn_probes!();
+                            let _ = status_tx.send(state.status());
+                            let _ = ack.send(());
+                        }
+                        SupervisorCommand::Stop { ack } => {
+                            activity.log("Stop requested");
+                            // Surface Stopping phase to status_rx subscribers
+                            // (TUI etc.) for the duration of the tail-stop
+                            // grace period.
+                            let _ = state.on_event(Event::StopRequested, Instant::now());
+                            let _ = status_tx.send(state.status());
+                            let _ = ack.send(());
+                            break 'supervisor;
+                        }
+                    }
+                    refresh_deadline!(state, current_deadline, deadline_fut);
                 }
 
                 Some(()) = async {
@@ -254,10 +387,12 @@ pub fn spawn_supervisor(
                     }
                     match state.on_event(Event::FileChange, Instant::now()) {
                         Action::Restart => {
-                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            job.start().await;
+                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2))
+                                .await;
+                            job.run(|_| {}).await;
+                            discard_replaced_exit = true;
                             state.on_restart_complete(Instant::now());
+                            mark_ready_without_probe(&config, &mut state);
                             let count = state.restart_count();
                             activity.log(format!("Restarted (attempt {})", count));
                             respawn_probes!();
@@ -302,7 +437,10 @@ pub fn spawn_supervisor(
                                         Action::Restart => {
                                             activity.error("Watchdog trigger - process signaled failure");
                                             job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                                            job.run(|_| {}).await;
+                                            discard_replaced_exit = true;
                                             state.on_restart_complete(Instant::now());
+                                            mark_ready_without_probe(&config, &mut state);
                                             let count = state.restart_count();
                                             let msg = format!("Restarted (attempt {count})");
                                             warn!("Process {} watchdog trigger, restarted (attempt {})", name, count);
@@ -366,7 +504,10 @@ pub fn spawn_supervisor(
                     ) {
                         Action::Restart => {
                             job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            job.run(|_| {}).await;
+                            discard_replaced_exit = true;
                             state.on_restart_complete(Instant::now());
+                            mark_ready_without_probe(&config, &mut state);
                             let count = state.restart_count();
                             let msg = format!("Restarted (attempt {count})");
                             info!("Restarted process {} (attempt {})", name, count);
@@ -391,6 +532,11 @@ pub fn spawn_supervisor(
                 // file change (handled by the `file_watcher` arm above).
                 _ = job.to_wait(), if state.phase() != SupervisorPhase::Exited => {
                     if shutdown.is_cancelled() { break 'supervisor; }
+                    if discard_replaced_exit {
+                        discard_replaced_exit = false;
+                        trace!("Discarding replaced-process exit for {}", name);
+                        continue 'supervisor;
+                    }
                     // Extract exit status from the job
                     let (tx, rx) = tokio::sync::oneshot::channel();
                     job.run_async(move |ctx| {
@@ -421,6 +567,7 @@ pub fn spawn_supervisor(
                             activity.log(format!("Process exited ({exit_status:?}), restarting"));
                             job.start().await;
                             state.on_restart_complete(Instant::now());
+                            mark_ready_without_probe(&config, &mut state);
                             let count = state.restart_count();
                             let msg = format!("Restarted (attempt {count})");
                             info!("Restarted process {} (attempt {})", name, count);
@@ -483,6 +630,12 @@ pub fn spawn_supervisor(
                 _ => unreachable!("terminal phase checked above"),
             });
         }
+
+        // Tail-stop invariant: on every supervisor exit (shutdown / GaveUp /
+        // Stop), the child gets SIGTERM-with-grace here. Without it, the child
+        // only dies via watchexec KillOnDrop (SIGKILL) once the last Arc<Job>
+        // drops — losing the graceful shutdown hook.
+        job.stop_with_signal(Signal::Terminate, STOP_GRACE).await;
 
         trace!("Supervision task for {} exiting", name);
     })
