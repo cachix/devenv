@@ -9,10 +9,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
@@ -209,10 +211,8 @@ impl Drop for AttachStream {
     }
 }
 
-use watchexec_supervisor::{
-    Signal,
-    job::{Job, start_job},
-};
+use watchexec_supervisor::Signal;
+use watchexec_supervisor::job::{Job, start_job};
 
 use crate::config::ProcessConfig;
 use crate::pid::{self, PidStatus};
@@ -242,6 +242,11 @@ pub struct ProcessResources {
     pub notify_socket: Option<Arc<NotifySocket>>,
     pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     pub stderr_log: PathBuf,
+    /// Shared live-supervisor counter; the supervisor decrements it once on
+    /// reaching a terminal phase.
+    pub live: Arc<AtomicUsize>,
+    /// Notified after the supervisor decrements `live`.
+    pub completion: Arc<Notify>,
 }
 
 /// Handle to a managed process job
@@ -251,6 +256,8 @@ pub struct JobHandle {
     pub status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     /// Supervisor task handling restarts
     pub supervisor_task: JoinHandle<()>,
+    /// Channel to send lifecycle commands (restart/stop) into the supervisor loop.
+    pub cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
     /// Output reader tasks (stdout, stderr)
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
     /// Forwards supervisor status transitions to the task system; exits when
@@ -275,6 +282,8 @@ pub enum ProcessPhase {
     Starting,
     /// Readiness probe passed.
     Ready,
+    /// User-requested teardown in progress (SIGTERM sent, awaiting grace).
+    Stopping,
     /// Process exited and will not be restarted.
     Exited,
     /// Supervisor gave up (crash loop).
@@ -289,10 +298,27 @@ impl std::fmt::Display for ProcessPhase {
             Self::Waiting => write!(f, "waiting"),
             Self::Starting => write!(f, "starting"),
             Self::Ready => write!(f, "ready"),
+            Self::Stopping => write!(f, "stopping"),
             Self::Exited => write!(f, "exited"),
             Self::GaveUp => write!(f, "gave_up"),
         }
     }
+}
+
+/// Controls [`NativeProcessManager::run_foreground`] idle behavior.
+///
+/// Matches the `--on-idle exit|linger` CLI surface so the same vocabulary
+/// flows from user input down to the manager.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OnIdle {
+    /// Stay alive until a shutdown signal, even after every process has exited.
+    /// Used by `devenv up` with the native manager, where the environment is
+    /// long-lived and exited processes can still be restarted.
+    Linger,
+    /// Return once no process is live (every process has exited, given up, or
+    /// is otherwise not running). Used when an external manager (e.g.
+    /// process-compose) owns the lifecycle and tracks this process's PID.
+    Exit,
 }
 
 impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
@@ -300,6 +326,7 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
         match phase {
             crate::supervisor_state::SupervisorPhase::Starting => Self::Starting,
             crate::supervisor_state::SupervisorPhase::Ready => Self::Ready,
+            crate::supervisor_state::SupervisorPhase::Stopping => Self::Stopping,
             crate::supervisor_state::SupervisorPhase::Exited => Self::Exited,
             crate::supervisor_state::SupervisorPhase::GaveUp => Self::GaveUp,
         }
@@ -364,10 +391,10 @@ fn lifecycle_phase(terminal_phase: Option<ProcessPhase>) -> ProcessPhase {
     terminal_phase.unwrap_or(ProcessPhase::Stopped)
 }
 
-/// The pieces of a torn-down `Active` handle that [`Manager::finish_stop`] needs
-/// to abort the supervisor, kill the job, and release ports.
+/// The pieces of a torn-down `Active` handle that [`NativeProcessManager::finish_stop`]
+/// needs to stop the supervisor-owned job and release ports.
 struct StopParts {
-    job: Arc<Job>,
+    cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
     supervisor_task: JoinHandle<()>,
     notify_forwarder: JoinHandle<()>,
     output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
@@ -395,15 +422,13 @@ fn take_active_for_stop(
     let JobHandle {
         resources,
         supervisor_task,
+        cmd_tx,
         notify_forwarder,
         output_readers,
         ..
     } = handle;
     let ProcessResources {
-        config,
-        activity,
-        job,
-        ..
+        config, activity, ..
     } = resources;
 
     activity.set_status(ProcessStatus::Stopping);
@@ -418,12 +443,32 @@ fn take_active_for_stop(
     );
 
     StopParts {
-        job,
+        cmd_tx,
         supervisor_task,
         notify_forwarder,
         output_readers,
         ports,
     }
+}
+
+/// Ask a supervisor to stop its job and wait for its task to end.
+///
+/// The supervisor's tail block signals the job on every exit path, so awaiting
+/// the task guarantees the child has been signaled — a send failure on a closed
+/// receiver is therefore harmless.
+async fn stop_via_supervisor(
+    cmd_tx: &mpsc::Sender<crate::supervisor::SupervisorCommand>,
+    supervisor_task: JoinHandle<()>,
+) {
+    let (ack_tx, ack_rx) = oneshot::channel();
+    if cmd_tx
+        .send(crate::supervisor::SupervisorCommand::Stop { ack: ack_tx })
+        .await
+        .is_ok()
+    {
+        let _ = ack_rx.await;
+    }
+    let _ = supervisor_task.await;
 }
 
 /// Collect the names of all active (supervised) processes from the map.
@@ -506,6 +551,14 @@ pub struct NativeProcessManager {
     /// Fired on every process-map transition; internal waiters (stop_all's
     /// Launching drain) and the forwarder tasks use it alongside task_notify.
     entries_changed: Arc<Notify>,
+    /// Number of supervisors currently in a non-terminal phase (Starting/Ready).
+    /// Incremented when a supervisor is spawned, decremented when it reaches a
+    /// terminal phase or is stopped. A `OnIdle::Exit` foreground
+    /// run exits when this reaches zero.
+    live: Arc<AtomicUsize>,
+    /// Fired whenever `live` decreases, to wake a foreground run so it can
+    /// re-check the completion condition without polling.
+    completion: Arc<Notify>,
     /// Whether this instance owns the runtime files (socket, pid file) and should
     /// clean them up on drop. Set to false for control-client instances that
     /// connect to an existing daemon — they should not delete the daemon's files.
@@ -817,6 +870,7 @@ async fn wait_for_port_conflicts_to_settle(ports: &[u16], timeout: Duration) -> 
 /// Everything a launch produces before the entry settles to Active.
 struct LaunchSetup {
     job: Arc<Job>,
+    start_error_rx: mpsc::UnboundedReceiver<String>,
     status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     notify_socket: Option<Arc<NotifySocket>>,
@@ -827,8 +881,8 @@ struct LaunchSetup {
 
 impl LaunchSetup {
     /// Tear down a launch that never settled to `Active`: abort the output
-    /// tailers and stop the spawned child with the standard grace period. Used
-    /// when shutdown raced the launch or the entry changed underneath it.
+    /// tailers and ensure the job is stopped. Used when shutdown raced the
+    /// launch or the entry changed underneath it.
     async fn abort_and_stop(self) {
         self.stdout_tailer.abort();
         self.stderr_tailer.abort();
@@ -878,6 +932,8 @@ impl NativeProcessManager {
             processes_activity: Arc::new(RwLock::new(None)),
             task_notify: None,
             entries_changed: Arc::new(Notify::new()),
+            live: Arc::new(AtomicUsize::new(0)),
+            completion: Arc::new(Notify::new()),
             owns_runtime_files: true,
             scheduler: std::sync::OnceLock::new(),
             mode: std::sync::OnceLock::new(),
@@ -1236,6 +1292,8 @@ impl NativeProcessManager {
         let task_notify = self.task_notify.clone();
         let shutdown = self.shutdown.clone();
         let state_dir = self.state_dir.clone();
+        let live = Arc::clone(&self.live);
+        let completion = Arc::clone(&self.completion);
         tokio::spawn(async move {
             let (config, activity_ref) = {
                 let procs = processes.read().await;
@@ -1303,35 +1361,100 @@ impl NativeProcessManager {
                         bail!("process manager is shutting down")
                     }
                     Ok(setup) => {
+                        let LaunchSetup {
+                            job,
+                            start_error_rx,
+                            status_tx,
+                            status_rx,
+                            notify_socket,
+                            stdout_tailer,
+                            stderr_tailer,
+                            stderr_log,
+                        } = setup;
                         let resources = ProcessResources {
                             config,
-                            job: setup.job.clone(),
+                            job: job.clone(),
                             activity,
-                            notify_socket: setup.notify_socket,
-                            status_tx: setup.status_tx,
-                            stderr_log: setup.stderr_log,
+                            notify_socket,
+                            status_tx,
+                            stderr_log,
+                            live,
+                            completion,
                         };
-                        let supervisor_task =
-                            crate::supervisor::spawn_supervisor(&resources, shutdown.clone());
+                        let (cmd_tx, cmd_rx) = mpsc::channel(8);
+                        let (startup_tx, startup_rx) = oneshot::channel();
+                        let supervisor_task = crate::supervisor::spawn_supervisor(
+                            &resources,
+                            shutdown.clone(),
+                            cmd_rx,
+                            Some((start_error_rx, startup_tx)),
+                        );
                         let notify_forwarder = spawn_notify_forwarder(
                             task_notify.clone(),
                             Arc::clone(&entries_changed),
-                            setup.status_rx.clone(),
+                            status_rx.clone(),
                         );
                         procs.insert(
                             name.clone(),
                             ProcessEntry::Active(JobHandle {
                                 resources,
-                                status_rx: setup.status_rx,
+                                status_rx,
                                 supervisor_task,
-                                output_readers: Some((setup.stdout_tailer, setup.stderr_tailer)),
+                                cmd_tx,
+                                output_readers: Some((stdout_tailer, stderr_tailer)),
                                 notify_forwarder,
                             }),
                         );
                         drop(procs);
                         notify_lifecycle_parts(&entries_changed, &task_notify);
+
+                        let startup_error = match startup_rx.await {
+                            Ok(Ok(())) => None,
+                            Ok(Err(error)) => Some(error),
+                            Err(_) => Some("supervisor exited while starting".to_string()),
+                        };
+                        if let Some(error) = startup_error {
+                            let parts = {
+                                let mut procs = processes.write().await;
+                                match procs.remove(&name) {
+                                    Some(ProcessEntry::Active(handle)) => {
+                                        Some(take_active_for_stop(handle, &name, &mut procs, false))
+                                    }
+                                    Some(other) => {
+                                        procs.insert(name.clone(), other);
+                                        None
+                                    }
+                                    None => None,
+                                }
+                            };
+                            if let Some(parts) = parts {
+                                let StopParts {
+                                    cmd_tx,
+                                    supervisor_task,
+                                    notify_forwarder,
+                                    output_readers,
+                                    ..
+                                } = parts;
+                                stop_via_supervisor(&cmd_tx, supervisor_task).await;
+                                notify_forwarder.abort();
+                                if let Some((stdout_reader, stderr_reader)) = output_readers {
+                                    stdout_reader.abort();
+                                    stderr_reader.abort();
+                                }
+                                let procs = processes.read().await;
+                                if let Some(ProcessEntry::Stopped { activity, .. }) =
+                                    procs.get(&name)
+                                {
+                                    activity.fail();
+                                    activity.set_status(ProcessStatus::Stopped);
+                                }
+                            }
+                            notify_lifecycle_parts(&entries_changed, &task_notify);
+                            bail!("Failed to spawn process '{}': {}", name, error);
+                        }
+
                         info!("Command '{}' started", name);
-                        Ok(setup.job)
+                        Ok(job)
                     }
                 },
                 other => {
@@ -1352,7 +1475,8 @@ impl NativeProcessManager {
     }
 
     /// Set up everything a launch produces before the entry settles to
-    /// `Active`: probes, sockets, command, job start, and log tailers.
+    /// `Active`: probes, sockets, command, job, and log tailers. The supervisor
+    /// starts the job after the entry is installed.
     async fn launch_setup(
         state_dir: &Path,
         config: &ProcessConfig,
@@ -1393,7 +1517,7 @@ impl NativeProcessManager {
         // watchexec-supervisor reports spawn failures only through its error
         // handler. Without one, the start ticket completes successfully even
         // when no child was created.
-        let (start_error_tx, mut start_error_rx) = mpsc::unbounded_channel();
+        let (start_error_tx, start_error_rx) = mpsc::unbounded_channel();
         let process_name = config.name.clone();
         job.set_error_handler(move |error| {
             let message = error
@@ -1471,12 +1595,6 @@ impl NativeProcessManager {
             }
         });
 
-        job.start().await;
-        if let Ok(error) = start_error_rx.try_recv() {
-            job.delete().await;
-            bail!("Failed to spawn process '{}': {}", config.name, error);
-        }
-
         // Spawn file tailers to emit output to activity
         let stderr_log = proc_cmd.stderr_log.clone();
         let stdout_tailer =
@@ -1494,6 +1612,7 @@ impl NativeProcessManager {
 
         Ok(LaunchSetup {
             job,
+            start_error_rx,
             status_tx,
             status_rx,
             notify_socket,
@@ -1506,20 +1625,18 @@ impl NativeProcessManager {
     /// Shared teardown for [`Self::stop`] and [`Self::stop_and_keep`] once the
     /// `Active` handle has been extracted and a `Stopped` placeholder inserted
     /// under the write lock: abort the supervisor, forwarder, and output
-    /// readers, signal the child with the grace period, wait for declared ports
-    /// to be released, then mark the activity `Stopped`.
+    /// readers, ask the supervisor to stop the child with the grace period,
+    /// wait for declared ports to be released, then mark the activity `Stopped`.
     async fn finish_stop(&self, name: &str, parts: StopParts) {
         let StopParts {
-            job,
+            cmd_tx,
             supervisor_task,
             notify_forwarder,
             output_readers,
             ports,
         } = parts;
-        let grace_period = Duration::from_secs(5);
-
-        // Abort the supervisor task first to prevent restarts
-        supervisor_task.abort();
+        // The supervisor owns the job and serializes stop against restarts.
+        stop_via_supervisor(&cmd_tx, supervisor_task).await;
         notify_forwarder.abort();
 
         // Abort output reader tasks
@@ -1527,9 +1644,6 @@ impl NativeProcessManager {
             stdout_reader.abort();
             stderr_reader.abort();
         }
-
-        // Send terminate signal with grace period
-        job.stop_with_signal(Signal::Terminate, grace_period).await;
 
         if !ports.is_empty() {
             let release_status =
@@ -1775,27 +1889,34 @@ impl NativeProcessManager {
             ),
         ));
 
-        // Check if the old supervision still monitors the job. It doesn't when
-        // the supervisor task has exited (e.g., due to max restarts), or when
-        // it is parked in the Exited phase (kept alive only to react to file
-        // changes — its job-wait arm is disabled).
-        let supervisor_finished = handle.supervisor_task.is_finished();
-        let supervisor_parked =
-            handle.status_rx.borrow().phase == crate::supervisor_state::SupervisorPhase::Exited;
-        if supervisor_finished || supervisor_parked {
-            // Start fresh with new supervision.
-            // Order matters: start job first, then spawn supervisor (like start_command does).
-            // This gives the process a fresh restart quota (restart_count = 0).
+        // Drive the restart through the existing supervisor when possible.
+        // Falls back to respawn on any signal that it's gone or going (already
+        // finished, send failure, or ack dropped — the last covers the race
+        // where the supervisor exits between our check and our send).
+        let driven_by_existing = if handle.supervisor_task.is_finished() {
+            false
+        } else {
+            let (ack_tx, ack_rx) = oneshot::channel();
+            let sent = handle
+                .cmd_tx
+                .send(crate::supervisor::SupervisorCommand::Restart { ack: ack_tx })
+                .await
+                .is_ok();
+            sent && ack_rx.await.is_ok()
+        };
+
+        if !driven_by_existing {
             info!(
                 "Supervisor for {} no longer monitors the job, starting fresh with new supervision",
                 name
             );
-            if !supervisor_finished {
-                handle.supervisor_task.abort();
-            }
-            handle.resources.job.start().await;
-
-            // Publish a fresh status (needed for processes without readiness probe)
+            // Drain the old task first so its tail-stop signals the job before
+            // the new supervisor's job.start() spawns a fresh child — avoids
+            // double-starting on top of an orphan left by GaveUp.
+            let old_task = std::mem::replace(&mut handle.supervisor_task, tokio::spawn(async {}));
+            let _ = old_task.await;
+            // Publish a fresh status before the new supervisor starts (needed
+            // for processes without a readiness probe).
             let _ = handle
                 .resources
                 .status_tx
@@ -1803,16 +1924,14 @@ impl NativeProcessManager {
                     phase: initial_phase(&handle.resources.config),
                     restart_count: 0,
                 });
-            handle.supervisor_task =
-                crate::supervisor::spawn_supervisor(&handle.resources, self.shutdown.clone());
-        } else {
-            // Supervisor is still running — just restart the job.
-            // The existing supervisor will continue monitoring with its current restart_count.
-            handle
-                .resources
-                .job
-                .restart_with_signal(Signal::Terminate, Duration::from_secs(2))
-                .await;
+            let (cmd_tx, cmd_rx) = mpsc::channel(8);
+            handle.supervisor_task = crate::supervisor::spawn_supervisor(
+                &handle.resources,
+                self.shutdown.clone(),
+                cmd_rx,
+                None,
+            );
+            handle.cmd_tx = cmd_tx;
         }
 
         // The supervisor will update the status via status_tx once the
@@ -2687,14 +2806,25 @@ impl NativeProcessManager {
         &self,
         cancellation_token: tokio_util::sync::CancellationToken,
         mut frontend_event_rx: Option<mpsc::Receiver<FrontendEvent>>,
+        mode: OnIdle,
     ) -> Result<()> {
         trace!(
-            "run_foreground: ENTERED, token_cancelled={}",
+            "run_foreground: ENTERED, mode={:?}, token_cancelled={}",
+            mode,
             cancellation_token.is_cancelled()
         );
         info!("Manager event loop started (foreground)");
-        let mut saw_processes = false;
         let mut queued_command = None;
+
+        // Exit runs return once no supervisor is live. The processes
+        // may already have settled before we got here (e.g. fast `@completed`
+        // tasks), so check before parking.
+        let done = || mode == OnIdle::Exit && self.live.load(Ordering::SeqCst) == 0;
+        if done() {
+            trace!("run_foreground: all processes already settled, returning");
+            info!("Manager event loop stopped");
+            return Ok(());
+        }
 
         loop {
             tokio::select! {
@@ -2723,16 +2853,16 @@ impl NativeProcessManager {
                             .filter(|queued| !same_process_command(&command, queued));
                     }
                 }
-                _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    let is_empty = self.processes.read().await.is_empty();
-                    if !is_empty {
-                        saw_processes = true;
-                    }
-                    if is_empty && saw_processes {
-                        trace!("All processes exited, shutting down");
-                        break;
-                    }
-                }
+                // Woken whenever a supervisor reaches terminal (or a process is
+                // stopped). Linger runs never self-terminate; they stay alive
+                // until a shutdown signal so the environment (and any restartable,
+                // already-exited processes) remains available.
+                _ = self.completion.notified() => {}
+            }
+
+            if done() {
+                trace!("all processes settled, shutting down");
+                break;
             }
         }
 
@@ -2931,7 +3061,7 @@ impl ProcessManager for NativeProcessManager {
 
         // Run the event loop (shutdown via cancellation token from tokio-shutdown)
         let token = options.cancellation_token.unwrap_or_default();
-        let result = self.run_foreground(token, None).await;
+        let result = self.run_foreground(token, None, OnIdle::Linger).await;
 
         // Clean up PID file
         let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;

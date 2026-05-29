@@ -215,6 +215,21 @@ impl Default for StartConfig {
     }
 }
 
+/// Who runs the supervision loop for a process.
+///
+/// - `Native`: devenv-processes owns lifecycle — restart policy, readiness
+///   probes, watchdog, file-watch reload. The default.
+/// - `External`: an external manager (process-compose, mprocs, systemd) owns
+///   the lifecycle. The supervisor task runs the job once and tracks only
+///   start/exit; restart/probe/watchdog/watch config is ignored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Supervisor {
+    #[default]
+    Native,
+    External,
+}
+
 /// Process configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessConfig {
@@ -254,11 +269,19 @@ pub struct ProcessConfig {
     /// Linux-specific configuration
     #[serde(default)]
     pub linux: LinuxConfig,
+    /// Who runs the supervision loop for this process.
+    #[serde(default)]
+    pub supervisor: Supervisor,
 }
 
 impl ProcessConfig {
     /// Whether this config has any readiness mechanism (probe, TCP listen, or allocated ports).
+    /// Under `Supervisor::External` always false — the host owns readiness, so
+    /// the manager surfaces `Ready` immediately and skips probe setup.
     pub fn has_readiness_probe(&self) -> bool {
+        if self.supervisor == Supervisor::External {
+            return false;
+        }
         self.ready.is_some()
             || self.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
             || !self.ports.is_empty()
@@ -283,6 +306,7 @@ impl Default for ProcessConfig {
             watch: WatchConfig::default(),
             watchdog: None,
             linux: LinuxConfig::default(),
+            supervisor: Supervisor::default(),
         }
     }
 }

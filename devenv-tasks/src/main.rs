@@ -1,6 +1,6 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use devenv_core::VerbosityLevel;
-use devenv_processes::get_process_runtime_dir;
+use devenv_processes::{Supervisor, get_process_runtime_dir};
 use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, is_tty};
 use std::{env, fmt::Display, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
@@ -38,10 +38,46 @@ enum Command {
 
         #[clap(
             long,
-            help = "Exclude non-root process tasks from the scheduled subgraph (used when process-compose manages process ordering)"
+            value_enum,
+            default_value_t = SupervisorArg::Native,
+            help = "Who runs the supervision loop. 'external' delegates restart/ready/watchdog/watch policy to the host (process-compose, mprocs, ...) and runs each process once."
+        )]
+        supervisor: SupervisorArg,
+
+        #[clap(
+            long,
+            value_enum,
+            help = "What to do once no process is live. Defaults: 'linger' under --supervisor native, 'exit' under --supervisor external."
+        )]
+        on_idle: Option<OnIdleArg>,
+
+        #[clap(
+            long,
+            help = "Exclude non-root process tasks from the scheduled subgraph. Implied by --supervisor external; accepted standalone for backwards compatibility."
         )]
         ignore_process_deps: bool,
     },
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum SupervisorArg {
+    Native,
+    External,
+}
+
+impl From<SupervisorArg> for Supervisor {
+    fn from(a: SupervisorArg) -> Self {
+        match a {
+            SupervisorArg::Native => Supervisor::Native,
+            SupervisorArg::External => Supervisor::External,
+        }
+    }
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum OnIdleArg {
+    Exit,
+    Linger,
 }
 
 type Result<T> = std::result::Result<T, TaskError>;
@@ -152,8 +188,22 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             task_file,
             cache_dir,
             runtime_dir,
+            supervisor,
+            on_idle,
             ignore_process_deps,
         } => {
+            let supervisor: Supervisor = supervisor.into();
+            // `--on-idle` defaults derive from the supervisor: external hosts
+            // track the PID and expect us to exit; native runs are long-lived.
+            let exit_on_idle = match on_idle {
+                Some(OnIdleArg::Exit) => true,
+                Some(OnIdleArg::Linger) => false,
+                None => supervisor == Supervisor::External,
+            };
+            // `--ignore-process-deps` survives as a backwards-compat shorthand;
+            // external supervisors always imply it.
+            let ignore_process_deps = ignore_process_deps || supervisor == Supervisor::External;
+
             let mut tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
 
             // If --show-output flag is present, enable output for all tasks
@@ -180,6 +230,8 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 env: std::env::vars().collect(),
                 bash: String::new(),
                 ignore_process_deps,
+                exit_on_idle,
+                supervisor,
             };
 
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))

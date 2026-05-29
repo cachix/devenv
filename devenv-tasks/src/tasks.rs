@@ -123,6 +123,8 @@ impl TasksBuilder {
             start_with_deps_lock: Mutex::new(()),
             scheduled_task_indices: Mutex::new(HashSet::new()),
             outputs: Arc::new(Mutex::new(Outputs::new())),
+            exit_on_idle: self.config.exit_on_idle,
+            supervisor: self.config.supervisor,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -191,6 +193,11 @@ pub struct Tasks {
     /// scheduler lifetime so one-shots started dynamically share results with
     /// the cold run and with later dynamic dependency closures.
     pub(crate) outputs: Arc<Mutex<Outputs>>,
+    /// When true, the foreground run exits once no process is live.
+    pub(crate) exit_on_idle: bool,
+    /// Who runs the supervision loop for each registered process. Drives
+    /// `ProcessConfig.supervisor` at build time.
+    pub(crate) supervisor: devenv_processes::Supervisor,
 }
 
 /// One dependency's evaluation, produced by `Tasks::eval_dep` and shared
@@ -264,7 +271,10 @@ impl Tasks {
                         Some(ProcessPhase::Exited) => status.succeeded += 1,
                         Some(ProcessPhase::GaveUp) => status.failed += 1,
                         Some(
-                            ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready,
+                            ProcessPhase::Waiting
+                            | ProcessPhase::Starting
+                            | ProcessPhase::Ready
+                            | ProcessPhase::Stopping,
                         ) => status.running += 1,
                         None => status.pending += 1,
                     }
@@ -733,7 +743,12 @@ impl Tasks {
                 // race; already-running ones count as satisfied dependencies.
                 // A mid-launch `Launching` entry reports `Starting`, so an
                 // in-flight launch is skipped here too.
-                Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::Waiting) => {
+                Some(
+                    ProcessPhase::Starting
+                    | ProcessPhase::Ready
+                    | ProcessPhase::Waiting
+                    | ProcessPhase::Stopping,
+                ) => {
                     outcome.skipped.push(name.clone());
                     continue;
                 }
@@ -760,7 +775,7 @@ impl Tasks {
             // in a `devenv shell` daemon).
             let config = {
                 let ts = self.graph[index].read().await;
-                match ts.build_process_config(&self.env, &self.bash) {
+                match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                     Ok(mut config) => {
                         config.start.enable = true;
                         config
@@ -1164,6 +1179,7 @@ impl Tasks {
                     phase @ (ProcessPhase::Waiting
                     | ProcessPhase::Starting
                     | ProcessPhase::Ready
+                    | ProcessPhase::Stopping
                     | ProcessPhase::Exited
                     | ProcessPhase::GaveUp),
                 ) => crate::types::is_process_dep_satisfied(phase, dep_kind),
@@ -1401,7 +1417,7 @@ impl Tasks {
             if ts.task.r#type != TaskType::Process || ts.task.command.is_none() {
                 continue;
             }
-            match ts.build_process_config(&self.env, &self.bash) {
+            match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                 Ok(mut config) => {
                     has_process_tasks = true;
                     if scheduled.contains(&index) {
@@ -1705,7 +1721,10 @@ impl Tasks {
                     if matches!(
                         phase,
                         None | Some(
-                            ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready
+                            ProcessPhase::Waiting
+                                | ProcessPhase::Starting
+                                | ProcessPhase::Ready
+                                | ProcessPhase::Stopping
                         )
                     ) {
                         let mut task_state = self.graph[index].write().await;
@@ -1999,6 +2018,8 @@ mod schedule_tests {
             env: HashMap::new(),
             bash: String::new(),
             ignore_process_deps,
+            exit_on_idle: false,
+            supervisor: devenv_processes::Supervisor::Native,
         };
 
         let shutdown = tokio_shutdown::Shutdown::new();
@@ -2884,7 +2905,7 @@ mod schedule_tests {
         let d_cfg = tasks.graph[d_idx]
             .read()
             .await
-            .build_process_config(&tasks.env, &tasks.bash)
+            .build_process_config(&tasks.env, &tasks.bash, tasks.supervisor)
             .unwrap();
         tasks.process_manager.register_waiting(d_cfg, None).await;
         tasks.process_manager.cancel_waiting("d").await; // Waiting -> Stopped
@@ -2942,7 +2963,7 @@ mod schedule_tests {
         let p_cfg = tasks.graph[p_idx]
             .read()
             .await
-            .build_process_config(&tasks.env, &tasks.bash)
+            .build_process_config(&tasks.env, &tasks.bash, tasks.supervisor)
             .unwrap();
         tasks
             .process_manager
