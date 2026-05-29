@@ -1245,21 +1245,13 @@ impl Config {
             && let Some(canonical_root) = canonical_root
         {
             // Import path doesn't exist, but root does.
-            // Canonicalize the parent directory to resolve symlinks
-            // (e.g. /tmp -> /run/user/...), falling back to lexical
-            // normalization only when the parent doesn't exist either.
-            let abs_import = if let Some(parent) = import_path.parent() {
-                if let Ok(canonical_parent) = parent.canonicalize() {
-                    canonical_parent.join(import_path.file_name().unwrap_or_default())
-                } else if import_path.is_absolute() {
-                    Self::normalize_path_components(import_path)
-                } else if let Ok(cwd) = std::env::current_dir() {
-                    Self::normalize_path_components(&cwd.join(import_path))
-                } else {
-                    return Ok(());
-                }
-            } else if import_path.is_absolute() {
-                Self::normalize_path_components(import_path)
+            // Walk up the path looking for an existing ancestor that we can
+            // canonicalize (so symlinks like macOS `/var -> /private/var` get
+            // resolved), then append the remaining components lexically.
+            let abs_import = if import_path.is_absolute() {
+                Self::canonicalize_existing_ancestor(import_path)
+            } else if let Ok(cwd) = std::env::current_dir() {
+                Self::canonicalize_existing_ancestor(&cwd.join(import_path))
             } else {
                 return Ok(());
             };
@@ -1285,6 +1277,35 @@ impl Config {
         // The path will be validated when it's actually used
 
         Ok(())
+    }
+
+    /// Resolve an absolute path by canonicalizing the longest existing prefix
+    /// and appending the remaining components lexically. This handles paths
+    /// whose leaves don't exist yet while still resolving symlinks anywhere
+    /// up the chain (e.g. macOS `/var/folders/...` -> `/private/var/folders/...`).
+    fn canonicalize_existing_ancestor(path: &Path) -> PathBuf {
+        let mut probe = path.to_path_buf();
+        let mut tail: Vec<std::ffi::OsString> = Vec::new();
+        loop {
+            match probe.canonicalize() {
+                Ok(canonical) => {
+                    let mut result = canonical;
+                    for component in tail.iter().rev() {
+                        result.push(component);
+                    }
+                    return result;
+                }
+                Err(_) => {
+                    let file_name = probe.file_name().map(|n| n.to_os_string());
+                    if !probe.pop() || file_name.is_none() {
+                        // Nothing exists along the way; fall back to lexical
+                        // normalization of the original path.
+                        return Self::normalize_path_components(path);
+                    }
+                    tail.push(file_name.unwrap());
+                }
+            }
+        }
     }
 
     /// Normalizes a path by resolving `.` and `..` components without requiring the path to exist.
