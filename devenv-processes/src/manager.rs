@@ -8,6 +8,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
@@ -119,6 +120,11 @@ pub struct ProcessResources {
     pub notify_socket: Option<Arc<NotifySocket>>,
     pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     pub stderr_log: PathBuf,
+    /// Shared live-supervisor counter; the supervisor decrements it once on
+    /// reaching a terminal phase.
+    pub live: Arc<AtomicUsize>,
+    /// Notified after the supervisor decrements `live`.
+    pub completion: Arc<Notify>,
 }
 
 /// Handle to a managed process job
@@ -153,19 +159,6 @@ pub enum ProcessPhase {
     Exited,
     /// Supervisor gave up (crash loop).
     GaveUp,
-}
-
-impl ProcessPhase {
-    /// Process is still doing work — keeps a foreground run alive.
-    pub fn is_live(self) -> bool {
-        matches!(self, Self::Waiting | Self::Starting | Self::Ready)
-    }
-
-    /// Process reached a terminal state on its own and will not run again
-    /// without explicit action (start/restart).
-    pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Exited | Self::GaveUp)
-    }
 }
 
 impl std::fmt::Display for ProcessPhase {
@@ -204,18 +197,6 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
             crate::supervisor_state::SupervisorPhase::GaveUp => Self::GaveUp,
         }
     }
-}
-
-/// True if any process is still doing work (waiting for deps, starting, or
-/// ready). Exited, gave-up, stopped, and not-started processes are not live.
-fn has_live_processes(processes: &HashMap<String, ProcessEntry>) -> bool {
-    processes.values().any(|entry| match entry {
-        ProcessEntry::Waiting { .. } => true,
-        ProcessEntry::Active(handle) => {
-            ProcessPhase::from(handle.status_rx.borrow().phase).is_live()
-        }
-        ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. } => false,
-    })
 }
 
 /// Collect the names of all active (supervised) processes from the map.
@@ -262,6 +243,14 @@ pub struct NativeProcessManager {
     /// Optional notify handle fired when a process lifecycle changes (e.g. not-started
     /// process is manually started). The task system uses this to re-check dependencies.
     task_notify: Option<Arc<Notify>>,
+    /// Number of supervisors currently in a non-terminal phase (Starting/Ready).
+    /// Incremented when a supervisor is spawned, decremented when it reaches a
+    /// terminal phase or is stopped. A `CompletionMode::UntilComplete` foreground
+    /// run exits when this reaches zero.
+    live: Arc<AtomicUsize>,
+    /// Fired whenever `live` decreases, to wake a foreground run so it can
+    /// re-check the completion condition without polling.
+    completion: Arc<Notify>,
     /// Whether this instance owns the runtime files (socket, pid file) and should
     /// clean them up on drop. Set to false for control-client instances that
     /// connect to an existing daemon — they should not delete the daemon's files.
@@ -480,6 +469,8 @@ impl NativeProcessManager {
             shutdown: CancellationToken::new(),
             processes_activity: Arc::new(RwLock::new(None)),
             task_notify: None,
+            live: Arc::new(AtomicUsize::new(0)),
+            completion: Arc::new(Notify::new()),
             owns_runtime_files: true,
         })
     }
@@ -798,6 +789,8 @@ impl NativeProcessManager {
             notify_socket,
             status_tx,
             stderr_log,
+            live: Arc::clone(&self.live),
+            completion: Arc::clone(&self.completion),
         };
 
         // Spawn supervision task
@@ -871,7 +864,8 @@ impl NativeProcessManager {
 
         trace!("Stopping process: {}", name);
 
-        // Abort the supervisor task first to prevent restarts
+        // Abort the supervisor task first to prevent restarts. The supervisor's
+        // LiveGuard decrements the live count when its task is dropped.
         supervisor_task.abort();
 
         // Abort output reader tasks
@@ -980,6 +974,8 @@ impl NativeProcessManager {
             .activity
             .set_status(ProcessStatus::Stopping);
 
+        // The supervisor's LiveGuard decrements the live count when its task is
+        // dropped by this abort.
         handle.supervisor_task.abort();
 
         if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
@@ -1050,6 +1046,8 @@ impl NativeProcessManager {
             notify_socket: _,
             status_tx: _,
             stderr_log: _,
+            live: _,
+            completion: _,
         } = handle.resources;
 
         self.processes
@@ -1719,7 +1717,17 @@ impl NativeProcessManager {
             cancellation_token.is_cancelled()
         );
         info!("Manager event loop started (foreground)");
-        let mut saw_processes = false;
+
+        // UntilComplete runs return once no supervisor is live. The processes
+        // may already have settled before we got here (e.g. fast `@completed`
+        // tasks), so check before parking.
+        let done =
+            || mode == CompletionMode::UntilComplete && self.live.load(Ordering::SeqCst) == 0;
+        if done() {
+            trace!("run_foreground: all processes already settled, returning");
+            info!("Manager event loop stopped");
+            return Ok(());
+        }
 
         loop {
             tokio::select! {
@@ -1739,21 +1747,16 @@ impl NativeProcessManager {
                 } => {
                     self.handle_command(cmd).await;
                 }
-                _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    // Persistent runs never self-terminate; they stay alive until a
-                    // shutdown signal so the environment (and any restartable, already
-                    // exited processes) remains available.
-                    if mode == CompletionMode::UntilComplete {
-                        let processes = self.processes.read().await;
-                        if !processes.is_empty() {
-                            saw_processes = true;
-                        }
-                        if saw_processes && !has_live_processes(&processes) {
-                            trace!("all processes settled, shutting down");
-                            break;
-                        }
-                    }
-                }
+                // Woken whenever a supervisor reaches terminal (or a process is
+                // stopped). Persistent runs never self-terminate; they stay alive
+                // until a shutdown signal so the environment (and any restartable,
+                // already-exited processes) remains available.
+                _ = self.completion.notified() => {}
+            }
+
+            if done() {
+                trace!("all processes settled, shutting down");
+                break;
             }
         }
 

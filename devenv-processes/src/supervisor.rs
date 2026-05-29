@@ -18,6 +18,32 @@ use crate::supervisor_state::{
     Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
 };
 
+/// RAII accounting for a live supervisor. Incremented when a supervisor is
+/// spawned, decremented (and `completion` notified) when its task ends for any
+/// reason — a terminal phase, give-up, or an external `abort()`. A single owner
+/// keeps the count balanced without per-call-site bookkeeping.
+struct LiveGuard {
+    live: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    completion: std::sync::Arc<tokio::sync::Notify>,
+}
+
+impl LiveGuard {
+    fn new(
+        live: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        completion: std::sync::Arc<tokio::sync::Notify>,
+    ) -> Self {
+        live.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self { live, completion }
+    }
+}
+
+impl Drop for LiveGuard {
+    fn drop(&mut self) {
+        self.live.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.completion.notify_one();
+    }
+}
+
 /// Handle a successful probe by marking the process as ready.
 fn handle_probe_success(
     activity: &devenv_activity::ActivityRef,
@@ -44,6 +70,10 @@ pub fn spawn_supervisor(
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
+    // Increment now (synchronously, before returning) so the live count reflects
+    // this supervisor the moment the caller's `launch`/`restart` returns. The
+    // guard is moved into the task and decrements when the task ends.
+    let live_guard = LiveGuard::new(resources.live.clone(), resources.completion.clone());
     let name = config.name.clone();
 
     // Probe timing from ready config
@@ -103,6 +133,9 @@ pub fn spawn_supervisor(
         };
 
     tokio::spawn(async move {
+        // Owns the live-count slot for the duration of this task; decrements on
+        // drop (terminal break, give-up, or abort).
+        let _live_guard = live_guard;
         let mut state = SupervisorState::new(&config, Instant::now());
 
         // TCP probe: signals the supervisor loop when the port becomes reachable.
