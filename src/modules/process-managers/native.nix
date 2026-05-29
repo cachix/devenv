@@ -34,13 +34,21 @@ in
 
     packages = [ cfg.package ];
 
-    # The actual process manager command will be invoked from devenv.rs
-    # We just need to provide the configuration via procfileScript
+    # `devenv up` invokes the native task runner directly from Rust and never
+    # builds procfileScript. But procfileScript is still used by the processes
+    # container (containers.nix), `nix run .#devenv-up` (flake-compat.nix), and
+    # `config.ci`. For those code paths, run all process tasks in a single
+    # `devenv-tasks run` invocation so they share one NativeProcessManager;
+    # the runner blocks in run_foreground until processes exit. Includes
+    # processes with start.enable = false to match `devenv up` (the native
+    # manager surfaces them as stopped).
     process.manager.command = lib.mkDefault ''
-      # Native process manager is invoked directly from devenv up
-      # This script should not be reached
-      echo "Native process manager should be invoked from devenv up" >&2
-      exit 1
+      ${config.task.package}/bin/devenv-tasks run \
+        --task-file ${config.task.config} \
+        --mode all \
+        --cache-dir ${lib.escapeShellArg config.devenv.dotfile} \
+        --runtime-dir ${lib.escapeShellArg config.devenv.runtime} \
+        ${lib.concatMapStringsSep " " (name: "devenv:processes:${name}") (lib.attrNames config.processes)} &
     '';
   };
 }
