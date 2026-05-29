@@ -119,6 +119,8 @@ impl TasksBuilder {
             bash: self.config.bash,
             refresh_task_cache: self.refresh_task_cache,
             ignore_process_deps: self.config.ignore_process_deps,
+            exit_on_idle: self.config.exit_on_idle,
+            supervise_processes: self.config.supervise_processes,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -158,6 +160,10 @@ pub struct Tasks {
     pub(crate) refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
     pub(crate) ignore_process_deps: bool,
+    /// When true, the foreground run exits once no process is live.
+    pub(crate) exit_on_idle: bool,
+    /// When true, devenv-tasks supervises processes (restart/probe/watchdog/watch).
+    pub(crate) supervise_processes: bool,
 }
 
 impl Tasks {
@@ -753,7 +759,7 @@ impl Tasks {
             if ts.task.r#type != TaskType::Process || ts.task.command.is_none() {
                 continue;
             }
-            match ts.build_process_config(&self.env, &self.bash) {
+            match ts.build_process_config(&self.env, &self.bash, self.supervise_processes) {
                 Ok(config) => {
                     self.process_manager
                         .register_waiting(config.clone(), Some(orchestration_activity.id()))
@@ -1539,6 +1545,8 @@ mod schedule_tests {
             env: HashMap::new(),
             bash: String::new(),
             ignore_process_deps,
+            exit_on_idle: false,
+            supervise_processes: true,
         };
 
         let shutdown = tokio_shutdown::Shutdown::new();

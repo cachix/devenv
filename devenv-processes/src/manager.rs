@@ -155,6 +155,19 @@ pub enum ProcessPhase {
     GaveUp,
 }
 
+impl ProcessPhase {
+    /// Process is still doing work — keeps a foreground run alive.
+    pub fn is_live(self) -> bool {
+        matches!(self, Self::Waiting | Self::Starting | Self::Ready)
+    }
+
+    /// Process reached a terminal state on its own and will not run again
+    /// without explicit action (start/restart).
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Exited | Self::GaveUp)
+    }
+}
+
 impl std::fmt::Display for ProcessPhase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -169,6 +182,19 @@ impl std::fmt::Display for ProcessPhase {
     }
 }
 
+/// Controls when [`NativeProcessManager::run_foreground`] returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompletionMode {
+    /// Stay alive until a shutdown signal, even after every process has exited.
+    /// Used by `devenv up` with the native manager, where the environment is
+    /// long-lived and exited processes can still be restarted.
+    Persistent,
+    /// Return once no process is live (every process has exited, given up, or
+    /// is otherwise not running). Used when an external manager (e.g.
+    /// process-compose) owns the lifecycle and tracks this process's PID.
+    UntilComplete,
+}
+
 impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
     fn from(phase: crate::supervisor_state::SupervisorPhase) -> Self {
         match phase {
@@ -178,6 +204,18 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
             crate::supervisor_state::SupervisorPhase::GaveUp => Self::GaveUp,
         }
     }
+}
+
+/// True if any process is still doing work (waiting for deps, starting, or
+/// ready). Exited, gave-up, stopped, and not-started processes are not live.
+fn has_live_processes(processes: &HashMap<String, ProcessEntry>) -> bool {
+    processes.values().any(|entry| match entry {
+        ProcessEntry::Waiting { .. } => true,
+        ProcessEntry::Active(handle) => {
+            ProcessPhase::from(handle.status_rx.borrow().phase).is_live()
+        }
+        ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. } => false,
+    })
 }
 
 /// Collect the names of all active (supervised) processes from the map.
@@ -1673,9 +1711,11 @@ impl NativeProcessManager {
         &self,
         cancellation_token: tokio_util::sync::CancellationToken,
         mut command_rx: Option<mpsc::Receiver<ProcessCommand>>,
+        mode: CompletionMode,
     ) -> Result<()> {
         trace!(
-            "run_foreground: ENTERED, token_cancelled={}",
+            "run_foreground: ENTERED, mode={:?}, token_cancelled={}",
+            mode,
             cancellation_token.is_cancelled()
         );
         info!("Manager event loop started (foreground)");
@@ -1700,13 +1740,18 @@ impl NativeProcessManager {
                     self.handle_command(cmd).await;
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    let is_empty = self.processes.read().await.is_empty();
-                    if !is_empty {
-                        saw_processes = true;
-                    }
-                    if is_empty && saw_processes {
-                        trace!("All processes exited, shutting down");
-                        break;
+                    // Persistent runs never self-terminate; they stay alive until a
+                    // shutdown signal so the environment (and any restartable, already
+                    // exited processes) remains available.
+                    if mode == CompletionMode::UntilComplete {
+                        let processes = self.processes.read().await;
+                        if !processes.is_empty() {
+                            saw_processes = true;
+                        }
+                        if saw_processes && !has_live_processes(&processes) {
+                            trace!("all processes settled, shutting down");
+                            break;
+                        }
                     }
                 }
             }
@@ -1907,7 +1952,9 @@ impl ProcessManager for NativeProcessManager {
 
         // Run the event loop (shutdown via cancellation token from tokio-shutdown)
         let token = options.cancellation_token.unwrap_or_default();
-        let result = self.run_foreground(token, None).await;
+        let result = self
+            .run_foreground(token, None, CompletionMode::Persistent)
+            .await;
 
         // Clean up PID file
         let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;

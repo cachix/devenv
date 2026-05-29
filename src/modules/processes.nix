@@ -499,10 +499,20 @@ in
         # Not used by the native manager (devenv 2.0+) which handles process tasks directly.
         process.taskCommandsBase =
           let
-            ignoreProcessDepsFlag = lib.optionalString (implementation != "native") " --ignore-process-deps";
+            # Non-native managers (process-compose, mprocs) own process supervision
+            # and ordering. The external-supervisor preset makes devenv-tasks a thin
+            # graph runner: prune sibling process tasks, delegate supervision, and
+            # exit once the process settles so the external manager tracks its PID.
+            runArgs = lib.cli.toCommandLineShellGNU { } {
+              task-file = config.task.config;
+              mode = "all";
+              cache-dir = config.devenv.dotfile;
+              runtime-dir = config.devenv.runtime;
+              external-supervisor = implementation != "native";
+            };
           in
           lib.mapAttrs
-            (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime}${ignoreProcessDepsFlag} devenv:processes:${name}")
+            (name: _: "${config.task.package}/bin/devenv-tasks run ${runArgs} devenv:processes:${name}")
             enabledProcesses;
 
         # With exec prefix for proper signal handling (derived from base)

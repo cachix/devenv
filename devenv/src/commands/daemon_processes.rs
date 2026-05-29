@@ -51,7 +51,11 @@ pub fn run(config_file: &Path) -> Result<()> {
 
         let result = tasks_runner
             .process_manager()
-            .run_foreground(shutdown.cancellation_token(), None)
+            .run_foreground(
+                shutdown.cancellation_token(),
+                None,
+                crate::processes::CompletionMode::Persistent,
+            )
             .await
             .map_err(|e| miette::miette!("Process manager error: {}", e));
 
