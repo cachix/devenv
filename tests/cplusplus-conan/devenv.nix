@@ -1,20 +1,22 @@
 { pkgs, config, ... }:
-
+let
+  getCommand = package: builtins.baseNameOf (pkgs.lib.getExe package);
+in
 {
   languages.cplusplus.enable = true;
   languages.cplusplus.conan.enable = true;
   languages.cplusplus.conan.install.enable = true;
   enterTest = ''
-    ${pkgs.lib.getExe config.languages.cplusplus.package} --version
-    ${pkgs.lib.getExe config.languages.cplusplus.package} --version \
+    ${getCommand config.languages.cplusplus.package} --version
+    ${getCommand config.languages.cplusplus.package} --version \
       | grep ${pkgs.lib.escapeShellArg config.stdenv.cc.cc.pname}
-    ${pkgs.lib.getExe config.languages.cplusplus.cmake.package} --version
-    ${pkgs.lib.getExe config.languages.cplusplus.lsp.package} --version \
+    ${getCommand config.languages.cplusplus.cmake.package} --version
+    ${getCommand config.languages.cplusplus.lsp.package} --version \
       | grep ${pkgs.lib.escapeShellArg config.languages.cplusplus.lsp.package.version}
-    ${pkgs.lib.getExe config.languages.cplusplus.conan.package} --version
+    ${getCommand config.languages.cplusplus.conan.package} --version
     echo "enable:"${pkgs.lib.escapeShellArg config.languages.cplusplus.tools.enable}":" \
       | grep "enable:"${pkgs.lib.escapeShellArg config.stdenv.cc.isClang}":"
-    ${pkgs.lib.getExe config.languages.cplusplus.conan.package} profile show \
+    ${getCommand config.languages.cplusplus.conan.package} profile show \
       | grep "cmake/"${pkgs.lib.escapeShellArg config.languages.cplusplus.cmake.package.version}
   '';
 }
