@@ -276,6 +276,7 @@ impl NixCBackend {
                 &nixpkgs_config_path,
                 &flake_settings,
                 nix_settings.nix_debugger,
+                nix_settings.refresh_fetchers,
             )?
         };
 
@@ -380,6 +381,7 @@ impl NixCBackend {
             &self.nixpkgs_config_path,
             &self.flake_settings,
             self.nix_settings.nix_debugger,
+            self.nix_settings.refresh_fetchers,
         )
     }
 
@@ -1193,6 +1195,7 @@ impl NixCBackend {
             &self.nixpkgs_config_path,
             &self.flake_settings,
             self.nix_settings.nix_debugger,
+            self.nix_settings.refresh_fetchers,
         )?;
         *guard = Some(new_state);
 
@@ -1440,6 +1443,7 @@ fn build_eval_state(
     nixpkgs_config_path: &Path,
     flake_settings: &FlakeSettings,
     enable_debugger: bool,
+    refresh_fetchers: bool,
 ) -> Result<EvalState> {
     let root_str = root
         .to_str()
@@ -1448,7 +1452,7 @@ fn build_eval_state(
         .to_str()
         .ok_or_else(|| miette!("Nixpkgs config path contains invalid UTF-8"))?;
 
-    let mut eval_state = EvalStateBuilder::new(store.clone())
+    let mut builder = EvalStateBuilder::new(store.clone())
         .to_miette()
         .wrap_err("Failed to create eval state builder")?
         .base_directory(root_str)
@@ -1459,7 +1463,20 @@ fn build_eval_state(
         .wrap_err("Failed to set NIXPKGS_CONFIG")?
         .flakes(flake_settings)
         .to_miette()
-        .wrap_err("Failed to configure flakes")?
+        .wrap_err("Failed to configure flakes")?;
+
+    // `devenv update` sets this so branch and tag inputs are re-resolved
+    // instead of served from cache within tarball-ttl. The eval state's own
+    // fetchers::Settings is what governs locking, so the override must land
+    // here rather than on the global config or the locker's settings argument.
+    if refresh_fetchers {
+        builder = builder
+            .fetch_setting("tarball-ttl", "0")
+            .to_miette()
+            .wrap_err("Failed to set tarball-ttl")?;
+    }
+
+    let mut eval_state = builder
         .build()
         .to_miette()
         .wrap_err("Failed to build eval state")?;
@@ -1599,11 +1616,6 @@ pub fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
     settings::set("use-registries", "true")
         .to_miette()
         .wrap_err("Failed to set use-registries")?;
-    if nix_settings.refresh_fetchers {
-        settings::set("tarball-ttl", "0")
-            .to_miette()
-            .wrap_err("Failed to set tarball-ttl")?;
-    }
     settings::set("show-trace", "true")
         .to_miette()
         .wrap_err("Failed to set show-trace")?;
