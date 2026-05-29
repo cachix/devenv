@@ -1616,9 +1616,6 @@ pub fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
     settings::set("use-registries", "true")
         .to_miette()
         .wrap_err("Failed to set use-registries")?;
-    // tarball-ttl is a fetchers::Settings option, not a global one, so setting
-    // it here has no effect. For `devenv update` it is applied to the eval
-    // state's fetchers settings in build_eval_state via refresh_fetchers.
     settings::set("show-trace", "true")
         .to_miette()
         .wrap_err("Failed to set show-trace")?;
