@@ -95,7 +95,8 @@ in
         cfg.package
       ]
       ++ lib.optional cfg.tools.enable cfg.tools.package
-      ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+      ++ lib.optional cfg.lsp.enable cfg.lsp.package
+      ++ lib.optional cfg.conan.enable cfg.conan.package;
     })
 
     #
@@ -105,6 +106,7 @@ in
       languages.cplusplus.conan.config.platformToolRequires = lib.mkDefault {
         cmake = cfg.cmake.package.version;
       };
+      languages.cplusplus.conan.config.defaults.enable = lib.mkDefault false;
       languages.cplusplus.package = lib.mkDefault cfg.conan.config.stdenv.cc;
     })
 
