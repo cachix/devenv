@@ -19,12 +19,10 @@ use crate::supervisor_state::{
     Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
 };
 
-/// External lifecycle requests delivered into a running supervisor's loop.
+/// Lifecycle requests delivered into the supervisor's loop.
 ///
-/// Routing restart/stop through the supervisor (instead of the manager poking
-/// the shared `Job` directly) keeps the supervisor the sole driver of its job,
-/// so there is no race between a manager-issued job change and the supervisor's
-/// own restart policy. Each command carries an ack the manager awaits.
+/// The supervisor is the sole driver of its job, so a `Restart` or `Stop` here
+/// can't race its restart policy. Each command carries an ack the manager awaits.
 pub enum SupervisorCommand {
     /// Restart the job with a fresh restart budget.
     Restart { ack: oneshot::Sender<()> },
@@ -37,8 +35,7 @@ const STOP_GRACE: Duration = Duration::from_secs(5);
 
 /// RAII accounting for a live supervisor. Incremented when a supervisor is
 /// spawned, decremented (and `completion` notified) when its task ends for any
-/// reason — a terminal phase, give-up, or an external `abort()`. A single owner
-/// keeps the count balanced without per-call-site bookkeeping.
+/// reason — a terminal phase, give-up, or an external `abort()`.
 struct LiveGuard {
     live: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     completion: std::sync::Arc<tokio::sync::Notify>,
@@ -88,9 +85,8 @@ pub fn spawn_supervisor(
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
-    // Increment now (synchronously, before returning) so the live count reflects
-    // this supervisor the moment the caller's `launch`/`restart` returns. The
-    // guard is moved into the task and decrements when the task ends.
+    // Increment synchronously so the live count reflects this supervisor the
+    // moment `launch`/`restart` returns, before any await point.
     let live_guard = LiveGuard::new(resources.live.clone(), resources.completion.clone());
     let name = config.name.clone();
 
@@ -154,6 +150,12 @@ pub fn spawn_supervisor(
         // Owns the live-count slot for the duration of this task; decrements on
         // drop (terminal break, give-up, or abort).
         let _live_guard = live_guard;
+
+        // The supervisor is the sole driver of its job: start it here so there
+        // is no window between launch and supervision where a fast process could
+        // exit before the loop watches it. The spawn hook is already set on the job.
+        job.start().await;
+
         let mut state = SupervisorState::new(&config, Instant::now());
 
         // TCP probe: signals the supervisor loop when the port becomes reachable.

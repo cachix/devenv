@@ -777,8 +777,6 @@ impl NativeProcessManager {
             }
         });
 
-        job.start().await;
-
         // Spawn file tailers to emit output to activity
         let stderr_log = proc_cmd.stderr_log.clone();
         let stdout_tailer =
@@ -1166,14 +1164,13 @@ impl NativeProcessManager {
 
         // Check if supervisor task has exited (e.g., due to max restarts).
         if handle.supervisor_task.is_finished() {
-            // Supervisor has exited — start fresh with new supervision and a new
-            // command channel. Order matters: start job first, then spawn the
-            // supervisor (like start_command does). Fresh restart quota.
+            // Supervisor has exited — spawn a fresh one with a new command
+            // channel. The new supervisor starts the job itself, with a fresh
+            // restart quota.
             info!(
                 "Supervisor for {} has exited, starting fresh with new supervision",
                 name
             );
-            handle.resources.job.start().await;
             let (cmd_tx, cmd_rx) = mpsc::channel(8);
             handle.supervisor_task = crate::supervisor::spawn_supervisor(
                 &handle.resources,
