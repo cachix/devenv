@@ -5,6 +5,7 @@ use devenv_event_sources::{
     ExecProbe, FileWatcher, FileWatcherConfig, HttpGetProbe, NotifyMessage, TcpProbe,
 };
 use futures::future::Either;
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
@@ -17,6 +18,22 @@ use crate::manager::ProcessResources;
 use crate::supervisor_state::{
     Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
 };
+
+/// External lifecycle requests delivered into a running supervisor's loop.
+///
+/// Routing restart/stop through the supervisor (instead of the manager poking
+/// the shared `Job` directly) keeps the supervisor the sole driver of its job,
+/// so there is no race between a manager-issued job change and the supervisor's
+/// own restart policy. Each command carries an ack the manager awaits.
+pub enum SupervisorCommand {
+    /// Restart the job with a fresh restart budget.
+    Restart { ack: oneshot::Sender<()> },
+    /// Stop the job and end the supervisor task.
+    Stop { ack: oneshot::Sender<()> },
+}
+
+/// Grace period before SIGKILL when stopping a process via a `Stop` command.
+const STOP_GRACE: Duration = Duration::from_secs(5);
 
 /// RAII accounting for a live supervisor. Incremented when a supervisor is
 /// spawned, decremented (and `completion` notified) when its task ends for any
@@ -64,6 +81,7 @@ fn handle_probe_success(
 pub fn spawn_supervisor(
     resources: &ProcessResources,
     shutdown: CancellationToken,
+    mut cmd_rx: mpsc::Receiver<SupervisorCommand>,
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
     let job = resources.job.clone();
@@ -235,6 +253,29 @@ pub fn spawn_supervisor(
                 _ = shutdown.cancelled() => {
                     debug!("Shutdown requested for {}", name);
                     break;
+                }
+
+                Some(cmd) = cmd_rx.recv() => {
+                    if shutdown.is_cancelled() { break 'supervisor; }
+                    match cmd {
+                        SupervisorCommand::Restart { ack } => {
+                            activity.log("Restart requested");
+                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            job.start().await;
+                            state.reset_for_external_restart(Instant::now());
+                            respawn_probes!();
+                            let _ = status_tx.send(state.status());
+                            let _ = ack.send(());
+                        }
+                        SupervisorCommand::Stop { ack } => {
+                            activity.log("Stop requested");
+                            job.stop_with_signal(Signal::Terminate, STOP_GRACE).await;
+                            let _ = ack.send(());
+                            break 'supervisor;
+                        }
+                    }
+                    refresh_deadline!(state, current_deadline, deadline_fut);
                 }
 
                 Some(()) = async {

@@ -13,6 +13,7 @@ use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
@@ -87,10 +88,7 @@ pub enum ApiResponse {
     PortAllocations { ports: Vec<PortInfo> },
 }
 
-use watchexec_supervisor::{
-    Signal,
-    job::{Job, start_job},
-};
+use watchexec_supervisor::job::{Job, start_job};
 
 use crate::config::ProcessConfig;
 use crate::pid::{self, PidStatus};
@@ -134,6 +132,8 @@ pub struct JobHandle {
     pub status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     /// Supervisor task handling restarts
     pub supervisor_task: JoinHandle<()>,
+    /// Channel to send lifecycle commands (restart/stop) into the supervisor loop.
+    pub cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
     /// Output reader tasks (stdout, stderr)
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
 }
@@ -197,6 +197,28 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
             crate::supervisor_state::SupervisorPhase::GaveUp => Self::GaveUp,
         }
     }
+}
+
+/// Ask a supervisor to stop its job and wait for its task to end.
+///
+/// Sends a `Stop` command (if the supervisor is still running) and awaits the
+/// ack, then joins the task so its `LiveGuard` decrements the live count before
+/// the caller proceeds with teardown.
+async fn stop_via_supervisor(
+    cmd_tx: &mpsc::Sender<crate::supervisor::SupervisorCommand>,
+    supervisor_task: JoinHandle<()>,
+) {
+    if !supervisor_task.is_finished() {
+        let (ack_tx, ack_rx) = oneshot::channel();
+        if cmd_tx
+            .send(crate::supervisor::SupervisorCommand::Stop { ack: ack_tx })
+            .await
+            .is_ok()
+        {
+            let _ = ack_rx.await;
+        }
+    }
+    let _ = supervisor_task.await;
 }
 
 /// Collect the names of all active (supervised) processes from the map.
@@ -793,9 +815,10 @@ impl NativeProcessManager {
             completion: Arc::clone(&self.completion),
         };
 
-        // Spawn supervision task
+        // Spawn supervision task with a command channel for restart/stop.
+        let (cmd_tx, cmd_rx) = mpsc::channel(8);
         let supervisor_task =
-            crate::supervisor::spawn_supervisor(&resources, self.shutdown.clone());
+            crate::supervisor::spawn_supervisor(&resources, self.shutdown.clone(), cmd_rx);
 
         // Store the job handle
         let mut processes = self.processes.write().await;
@@ -805,6 +828,7 @@ impl NativeProcessManager {
                 resources,
                 status_rx,
                 supervisor_task,
+                cmd_tx,
                 output_readers: Some((stdout_tailer, stderr_tailer)),
             }),
         );
@@ -818,7 +842,7 @@ impl NativeProcessManager {
         // Extract the handle and immediately insert a Stopped entry so the process
         // stays visible in the map during teardown. Without this, concurrent API
         // queries (list, status) would see "not found" during the teardown window.
-        let (job, supervisor_task, output_readers, ports) = {
+        let (cmd_tx, supervisor_task, output_readers, ports) = {
             let mut processes = self.processes.write().await;
 
             match processes.remove(name) {
@@ -827,20 +851,18 @@ impl NativeProcessManager {
                     let JobHandle {
                         resources,
                         supervisor_task,
+                        cmd_tx,
                         output_readers,
                         ..
                     } = handle;
                     let ProcessResources {
-                        config,
-                        activity,
-                        job,
-                        ..
+                        config, activity, ..
                     } = resources;
 
                     activity.set_status(ProcessStatus::Stopping);
                     processes.insert(name.to_string(), ProcessEntry::Stopped { config, activity });
 
-                    (job, supervisor_task, output_readers, ports)
+                    (cmd_tx, supervisor_task, output_readers, ports)
                 }
                 Some(
                     entry @ (ProcessEntry::NotStarted { .. }
@@ -860,22 +882,18 @@ impl NativeProcessManager {
             }
         };
 
-        let grace_period = Duration::from_secs(5);
-
         trace!("Stopping process: {}", name);
 
-        // Abort the supervisor task first to prevent restarts. The supervisor's
-        // LiveGuard decrements the live count when its task is dropped.
-        supervisor_task.abort();
+        // Ask the supervisor to stop its job and end. It owns the job (and keeps
+        // its own Arc), so the stop can't race its restart policy. The task's
+        // LiveGuard decrements the live count when it ends.
+        stop_via_supervisor(&cmd_tx, supervisor_task).await;
 
         // Abort output reader tasks
         if let Some((stdout_reader, stderr_reader)) = output_readers {
             stdout_reader.abort();
             stderr_reader.abort();
         }
-
-        // Send terminate signal with grace period
-        job.stop_with_signal(Signal::Terminate, grace_period).await;
 
         if !ports.is_empty() {
             let release_status =
@@ -965,29 +983,26 @@ impl NativeProcessManager {
             }
         };
 
-        let grace_period = Duration::from_secs(5);
         let ports = declared_ports(&handle.resources.config);
+        let JobHandle {
+            resources,
+            supervisor_task,
+            cmd_tx,
+            output_readers,
+            ..
+        } = handle;
 
         trace!("Stopping process (keeping visible): {}", name);
-        handle
-            .resources
-            .activity
-            .set_status(ProcessStatus::Stopping);
+        resources.activity.set_status(ProcessStatus::Stopping);
 
-        // The supervisor's LiveGuard decrements the live count when its task is
-        // dropped by this abort.
-        handle.supervisor_task.abort();
+        // Ask the supervisor to stop its job and end; its LiveGuard decrements
+        // the live count when the task ends.
+        stop_via_supervisor(&cmd_tx, supervisor_task).await;
 
-        if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
+        if let Some((stdout_reader, stderr_reader)) = output_readers {
             stdout_reader.abort();
             stderr_reader.abort();
         }
-
-        handle
-            .resources
-            .job
-            .stop_with_signal(Signal::Terminate, grace_period)
-            .await;
 
         if !ports.is_empty() {
             let release_status =
@@ -1035,7 +1050,7 @@ impl NativeProcessManager {
             }
         }
 
-        handle.resources.activity.set_status(ProcessStatus::Stopped);
+        resources.activity.set_status(ProcessStatus::Stopped);
 
         // Destructure to move Activity out without dropping it.
         // Activity::drop sends Process::Complete which would remove it from the TUI.
@@ -1048,7 +1063,7 @@ impl NativeProcessManager {
             stderr_log: _,
             live: _,
             completion: _,
-        } = handle.resources;
+        } = resources;
 
         self.processes
             .write()
@@ -1149,26 +1164,35 @@ impl NativeProcessManager {
             ),
         ));
 
-        // Check if supervisor task has exited (e.g., due to max restarts)
+        // Check if supervisor task has exited (e.g., due to max restarts).
         if handle.supervisor_task.is_finished() {
-            // Supervisor has exited — start fresh with new supervision.
-            // Order matters: start job first, then spawn supervisor (like start_command does).
-            // This gives the process a fresh restart quota (restart_count = 0).
+            // Supervisor has exited — start fresh with new supervision and a new
+            // command channel. Order matters: start job first, then spawn the
+            // supervisor (like start_command does). Fresh restart quota.
             info!(
                 "Supervisor for {} has exited, starting fresh with new supervision",
                 name
             );
             handle.resources.job.start().await;
-            handle.supervisor_task =
-                crate::supervisor::spawn_supervisor(&handle.resources, self.shutdown.clone());
+            let (cmd_tx, cmd_rx) = mpsc::channel(8);
+            handle.supervisor_task = crate::supervisor::spawn_supervisor(
+                &handle.resources,
+                self.shutdown.clone(),
+                cmd_rx,
+            );
+            handle.cmd_tx = cmd_tx;
         } else {
-            // Supervisor is still running — just restart the job.
-            // The existing supervisor will continue monitoring with its current restart_count.
-            handle
-                .resources
-                .job
-                .restart_with_signal(Signal::Terminate, Duration::from_secs(2))
-                .await;
+            // Supervisor is still running — ask it to restart the job so it stays
+            // the sole driver of its job and resets its own restart budget.
+            let (ack_tx, ack_rx) = oneshot::channel();
+            if handle
+                .cmd_tx
+                .send(crate::supervisor::SupervisorCommand::Restart { ack: ack_tx })
+                .await
+                .is_ok()
+            {
+                let _ = ack_rx.await;
+            }
         }
 
         // The supervisor will update the status via status_tx once the

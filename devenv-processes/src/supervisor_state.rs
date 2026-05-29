@@ -205,6 +205,19 @@ impl SupervisorState {
         }
     }
 
+    /// Reset to a fresh start for an externally requested restart (user/API).
+    /// Unlike a policy restart, this clears the restart budget so the process
+    /// gets a clean quota and can recover even from `GaveUp`.
+    pub fn reset_for_external_restart(&mut self, now: Instant) {
+        self.restart_timestamps.clear();
+        self.restart_count = 0;
+        self.watchdog_armed = false;
+        self.watchdog_deadline = None;
+        self.phase = SupervisorPhase::Starting;
+        self.startup_deadline = self.startup_timeout.map(|d| now + d);
+        self.arm_initial_watchdog(now);
+    }
+
     /// Called after a restart completes — single place to reset state.
     pub fn on_restart_complete(&mut self, now: Instant) {
         self.restart_count += 1;
