@@ -375,7 +375,7 @@ impl TaskState {
         &self,
         env: &std::collections::HashMap<String, String>,
         bash: &str,
-        supervise: bool,
+        supervisor: devenv_processes::Supervisor,
     ) -> Result<ProcessConfig> {
         let cmd = self
             .task
@@ -390,20 +390,9 @@ impl TaskState {
             name: process_name,
             exec: cmd.clone(),
             cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
+            supervisor,
             ..base
         };
-
-        // When supervision is delegated to an external manager (process-compose),
-        // neutralize the supervision devenv-tasks would otherwise apply so the
-        // process runs once and exits — letting the external manager own restart,
-        // readiness, watchdog, and file-watch reload. `listen`/`ports` are kept
-        // since they drive socket activation, not supervision.
-        if !supervise {
-            config.restart.on = devenv_processes::RestartPolicy::Never;
-            config.ready = None;
-            config.watchdog = None;
-            config.watch = devenv_processes::WatchConfig::default();
-        }
 
         // Merge devenv shell environment into process config
         // Task-level env takes precedence over shell env,

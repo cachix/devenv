@@ -146,6 +146,8 @@ pub fn spawn_supervisor(
             None
         };
 
+    let supervisor_mode = config.supervisor;
+
     tokio::spawn(async move {
         // Owns the live-count slot for the duration of this task; decrements on
         // drop (terminal break, give-up, or abort).
@@ -155,6 +157,16 @@ pub fn spawn_supervisor(
         // is no window between launch and supervision where a fast process could
         // exit before the loop watches it. The spawn hook is already set on the job.
         job.start().await;
+
+        // External supervisor: skip the state machine + probes + watcher. The
+        // host (process-compose, mprocs, …) owns restart/ready/watchdog policy;
+        // we only mirror start/stop/exit into status_rx and the live counter.
+        if supervisor_mode == crate::config::Supervisor::External {
+            run_external_supervision(&job, &activity, &status_tx, &shutdown, &mut cmd_rx).await;
+            job.stop_with_signal(Signal::Terminate, STOP_GRACE).await;
+            trace!("Supervision task for {} exiting (external)", name);
+            return;
+        }
 
         let mut state = SupervisorState::new(&config, Instant::now());
 
@@ -262,9 +274,7 @@ pub fn spawn_supervisor(
                     match cmd {
                         SupervisorCommand::Restart { ack } => {
                             activity.log("Restart requested");
-                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            job.start().await;
+                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
                             state.reset_for_external_restart(Instant::now());
                             respawn_probes!();
                             let _ = status_tx.send(state.status());
@@ -272,6 +282,11 @@ pub fn spawn_supervisor(
                         }
                         SupervisorCommand::Stop { ack } => {
                             activity.log("Stop requested");
+                            // Surface Stopping phase to status_rx subscribers
+                            // (TUI etc.) for the duration of the tail-stop
+                            // grace period.
+                            let _ = state.on_event(Event::StopRequested, Instant::now());
+                            let _ = status_tx.send(state.status());
                             let _ = ack.send(());
                             break 'supervisor;
                         }
@@ -329,9 +344,7 @@ pub fn spawn_supervisor(
                     }
                     match state.on_event(Event::FileChange, Instant::now()) {
                         Action::Restart => {
-                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            job.start().await;
+                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
                             activity.log(format!("Restarted (attempt {})", count));
@@ -519,11 +532,10 @@ pub fn spawn_supervisor(
             refresh_deadline!(state, current_deadline, deadline_fut);
         }
 
-        // Always signal the job on supervisor exit so a SIGTERM-with-grace is
-        // delivered for shutdown / GaveUp / Stop uniformly. Without this, the
-        // child only dies via watchexec's KillOnDrop (SIGKILL) when the last
-        // `Arc<Job>` drops — losing the graceful shutdown hook. Idempotent on
-        // an already-stopped job.
+        // Tail-stop invariant: on every supervisor exit (shutdown / GaveUp /
+        // Stop), the child gets SIGTERM-with-grace here. Without it, the child
+        // only dies via watchexec KillOnDrop (SIGKILL) once the last Arc<Job>
+        // drops — losing the graceful shutdown hook.
         job.stop_with_signal(Signal::Terminate, STOP_GRACE).await;
 
         trace!("Supervision task for {} exiting", name);
@@ -537,5 +549,51 @@ fn make_deadline_future(
     match deadline {
         Some(d) => Either::Left(tokio::time::sleep_until(d.into())),
         None => Either::Right(std::future::pending()),
+    }
+}
+
+/// Minimal supervision body used when the lifecycle is owned by an external
+/// manager. Surfaces start (Ready) and exit (Exited) to `status_rx` and honors
+/// Stop/Restart commands. No restart policy, no probes, no watchdog, no watch.
+async fn run_external_supervision(
+    job: &std::sync::Arc<watchexec_supervisor::job::Job>,
+    activity: &devenv_activity::ActivityRef,
+    status_tx: &tokio::sync::watch::Sender<JobStatus>,
+    shutdown: &CancellationToken,
+    cmd_rx: &mut tokio::sync::mpsc::Receiver<SupervisorCommand>,
+) {
+    // Host owns readiness; report Ready immediately so dependents can proceed.
+    let _ = status_tx.send(JobStatus {
+        phase: SupervisorPhase::Ready,
+        restart_count: 0,
+    });
+    activity.set_status(ProcessStatus::Ready);
+
+    loop {
+        tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            Some(cmd) = cmd_rx.recv() => match cmd {
+                SupervisorCommand::Stop { ack } => {
+                    let _ = status_tx.send(JobStatus {
+                        phase: SupervisorPhase::Stopping,
+                        restart_count: 0,
+                    });
+                    let _ = ack.send(());
+                    break;
+                }
+                SupervisorCommand::Restart { ack } => {
+                    job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                    let _ = ack.send(());
+                }
+            },
+            _ = job.to_wait() => {
+                let _ = status_tx.send(JobStatus {
+                    phase: SupervisorPhase::Exited,
+                    restart_count: 0,
+                });
+                break;
+            }
+        }
     }
 }

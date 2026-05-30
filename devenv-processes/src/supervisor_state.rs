@@ -12,6 +12,9 @@ pub enum SupervisorPhase {
     Starting,
     /// READY=1 received (or require_ready=false and first WATCHDOG received)
     Ready,
+    /// External `StopRequested` received; supervisor will tear down the job
+    /// and exit. Reachable from any other phase. Terminal — no event lifts it.
+    Stopping,
     /// Process exited and will not be restarted (restart policy says stop).
     Exited,
     /// Restart rate limit exceeded or policy says stop
@@ -40,6 +43,8 @@ pub enum Event {
         status: ExitStatus,
     },
     FileChange,
+    /// External lifecycle stop. Honored from any phase, including `GaveUp`.
+    StopRequested,
 }
 
 #[must_use]
@@ -151,6 +156,22 @@ impl SupervisorState {
     }
 
     pub fn on_event(&mut self, event: Event, now: Instant) -> Action {
+        // `StopRequested` is honored from every phase, including `GaveUp` and
+        // `Stopping` itself (idempotent). The state machine only updates phase;
+        // the actual job teardown is the caller's job (observe `phase()`).
+        if event == Event::StopRequested {
+            self.phase = SupervisorPhase::Stopping;
+            self.watchdog_armed = false;
+            self.watchdog_deadline = None;
+            self.startup_deadline = None;
+            return Action::None;
+        }
+
+        // Once stopping, every other event is ignored — caller is tearing down.
+        if self.phase == SupervisorPhase::Stopping {
+            return Action::None;
+        }
+
         // Once the state machine has given up, only file changes (user-initiated)
         // can still trigger a restart.
         if self.phase == SupervisorPhase::GaveUp && event != Event::FileChange {
@@ -202,6 +223,7 @@ impl SupervisorState {
                 self.try_restart(now, RestartTrigger::ProcessExit)
             }
             Event::FileChange => Action::Restart,
+            Event::StopRequested => unreachable!("handled by the early-return above"),
         }
     }
 
@@ -1068,12 +1090,11 @@ mod tests {
         let now2 = now + Duration::from_secs(1);
         state.reset_for_external_restart(now2);
 
-        // Phase reset and quota cleared so a fresh restart is allowed.
         assert_eq!(state.phase(), SupervisorPhase::Starting);
         assert_eq!(state.restart_count(), 0);
         assert!(state.restart_timestamps.is_empty());
 
-        // Process can recover: a fresh failure now restarts instead of giving up.
+        // GaveUp recovery: a fresh failure restarts instead of staying GaveUp.
         let action = state.on_event(
             Event::ProcessExit {
                 status: ExitStatus::Failure,
@@ -1117,7 +1138,6 @@ mod tests {
         let later = now + Duration::from_secs(2);
         state.reset_for_external_restart(later);
 
-        // Back in Starting; watchdog disarmed until Ready/Ping arrives.
         assert_eq!(state.phase(), SupervisorPhase::Starting);
         assert!(!state.watchdog_armed);
         assert!(state.watchdog_deadline.is_none());
@@ -1151,6 +1171,127 @@ mod tests {
         assert!(state.watchdog_armed);
         assert_eq!(state.watchdog_deadline, Some(t + Duration::from_secs(1)));
         assert_eq!(state.phase(), SupervisorPhase::Starting);
+    }
+
+    // =============================================================
+    // StopRequested + Stopping phase
+    // =============================================================
+
+    #[test]
+    fn stop_requested_from_starting_transitions_to_stopping() {
+        let now = Instant::now();
+        let config = config_default();
+        let mut state = SupervisorState::new(&config, now);
+
+        let action = state.on_event(Event::StopRequested, now);
+        assert_eq!(action, Action::None);
+        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+    }
+
+    #[test]
+    fn stop_requested_from_ready_transitions_to_stopping() {
+        let now = Instant::now();
+        let config = config_with_watchdog(1_000_000, true);
+        let mut state = SupervisorState::new(&config, now);
+
+        let _ = state.on_event(Event::Ready, now);
+        assert_eq!(state.phase(), SupervisorPhase::Ready);
+
+        let action = state.on_event(Event::StopRequested, now);
+        assert_eq!(action, Action::None);
+        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+    }
+
+    #[test]
+    fn stop_requested_from_gave_up_transitions_to_stopping() {
+        let now = Instant::now();
+        let config = config_with_policy(RestartPolicy::Always);
+        let mut state = SupervisorState::new(&config, now);
+
+        // Drive into GaveUp.
+        for i in 0..5 {
+            let t = now + Duration::from_millis(i * 10);
+            let _ = state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure,
+                },
+                t,
+            );
+            state.on_restart_complete(t);
+        }
+        let t = now + Duration::from_millis(100);
+        let _ = state.on_event(
+            Event::ProcessExit {
+                status: ExitStatus::Failure,
+            },
+            t,
+        );
+        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+
+        // Stop still wins from GaveUp.
+        let action = state.on_event(Event::StopRequested, t);
+        assert_eq!(action, Action::None);
+        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+    }
+
+    #[test]
+    fn stop_requested_clears_deadlines_and_disarms_watchdog() {
+        let now = Instant::now();
+        let config = config_with_startup_and_watchdog(5, 1_000_000, false);
+        let mut state = SupervisorState::new(&config, now);
+
+        assert!(state.watchdog_armed);
+        assert!(state.startup_deadline.is_some());
+        assert!(state.next_deadline().is_some());
+
+        let _ = state.on_event(Event::StopRequested, now);
+
+        assert!(!state.watchdog_armed);
+        assert!(state.watchdog_deadline.is_none());
+        assert!(state.startup_deadline.is_none());
+        assert!(state.next_deadline().is_none());
+    }
+
+    #[test]
+    fn events_after_stopping_are_ignored() {
+        let now = Instant::now();
+        let config = config_with_policy(RestartPolicy::Always);
+        let mut state = SupervisorState::new(&config, now);
+
+        let _ = state.on_event(Event::StopRequested, now);
+        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+
+        // Lifecycle events absorbed; phase pinned.
+        assert_eq!(state.on_event(Event::Ready, now), Action::None);
+        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+
+        assert_eq!(state.on_event(Event::WatchdogPing, now), Action::None);
+        assert_eq!(state.on_event(Event::WatchdogTrigger, now), Action::None);
+        assert_eq!(state.on_event(Event::WatchdogTimeout, now), Action::None);
+        assert_eq!(state.on_event(Event::StartupTimeout, now), Action::None);
+        assert_eq!(state.on_event(Event::FileChange, now), Action::None);
+        assert_eq!(
+            state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure,
+                },
+                now,
+            ),
+            Action::None
+        );
+        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+    }
+
+    #[test]
+    fn stop_requested_is_idempotent() {
+        let now = Instant::now();
+        let config = config_default();
+        let mut state = SupervisorState::new(&config, now);
+
+        assert_eq!(state.on_event(Event::StopRequested, now), Action::None);
+        // Second StopRequested: phase pinned, still no action emitted.
+        assert_eq!(state.on_event(Event::StopRequested, now), Action::None);
+        assert_eq!(state.phase(), SupervisorPhase::Stopping);
     }
 
     // =============================================================

@@ -118,9 +118,9 @@ impl TasksUi {
                 // External managers set exit_on_idle so the run returns once all
                 // processes have settled; otherwise stay alive until interrupted.
                 let mode = if self.tasks.exit_on_idle {
-                    devenv_processes::CompletionMode::UntilComplete
+                    devenv_processes::OnIdle::Exit
                 } else {
-                    devenv_processes::CompletionMode::Persistent
+                    devenv_processes::OnIdle::Linger
                 };
                 let fg_handle =
                     tokio::spawn(async move { pm.run_foreground(cancel, None, mode).await });

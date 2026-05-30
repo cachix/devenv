@@ -54,7 +54,7 @@ pub fn run(config_file: &Path) -> Result<()> {
             .run_foreground(
                 shutdown.cancellation_token(),
                 None,
-                crate::processes::CompletionMode::Persistent,
+                crate::processes::OnIdle::Linger,
             )
             .await
             .map_err(|e| miette::miette!("Process manager error: {}", e));

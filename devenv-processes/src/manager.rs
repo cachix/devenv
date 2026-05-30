@@ -155,6 +155,8 @@ pub enum ProcessPhase {
     Starting,
     /// Readiness probe passed.
     Ready,
+    /// User-requested teardown in progress (SIGTERM sent, awaiting grace).
+    Stopping,
     /// Process exited and will not be restarted.
     Exited,
     /// Supervisor gave up (crash loop).
@@ -169,23 +171,27 @@ impl std::fmt::Display for ProcessPhase {
             Self::Waiting => write!(f, "waiting"),
             Self::Starting => write!(f, "starting"),
             Self::Ready => write!(f, "ready"),
+            Self::Stopping => write!(f, "stopping"),
             Self::Exited => write!(f, "exited"),
             Self::GaveUp => write!(f, "gave_up"),
         }
     }
 }
 
-/// Controls when [`NativeProcessManager::run_foreground`] returns.
+/// Controls [`NativeProcessManager::run_foreground`] idle behavior.
+///
+/// Matches the `--on-idle exit|linger` CLI surface so the same vocabulary
+/// flows from user input down to the manager.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CompletionMode {
+pub enum OnIdle {
     /// Stay alive until a shutdown signal, even after every process has exited.
     /// Used by `devenv up` with the native manager, where the environment is
     /// long-lived and exited processes can still be restarted.
-    Persistent,
+    Linger,
     /// Return once no process is live (every process has exited, given up, or
     /// is otherwise not running). Used when an external manager (e.g.
     /// process-compose) owns the lifecycle and tracks this process's PID.
-    UntilComplete,
+    Exit,
 }
 
 impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
@@ -193,6 +199,7 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
         match phase {
             crate::supervisor_state::SupervisorPhase::Starting => Self::Starting,
             crate::supervisor_state::SupervisorPhase::Ready => Self::Ready,
+            crate::supervisor_state::SupervisorPhase::Stopping => Self::Stopping,
             crate::supervisor_state::SupervisorPhase::Exited => Self::Exited,
             crate::supervisor_state::SupervisorPhase::GaveUp => Self::GaveUp,
         }
@@ -201,11 +208,9 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
 
 /// Ask a supervisor to stop its job and wait for its task to end.
 ///
-/// Sends a `Stop` command and joins the task. The supervisor's tail block
-/// signals the job (SIGTERM with grace) on every exit path, so awaiting the
-/// task is sufficient to guarantee the child has been signaled. A `send`
-/// failure (receiver gone) is harmless — the task is already exiting and its
-/// tail block has already run or is about to.
+/// The supervisor's tail block signals the job on every exit path, so awaiting
+/// the task guarantees the child has been signaled — a send failure on a closed
+/// receiver is therefore harmless.
 async fn stop_via_supervisor(
     cmd_tx: &mpsc::Sender<crate::supervisor::SupervisorCommand>,
     supervisor_task: JoinHandle<()>,
@@ -267,7 +272,7 @@ pub struct NativeProcessManager {
     task_notify: Option<Arc<Notify>>,
     /// Number of supervisors currently in a non-terminal phase (Starting/Ready).
     /// Incremented when a supervisor is spawned, decremented when it reaches a
-    /// terminal phase or is stopped. A `CompletionMode::UntilComplete` foreground
+    /// terminal phase or is stopped. A `OnIdle::Exit` foreground
     /// run exits when this reaches zero.
     live: Arc<AtomicUsize>,
     /// Fired whenever `live` decreases, to wake a foreground run so it can
@@ -1162,13 +1167,10 @@ impl NativeProcessManager {
             ),
         ));
 
-        // Try to drive the restart through the existing supervisor. If the
-        // supervisor has already exited (e.g. GaveUp from max restarts) — or
-        // exits between our check and our send, dropping the command before
-        // it's processed — fall back to respawning a fresh supervisor with a
-        // new command channel. The previous supervisor's tail block has
-        // already signaled the job, so the fresh supervisor's `job.start()`
-        // launches against a stopped job (no orphan).
+        // Drive the restart through the existing supervisor when possible.
+        // Falls back to respawn on any signal that it's gone or going (already
+        // finished, send failure, or ack dropped — the last covers the race
+        // where the supervisor exits between our check and our send).
         let driven_by_existing = if handle.supervisor_task.is_finished() {
             false
         } else {
@@ -1178,8 +1180,6 @@ impl NativeProcessManager {
                 .send(crate::supervisor::SupervisorCommand::Restart { ack: ack_tx })
                 .await
                 .is_ok();
-            // ack_rx errors when the supervisor drops the command (it exited
-            // before processing). Treat as "not driven" so we respawn.
             sent && ack_rx.await.is_ok()
         };
 
@@ -1188,13 +1188,10 @@ impl NativeProcessManager {
                 "Supervisor for {} has exited, starting fresh with new supervision",
                 name
             );
-            // Make sure the old task is fully joined so its tail-stop has
-            // signaled the job before we spawn a new supervisor that calls
-            // `job.start()`.
-            let old_task = std::mem::replace(
-                &mut handle.supervisor_task,
-                tokio::spawn(async {}), // placeholder; replaced below
-            );
+            // Drain the old task first so its tail-stop signals the job before
+            // the new supervisor's job.start() spawns a fresh child — avoids
+            // double-starting on top of an orphan left by GaveUp.
+            let old_task = std::mem::replace(&mut handle.supervisor_task, tokio::spawn(async {}));
             let _ = old_task.await;
             let (cmd_tx, cmd_rx) = mpsc::channel(8);
             handle.supervisor_task = crate::supervisor::spawn_supervisor(
@@ -1743,7 +1740,7 @@ impl NativeProcessManager {
         &self,
         cancellation_token: tokio_util::sync::CancellationToken,
         mut command_rx: Option<mpsc::Receiver<ProcessCommand>>,
-        mode: CompletionMode,
+        mode: OnIdle,
     ) -> Result<()> {
         trace!(
             "run_foreground: ENTERED, mode={:?}, token_cancelled={}",
@@ -1752,11 +1749,10 @@ impl NativeProcessManager {
         );
         info!("Manager event loop started (foreground)");
 
-        // UntilComplete runs return once no supervisor is live. The processes
+        // Exit runs return once no supervisor is live. The processes
         // may already have settled before we got here (e.g. fast `@completed`
         // tasks), so check before parking.
-        let done =
-            || mode == CompletionMode::UntilComplete && self.live.load(Ordering::SeqCst) == 0;
+        let done = || mode == OnIdle::Exit && self.live.load(Ordering::SeqCst) == 0;
         if done() {
             trace!("run_foreground: all processes already settled, returning");
             info!("Manager event loop stopped");
@@ -1782,7 +1778,7 @@ impl NativeProcessManager {
                     self.handle_command(cmd).await;
                 }
                 // Woken whenever a supervisor reaches terminal (or a process is
-                // stopped). Persistent runs never self-terminate; they stay alive
+                // stopped). Linger runs never self-terminate; they stay alive
                 // until a shutdown signal so the environment (and any restartable,
                 // already-exited processes) remains available.
                 _ = self.completion.notified() => {}
@@ -1989,9 +1985,7 @@ impl ProcessManager for NativeProcessManager {
 
         // Run the event loop (shutdown via cancellation token from tokio-shutdown)
         let token = options.cancellation_token.unwrap_or_default();
-        let result = self
-            .run_foreground(token, None, CompletionMode::Persistent)
-            .await;
+        let result = self.run_foreground(token, None, OnIdle::Linger).await;
 
         // Clean up PID file
         let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;

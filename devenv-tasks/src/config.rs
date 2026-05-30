@@ -76,16 +76,11 @@ pub struct Config {
     /// managers (process-compose) set this so they can track this process's PID.
     #[serde(default)]
     pub exit_on_idle: bool,
-    /// When true, devenv-tasks supervises processes itself (restart policy,
-    /// readiness probes, watchdog, file-watch reload). When false, supervision is
-    /// delegated to an external manager and these are neutralized so a process
-    /// runs once and exits.
-    #[serde(default = "default_true")]
-    pub supervise_processes: bool,
-}
-
-fn default_true() -> bool {
-    true
+    /// Who runs the supervision loop for processes registered through this Config.
+    /// Native (default) → devenv-tasks supervises (restart/probe/watchdog/watch).
+    /// External → host (process-compose, mprocs, ...) owns lifecycle.
+    #[serde(default)]
+    pub supervisor: devenv_processes::Supervisor,
 }
 
 impl TryFrom<serde_json::Value> for Config {

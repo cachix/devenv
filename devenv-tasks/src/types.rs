@@ -328,6 +328,15 @@ pub fn is_process_dep_satisfied(
         // GaveUp: @completed is satisfied, others are never satisfiable
         (ProcessPhase::GaveUp, DependencyKind::Completed) => DepSatisfaction::Satisfied,
         (ProcessPhase::GaveUp, _) => DepSatisfaction::NeverSatisfiable,
+
+        // Stopping: user-requested teardown in progress. The process did run,
+        // so @started/@completed are satisfied. @ready/@succeeded won't be —
+        // the process is going away, not delivering a fresh ready signal or
+        // a clean task success.
+        (ProcessPhase::Stopping, DependencyKind::Started | DependencyKind::Completed) => {
+            DepSatisfaction::Satisfied
+        }
+        (ProcessPhase::Stopping, _) => DepSatisfaction::NeverSatisfiable,
     }
 }
 
@@ -455,12 +464,13 @@ mod tests {
         DependencyKind::Completed,
     ];
 
-    const ALL_PHASES: [ProcessPhase; 7] = [
+    const ALL_PHASES: [ProcessPhase; 8] = [
         ProcessPhase::NotStarted,
         ProcessPhase::Stopped,
         ProcessPhase::Waiting,
         ProcessPhase::Starting,
         ProcessPhase::Ready,
+        ProcessPhase::Stopping,
         ProcessPhase::Exited,
         ProcessPhase::GaveUp,
     ];
@@ -541,6 +551,11 @@ mod tests {
             (ProcessPhase::GaveUp, ready, NeverSatisfiable),
             (ProcessPhase::GaveUp, succeeded, NeverSatisfiable),
             (ProcessPhase::GaveUp, completed, Satisfied),
+            // Stopping
+            (ProcessPhase::Stopping, started, Satisfied),
+            (ProcessPhase::Stopping, ready, NeverSatisfiable),
+            (ProcessPhase::Stopping, succeeded, NeverSatisfiable),
+            (ProcessPhase::Stopping, completed, Satisfied),
         ];
 
         for (phase, kind, expected) in &table {

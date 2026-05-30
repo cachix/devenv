@@ -215,6 +215,21 @@ impl Default for StartConfig {
     }
 }
 
+/// Who runs the supervision loop for a process.
+///
+/// - `Native`: devenv-processes owns lifecycle — restart policy, readiness
+///   probes, watchdog, file-watch reload. The default.
+/// - `External`: an external manager (process-compose, mprocs, systemd) owns
+///   the lifecycle. The supervisor task runs the job once and tracks only
+///   start/exit; restart/probe/watchdog/watch config is ignored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Supervisor {
+    #[default]
+    Native,
+    External,
+}
+
 /// Process configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessConfig {
@@ -254,6 +269,9 @@ pub struct ProcessConfig {
     /// Linux-specific configuration
     #[serde(default)]
     pub linux: LinuxConfig,
+    /// Who runs the supervision loop for this process.
+    #[serde(default)]
+    pub supervisor: Supervisor,
 }
 
 impl ProcessConfig {
@@ -283,6 +301,7 @@ impl Default for ProcessConfig {
             watch: WatchConfig::default(),
             watchdog: None,
             linux: LinuxConfig::default(),
+            supervisor: Supervisor::default(),
         }
     }
 }

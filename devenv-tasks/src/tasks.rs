@@ -120,7 +120,7 @@ impl TasksBuilder {
             refresh_task_cache: self.refresh_task_cache,
             ignore_process_deps: self.config.ignore_process_deps,
             exit_on_idle: self.config.exit_on_idle,
-            supervise_processes: self.config.supervise_processes,
+            supervisor: self.config.supervisor,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -162,8 +162,9 @@ pub struct Tasks {
     pub(crate) ignore_process_deps: bool,
     /// When true, the foreground run exits once no process is live.
     pub(crate) exit_on_idle: bool,
-    /// When true, devenv-tasks supervises processes (restart/probe/watchdog/watch).
-    pub(crate) supervise_processes: bool,
+    /// Who runs the supervision loop for each registered process. Drives
+    /// `ProcessConfig.supervisor` at build time.
+    pub(crate) supervisor: devenv_processes::Supervisor,
 }
 
 impl Tasks {
@@ -194,9 +195,10 @@ impl Tasks {
                     ProcessPhase::NotStarted | ProcessPhase::Stopped => status.skipped += 1,
                     ProcessPhase::Exited => status.succeeded += 1,
                     ProcessPhase::GaveUp => status.failed += 1,
-                    ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready => {
-                        status.running += 1
-                    }
+                    ProcessPhase::Waiting
+                    | ProcessPhase::Starting
+                    | ProcessPhase::Ready
+                    | ProcessPhase::Stopping => status.running += 1,
                 },
                 TaskStatus::Completed(completed) => match completed {
                     TaskCompleted::Success(_, _) => status.succeeded += 1,
@@ -759,7 +761,7 @@ impl Tasks {
             if ts.task.r#type != TaskType::Process || ts.task.command.is_none() {
                 continue;
             }
-            match ts.build_process_config(&self.env, &self.bash, self.supervise_processes) {
+            match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                 Ok(config) => {
                     self.process_manager
                         .register_waiting(config.clone(), Some(orchestration_activity.id()))
@@ -1242,7 +1244,12 @@ async fn process_status_watcher(
                     _ = shutdown.wait_for_shutdown() => { return; }
                 }
             }
-            Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::GaveUp) => {
+            Some(
+                ProcessPhase::Starting
+                | ProcessPhase::Ready
+                | ProcessPhase::Stopping
+                | ProcessPhase::GaveUp,
+            ) => {
                 if let Some(status_rx) = manager.subscribe_status(&name).await {
                     set_process_phase(&task_state, &notify_finished, ProcessPhase::Starting).await;
                     // Watch until Exited (process won't restart). GaveUp is not
@@ -1546,7 +1553,7 @@ mod schedule_tests {
             bash: String::new(),
             ignore_process_deps,
             exit_on_idle: false,
-            supervise_processes: true,
+            supervisor: devenv_processes::Supervisor::Native,
         };
 
         let shutdown = tokio_shutdown::Shutdown::new();

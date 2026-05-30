@@ -508,7 +508,7 @@ in
               mode = "all";
               cache-dir = config.devenv.dotfile;
               runtime-dir = config.devenv.runtime;
-              external-supervisor = implementation != "native";
+              supervisor = if implementation == "native" then "native" else "external";
             };
           in
           lib.mapAttrs

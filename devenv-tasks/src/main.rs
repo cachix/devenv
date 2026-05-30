@@ -1,6 +1,6 @@
-use clap::{Parser, Subcommand};
-use devenv_core::{VerbosityLevel, flag};
-use devenv_processes::get_process_runtime_dir;
+use clap::{Parser, Subcommand, ValueEnum};
+use devenv_core::VerbosityLevel;
+use devenv_processes::{Supervisor, get_process_runtime_dir};
 use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, is_tty};
 use std::{env, fmt::Display, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
@@ -38,49 +38,46 @@ enum Command {
 
         #[clap(
             long,
-            help = "Exclude non-root process tasks from the scheduled subgraph (used when process-compose manages process ordering)"
+            value_enum,
+            default_value_t = SupervisorArg::Native,
+            help = "Who runs the supervision loop. 'external' delegates restart/ready/watchdog/watch policy to the host (process-compose, mprocs, ...) and runs each process once."
+        )]
+        supervisor: SupervisorArg,
+
+        #[clap(
+            long,
+            value_enum,
+            help = "What to do once no process is live. Defaults: 'linger' under --supervisor native, 'exit' under --supervisor external."
+        )]
+        on_idle: Option<OnIdleArg>,
+
+        #[clap(
+            long,
+            help = "Exclude non-root process tasks from the scheduled subgraph. Implied by --supervisor external; accepted standalone for backwards compatibility."
         )]
         ignore_process_deps: bool,
-
-        #[clap(
-            long,
-            help = "Include non-root process tasks in the scheduled subgraph."
-        )]
-        no_ignore_process_deps: bool,
-
-        #[clap(
-            long,
-            help = "Exit once no process is live, instead of staying alive until interrupted."
-        )]
-        exit_on_idle: bool,
-
-        #[clap(
-            long,
-            help = "Stay alive until interrupted, even after all processes exit."
-        )]
-        no_exit_on_idle: bool,
-
-        #[clap(
-            long,
-            help = "Supervise processes (restart policy, readiness probes, watchdog, file-watch reload)."
-        )]
-        supervise_processes: bool,
-
-        #[clap(
-            long,
-            help = "Delegate process supervision to an external manager; run each process once."
-        )]
-        no_supervise_processes: bool,
-
-        #[clap(
-            long,
-            help = "Preset for runs driven by an external manager (e.g. process-compose): implies --ignore-process-deps --exit-on-idle --no-supervise-processes. Individual flags override."
-        )]
-        external_supervisor: bool,
-
-        #[clap(long, help = "Disable the --external-supervisor preset.")]
-        no_external_supervisor: bool,
     },
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum SupervisorArg {
+    Native,
+    External,
+}
+
+impl From<SupervisorArg> for Supervisor {
+    fn from(a: SupervisorArg) -> Self {
+        match a {
+            SupervisorArg::Native => Supervisor::Native,
+            SupervisorArg::External => Supervisor::External,
+        }
+    }
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum OnIdleArg {
+    Exit,
+    Linger,
 }
 
 type Result<T> = std::result::Result<T, TaskError>;
@@ -191,23 +188,21 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             task_file,
             cache_dir,
             runtime_dir,
+            supervisor,
+            on_idle,
             ignore_process_deps,
-            no_ignore_process_deps,
-            exit_on_idle,
-            no_exit_on_idle,
-            supervise_processes,
-            no_supervise_processes,
-            external_supervisor,
-            no_external_supervisor,
         } => {
-            // Resolve the external-supervisor preset: it fills any primitive the
-            // user didn't set explicitly. Individual flags always win.
-            let external = flag(external_supervisor, no_external_supervisor).unwrap_or(false);
-            let ignore_process_deps =
-                flag(ignore_process_deps, no_ignore_process_deps).unwrap_or(external);
-            let exit_on_idle = flag(exit_on_idle, no_exit_on_idle).unwrap_or(external);
-            let supervise_processes =
-                flag(supervise_processes, no_supervise_processes).unwrap_or(!external);
+            let supervisor: Supervisor = supervisor.into();
+            // `--on-idle` defaults derive from the supervisor: external hosts
+            // track the PID and expect us to exit; native runs are long-lived.
+            let exit_on_idle = match on_idle {
+                Some(OnIdleArg::Exit) => true,
+                Some(OnIdleArg::Linger) => false,
+                None => supervisor == Supervisor::External,
+            };
+            // `--ignore-process-deps` survives as a backwards-compat shorthand;
+            // external supervisors always imply it.
+            let ignore_process_deps = ignore_process_deps || supervisor == Supervisor::External;
 
             let mut tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
 
@@ -236,7 +231,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 bash: String::new(),
                 ignore_process_deps,
                 exit_on_idle,
-                supervise_processes,
+                supervisor,
             };
 
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))
