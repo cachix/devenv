@@ -272,7 +272,6 @@ pub fn spawn_supervisor(
                         }
                         SupervisorCommand::Stop { ack } => {
                             activity.log("Stop requested");
-                            job.stop_with_signal(Signal::Terminate, STOP_GRACE).await;
                             let _ = ack.send(());
                             break 'supervisor;
                         }
@@ -519,6 +518,13 @@ pub fn spawn_supervisor(
             // Refresh the pinned deadline future only when the deadline changed
             refresh_deadline!(state, current_deadline, deadline_fut);
         }
+
+        // Always signal the job on supervisor exit so a SIGTERM-with-grace is
+        // delivered for shutdown / GaveUp / Stop uniformly. Without this, the
+        // child only dies via watchexec's KillOnDrop (SIGKILL) when the last
+        // `Arc<Job>` drops — losing the graceful shutdown hook. Idempotent on
+        // an already-stopped job.
+        job.stop_with_signal(Signal::Terminate, STOP_GRACE).await;
 
         trace!("Supervision task for {} exiting", name);
     })

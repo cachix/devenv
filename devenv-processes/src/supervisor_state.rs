@@ -1039,6 +1039,107 @@ mod tests {
     }
 
     #[test]
+    fn reset_for_external_restart_clears_gave_up_phase() {
+        let now = Instant::now();
+        let config = config_with_policy(RestartPolicy::Always);
+        let mut state = SupervisorState::new(&config, now);
+
+        // Drive into GaveUp.
+        for i in 0..5 {
+            let t = now + Duration::from_millis(i * 10);
+            let _ = state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure,
+                },
+                t,
+            );
+            state.on_restart_complete(t);
+        }
+        let t = now + Duration::from_millis(100);
+        let _ = state.on_event(
+            Event::ProcessExit {
+                status: ExitStatus::Failure,
+            },
+            t,
+        );
+        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+        assert!(state.restart_count() > 0);
+
+        let now2 = now + Duration::from_secs(1);
+        state.reset_for_external_restart(now2);
+
+        // Phase reset and quota cleared so a fresh restart is allowed.
+        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.restart_count(), 0);
+        assert!(state.restart_timestamps.is_empty());
+
+        // Process can recover: a fresh failure now restarts instead of giving up.
+        let action = state.on_event(
+            Event::ProcessExit {
+                status: ExitStatus::Failure,
+            },
+            now2,
+        );
+        assert_eq!(action, Action::Restart);
+    }
+
+    #[test]
+    fn reset_for_external_restart_rearms_watchdog_when_not_require_ready() {
+        let now = Instant::now();
+        let config = config_with_watchdog(1_000_000, false);
+        let mut state = SupervisorState::new(&config, now);
+
+        // Move into Ready and clear startup deadline.
+        let _ = state.on_event(Event::Ready, now);
+        assert_eq!(state.phase(), SupervisorPhase::Ready);
+
+        let later = now + Duration::from_secs(2);
+        state.reset_for_external_restart(later);
+
+        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert!(state.watchdog_armed);
+        assert_eq!(
+            state.watchdog_deadline,
+            Some(later + Duration::from_secs(1))
+        );
+    }
+
+    #[test]
+    fn reset_for_external_restart_holds_watchdog_when_require_ready() {
+        let now = Instant::now();
+        let config = config_with_watchdog(1_000_000, true);
+        let mut state = SupervisorState::new(&config, now);
+
+        // Reach Ready so watchdog is armed.
+        let _ = state.on_event(Event::Ready, now);
+        assert!(state.watchdog_armed);
+
+        let later = now + Duration::from_secs(2);
+        state.reset_for_external_restart(later);
+
+        // Back in Starting; watchdog disarmed until Ready/Ping arrives.
+        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert!(!state.watchdog_armed);
+        assert!(state.watchdog_deadline.is_none());
+    }
+
+    #[test]
+    fn reset_for_external_restart_sets_startup_deadline() {
+        let now = Instant::now();
+        let config = config_with_startup_timeout(7);
+        let mut state = SupervisorState::new(&config, now);
+
+        // Clear startup deadline by going Ready.
+        let _ = state.on_event(Event::Ready, now);
+        assert!(state.startup_deadline.is_none());
+
+        let later = now + Duration::from_secs(5);
+        state.reset_for_external_restart(later);
+
+        assert_eq!(state.startup_deadline, Some(later + Duration::from_secs(7)));
+    }
+
+    #[test]
     fn on_restart_complete_rearms_watchdog_when_not_require_ready() {
         let now = Instant::now();
         let config = config_with_watchdog(1_000_000, false);

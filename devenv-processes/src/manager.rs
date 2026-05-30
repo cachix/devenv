@@ -201,22 +201,22 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
 
 /// Ask a supervisor to stop its job and wait for its task to end.
 ///
-/// Sends a `Stop` command (if the supervisor is still running) and awaits the
-/// ack, then joins the task so its `LiveGuard` decrements the live count before
-/// the caller proceeds with teardown.
+/// Sends a `Stop` command and joins the task. The supervisor's tail block
+/// signals the job (SIGTERM with grace) on every exit path, so awaiting the
+/// task is sufficient to guarantee the child has been signaled. A `send`
+/// failure (receiver gone) is harmless — the task is already exiting and its
+/// tail block has already run or is about to.
 async fn stop_via_supervisor(
     cmd_tx: &mpsc::Sender<crate::supervisor::SupervisorCommand>,
     supervisor_task: JoinHandle<()>,
 ) {
-    if !supervisor_task.is_finished() {
-        let (ack_tx, ack_rx) = oneshot::channel();
-        if cmd_tx
-            .send(crate::supervisor::SupervisorCommand::Stop { ack: ack_tx })
-            .await
-            .is_ok()
-        {
-            let _ = ack_rx.await;
-        }
+    let (ack_tx, ack_rx) = oneshot::channel();
+    if cmd_tx
+        .send(crate::supervisor::SupervisorCommand::Stop { ack: ack_tx })
+        .await
+        .is_ok()
+    {
+        let _ = ack_rx.await;
     }
     let _ = supervisor_task.await;
 }
@@ -1162,15 +1162,40 @@ impl NativeProcessManager {
             ),
         ));
 
-        // Check if supervisor task has exited (e.g., due to max restarts).
-        if handle.supervisor_task.is_finished() {
-            // Supervisor has exited — spawn a fresh one with a new command
-            // channel. The new supervisor starts the job itself, with a fresh
-            // restart quota.
+        // Try to drive the restart through the existing supervisor. If the
+        // supervisor has already exited (e.g. GaveUp from max restarts) — or
+        // exits between our check and our send, dropping the command before
+        // it's processed — fall back to respawning a fresh supervisor with a
+        // new command channel. The previous supervisor's tail block has
+        // already signaled the job, so the fresh supervisor's `job.start()`
+        // launches against a stopped job (no orphan).
+        let driven_by_existing = if handle.supervisor_task.is_finished() {
+            false
+        } else {
+            let (ack_tx, ack_rx) = oneshot::channel();
+            let sent = handle
+                .cmd_tx
+                .send(crate::supervisor::SupervisorCommand::Restart { ack: ack_tx })
+                .await
+                .is_ok();
+            // ack_rx errors when the supervisor drops the command (it exited
+            // before processing). Treat as "not driven" so we respawn.
+            sent && ack_rx.await.is_ok()
+        };
+
+        if !driven_by_existing {
             info!(
                 "Supervisor for {} has exited, starting fresh with new supervision",
                 name
             );
+            // Make sure the old task is fully joined so its tail-stop has
+            // signaled the job before we spawn a new supervisor that calls
+            // `job.start()`.
+            let old_task = std::mem::replace(
+                &mut handle.supervisor_task,
+                tokio::spawn(async {}), // placeholder; replaced below
+            );
+            let _ = old_task.await;
             let (cmd_tx, cmd_rx) = mpsc::channel(8);
             handle.supervisor_task = crate::supervisor::spawn_supervisor(
                 &handle.resources,
@@ -1178,18 +1203,6 @@ impl NativeProcessManager {
                 cmd_rx,
             );
             handle.cmd_tx = cmd_tx;
-        } else {
-            // Supervisor is still running — ask it to restart the job so it stays
-            // the sole driver of its job and resets its own restart budget.
-            let (ack_tx, ack_rx) = oneshot::channel();
-            if handle
-                .cmd_tx
-                .send(crate::supervisor::SupervisorCommand::Restart { ack: ack_tx })
-                .await
-                .is_ok()
-            {
-                let _ = ack_rx.await;
-            }
         }
 
         // The supervisor will update the status via status_tx once the
