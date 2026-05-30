@@ -503,7 +503,7 @@ in
             # and ordering. The external-supervisor preset makes devenv-tasks a thin
             # graph runner: prune sibling process tasks, delegate supervision, and
             # exit once the process settles so the external manager tracks its PID.
-            runArgs = lib.cli.toCommandLineShellGNU { } {
+            runArgs = (lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } {
               task-file = config.task.config;
               mode = "all";
               cache-dir = config.devenv.dotfile;
