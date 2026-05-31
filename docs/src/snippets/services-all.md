@@ -27,6 +27,7 @@
   services.nixseparatedebuginfod.enable = true;
   services.opensearch.enable = true;
   services.opentelemetry-collector.enable = true;
+  services.pgbouncer.enable = true;
   services.postgres.enable = true;
   services.prometheus.enable = true;
   services.rabbitmq.enable = true;
