@@ -106,6 +106,47 @@ async fn test_spawn_and_exit() {
     assert!(result.is_ok());
 }
 
+/// Regression: the process-count poller runs concurrently with the build that
+/// gates Spawn, so a ProcessCount can reach the session before Spawn. It must be
+/// absorbed rather than rejected as an unexpected command, or the shell never
+/// enters.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_process_count_before_spawn_does_not_abort() {
+    let (io, _stdin_ours, _stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, mut event_rx) = mpsc::channel(10);
+
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+
+    // Deliver a process-count update *before* Spawn, as the poller would.
+    cmd_tx
+        .send(ShellCommand::ProcessCount { running: 2 })
+        .await
+        .unwrap();
+    cmd_tx.send(spawn_cmd("exit 0")).await.unwrap();
+
+    // The shell still spawns and exits cleanly.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        tokio::select! {
+            event = event_rx.recv() => {
+                match event {
+                    Some(ShellEvent::Exited { .. }) => break,
+                    None => panic!("event channel closed without Exited"),
+                    _ => continue,
+                }
+            }
+            _ = tokio::time::sleep_until(deadline) => {
+                panic!("timed out waiting for Exited event");
+            }
+        }
+    }
+
+    let result = handle.await.unwrap();
+    assert!(result.is_ok());
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_shutdown_before_spawn() {
     let (io, _stdin_ours, _stdout_ours) = test_io();
@@ -624,6 +665,45 @@ async fn test_watching_paused_status_line() {
     ));
     let rows = render(&all_bytes, 80, 24);
     insta::assert_snapshot!("resumed", rows[23]);
+
+    let _ = stdin_ours.write_all(b"\n");
+    drop(stdin_ours);
+    drop(cmd_tx);
+    let _ = handle.await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_process_count_status_line() {
+    let _keybind_guard = bind_keybind_filters();
+    let (io, mut stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+
+    let session = status_line_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+
+    cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
+
+    cmd_tx
+        .send(ShellCommand::WatchedFiles {
+            files: vec!["a.nix".into(), "b.nix".into()],
+        })
+        .await
+        .unwrap();
+    let mut all_bytes = read_until(&mut stdout_ours, b"watching", Duration::from_secs(5));
+
+    // Report running processes: the count joins the watching summary.
+    cmd_tx
+        .send(ShellCommand::ProcessCount { running: 3 })
+        .await
+        .unwrap();
+    all_bytes.extend(read_until(
+        &mut stdout_ours,
+        b"processes",
+        Duration::from_secs(5),
+    ));
+    let rows = render(&all_bytes, 80, 24);
+    insta::assert_snapshot!("process_count", rows[23]);
 
     let _ = stdin_ours.write_all(b"\n");
     drop(stdin_ours);

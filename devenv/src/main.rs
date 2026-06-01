@@ -10,7 +10,7 @@ use devenv::{
     },
     commands,
     config::{self, Config},
-    processes::ProcessCommand,
+    processes::{self, ProcessCommand},
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
     tracing as devenv_tracing,
     tui::{SessionIo, ShellSession, TuiHandoff},
@@ -1152,6 +1152,10 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
     // Status line emits escape codes; disable when output is captured.
     let is_interactive = cmd.is_none();
 
+    // Compute the process manager socket path before `dotfile` moves into the
+    // builder, so the status line poller can query it.
+    let process_socket_path = processes::native_socket_path(&dotfile);
+
     let builder = DevenvShellBuilder {
         devenv,
         cmd,
@@ -1168,6 +1172,14 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
 
     let (command_tx, command_rx) = tokio::sync::mpsc::channel(16);
     let (event_tx, event_rx) = tokio::sync::mpsc::channel(16);
+
+    // Feed the status line a live count of processes running alongside the
+    // shell (started via `start = "shell"` or an attached `devenv up`). Only
+    // meaningful while the interactive status line is shown.
+    let process_poll_handle = is_interactive.then(|| {
+        let command_tx = command_tx.clone();
+        tokio::spawn(poll_process_count(process_socket_path, command_tx))
+    });
 
     let coordinator_handle = tokio::spawn(async move {
         ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
@@ -1197,7 +1209,51 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
     coordinator_handle.abort();
     let _ = coordinator_handle.await;
 
+    if let Some(handle) = process_poll_handle {
+        handle.abort();
+    }
+
     session_result
+}
+
+/// Poll the native process manager and push the count of running processes to
+/// the shell session's status line. Sends only when the count changes to avoid
+/// redundant redraws, and exits quietly once the session closes the channel.
+async fn poll_process_count(
+    socket_path: PathBuf,
+    command_tx: tokio::sync::mpsc::Sender<devenv::reload::ShellCommand>,
+) {
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut last: Option<usize> = None;
+    loop {
+        interval.tick().await;
+        let running = count_running_processes(&socket_path).await;
+        if last == Some(running) {
+            continue;
+        }
+        last = Some(running);
+        if command_tx
+            .send(devenv::reload::ShellCommand::ProcessCount { running })
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
+}
+
+/// Count processes that are currently alive (starting or ready) according to
+/// the native process manager. Returns 0 when no manager is reachable.
+async fn count_running_processes(socket_path: &Path) -> usize {
+    use processes::{ApiRequest, ApiResponse, ProcessPhase};
+    match processes::NativeProcessManager::api_request(socket_path, &ApiRequest::List).await {
+        Ok(ApiResponse::ProcessList { processes }) => processes
+            .iter()
+            .filter(|p| matches!(p.phase, ProcessPhase::Starting | ProcessPhase::Ready))
+            .count(),
+        _ => 0,
+    }
 }
 
 /// Run the REPL with TUI handoff.

@@ -102,6 +102,8 @@ pub struct StatusState {
     pub paused: bool,
     /// Number of files being watched for changes.
     pub watched_file_count: usize,
+    /// Number of processes currently running alongside the shell.
+    pub process_count: usize,
     /// When the current build started (for timing).
     build_start: Option<Instant>,
     /// Duration of the last completed build.
@@ -203,6 +205,11 @@ impl StatusState {
         self.watched_file_count = count;
     }
 
+    /// Set the number of processes running alongside the shell.
+    pub fn set_process_count(&mut self, count: usize) {
+        self.process_count = count;
+    }
+
     /// Check if there's any status to display.
     pub fn has_status(&self) -> bool {
         self.building
@@ -211,6 +218,7 @@ impl StatusState {
             || self.error.is_some()
             || self.paused
             || self.watched_file_count > 0
+            || self.process_count > 0
     }
 }
 
@@ -307,6 +315,23 @@ fn watching_elements(count: usize) -> Vec<AnyElement<'static>> {
         element!(Text(content: " | watching ", color: COLOR_SECONDARY)).into_any(),
         element!(Text(content: count.to_string(), color: COLOR_COMPLETED)).into_any(),
         element!(Text(content: " files", color: COLOR_SECONDARY)).into_any(),
+    ]
+}
+
+/// Build "N processes" elements, or empty if no processes are running.
+///
+/// `separator` prefixes the segment with " | " to set it apart from a
+/// preceding segment (e.g. the watched-files count); otherwise it's a single
+/// leading space so it can stand on its own.
+fn process_elements(count: usize, separator: bool) -> Vec<AnyElement<'static>> {
+    if count == 0 {
+        return vec![];
+    }
+    let prefix = if separator { " | " } else { " " };
+    vec![
+        element!(Text(content: prefix, color: COLOR_SECONDARY)).into_any(),
+        element!(Text(content: count.to_string(), color: COLOR_COMPLETED)).into_any(),
+        element!(Text(content: " processes", color: COLOR_SECONDARY)).into_any(),
     ]
 }
 
@@ -452,6 +477,7 @@ impl StatusLine {
             // Ready state (auto-reloads at next prompt)
             let duration = duration_elements(&self.state);
             let watching = watching_elements(self.state.watched_file_count);
+            let processes = process_elements(self.state.process_count, true);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
@@ -463,6 +489,7 @@ impl StatusLine {
                         Text(content: "ready", weight: Weight::Bold, color: COLOR_ACTIVE)
                         #(duration)
                         #(watching)
+                        #(processes)
                     }
                 }
             }
@@ -471,6 +498,7 @@ impl StatusLine {
             // Reloaded state (environment was applied)
             let duration = duration_elements(&self.state);
             let watching = watching_elements(self.state.watched_file_count);
+            let processes = process_elements(self.state.process_count, true);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
@@ -482,6 +510,7 @@ impl StatusLine {
                         Text(content: "reloaded", weight: Weight::Bold, color: COLOR_COMPLETED)
                         #(duration)
                         #(watching)
+                        #(processes)
                     }
                 }
             }
@@ -490,6 +519,7 @@ impl StatusLine {
             // Failed state
             let duration = duration_elements(&self.state);
             let watching = watching_elements(self.state.watched_file_count);
+            let processes = process_elements(self.state.process_count, true);
             let keybind = keybind_label(KEYBIND_ERROR, use_short);
             let error_action = if self.state.show_error {
                 " hide error"
@@ -507,6 +537,7 @@ impl StatusLine {
                         Text(content: "failed", weight: Weight::Bold, color: COLOR_FAILED)
                         #(duration)
                         #(watching)
+                        #(processes)
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                         Text(content: keybind, color: COLOR_INTERACTIVE)
@@ -535,10 +566,14 @@ impl StatusLine {
                 }
             }
             .into_any()
-        } else if self.state.watched_file_count > 0 {
-            // Watching state
+        } else if self.state.watched_file_count > 0 || self.state.process_count > 0 {
+            // Watching state (optionally summarising running processes). When no
+            // files are watched, lead with the process count instead.
             let keybind = keybind_label(KEYBIND_PAUSE, use_short);
+            let watching_files = self.state.watched_file_count > 0;
             let count_str = self.state.watched_file_count.to_string();
+            // Separate the process count from the file count when both show.
+            let processes = process_elements(self.state.process_count, watching_files);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
@@ -547,9 +582,16 @@ impl StatusLine {
                             Text(content: "👁", color: COLOR_SECONDARY)
                         }
                         Text(content: "devenv ", color: COLOR_SECONDARY)
-                        Text(content: "watching ", weight: Weight::Bold, color: COLOR_ACTIVE)
-                        Text(content: count_str, color: COLOR_COMPLETED)
-                        Text(content: " files", color: COLOR_SECONDARY)
+                        #(if watching_files {
+                            vec![
+                                element!(Text(content: "watching ", weight: Weight::Bold, color: COLOR_ACTIVE)).into_any(),
+                                element!(Text(content: count_str, color: COLOR_COMPLETED)).into_any(),
+                                element!(Text(content: " files", color: COLOR_SECONDARY)).into_any(),
+                            ]
+                        } else {
+                            vec![element!(Text(content: "running", weight: Weight::Bold, color: COLOR_ACTIVE)).into_any()]
+                        })
+                        #(processes)
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                         Text(content: keybind, color: COLOR_INTERACTIVE)
@@ -655,6 +697,26 @@ mod tests {
         let narrow = format_changed_files(&files, 20);
         assert!(narrow.contains("devenv.nix"));
         assert!(narrow.contains("+2"));
+    }
+
+    #[test]
+    fn test_process_count_is_status() {
+        let mut state = StatusState::new();
+        assert!(!state.has_status());
+        // A running-process count alone is enough to show the status line,
+        // even with no watched files.
+        state.set_process_count(3);
+        assert!(state.has_status());
+        assert_eq!(state.process_count, 3);
+        state.set_process_count(0);
+        assert!(!state.has_status());
+    }
+
+    #[test]
+    fn test_process_elements_separator() {
+        assert!(process_elements(0, true).is_empty());
+        assert_eq!(process_elements(2, true).len(), 3);
+        assert_eq!(process_elements(2, false).len(), 3);
     }
 
     #[test]
