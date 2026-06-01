@@ -25,13 +25,44 @@ languages.cplusplus = {
 
 ## Setting up the [Conan](https://conan.io/) package manager
 
-Add `conan-flake` to your inputs:
+Add conan-flake to your inputs:
 
 ```shell-session
 $ devenv inputs add conan-flake git+https://codeberg.org/tarcisio/conan-flake
 ```
 
-You can check [the list of available options](/reference/options.md#languagescplusplusconanenable). The [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option, however, maps the whole of the options available in the [`conan-flake`](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
+The conan-flake module bridges the gap between Nix and Conan, supporting a declarative configuration style. For instance, for a user profile configuration like the following:
+
+```ini
+[settings]
+build_type=Debug
+compiler.cppstd
+
+[platform_tool_requires]
+cmake/X.Y.Z
+```
+
+There correspond the following conan-flake options:
+
+```nix
+{
+  buildType = "Debug";
+  compilerCppStd = "14";
+
+  platformToolRequires = {
+    cmake = pkgs.cmake.version;
+  };
+
+  devShell = {
+    # Programs you want to make available in the shell.
+    tools = {
+      inherit (pkgs) cmake;
+    };
+  };
+}
+```
+
+You can check [the list of available options](/reference/options.md#languagescplusplusconanenable). The [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option, however, maps the whole of the options available in the [conan-flake](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
 
 Config the `devenv.nix` file accordingly. For example:
 
@@ -41,6 +72,10 @@ languages.cplusplus = {
   conan = {
     enable = true;
     install.enable = true;
+    config = {
+      buildType = "Debug";
+      compilerCppStd = "14";
+    };
   };
 };
 ```
@@ -48,7 +83,7 @@ languages.cplusplus = {
 By default, when Conan is enabled:
 
 - The default C++ package is set to `config.stdenv.cc`
-- Conan is configured to use the same CMake available in the developmemnt shell
+- Conan is configured to use the same CMake available in the developmemnt shell; it's not necessary to set the `languages.cplusplus.conan.config.platformToolRequires.cmake` and `languages.cplusplus.conan.config.devShell.tools.cmake` options explicitly
 
 ### In Action:
 
@@ -57,7 +92,7 @@ $ devenv shell
 Building shell ...
 Entering shell ...
 
-conan profile show # This would show the default profile.
+conan profile show # This would show the configured profile.
 ```
 
 ## Additional Examples
@@ -119,6 +154,10 @@ Or even:
 }
 ```
 
+In this second use case:
+
+- By default, conan-flake is configured using the same stdenv as devenv's (that is, `config.stdenv`)
+
 ### In Action:
 
 ```shell-session
@@ -126,7 +165,56 @@ $ devenv shell
 Building shell ...
 Entering shell ...
 
-conan profile show # This would show the default profile.
+conan profile show # This would show the configured profile.
+conan create . --build=missing # This would create and test the current package.
+```
+
+### A local-recipe-index remote
+
+With [local-recipe-index](https://docs.conan.io/2/tutorial/conan_repositories/setup_local_recipes_index.html) remotes it's possible to declare dependencies from a simplified local index structure:
+
+```nix
+{
+  languages.cplusplus = {
+    enable = true;
+
+    conan = {
+      enable = true;
+      install.enable = true;
+
+      config = {
+        buildType = "Release";
+        compilerCppStd = "17";
+
+        remotes.local = {
+          url = "./repo";
+          local = true;
+          allowedPackages = [
+            "hello-world/0.0.1.cci.20260428"
+          ];
+        };
+
+        offline = true;
+      };
+    };
+  };
+}
+```
+
+The options in the `languages.cplusplus.conan.config` namespace:
+
+- `remotes.local.url`: is taken as a relative path to the root of the configuration
+- `offline`: enable only local remotes (that is, only of local-recipe-index type)
+
+### In Action:
+
+```shell-session
+$ devenv shell
+Building shell ...
+Entering shell ...
+
+conan profile show # This would show the configured profile.
+conan remote list # This would list the configured remotes.
 conan create . --build=missing # This would create and test the current package.
 ```
 
