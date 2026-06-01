@@ -9,10 +9,11 @@ let
   topConfig = config;
 
   # Start mode for a process:
-  #   true    -> start with `devenv up`
-  #   false   -> never auto-start (manual only)
-  #   "shell" -> start when entering `devenv shell`, stop on shell exit
-  startEnableType = types.either types.bool (types.enum [ "shell" ]);
+  #   true                -> start with `devenv up`
+  #   false               -> never auto-start (manual only)
+  #   "interactive-shell" -> start when entering an interactive `devenv shell`,
+  #                          stop on shell exit
+  startEnableType = types.either types.bool (types.enum [ "interactive-shell" ]);
 
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
@@ -60,8 +61,10 @@ let
                 - `false`: never auto-start. The process is still visible in the
                   TUI as stopped and can be started manually by selecting it and
                   pressing Enter.
-                - `"shell"`: start when entering `devenv shell` and stop it when
-                  the shell exits. It is also started by `devenv up`.
+                - `"interactive-shell"`: start when entering an interactive
+                  `devenv shell` and stop it when the shell exits. It is also
+                  started by `devenv up`. Only interactive shells start it:
+                  `devenv shell -- <cmd>` and non-interactive shells do not.
 
                 Defaults to `process.start`.
               '';
@@ -368,8 +371,8 @@ in
 
         - `true`: start with `devenv up`.
         - `false`: do not auto-start.
-        - `"shell"`: start when entering `devenv shell` and stop on shell exit
-          (also started by `devenv up`).
+        - `"interactive-shell"`: start when entering an interactive `devenv shell`
+          and stop on shell exit (also started by `devenv up`).
       '';
     };
 
@@ -503,10 +506,10 @@ in
     (lib.mkIf options.processes.isDefined (
       let
         # A process is "enabled" (present in the procfile / not disabled) when it
-        # is not explicitly turned off. Both `true` and `"shell"` count.
+        # is not explicitly turned off. Both `true` and `"interactive-shell"` count.
         enabledProcesses = lib.filterAttrs (_: p: p.start.enable != false) config.processes;
         shellStartNames =
-          lib.attrNames (lib.filterAttrs (_: p: p.start.enable == "shell") config.processes);
+          lib.attrNames (lib.filterAttrs (_: p: p.start.enable == "interactive-shell") config.processes);
       in
       {
         assertions = [
@@ -516,7 +519,7 @@ in
             # for the native process manager.
             assertion = shellStartNames == [ ] || implementation == "native";
             message = ''
-              `start.enable = "shell"` (or `process.start = "shell"`) requires the native process manager.
+              `start.enable = "interactive-shell"` (or `process.start = "interactive-shell"`) requires the native process manager.
               These processes use it: ${lib.concatStringsSep ", " shellStartNames}.
               Set `process.manager.implementation = "native"` (the default for devenv 2.0+), or use `start.enable = true`.
             '';
@@ -539,9 +542,10 @@ in
               before = process.before;
               showOutput = true;
               process = {
-                # The native manager only needs a bool: "shell" processes are
-                # enabled (they start when their manager runs). Which command
-                # auto-starts them is decided by the CLI, not the manager.
+                # The native manager only needs a bool: "interactive-shell"
+                # processes are enabled (they start when their manager runs).
+                # Which command auto-starts them is decided by the CLI, not the
+                # manager.
                 start.enable = process.start.enable != false;
                 ready = process.ready;
                 restart = process.restart;

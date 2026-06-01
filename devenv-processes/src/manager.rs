@@ -44,6 +44,12 @@ pub enum ApiRequest {
     Restart { name: String },
     /// Start a process that has `start.enable = false`.
     Start { name: String },
+    /// Bring up the named processes, honouring their `after`/`before`
+    /// dependencies. Driven by the task scheduler that owns this manager, so
+    /// already-running and out-of-subset dependencies resolve against the live
+    /// task graph. Used by `devenv up` attaching to a running manager (the
+    /// client resolves the up-enabled default set before sending).
+    Up { names: Vec<String> },
     /// Stop a running process.
     Stop { name: String },
     /// Query all port allocations from running processes.
@@ -231,6 +237,20 @@ pub struct NativeProcessManager {
     /// clean them up on drop. Set to false for control-client instances that
     /// connect to an existing daemon — they should not delete the daemon's files.
     owns_runtime_files: bool,
+    /// Channel to the owner (the daemon's task scheduler) for servicing
+    /// `ApiRequest::Up`. The manager can't drive dependency ordering itself —
+    /// that lives in `devenv-tasks` — so it forwards the request and awaits the
+    /// names that were scheduled. Set once, after the manager is wrapped in an
+    /// `Arc`; unset on managers without an owning scheduler.
+    up_tx: std::sync::OnceLock<mpsc::Sender<UpRequest>>,
+}
+
+/// An `ApiRequest::Up` forwarded from the control socket to the owning task
+/// scheduler: the requested process names and a reply channel for the names it
+/// scheduled.
+pub struct UpRequest {
+    pub names: Vec<String>,
+    pub reply: tokio::sync::oneshot::Sender<Vec<String>>,
 }
 
 /// Build a human-readable description of the readiness probe for TUI display.
@@ -446,7 +466,15 @@ impl NativeProcessManager {
             processes_activity: Arc::new(RwLock::new(None)),
             task_notify: None,
             owns_runtime_files: true,
+            up_tx: std::sync::OnceLock::new(),
         })
+    }
+
+    /// Set the channel used to forward `ApiRequest::Up` to the owning task
+    /// scheduler (the daemon). Without it, `Up` requests are rejected. Can be
+    /// called after the manager is wrapped in an `Arc`; ignored if already set.
+    pub fn set_up_handler(&self, tx: mpsc::Sender<UpRequest>) {
+        let _ = self.up_tx.set(tx);
     }
 
     /// Mark this instance as a control client that should not clean up
@@ -547,6 +575,37 @@ impl NativeProcessManager {
             .await
             .insert(name.clone(), ProcessEntry::Waiting { config, activity });
         info!("Registered waiting process: {}", name);
+    }
+
+    /// Re-arm a process as `Waiting` so it can be (re)launched by the task
+    /// scheduler, unless it is already active.
+    ///
+    /// Used by `Tasks::start_with_deps` when a later `devenv up` brings up more
+    /// processes against an already-running manager: a process that was
+    /// registered auto-start-off (`NotStarted`) or was previously `Stopped`
+    /// must go back to `Waiting` with the caller's (force-enabled) config so the
+    /// normal dependency-driven launch path applies. Already-active processes
+    /// are left untouched.
+    pub async fn rearm_waiting(&self, config: ProcessConfig) {
+        let mut processes = self.processes.write().await;
+        if matches!(processes.get(&config.name), Some(ProcessEntry::Active(_))) {
+            return;
+        }
+        let name = config.name.clone();
+        let activity = match processes.remove(&name) {
+            // Reuse the existing activity so the TUI row is preserved.
+            Some(
+                ProcessEntry::NotStarted { activity, .. }
+                | ProcessEntry::Stopped { activity, .. }
+                | ProcessEntry::Waiting { activity, .. },
+            ) => activity,
+            // No prior entry (or an Active we just excluded): make a fresh one.
+            _ => self.create_process_activity(&config, None),
+        };
+        activity.reset();
+        activity.set_status(ProcessStatus::Waiting);
+        processes.insert(name.clone(), ProcessEntry::Waiting { config, activity });
+        info!("Re-armed waiting process: {}", name);
     }
 
     /// Cancel a previously registered waiting process.
@@ -1519,6 +1578,26 @@ impl NativeProcessManager {
                     None => Self::process_not_found(&name),
                 }
             }
+            Ok(ApiRequest::Up { names }) => match manager.up_tx.get() {
+                Some(up_tx) => {
+                    let (reply, rx) = tokio::sync::oneshot::channel();
+                    if up_tx.send(UpRequest { names, reply }).await.is_err() {
+                        ApiResponse::Error {
+                            message: "process scheduler is no longer running".to_string(),
+                        }
+                    } else {
+                        match rx.await {
+                            Ok(_started) => ApiResponse::Ok,
+                            Err(_) => ApiResponse::Error {
+                                message: "process scheduler dropped the request".to_string(),
+                            },
+                        }
+                    }
+                }
+                None => ApiResponse::Error {
+                    message: "this manager has no process scheduler to handle `up`".to_string(),
+                },
+            },
             Ok(ApiRequest::Stop { name }) => match manager.stop(&name).await {
                 Ok(()) => ApiResponse::Ok,
                 Err(e) => ApiResponse::Error {
@@ -2148,6 +2227,38 @@ mod tests {
 
         let phase = manager.get_phase("long-runner").await;
         assert_ne!(phase, Some(ProcessPhase::Waiting));
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_rearm_waiting_relaunches_stopped_process() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = long_running_config("relaunch-me");
+
+        // Launch, then stop-and-keep so the entry becomes Stopped.
+        manager.register_waiting(config.clone(), None).await;
+        manager.launch_waiting("relaunch-me").await.unwrap();
+        manager.stop_and_keep("relaunch-me").await.unwrap();
+        assert_eq!(
+            manager.get_phase("relaunch-me").await,
+            Some(ProcessPhase::Stopped)
+        );
+
+        // Re-arm and relaunch — mirrors `Tasks::start_with_deps` bringing a
+        // stopped process back up on an attaching `devenv up`.
+        manager.rearm_waiting(config).await;
+        assert_eq!(
+            manager.get_phase("relaunch-me").await,
+            Some(ProcessPhase::Waiting)
+        );
+        let job = manager.launch_waiting("relaunch-me").await.unwrap();
+        assert!(job.is_some(), "stopped process should relaunch");
+        assert_ne!(
+            manager.get_phase("relaunch-me").await,
+            Some(ProcessPhase::Stopped)
+        );
 
         let _ = manager.stop_all().await;
     }

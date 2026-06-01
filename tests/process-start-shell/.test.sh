@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# Verify the `start.enable = "shell"` schema:
-#  - "shell" processes still start with `devenv up` (decision: up starts them too)
+# Verify the `start.enable = "interactive-shell"` schema:
+#  - "interactive-shell" processes still start with `devenv up` (up starts them too)
 #  - `false` processes do not start with `devenv up`
-#  - `process.shellStartProcesses` lists only the "shell" processes
+#  - `process.shellStartProcesses` lists only the "interactive-shell" processes
 
 set -ex
 
@@ -23,14 +23,14 @@ wait_for_port() {
   return 1
 }
 
-# --- shellStartProcesses lists only the "shell" process ---
+# --- shellStartProcesses lists only the "interactive-shell" process ---
 shell_list=$(devenv eval process.shellStartProcesses)
 echo "shellStartProcesses: $shell_list"
 echo "$shell_list" | grep -q "shell_proc" || { echo "FAIL: shell_proc missing from shellStartProcesses"; exit 1; }
 echo "$shell_list" | grep -q "up_proc" && { echo "FAIL: up_proc should not be in shellStartProcesses"; exit 1; }
 echo "$shell_list" | grep -q "off_proc" && { echo "FAIL: off_proc should not be in shellStartProcesses"; exit 1; }
 
-# --- devenv up starts both `true` and `"shell"` processes, but not `false` ---
+# --- devenv up starts both `true` and `"interactive-shell"` processes, but not `false` ---
 devenv up -d
 devenv processes wait
 

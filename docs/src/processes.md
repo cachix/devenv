@@ -51,14 +51,14 @@ Each process has a `start.enable` option that controls when it starts. It accept
 
 - `true` (default) — start with `devenv up`.
 - `false` — never auto-start. The process is still registered and visible in the TUI as stopped; start it manually (select it and press Enter, or `devenv processes start <name>`).
-- `"shell"` — start when you enter `devenv shell` and stop it when you exit the shell. It is also started by `devenv up`.
+- `"interactive-shell"` — start when you enter an interactive `devenv shell` and stop it when you exit the shell. It is also started by `devenv up`.
 
 Set the default for every process with `process.start`, and override per process with `processes.<name>.start.enable`:
 
 ```nix title="devenv.nix"
 {
   # Default: tie every process to the shell lifecycle.
-  process.start = "shell";
+  process.start = "interactive-shell";
 
   processes.web.exec = "npm run dev";
 
@@ -70,9 +70,11 @@ Set the default for every process with `process.start`, and override per process
 }
 ```
 
-With `start.enable = "shell"`, a single `devenv shell` starts your processes in the background, drops you into a shell with your tools, and stops the processes when you exit — replacing the `devenv up -d && devenv shell` two-step (and the matching `exit` + `devenv processes down`).
+With `start.enable = "interactive-shell"`, a single `devenv shell` starts your processes in the background, drops you into a shell with your tools, and stops the processes when you exit — replacing the `devenv up -d && devenv shell` two-step (and the matching `exit` + `devenv processes down`).
 
-The `"shell"` start mode requires the native process manager (the default for devenv 2.0+).
+Only an **interactive** `devenv shell` starts these processes: `devenv shell -- <cmd>`, a piped/non-interactive shell, and `devenv shell --no-reload` do not (devenv warns when it skips them). Use `devenv up` to start them outside an interactive shell.
+
+The `"interactive-shell"` start mode requires the native process manager (the default for devenv 2.0+).
 
 ### Attaching with `devenv up`
 

@@ -3,7 +3,7 @@ use clap_complete::CompleteEnv;
 use devenv::{
     CacheSettings, Devenv, InputOverrides, NixSettings, RunMode, SecretSettings, ShellSettings,
     VerbosityLevel,
-    activity::{ActivityGuard, ActivityLevel},
+    activity::{ActivityGuard, ActivityLevel, message},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
@@ -74,8 +74,11 @@ fn main_inner() -> Result<()> {
             Commands::HookShouldActivate => {
                 return commands::hook::should_activate();
             }
-            Commands::DaemonProcesses { config_file } => {
-                return commands::daemon_processes::run(config_file);
+            Commands::DaemonProcesses {
+                config_file,
+                background,
+            } => {
+                return commands::daemon_processes::run(config_file, *background);
             }
             Commands::Init {
                 target,
@@ -806,6 +809,8 @@ async fn run_up_args(
         strict_ports,
         command_rx,
         daemon: up_args.detach,
+        // `devenv up -d` waits until processes have started before returning.
+        background: false,
     };
     run_up(devenv, up_args.processes, up_args.mode, options, verbosity).await
 }
@@ -821,7 +826,22 @@ async fn dispatch_command(
 ) -> Result<CommandResult> {
     match command {
         Commands::Shell { cmd, ref args } => {
-            // Non-PTY shell path (PTY is handled as early return in run_backend)
+            // Non-PTY shell path (PTY is handled as early return in run_backend).
+            // `start.enable = "interactive-shell"` processes only start for an
+            // interactive PTY shell, which this is not (`devenv shell -- cmd`, a
+            // piped/non-interactive shell, or `--no-reload`). Warn so they aren't
+            // silently skipped.
+            let shell_start_names = devenv.shell_start_processes().await?;
+            if !shell_start_names.is_empty() {
+                message(
+                    ActivityLevel::Warn,
+                    format!(
+                        "Not starting `start.enable = \"interactive-shell\"` process(es) [{}]: this is not an interactive `devenv shell`. Start them with `devenv up`.",
+                        shell_start_names.join(", ")
+                    ),
+                );
+            }
+
             // Messages are injected into the shell script by prepare_shell() via self.task_messages.
             devenv.run_enter_shell_tasks(None, verbosity).await?;
 
@@ -922,6 +942,7 @@ async fn dispatch_command(
                     strict_ports: config_strict_ports,
                     command_rx,
                     daemon: detach,
+                    background: false,
                 };
                 run_up(
                     devenv,

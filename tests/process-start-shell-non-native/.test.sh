@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# `start.enable = "shell"` with a non-native process manager must fail fast with
-# a clear assertion error rather than silently misbehaving.
+# `start.enable = "interactive-shell"` with a non-native process manager must fail
+# fast with a clear assertion error rather than silently misbehaving.
 
 set -u
 
@@ -18,4 +18,4 @@ if ! grep -q "requires the native process manager" out.txt; then
   exit 1
 fi
 
-echo "PASS: start.enable = \"shell\" rejected with non-native process manager"
+echo "PASS: start.enable = \"interactive-shell\" rejected with non-native process manager"

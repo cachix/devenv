@@ -3,8 +3,9 @@ use crate::error::Error;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
-    DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, ProcessTaskStatus, Skipped,
-    TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
+    DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, PROCESS_TASK_PREFIX,
+    ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus,
+    VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
 use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase};
@@ -588,6 +589,156 @@ impl Tasks {
         self.run_internal(parent_activity).await
     }
 
+    /// Start a subset of already-built process tasks, honouring their
+    /// `after`/`before` dependencies via the same engine as the initial run.
+    ///
+    /// Used when a long-lived manager is already running (e.g. a daemon started
+    /// by `devenv up -d` or `devenv shell`) and a later `devenv up [names]`
+    /// wants to bring up more processes. Rather than the CLI re-deriving the
+    /// dependency order and force-launching each process over the control
+    /// socket, the daemon drives them through `wait_for_task_deps` +
+    /// `run_process` — so out-of-subset and already-running dependencies are
+    /// resolved against the live task graph exactly like the cold-start path.
+    ///
+    /// `names` are process names without the `devenv:processes:` prefix. An
+    /// empty `names` is a no-op. Processes already active are left untouched
+    /// (and count as satisfied dependencies). Returns the names it scheduled.
+    ///
+    /// Returns once the processes have been *scheduled*, not once they are
+    /// ready: each one launches in a detached task that waits for its
+    /// dependencies in the background. A process whose dependency is never
+    /// satisfied simply stays `Waiting` in the manager (visible in the TUI),
+    /// rather than blocking the caller — so an attaching `devenv up` never
+    /// hangs on a dependent it cannot complete.
+    pub async fn start_with_deps(&self, names: &[String]) -> Vec<String> {
+        // Reconcile every process node's task phase with the manager's live
+        // state first. Between the initial run and this call a process may have
+        // been stopped or restarted out of band; the per-process status watchers
+        // update the graph eventually but can lag, and dependency checks read
+        // the graph phase. Syncing up front means `wait_for_task_deps` evaluates
+        // against current reality (e.g. a stopped dependency reads Stopped, not a
+        // stale Ready), so a dependent isn't launched on a no-longer-ready dep.
+        for index in self.graph.node_indices() {
+            let (is_process, proc_name) = {
+                let ts = self.graph[index].read().await;
+                match &ts.status {
+                    TaskStatus::Process(ps) => (true, ps.name.clone()),
+                    _ => (false, String::new()),
+                }
+            };
+            if !is_process {
+                continue;
+            }
+            if let Some(phase) = self.process_manager.get_phase(&proc_name).await {
+                set_process_phase(&self.graph[index], &self.notify_finished, phase).await;
+            }
+        }
+
+        let mut scheduled = Vec::new();
+
+        for name in names {
+            let task_name = format!("{PROCESS_TASK_PREFIX}{name}");
+            let Some(index) = self.find_task_index(&task_name).await else {
+                tracing::warn!(process = %name, "start_with_deps: no such process task");
+                continue;
+            };
+
+            // Skip processes that are already running in the manager; they are
+            // treated as satisfied dependencies for anything that waits on them.
+            if let Some(ProcessPhase::Starting | ProcessPhase::Ready) =
+                self.process_manager.get_phase(name).await
+            {
+                continue;
+            }
+
+            // Re-arm the manager entry as Waiting with auto-start forced on, so
+            // `run_process`'s `launch_waiting` actually launches it even if it
+            // was registered auto-start-off (e.g. a non-shell process in a
+            // `devenv shell` daemon).
+            let config = {
+                let ts = self.graph[index].read().await;
+                match ts.build_process_config(&self.env, &self.bash) {
+                    Ok(mut config) => {
+                        config.start.enable = true;
+                        config
+                    }
+                    Err(e) => {
+                        tracing::error!(process = %name, "failed to build process config: {e}");
+                        continue;
+                    }
+                }
+            };
+            // The re-armed Waiting entry holds the config `launch_waiting` will
+            // launch; `run_process` (below) only reads name/probe off its copy.
+            self.process_manager.rearm_waiting(config.clone()).await;
+            // Reset the task phase to Waiting so dependents re-evaluate and the
+            // status watcher re-subscribes once it launches.
+            set_process_phase(
+                &self.graph[index],
+                &self.notify_finished,
+                ProcessPhase::Waiting,
+            )
+            .await;
+
+            scheduled.push(name.clone());
+
+            let deps = self.collect_deps(index);
+            let task_state = Arc::clone(&self.graph[index]);
+            let notify_finished = Arc::clone(&self.notify_finished);
+            let process_manager = Arc::clone(&self.process_manager);
+            let shutdown = Arc::clone(&self.shutdown);
+            let process_name = name.clone();
+
+            // Detached: wait for deps and launch in the background so a
+            // never-satisfiable dependency leaves this process `Waiting` instead
+            // of blocking the `Up` reply. Mirrors how the cold-start path spawns
+            // per-process dependency checkers.
+            tokio::spawn(async move {
+                let (dep_cancelled, dep_failed) =
+                    Self::wait_for_task_deps(&deps, &notify_finished, &shutdown).await;
+                if dep_cancelled || dep_failed {
+                    process_manager.cancel_waiting(&process_name).await;
+                    return;
+                }
+
+                let launch_info = match task_state
+                    .read()
+                    .await
+                    .run_process(&process_manager, config)
+                    .await
+                {
+                    Ok(info) => info,
+                    Err(e) => {
+                        tracing::error!(process = %process_name, "failed to start process: {e}");
+                        return;
+                    }
+                };
+
+                if launch_info.auto_start_off {
+                    set_process_phase(&task_state, &notify_finished, ProcessPhase::NotStarted)
+                        .await;
+                    return;
+                }
+
+                set_process_phase(&task_state, &notify_finished, ProcessPhase::Starting).await;
+
+                // Keep task status in sync with supervisor state. This both
+                // tracks ongoing lifecycle and, on first subscribe, advances the
+                // phase from Starting to Ready/Exited as the supervisor reports.
+                process_status_watcher(
+                    task_state,
+                    notify_finished,
+                    process_manager,
+                    shutdown,
+                    launch_info.process_name,
+                )
+                .await;
+            });
+        }
+
+        scheduled
+    }
+
     /// Increment the completed counter, update the orchestration progress bar, and
     /// notify the dependency and UI loops. Every task must call this exactly once
     /// when its work (success, failure, skip) is done.
@@ -645,6 +796,18 @@ impl Tasks {
     }
 
     /// Collect dependency edges for a task node.
+    /// Find the graph node for a task by its full name (e.g.
+    /// `devenv:processes:web`). Linear over the node set, which is fine for the
+    /// occasional `start_with_deps` call.
+    async fn find_task_index(&self, task_name: &str) -> Option<NodeIndex> {
+        for index in self.graph.node_indices() {
+            if self.graph[index].read().await.task.name == task_name {
+                return Some(index);
+            }
+        }
+        None
+    }
+
     fn collect_deps(&self, index: NodeIndex) -> Vec<(Arc<RwLock<TaskState>>, DependencyKind)> {
         self.graph
             .edges_directed(index, petgraph::Direction::Incoming)
@@ -1576,6 +1739,132 @@ mod schedule_tests {
             names.push(tasks.graph[*idx].read().await.task.name.clone());
         }
         names
+    }
+
+    /// A long-running process task keyed under the `devenv:processes:` prefix,
+    /// so `start_with_deps` (which strips that prefix) can find it.
+    fn long_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
+        TaskConfig {
+            name: format!("{PROCESS_TASK_PREFIX}{name}"),
+            r#type: TaskType::Process,
+            after: after
+                .into_iter()
+                .map(|a| format!("{PROCESS_TASK_PREFIX}{a}"))
+                .collect(),
+            command: Some("sleep 100".to_string()),
+            ..Default::default()
+        }
+    }
+
+    async fn wait_phase(
+        tasks: &Tasks,
+        name: &str,
+        want: ProcessPhase,
+        max_ticks: u32,
+    ) -> ProcessPhase {
+        let mut last = ProcessPhase::Waiting;
+        for _ in 0..max_ticks {
+            last = tasks
+                .process_manager
+                .get_phase(name)
+                .await
+                .unwrap_or(ProcessPhase::Waiting);
+            if last == want {
+                return last;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        last
+    }
+
+    #[tokio::test]
+    async fn start_with_deps_relaunches_stopped_process() {
+        // A single up-enabled long-running process, started by the cold run,
+        // then stopped, then brought back by start_with_deps (the attach path).
+        let (tasks, _tmp) = build_test_tasks(
+            vec![long_process_task("web", vec![])],
+            vec![format!("{PROCESS_TASK_PREFIX}web")],
+            false,
+        )
+        .await;
+
+        let parent = Arc::new(devenv_activity::start!(
+            devenv_activity::Activity::operation("test").parent(None)
+        ));
+        let _ = tasks.run_with_parent_activity(parent).await;
+
+        assert_eq!(
+            wait_phase(&tasks, "web", ProcessPhase::Ready, 40).await,
+            ProcessPhase::Ready,
+            "process should be running after the cold start"
+        );
+
+        tasks.process_manager.stop_and_keep("web").await.unwrap();
+        assert_eq!(
+            tasks.process_manager.get_phase("web").await,
+            Some(ProcessPhase::Stopped)
+        );
+
+        // Attach path: bring the stopped process back up.
+        let scheduled = tasks.start_with_deps(&["web".to_string()]).await;
+        assert_eq!(scheduled, vec!["web".to_string()]);
+        assert_eq!(
+            wait_phase(&tasks, "web", ProcessPhase::Ready, 40).await,
+            ProcessPhase::Ready,
+            "start_with_deps should relaunch the stopped process"
+        );
+
+        let _ = tasks.process_manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn start_with_deps_waits_for_unsatisfied_dependency() {
+        // beta after gamma@started; gamma is stopped. Attaching `up beta` must
+        // NOT launch beta (its dependency is unmet) and must not hang.
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                long_process_task("gamma", vec![]),
+                long_process_task("beta", vec!["gamma@started"]),
+            ],
+            vec![
+                format!("{PROCESS_TASK_PREFIX}gamma"),
+                format!("{PROCESS_TASK_PREFIX}beta"),
+            ],
+            false,
+        )
+        .await;
+
+        let parent = Arc::new(devenv_activity::start!(
+            devenv_activity::Activity::operation("test").parent(None)
+        ));
+        let _ = tasks.run_with_parent_activity(parent).await;
+        assert_eq!(
+            wait_phase(&tasks, "beta", ProcessPhase::Ready, 40).await,
+            ProcessPhase::Ready
+        );
+
+        // Stop both; gamma is now an unmet dependency for beta.
+        tasks.process_manager.stop_and_keep("beta").await.unwrap();
+        tasks.process_manager.stop_and_keep("gamma").await.unwrap();
+
+        // Attach `up beta`: beta must stay waiting (gamma is stopped).
+        let scheduled = tasks.start_with_deps(&["beta".to_string()]).await;
+        assert_eq!(scheduled, vec!["beta".to_string()]);
+        assert_eq!(
+            wait_phase(&tasks, "beta", ProcessPhase::Waiting, 20).await,
+            ProcessPhase::Waiting,
+            "beta must wait for its gamma dependency, not launch"
+        );
+
+        // Now bring gamma up; beta should follow automatically.
+        let _ = tasks.start_with_deps(&["gamma".to_string()]).await;
+        assert_eq!(
+            wait_phase(&tasks, "beta", ProcessPhase::Ready, 60).await,
+            ProcessPhase::Ready,
+            "beta should launch once gamma is started"
+        );
+
+        let _ = tasks.process_manager.stop_all().await;
     }
 
     #[tokio::test]
