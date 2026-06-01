@@ -35,7 +35,7 @@ The conan-flake module bridges the gap between Nix and Conan, supporting a decla
 ```ini
 [settings]
 build_type=Debug
-compiler.cppstd
+compiler.cppstd=14
 
 [platform_tool_requires]
 cmake/X.Y.Z
