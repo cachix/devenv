@@ -1976,11 +1976,18 @@ impl Devenv {
                     "devenv.up: calling run_foreground (native manager, detach=false), global_token_cancelled={}",
                     self.shutdown.is_cancelled()
                 );
-                let result = tasks_runner
-                    .process_manager()
-                    .run_foreground(self.shutdown.cancellation_token(), None)
-                    .await
-                    .map_err(|e| miette!("Process manager error: {}", e));
+                // Answer `devenv up` attach requests against this foreground
+                // manager too: a second `devenv up` finds our PID file and
+                // attaches over the control socket. The cold start above has
+                // already finished, so registering the handler here is in time.
+                let (up_tx, up_rx) = tokio::sync::mpsc::channel::<processes::UpRequest>(8);
+                tasks_runner.process_manager().set_up_handler(up_tx);
+                let result = crate::commands::daemon_processes::run_foreground_with_up(
+                    &tasks_runner,
+                    &self.shutdown,
+                    up_rx,
+                )
+                .await;
                 trace!("devenv.up: run_foreground returned");
 
                 let _ = tokio::fs::remove_file(&pid_file).await;
