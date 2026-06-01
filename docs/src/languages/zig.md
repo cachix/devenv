@@ -11,7 +11,6 @@ languages.zig = {
 ```
 
 This will automatically:
-
 - Use the specified Zig version from zig-overlay
 - Install the corresponding ZLS version (e.g., version "0.15.1" uses ZLS 0.15.0)
 
