@@ -263,6 +263,7 @@ Agents are specialized AI assistants that handle specific tasks with their own c
 ### Available Tools
 
 Common tools that can be assigned to agents:
+
 - `Read`: Read files
 - `Write`: Create new files
 - `Edit`/`MultiEdit`: Modify existing files

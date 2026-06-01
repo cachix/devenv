@@ -60,6 +60,7 @@ Changelogs are defined in any `devenv.nix` module or configuration using the `ch
 ```
 
 Each changelog entry requires:
+
 - `date`: A YYYY-MM-DD formatted date string
 - `title`: A short description of the breaking change or behavior change
 - `when`: A boolean condition for when to show this changelog (e.g., based on whether a feature is enabled)
