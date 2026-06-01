@@ -3,6 +3,7 @@
 The `files` option allows you to declaratively create configuration files and scripts in your development environment. Files are automatically generated from structured data and symlinked into your project when entering the shell.
 
 This is particularly useful for:
+
 - Generating configuration files from Nix data structures
 - Creating executable scripts
 - Setting up project-specific configurations
@@ -123,6 +124,7 @@ You can make any file executable by setting the `executable` attribute:
 ```
 
 This is particularly useful for:
+
 - Shell scripts that need to be executed
 - Custom tooling and utilities
 - Git hooks
