@@ -643,12 +643,22 @@ impl Tasks {
                 continue;
             };
 
-            // Skip processes that are already running in the manager; they are
-            // treated as satisfied dependencies for anything that waits on them.
-            if let Some(ProcessPhase::Starting | ProcessPhase::Ready) =
-                self.process_manager.get_phase(name).await
-            {
-                continue;
+            match self.process_manager.get_phase(name).await {
+                // Already running in the manager; treated as a satisfied
+                // dependency for anything that waits on it. Leave it untouched.
+                Some(ProcessPhase::Starting | ProcessPhase::Ready) => continue,
+                // Exited or gave up on its own: the manager entry is still
+                // `Active` (only an explicit stop produces `Stopped`), and
+                // `rearm_waiting` refuses to touch an `Active` entry. Normalize
+                // it to `Stopped` first — `stop_and_keep` aborts the dead
+                // supervisor and tailers, releases its ports, and keeps the TUI
+                // row — so the re-arm + launch path below can relaunch it.
+                Some(ProcessPhase::Exited | ProcessPhase::GaveUp) => {
+                    if let Err(e) = self.process_manager.stop_and_keep(name).await {
+                        tracing::warn!(process = %name, "failed to reset exited process before relaunch: {e}");
+                    }
+                }
+                _ => {}
             }
 
             // Re-arm the manager entry as Waiting with auto-start forced on, so
@@ -1812,6 +1822,58 @@ mod schedule_tests {
             wait_phase(&tasks, "web", ProcessPhase::Ready, 40).await,
             ProcessPhase::Ready,
             "start_with_deps should relaunch the stopped process"
+        );
+
+        let _ = tasks.process_manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn start_with_deps_relaunches_exited_process() {
+        // Regression: a process that exits on its own stays `Active` with phase
+        // `Exited` (only an explicit stop produces `Stopped`), and the manager
+        // refuses to re-arm an `Active` entry. The attach path must normalize it
+        // back to a launchable state, rather than no-op'ing the re-arm and then
+        // bailing in `launch_waiting`.
+        //
+        // The process exits cleanly on its first run but sleeps on the second,
+        // so reaching `Ready` after `start_with_deps` proves it was actually
+        // relaunched (not merely left in its original `Exited` state).
+        let marker_dir = tempfile::tempdir().unwrap();
+        let marker = marker_dir.path().join("ran");
+        let exec = format!(
+            "if [ -e '{m}' ]; then sleep 100; else : > '{m}'; fi",
+            m = marker.display()
+        );
+        let task = TaskConfig {
+            name: format!("{PROCESS_TASK_PREFIX}web"),
+            r#type: TaskType::Process,
+            command: Some(exec),
+            ..Default::default()
+        };
+
+        let (tasks, _tmp) =
+            build_test_tasks(vec![task], vec![format!("{PROCESS_TASK_PREFIX}web")], false).await;
+
+        let parent = Arc::new(devenv_activity::start!(
+            devenv_activity::Activity::operation("test").parent(None)
+        ));
+        let _ = tasks.run_with_parent_activity(parent).await;
+
+        // First run exits cleanly -> entry stays Active with phase Exited.
+        assert_eq!(
+            wait_phase(&tasks, "web", ProcessPhase::Exited, 40).await,
+            ProcessPhase::Exited,
+            "self-exited process should be Active+Exited after the cold start"
+        );
+
+        // Attach path: relaunch the self-exited process. The second run sleeps,
+        // so reaching Ready proves start_with_deps actually relaunched it.
+        let scheduled = tasks.start_with_deps(&["web".to_string()]).await;
+        assert_eq!(scheduled, vec!["web".to_string()]);
+        assert_eq!(
+            wait_phase(&tasks, "web", ProcessPhase::Ready, 40).await,
+            ProcessPhase::Ready,
+            "start_with_deps should relaunch a self-exited process"
         );
 
         let _ = tasks.process_manager.stop_all().await;
