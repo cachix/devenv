@@ -654,9 +654,23 @@ async fn run_backend(
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
         if start_shell_procs {
-            devenv
+            // The detached daemon spawns as the last step of this call, so a
+            // failure inside it can leave the daemon running. Tear it down on
+            // error rather than orphaning it: we bail out of shell entry here,
+            // dropping the user back to their outer shell with no session left
+            // to stop it. `down()` reconstructs the manager from the PID file.
+            if let Err(e) = devenv
                 .start_shell_processes(&shell_start_names, task_exports.clone())
-                .await?;
+                .await
+            {
+                if let Err(down_err) = devenv.down().await {
+                    tracing::warn!(
+                        "failed to stop shell-owned process manager after a failed start: {}",
+                        down_err
+                    );
+                }
+                return Err(e);
+            }
         }
 
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
