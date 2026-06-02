@@ -644,9 +644,14 @@ impl Tasks {
             };
 
             match self.process_manager.get_phase(name).await {
-                // Already running in the manager; treated as a satisfied
-                // dependency for anything that waits on it. Leave it untouched.
-                Some(ProcessPhase::Starting | ProcessPhase::Ready) => continue,
+                // Already running, or already scheduled and waiting on a
+                // dependency: a live dep-waiter (or the process itself) is in
+                // flight, so leave it. Re-arming a `Waiting` process would spawn
+                // a second waiter that later errors when it loses the launch
+                // race; already-running ones count as satisfied dependencies.
+                Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::Waiting) => {
+                    continue;
+                }
                 // Exited or gave up on its own: the manager entry is still
                 // `Active` (only an explicit stop produces `Stopped`), and
                 // `rearm_waiting` refuses to touch an `Active` entry. Normalize
