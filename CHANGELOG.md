@@ -17,6 +17,7 @@
 - Fixed long lines in `devenv shell` getting a hard newline inserted at the wrap point when copying to clipboard. The shell now preserves the soft-wrap when flushing wrapped output into the terminal's scrollback, so clipboard copy keeps the original single line ([#2865](https://github.com/cachix/devenv/issues/2865)).
 - Fixed files declared with the `files` option not being regenerated when an auto-loaded (`devenv allow`) shell reloaded after `devenv update`. enterShell tasks (including `devenv:files`) now re-run on hot-reload, matching a fresh shell entry, instead of only updating environment variables ([#2864](https://github.com/cachix/devenv/issues/2864)).
 - Fixed `devenv test --no-tui` (and any other non-TUI invocation) silently discarding all output from the `enterTest` script, so the test runner's output, traces, and failure messages never reached the terminal or CI logs. Output from commands run in the shell is now printed in non-TUI mode.
+- Fixed `devenv shell` self-triggering hot-reload in an infinite loop after the first reload, and `lib.fileset.fromSource ./.` (and similar `readDir` calls on a parent of `.devenv/`) dragging devenv's own churn (eval cache WAL/SHM, tasks DB, generated shell scripts, `imports.txt`, …) into the Nix tracked-input set and causing spurious rebuilds. The devenv dotfile dir is now excluded from both the reload watch set and the eval cache's tracked inputs, with a carve-out for `.devenv/state/` (`$DEVENV_STATE`) so files users persist there still trigger reload.
 
 ### Improvements
 

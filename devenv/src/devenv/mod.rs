@@ -385,7 +385,7 @@ impl Devenv {
         if cache_settings.eval_cache {
             eval_cache_pool
                 .get_or_try_init(|| async {
-                    let db_path = devenv_dotfile.join("nix-eval-cache.db");
+                    let db_path = devenv_dotfile.join(devenv_eval_cache::DB_FILENAME);
                     let db = devenv_cache_core::db::Database::new(
                         db_path,
                         &devenv_eval_cache::db::MIGRATIONS,
