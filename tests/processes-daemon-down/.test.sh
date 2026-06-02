@@ -57,6 +57,19 @@ devenv processes wait
 
 # Daemon should still be healthy and stoppable with a single `down`.
 curl -s -o /dev/null http://127.0.0.1:$PORT/ || { echo "FAIL: daemon died after attaching up"; devenv processes down || true; exit 1; }
+
+# A non-interactive foreground `up` (no -d) against a running daemon must fail
+# fast, not attach and block forever. Assert on the message: a hang killed by
+# the timeout also exits non-zero, so the exit code alone can't tell a clean
+# reject from a hang.
+timeout 15 devenv up --no-tui >up_out.txt 2>&1 || true
+grep -q "Processes already running" up_out.txt || {
+  echo "FAIL: non-interactive foreground up should fail fast when a daemon is running"
+  cat up_out.txt
+  devenv processes down || true
+  exit 1
+}
+
 devenv processes down
 wait_for_port_free || { echo "FAIL: port still bound after down"; exit 1; }
 echo "PASS: up -d attaches when daemon running"

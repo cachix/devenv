@@ -28,6 +28,7 @@ use processes::ProcessManager as _;
 use secrecy::ExposeSecret;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::io::IsTerminal;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
@@ -1920,12 +1921,19 @@ impl Devenv {
             if let Ok(processes::PidStatus::Running(pid)) =
                 processes::check_pid_file(&pid_file).await
             {
-                // A detached caller (e.g. `devenv test`) can't run an isolated
-                // process set over a manager it doesn't own, and its later
-                // teardown would stop that foreign daemon. Refuse rather than
-                // attach. Interactive foreground `devenv up` below is the only
-                // intended attacher on this path.
-                if options.detach {
+                // Two callers must not attach. A detached caller (e.g. `devenv
+                // test`) can't run an isolated process set over a manager it
+                // doesn't own, and its later teardown would stop that foreign
+                // daemon. And attaching streams a live view until you detach
+                // with Ctrl-C, which only makes sense at an interactive
+                // terminal — scripts, CI, and piped output would otherwise block
+                // forever. Both fail fast like a fresh foreground start that
+                // finds a manager already running; interactive foreground
+                // `devenv up` is the only intended attacher on this path.
+                let interactive = std::io::stdin().is_terminal()
+                    && std::io::stderr().is_terminal()
+                    && std::env::var_os("CI").is_none();
+                if options.detach || !interactive {
                     bail!(
                         "Processes already running with PID {}. Stop them first with: devenv processes down",
                         pid
