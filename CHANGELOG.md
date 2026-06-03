@@ -18,6 +18,7 @@
 - Fixed files declared with the `files` option not being regenerated when an auto-loaded (`devenv allow`) shell reloaded after `devenv update`. enterShell tasks (including `devenv:files`) now re-run on hot-reload, matching a fresh shell entry, instead of only updating environment variables ([#2864](https://github.com/cachix/devenv/issues/2864)).
 - Fixed `devenv test --no-tui` (and any other non-TUI invocation) silently discarding all output from the `enterTest` script, so the test runner's output, traces, and failure messages never reached the terminal or CI logs. Output from commands run in the shell is now printed in non-TUI mode.
 - Fixed `watch` paths being ignored for one-shot processes that exit immediately (e.g. code generators). The file watcher was torn down as soon as the process exited, so later edits never triggered a re-run. Watched one-shot processes now stay parked after exiting and re-run when a watched file changes.
+- Fixed `devenv up` intermittently failing to start processes with "Failed to initialize task cache: ... pool timed out while waiting for an open connection", most often in CI. The processes that a non-native process manager (e.g. process-compose) launches each open the same task cache database concurrently and raced to create and migrate it; the database is now initialized once before the processes start ([#2897](https://github.com/cachix/devenv/issues/2897)).
 
 ### Improvements
 

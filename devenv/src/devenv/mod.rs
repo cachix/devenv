@@ -1722,6 +1722,16 @@ impl Devenv {
         let manager =
             processes::ProcessComposeManager::new(procfile_script, self.devenv_dotfile.clone());
 
+        // Pre-initialize the task cache so the per-process `devenv-tasks`
+        // invocations that the process manager spawns concurrently don't race to
+        // create and migrate the same SQLite database (#2897). After this the
+        // database already exists in WAL mode with migrations applied, so the
+        // children only open it for reads at startup. Best-effort: on failure we
+        // fall back to the previous behaviour.
+        if let Err(e) = devenv_tasks::warm_cache(&self.devenv_dotfile).await {
+            warn!(error = %e, "failed to pre-initialize task cache");
+        }
+
         if options.detach {
             let start_options = processes::StartOptions {
                 process_configs: HashMap::new(),
