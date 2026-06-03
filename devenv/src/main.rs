@@ -1218,9 +1218,9 @@ fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<(
 /// Detect whether we are running inside an AI coding agent.
 ///
 /// LLM tools typically allocate a PTY so is_terminal() returns true,
-/// but their verbose TUI output wastes tokens. We check for well-known
-/// environment variables set by popular AI agents and the emerging
-/// AI_AGENT standard (https://github.com/anthropics/claude-code/blob/main/AI_AGENT.md).
+/// but their verbose TUI output wastes tokens. We use the `detect-coding-agent`
+/// crate to recognize well-known AI agents (Claude Code, Cursor, Aider, ...) from
+/// their environment variables.
 ///
 /// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
 /// even when running under a detected agent).
@@ -1230,9 +1230,7 @@ fn is_ai_agent() -> bool {
         if env::var_os("DEVENV_NO_AI_AGENT").is_some() {
             return false;
         }
-        env::var_os("CLAUDECODE").is_some()
-            || env::var_os("OPENCODE_CLIENT").is_some()
-            || env::var_os("AI_AGENT").is_some()
+        detect_coding_agent::is_agent()
     })
 }
 

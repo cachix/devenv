@@ -27,6 +27,7 @@ clap.workspace = true
 clap_complete.workspace = true
 cli-table.workspace = true
 console.workspace = true
+detect-coding-agent.workspace = true
 dialoguer.workspace = true
 fd-lock.workspace = true
 futures.workspace = true
