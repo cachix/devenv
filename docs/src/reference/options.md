@@ -10589,8 +10589,6 @@ one of “silent”, “error”, “warn”, “log”, “debug”
 
 ## git-hooks.hooks.prettier.settings.no-bracket-spacing
 
-
-
 Do not print spaces between brackets.
 
 
@@ -14391,6 +14389,169 @@ git-hooks.nix-pkgs.callPackage tools-dot-nix { inherit (pkgs) system; }
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
+## gitignore.enable
+
+
+
+Whether to enable gitignore generator.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix)
+
+
+
+## gitignore.enableDefaultTemplates
+
+
+
+Prepend a sensible default set of TopTal templates.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix)
+
+
+
+## gitignore.package
+
+
+
+The gitnr package to use for generating templates.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.gitnr
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix)
+
+
+
+## gitignore.content
+
+
+
+Additional gitignore patterns to append to the generated file.
+These patterns will be added after the templates are processed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "*.log"
+  "dist/"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix)
+
+
+
+## gitignore.templates
+
+
+
+List of templates to include in the .gitignore file.
+
+Supported prefixes:
+
+ - repo: - GitHub repository path (e.g., repo:github/gitignore/refs/heads/main/Nix.gitignore)
+ - tt: - TopTal template (e.g., tt:go, tt:jetbrains+all)
+ - gh: - GitHub template (e.g., gh:Node)
+ - ghc: - GitHub community template (e.g., ghc:JavaScript/Vue)
+ - url: - Remote URL (e.g., url:https://domain.com/template.gitignore)
+ - file: - Local file (e.g., file:path/to/local.template.gitignore)
+
+Templates without prefixes default to GitHub templates.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "tt:linux"
+  "tt:macos"
+  "tt:windows"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitignore.nix)
 
 
 
