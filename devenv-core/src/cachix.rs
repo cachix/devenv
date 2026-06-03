@@ -246,8 +246,18 @@ impl CachixManager {
             }
         }
 
+        // Advertise the netrc path whenever a token is resolvable, even
+        // before the file is written. This lets `netrc-file` be applied to
+        // the Nix settings registry *before the store opens* and performs
+        // any authenticated fetch (e.g. a private cache's `nix-cache-info`
+        // probe). The file content is created later by `ensure_netrc_file`,
+        // before the first substituter request. Without this, the netrc
+        // path is only known after cachix config is evaluated — too late,
+        // and private-cache requests go out unauthenticated (HTTP 401).
         if let Some(path) = self.netrc_path.get() {
             settings.netrc_path = Some(PathBuf::from(path));
+        } else if self.resolve_auth_token().is_some() {
+            settings.netrc_path = Some(self.paths.netrc.clone());
         }
 
         Ok(settings)
