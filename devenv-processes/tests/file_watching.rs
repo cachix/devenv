@@ -586,6 +586,92 @@ sleep 3600
     .expect("Test timed out");
 }
 
+// ============================================================================
+// One-shot / short-lived process tests
+// ============================================================================
+
+/// Regression test: a one-shot command (one that exits immediately rather than
+/// staying alive) must still re-run when a watched file changes.
+///
+/// Previously the supervisor tore itself down — dropping the file watcher — the
+/// moment a non-restarting process exited, so `watch` silently did nothing for
+/// one-shot commands that exit immediately.
+/// The supervisor now parks after a clean exit when watch paths are configured,
+/// keeping the watcher live so subsequent edits re-trigger the command.
+///
+/// Without the fix the watcher is gone after the first (immediate) exit, so
+/// `wait_for_watcher_ready` can never observe a re-run and `baseline` stays 1,
+/// failing the assertion below.
+#[cfg(feature = "test-file-watcher")]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_oneshot_reruns_on_file_change() {
+    timeout(TEST_TIMEOUT, async {
+        let ctx = TestContext::new();
+        let counter_file = ctx.temp_path().join("oneshot_counter.txt");
+        let watch_file = ctx.temp_path().join("input.txt");
+
+        // Create initial watch file
+        tokio::fs::write(&watch_file, "initial")
+            .await
+            .expect("Failed to create watch file");
+
+        // One-shot script: records a run and exits immediately (no `sleep`).
+        let script_content = format!(
+            r#"#!/bin/sh
+echo "started" >> {}
+"#,
+            counter_file.display()
+        );
+        let script = ctx.create_script("oneshot.sh", &script_content).await;
+
+        let config =
+            watch_process_config("watch-oneshot", &script, vec![watch_file.clone()], vec![]);
+
+        let manager = ctx.create_manager();
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+
+        // Wait for the initial (one-shot) run to complete
+        assert!(
+            wait_for_file_content(&counter_file, "started", STARTUP_TIMEOUT).await,
+            "One-shot process should run initially"
+        );
+
+        // Probe until the OS file watcher is live. This is the crux: each probe
+        // write must re-run the already-exited one-shot. If the supervisor had
+        // torn down on exit, no probe would ever trigger a re-run.
+        let baseline =
+            wait_for_watcher_ready(&watch_file, &counter_file, "started", 1, WATCH_TIMEOUT).await;
+        assert!(
+            baseline > 1,
+            "One-shot process should re-run after exit when a watched file changes, \
+             but it never re-ran (got {} run(s)). The supervisor likely tore down \
+             after the first exit and dropped the watcher.",
+            baseline
+        );
+
+        // A definitive real edit should trigger at least one more run.
+        tokio::fs::write(&watch_file, "modified")
+            .await
+            .expect("Failed to modify watch file");
+
+        let count =
+            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
+        assert!(
+            count > baseline,
+            "One-shot process should re-run on a watched file edit, got {} run(s) (baseline {})",
+            count,
+            baseline
+        );
+
+        manager.stop_all().await.expect("Failed to stop");
+    })
+    .await
+    .expect("Test timed out");
+}
+
 /// Test rapid file changes (debouncing behavior)
 #[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
