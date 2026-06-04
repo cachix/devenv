@@ -220,7 +220,10 @@
             ]
             ++ args.modules;
 
-            project = lib.evalModules { inherit modules specialArgs; };
+            project = lib.evalModules {
+              class = "devenv";
+              inherit modules specialArgs;
+            };
           in
           project;
 
