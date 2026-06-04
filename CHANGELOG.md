@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed authenticated Cachix pulls failing with HTTP 401 even when a valid auth token was configured. The token was resolved correctly but applied to Nix too late, after the store had already opened and made its first request, so private cache lookups went out unauthenticated. The netrc credentials are now in place before the store opens.
 - Fixed `devenv shell` lingering as a background process, often pinned at 100%+ CPU, after its terminal window or tab was closed. The shell now reacts to the SIGHUP/SIGINT/SIGTERM that already trigger devenv's graceful shutdown by killing the inner shell, instead of orphaning it ([#2845](https://github.com/cachix/devenv/issues/2845)).
 - Fixed `devenv shell`/`devenv update` failing with `authentication required but no callback set` when a `url."ssh://git@github.com/".insteadOf` git config rewrites GitHub HTTPS URLs to SSH. GitHub flake inputs now resolve over SSH using your ssh-agent ([#2842](https://github.com/cachix/devenv/issues/2842)).
 - Fixed the "N files" counter under "Evaluating shell" inflating from generic Nix log lines. Now only counts actual file read operations.
@@ -17,6 +18,8 @@
 - Fixed long lines in `devenv shell` getting a hard newline inserted at the wrap point when copying to clipboard. The shell now preserves the soft-wrap when flushing wrapped output into the terminal's scrollback, so clipboard copy keeps the original single line ([#2865](https://github.com/cachix/devenv/issues/2865)).
 - Fixed files declared with the `files` option not being regenerated when an auto-loaded (`devenv allow`) shell reloaded after `devenv update`. enterShell tasks (including `devenv:files`) now re-run on hot-reload, matching a fresh shell entry, instead of only updating environment variables ([#2864](https://github.com/cachix/devenv/issues/2864)).
 - Fixed `devenv test --no-tui` (and any other non-TUI invocation) silently discarding all output from the `enterTest` script, so the test runner's output, traces, and failure messages never reached the terminal or CI logs. Output from commands run in the shell is now printed in non-TUI mode.
+- Fixed `watch` paths being ignored for one-shot processes that exit immediately (e.g. code generators). The file watcher was torn down as soon as the process exited, so later edits never triggered a re-run. Watched one-shot processes now stay parked after exiting and re-run when a watched file changes.
+- Fixed `devenv up` intermittently failing to start processes with "Failed to initialize task cache: ... pool timed out while waiting for an open connection", most often in CI. The processes that a non-native process manager (e.g. process-compose) launches each open the same task cache database concurrently and raced to create and migrate it; the database is now initialized once before the processes start ([#2897](https://github.com/cachix/devenv/issues/2897)).
 
 ### Improvements
 
@@ -24,6 +27,7 @@
 - `devenv repl` now exposes `inputs` alongside `devenv` and `pkgs`, so you can inspect inputs declared in `devenv.yaml` directly from the REPL (e.g. `inputs.nixpkgs.lib.version`).
 - The TUI now shows each process's state as a status dot whose shape encodes the lifecycle (waiting, starting, running, ready, stopped, failed) instead of an identical spinner on every process. The shape carries the state so it reads without relying on color; transient states gently pulse to signal progress.
 - Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.
+- Auto-disabling the TUI and switching to quiet output when running inside an AI coding agent now recognizes more agents (Aider, autonomous/cloud agents, and others) via the `detect-coding-agent` crate, not just Claude Code. Set `DEVENV_NO_AI_AGENT=1` to opt out.
 - Added `devenv down` as a shorthand for `devenv processes down`, mirroring `devenv up` ([#2862](https://github.com/cachix/devenv/issues/2862)).
 - Bumped secretspec to 0.11, which adds a `[providers]` alias map in `secretspec.toml` and support for a key prefix in the AWS Secrets Manager provider.
 - Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).

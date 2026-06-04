@@ -215,6 +215,31 @@ Automatically restart processes when files change:
 }
 ```
 
+This works for both long-running processes and one-shot commands. A
+long-running process (such as `cargo run`) is restarted on each change. A
+one-shot command that exits immediately is re-run on each change — the watcher
+stays active after the command exits.
+
+```nix title="devenv.nix"
+{
+  # Prints a line every time a file in ./src changes.
+  processes.on-change = {
+    exec = "echo 'a file in ./src changed'";
+    watch = {
+      paths = [ ./src ];
+    };
+  };
+}
+```
+
+!!! note "Path resolution"
+
+    `watch.paths` entries are resolved relative to the location of your
+    `devenv.nix` (the project root), **not** relative to the process's `cwd`.
+    Use path literals such as `./src` rather than strings; they are passed to
+    the watcher as absolute paths. The `cwd` option only sets the working
+    directory for `exec`.
+
 ## Socket Activation
 
 !!! tip "New in devenv 2.0"

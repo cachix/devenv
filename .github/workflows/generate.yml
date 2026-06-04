@@ -53,6 +53,18 @@ jobs:
           add: docs
           message: "Auto generate missing individual markdowns"
 
+      - name: Generate Cargo.nix
+        run: devenv shell -- crate2nix generate -h nix/crate-hashes.json
+
+      - uses: EndBug/add-and-commit@v10
+        if: ${{ github.event_name == 'push' }}
+        with:
+          default_author: github_actions
+          add: |
+            Cargo.nix
+            nix/crate-hashes.json
+          message: "Auto generate Cargo.nix"
+
       - name: Generate supported-languages example
         run: devenv shell devenv-generate-languages-example
 

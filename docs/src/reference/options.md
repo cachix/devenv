@@ -25923,7 +25923,13 @@ list of string
 
 
 Paths to watch for changes (files or directories).
-When files in these paths change, the process will be restarted.
+When files in these paths change, the process is restarted
+(or, for a one-shot command that exits immediately, re-run).
+
+Paths are resolved relative to the location of ` devenv.nix `
+(the project root), not relative to the process’s ` cwd `. Use
+path literals such as ` ./src `; they are passed to the watcher
+as absolute paths.
 
 Requires devenv 2.0+.
 
