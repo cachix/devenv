@@ -242,7 +242,7 @@ impl CachingEvalService {
         // Add extra watch paths
         let fallback_time = SystemTime::now();
         for path in &self.config.extra_watch_paths {
-            if let Ok(desc) = FileInputDesc::new(path.clone(), fallback_time) {
+            if let Ok(desc) = FileInputDesc::new(path.clone(), fallback_time, true) {
                 all_inputs.push(Input::File(desc));
             }
         }
@@ -884,7 +884,7 @@ mod tests {
         // Store a result with the real file
         let json_output = r#"{"shell":"/nix/store/abc-shell"}"#;
         let inputs = vec![Input::File(
-            FileInputDesc::new(temp_file, SystemTime::now()).unwrap(),
+            FileInputDesc::new(temp_file, SystemTime::now(), false).unwrap(),
         )];
         service.store(&key, json_output, inputs).await.unwrap();
 
@@ -957,7 +957,7 @@ mod tests {
         // Store with the file as input
         let json_output = r#"{"result":"original"}"#;
         let inputs = vec![Input::File(
-            FileInputDesc::new(temp_file.clone(), SystemTime::now()).unwrap(),
+            FileInputDesc::new(temp_file.clone(), SystemTime::now(), false).unwrap(),
         )];
         service.store(&key, json_output, inputs).await.unwrap();
 
@@ -986,7 +986,7 @@ mod tests {
         // Store with the file as input
         let json_output = r#"{"content":"original content"}"#;
         let inputs = vec![Input::File(
-            FileInputDesc::new(temp_file.clone(), SystemTime::now()).unwrap(),
+            FileInputDesc::new(temp_file.clone(), SystemTime::now(), false).unwrap(),
         )];
         service.store(&key, json_output, inputs).await.unwrap();
 
@@ -1022,7 +1022,7 @@ mod tests {
         // Store with the file as input
         let json_output = r#"{"content":"stable content"}"#;
         let inputs = vec![Input::File(
-            FileInputDesc::new(temp_file.clone(), SystemTime::now()).unwrap(),
+            FileInputDesc::new(temp_file.clone(), SystemTime::now(), false).unwrap(),
         )];
         service.store(&key, json_output, inputs).await.unwrap();
 
@@ -1057,8 +1057,8 @@ mod tests {
         // Store with multiple file inputs
         let json_output = r#"{"config":{"version":"1.0"},"data":"important data"}"#;
         let inputs = vec![
-            Input::File(FileInputDesc::new(file1.clone(), SystemTime::now()).unwrap()),
-            Input::File(FileInputDesc::new(file2.clone(), SystemTime::now()).unwrap()),
+            Input::File(FileInputDesc::new(file1.clone(), SystemTime::now(), false).unwrap()),
+            Input::File(FileInputDesc::new(file2.clone(), SystemTime::now(), false).unwrap()),
         ];
         service.store(&key, json_output, inputs).await.unwrap();
 
@@ -1168,7 +1168,7 @@ mod tests {
         // Store with both file and env inputs
         let json_output = r#"{"file":"file content","env":"env_value"}"#;
         let inputs = vec![
-            Input::File(FileInputDesc::new(temp_file.clone(), SystemTime::now()).unwrap()),
+            Input::File(FileInputDesc::new(temp_file.clone(), SystemTime::now(), false).unwrap()),
             Input::Env(EnvInputDesc::new(env_name.to_string()).unwrap()),
         ];
         service.store(&key, json_output, inputs).await.unwrap();
@@ -1231,7 +1231,7 @@ mod tests {
             let service = CachingEvalService::new(pool.clone());
             let json_output = r#"{"persistent":true}"#;
             let inputs = vec![Input::File(
-                FileInputDesc::new(temp_file.clone(), SystemTime::now()).unwrap(),
+                FileInputDesc::new(temp_file.clone(), SystemTime::now(), false).unwrap(),
             )];
             service.store(&key, json_output, inputs).await.unwrap();
         }
@@ -1448,7 +1448,7 @@ mod tests {
             .unwrap();
 
         let inputs = vec![Input::File(
-            FileInputDesc::new(file_path, SystemTime::now()).unwrap(),
+            FileInputDesc::new(file_path, SystemTime::now(), false).unwrap(),
         )];
         assert!(any_input_modified_after(&inputs, threshold));
     }
@@ -1468,7 +1468,7 @@ mod tests {
             .unwrap();
 
         let inputs = vec![Input::File(
-            FileInputDesc::new(file_path, SystemTime::now()).unwrap(),
+            FileInputDesc::new(file_path, SystemTime::now(), false).unwrap(),
         )];
         assert!(!any_input_modified_after(&inputs, SystemTime::now()));
     }
