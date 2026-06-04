@@ -29,6 +29,7 @@ Add one line to your shell configuration file:
 === "Nushell"
 
     ```nu title="config.nu"
+    mkdir ~/.cache/devenv
     devenv hook nu | save --force ~/.cache/devenv/hook.nu
     source ~/.cache/devenv/hook.nu
     ```
