@@ -9,6 +9,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:perl6" ];
     packages = with pkgs; [
       rakudo
     ];

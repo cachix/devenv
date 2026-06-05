@@ -26,6 +26,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:fortran" ];
     packages = with pkgs; [
       cfg.package
       fortran-fpm

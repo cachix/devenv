@@ -94,6 +94,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Haskell" ];
     packages = with pkgs; [
       cfg.package
       zlib

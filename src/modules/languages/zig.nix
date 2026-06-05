@@ -69,6 +69,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Zig" ];
     languages.zig.package = lib.mkIf (cfg.version != null) (
       zig-overlay.packages.${pkgs.stdenv.system}.${cfg.version}
     );

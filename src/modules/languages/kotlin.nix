@@ -18,6 +18,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Kotlin" ];
     packages = with pkgs; [
       kotlin
       gradle

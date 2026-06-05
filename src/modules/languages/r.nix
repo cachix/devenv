@@ -35,6 +35,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:R" ];
     packages = [
       cfg.package
     ] ++ lib.optional cfg.radian.enable cfg.radian.package

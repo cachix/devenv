@@ -27,6 +27,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:OCaml" ];
     packages = [
       cfg.packages.ocaml
       cfg.packages.dune_3

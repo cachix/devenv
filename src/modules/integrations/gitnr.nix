@@ -1,81 +1,100 @@
-{ pkgs, lib, config, ... }:
+{ pkgs
+, lib
+, config
+, ...
+}:
 
 let
   cfg = config.gitnr;
 
-  ignoreFileSubmodule = { ... }: {
-    options = {
-      package = lib.mkOption {
-        type = lib.types.package;
-        default = pkgs.gitnr;
-        defaultText = lib.literalExpression "pkgs.gitnr";
-        description = "The gitnr package to use for generating templates.";
-      };
+  ignoreFileSubmodule =
+    { ... }:
+    {
+      options = {
+        enable = lib.mkEnableOption "Enable gitnr integration.";
 
-      content = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        default = [ ];
-        example = [
-          "*.log"
-          "dist/"
-        ];
-        description = ''
-          Additional patterns to append to the generated ignore file.
-          These patterns will be added after the templates are processed.
-        '';
-      };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.gitnr;
+          defaultText = lib.literalExpression "pkgs.gitnr";
+          description = "The gitnr package to use for generating templates.";
+        };
 
-      enableDefaultTemplates = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Prepend a sensible default set of TopTal templates.";
-      };
+        content = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          example = [
+            "*.log"
+            "dist/"
+          ];
+          description = ''
+            Additional patterns to append to the generated ignore file.
+            These patterns will be added after the templates are processed.
+          '';
+        };
 
-      templates = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        default = [ ];
-        example = [
-          "tt:linux"
-          "tt:macos"
-          "tt:windows"
-        ];
-        description = ''
-          List of templates to include in the ignore file.
+        enableDefaultTemplates = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Prepend a sensible default set of GitHub Global templates.";
+        };
 
-          Template strings are passed directly to `gitnr create`.
-        '';
+        templates = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          example = [
+            "tt:linux"
+            "tt:macos"
+            "tt:windows"
+          ];
+          description = ''
+            List of templates to include in the ignore file.
+
+            Template strings are passed directly to `gitnr create`.
+          '';
+        };
       };
     };
-  };
 
-  defaultTemplates = [
-    "tt:jetbrains+all"
-    "tt:linux"
-    "tt:macos"
-    "tt:vim"
-    "tt:visualstudiocode"
-    "tt:windows"
-  ];
+  defaultTemplates =
+    let
+      os = [
+        "ghg:linux"
+        "ghg:macos"
+        "ghg:windows"
+      ];
+      editors = [
+        "ghg:jetbrains"
+        "ghg:vim"
+        "ghg:visualstudiocode"
+        "ghg:sublimetext"
+        "ghg:emacs"
+        "ghg:eclipse"
+      ];
+      vcs = [
+        "ghg:svn"
+        "ghg:mercurial"
+        "ghg:tortoisegit"
+      ];
 
-  mkTemplates = fileCfg:
-    fileCfg.templates
-    ++ lib.optionals fileCfg.enableDefaultTemplates defaultTemplates;
+    in
+    os ++ editors ++ vcs;
 
-  mkContent = contentLines:
-    if contentLines == [ ] then
-      ""
-    else
-      lib.concatStringsSep "\n" (contentLines ++ [ "" ]);
+  mkTemplates =
+    fileCfg: fileCfg.templates ++ lib.optionals fileCfg.enableDefaultTemplates defaultTemplates;
 
-  mkFileExec = filename: fileCfg:
+  mkContent =
+    contentLines:
+    if contentLines == [ ] then "" else lib.concatStringsSep "\n" (contentLines ++ [ "" ]);
+
+  mkFileExec =
+    filename: fileCfg:
     let
       templates = mkTemplates fileCfg;
       content = mkContent fileCfg.content;
       outPath = "${config.env.DEVENV_ROOT}/${filename}";
 
-      gitnrArgs =
-        templates
-        ++ lib.optional (fileCfg.content != [ ]) "file:/dev/stdin";
+      gitnrArgs = templates ++ lib.optional (fileCfg.content != [ ]) "file:/dev/stdin";
 
       gitnrCmd =
         if fileCfg.content == [ ] then
@@ -109,7 +128,7 @@ in
     description = "Declarative generation of ignore files using gitnr templates.";
   };
 
-  config = lib.mkIf (fileExecs != [ ]) {
+  config = lib.mkIf (cfg != { }) {
     tasks."devenv:gitnr:install" = {
       before = [ "devenv:enterShell" ];
       description = "Generate ignore files";

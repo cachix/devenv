@@ -16,6 +16,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Gleam" ];
     languages.erlang.enable = true;
 
     packages = [

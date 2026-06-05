@@ -32,6 +32,7 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:TeX" ];
     packages = [ package ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

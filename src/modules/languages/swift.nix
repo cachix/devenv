@@ -28,6 +28,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Swift" ];
     packages = [
       cfg.package
       pkgs.clang

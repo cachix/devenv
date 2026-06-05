@@ -31,6 +31,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Dotnet" ];
     packages = [
       cfg.package
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;

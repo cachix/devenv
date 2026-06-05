@@ -31,6 +31,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "ghg:Ansible" ];
     packages = [
       pkgs.ansible-lint
       cfg.package

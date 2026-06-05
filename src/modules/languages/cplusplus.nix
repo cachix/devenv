@@ -19,6 +19,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:C++" ];
     packages = with pkgs; [
       clang-tools
       cmake

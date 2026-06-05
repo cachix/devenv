@@ -31,6 +31,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Erlang" ];
     packages = [
       cfg.package
       rebar3

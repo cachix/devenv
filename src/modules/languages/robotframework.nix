@@ -17,6 +17,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:robotframework" ];
     packages = [
       (cfg.python.withPackages (ps: [
         ps.robotframework

@@ -29,6 +29,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:standardml" ];
     packages = [
       cfg.package
       pkgs.smlfmt

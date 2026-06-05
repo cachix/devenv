@@ -34,6 +34,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:solidity" ];
     packages = [ cfg.package ] ++ lib.optional cfg.foundry.enable (cfg.foundry.package);
   };
 }

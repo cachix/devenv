@@ -58,6 +58,7 @@ in
   };
 
   config = mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Java" ];
     languages.java.maven.package = mkDefault mavenPackage;
     languages.java.gradle.package = mkDefault (pkgs.gradle.override { java = cfg.jdk.package; });
     packages = (optional cfg.enable cfg.jdk.package)

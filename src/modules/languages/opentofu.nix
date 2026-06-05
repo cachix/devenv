@@ -27,6 +27,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "ghc:OpenTofu" ];
     git-hooks.hooks = {
       terraform-format.package = config.lib.mkOverrideDefault cfg.package;
       terraform-validate.package = config.lib.mkOverrideDefault cfg.package;

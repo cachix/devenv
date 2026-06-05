@@ -19,6 +19,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Node" ];
     packages = [
       pkgs.typescript
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
