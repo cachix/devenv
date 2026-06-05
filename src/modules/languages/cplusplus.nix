@@ -14,8 +14,8 @@ let
   conan-flake =
     if cfg.conan.enable then config.lib.getInput inputArgs else config.lib.tryGetInput inputArgs;
 
-  # Determine config root: prefer git.root, fallback to devenv.root
-  configRoot = if config.git.root != null then config.git.root else config.devenv.root;
+  # Determine config root: prefer devenv.root, fallback to git.root
+  configRoot = if config.devenv.root != null then config.devenv.root else config.git.root;
 
   conanSubmodule =
     if conan-flake != null then
