@@ -214,6 +214,7 @@ rec {
 
       # Phase 1: Base evaluation to extract profile definitions
       baseProject = lib.evalModules {
+        class = "devenv";
         specialArgs = inputs // {
           inherit inputs secretspec primops;
         };
@@ -493,6 +494,7 @@ rec {
         let
           evalPkgs = mkPkgsForSystem evalSystem;
           evalProject = lib.evalModules {
+            class = "devenv";
             specialArgs = inputs // {
               inherit inputs secretspec primops;
             };
@@ -579,6 +581,7 @@ rec {
         lib = pkgs.lib;
 
         project = lib.evalModules {
+          class = "devenv";
           specialArgs = allInputs // {
             inputs = allInputs;
             secretspec = null;
