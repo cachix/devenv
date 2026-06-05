@@ -3,6 +3,13 @@
 let
   cfg = config.languages.rust;
 
+  # The components to actually install in the toolchain. Appends the cranelift
+  # codegen backend on top of the user-configured `components` (which keeps its
+  # default) rather than overriding them.
+  componentsToInstall =
+    cfg.components
+    ++ lib.optional cfg.cranelift.enable "rustc-codegen-cranelift-preview";
+
   validChannels = [ "nixpkgs" "stable" "beta" "nightly" ];
 
   rust-overlay = config.lib.getInput {
@@ -405,8 +412,6 @@ in
 
         # Allow clippy to access the internet to fetch dependencies.
         git-hooks.hooks.clippy.settings.offline = lib.mkDefault false;
-
-        languages.rust.components = lib.mkIf cfg.cranelift.enable (lib.mkAfter [ "rustc-codegen-cranelift-preview" ]);
       }
     )
 
@@ -437,7 +442,7 @@ in
       languages.rust.toolchainPackage = lib.mkDefault (
         pkgs.symlinkJoin {
           name = "rust-toolchain-${cfg.channel}";
-          paths = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components;
+          paths = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) componentsToInstall;
         }
       );
       languages.rust.lsp.package = lib.mkDefault cfg.toolchain.rust-analyzer;
@@ -506,7 +511,7 @@ in
             in
               cfg.toolchain.${c} or cfg.toolchain.${resolvedName} or toolchainComponents.${resolvedName}
           )
-          cfg.components;
+          componentsToInstall;
 
         allSelectedComponents = resolvedComponents ++ targetComponents;
 
