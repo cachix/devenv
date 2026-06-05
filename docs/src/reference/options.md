@@ -14516,6 +14516,169 @@ list of package
 
 
 
+## integrations.gitnr
+
+
+
+Declarative generation of ignore files using gitnr templates.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  ".gitignore" = {
+    enableDefaultTemplates = true;
+    templates = [ "tt:go" "tt:node" ];
+    content = [
+      "*.env"
+    ];
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix)
+
+
+
+## integrations.gitnr.\<name>.enableDefaultTemplates
+
+
+
+Prepend a sensible default set of TopTal templates.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix)
+
+
+
+## integrations.gitnr.\<name>.package
+
+
+
+The gitnr package to use for generating templates.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.gitnr
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix)
+
+
+
+## integrations.gitnr.\<name>.content
+
+
+
+Additional patterns to append to the generated ignore file.
+These patterns will be added after the templates are processed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "*.log"
+  "dist/"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix)
+
+
+
+## integrations.gitnr.\<name>.templates
+
+
+
+List of templates to include in the ignore file.
+
+Template strings are passed directly to ` gitnr create `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "tt:linux"
+  "tt:macos"
+  "tt:windows"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/gitnr.nix)
+
+
+
 ## keyFile
 
 
