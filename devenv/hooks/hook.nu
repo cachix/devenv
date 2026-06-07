@@ -1,8 +1,7 @@
 # devenv hook for nushell
 # Usage: Add to your config.nu:
-#   source (devenv hook nu | save --force ~/.cache/devenv/hook.nu; "~/.cache/devenv/hook.nu")
-# Or: devenv hook nu | save --force ~/.cache/devenv/hook.nu
-#     source ~/.cache/devenv/hook.nu
+#   mkdir ($nu.default-config-dir | path join autoload)
+#   devenv hook nu | save --force ($nu.default-config-dir | path join autoload/devenv-hook.nu)
 
 $env._DEVENV_HOOK_UNTRUSTED = ""
 
