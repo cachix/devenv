@@ -12,7 +12,7 @@ use devenv_activity::{ActivityEvent, ActivityLevel};
 use devenv_processes::ProcessCommand;
 use iocraft::prelude::*;
 use std::io::{self, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_shutdown::Shutdown;
@@ -23,6 +23,12 @@ use tracing::debug;
 /// type-keyed context lookup can resolve them independently.
 #[derive(Clone)]
 pub struct RenderShutdown(pub Arc<Notify>);
+
+/// Monotonic counter bumped by the event processor whenever the activity model
+/// changes. The render loop reads it to skip layout-recomputing redraws while
+/// idle (see `throttled_notify_loop`). Provided to components via context.
+#[derive(Clone)]
+pub struct ModelVersion(pub Arc<AtomicU64>);
 
 /// Cooperative exit flag for TUI shutdown.
 ///
@@ -160,6 +166,10 @@ impl TuiApp {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
+        // Bumped on every activity-model change so the render loop can tell a
+        // real update from an idle safety-net wake and avoid redrawing (and
+        // recomputing the layout) when nothing changed.
+        let model_version = Arc::new(AtomicU64::new(0));
         // Separate notify for shutdown — bypasses render throttle so the
         // cooperative exit flag is observed promptly instead of waiting for
         // the next throttle tick (which can lose intermediate notifies).
@@ -175,6 +185,7 @@ impl TuiApp {
         let event_processor_handle = tokio::spawn({
             let activity_model = activity_model.clone();
             let notify = notify.clone();
+            let model_version = model_version.clone();
             let render_shutdown = render_shutdown.clone();
             let exit_flag = exit_flag.clone();
             let event_batch_size = config.event_batch_size;
@@ -189,6 +200,10 @@ impl TuiApp {
                             let Some(event) = event else {
                                 // Channel closed unexpectedly
                                 exit_flag.set();
+                                // Bump the version alongside the notify so the
+                                // render loop treats this as a real change (kept
+                                // in lockstep with the other notify sites).
+                                model_version.fetch_add(1, Ordering::Release);
                                 notify.notify_waiters();
                                 render_shutdown.notify_waiters();
                                 break;
@@ -202,13 +217,21 @@ impl TuiApp {
                                 }
                             }
 
+                            let mut any_changed = false;
                             if let Ok(mut m) = activity_model.write() {
                                 for event in batch.drain(..) {
-                                    m.apply_activity_event(event);
+                                    any_changed |= m.apply_activity_event(event);
                                 }
                             }
 
-                            notify.notify_waiters();
+                            // Only wake the render loop when the batch actually
+                            // changed the visible model; pure no-op events (e.g.
+                            // shell events, skipped .narinfo fetches) don't force
+                            // a layout-recomputing redraw.
+                            if any_changed {
+                                model_version.fetch_add(1, Ordering::Release);
+                                notify.notify_waiters();
+                            }
                         }
 
                         _ = &mut backend_notified => {
@@ -229,6 +252,7 @@ impl TuiApp {
                             // Signal component to exit cooperatively. Set before
                             // notify so the triggered re-render sees the flag.
                             exit_flag.set();
+                            model_version.fetch_add(1, Ordering::Release);
                             notify.notify_waiters();
                             // Bypass render throttle so the exit flag is observed
                             // on the next frame instead of after another throttle tick.
@@ -258,6 +282,7 @@ impl TuiApp {
                 activity_model.clone(),
                 ui_state.clone(),
                 notify.clone(),
+                model_version.clone(),
                 render_shutdown.clone(),
                 shutdown.clone(),
                 config.clone(),
@@ -533,6 +558,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let activity_model = hooks.use_context::<Arc<RwLock<ActivityModel>>>();
     let ui_state = hooks.use_context::<Arc<RwLock<UiState>>>();
     let notify = hooks.use_context::<Arc<Notify>>();
+    let model_version = hooks.use_context::<ModelVersion>().0.clone();
     let render_shutdown = hooks.use_context::<RenderShutdown>().0.clone();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
     let mut should_exit = hooks.use_state(|| false);
@@ -549,10 +575,12 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let redraw = hooks.use_state(|| 0u64);
     hooks.use_future({
         let notify = notify.clone();
+        let model_version = model_version.clone();
         let render_shutdown = render_shutdown.clone();
         let max_fps = config.max_fps;
         async move {
-            crate::throttled_notify_loop(notify, render_shutdown, redraw, max_fps).await;
+            crate::throttled_notify_loop(notify, render_shutdown, model_version, redraw, max_fps)
+                .await;
         }
     });
 
@@ -578,6 +606,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let ui_state = ui_state.clone();
         let shutdown = shutdown.clone();
         let command_tx = command_tx.clone();
+        let notify = notify.clone();
         let mut scroll_handle = scroll_handle;
         let scroll_view_active = scroll_view_active;
 
@@ -586,92 +615,109 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 && key_event.kind != KeyEventKind::Release
             {
                 debug!("Key event: {:?}", key_event);
-                if handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown) {
-                    return;
-                }
-
-                match key_event.code {
-                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !request_interrupt_prompt(command_tx.as_ref(), &ui_state) {
-                            shutdown.handle_interrupt();
-                        }
-                    }
-                    KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        // Restart selected process
-                        if let Some(tx) = command_tx.as_ref()
-                            && let Ok(ui) = ui_state.read()
-                            && let Some(activity_id) = ui.selected_activity
-                            && let Ok(model) = activity_model.read()
-                            && let Some(activity) = model.get_activity(activity_id)
-                            && matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+                if !handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown) {
+                    match key_event.code {
+                        KeyCode::Char('c')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
-                            let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
+                            if !request_interrupt_prompt(command_tx.as_ref(), &ui_state) {
+                                shutdown.handle_interrupt();
+                            }
                         }
-                    }
-                    KeyCode::Char('x') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        // Stop selected process (only if active)
-                        if let Some(tx) = command_tx.as_ref()
-                            && let Ok(ui) = ui_state.read()
-                            && let Some(activity_id) = ui.selected_activity
-                            && let Ok(model) = activity_model.read()
-                            && let Some(activity) = model.get_activity(activity_id)
-                            && let crate::model::ActivityVariant::Process(ref proc) =
-                                activity.variant
-                            && proc.status.is_stoppable()
+                        KeyCode::Char('r')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
-                            let _ = tx.try_send(ProcessCommand::Stop(activity.name.clone()));
-                        }
-                    }
-                    KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if let Ok(mut ui) = ui_state.write()
-                            && let Some(activity_id) = ui.selected_activity
-                        {
-                            ui.view_mode = ViewMode::ExpandedLogs { activity_id };
-                            should_exit.set(true);
-                        }
-                    }
-                    KeyCode::Char('h') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if let Ok(model) = activity_model.read()
-                            && let Ok(mut ui) = ui_state.write()
-                        {
-                            ui.toggle_hide_stopped_processes();
-                            if let Some(id) = ui.selected_activity
-                                && !model.is_selectable(id, &ui)
+                            // Restart selected process
+                            if let Some(tx) = command_tx.as_ref()
+                                && let Ok(ui) = ui_state.read()
+                                && let Some(activity_id) = ui.selected_activity
+                                && let Ok(model) = activity_model.read()
+                                && let Some(activity) = model.get_activity(activity_id)
+                                && matches!(
+                                    activity.variant,
+                                    crate::model::ActivityVariant::Process(_)
+                                )
                             {
+                                let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
+                            }
+                        }
+                        KeyCode::Char('x')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            // Stop selected process (only if active)
+                            if let Some(tx) = command_tx.as_ref()
+                                && let Ok(ui) = ui_state.read()
+                                && let Some(activity_id) = ui.selected_activity
+                                && let Ok(model) = activity_model.read()
+                                && let Some(activity) = model.get_activity(activity_id)
+                                && let crate::model::ActivityVariant::Process(ref proc) =
+                                    activity.variant
+                                && proc.status.is_stoppable()
+                            {
+                                let _ = tx.try_send(ProcessCommand::Stop(activity.name.clone()));
+                            }
+                        }
+                        KeyCode::Char('e')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            if let Ok(mut ui) = ui_state.write()
+                                && let Some(activity_id) = ui.selected_activity
+                            {
+                                ui.view_mode = ViewMode::ExpandedLogs { activity_id };
+                                should_exit.set(true);
+                            }
+                        }
+                        KeyCode::Char('h')
+                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                ui.toggle_hide_stopped_processes();
+                                if let Some(id) = ui.selected_activity
+                                    && !model.is_selectable(id, &ui)
+                                {
+                                    ui.selected_activity = None;
+                                }
+                            }
+                        }
+                        KeyCode::Down | KeyCode::Up => {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                let selectable = model.get_selectable_activity_ids(&ui);
+                                ui.select_activity(&selectable, key_event.code == KeyCode::Down);
+                                if let Some(selected_id) = ui.selected_activity
+                                    && *scroll_view_active.read()
+                                {
+                                    let display = model.get_display_activities(&ui);
+                                    let heights = activity_heights.read();
+                                    scroll_selected_into_view(
+                                        &mut scroll_handle.write(),
+                                        &heights,
+                                        &display,
+                                        selected_id,
+                                    );
+                                }
+                            }
+                        }
+                        KeyCode::Esc => {
+                            if let Ok(mut ui) = ui_state.write() {
                                 ui.selected_activity = None;
                             }
-                        }
-                    }
-                    KeyCode::Down | KeyCode::Up => {
-                        if let Ok(model) = activity_model.read()
-                            && let Ok(mut ui) = ui_state.write()
-                        {
-                            let selectable = model.get_selectable_activity_ids(&ui);
-                            ui.select_activity(&selectable, key_event.code == KeyCode::Down);
-                            if let Some(selected_id) = ui.selected_activity
-                                && *scroll_view_active.read()
-                            {
-                                let display = model.get_display_activities(&ui);
-                                let heights = activity_heights.read();
-                                scroll_selected_into_view(
-                                    &mut scroll_handle.write(),
-                                    &heights,
-                                    &display,
-                                    selected_id,
-                                );
+                            if *scroll_view_active.read() {
+                                scroll_handle.write().scroll_to_bottom();
                             }
                         }
+                        _ => {}
                     }
-                    KeyCode::Esc => {
-                        if let Ok(mut ui) = ui_state.write() {
-                            ui.selected_activity = None;
-                        }
-                        if *scroll_view_active.read() {
-                            scroll_handle.write().scroll_to_bottom();
-                        }
-                    }
-                    _ => {}
                 }
+
+                // Key handlers above mutate `ui_state` (and the interrupt
+                // prompt), which iocraft cannot observe on its own. Wake the
+                // render loop so the change is painted promptly instead of
+                // waiting for the idle heartbeat (#2915).
+                notify.notify_waiters();
             }
         }
     });
@@ -740,6 +786,7 @@ async fn run_view(
     activity_model: Arc<RwLock<ActivityModel>>,
     ui_state: Arc<RwLock<UiState>>,
     notify: Arc<Notify>,
+    model_version: Arc<AtomicU64>,
     render_shutdown: Arc<Notify>,
     shutdown: Arc<Shutdown>,
     config: Arc<TuiConfig>,
@@ -769,12 +816,14 @@ async fn run_view(
                 ContextProvider(value: Context::owned(config.clone())) {
                     ContextProvider(value: Context::owned(shutdown.clone())) {
                         ContextProvider(value: Context::owned(notify.clone())) {
-                            ContextProvider(value: Context::owned(RenderShutdown(render_shutdown.clone()))) {
-                                ContextProvider(value: Context::owned(activity_model.clone())) {
-                                    ContextProvider(value: Context::owned(ui_state.clone())) {
-                                        ContextProvider(value: Context::owned(command_tx.clone())) {
-                                            ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                                MainView
+                            ContextProvider(value: Context::owned(ModelVersion(model_version.clone()))) {
+                                ContextProvider(value: Context::owned(RenderShutdown(render_shutdown.clone()))) {
+                                    ContextProvider(value: Context::owned(activity_model.clone())) {
+                                        ContextProvider(value: Context::owned(ui_state.clone())) {
+                                            ContextProvider(value: Context::owned(command_tx.clone())) {
+                                                ContextProvider(value: Context::owned(exit_flag.clone())) {
+                                                    MainView
+                                                }
                                             }
                                         }
                                     }
@@ -810,13 +859,15 @@ async fn run_view(
                 ContextProvider(value: Context::owned(config.clone())) {
                     ContextProvider(value: Context::owned(shutdown.clone())) {
                         ContextProvider(value: Context::owned(notify.clone())) {
-                            ContextProvider(value: Context::owned(RenderShutdown(render_shutdown.clone()))) {
-                                ContextProvider(value: Context::owned(activity_model.clone())) {
-                                    ContextProvider(value: Context::owned(ui_state.clone())) {
-                                        ContextProvider(value: Context::owned(command_tx.clone())) {
-                                            ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                                ContextProvider(value: Context::owned(activity_id)) {
-                                                    ExpandedLogView
+                            ContextProvider(value: Context::owned(ModelVersion(model_version.clone()))) {
+                                ContextProvider(value: Context::owned(RenderShutdown(render_shutdown.clone()))) {
+                                    ContextProvider(value: Context::owned(activity_model.clone())) {
+                                        ContextProvider(value: Context::owned(ui_state.clone())) {
+                                            ContextProvider(value: Context::owned(command_tx.clone())) {
+                                                ContextProvider(value: Context::owned(exit_flag.clone())) {
+                                                    ContextProvider(value: Context::owned(activity_id)) {
+                                                        ExpandedLogView
+                                                    }
                                                 }
                                             }
                                         }
