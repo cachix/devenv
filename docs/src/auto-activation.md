@@ -29,9 +29,8 @@ Add one line to your shell configuration file:
 === "Nushell"
 
     ```nu title="config.nu"
-    mkdir ~/.cache/devenv
-    devenv hook nu | save --force ~/.cache/devenv/hook.nu
-    source ~/.cache/devenv/hook.nu
+    mkdir ($nu.default-config-dir | path join autoload)
+    devenv hook nu | save --force ($nu.default-config-dir | path join autoload/devenv-hook.nu)
     ```
 
 ## Trusting a project
