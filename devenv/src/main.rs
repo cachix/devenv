@@ -660,7 +660,7 @@ async fn run_backend(
             // dropping the user back to their outer shell with no session left
             // to stop it. `down()` reconstructs the manager from the PID file.
             if let Err(e) = devenv
-                .start_shell_processes(&shell_start_names, task_exports.clone())
+                .start_shell_processes(task_exports.clone())
                 .await
             {
                 if let Err(down_err) = devenv.down().await {
@@ -703,9 +703,7 @@ async fn run_backend(
         });
         let devenv = tokio::task::block_in_place(|| owner_handle.join())
             .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
-        // The shell owns the daemon it spawned: tear it down on exit. Anything
-        // an attached `devenv up` started inside it is bound to the shell's
-        // lifetime and stops here too.
+        // The shell owns the daemon it spawned: tear it down on exit.
         if start_shell_procs && let Err(e) = devenv.down().await {
             tracing::warn!("failed to stop shell-owned process manager on exit: {}", e);
         }

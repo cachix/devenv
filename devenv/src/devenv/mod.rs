@@ -28,7 +28,6 @@ use processes::ProcessManager as _;
 use secrecy::ExposeSecret;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::IsTerminal;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
@@ -666,201 +665,6 @@ impl Devenv {
             .unwrap_or_else(|_| self.devenv_dotfile.join("native-manager.pid"))
     }
 
-    /// Names of processes that `devenv up` should start: process tasks whose
-    /// `start.enable` is true. Nix coerces both `true` and `"shell"` to true
-    /// here, so this covers the up-enabled set; `false` processes are excluded.
-    fn up_enabled_process_names(task_configs: &[tasks::TaskConfig]) -> Vec<String> {
-        task_configs
-            .iter()
-            .filter_map(|t| {
-                let name = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)?;
-                let enabled = t.process.as_ref().is_some_and(|p| p.start.enable);
-                enabled.then(|| name.to_string())
-            })
-            .collect()
-    }
-
-    /// Override per-process auto-start so that only the `shell_names` subset is
-    /// launched, while every other process is registered as not-started (so a
-    /// later `devenv up` can attach and start the up-enabled ones). Used when
-    /// building the daemon config for `devenv shell`.
-    fn set_shell_autostart(task_configs: &mut [tasks::TaskConfig], shell_names: &[String]) {
-        let shell_set: HashSet<&str> = shell_names.iter().map(String::as_str).collect();
-        for t in task_configs.iter_mut() {
-            if let Some(name) = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)
-                && let Some(process) = t.process.as_mut()
-            {
-                process.start.enable = shell_set.contains(name);
-            }
-        }
-    }
-
-    /// Map a manager process phase to the TUI's process status.
-    fn phase_to_process_status(phase: processes::ProcessPhase) -> devenv_activity::ProcessStatus {
-        use devenv_activity::ProcessStatus as S;
-        use processes::ProcessPhase as P;
-        match phase {
-            P::NotStarted => S::NotStarted,
-            P::Stopped => S::Stopped,
-            P::Waiting => S::Waiting,
-            P::Starting => S::Starting,
-            P::Ready => S::Ready,
-            P::Exited | P::GaveUp => S::Stopped,
-        }
-    }
-
-    /// Attach to a running native manager and start the requested processes
-    /// (defaulting to the up-enabled set).
-    ///
-    /// Dependency ordering and readiness-waiting are delegated to the daemon's
-    /// own task scheduler over the control socket (`ApiRequest::Up`): it owns
-    /// the live task graph, so `after`/`before` ordering, already-running
-    /// dependencies, and out-of-subset dependencies are all resolved exactly
-    /// like the cold-start path — the CLI no longer re-derives them.
-    async fn attach_start_up_processes(
-        &self,
-        task_configs: &[tasks::TaskConfig],
-        requested: &[String],
-    ) -> Result<Vec<String>> {
-        // Validate explicit `devenv up <name>` requests against the
-        // configuration so a typo (or a name absent from the config) fails
-        // loudly here — matching the cold-start path.
-        if !requested.is_empty() {
-            let known: HashSet<&str> = task_configs
-                .iter()
-                .filter_map(|t| t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX))
-                .collect();
-            let unknown: Vec<&str> = requested
-                .iter()
-                .map(String::as_str)
-                .filter(|n| !known.contains(n))
-                .collect();
-            if !unknown.is_empty() {
-                bail!(
-                    "Process(es) not found in configuration: {}",
-                    unknown.join(", ")
-                );
-            }
-        }
-
-        // Resolve the concrete set to start: an explicit subset, or the
-        // up-enabled default. The daemon orders and launches them by dependency.
-        let names = if requested.is_empty() {
-            Self::up_enabled_process_names(task_configs)
-        } else {
-            requested.to_vec()
-        };
-
-        match self
-            .native_api_request(&processes::ApiRequest::Up {
-                names: names.clone(),
-            })
-            .await?
-        {
-            processes::ApiResponse::Ok => {}
-            processes::ApiResponse::Error { message } => {
-                bail!("Failed to start processes on running manager: {}", message)
-            }
-            other => bail!("Unexpected response to up request: {:?}", other),
-        }
-
-        Ok(names)
-    }
-
-    /// New log lines to emit from a polled "last N lines" snapshot.
-    ///
-    /// The daemon's `Logs` API returns a tail window, so as output grows old
-    /// lines scroll off the top. We emit the lines after the last one we already
-    /// emitted; if it scrolled out of the window, we emit the whole window.
-    fn delta_lines(prev_last: &mut Option<String>, text: &str) -> Vec<String> {
-        let lines: Vec<&str> = text.lines().collect();
-        let start = match prev_last {
-            Some(last) => lines
-                .iter()
-                .rposition(|l| l == last)
-                .map(|i| i + 1)
-                .unwrap_or(0),
-            None => 0,
-        };
-        if let Some(l) = lines.last() {
-            *prev_last = Some((*l).to_string());
-        }
-        lines[start..].iter().map(|s| (*s).to_string()).collect()
-    }
-
-    /// Foreground view while attached to a running daemon: poll the control
-    /// socket and mirror process state, ports, and logs into the activity system
-    /// so the TUI renders the process list and the status-line summary. Returns
-    /// when the user interrupts (Ctrl-C) or the daemon goes away, leaving the
-    /// daemon and its processes running.
-    async fn run_attached_foreground(&self) -> Result<()> {
-        struct ProcState {
-            activity: Activity,
-            last_stdout: Option<String>,
-            last_stderr: Option<String>,
-        }
-
-        let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
-        let parent_id = parent.id();
-        let token = self.shutdown.cancellation_token();
-        let mut procs: HashMap<String, ProcState> = HashMap::new();
-
-        loop {
-            match self.native_api_request(&processes::ApiRequest::List).await {
-                Ok(processes::ApiResponse::ProcessList { processes }) => {
-                    for info in &processes {
-                        let state = procs.entry(info.name.clone()).or_insert_with(|| {
-                            let activity = devenv_activity::start!(
-                                Activity::process(&info.name)
-                                    .parent(Some(parent_id))
-                                    .ports(info.ports.clone())
-                            );
-                            ProcState {
-                                activity,
-                                last_stdout: None,
-                                last_stderr: None,
-                            }
-                        });
-                        state
-                            .activity
-                            .set_status(Self::phase_to_process_status(info.phase));
-                    }
-
-                    // Mirror recent log output for each process.
-                    for info in &processes {
-                        let logs = self
-                            .native_api_request(&processes::ApiRequest::Logs {
-                                name: info.name.clone(),
-                                lines: Some(50),
-                            })
-                            .await;
-                        if let Ok(processes::ApiResponse::ProcessLogs { stdout, stderr }) = logs
-                            && let Some(state) = procs.get_mut(&info.name)
-                        {
-                            for line in Self::delta_lines(&mut state.last_stdout, &stdout) {
-                                state.activity.log(line);
-                            }
-                            for line in Self::delta_lines(&mut state.last_stderr, &stderr) {
-                                state.activity.error(line);
-                            }
-                        }
-                    }
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    debug!(error = %e, "attached manager no longer reachable");
-                    break;
-                }
-            }
-
-            tokio::select! {
-                _ = token.cancelled() => break,
-                _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {}
-            }
-        }
-        Ok(())
-    }
-
     /// Enable process port allocation. Must be called before the dev-env / task
     /// config evaluation that resolves process ports (see the PTY shell path in
     /// `main.rs`), mirroring what `up()`/`test()` do before assemble.
@@ -870,10 +674,8 @@ impl Devenv {
         self.reserve_running_ports().await;
     }
 
-    /// Start the `start.enable = "shell"` processes as a detached daemon when
-    /// entering an interactive `devenv shell`. All processes are registered with
-    /// the daemon (so a later `devenv up` can attach and start the up-enabled
-    /// ones), but only the shell subset is auto-started here.
+    /// Start processes as a detached daemon when entering an interactive
+    /// `devenv shell` (when `process.start = "interactive-shell"`).
     ///
     /// Reuses the already-computed enterShell `task_exports` to avoid re-running
     /// enterShell tasks. The caller must enable port allocation
@@ -881,15 +683,10 @@ impl Devenv {
     /// manager is already running.
     pub async fn start_shell_processes(
         &self,
-        shell_names: &[String],
         task_exports: BTreeMap<String, String>,
     ) -> Result<()> {
         let mut envs = self.configure_shell().await?;
         envs.extend(task_exports);
-
-        // Auto-start only the shell subset; register the rest as not-started.
-        let mut task_configs = self.load_tasks().await?;
-        Self::set_shell_autostart(&mut task_configs, shell_names);
 
         let options = ProcessOptions {
             detach: true,
@@ -906,7 +703,7 @@ impl Devenv {
             devenv_tasks::RunMode::All,
             envs,
             options,
-            Some(task_configs),
+            None,
         )
         .await?;
         Ok(())
@@ -1909,44 +1706,22 @@ impl Devenv {
                 // Spawn a separate daemon process via re-exec to avoid
                 // fork-safety issues in this multithreaded process.
                 return self
-                    .spawn_daemon_processes(config, &processes, options.background)
+                    .spawn_daemon_processes(config, options.background)
                     .await;
             }
 
-            // If a manager is already running (e.g. started by `devenv up -d` or
-            // by `devenv shell`), attach to it over the control socket and start
-            // the up-enabled processes instead of starting a second manager
-            // (which would clobber the daemon's PID file/socket and orphan it).
+            // Check if a daemon is already running. Without this guard a
+            // foreground `devenv up` would overwrite the daemon's PID file
+            // and socket, and its Drop would delete them — orphaning the
+            // daemon and its child processes.
             let pid_file = self.native_manager_pid_file();
             if let Ok(processes::PidStatus::Running(pid)) =
                 processes::check_pid_file(&pid_file).await
             {
-                // Two callers must not attach. A detached caller (e.g. `devenv
-                // test`) can't run an isolated process set over a manager it
-                // doesn't own, and its later teardown would stop that foreign
-                // daemon. And attaching streams a live view until you detach
-                // with Ctrl-C, which only makes sense at an interactive
-                // terminal — scripts, CI, and piped output would otherwise block
-                // forever. Both fail fast like a fresh foreground start that
-                // finds a manager already running; interactive foreground
-                // `devenv up` is the only intended attacher on this path.
-                let interactive = std::io::stdin().is_terminal()
-                    && std::io::stderr().is_terminal()
-                    && std::env::var_os("CI").is_none();
-                if options.detach || !interactive {
-                    bail!(
-                        "Processes already running with PID {}. Stop them first with: devenv processes down",
-                        pid
-                    );
-                }
-                // Interactive foreground `devenv up`: attach and stream status
-                // until the user detaches (Ctrl-C), leaving the manager running.
-                let started = self
-                    .attach_start_up_processes(&config.tasks, &processes)
-                    .await?;
-                info!(?started, "attached to running process manager");
-                self.run_attached_foreground().await?;
-                return Ok(RunMode::Detached);
+                bail!(
+                    "Processes already running with PID {}. Stop them first with: devenv processes down",
+                    pid
+                );
             }
 
             let tasks_runner =
@@ -1984,18 +1759,11 @@ impl Devenv {
                     "devenv.up: calling run_foreground (native manager, detach=false), global_token_cancelled={}",
                     self.shutdown.is_cancelled()
                 );
-                // Answer `devenv up` attach requests against this foreground
-                // manager too: a second `devenv up` finds our PID file and
-                // attaches over the control socket. The cold start above has
-                // already finished, so registering the handler here is in time.
-                let (up_tx, up_rx) = tokio::sync::mpsc::channel::<processes::UpRequest>(8);
-                tasks_runner.process_manager().set_up_handler(up_tx);
-                let result = crate::commands::daemon_processes::run_foreground_with_up(
-                    &tasks_runner,
-                    &self.shutdown,
-                    up_rx,
-                )
-                .await;
+                let result = tasks_runner
+                    .process_manager()
+                    .run_foreground(self.shutdown.cancellation_token(), None)
+                    .await
+                    .map_err(|e| miette!("Process manager error: {}", e));
                 trace!("devenv.up: run_foreground returned");
 
                 let _ = tokio::fs::remove_file(&pid_file).await;
@@ -2057,22 +1825,28 @@ impl Devenv {
     async fn spawn_daemon_processes(
         &self,
         config: tasks::Config,
-        processes: &[String],
         background: bool,
     ) -> Result<RunMode> {
         let pid_file = self.native_manager_pid_file();
 
-        // If a manager is already running, attach to it and start the requested
-        // processes rather than spawning a second daemon.
-        if matches!(
-            processes::check_pid_file(&pid_file).await,
-            Ok(processes::PidStatus::Running(_))
-        ) {
-            let started = self
-                .attach_start_up_processes(&config.tasks, processes)
-                .await?;
-            info!(?started, "attached to running process manager");
-            return Ok(RunMode::Detached);
+        // Check if already running
+        if let Ok(processes::PidStatus::Running(pid)) =
+            processes::check_pid_file(&pid_file).await
+        {
+            bail!(
+                "Processes already running with PID {}. Stop them first with: devenv processes down",
+                pid
+            );
+        }
+
+        // Pre-initialize the task cache so the per-process `devenv-tasks`
+        // invocations that the process manager spawns concurrently don't race to
+        // create and migrate the same SQLite database (#2897). After this the
+        // database already exists in WAL mode with migrations applied, so the
+        // children only open it for reads at startup. Best-effort: on failure we
+        // fall back to the previous behaviour.
+        if let Err(e) = devenv_tasks::warm_cache(&self.devenv_dotfile).await {
+            warn!(error = %e, "failed to pre-initialize task cache");
         }
 
         // Serialize the task config for the daemon
@@ -2906,81 +2680,6 @@ fn resolve_secretspec_into(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn process_task(name: &str, enable: bool) -> tasks::TaskConfig {
-        tasks::TaskConfig {
-            name: format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, name),
-            process: Some(processes::ProcessConfig {
-                start: processes::config::StartConfig { enable },
-                ..Default::default()
-            }),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn test_up_enabled_process_names() {
-        let configs = vec![
-            process_task("alpha", true),
-            process_task("beta", false),
-            tasks::TaskConfig {
-                name: "devenv:not-a-process".to_string(),
-                ..Default::default()
-            },
-        ];
-        assert_eq!(
-            Devenv::up_enabled_process_names(&configs),
-            vec!["alpha".to_string()]
-        );
-    }
-
-    #[test]
-    fn test_set_shell_autostart() {
-        let mut configs = vec![
-            process_task("web", true),
-            process_task("db", true),
-            process_task("off", false),
-            tasks::TaskConfig {
-                name: "devenv:other".to_string(),
-                ..Default::default()
-            },
-        ];
-        Devenv::set_shell_autostart(&mut configs, &["db".to_string()]);
-        let enabled = |i: usize| configs[i].process.as_ref().unwrap().start.enable;
-        // Only the shell subset auto-starts; everything else is registered as
-        // not-started so an attaching `devenv up` can start the up-enabled ones.
-        assert!(!enabled(0), "web should not auto-start in shell");
-        assert!(enabled(1), "db is the shell process and should auto-start");
-        assert!(!enabled(2), "off stays not-started");
-        assert!(configs[3].process.is_none(), "non-process task untouched");
-    }
-
-    #[test]
-    fn test_delta_lines() {
-        // First poll emits the whole snapshot and remembers the last line.
-        let mut last = None;
-        assert_eq!(
-            Devenv::delta_lines(&mut last, "a\nb\nc\n"),
-            vec!["a".to_string(), "b".to_string(), "c".to_string()]
-        );
-        assert_eq!(last.as_deref(), Some("c"));
-
-        // Next poll: only lines after the previously-seen last line.
-        assert_eq!(
-            Devenv::delta_lines(&mut last, "b\nc\nd\ne"),
-            vec!["d".to_string(), "e".to_string()]
-        );
-        assert_eq!(last.as_deref(), Some("e"));
-
-        // No new output -> nothing emitted.
-        assert!(Devenv::delta_lines(&mut last, "c\nd\ne").is_empty());
-
-        // Window scrolled past the last seen line -> emit the whole window.
-        assert_eq!(
-            Devenv::delta_lines(&mut last, "x\ny\nz"),
-            vec!["x".to_string(), "y".to_string(), "z".to_string()]
-        );
-    }
 
     #[test]
     fn test_print_tasks_tree_flat_hierarchy_sorted() {

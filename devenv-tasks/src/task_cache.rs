@@ -612,6 +612,39 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn test_warm_cache_allows_concurrent_open() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().to_path_buf();
+
+        // Warm the cache once, as `devenv up` now does before spawning the
+        // per-process `devenv-tasks` invocations a non-native process manager
+        // launches concurrently (#2897).
+        crate::warm_cache(&cache_dir).await.unwrap();
+
+        // The database file should now exist and be migrated.
+        assert!(cache_dir.join("tasks.db").exists());
+
+        // Opening the already-initialized cache from many concurrent tasks must
+        // all succeed: migrations are applied and the database is in WAL mode, so
+        // these are read-only opens with no exclusive-lock contention.
+        let mut handles = Vec::new();
+        for _ in 0..16 {
+            let dir = cache_dir.clone();
+            handles.push(tokio::spawn(async move { TaskCache::new(&dir).await }));
+        }
+        for handle in handles {
+            let cache = handle
+                .await
+                .unwrap()
+                .expect("concurrent cache open should succeed after warming");
+            sqlx::query("SELECT 1")
+                .fetch_one(cache.db.pool())
+                .await
+                .unwrap();
+        }
+    }
+
+    #[sqlx::test]
     async fn test_file_modification_detection() {
         let db_temp_dir = TempDir::new().unwrap();
         let db_path = db_temp_dir.path().join("tasks-file-mod.db");
