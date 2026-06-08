@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed `devenv up` (and other TUI commands) burning significant CPU while idle — roughly 10-15% per managed process — even when every process was quiet. The foreground UI was recomputing its layout dozens of times per second regardless of whether anything changed, and each idle process woke the whole UI twice a second. The TUI now only redraws when the model actually changes, with a slow heartbeat to keep elapsed timers ticking ([#2915](https://github.com/cachix/devenv/issues/2915)).
+- Fixed `devenv container` placing `copyToRoot` directories under a hash-prefixed subdirectory (e.g. `/env/<hash>-source`) instead of in the working directory. The project root and other directory paths now land directly under the working directory, and single files keep their original name ([#2914](https://github.com/cachix/devenv/issues/2914)).
 - Fixed authenticated Cachix pulls failing with HTTP 401 even when a valid auth token was configured. The token was resolved correctly but applied to Nix too late, after the store had already opened and made its first request, so private cache lookups went out unauthenticated. The netrc credentials are now in place before the store opens.
 - Fixed `devenv shell` lingering as a background process, often pinned at 100%+ CPU, after its terminal window or tab was closed. The shell now reacts to the SIGHUP/SIGINT/SIGTERM that already trigger devenv's graceful shutdown by killing the inner shell, instead of orphaning it ([#2845](https://github.com/cachix/devenv/issues/2845)).
 - Fixed `devenv shell`/`devenv update` failing with `authentication required but no callback set` when a `url."ssh://git@github.com/".insteadOf` git config rewrites GitHub HTTPS URLs to SSH. GitHub flake inputs now resolve over SSH using your ssh-agent ([#2842](https://github.com/cachix/devenv/issues/2842)).
@@ -30,7 +32,7 @@
 - Cleaned up non-TUI console output: surfaces Nix eval/build progress, hides internal debug noise.
 - Auto-disabling the TUI and switching to quiet output when running inside an AI coding agent now recognizes more agents (Aider, autonomous/cloud agents, and others) via the `detect-coding-agent` crate, not just Claude Code. Set `DEVENV_NO_AI_AGENT=1` to opt out.
 - Added `devenv down` as a shorthand for `devenv processes down`, mirroring `devenv up` ([#2862](https://github.com/cachix/devenv/issues/2862)).
-- Bumped secretspec to 0.11, which adds a `[providers]` alias map in `secretspec.toml` and support for a key prefix in the AWS Secrets Manager provider.
+- Bumped secretspec to 0.12, which adds a `[providers]` alias map in `secretspec.toml`, a key prefix for the AWS Secrets Manager provider, audit logging and access reasons for secret reads, and support for custom Bitwarden instances.
 - Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).
 
 ### Breaking Changes

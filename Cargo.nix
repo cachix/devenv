@@ -4386,7 +4386,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.48.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Console" ];
           }
@@ -7563,6 +7563,11 @@ rec {
             name = "insta";
             packageId = "insta";
             features = [ "filters" "json" ];
+          }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "process" "fs" "io-util" "macros" "rt-multi-thread" "sync" "time" "test-util" ];
           }
         ];
         features = {
@@ -19966,7 +19971,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.5.0";
+            packageId = "heck 0.4.1";
           }
           {
             name = "itertools";
@@ -20046,7 +20051,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.5.0";
+            packageId = "heck 0.4.1";
           }
           {
             name = "itertools";
@@ -20305,7 +20310,7 @@ rec {
         dependencies = [
           {
             name = "heck";
-            packageId = "heck 0.5.0";
+            packageId = "heck 0.4.1";
           }
           {
             name = "prost";
@@ -23899,14 +23904,14 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.11.0";
+        version = "0.12.0";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "8d8a186e509f0b68e909cb5c930083466ef41e92";
-          sha256 = "1fn4ffb84cyqcj1d9rp32dip4k7v2nyds4mhzakqlqx6alrkily0";
+          rev = "fae2d356732ea368d1f858113aec630947508fc6";
+          sha256 = "06l9grp03wwdn85d6lm33cq7ad4v1ac1906vpj7wjrnws6g8cvkn";
         };
         dependencies = [
           {
@@ -23933,6 +23938,10 @@ rec {
             packageId = "data-encoding";
           }
           {
+            name = "detect-coding-agent";
+            packageId = "detect-coding-agent";
+          }
+          {
             name = "dotenvy";
             packageId = "dotenvy";
           }
@@ -23949,6 +23958,10 @@ rec {
             name = "inquire";
             packageId = "inquire";
             features = [ "experimental-multiline-input" ];
+          }
+          {
+            name = "jiff";
+            packageId = "jiff";
           }
           {
             name = "keyring";
@@ -24017,6 +24030,11 @@ rec {
             packageId = "toml 0.9.12+spec-1.1.0";
           }
           {
+            name = "toml_edit";
+            packageId = "toml_edit 0.23.10+spec-1.0.0";
+            optional = true;
+          }
+          {
             name = "url";
             packageId = "url";
           }
@@ -24034,6 +24052,7 @@ rec {
         features = {
           "awssm" = [ "dep:aws-config" "dep:aws-sdk-secretsmanager" ];
           "bws" = [ "dep:bitwarden" "dep:rustls" ];
+          "cli" = [ "dep:toml_edit" ];
           "default" = [ "cli" "keyring" "gcsm" "awssm" "vault" "bws" ];
           "gcsm" = [ "dep:google-cloud-secretmanager-v1" ];
           "keyring" = [ "dep:keyring" "dep:whoami" ];
@@ -29444,7 +29463,7 @@ rec {
           "serde" = [ "dep:serde_core" ];
           "std" = [ "alloc" "serde_core?/std" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "serde" "std" ];
+        resolvedDefaultFeatures = [ "alloc" "default" "serde" "std" ];
       };
       "toml_datetime 1.1.1+spec-1.1.0" = rec {
         crateName = "toml_datetime";
@@ -29507,6 +29526,46 @@ rec {
           "serde" = [ "dep:serde" "toml_datetime/serde" "dep:serde_spanned" ];
         };
         resolvedDefaultFeatures = [ "default" "serde" ];
+      };
+      "toml_edit 0.23.10+spec-1.0.0" = rec {
+        crateName = "toml_edit";
+        version = "0.23.10+spec-1.0.0";
+        edition = "2021";
+        sha256 = "0saj5c676j8a3sqaj9akkp09wambg8aflji4zblwwa70azvvkj44";
+        dependencies = [
+          {
+            name = "indexmap";
+            packageId = "indexmap 2.14.0";
+            features = [ "std" ];
+          }
+          {
+            name = "toml_datetime";
+            packageId = "toml_datetime 0.7.5+spec-1.1.0";
+          }
+          {
+            name = "toml_parser";
+            packageId = "toml_parser";
+            optional = true;
+          }
+          {
+            name = "toml_writer";
+            packageId = "toml_writer";
+            optional = true;
+          }
+          {
+            name = "winnow";
+            packageId = "winnow 0.7.15";
+            optional = true;
+          }
+        ];
+        features = {
+          "debug" = [ "toml_parser?/debug" "dep:anstream" "dep:anstyle" "display" ];
+          "default" = [ "parse" "display" ];
+          "display" = [ "dep:toml_writer" ];
+          "parse" = [ "dep:toml_parser" "dep:winnow" ];
+          "serde" = [ "dep:serde_core" "toml_datetime/serde" "dep:serde_spanned" ];
+        };
+        resolvedDefaultFeatures = [ "default" "display" "parse" ];
       };
       "toml_edit 0.25.11+spec-1.1.0" = rec {
         crateName = "toml_edit";
@@ -29572,7 +29631,7 @@ rec {
           "default" = [ "std" ];
           "std" = [ "alloc" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "std" ];
+        resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
       "tonic 0.12.3" = rec {
         crateName = "tonic";
@@ -33362,7 +33421,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.48.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Storage_FileSystem" "Win32_System_Console" "Win32_System_SystemInformation" ];
           }
@@ -34613,7 +34672,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Shell" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_SystemInformation" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Shell" "default" ];
       };
       "windows-sys 0.52.0" = rec {
         crateName = "windows-sys";

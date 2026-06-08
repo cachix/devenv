@@ -351,20 +351,49 @@ impl ActivityModel {
         &self.config
     }
 
-    pub fn apply_activity_event(&mut self, event: ActivityEvent) {
+    /// Apply an activity event to the model. Returns `true` if the event may
+    /// have changed the visible model (so the UI should redraw), and `false`
+    /// for known no-ops (shell events, skipped `.narinfo` fetches) so the render
+    /// loop is not woken needlessly.
+    pub fn apply_activity_event(&mut self, event: ActivityEvent) -> bool {
         match event {
-            ActivityEvent::Build(build_event) => self.handle_build_event(build_event),
+            ActivityEvent::Build(build_event) => {
+                self.handle_build_event(build_event);
+                true
+            }
             ActivityEvent::Fetch(fetch_event) => self.handle_fetch_event(fetch_event),
-            ActivityEvent::Evaluate(eval_event) => self.handle_evaluate_event(eval_event),
-            ActivityEvent::Task(task_event) => self.handle_task_event(task_event),
-            ActivityEvent::Command(cmd_event) => self.handle_command_event(cmd_event),
-            ActivityEvent::Process(proc_event) => self.handle_process_event(proc_event),
-            ActivityEvent::Operation(op_event) => self.handle_operation_event(op_event),
-            ActivityEvent::Message(msg) => self.handle_message(msg),
-            ActivityEvent::SetExpected(expected) => self.handle_set_expected(expected),
+            ActivityEvent::Evaluate(eval_event) => {
+                self.handle_evaluate_event(eval_event);
+                true
+            }
+            ActivityEvent::Task(task_event) => {
+                self.handle_task_event(task_event);
+                true
+            }
+            ActivityEvent::Command(cmd_event) => {
+                self.handle_command_event(cmd_event);
+                true
+            }
+            ActivityEvent::Process(proc_event) => {
+                self.handle_process_event(proc_event);
+                true
+            }
+            ActivityEvent::Operation(op_event) => {
+                self.handle_operation_event(op_event);
+                true
+            }
+            ActivityEvent::Message(msg) => {
+                self.handle_message(msg);
+                true
+            }
+            ActivityEvent::SetExpected(expected) => {
+                self.handle_set_expected(expected);
+                true
+            }
             ActivityEvent::Shell(_) => {
-                // Shell events are handled separately by the shell runner
-                // They don't affect the activity model
+                // Shell events are handled separately by the shell runner;
+                // they don't affect the activity model.
+                false
             }
         }
     }
@@ -433,7 +462,9 @@ impl ActivityModel {
         }
     }
 
-    fn handle_fetch_event(&mut self, event: Fetch) {
+    /// Returns `true` if the model may have changed; `false` for skipped
+    /// `.narinfo` downloads, which are not displayed.
+    fn handle_fetch_event(&mut self, event: Fetch) -> bool {
         match event {
             Fetch::Start {
                 id,
@@ -449,7 +480,7 @@ impl ActivityModel {
                 // 2. A Download activity for the actual .narinfo HTTP request
                 // We only display the Query since it has the better name.
                 if kind == FetchKind::Download && name.ends_with(".narinfo") {
-                    return;
+                    return false;
                 }
 
                 let substituter = url.as_ref().and_then(|u| {
@@ -471,14 +502,17 @@ impl ActivityModel {
                     FetchKind::Copy => ActivityVariant::Copy,
                 };
                 self.create_activity(id, name, parent, url, variant, ActivityLevel::Info);
+                true
             }
             Fetch::Complete { id, outcome, .. } => {
                 self.handle_activity_complete(id, outcome);
+                true
             }
             Fetch::Progress {
                 id, current, total, ..
             } => {
                 self.handle_byte_progress(id, current, total);
+                true
             }
         }
     }
