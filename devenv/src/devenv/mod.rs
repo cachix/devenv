@@ -301,7 +301,8 @@ pub enum ShellProcesses {
     /// No `start.shell = true` processes configured.
     None,
     /// Shell spawned the daemon; it owns it and must call `down()` on exit.
-    OwnsDaemon,
+    /// Stores the daemon PID so we can detect if `devenv up --restart` replaced it.
+    OwnsDaemon(u32),
     /// Shell started named processes in an already-running daemon via the API;
     /// stop only those processes on exit.
     Peer(Vec<String>),
@@ -743,21 +744,33 @@ impl Devenv {
         if manager_running {
             Ok(ShellProcesses::Peer(shell_names))
         } else {
-            Ok(ShellProcesses::OwnsDaemon)
+            let owned_pid = match processes::check_pid_file(&self.native_manager_pid_file()).await {
+                Ok(processes::PidStatus::Running(pid)) => pid.as_raw() as u32,
+                _ => 0,
+            };
+            Ok(ShellProcesses::OwnsDaemon(owned_pid))
         }
     }
 
     /// Clean up shell processes on shell exit.
     ///
-    /// `OwnsDaemon` → tears down the entire manager.
+    /// `OwnsDaemon(pid)` → tears down the entire manager, but only if the PID
+    ///   still matches (guards against `devenv up --restart` having replaced it).
     /// `Peer` → stops only the processes the shell started via the API.
     /// `None` → no-op.
     pub async fn end_shell_processes(&self, guard: ShellProcesses) {
         match guard {
             ShellProcesses::None => {}
-            ShellProcesses::OwnsDaemon => {
-                if let Err(e) = self.down().await {
-                    tracing::warn!("failed to stop shell-owned process manager on exit: {}", e);
+            ShellProcesses::OwnsDaemon(owned_pid) => {
+                let current_pid =
+                    match processes::check_pid_file(&self.native_manager_pid_file()).await {
+                        Ok(processes::PidStatus::Running(pid)) => pid.as_raw() as u32,
+                        _ => 0,
+                    };
+                if current_pid == owned_pid {
+                    if let Err(e) = self.down().await {
+                        tracing::warn!("failed to stop shell-owned process manager on exit: {}", e);
+                    }
                 }
             }
             ShellProcesses::Peer(names) => {

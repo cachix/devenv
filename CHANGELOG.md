@@ -27,7 +27,8 @@
 - Added `devenv down` as a shorthand for `devenv processes down`, mirroring `devenv up` ([#2862](https://github.com/cachix/devenv/issues/2862)).
 - Bumped secretspec to 0.11, which adds a `[providers]` alias map in `secretspec.toml` and support for a key prefix in the AWS Secrets Manager provider.
 - Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).
-- Added `processes.<name>.start.up` and `processes.<name>.start.shell` as orthogonal per-process flags, with matching global defaults `process.start.up` (default `true`) and `process.start.shell` (default `false`). Setting `start.shell = true` on a process starts it when you enter an interactive `devenv shell` and stops it on exit - no manual `devenv up -d` / `devenv processes down` needed (native process manager only) ([#2863](https://github.com/cachix/devenv/issues/2863)).
+- Added `processes.<name>.start.up` and `processes.<name>.start.shell` as orthogonal per-process flags, with matching global defaults `process.start.up` (default `true`) and `process.start.shell` (default `false`). Setting `start.shell = true` on a process starts it when you enter an interactive `devenv shell` and stops it on exit — no manual `devenv up -d` / `devenv processes down` needed (native process manager only) ([#2863](https://github.com/cachix/devenv/issues/2863)).
+- `devenv up` now tells you to use `--restart` when a process manager is already running, then stops and restarts it, instead of failing with an unhelpful error.
 - The `devenv shell` status line now shows how many processes are running alongside the shell (e.g. `watching 5 files | 3 processes`), updating live as processes start, become ready, or exit.
 
 ### Breaking Changes

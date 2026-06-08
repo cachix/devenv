@@ -794,6 +794,14 @@ async fn run_up_args(
     command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
     verbosity: VerbosityLevel,
 ) -> Result<CommandResult> {
+    if devenv.processes_running().await {
+        if !up_args.restart {
+            miette::bail!(
+                "Processes are already running. Stop them with `devenv processes down`, or re-run with `devenv up --restart` to stop and restart."
+            );
+        }
+        devenv.down().await?;
+    }
     let strict_ports = devenv_core::settings::flag(up_args.strict_ports, up_args.no_strict_ports)
         .unwrap_or(config_strict_ports);
     let options = devenv::ProcessOptions {
