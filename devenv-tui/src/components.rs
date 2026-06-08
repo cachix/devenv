@@ -5,7 +5,9 @@ use devenv_activity::ProcessStatus;
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Notify;
 
 // Import shared UI constants from devenv-shell
 pub use devenv_shell::{
@@ -135,9 +137,41 @@ pub fn StatusDot(mut hooks: Hooks, props: &StatusDotProps) -> impl Into<AnyEleme
     // (iocraft rules of hooks); `pulse` can flip as a process changes state,
     // so always register them and gate only the rendering.
     let mut bright = hooks.use_state(|| true);
+    // Non-reactive mirror of `pulse`, refreshed every render. The animation
+    // future reads it to decide whether to toggle `bright`. Writing a `Ref`
+    // does not mark the component dirty, so updating this never forces a redraw.
+    let mut pulse_active = hooks.use_ref(|| props.pulse);
+    pulse_active.set(props.pulse);
+    // Wake source so the animation future can fully park while the dot is
+    // steady, instead of polling a timer twice a second per dot — which would
+    // scale idle wakeups with the number of processes (#2915). We signal it on
+    // the steady -> pulsing transition; `notify_one` stores a permit, so a wake
+    // raised before the future parks is never lost.
+    let wake = hooks.use_ref(|| Arc::new(Notify::new()));
+    let mut was_pulsing = hooks.use_ref(|| false);
+    if props.pulse && !was_pulsing.get() {
+        wake.read().notify_one();
+    }
+    was_pulsing.set(props.pulse);
+
+    let wake_fut = wake.read().clone();
     hooks.use_future(async move {
         loop {
+            // Steady dot: park until it starts pulsing again, so a screen full
+            // of running processes wakes no timers.
+            if !pulse_active.try_get().unwrap_or(false) {
+                wake_fut.notified().await;
+                continue;
+            }
             tokio::time::sleep(Duration::from_millis(PULSE_INTERVAL_MS)).await;
+            // Re-check after sleeping. Use `try_get` (not the panicking `get`)
+            // so a dropped owner ends the loop cleanly, matching `bright` below.
+            let Some(active) = pulse_active.try_get() else {
+                break;
+            };
+            if !active {
+                continue;
+            }
             let Some(val) = bright.try_get() else {
                 break;
             };
