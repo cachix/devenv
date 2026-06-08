@@ -9,7 +9,7 @@
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-store@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-util@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-cmd@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
-  "git+https://github.com/cachix/secretspec?rev=8d8a186e509f0b68e909cb5c930083466ef41e92#secretspec@0.11.0": "1fn4ffb84cyqcj1d9rp32dip4k7v2nyds4mhzakqlqx6alrkily0",
+  "git+https://github.com/cachix/secretspec?rev=fae2d356732ea368d1f858113aec630947508fc6#secretspec@0.12.0": "06l9grp03wwdn85d6lm33cq7ad4v1ac1906vpj7wjrnws6g8cvkn",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#nix-compat-derive@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#nix-compat@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
   "git+https://github.com/cachix/snix?rev=50b41ae7e05b423a7525b4dda53d372a71931506#snix-build@0.1.0": "17k7mvwwcjd4n21nlypf02ls2ba3ph8v1mhingnh89l5cjc2habm",
