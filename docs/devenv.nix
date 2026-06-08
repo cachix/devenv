@@ -47,7 +47,8 @@
       # Serve the mkdocs documentation website with live reload
       exec = "mkdocs serve";
       cwd = config.git.root + "/docs";
-      start.enable = "interactive-shell";
+      start.shell = true;
+      start.up = false;
     };
   };
 

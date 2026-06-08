@@ -4,12 +4,9 @@ let
   listenType = import ./lib/listen.nix { inherit lib; };
   readyType = import ./lib/ready.nix { inherit lib; };
 
-  # Start mode for a process (global option only):
-  #   true                -> start with `devenv up`
-  #   false               -> never auto-start (manual only)
-  #   "interactive-shell" -> start when entering an interactive `devenv shell`,
-  #                          stop on shell exit
-  startEnableType = types.either types.bool (types.enum [ "interactive-shell" ]);
+  # Captured outer config so the `processes` submodule can read process.start.*
+  # defaults (submodule `config` shadows the outer one).
+  topConfig = config;
 
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
@@ -44,20 +41,50 @@ let
   processType = types.submodule ({ config, name, ... }: {
     options = {
       start = lib.mkOption {
-        type = types.submodule {
+        type = types.submodule ({ config, options, ... }: {
           options = {
-            enable = lib.mkOption {
+            up = lib.mkOption {
               type = types.bool;
-              default = true;
+              default = topConfig.process.start.up;
+              defaultText = lib.literalExpression "config.process.start.up";
               description = ''
                 Whether to start this process automatically with `devenv up`.
 
                 Disabled processes are still visible in the TUI as stopped
                 and can be started manually by selecting them and pressing Enter.
+
+                Defaults to `process.start.up`.
               '';
             };
+            shell = lib.mkOption {
+              type = types.bool;
+              default = topConfig.process.start.shell;
+              defaultText = lib.literalExpression "config.process.start.shell";
+              description = ''
+                Whether to start this process when entering an interactive `devenv shell`
+                and stop it when the shell exits.
+
+                Only interactive `devenv shell` sessions trigger this; `devenv shell -- <cmd>`,
+                piped shells, and `--no-reload` do not.
+
+                Requires the native process manager (the default for devenv 2.0+).
+
+                Defaults to `process.start.shell`.
+              '';
+            };
+            enable = lib.mkOption {
+              type = types.bool;
+              default = config.up;
+              visible = false;
+              description = "Deprecated: use `start.up` instead.";
+            };
           };
-        };
+          config = lib.mkIf options.enable.isDefined {
+            up = lib.warn
+              "`processes.<name>.start.enable` is deprecated, use `start.up` instead"
+              config.enable;
+          };
+        });
         default = { };
         description = "Auto-start configuration for this process.";
       };
@@ -350,17 +377,30 @@ in
     };
 
     process.start = lib.mkOption {
-      type = startEnableType;
-      default = true;
-      description = ''
-        Default start mode for all processes:
+      type = types.submodule {
+        options = {
+          up = lib.mkOption {
+            type = types.bool;
+            default = true;
+            description = ''
+              Default for `processes.<name>.start.up`: whether processes start
+              automatically with `devenv up`.
+            '';
+          };
+          shell = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = ''
+              Default for `processes.<name>.start.shell`: whether processes start
+              when entering an interactive `devenv shell` and stop on exit.
 
-        - `true`: start with `devenv up`.
-        - `false`: do not auto-start.
-        - `"interactive-shell"`: start all enabled processes when entering an
-          interactive `devenv shell` and stop them on shell exit.
-          They are also started by `devenv up`.
-      '';
+              Requires the native process manager (the default for devenv 2.0+).
+            '';
+          };
+        };
+      };
+      default = { };
+      description = "Default auto-start settings for all processes, overridable per process.";
     };
 
     process.manager = {
@@ -412,7 +452,7 @@ in
       type = types.listOf types.str;
       internal = true;
       default = [ ];
-      description = "Processes started when entering `devenv shell` (process.start == \"interactive-shell\").";
+      description = "Names of processes with `start.shell = true`, started on interactive shell entry.";
     };
 
     procfile = lib.mkOption {
@@ -492,24 +532,21 @@ in
 
     (lib.mkIf options.processes.isDefined (
       let
-        enabledProcesses = lib.filterAttrs (_: p: p.start.enable) config.processes;
-        shellStartNames =
-          if config.process.start == "interactive-shell"
-          then lib.attrNames enabledProcesses
-          else [ ];
+        upProcesses = lib.filterAttrs (_: p: p.start.up) config.processes;
+        shellProcesses = lib.filterAttrs (_: p: p.start.shell) config.processes;
       in
       {
         assertions = [
           {
-            assertion = shellStartNames == [ ] || implementation == "native";
+            assertion = shellProcesses == { } || implementation == "native";
             message = ''
-              `process.start = "interactive-shell"` requires the native process manager.
-              Set `process.manager.implementation = "native"` (the default for devenv 2.0+), or use `process.start = true`.
+              `start.shell = true` (or `process.start.shell = true`) requires the native process manager.
+              Set `process.manager.implementation = "native"` (the default for devenv 2.0+), or use `start.shell = false`.
             '';
           }
         ];
 
-        process.shellStartProcesses = shellStartNames;
+        process.shellStartProcesses = lib.attrNames shellProcesses;
 
 
         # Create tasks for all processes (native manager uses enable flag to decide auto-start)
@@ -525,7 +562,7 @@ in
               before = process.before;
               showOutput = true;
               process = {
-                start.enable = process.start.enable;
+                start.up = process.start.up;
                 ready = process.ready;
                 restart = process.restart;
                 listen = process.listen;
@@ -548,7 +585,7 @@ in
           in
           lib.mapAttrs
             (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime}${ignoreProcessDepsFlag} devenv:processes:${name}")
-            enabledProcesses;
+            upProcesses;
 
         # With exec prefix for proper signal handling (derived from base)
         process.taskCommands = lib.mapAttrs
@@ -558,7 +595,7 @@ in
         procfile =
           pkgs.writeText "procfile" (lib.concatStringsSep "\n"
             (lib.mapAttrsToList (name: _: "${name}: ${config.process.taskCommands.${name}}")
-              enabledProcesses));
+              upProcesses));
 
         procfileEnv =
           let
@@ -593,7 +630,7 @@ in
 
         ci = [ config.procfileScript ];
 
-        infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}") enabledProcesses;
+        infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}") upProcesses;
       }
     ))
   ];

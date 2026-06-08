@@ -3,9 +3,8 @@ use crate::error::Error;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
-    DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, PROCESS_TASK_PREFIX,
-    ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus,
-    VerbosityLevel,
+    DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, ProcessTaskStatus, Skipped,
+    TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
 use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase};
@@ -643,19 +642,6 @@ impl Tasks {
             notify_finished,
             notify_ui,
         );
-    }
-
-    /// Collect dependency edges for a task node.
-    /// Find the graph node for a task by its full name (e.g.
-    /// `devenv:processes:web`). Linear over the node set, which is fine for the
-    /// occasional `start_with_deps` call.
-    async fn find_task_index(&self, task_name: &str) -> Option<NodeIndex> {
-        for index in self.graph.node_indices() {
-            if self.graph[index].read().await.task.name == task_name {
-                return Some(index);
-            }
-        }
-        None
     }
 
     fn collect_deps(&self, index: NodeIndex) -> Vec<(Arc<RwLock<TaskState>>, DependencyKind)> {

@@ -177,7 +177,7 @@ in
             (name: value:
               let
                 command =
-                  if !value.start.enable then value.exec
+                  if !value.start.up then value.exec
                   # Interactive processes must be a direct child of the process-compose PTY.
                   # Routing them through `devenv-tasks` pipes their stdout/stderr and breaks
                   # interactivity (no prompt, block-buffered output). They therefore bypass
@@ -240,7 +240,7 @@ in
               merged
               // { environment = envList ++ pcEnv; }
               // lib.optionalAttrs (mergedDepsOn != { }) { depends_on = mergedDepsOn; }
-              // lib.optionalAttrs (!value.start.enable) { disabled = true; }
+              // lib.optionalAttrs (!value.start.up) { disabled = true; }
             )
             config.processes;
         };

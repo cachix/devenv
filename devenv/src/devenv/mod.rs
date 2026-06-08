@@ -296,6 +296,17 @@ fn compute_profile_dir_suffix(profiles: &[String]) -> Option<String> {
     }
 }
 
+/// Tracks what the shell entry did so `end_shell_processes` knows how to clean up.
+pub enum ShellProcesses {
+    /// No `start.shell = true` processes configured.
+    None,
+    /// Shell spawned the daemon; it owns it and must call `down()` on exit.
+    OwnsDaemon,
+    /// Shell started named processes in an already-running daemon via the API;
+    /// stop only those processes on exit.
+    Peer(Vec<String>),
+}
+
 impl Devenv {
     pub async fn new(options: DevenvOptions) -> Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv");
@@ -567,7 +578,18 @@ impl Devenv {
             processes::check_pid_file(&self.native_manager_pid_file()).await,
             Ok(processes::PidStatus::Running(_))
         ) {
-            return true;
+            // PID file shows the process is alive. Also verify the API socket is
+            // accepting connections: the daemon writes the PID file before binding
+            // the socket, so checking both avoids a race on daemon startup.
+            let socket_path = self.native_socket_path();
+            return matches!(
+                tokio::time::timeout(
+                    std::time::Duration::from_millis(200),
+                    UnixStream::connect(&socket_path),
+                )
+                .await,
+                Ok(Ok(_))
+            );
         }
 
         // process-compose.
@@ -674,8 +696,82 @@ impl Devenv {
         self.reserve_running_ports().await;
     }
 
+    /// Start `start.shell = true` processes on interactive shell entry.
+    ///
+    /// If no manager is running: spawns the daemon (which auto-starts `start.up`
+    /// processes), then starts shell-only processes via the socket API.
+    /// If a manager is already running: starts shell-only processes via the API only.
+    ///
+    /// Returns a `ShellProcesses` guard used by `end_shell_processes` to clean up.
+    pub async fn begin_shell_processes(
+        &self,
+        shell_names: Vec<String>,
+        task_exports: BTreeMap<String, String>,
+    ) -> Result<ShellProcesses> {
+        if shell_names.is_empty() {
+            return Ok(ShellProcesses::None);
+        }
+
+        let manager_running = self.processes_running().await;
+
+        if !manager_running {
+            if let Err(e) = self.start_shell_processes(task_exports).await {
+                if let Err(down_err) = self.down().await {
+                    tracing::warn!(
+                        "failed to stop shell-owned process manager after failed start: {}",
+                        down_err
+                    );
+                }
+                return Err(e);
+            }
+            // Wait for the API socket to be accepting connections.
+            // The daemon signals "up" (via PID file) before the socket is bound,
+            // so processes_running() (which now checks socket connectivity) is the
+            // right poll target.
+            for _ in 0..100 {
+                if self.processes_running().await {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        }
+
+        for name in &shell_names {
+            self.processes_start(name).await?;
+        }
+
+        if manager_running {
+            Ok(ShellProcesses::Peer(shell_names))
+        } else {
+            Ok(ShellProcesses::OwnsDaemon)
+        }
+    }
+
+    /// Clean up shell processes on shell exit.
+    ///
+    /// `OwnsDaemon` → tears down the entire manager.
+    /// `Peer` → stops only the processes the shell started via the API.
+    /// `None` → no-op.
+    pub async fn end_shell_processes(&self, guard: ShellProcesses) {
+        match guard {
+            ShellProcesses::None => {}
+            ShellProcesses::OwnsDaemon => {
+                if let Err(e) = self.down().await {
+                    tracing::warn!("failed to stop shell-owned process manager on exit: {}", e);
+                }
+            }
+            ShellProcesses::Peer(names) => {
+                for name in names {
+                    if let Err(e) = self.processes_stop(&name).await {
+                        tracing::warn!("failed to stop shell process {} on exit: {}", name, e);
+                    }
+                }
+            }
+        }
+    }
+
     /// Start processes as a detached daemon when entering an interactive
-    /// `devenv shell` (when `process.start = "interactive-shell"`).
+    /// `devenv shell` (when some processes have `start.shell = true`).
     ///
     /// Reuses the already-computed enterShell `task_exports` to avoid re-running
     /// enterShell tasks. The caller must enable port allocation
@@ -698,14 +794,8 @@ impl Devenv {
             background: true,
             ..Default::default()
         };
-        self.start_processes(
-            vec![],
-            devenv_tasks::RunMode::All,
-            envs,
-            options,
-            None,
-        )
-        .await?;
+        self.start_processes(vec![], devenv_tasks::RunMode::All, envs, options, None)
+            .await?;
         Ok(())
     }
 
@@ -1094,8 +1184,8 @@ impl Devenv {
         Ok(*value)
     }
 
-    /// Names of processes with `start.enable = "shell"`, which start when
-    /// entering `devenv shell` and stop on shell exit.
+    /// Names of processes with `start.shell = true`, which start when
+    /// entering an interactive `devenv shell` and stop on shell exit.
     pub async fn shell_start_processes(&self) -> Result<Vec<String>> {
         let json = self
             .backend
@@ -1738,8 +1828,8 @@ impl Devenv {
             }
 
             // Run process tasks under the Phase 4 activity.
-            // Auto start off processes (start.enable = false) are handled by the
-            // process manager: they appear in the TUI as stopped.
+            // Processes with start.up = false are handled by the process manager:
+            // they appear in the TUI as stopped.
             trace!("devenv.up: running process tasks (run_with_parent_activity)");
             let _outputs = tasks_runner
                 .run_with_parent_activity(Arc::new(phase4))
@@ -1830,9 +1920,7 @@ impl Devenv {
         let pid_file = self.native_manager_pid_file();
 
         // Check if already running
-        if let Ok(processes::PidStatus::Running(pid)) =
-            processes::check_pid_file(&pid_file).await
-        {
+        if let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await {
             bail!(
                 "Processes already running with PID {}. Stop them first with: devenv processes down",
                 pid

@@ -37,7 +37,7 @@ in
 
   # 3. Auto start off process: visible in TUI but not launched
   processes.auto-start-off-proc = {
-    start.enable = false;
+    start.up = false;
     exec = ''
       mkdir -p ${markerDir}
       touch ${markerDir}/auto-start-off-proc.started

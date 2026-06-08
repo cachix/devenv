@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-# Verify the `start.enable = "interactive-shell"` schema:
-#  - "interactive-shell" processes still start with `devenv up` (up starts them too)
-#  - `false` processes do not start with `devenv up`
-#  - `process.shellStartProcesses` lists only the "interactive-shell" processes
+# Verify the `start.shell` and `start.up` per-process flags:
+#  - `start.up = true` (default): process starts with `devenv up`
+#  - `start.shell = true, start.up = false`: process only starts on shell entry, not `devenv up`
+#  - `start.up = false`: process never starts automatically
+#  - `process.shellStartProcesses` lists only the `start.shell = true` processes
 
 set -ex
 
@@ -23,22 +24,27 @@ wait_for_port() {
   return 1
 }
 
-# --- shellStartProcesses lists only the "interactive-shell" process ---
+# --- shellStartProcesses lists only the start.shell = true process ---
 shell_list=$(devenv eval process.shellStartProcesses)
 echo "shellStartProcesses: $shell_list"
 echo "$shell_list" | grep -q "shell_proc" || { echo "FAIL: shell_proc missing from shellStartProcesses"; exit 1; }
 echo "$shell_list" | grep -q "up_proc" && { echo "FAIL: up_proc should not be in shellStartProcesses"; exit 1; }
 echo "$shell_list" | grep -q "off_proc" && { echo "FAIL: off_proc should not be in shellStartProcesses"; exit 1; }
 
-# --- devenv up starts both `true` and `"interactive-shell"` processes, but not `false` ---
+# --- devenv up starts only `start.up = true` processes ---
 devenv up -d
 devenv processes wait
 
-wait_for_port "$PORT_UP" || { echo "FAIL: up_proc (start.enable=true) did not start"; devenv processes down || true; exit 1; }
-wait_for_port "$PORT_SHELL" || { echo "FAIL: shell_proc (start.enable=\"shell\") did not start under up"; devenv processes down || true; exit 1; }
+wait_for_port "$PORT_UP" || { echo "FAIL: up_proc (start.up=true) did not start"; devenv processes down || true; exit 1; }
+
+if reachable "$PORT_SHELL"; then
+  echo "FAIL: shell_proc (start.shell=true, start.up=false) should not have started under devenv up"
+  devenv processes down || true
+  exit 1
+fi
 
 if reachable "$PORT_OFF"; then
-  echo "FAIL: off_proc (start.enable=false) should not have started"
+  echo "FAIL: off_proc (start.up=false) should not have started"
   devenv processes down || true
   exit 1
 fi

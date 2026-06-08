@@ -284,7 +284,7 @@ in
 
     processes.garage-web-ui = lib.mkIf cfg.ui.enable {
       exec = "${lib.getExe pkgs.garage-webui}";
-      start.enable = cfg.ui.start;
+      start.up = cfg.ui.start;
       env = {
         CONFIG_PATH = "${configFile}";
         PORT = lib.toString cfg.ui.port;

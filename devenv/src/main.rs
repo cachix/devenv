@@ -1,8 +1,8 @@
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
-    CacheSettings, Devenv, InputOverrides, NixSettings, RunMode, SecretSettings, ShellSettings,
-    VerbosityLevel,
+    CacheSettings, Devenv, InputOverrides, NixSettings, RunMode, SecretSettings, ShellProcesses,
+    ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel, message},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
@@ -633,13 +633,13 @@ async fn run_backend(
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd, args } = command {
-        // `start.enable = "shell"` processes start (as a detached daemon) when
-        // entering an interactive shell and stop on exit. Decide up front so we
-        // can enable port allocation before the dev-env eval below resolves
-        // process ports. Leave already-running processes alone.
-        let shell_start_names = devenv.shell_start_processes().await?;
-        let start_shell_procs = !shell_start_names.is_empty() && !devenv.processes_running().await;
-        if start_shell_procs {
+        // `start.shell = true` processes start when entering an interactive shell
+        // and stop on exit. Decide up front so we can enable port allocation before
+        // the dev-env eval below resolves process ports (only needed when we'll
+        // spawn a new daemon).
+        let shell_names = devenv.shell_start_processes().await?;
+        let manager_running = devenv.processes_running().await;
+        if !shell_names.is_empty() && !manager_running {
             devenv.enable_process_ports(config_strict_ports).await;
         }
 
@@ -653,25 +653,9 @@ async fn run_backend(
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
-        if start_shell_procs {
-            // The detached daemon spawns as the last step of this call, so a
-            // failure inside it can leave the daemon running. Tear it down on
-            // error rather than orphaning it: we bail out of shell entry here,
-            // dropping the user back to their outer shell with no session left
-            // to stop it. `down()` reconstructs the manager from the PID file.
-            if let Err(e) = devenv
-                .start_shell_processes(task_exports.clone())
-                .await
-            {
-                if let Err(down_err) = devenv.down().await {
-                    tracing::warn!(
-                        "failed to stop shell-owned process manager after a failed start: {}",
-                        down_err
-                    );
-                }
-                return Err(e);
-            }
-        }
+        let shell_guard = devenv
+            .begin_shell_processes(shell_names, task_exports.clone())
+            .await?;
 
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
@@ -703,10 +687,7 @@ async fn run_backend(
         });
         let devenv = tokio::task::block_in_place(|| owner_handle.join())
             .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
-        // The shell owns the daemon it spawned: tear it down on exit.
-        if start_shell_procs && let Err(e) = devenv.down().await {
-            tracing::warn!("failed to stop shell-owned process manager on exit: {}", e);
-        }
+        devenv.end_shell_processes(shell_guard).await;
         return debugger_or_err(result, nix_debugger, devenv);
     }
 
@@ -839,16 +820,15 @@ async fn dispatch_command(
     match command {
         Commands::Shell { cmd, ref args } => {
             // Non-PTY shell path (PTY is handled as early return in run_backend).
-            // `start.enable = "interactive-shell"` processes only start for an
-            // interactive PTY shell, which this is not (`devenv shell -- cmd`, a
-            // piped/non-interactive shell, or `--no-reload`). Warn so they aren't
-            // silently skipped.
+            // `start.shell = true` processes only start for an interactive PTY shell,
+            // which this is not (`devenv shell -- cmd`, a piped/non-interactive shell,
+            // or `--no-reload`). Warn so they aren't silently skipped.
             let shell_start_names = devenv.shell_start_processes().await?;
             if !shell_start_names.is_empty() {
                 message(
                     ActivityLevel::Warn,
                     format!(
-                        "Not starting `start.enable = \"interactive-shell\"` process(es) [{}]: this is not an interactive `devenv shell`. Start them with `devenv up`.",
+                        "Not starting `start.shell = true` process(es) [{}]: this is not an interactive `devenv shell`. Start them with `devenv up`.",
                         shell_start_names.join(", ")
                     ),
                 );

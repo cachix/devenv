@@ -42,7 +42,7 @@ pub enum ApiRequest {
     Logs { name: String, lines: Option<usize> },
     /// Restart a process (or start it if not started).
     Restart { name: String },
-    /// Start a process that has `start.enable = false`.
+    /// Start a process that has `start.up = false`.
     Start { name: String },
     /// Stop a running process.
     Stop { name: String },
@@ -139,7 +139,7 @@ pub struct JobHandle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProcessPhase {
-    /// Process has `start.enable = false`; not yet launched.
+    /// Process has `start.up = false`; not yet launched.
     NotStarted,
     /// Process was explicitly stopped by the user.
     Stopped,
@@ -195,7 +195,7 @@ fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
 
 /// A managed process entry: not started, waiting for dependencies, or active.
 enum ProcessEntry {
-    /// Process has `start.enable = false`: visible in TUI but not yet launched.
+    /// Process has `start.up = false`: visible in TUI but not yet launched.
     NotStarted {
         config: ProcessConfig,
         activity: Activity,
@@ -619,7 +619,7 @@ impl NativeProcessManager {
 
     /// Start a command with the given configuration.
     ///
-    /// If `start.enable` is false, the process is registered as not started (visible
+    /// If `start.up` is false, the process is registered as not started (visible
     /// in TUI as stopped but not running) and `Ok(None)` is returned.
     pub async fn start_command(
         &self,
@@ -642,7 +642,7 @@ impl NativeProcessManager {
         config: ProcessConfig,
         activity: Activity,
     ) -> Result<Option<Arc<Job>>> {
-        if !config.start.enable {
+        if !config.start.up {
             activity.set_status(ProcessStatus::NotStarted);
             info!("Registered auto start off process: {}", config.name);
             self.processes.write().await.insert(
@@ -2033,7 +2033,7 @@ mod tests {
 
     fn auto_start_off_config(name: &str) -> ProcessConfig {
         ProcessConfig {
-            start: StartConfig { enable: false },
+            start: StartConfig { up: false },
             ..test_config(name)
         }
     }
