@@ -46,7 +46,15 @@ let
 
   mkHome = path: (pkgs.runCommand "devenv-container-home" { } ''
     mkdir -p $out${homeDir}
-    cp -r ${path} $out${homeDir}/
+    if [ -d ${path} ]; then
+      # Copy the directory's contents into the working directory so that, e.g.,
+      # the project root ends up directly under ${homeDir} rather than in a
+      # hash-prefixed subdirectory.
+      cp -r ${path}/. $out${homeDir}/
+    else
+      # Copy a single file using its original name, dropping the store hash.
+      cp ${path} "$out${homeDir}/${baseNameOf path}"
+    fi
   '');
 
   mkMultiHome = paths: map mkHome paths;
