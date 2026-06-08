@@ -7564,6 +7564,11 @@ rec {
             packageId = "insta";
             features = [ "filters" "json" ];
           }
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "process" "fs" "io-util" "macros" "rt-multi-thread" "sync" "time" "test-util" ];
+          }
         ];
         features = {
           "test-all" = [ "deterministic-tui" ];
