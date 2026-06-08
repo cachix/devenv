@@ -12,7 +12,7 @@ in
   # user set any sibling under `readiness_probe` / `availability`.
   processes.foo = {
     # Disabled: we only care about eval-time merge correctness, not runtime.
-    start.enable = false;
+    start.up = false;
     exec = "sleep infinity";
 
     ready = {

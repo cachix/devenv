@@ -385,7 +385,7 @@ pub fn spawn_supervisor(
                     let _ = status_tx.send(state.status());
                 }
 
-                _ = job.to_wait() => {
+                _ = job.to_wait(), if state.phase() != SupervisorPhase::Exited => {
                     if shutdown.is_cancelled() { break 'supervisor; }
                     // Extract exit status from the job
                     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -433,7 +433,22 @@ pub fn spawn_supervisor(
                         Action::None => {
                             debug!("Process {} exited, not restarting", name);
                             let _ = status_tx.send(state.status());
-                            break;
+                            // When file watching is configured, keep the
+                            // supervisor alive after a clean exit so subsequent
+                            // file changes can re-run the process. This is what
+                            // makes `watch` usable with one-shot commands that
+                            // exit immediately, not just long-running ones.
+                            // The process is reported as Exited, so `@completed`
+                            // / `@started` dependencies are satisfied; the loop
+                            // simply parks until a file change arrives.
+                            if config.watch.paths.is_empty() {
+                                break;
+                            }
+                            debug!(
+                                "Process {} parked after exit; watching {} path(s) for changes",
+                                name,
+                                config.watch.paths.len()
+                            );
                         }
                     }
                     let _ = status_tx.send(state.status());

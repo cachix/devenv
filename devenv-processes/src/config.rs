@@ -206,12 +206,12 @@ pub struct LinuxConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StartConfig {
     #[serde(default = "default_true")]
-    pub enable: bool,
+    pub up: bool,
 }
 
 impl Default for StartConfig {
     fn default() -> Self {
-        Self { enable: true }
+        Self { up: true }
     }
 }
 

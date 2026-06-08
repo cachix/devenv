@@ -1,10 +1,9 @@
-# Test the `start.enable = "interactive-shell"` value and the global
-# `process.start` default.
+# Test `start.shell` and `start.up` per-process flags and global defaults.
 #
-# - `start.enable = "interactive-shell"` processes are still started by `devenv up`
-#   (they are enabled; "interactive-shell" only adds the shell-entry trigger).
-# - `start.enable = false` processes are not started by `devenv up`.
-# - `process.shellStartProcesses` lists only the "interactive-shell" processes.
+# - `start.up = true` (default): process starts on `devenv up`.
+# - `start.shell = true`: process starts on interactive shell entry only.
+# - `start.up = false`: process never starts automatically.
+# - `process.shellStartProcesses` lists only the `start.shell = true` processes.
 { pkgs, ... }:
 {
   packages = [ pkgs.python3 pkgs.curl ];
@@ -13,10 +12,11 @@
   processes.up_proc.exec = "exec python3 -m http.server 18551";
   processes.shell_proc = {
     exec = "exec python3 -m http.server 18552";
-    start.enable = "interactive-shell";
+    start.shell = true;
+    start.up = false;
   };
   processes.off_proc = {
     exec = "exec python3 -m http.server 18553";
-    start.enable = false;
+    start.up = false;
   };
 }

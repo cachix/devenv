@@ -47,45 +47,37 @@ The default timeout is 120 seconds.
 
 !!! tip "New in devenv 2.1.3"
 
-Each process has a `start.enable` option that controls when it starts. It accepts:
+Each process has two independent flags that control when it starts:
 
-- `true` (default) — start with `devenv up`.
-- `false` — never auto-start. The process is still registered and visible in the TUI as stopped; start it manually (select it and press Enter, or `devenv processes start <name>`).
-- `"interactive-shell"` — start when you enter an interactive `devenv shell` and stop it when you exit the shell. It is also started by `devenv up`.
+- **`start.up`** (default `true`) — start with `devenv up`. Set to `false` to prevent auto-start; the process is still registered and visible in the TUI as stopped, and can be started manually (select it and press Enter, or `devenv processes start <name>`).
+- **`start.shell`** (default `false`) — start when you enter an interactive `devenv shell`, and stop when you exit. Requires the native process manager.
 
-Set the default for every process with `process.start`, and override per process with `processes.<name>.start.enable`:
+Set global defaults with `process.start.up` and `process.start.shell`, and override per process with `processes.<name>.start.up` / `processes.<name>.start.shell`:
 
 ```nix title="devenv.nix"
 {
-  # Default: tie every process to the shell lifecycle.
-  process.start = "interactive-shell";
-
   processes.web.exec = "npm run dev";
 
-  # Override a single process to only start with `devenv up`.
-  processes.worker = {
-    exec = "worker --queue jobs";
-    start.enable = true;
+  # This process starts on shell entry, not on `devenv up`.
+  processes.watcher = {
+    exec = "watchexec -e rs cargo test";
+    start.shell = true;
+    start.up = false;
+  };
+
+  # This process never starts automatically.
+  processes.debug-server = {
+    exec = "myserver --debug";
+    start.up = false;
   };
 }
 ```
 
-With `start.enable = "interactive-shell"`, a single `devenv shell` starts your processes in the background, drops you into a shell with your tools, and stops the processes when you exit — replacing the `devenv up -d && devenv shell` two-step (and the matching `exit` + `devenv processes down`).
+With `start.shell = true`, a single `devenv shell` starts those processes in the background, drops you into a shell with your tools, and stops them when you exit — no manual `devenv up -d` / `devenv processes down` needed.
 
-Only an **interactive** `devenv shell` starts these processes: `devenv shell -- <cmd>`, a piped/non-interactive shell, and `devenv shell --no-reload` do not (devenv warns when it skips them). Use `devenv up` to start them outside an interactive shell.
+Only an **interactive** `devenv shell` starts `start.shell` processes: `devenv shell -- <cmd>`, piped/non-interactive shells, and `devenv shell --no-reload` do not (devenv warns when it skips them).
 
-The `"interactive-shell"` start mode requires the native process manager (the default for devenv 2.0+).
-
-### Attaching with `devenv up`
-
-If a process manager is already running (for example started by `devenv shell` or `devenv up -d`), running `devenv up` attaches to it over its control socket and starts the remaining up-enabled processes, instead of failing with "Processes already running".
-
-Pressing Ctrl-C detaches the foreground view. The processes keep running for as long as the manager does:
-
-- If the manager was started by `devenv up -d`, it persists until you run `devenv down`.
-- If the manager was started by `devenv shell`, the manager and every process inside it (including ones an attached `devenv up` started) stop when you exit that shell.
-
-Attaching is supported by the native process manager.
+`start.shell = true` requires the native process manager (the default for devenv 2.0+).
 
 ## Dependencies
 

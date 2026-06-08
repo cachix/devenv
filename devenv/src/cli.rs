@@ -934,6 +934,12 @@ pub struct UpArgs {
         help = "Disable strict port mode, overriding strict_ports from devenv.yaml."
     )]
     pub no_strict_ports: bool,
+
+    #[arg(
+        long,
+        help = "Stop already-running processes and restart. Required when a process manager is already running."
+    )]
+    pub restart: bool,
 }
 
 #[derive(Subcommand, Clone)]

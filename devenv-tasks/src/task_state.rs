@@ -50,7 +50,7 @@ impl OutputCallback for ActivityCallback<'_> {
 
 /// Info returned from `run_process` about how the process was launched.
 pub struct ProcessLaunchInfo {
-    /// Whether the process has auto start off (start.enable = false).
+    /// Whether the process has auto start off (start.up = false).
     pub auto_start_off: bool,
     /// Whether the process has a readiness probe that must be awaited.
     pub requires_ready_wait: bool,
