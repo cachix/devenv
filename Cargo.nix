@@ -14983,8 +14983,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/Uzaaft/libghostty-rs.git";
-          rev = "5ac47e9eb166add2c00c432bc65c279133629712";
-          sha256 = "0cigbv2jfzckd6fcvrv4n9zsq38mj2arvbqjnz9n20dpkh4kv6xi";
+          rev = "20edad15d7984c727acc4f4facdadf045609f543";
+          sha256 = "0iq9pm508hhq024w7rb5c3xxs2yqzhkfsjxn8cs1s2128pgn5kpk";
         };
         libName = "libghostty_vt";
         dependencies = [
@@ -15011,7 +15011,7 @@ rec {
           "allocator_api" = [ "dep:allocator-api2" ];
           "default" = [ "kitty-graphics" ];
           "kitty-graphics" = [ "libghostty-vt-sys/kitty-graphics" ];
-          "link-static" = [ "libghostty-vt-sys/link-static" ];
+          "link-dynamic" = [ "libghostty-vt-sys/link-dynamic" ];
           "log" = [ "dep:log" ];
           "png" = [ "dep:png" ];
         };
@@ -15026,8 +15026,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/Uzaaft/libghostty-rs.git";
-          rev = "5ac47e9eb166add2c00c432bc65c279133629712";
-          sha256 = "0cigbv2jfzckd6fcvrv4n9zsq38mj2arvbqjnz9n20dpkh4kv6xi";
+          rev = "20edad15d7984c727acc4f4facdadf045609f543";
+          sha256 = "0iq9pm508hhq024w7rb5c3xxs2yqzhkfsjxn8cs1s2128pgn5kpk";
         };
         libName = "libghostty_vt_sys";
         buildDependencies = [
