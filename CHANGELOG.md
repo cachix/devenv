@@ -37,6 +37,7 @@
 
 ### Breaking Changes
 
+- **Dropped `x86_64-darwin` (Intel macOS)**: devenv is no longer built, tested, or released for `x86_64-darwin`. The platform is end-of-life in nixpkgs (26.05 is the last release to support it). Intel Mac users should run devenv via Rosetta on an Apple Silicon machine or pin an older devenv release.
 - **Shell hook auto-activation**: The shell hook (`devenv hook bash`/`zsh`/`fish`/`nu`) and `devenv allow` now detect a project by looking for `devenv.nix` instead of `devenv.yaml`. Projects with only a `devenv.yaml` and no `devenv.nix` will no longer auto-activate; add a `devenv.nix` to restore activation.
 
 ## 2.1.2 (2026-05-13)
