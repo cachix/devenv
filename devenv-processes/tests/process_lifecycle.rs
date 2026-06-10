@@ -7,7 +7,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ProcessManager};
+use devenv_processes::{ProcessConfig, ProcessManager, RestartConfig, RestartPolicy};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -446,4 +446,40 @@ async fn test_process_output_capture() {
 
     assert!(stdout_content.contains("stdout message"));
     assert!(stderr_content.contains("stderr message"));
+}
+
+/// Regression test for https://github.com/cachix/devenv/issues/2879.
+///
+/// When every supervised process has exited on its own (clean exit, no
+/// restart, no watch paths), run_foreground must return. Otherwise the
+/// devenv-tasks wrapper that process-compose spawns per process never
+/// exits, and process-compose shows the process as running forever.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_foreground_returns_after_processes_exit() {
+    timeout(TEST_TIMEOUT, async {
+        let ctx = TestContext::new();
+        let manager = ctx.create_manager();
+
+        let config = ProcessConfig {
+            name: "oneshot".to_string(),
+            exec: "true".to_string(),
+            restart: RestartConfig {
+                on: RestartPolicy::Never,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+
+        let token = tokio_util::sync::CancellationToken::new();
+        manager
+            .run_foreground(token, None)
+            .await
+            .expect("run_foreground failed");
+    })
+    .await
+    .expect("run_foreground should return once all processes have exited (issue #2879)");
 }

@@ -4735,3 +4735,63 @@ echo "Dotfiles task executed successfully"
 
     Ok(())
 }
+
+/// Regression test for https://github.com/cachix/devenv/issues/2879.
+///
+/// process-compose runs each process as `devenv-tasks run devenv:processes:<name>`.
+/// Once the wrapped process exits on its own, the whole devenv-tasks run must
+/// finish; otherwise process-compose sees the wrapper as a still-running
+/// process and the process never reaches the Completed state.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_exits_when_process_task_exits() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+    let runtime_dir = temp_dir.path().join("runtime");
+    fs::create_dir_all(&runtime_dir).await.unwrap();
+
+    let script = create_script("#!/bin/sh\necho done")?;
+    let command = script.to_str().unwrap();
+
+    let config = Config::try_from(json!({
+        "roots": ["ns:proc"],
+        "run_mode": "all",
+        "runtime_dir": runtime_dir.to_str().unwrap(),
+        "cache_dir": temp_dir.path().to_str().unwrap(),
+        "tasks": [
+            {
+                "name": "ns:proc",
+                "type": "process",
+                "command": command
+            }
+        ]
+    }))
+    .unwrap();
+
+    let tasks = std::sync::Arc::new(
+        Tasks::builder(config, VerbosityLevel::Quiet, Shutdown::new())
+            .with_db_path(db_path)
+            .build()
+            .await?,
+    );
+
+    let (activity_rx, _activity_handle) = devenv_activity::init();
+
+    let tasks_clone = std::sync::Arc::clone(&tasks);
+    let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
+
+    let ui = crate::TasksUi::new(
+        std::sync::Arc::clone(&tasks),
+        activity_rx,
+        VerbosityLevel::Quiet,
+    );
+    let (status, _outputs) = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        ui.run(run_handle, false),
+    )
+    .await
+    .expect("devenv-tasks must exit after its process task exits (issue #2879)")?;
+
+    assert!(!status.has_failures());
+
+    Ok(())
+}
