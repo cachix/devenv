@@ -328,8 +328,9 @@ impl Devenv {
         let devenv_tmp =
             PathBuf::from(std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
 
-        // Runtime directory for sockets - XDG_RUNTIME_DIR is the correct location
-        // per the XDG Base Directory Specification
+        // Runtime directory for sockets. Deliberately independent of TMPDIR so
+        // that every process of the same user computes the same path; see
+        // compute_runtime_dir for the resolution order.
         let devenv_runtime = processes::compute_runtime_dir(&devenv_dotfile);
 
         xdg_dirs
@@ -385,9 +386,7 @@ impl Devenv {
             devenv_dotfile.join("imports.txt"),
             options.imports.join("\n"),
         )?;
-        fs::create_dir_all(&devenv_runtime)
-            .await
-            .map_err(|e| miette::miette!("Failed to create {}: {}", devenv_runtime.display(), e))?;
+        processes::ensure_runtime_dir(&devenv_runtime)?;
 
         if cache_settings.eval_cache {
             eval_cache_pool
@@ -1932,9 +1931,11 @@ impl Devenv {
         }
     }
 
-    /// Compute the native process manager socket path.
+    /// The native process manager socket path, derived from the runtime
+    /// directory resolved once at construction so every use of this struct
+    /// agrees on a single location.
     fn native_socket_path(&self) -> std::path::PathBuf {
-        processes::native_socket_path(&self.devenv_dotfile)
+        processes::native_socket_path_in(&self.devenv_runtime)
     }
 
     /// Send an API request to the running native process manager and return the response.
