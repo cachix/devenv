@@ -49,7 +49,7 @@ There correspond the following conan-flake options:
   buildType = "Debug";
   compilerCppStd = "14";
 
-  platformToolRequires = {
+  profiles.platformToolRequires = {
     cmake = pkgs.cmake.version;
   };
 
@@ -83,7 +83,7 @@ languages.cplusplus = {
 By default, when Conan is enabled:
 
 - The default C++ package is set to `config.stdenv.cc`
-- Conan is configured to use the same CMake available in the developmemnt shell; it's not necessary to set the `languages.cplusplus.conan.config.platformToolRequires.cmake` and `languages.cplusplus.conan.config.devShell.tools` options explicitly
+- Conan is configured to use the same CMake available in the developmemnt shell; it's not necessary to set the `languages.cplusplus.conan.config.profiles.platformToolRequires.cmake` and `languages.cplusplus.conan.config.devShell.tools` options explicitly
 
 ### In Action:
 
