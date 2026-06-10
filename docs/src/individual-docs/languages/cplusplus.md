@@ -53,7 +53,7 @@ There correspond the following conan-flake options:
   };
 
   devShell = {
-    # Programs you want to make available in the shell.
+    # Programs you want to make available in the shell:
     tools = {
       inherit (pkgs) cmake;
     };
