@@ -147,10 +147,15 @@ in
                 exit 0
               fi
 
+              # Use an absolute config path: git runs hooks from the repository
+              # toplevel, which differs from the devenv root when devenv lives
+              # in a subdirectory.
+              config="$DEVENV_ROOT/${configPath}"
+
               # Install hooks for configured stages
               if [ -z "${lib.concatStringsSep " " installStages}" ]; then
                 # Default: install pre-commit hook
-                ${executable} install -c ${configPath}
+                ${executable} install -c "$config"
               else
                 for stage in ${lib.concatStringsSep " " installStages}; do
                   case $stage in
@@ -158,10 +163,10 @@ in
                       # Skip manual stage - it's not a git hook
                       ;;
                     commit|merge-commit|push)
-                      ${executable} install -c ${configPath} -t "pre-$stage"
+                      ${executable} install -c "$config" -t "pre-$stage"
                       ;;
                     *)
-                      ${executable} install -c ${configPath} -t "$stage"
+                      ${executable} install -c "$config" -t "$stage"
                       ;;
                   esac
                 done
@@ -171,7 +176,7 @@ in
           before = [ "devenv:enterShell" ];
         };
         "devenv:git-hooks:run" = {
-          exec = "${lib.getExe package} run -a";
+          exec = ''${lib.getExe package} run -a -c "$DEVENV_ROOT/${cfg.configPath}"'';
           after = [ "devenv:git-hooks:install" ];
           before = [ "devenv:enterTest" ];
         };
