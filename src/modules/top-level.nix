@@ -244,21 +244,35 @@ in
         type = types.str;
         internal = true;
         # The path has to be
-        # - unique to each DEVENV_STATE to let multiple devenv environments coexist
+        # - unique to each project to let multiple devenv environments coexist
         # - deterministic so that it won't change constantly
         # - short so that unix domain sockets won't hit the path length limit
         # - free to create as an unprivileged user across OSes
+        # - independent of $TMPDIR, which differs between processes of the
+        #   same user (nix develop, sandboxes) and made process managers
+        #   mutually invisible
+        # This mirrors compute_runtime_dir in devenv-processes. The CLI passes
+        # its own value in, so this default only applies to flakes integration.
         default =
           let
-            hashedRoot = builtins.hashString "sha256" config.devenv.state;
+            hashedDotfile = builtins.hashString "sha256" (toString config.devenv.dotfile);
             # same length as git's abbreviated commit hashes
-            shortHash = builtins.substring 0 7 hashedRoot;
+            shortHash = builtins.substring 0 7 hashedDotfile;
+            # Reuse an inherited DEVENV_RUNTIME (e.g. when re-evaluating inside
+            # an existing shell) when it belongs to this project; a value
+            # inherited from a different project has a different hash and is
+            # ignored, which keeps nested devenvs isolated. The two accepted
+            # basename forms (devenv-<hash> and devenv-<uid>-<hash>) match the
+            # ones compute_runtime_dir produces.
+            inherited = builtins.getEnv "DEVENV_RUNTIME";
+            inheritedName = baseNameOf inherited;
+            inheritedMatches = builtins.match "devenv-([0-9]+-)?${shortHash}" inheritedName != null;
             # XDG_RUNTIME_DIR is the correct location for runtime files like sockets
             # per the XDG Base Directory Specification
             xdg = builtins.getEnv "XDG_RUNTIME_DIR";
-            base = if xdg != "" then xdg else config.devenv.tmpdir;
+            base = if xdg != "" then xdg else "/tmp";
           in
-          "${base}/devenv-${shortHash}";
+          if inheritedMatches then inherited else "${base}/devenv-${shortHash}";
       };
 
       tmpdir = lib.mkOption {
@@ -362,7 +376,10 @@ in
       fi
       unset ${lib.concatStringsSep " " config.unsetEnvVars}
 
-      mkdir -p ${lib.escapeShellArg config.devenv.runtime}
+      mkdir -p -m 700 ${lib.escapeShellArg config.devenv.runtime}
+      # tighten directories created by older devenv versions with the default
+      # umask; the CLI does the same in ensure_runtime_dir
+      chmod 700 ${lib.escapeShellArg config.devenv.runtime} 2>/dev/null || true
       ln -snf ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
     '';
 
