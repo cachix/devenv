@@ -50,10 +50,15 @@ let
       # Copy the directory's contents into the working directory so that, e.g.,
       # the project root ends up directly under ${homeDir} rather than in a
       # hash-prefixed subdirectory.
-      cp -r ${path}/. $out${homeDir}/
+      cp -rP ${path}/. $out${homeDir}/
     else
       # Copy a single file using its original name, dropping the store hash.
-      cp ${path} "$out${homeDir}/${baseNameOf path}"
+      # Preserve symlinks (-P) rather than following them: paths produced by the
+      # `files` option are symlinks into the store, and their targets are not part
+      # of this source path's closure, so dereferencing would fail to stat them.
+      # Keeping the symlink lets Nix's output scan pull the target into the
+      # closure so it ends up in the image.
+      cp -P ${path} "$out${homeDir}/${baseNameOf path}"
     fi
   '');
 
