@@ -95,6 +95,15 @@ pub(crate) fn xdg_config_home() -> Option<PathBuf> {
 /// This script reverses the previous env diff, sources the new devenv
 /// environment, computes a new diff, and outputs `export -p` for the
 /// calling shell to parse.
+///
+/// The calling shell (zsh/fish) captures this script's stdout via command
+/// substitution and then `eval`s it. Sourcing the devenv environment runs the
+/// `shellHook` (i.e. `enterShell`), which prints to stdout. That output must
+/// not leak into the captured `export -p` stream, otherwise the caller would
+/// `eval` arbitrary `enterShell` output and hit shell parse errors. We redirect
+/// the `source` output to the user's terminal so it is still displayed on
+/// reload (matching bash's behavior), falling back to discarding it when no
+/// controlling terminal is available.
 pub(crate) fn bash_reload_subprocess_script(env_diff_helpers: &str, reload_file: &str) -> String {
     format!(
         r#"{env_diff_helpers}
@@ -106,9 +115,19 @@ __devenv_apply_reverse_diff
 _before=$(mktemp)
 __devenv_capture_env > "$_before"
 
+# Send enterShell output to the terminal instead of the captured stdout.
+# Probe by actually opening /dev/tty: it can exist with writable permission
+# bits yet fail to open (ENXIO) when there is no controlling terminal.
+if {{ : >/dev/tty; }} 2>/dev/null; then
+    _devenv_reload_out=/dev/tty
+else
+    _devenv_reload_out=/dev/null
+fi
+
 # Source new devenv environment
-source "{reload_file}"
+source "{reload_file}" >"$_devenv_reload_out" 2>"$_devenv_reload_out"
 rm -f "{reload_file}"
+unset _devenv_reload_out
 
 # Compute new diff
 __devenv_compute_diff "$_before"
@@ -133,4 +152,81 @@ pub struct RcfileContext<'a> {
     pub target_shell_path: Option<&'a str>,
     /// Directory for writing shell init files (e.g., .devenv/).
     pub init_dir: &'a Path,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    /// Regression test for https://github.com/cachix/devenv/issues/2919
+    ///
+    /// The non-bash reload path captures this subprocess's stdout and `eval`s it.
+    /// Sourcing the devenv environment runs `enterShell` (via `eval "$shellHook"`),
+    /// which prints to stdout. That output must not leak into the captured
+    /// `export -p` stream, otherwise the caller `eval`s arbitrary `enterShell`
+    /// output and hits a shell parse error (e.g. `(eval):6: parse error near '\n'`).
+    #[test]
+    fn reload_subprocess_does_not_leak_enter_shell_output() {
+        // Simulate the activation script: `enterShell` prints to stdout and the
+        // environment exports a variable that the reload must propagate.
+        let reload_file =
+            std::env::temp_dir().join(format!("devenv-reload-test-{}.sh", std::process::id()));
+        std::fs::write(
+            &reload_file,
+            r#"echo "hello from devenv"
+echo "GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)"
+echo ""
+echo "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>"
+export DEVENV_RELOAD_TEST_VAR=reload_works
+"#,
+        )
+        .expect("failed to write fake reload file");
+
+        let script = bash_reload_subprocess_script(
+            BashDialect.env_diff_helpers(),
+            &reload_file.to_string_lossy(),
+        );
+
+        // Capture stdout exactly as the zsh/fish reload hook does (no tty here,
+        // so `enterShell` output falls back to /dev/null).
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(&script)
+            .output()
+            .expect("failed to run reload subprocess script");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // The exported variable must reach the captured `export -p` output.
+        assert!(
+            stdout.contains("DEVENV_RELOAD_TEST_VAR"),
+            "reload output should propagate exported variables, got:\n{stdout}"
+        );
+
+        // `enterShell` stdout must NOT leak into the captured output, otherwise
+        // the caller's `eval` would choke on it.
+        assert!(
+            !stdout.contains("hello from devenv"),
+            "enterShell output leaked into captured reload stdout:\n{stdout}"
+        );
+        assert!(
+            !stdout.contains("License GPLv3+"),
+            "enterShell output leaked into captured reload stdout:\n{stdout}"
+        );
+
+        // The captured output must be evaluable without a parse error, which is
+        // the actual symptom reported in the issue.
+        let eval = Command::new("bash")
+            .arg("-c")
+            .arg(stdout.as_ref())
+            .output()
+            .expect("failed to eval captured reload output");
+        assert!(
+            eval.status.success(),
+            "evaluating captured reload output failed: {}",
+            String::from_utf8_lossy(&eval.stderr)
+        );
+
+        let _ = std::fs::remove_file(&reload_file);
+    }
 }

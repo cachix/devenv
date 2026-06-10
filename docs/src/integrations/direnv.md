@@ -46,7 +46,10 @@ Create an `.envrc` file in your project directory with the following content:
 This file configures direnv to use devenv for shell activation.
 
 !!! note
-    `devenv init` does not create a `.envrc` file by default. Use `devenv init --include-envrc` to include it.
+    `devenv init` does not create a `.envrc` file by default.
+
+!!! tip "New in version 2.2"
+    Use `devenv init --include-envrc` to include an `.envrc` file. On earlier versions, create it manually using the snippet above.
 
 ## Approving and loading the shell
 

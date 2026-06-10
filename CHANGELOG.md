@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed editing `enterShell` while a `devenv shell` is running causing a parse error (e.g. `(eval):6: parse error near '\n'`) on reload under zsh and fish. The `enterShell` output was being mixed into the environment data the reload applies; it now goes to the terminal as it does on a fresh shell entry ([#2919](https://github.com/cachix/devenv/issues/2919)).
 - Fixed `devenv up` (and other TUI commands) burning significant CPU while idle — roughly 10-15% per managed process — even when every process was quiet. The foreground UI was recomputing its layout dozens of times per second regardless of whether anything changed, and each idle process woke the whole UI twice a second. The TUI now only redraws when the model actually changes, with a slow heartbeat to keep elapsed timers ticking ([#2915](https://github.com/cachix/devenv/issues/2915)).
 - Fixed `devenv container` placing `copyToRoot` directories under a hash-prefixed subdirectory (e.g. `/env/<hash>-source`) instead of in the working directory. The project root and other directory paths now land directly under the working directory, and single files keep their original name ([#2914](https://github.com/cachix/devenv/issues/2914)).
 - Fixed authenticated Cachix pulls failing with HTTP 401 even when a valid auth token was configured. The token was resolved correctly but applied to Nix too late, after the store had already opened and made its first request, so private cache lookups went out unauthenticated. The netrc credentials are now in place before the store opens.
