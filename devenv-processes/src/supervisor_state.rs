@@ -119,16 +119,34 @@ pub struct SupervisorState {
 
 impl SupervisorState {
     pub fn new(config: &ProcessConfig, now: Instant) -> Self {
-        let watchdog_timeout = config
-            .watchdog
-            .as_ref()
-            .map(|w| Duration::from_micros(w.usec));
+        // Under an external supervisor, host owns restart/ready/watchdog policy.
+        // Force the state machine into a "passive" shape so it only observes
+        // ProcessExit/StopRequested and never asks the caller to restart.
+        let external = config.supervisor == crate::config::Supervisor::External;
+
+        let watchdog_timeout = if external {
+            None
+        } else {
+            config
+                .watchdog
+                .as_ref()
+                .map(|w| Duration::from_micros(w.usec))
+        };
         let watchdog_require_ready = config.watchdog.as_ref().is_none_or(|w| w.require_ready);
-        let startup_timeout = config
-            .ready
-            .as_ref()
-            .and_then(|r| r.timeout)
-            .map(Duration::from_secs);
+        let startup_timeout = if external {
+            None
+        } else {
+            config
+                .ready
+                .as_ref()
+                .and_then(|r| r.timeout)
+                .map(Duration::from_secs)
+        };
+        let restart_policy = if external {
+            RestartPolicy::Never
+        } else {
+            config.restart.on
+        };
         let restart_limit_burst = config.restart.max.unwrap_or(DEFAULT_RESTART_LIMIT_BURST);
         let restart_limit_interval = config
             .restart
@@ -147,7 +165,7 @@ impl SupervisorState {
             phase: SupervisorPhase::Starting,
             watchdog_timeout,
             watchdog_require_ready,
-            restart_policy: config.restart.on,
+            restart_policy,
             startup_timeout,
         };
 

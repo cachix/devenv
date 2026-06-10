@@ -276,7 +276,12 @@ pub struct ProcessConfig {
 
 impl ProcessConfig {
     /// Whether this config has any readiness mechanism (probe, TCP listen, or allocated ports).
+    /// Under `Supervisor::External` always false — the host owns readiness, so
+    /// the manager surfaces `Ready` immediately and skips probe setup.
     pub fn has_readiness_probe(&self) -> bool {
+        if self.supervisor == Supervisor::External {
+            return false;
+        }
         self.ready.is_some()
             || self.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
             || !self.ports.is_empty()

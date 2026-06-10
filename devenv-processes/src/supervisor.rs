@@ -90,20 +90,23 @@ pub fn spawn_supervisor(
     let live_guard = LiveGuard::new(resources.live.clone(), resources.completion.clone());
     let name = config.name.clone();
 
+    // Under an external supervisor, host owns probes/watcher entirely.
+    let supervise_locally = config.supervisor == crate::config::Supervisor::Native;
+
     // Probe timing from ready config
     let initial_delay = Duration::from_secs(config.ready.as_ref().map_or(0, |r| r.initial_delay));
     let probe_period = Duration::from_secs(config.ready.as_ref().map_or(1, |r| r.period));
     let probe_timeout = Duration::from_secs(config.ready.as_ref().map_or(5, |r| r.probe_timeout));
 
     // Exec probe command (from ready.exec, only when not using notify)
-    let exec_probe_cmd = if !config.ready.as_ref().is_some_and(|r| r.notify) {
+    let exec_probe_cmd = if supervise_locally && !config.ready.as_ref().is_some_and(|r| r.notify) {
         config.ready.as_ref().and_then(|r| r.exec.clone())
     } else {
         None
     };
 
     // HTTP probe URL (from ready.http.get, only when not using notify)
-    let http_probe_url = if !config.ready.as_ref().is_some_and(|r| r.notify) {
+    let http_probe_url = if supervise_locally && !config.ready.as_ref().is_some_and(|r| r.notify) {
         config.ready.as_ref().and_then(|r| {
             r.http.as_ref().and_then(|h| {
                 h.get
@@ -118,7 +121,8 @@ pub fn spawn_supervisor(
     // TCP probe for readiness (listen sockets or allocated ports, without notify or exec/http)
     // Only use TCP probe as fallback when no explicit exec or http probe is configured.
     let tcp_probe_addresses: Option<Vec<String>> =
-        if !config.ready.as_ref().is_some_and(|r| r.notify)
+        if supervise_locally
+            && !config.ready.as_ref().is_some_and(|r| r.notify)
             && exec_probe_cmd.is_none()
             && http_probe_url.is_none()
         {
@@ -146,8 +150,6 @@ pub fn spawn_supervisor(
             None
         };
 
-    let supervisor_mode = config.supervisor;
-
     tokio::spawn(async move {
         // Owns the live-count slot for the duration of this task; decrements on
         // drop (terminal break, give-up, or abort).
@@ -157,16 +159,6 @@ pub fn spawn_supervisor(
         // is no window between launch and supervision where a fast process could
         // exit before the loop watches it. The spawn hook is already set on the job.
         job.start().await;
-
-        // External supervisor: skip the state machine + probes + watcher. The
-        // host (process-compose, mprocs, …) owns restart/ready/watchdog policy;
-        // we only mirror start/stop/exit into status_rx and the live counter.
-        if supervisor_mode == crate::config::Supervisor::External {
-            run_external_supervision(&job, &activity, &status_tx, &shutdown, &mut cmd_rx).await;
-            job.stop_with_signal(Signal::Terminate, STOP_GRACE).await;
-            trace!("Supervision task for {} exiting (external)", name);
-            return;
-        }
 
         let mut state = SupervisorState::new(&config, Instant::now());
 
@@ -202,11 +194,15 @@ pub fn spawn_supervisor(
             )
         });
 
+        // Under External the host owns file-watch reloads; pass empty paths
+        // so FileWatcher pends forever in the select arm.
+        let empty_paths: Vec<std::path::PathBuf> = Vec::new();
+        let empty_strs: Vec<String> = Vec::new();
         let mut file_watcher = FileWatcher::new(
             FileWatcherConfig {
-                paths: &config.watch.paths,
-                extensions: &config.watch.extensions,
-                ignore: &config.watch.ignore,
+                paths: if supervise_locally { &config.watch.paths } else { &empty_paths },
+                extensions: if supervise_locally { &config.watch.extensions } else { &empty_strs },
+                ignore: if supervise_locally { &config.watch.ignore } else { &empty_strs },
                 recursive: true,
                 ..Default::default()
             },
@@ -274,7 +270,19 @@ pub fn spawn_supervisor(
                     match cmd {
                         SupervisorCommand::Restart { ack } => {
                             activity.log("Restart requested");
-                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            // Sequence stop+start manually (rather than
+                            // `restart_with_signal`) so the supervisor stays
+                            // inside this arm while the old process dies and
+                            // the new one launches. `restart_with_signal`
+                            // leaves a phantom `to_wait` notification for the
+                            // old exit that the next `select` iteration would
+                            // process as a real `ProcessExit` — under
+                            // `RestartPolicy::Never` that drives the state
+                            // machine to `Exited` even though a new process
+                            // is already running.
+                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            job.start().await;
                             state.reset_for_external_restart(Instant::now());
                             respawn_probes!();
                             let _ = status_tx.send(state.status());
@@ -344,7 +352,11 @@ pub fn spawn_supervisor(
                     }
                     match state.on_event(Event::FileChange, Instant::now()) {
                         Action::Restart => {
-                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            // See `SupervisorCommand::Restart` for why this is
+                            // a manual stop+start instead of `restart_with_signal`.
+                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            job.start().await;
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
                             activity.log(format!("Restarted (attempt {})", count));
@@ -552,48 +564,3 @@ fn make_deadline_future(
     }
 }
 
-/// Minimal supervision body used when the lifecycle is owned by an external
-/// manager. Surfaces start (Ready) and exit (Exited) to `status_rx` and honors
-/// Stop/Restart commands. No restart policy, no probes, no watchdog, no watch.
-async fn run_external_supervision(
-    job: &std::sync::Arc<watchexec_supervisor::job::Job>,
-    activity: &devenv_activity::ActivityRef,
-    status_tx: &tokio::sync::watch::Sender<JobStatus>,
-    shutdown: &CancellationToken,
-    cmd_rx: &mut tokio::sync::mpsc::Receiver<SupervisorCommand>,
-) {
-    // Host owns readiness; report Ready immediately so dependents can proceed.
-    let _ = status_tx.send(JobStatus {
-        phase: SupervisorPhase::Ready,
-        restart_count: 0,
-    });
-    activity.set_status(ProcessStatus::Ready);
-
-    loop {
-        tokio::select! {
-            biased;
-            _ = shutdown.cancelled() => break,
-            Some(cmd) = cmd_rx.recv() => match cmd {
-                SupervisorCommand::Stop { ack } => {
-                    let _ = status_tx.send(JobStatus {
-                        phase: SupervisorPhase::Stopping,
-                        restart_count: 0,
-                    });
-                    let _ = ack.send(());
-                    break;
-                }
-                SupervisorCommand::Restart { ack } => {
-                    job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
-                    let _ = ack.send(());
-                }
-            },
-            _ = job.to_wait() => {
-                let _ = status_tx.send(JobStatus {
-                    phase: SupervisorPhase::Exited,
-                    restart_count: 0,
-                });
-                break;
-            }
-        }
-    }
-}

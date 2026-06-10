@@ -796,11 +796,9 @@ impl NativeProcessManager {
         };
         let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
 
-        // If no readiness mechanism is configured, mark process as immediately ready
-        let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
-        let has_ready_config = config.ready.is_some();
-        let has_tcp_probe = (!config.listen.is_empty() || !config.ports.is_empty()) && !has_notify;
-        if !has_notify && !has_ready_config && !has_tcp_probe {
+        // If no readiness mechanism is configured (or an external host owns it),
+        // mark the process as immediately ready.
+        if !config.has_readiness_probe() {
             let _ = status_tx.send(crate::supervisor_state::JobStatus {
                 phase: crate::supervisor_state::SupervisorPhase::Ready,
                 restart_count: 0,
