@@ -43,27 +43,36 @@ devenv processes down
 wait_for_port_free || { echo "FAIL: port still bound after down"; exit 1; }
 echo "PASS: basic up -d / down"
 
-# === Test 2: foreground up rejects when daemon running ===
-echo "--- Test 2: foreground up rejects when daemon running ---"
+# === Test 2: up -d attaches when a daemon is already running ===
+echo "--- Test 2: up -d attaches when a daemon is already running ---"
 devenv up -d
 devenv processes wait
 wait_for_port
 
-# Try foreground up — should fail with "already running"
-# Use timeout so we don't wait for crash-looping processes if the guard is missing.
-if timeout 10 devenv up --no-tui 2>&1; then
-  echo "FAIL: foreground up should have been rejected"
+# A second `up -d` must attach to the running daemon (start up-enabled processes
+# over the control socket) without erroring and without clobbering the daemon's
+# PID file / socket.
+devenv up -d
+devenv processes wait
+
+# Daemon should still be healthy and stoppable with a single `down`.
+curl -s -o /dev/null http://127.0.0.1:$PORT/ || { echo "FAIL: daemon died after attaching up"; devenv processes down || true; exit 1; }
+
+# A non-interactive foreground `up` (no -d) against a running daemon must fail
+# fast, not attach and block forever. Assert on the message: a hang killed by
+# the timeout also exits non-zero, so the exit code alone can't tell a clean
+# reject from a hang.
+timeout 15 devenv up --no-tui >up_out.txt 2>&1 || true
+grep -q "Processes already running" up_out.txt || {
+  echo "FAIL: non-interactive foreground up should fail fast when a daemon is running"
+  cat up_out.txt
   devenv processes down || true
   exit 1
-fi
-echo "Foreground up correctly rejected"
+}
 
-# Daemon should still be healthy
-curl -s -o /dev/null http://127.0.0.1:$PORT/ || { echo "FAIL: daemon died"; exit 1; }
 devenv processes down
-sleep 1
-port_free || { echo "FAIL: port still bound"; exit 1; }
-echo "PASS: foreground up rejects when daemon running"
+wait_for_port_free || { echo "FAIL: port still bound after down"; exit 1; }
+echo "PASS: up -d attaches when daemon running"
 
 # === Test 3: up -d / down / restart ===
 echo "--- Test 3: restart after down ---"

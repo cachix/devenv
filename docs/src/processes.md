@@ -43,6 +43,20 @@ $ devenv processes wait --timeout 120
 
 The default timeout is 120 seconds.
 
+## Attaching to running processes
+
+!!! tip "New in devenv 2.1.3"
+
+When processes are already running in the background (started with `devenv up -d`), a second `devenv up` attaches to them instead of failing. It starts any processes that are enabled but not currently running, honoring their `after`/`before` dependencies, and streams a live view of process status and logs. Press Ctrl-C to detach, leaving the processes running.
+
+You can also pass a subset of processes to start:
+
+```shell-session
+$ devenv up -d            # start everything in the background
+$ devenv processes stop api
+$ devenv up api           # attach and bring api back up
+```
+
 ## Dependencies
 
 Processes can depend on other processes and tasks using `after` and `before`:
