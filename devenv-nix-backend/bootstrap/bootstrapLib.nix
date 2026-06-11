@@ -585,7 +585,7 @@ rec {
     if !hasDevenv then
       throw ''
         Input does not have a devenv.nix file.
-        Expected file at: ${devenvPath}
+        Expected file at: ${toString devenvPath}
 
         To use this input's devenv configuration, the input must provide a devenv.nix file.
       ''
