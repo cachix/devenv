@@ -45,7 +45,7 @@ imports:
 The sibling `shared-config` repository only needs a `devenv.nix` file.
 Combine this with [profiles](profiles.md) to define one shared configuration that adapts to each project.
 
-!!! tip "New in version 2.1.4"
+!!! tip "New in version 2.2"
 
     Changes to files in local `path:` inputs are picked up automatically.
     Previously the evaluation cache held on to the old configuration until `.devenv` was deleted.
