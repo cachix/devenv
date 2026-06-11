@@ -12,7 +12,7 @@
 - Fixed `devenv shell`/`devenv update` failing with `authentication required but no callback set` when a `url."ssh://git@github.com/".insteadOf` git config rewrites GitHub HTTPS URLs to SSH. GitHub flake inputs now resolve over SSH using your ssh-agent ([#2842](https://github.com/cachix/devenv/issues/2842)).
 - Fixed the "N files" counter under "Evaluating shell" inflating from generic Nix log lines. Now only counts actual file read operations.
 - Fixed `devenv up`/`test`/`tasks` failing with `error: could not find a flake.nix file` when the devenv shell is loaded from a remote flake via direnv ([#2599](https://github.com/cachix/devenv/issues/2599)).
-- Fixed `devenv shell` printing internal reload warnings (e.g. "Watched path became unavailable, forcing reload") to the user's terminal, clobbering scrollback, prompts, and editors. 
+- Fixed `devenv shell` printing internal reload warnings (e.g. "Watched path became unavailable, forcing reload") to the user's terminal, clobbering scrollback, prompts, and editors.
 - Fixed `devenv up` corrupting a running daemon's PID file and socket when started in the foreground, leaving the daemon unmanageable. Foreground `up` now rejects with "Processes already running" when a daemon is active.
 - Fixed shell hook spawning a nested `devenv shell` when `devenv shell` was entered manually. Follow-up to [#2815](https://github.com/cachix/devenv/pull/2815).
 - Fixed "zoxide: infinite loop detected" when using `zoxide init --cmd=cd fish` and `cd`-ing into a devenv project. The fish hook now defers spawning `devenv shell` to the next prompt instead of spawning inline inside the PWD event handler, so in-progress shell state never leaks into the devenv shell ([#2841](https://github.com/cachix/devenv/issues/2841)).
@@ -39,7 +39,7 @@
 
 ### Breaking Changes
 
-- **Dropped `x86_64-darwin` (Intel macOS)**: devenv is no longer built, tested, or released for `x86_64-darwin`. The platform is end-of-life in nixpkgs (26.05 is the last release to support it). Intel Mac users should run devenv via Rosetta on an Apple Silicon machine or pin an older devenv release.
+- **Dropped `x86_64-darwin` (Intel macOS)**: devenv is no longer built, tested, or released for `x86_64-darwin`. Intel Mac users should pin an older devenv CLI release. `x86_64-darwin` environments can still be run via Rosetta 2 on Apple Silicon, however nixpkgs 26.05 will be the last release supporting the platform.
 - **Shell hook auto-activation**: The shell hook (`devenv hook bash`/`zsh`/`fish`/`nu`) and `devenv allow` now detect a project by looking for `devenv.nix` instead of `devenv.yaml`. Projects with only a `devenv.yaml` and no `devenv.nix` will no longer auto-activate; add a `devenv.nix` to restore activation.
 
 ## 2.1.2 (2026-05-13)
