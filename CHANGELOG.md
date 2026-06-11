@@ -37,6 +37,7 @@
 - Bumped secretspec to 0.12, which adds a `[providers]` alias map in `secretspec.toml`, a key prefix for the AWS Secrets Manager provider, audit logging and access reasons for secret reads, and support for custom Bitwarden instances.
 - Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).
 - `devenv up` now attaches to an already-running process manager (started by `devenv up -d`) and starts the requested up-enabled processes over the control socket — honouring the positional process subset (e.g. `devenv up foo`) and `after`/`before` dependency ordering — instead of failing with "Processes already running" ([#971](https://github.com/cachix/devenv/issues/971)).
+- Added `devenv processes attach` to attach to running processes and stream their status, ports, and logs until Ctrl-C, leaving them running (native process manager only).
 
 ### Breaking Changes
 

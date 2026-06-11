@@ -60,4 +60,16 @@ reachable "$PORT_A" || { echo "FAIL: alpha died after subset attach"; devenv pro
 
 devenv processes down
 
+# `devenv processes attach` requires a running manager: after down it must fail
+# fast with a helpful message instead of hanging or attaching to nothing.
+if devenv processes attach >attach_out.txt 2>&1; then
+  echo "FAIL: attach should fail when no manager is running"
+  exit 1
+fi
+grep -q "No processes running" attach_out.txt || {
+  echo "FAIL: unexpected attach error:"
+  cat attach_out.txt
+  exit 1
+}
+
 echo "All process-up-attach tests passed!"

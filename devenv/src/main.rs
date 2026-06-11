@@ -954,6 +954,10 @@ async fn dispatch_command(
                 devenv.processes_start(&name).await?;
                 Ok(CommandResult::Done)
             }
+            ProcessesCommand::Attach {} => {
+                devenv.attach().await?;
+                Ok(CommandResult::Done)
+            }
             ProcessesCommand::Down {} | ProcessesCommand::Stop { name: None } => {
                 devenv.down().await?;
                 Ok(CommandResult::Done)

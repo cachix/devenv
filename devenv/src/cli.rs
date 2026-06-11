@@ -940,6 +940,11 @@ pub enum ProcessesCommand {
         up_args: UpArgs,
     },
 
+    #[command(
+        about = "Attach to running processes and stream their status and logs until Ctrl-C, leaving them running."
+    )]
+    Attach {},
+
     #[command(about = "Stop processes running in the background.")]
     Down {},
 

@@ -834,6 +834,20 @@ impl Devenv {
         Ok(())
     }
 
+    /// Attach to an already-running process manager and stream a live view of
+    /// its processes (status, ports, logs) until the user detaches with Ctrl-C,
+    /// leaving the manager and its processes running. Unlike `devenv up`, this
+    /// does not start any processes. Fails when no manager is running.
+    pub async fn attach(&self) -> Result<()> {
+        let pid_file = self.native_manager_pid_file();
+        let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await
+        else {
+            bail!("No processes running. Start them with: devenv up -d");
+        };
+        info!(%pid, "attached to running process manager");
+        self.run_attached_foreground().await
+    }
+
     /// Get the path to the .devenv/state directory
     pub fn devenv_state_dir(&self) -> PathBuf {
         self.devenv_dotfile.join("state")

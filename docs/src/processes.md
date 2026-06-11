@@ -57,6 +57,12 @@ $ devenv processes stop api
 $ devenv up api           # attach and bring api back up
 ```
 
+To attach a live view without starting anything (native process manager only):
+
+```shell-session
+$ devenv processes attach
+```
+
 ## Dependencies
 
 Processes can depend on other processes and tasks using `after` and `before`:
