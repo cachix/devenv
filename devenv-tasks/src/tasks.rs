@@ -3,9 +3,8 @@ use crate::error::Error;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
-    DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, PROCESS_TASK_PREFIX,
-    ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus,
-    VerbosityLevel,
+    DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, PROCESS_TASK_PREFIX, Skipped,
+    TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
 use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase};
@@ -183,16 +182,25 @@ impl Tasks {
         for index in &self.tasks_order {
             let task_state = self.graph[*index].read().await;
             match &task_state.status {
+                // A process task node stays `Pending` for its whole live
+                // lifecycle; the manager owns the phase. A `Completed` node
+                // always wins below: it is the graph-owned launch outcome.
+                TaskStatus::Pending if task_state.task.r#type == TaskType::Process => {
+                    let pname = crate::types::process_name(&task_state.task.name);
+                    match self.process_manager.get_phase(pname).await {
+                        Some(ProcessPhase::NotStarted | ProcessPhase::Stopped) => {
+                            status.skipped += 1
+                        }
+                        Some(ProcessPhase::Exited) => status.succeeded += 1,
+                        Some(ProcessPhase::GaveUp) => status.failed += 1,
+                        Some(
+                            ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready,
+                        ) => status.running += 1,
+                        None => status.pending += 1,
+                    }
+                }
                 TaskStatus::Pending => status.pending += 1,
                 TaskStatus::Oneshot(OneshotStatus::Running(_)) => status.running += 1,
-                TaskStatus::Process(ps) => match ps.phase {
-                    ProcessPhase::NotStarted | ProcessPhase::Stopped => status.skipped += 1,
-                    ProcessPhase::Exited => status.succeeded += 1,
-                    ProcessPhase::GaveUp => status.failed += 1,
-                    ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready => {
-                        status.running += 1
-                    }
-                },
                 TaskStatus::Completed(completed) => match completed {
                     TaskCompleted::Success(_, _) => status.succeeded += 1,
                     TaskCompleted::Failed(_, _) => {
@@ -611,29 +619,6 @@ impl Tasks {
     /// rather than blocking the caller — so an attaching `devenv up` never
     /// hangs on a dependent it cannot complete.
     pub async fn start_with_deps(&self, names: &[String]) -> Vec<String> {
-        // Reconcile every process node's task phase with the manager's live
-        // state first. Between the initial run and this call a process may have
-        // been stopped or restarted out of band; the per-process status watchers
-        // update the graph eventually but can lag, and dependency checks read
-        // the graph phase. Syncing up front means `wait_for_task_deps` evaluates
-        // against current reality (e.g. a stopped dependency reads Stopped, not a
-        // stale Ready), so a dependent isn't launched on a no-longer-ready dep.
-        for index in self.graph.node_indices() {
-            let (is_process, proc_name) = {
-                let ts = self.graph[index].read().await;
-                match &ts.status {
-                    TaskStatus::Process(ps) => (true, ps.name.clone()),
-                    _ => (false, String::new()),
-                }
-            };
-            if !is_process {
-                continue;
-            }
-            if let Some(phase) = self.process_manager.get_phase(&proc_name).await {
-                set_process_phase(&self.graph[index], &self.notify_finished, phase).await;
-            }
-        }
-
         let mut scheduled = Vec::new();
 
         for name in names {
@@ -649,6 +634,8 @@ impl Tasks {
                 // flight, so leave it. Re-arming a `Waiting` process would spawn
                 // a second waiter that later errors when it loses the launch
                 // race; already-running ones count as satisfied dependencies.
+                // A mid-launch `Launching` entry reports `Starting`, so an
+                // in-flight launch is skipped here too.
                 Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::Waiting) => {
                     continue;
                 }
@@ -686,14 +673,13 @@ impl Tasks {
             // The re-armed Waiting entry holds the config `launch_waiting` will
             // launch; `run_process` (below) only reads name/probe off its copy.
             self.process_manager.rearm_waiting(config.clone()).await;
-            // Reset the task phase to Waiting so dependents re-evaluate and the
-            // status watcher re-subscribes once it launches.
-            set_process_phase(
-                &self.graph[index],
-                &self.notify_finished,
-                ProcessPhase::Waiting,
-            )
-            .await;
+            // Clear a stale launch outcome so dependents fall back to the
+            // manager's Waiting phase rather than a dead Completed status.
+            {
+                let mut ts = self.graph[index].write().await;
+                ts.status = TaskStatus::Pending;
+            }
+            self.notify_finished.notify_waiters();
 
             scheduled.push(name.clone());
 
@@ -710,44 +696,37 @@ impl Tasks {
             // per-process dependency checkers.
             tokio::spawn(async move {
                 let (dep_cancelled, dep_failed) =
-                    Self::wait_for_task_deps(&deps, &notify_finished, &shutdown).await;
+                    Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown)
+                        .await;
                 if dep_cancelled || dep_failed {
                     process_manager.cancel_waiting(&process_name).await;
                     return;
                 }
 
-                let launch_info = match task_state
-                    .read()
-                    .await
-                    .run_process(&process_manager, config)
-                    .await
-                {
-                    Ok(info) => info,
-                    Err(e) => {
-                        tracing::error!(process = %process_name, "failed to start process: {e}");
-                        return;
-                    }
+                // The read guard must drop before the failure path takes the
+                // write lock below; an `if let` scrutinee guard lives through
+                // the then-block and would self-deadlock.
+                let launch_result = {
+                    let ts = task_state.read().await;
+                    ts.run_process(&process_manager, config).await
                 };
-
-                if launch_info.auto_start_off {
-                    set_process_phase(&task_state, &notify_finished, ProcessPhase::NotStarted)
-                        .await;
-                    return;
+                if let Err(e) = launch_result {
+                    tracing::error!(process = %process_name, "failed to start process: {e}");
+                    // Launch outcome is graph-owned: record it so dependents
+                    // see NeverSatisfiable while the manager has a Stopped entry.
+                    let mut ts = task_state.write().await;
+                    ts.status = TaskStatus::Completed(TaskCompleted::Failed(
+                        std::time::Duration::ZERO,
+                        TaskFailure {
+                            stdout: Vec::new(),
+                            stderr: Vec::new(),
+                            error: format!("Failed to start process: {e}"),
+                        },
+                    ));
+                    drop(ts);
+                    notify_finished.notify_waiters();
                 }
-
-                set_process_phase(&task_state, &notify_finished, ProcessPhase::Starting).await;
-
-                // Keep task status in sync with supervisor state. This both
-                // tracks ongoing lifecycle and, on first subscribe, advances the
-                // phase from Starting to Ready/Exited as the supervisor reports.
-                process_status_watcher(
-                    task_state,
-                    notify_finished,
-                    process_manager,
-                    shutdown,
-                    launch_info.process_name,
-                )
-                .await;
+                // Success or auto-start-off: the manager owns the phase from here.
             });
         }
 
@@ -831,9 +810,12 @@ impl Tasks {
     }
 
     /// Wait for task dependencies to be satisfied in the background.
+    /// Process dependencies are evaluated against the manager's live phase;
+    /// the graph node is only consulted for graph-owned launch outcomes.
     /// Returns `(cancelled, dependency_failed)`.
     async fn wait_for_task_deps(
         deps: &[(Arc<RwLock<TaskState>>, DependencyKind)],
+        process_manager: &Arc<NativeProcessManager>,
         notify_finished: &Notify,
         shutdown: &tokio_shutdown::Shutdown,
     ) -> (bool, bool) {
@@ -841,7 +823,8 @@ impl Tasks {
             // Register the notification future BEFORE checking deps to prevent
             // missed wakeups: if a dependency transitions between our check and
             // the await, we will still be woken because the Notified was already
-            // registered via enable().
+            // registered via enable(). Any manager transition fires
+            // notify_finished via task_notify and the per-launch forwarder.
             let notified = notify_finished.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
@@ -856,7 +839,37 @@ impl Tasks {
                     dep_guard.status,
                     dep_kind
                 );
-                match crate::types::is_dep_satisfied(&dep_guard.status, dep_kind) {
+                let sat = if dep_guard.task.r#type == TaskType::Process {
+                    let pname = crate::types::process_name(&dep_guard.task.name);
+                    match process_manager.get_phase(pname).await {
+                        // A live manager phase wins: it cannot go stale and a
+                        // re-armed Waiting entry outranks a dead Completed node.
+                        Some(
+                            phase @ (ProcessPhase::Waiting
+                            | ProcessPhase::Starting
+                            | ProcessPhase::Ready
+                            | ProcessPhase::Exited
+                            | ProcessPhase::GaveUp),
+                        ) => crate::types::is_process_dep_satisfied(phase, dep_kind),
+                        // No entry, NotStarted, or Stopped: a terminal node
+                        // status is the graph-owned launch outcome (launch
+                        // failure, dependency failure, cancellation) and is
+                        // conclusive; otherwise fall back to the phase itself
+                        // so e.g. an auto-start-off dep satisfies @completed.
+                        phase => match &dep_guard.status {
+                            TaskStatus::Completed(_) => {
+                                crate::types::is_dep_satisfied(&dep_guard.status, dep_kind)
+                            }
+                            _ => match phase {
+                                Some(p) => crate::types::is_process_dep_satisfied(p, dep_kind),
+                                None => DepSatisfaction::NotYet,
+                            },
+                        },
+                    }
+                } else {
+                    crate::types::is_dep_satisfied(&dep_guard.status, dep_kind)
+                };
+                match sat {
                     DepSatisfaction::Satisfied => {}
                     DepSatisfaction::NeverSatisfiable => return (false, true),
                     DepSatisfaction::NotYet => {
@@ -1035,6 +1048,7 @@ impl Tasks {
                         );
                         let (dep_cancelled, dep_failed) = Self::wait_for_task_deps(
                             &deps,
+                            &process_manager_clone,
                             &notify_finished_clone,
                             &shutdown_clone,
                         )
@@ -1065,13 +1079,15 @@ impl Tasks {
                             return;
                         }
 
-                        // Launch the process (pre-registered as Waiting)
-                        let launch_info = match task_state_clone
-                            .read()
-                            .await
-                            .run_process(&process_manager_clone, config)
-                            .await
-                        {
+                        // Launch the process (pre-registered as Waiting).
+                        // The read guard must drop before the Err arm takes
+                        // the write lock; a match scrutinee guard lives until
+                        // the end of the match and would self-deadlock.
+                        let launch_result = {
+                            let ts = task_state_clone.read().await;
+                            ts.run_process(&process_manager_clone, config).await
+                        };
+                        let launch_info = match launch_result {
                             Ok(info) => info,
                             Err(e) => {
                                 let mut task_state = task_state_clone.write().await;
@@ -1098,55 +1114,26 @@ impl Tasks {
                             }
                         };
 
-                        let process_name = launch_info.process_name.clone();
-
-                        if launch_info.auto_start_off {
-                            // Auto start off process: set NotStarted
-                            set_process_phase(
-                                &task_state_clone,
+                        if !launch_info.auto_start_off && launch_info.requires_ready_wait {
+                            // Stopped/NotStarted end the wait too: a process
+                            // stopped mid-launch must not park this task.
+                            let _ = wait_for_phase(
+                                &process_manager_clone,
                                 &notify_finished_clone,
-                                ProcessPhase::NotStarted,
-                            )
-                            .await;
-                        } else {
-                            // Active process: set Starting, then wait for readiness
-                            set_process_phase(
-                                &task_state_clone,
-                                &notify_finished_clone,
-                                ProcessPhase::Starting,
-                            )
-                            .await;
-
-                            if launch_info.requires_ready_wait {
-                                // Watch status_rx until Ready or GaveUp
-                                if let Some(status_rx) =
-                                    process_manager_clone.subscribe_status(&process_name).await
-                                {
-                                    let _ = watch_status_until(
-                                        &task_state_clone,
-                                        &notify_finished_clone,
-                                        &shutdown_clone,
-                                        status_rx,
-                                        &[
-                                            ProcessPhase::Ready,
-                                            ProcessPhase::GaveUp,
-                                            ProcessPhase::Exited,
-                                        ],
-                                    )
-                                    .await;
-                                }
-                            } else {
-                                // No readiness probe: immediately Ready
-                                set_process_phase(
-                                    &task_state_clone,
-                                    &notify_finished_clone,
+                                &shutdown_clone,
+                                &launch_info.process_name,
+                                &[
                                     ProcessPhase::Ready,
-                                )
-                                .await;
-                            }
+                                    ProcessPhase::GaveUp,
+                                    ProcessPhase::Exited,
+                                    ProcessPhase::Stopped,
+                                    ProcessPhase::NotStarted,
+                                ],
+                            )
+                            .await;
                         }
 
-                        // Initial setup done
+                        // Initial setup done; the manager owns the phase from here.
                         Self::signal_task_done(
                             &completed_tasks_clone,
                             total_tasks,
@@ -1154,28 +1141,6 @@ impl Tasks {
                             &notify_finished_clone,
                             &notify_ui_clone,
                         );
-
-                        // Spawn detached watcher for ongoing status tracking.
-                        // This keeps task status in sync with supervisor state
-                        // after the initial setup phase completes.
-                        // Detached because watchers run indefinitely and clean up
-                        // via wait_for_shutdown when the app exits.
-                        let watcher_ts = Arc::clone(&task_state_clone);
-                        let watcher_notify = Arc::clone(&notify_finished_clone);
-                        let watcher_pm = Arc::clone(&process_manager_clone);
-                        let watcher_shutdown = Arc::clone(&shutdown_clone);
-                        let watcher_name = process_name;
-
-                        tokio::spawn(async move {
-                            process_status_watcher(
-                                watcher_ts,
-                                watcher_notify,
-                                watcher_pm,
-                                watcher_shutdown,
-                                watcher_name,
-                            )
-                            .await;
-                        });
                     }
                     .in_activity(&orchestration_activity_clone)
                 });
@@ -1195,6 +1160,7 @@ impl Tasks {
             // TODO: remove this clone
             let cache = Arc::new(self.cache.clone());
             let shutdown_clone = Arc::clone(&self.shutdown);
+            let process_manager_clone = Arc::clone(&self.process_manager);
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
             let refresh_task_cache = self.refresh_task_cache;
@@ -1206,9 +1172,13 @@ impl Tasks {
 
                 async move {
                     // Wait for dependencies in background
-                    let (dep_cancelled, dep_failed) =
-                        Self::wait_for_task_deps(&deps, &notify_finished_clone, &shutdown_clone)
-                            .await;
+                    let (dep_cancelled, dep_failed) = Self::wait_for_task_deps(
+                        &deps,
+                        &process_manager_clone,
+                        &notify_finished_clone,
+                        &shutdown_clone,
+                    )
+                    .await;
 
                     if dep_cancelled || dep_failed {
                         Self::mark_task_skipped(
@@ -1347,20 +1317,43 @@ impl Tasks {
         // completion status, so sweep any still-Running tasks to Cancelled.
         if self.shutdown.is_cancelled() {
             for &index in &self.tasks_order {
-                let mut task_state = self.graph[index].write().await;
-                match &task_state.status {
-                    TaskStatus::Oneshot(OneshotStatus::Running(start)) => {
-                        let elapsed = start.elapsed();
-                        task_state.status =
-                            TaskStatus::Completed(TaskCompleted::Cancelled(Some(elapsed)));
-                    }
-                    TaskStatus::Process(ProcessTaskStatus {
-                        phase: ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready,
-                        ..
-                    }) => {
+                let (is_process, task_name, running_oneshot_start) = {
+                    let task_state = self.graph[index].read().await;
+                    let running_start = match &task_state.status {
+                        TaskStatus::Oneshot(OneshotStatus::Running(start)) => Some(*start),
+                        _ => None,
+                    };
+                    let is_pending_process = task_state.task.r#type == TaskType::Process
+                        && matches!(task_state.status, TaskStatus::Pending);
+                    (
+                        is_pending_process,
+                        task_state.task.name.clone(),
+                        running_start,
+                    )
+                };
+
+                if let Some(start) = running_oneshot_start {
+                    let elapsed = start.elapsed();
+                    let mut task_state = self.graph[index].write().await;
+                    task_state.status =
+                        TaskStatus::Completed(TaskCompleted::Cancelled(Some(elapsed)));
+                } else if is_process {
+                    // A process never launched (no manager entry) or still live
+                    // is cancelled; terminal phases stay Pending and are counted
+                    // via the manager in get_completion_status.
+                    let phase = self
+                        .process_manager
+                        .get_phase(crate::types::process_name(&task_name))
+                        .await;
+                    if matches!(
+                        phase,
+                        None | Some(
+                            ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready
+                        )
+                    ) {
+                        let mut task_state = self.graph[index].write().await;
                         task_state.status = TaskStatus::Completed(TaskCompleted::Cancelled(None));
                     }
-                    _ => {}
                 }
             }
         }
@@ -1381,124 +1374,30 @@ impl Tasks {
     }
 }
 
-/// Detached watcher that keeps a process task's `TaskStatus` in sync with the
-/// supervisor state after the initial launch phase has completed.
-async fn process_status_watcher(
-    task_state: Arc<RwLock<TaskState>>,
-    notify_finished: Arc<tokio::sync::Notify>,
-    manager: Arc<NativeProcessManager>,
-    shutdown: Arc<tokio_shutdown::Shutdown>,
-    name: String,
-) {
-    // Wait for the process to become active, subscribe to its status channel,
-    // and watch indefinitely until the channel closes (process stopped) or
-    // shutdown is requested. When the channel closes we set Stopped and loop
-    // back so a subsequent start/restart re-subscribes automatically.
+/// Block until the manager reports one of `terminal` phases for `name`.
+/// Returns the reached phase, or `None` on shutdown or when the manager has
+/// no entry for the process. Event-driven: wakes on `notify_finished`, which
+/// the manager fires on every lifecycle and supervisor transition.
+async fn wait_for_phase(
+    manager: &Arc<NativeProcessManager>,
+    notify_finished: &Notify,
+    shutdown: &tokio_shutdown::Shutdown,
+    name: &str,
+    terminal: &[ProcessPhase],
+) -> Option<ProcessPhase> {
     loop {
         let notified = notify_finished.notified();
         tokio::pin!(notified);
         notified.as_mut().enable();
-
-        match manager.get_phase(&name).await {
-            Some(
-                ProcessPhase::NotStarted
-                | ProcessPhase::Stopped
-                | ProcessPhase::Waiting
-                | ProcessPhase::Exited,
-            )
-            | None => {
-                // Process is not active yet (auto start off, stopped, or waiting).
-                // Wait for a lifecycle notification before re-checking.
-                tokio::select! {
-                    _ = notified => { continue; }
-                    _ = shutdown.wait_for_shutdown() => { return; }
-                }
-            }
-            Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::GaveUp) => {
-                if let Some(status_rx) = manager.subscribe_status(&name).await {
-                    set_process_phase(&task_state, &notify_finished, ProcessPhase::Starting).await;
-                    // Watch until Exited (process won't restart). GaveUp is not
-                    // terminal because the process can be restarted explicitly.
-                    let reached_terminal = watch_status_until(
-                        &task_state,
-                        &notify_finished,
-                        &shutdown,
-                        status_rx,
-                        &[ProcessPhase::Exited],
-                    )
-                    .await;
-                    if reached_terminal {
-                        // Process exited and won't restart; phase already set.
-                        continue;
-                    }
-                }
-                // Channel closed (process was stopped) or could not subscribe.
-                // Update phase to Stopped and loop back to wait for restart.
-                set_process_phase(&task_state, &notify_finished, ProcessPhase::Stopped).await;
-                tokio::task::yield_now().await;
-            }
+        match manager.get_phase(name).await {
+            Some(phase) if terminal.contains(&phase) => return Some(phase),
+            None => return None,
+            Some(_) => {}
         }
-    }
-}
-
-/// Watch a process's status channel and update the task phase on each transition.
-/// Stops when the phase matches one of the `terminal_phases` or the channel/shutdown closes.
-///
-/// Returns `true` if a terminal phase was reached, `false` if the channel was closed
-/// (e.g. the process was stopped) or shutdown was requested.
-async fn watch_status_until(
-    task_state: &Arc<RwLock<TaskState>>,
-    notify: &Arc<tokio::sync::Notify>,
-    shutdown: &Arc<tokio_shutdown::Shutdown>,
-    mut status_rx: tokio::sync::watch::Receiver<devenv_processes::JobStatus>,
-    terminal_phases: &[ProcessPhase],
-) -> bool {
-    // Check the current value first to avoid missing a transition that
-    // already happened before we subscribed. `borrow_and_update` marks
-    // the current value as seen so the subsequent `changed()` call only
-    // fires on genuinely new updates.
-    {
-        let phase: ProcessPhase = status_rx.borrow_and_update().phase.into();
-        set_process_phase(task_state, notify, phase).await;
-        if terminal_phases.contains(&phase) {
-            return true;
-        }
-    }
-
-    loop {
         tokio::select! {
-            changed = status_rx.changed() => {
-                if changed.is_err() { return false; }
-                let phase: ProcessPhase = status_rx.borrow_and_update().phase.into();
-                set_process_phase(task_state, notify, phase).await;
-                if terminal_phases.contains(&phase) { return true; }
-            }
-            _ = shutdown.wait_for_shutdown() => { return false; }
+            _ = notified => {}
+            _ = shutdown.wait_for_shutdown() => return None,
         }
-    }
-}
-
-/// Set the process task's phase and notify waiters (only if the phase actually changed).
-async fn set_process_phase(
-    task_state: &Arc<RwLock<TaskState>>,
-    notify: &Arc<tokio::sync::Notify>,
-    phase: ProcessPhase,
-) {
-    let changed = {
-        let mut ts = task_state.write().await;
-        if let TaskStatus::Process(ref mut ps) = ts.status {
-            if ps.phase == phase {
-                false
-            } else {
-                ps.phase = phase;
-                true
-            }
-        } else {
-            false
-        }
-    };
-    if changed {
-        notify.notify_waiters();
     }
 }
 
@@ -1771,25 +1670,25 @@ mod schedule_tests {
         }
     }
 
-    async fn wait_phase(
-        tasks: &Tasks,
-        name: &str,
-        want: ProcessPhase,
-        max_ticks: u32,
-    ) -> ProcessPhase {
-        let mut last = ProcessPhase::Waiting;
-        for _ in 0..max_ticks {
-            last = tasks
-                .process_manager
-                .get_phase(name)
-                .await
-                .unwrap_or(ProcessPhase::Waiting);
-            if last == want {
-                return last;
+    /// Event-driven phase wait: wakes on `notify_finished` (the manager fires
+    /// it on every lifecycle and supervisor transition) and re-reads the
+    /// manager phase. The timeout is a failure bound, never a poll interval.
+    /// A missing manager entry keeps waiting until the failure bound: entries
+    /// must never vanish mid-lifecycle.
+    async fn wait_phase(tasks: &Tasks, name: &str, want: ProcessPhase) {
+        tokio::time::timeout(std::time::Duration::from_secs(60), async {
+            loop {
+                let notified = tasks.notify_finished.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                if tasks.process_manager.get_phase(name).await == Some(want) {
+                    return;
+                }
+                notified.await;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        }
-        last
+        })
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for process {name} to reach {want:?}"))
     }
 
     #[tokio::test]
@@ -1808,11 +1707,8 @@ mod schedule_tests {
         ));
         let _ = tasks.run_with_parent_activity(parent).await;
 
-        assert_eq!(
-            wait_phase(&tasks, "web", ProcessPhase::Ready, 40).await,
-            ProcessPhase::Ready,
-            "process should be running after the cold start"
-        );
+        // The process should be running after the cold start.
+        wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
         tasks.process_manager.stop_and_keep("web").await.unwrap();
         assert_eq!(
@@ -1823,11 +1719,8 @@ mod schedule_tests {
         // Attach path: bring the stopped process back up.
         let scheduled = tasks.start_with_deps(&["web".to_string()]).await;
         assert_eq!(scheduled, vec!["web".to_string()]);
-        assert_eq!(
-            wait_phase(&tasks, "web", ProcessPhase::Ready, 40).await,
-            ProcessPhase::Ready,
-            "start_with_deps should relaunch the stopped process"
-        );
+        // start_with_deps must relaunch the stopped process.
+        wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
         let _ = tasks.process_manager.stop_all().await;
     }
@@ -1865,21 +1758,13 @@ mod schedule_tests {
         let _ = tasks.run_with_parent_activity(parent).await;
 
         // First run exits cleanly -> entry stays Active with phase Exited.
-        assert_eq!(
-            wait_phase(&tasks, "web", ProcessPhase::Exited, 40).await,
-            ProcessPhase::Exited,
-            "self-exited process should be Active+Exited after the cold start"
-        );
+        wait_phase(&tasks, "web", ProcessPhase::Exited).await;
 
         // Attach path: relaunch the self-exited process. The second run sleeps,
         // so reaching Ready proves start_with_deps actually relaunched it.
         let scheduled = tasks.start_with_deps(&["web".to_string()]).await;
         assert_eq!(scheduled, vec!["web".to_string()]);
-        assert_eq!(
-            wait_phase(&tasks, "web", ProcessPhase::Ready, 40).await,
-            ProcessPhase::Ready,
-            "start_with_deps should relaunch a self-exited process"
-        );
+        wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
         let _ = tasks.process_manager.stop_all().await;
     }
@@ -1905,10 +1790,7 @@ mod schedule_tests {
             devenv_activity::Activity::operation("test").parent(None)
         ));
         let _ = tasks.run_with_parent_activity(parent).await;
-        assert_eq!(
-            wait_phase(&tasks, "beta", ProcessPhase::Ready, 40).await,
-            ProcessPhase::Ready
-        );
+        wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
         // Stop both; gamma is now an unmet dependency for beta.
         tasks.process_manager.stop_and_keep("beta").await.unwrap();
@@ -1917,19 +1799,37 @@ mod schedule_tests {
         // Attach `up beta`: beta must stay waiting (gamma is stopped).
         let scheduled = tasks.start_with_deps(&["beta".to_string()]).await;
         assert_eq!(scheduled, vec!["beta".to_string()]);
+
+        // Drive the detached dep waiter on this current-thread test runtime:
+        // wake it explicitly and yield so it evaluates its dependencies. Yields
+        // hand control to ready tasks; no wall-clock timing involved.
+        for _ in 0..64 {
+            tasks.notify_finished.notify_waiters();
+            tokio::task::yield_now().await;
+        }
+
+        let phase = tasks
+            .process_manager
+            .get_phase("beta")
+            .await
+            .expect("beta must stay registered while its dependency is unmet");
         assert_eq!(
-            wait_phase(&tasks, "beta", ProcessPhase::Waiting, 20).await,
+            phase,
             ProcessPhase::Waiting,
             "beta must wait for its gamma dependency, not launch"
+        );
+        assert!(
+            tasks
+                .process_manager
+                .subscribe_status("beta")
+                .await
+                .is_none(),
+            "beta must not have an active supervisor while gamma is down"
         );
 
         // Now bring gamma up; beta should follow automatically.
         let _ = tasks.start_with_deps(&["gamma".to_string()]).await;
-        assert_eq!(
-            wait_phase(&tasks, "beta", ProcessPhase::Ready, 60).await,
-            ProcessPhase::Ready,
-            "beta should launch once gamma is started"
-        );
+        wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
         let _ = tasks.process_manager.stop_all().await;
     }

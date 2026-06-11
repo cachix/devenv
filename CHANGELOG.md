@@ -25,6 +25,9 @@
 - Fixed `devenv up` intermittently failing to start processes with "Failed to initialize task cache: ... pool timed out while waiting for an open connection", most often in CI. The processes that a non-native process manager (e.g. process-compose) launches each open the same task cache database concurrently and raced to create and migrate it; the database is now initialized once before the processes start ([#2897](https://github.com/cachix/devenv/issues/2897)).
 - Fixed `devenv inputs add` from a subdirectory writing to a stray `devenv.yaml` in the subdir instead of the enclosing project. It now walks up to find `devenv.nix` the same way `devenv shell` does, so the input is added where the rest of devenv reads it.
 - Fixed `devenv gc` failing with "File devenv.nix does not exist" when run outside of a project. Garbage collection operates on the global devenv store and no longer requires a `devenv.nix` ([#2928](https://github.com/cachix/devenv/issues/2928)).
+- Fixed lifecycle races in the native process manager: a process being relaunched could be started twice, leaving an orphaned copy that kept its port bound but no longer appeared in `devenv processes list`, and the background manager could shut itself down while its only process was mid-relaunch.
+- Fixed a process whose dependency could not be satisfied vanishing from `devenv processes list` instead of showing as stopped, and fixed a relaunched process that had previously failed leaving its dependents permanently blocked on the stale failure.
+- Fixed repeated `devenv up` attaches against a long-running process manager accumulating one background watcher task per process per attach.
 
 ### Improvements
 

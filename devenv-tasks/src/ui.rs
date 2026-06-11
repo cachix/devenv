@@ -7,7 +7,7 @@ use devenv_activity::{ActivityEvent, ActivityOutcome, Process as ProcessEvent, T
 use tokio::sync::mpsc;
 
 use crate::types::VerbosityLevel;
-use crate::types::{ProcessPhase, ProcessTaskStatus, TaskCompleted, TaskStatus, TasksStatus};
+use crate::types::{ProcessPhase, TaskCompleted, TaskStatus, TaskType, TasksStatus, process_name};
 use crate::{Error, Outputs, Tasks};
 
 /// Line-buffered console output
@@ -370,14 +370,18 @@ impl TasksUi {
         let mut errors = String::new();
         for index in &self.tasks.tasks_order {
             let task_state = self.tasks.graph[*index].read().await;
-            if let TaskStatus::Process(ProcessTaskStatus {
-                phase: ProcessPhase::GaveUp,
-                name,
-            }) = &task_state.status
-            {
+            let gave_up = task_state.task.r#type == TaskType::Process
+                && self
+                    .tasks
+                    .process_manager
+                    .get_phase(process_name(&task_state.task.name))
+                    .await
+                    == Some(ProcessPhase::GaveUp);
+            if gave_up {
                 errors.push_str(&format!(
                     "\n--- {} (process {}) gave up (crash loop)\n",
-                    task_state.task.name, name
+                    task_state.task.name,
+                    process_name(&task_state.task.name)
                 ));
                 errors.push_str("---\n");
             } else if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) =

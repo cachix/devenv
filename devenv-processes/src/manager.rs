@@ -139,6 +139,9 @@ pub struct JobHandle {
     pub supervisor_task: JoinHandle<()>,
     /// Output reader tasks (stdout, stderr)
     pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
+    /// Forwards supervisor status transitions to the task system; exits when
+    /// the status channel closes. Aborted together with the supervisor.
+    pub notify_forwarder: JoinHandle<()>,
 }
 
 /// Lifecycle phase of a managed process.
@@ -197,7 +200,8 @@ fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
             ProcessEntry::Active(_) => Some(name.clone()),
             ProcessEntry::NotStarted { .. }
             | ProcessEntry::Stopped { .. }
-            | ProcessEntry::Waiting { .. } => None,
+            | ProcessEntry::Waiting { .. }
+            | ProcessEntry::Launching { .. } => None,
         })
         .collect()
 }
@@ -213,9 +217,21 @@ enum ProcessEntry {
     Stopped {
         config: ProcessConfig,
         activity: Activity,
+        /// Terminal supervisor phase preserved when the process had already
+        /// exited or given up on its own before the explicit stop; reported
+        /// instead of `Stopped` so run summaries and dependents keep the
+        /// terminal outcome after teardown.
+        terminal_phase: Option<ProcessPhase>,
     },
     /// Process is waiting for dependencies before starting.
     Waiting {
+        config: ProcessConfig,
+        activity: Activity,
+    },
+    /// Dependencies satisfied; launch in progress (the child may already be
+    /// spawned). Settles to `Active` on success, `Stopped` on failure or when
+    /// shutdown raced the launch.
+    Launching {
         config: ProcessConfig,
         activity: Activity,
     },
@@ -233,6 +249,9 @@ pub struct NativeProcessManager {
     /// Optional notify handle fired when a process lifecycle changes (e.g. not-started
     /// process is manually started). The task system uses this to re-check dependencies.
     task_notify: Option<Arc<Notify>>,
+    /// Fired on every process-map transition; internal waiters (stop_all's
+    /// Launching drain) and the forwarder tasks use it alongside task_notify.
+    entries_changed: Arc<Notify>,
     /// Whether this instance owns the runtime files (socket, pid file) and should
     /// clean them up on drop. Set to false for control-client instances that
     /// connect to an existing daemon — they should not delete the daemon's files.
@@ -454,6 +473,45 @@ async fn wait_for_port_conflicts_to_settle(ports: &[u16], timeout: Duration) -> 
         .await
 }
 
+/// Everything a launch produces before the entry settles to Active.
+struct LaunchSetup {
+    job: Arc<Job>,
+    status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
+    status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
+    notify_socket: Option<Arc<NotifySocket>>,
+    stdout_tailer: JoinHandle<()>,
+    stderr_tailer: JoinHandle<()>,
+    stderr_log: PathBuf,
+}
+
+/// Wake everyone observing the process map: the owning task scheduler's
+/// dependency loop and internal waiters.
+fn notify_lifecycle_parts(entries_changed: &Notify, task_notify: &Option<Arc<Notify>>) {
+    entries_changed.notify_waiters();
+    if let Some(notify) = task_notify {
+        notify.notify_waiters();
+    }
+}
+
+/// Forward supervisor status transitions to the task system; exits when the
+/// status channel closes. Aborted together with the supervisor.
+fn spawn_notify_forwarder(
+    task_notify: Option<Arc<Notify>>,
+    entries_changed: Arc<Notify>,
+    mut status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            if status_rx.changed().await.is_err() {
+                break;
+            }
+            notify_lifecycle_parts(&entries_changed, &task_notify);
+        }
+        // channel closed: entry removed or supervisor torn down
+        notify_lifecycle_parts(&entries_changed, &task_notify);
+    })
+}
+
 impl NativeProcessManager {
     /// Create a new native process manager
     pub fn new(state_dir: PathBuf) -> Result<Self> {
@@ -465,6 +523,7 @@ impl NativeProcessManager {
             shutdown: CancellationToken::new(),
             processes_activity: Arc::new(RwLock::new(None)),
             task_notify: None,
+            entries_changed: Arc::new(Notify::new()),
             owns_runtime_files: true,
             up_tx: std::sync::OnceLock::new(),
         })
@@ -489,13 +548,22 @@ impl NativeProcessManager {
         self.task_notify = Some(notify);
     }
 
+    /// Wake everyone observing the process map: the owning task scheduler's
+    /// dependency loop and internal waiters.
+    fn notify_lifecycle(&self) {
+        notify_lifecycle_parts(&self.entries_changed, &self.task_notify);
+    }
+
     /// Query the current lifecycle phase of a process entry.
     pub async fn get_phase(&self, name: &str) -> Option<ProcessPhase> {
         let processes = self.processes.read().await;
         match processes.get(name) {
             Some(ProcessEntry::NotStarted { .. }) => Some(ProcessPhase::NotStarted),
-            Some(ProcessEntry::Stopped { .. }) => Some(ProcessPhase::Stopped),
+            Some(ProcessEntry::Stopped { terminal_phase, .. }) => {
+                Some(terminal_phase.unwrap_or(ProcessPhase::Stopped))
+            }
             Some(ProcessEntry::Waiting { .. }) => Some(ProcessPhase::Waiting),
+            Some(ProcessEntry::Launching { .. }) => Some(ProcessPhase::Starting),
             Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.borrow().phase.into()),
             None => None,
         }
@@ -575,6 +643,7 @@ impl NativeProcessManager {
             .await
             .insert(name.clone(), ProcessEntry::Waiting { config, activity });
         info!("Registered waiting process: {}", name);
+        self.notify_lifecycle();
     }
 
     /// Re-arm a process as `Waiting` so it can be (re)launched by the task
@@ -588,7 +657,15 @@ impl NativeProcessManager {
     /// are left untouched.
     pub async fn rearm_waiting(&self, config: ProcessConfig) {
         let mut processes = self.processes.write().await;
-        if matches!(processes.get(&config.name), Some(ProcessEntry::Active(_))) {
+        // Checked under the write lock so a re-arm racing shutdown can never
+        // insert a Waiting entry after stop_all's drain has completed.
+        if self.shutdown.is_cancelled() {
+            return;
+        }
+        if matches!(
+            processes.get(&config.name),
+            Some(ProcessEntry::Active(_) | ProcessEntry::Launching { .. })
+        ) {
             return;
         }
         let name = config.name.clone();
@@ -599,53 +676,95 @@ impl NativeProcessManager {
                 | ProcessEntry::Stopped { activity, .. }
                 | ProcessEntry::Waiting { activity, .. },
             ) => activity,
-            // No prior entry (or an Active we just excluded): make a fresh one.
+            // No prior entry (or an Active/Launching we just excluded): make a fresh one.
             _ => self.create_process_activity(&config, None),
         };
         activity.reset();
         activity.set_status(ProcessStatus::Waiting);
         processes.insert(name.clone(), ProcessEntry::Waiting { config, activity });
         info!("Re-armed waiting process: {}", name);
+        drop(processes);
+        self.notify_lifecycle();
     }
 
-    /// Cancel a previously registered waiting process.
-    ///
-    /// Removes the `Waiting` entry and marks the activity as failed so the
-    /// TUI no longer shows the process as "Waiting". Used when a process
-    /// task's dependencies fail or are cancelled.
+    /// Mark a waiting process as stopped after its dependencies failed or were
+    /// cancelled. The entry is kept so list/status/start still see the process
+    /// and it can be started or re-armed later.
     pub async fn cancel_waiting(&self, name: &str) {
         let mut processes = self.processes.write().await;
-        if let Some(ProcessEntry::Waiting { activity, .. }) = processes.remove(name) {
-            activity.dependency_failed();
-            info!("Cancelled waiting process: {}", name);
+        // Only a Waiting entry transitions; every other variant is reinserted
+        // untouched so an entry can never vanish (dropping an Active entry
+        // here would detach a live supervised child).
+        match processes.remove(name) {
+            Some(ProcessEntry::Waiting { config, activity }) => {
+                activity.dependency_failed();
+                processes.insert(
+                    name.to_string(),
+                    ProcessEntry::Stopped {
+                        config,
+                        activity,
+                        terminal_phase: None,
+                    },
+                );
+                info!("Cancelled waiting process: {}", name);
+                drop(processes);
+                self.notify_lifecycle();
+            }
+            Some(entry) => {
+                processes.insert(name.to_string(), entry);
+            }
+            None => {}
         }
     }
 
     /// Launch a previously registered waiting process.
     ///
-    /// Removes the `Waiting` entry, transitions the activity to `Running`
-    /// status, and launches the process. The TUI elapsed time includes the
-    /// waiting period since the activity was created at registration time.
+    /// Transitions the `Waiting` entry to `Launching` under a single write
+    /// lock, then awaits the detached settle task. The TUI elapsed time
+    /// includes the waiting period since the activity was created at
+    /// registration time.
     pub async fn launch_waiting(&self, name: &str) -> Result<Option<Arc<Job>>> {
-        let mut processes = self.processes.write().await;
-        let (config, activity) = match processes.remove(name) {
-            Some(ProcessEntry::Waiting { config, activity }) => (config, activity),
-            Some(entry) => {
-                processes.insert(name.to_string(), entry);
-                bail!("Process {} is not in waiting state", name)
+        let settle = {
+            let mut processes = self.processes.write().await;
+            // Checked under the write lock so it serializes with stop_all's
+            // post-cancel map reads: either this launch sees the cancelled
+            // token and bails, or stop_all's drain observes the Launching
+            // entry and waits for it to settle.
+            if self.shutdown.is_cancelled() {
+                bail!("process manager is shutting down");
             }
-            None => bail!("Process {} not found", name),
+            match processes.remove(name) {
+                Some(ProcessEntry::Waiting { config, activity }) => {
+                    if !config.start.enable {
+                        activity.set_status(ProcessStatus::NotStarted);
+                        info!("Registered auto start off process: {}", name);
+                        processes.insert(
+                            name.to_string(),
+                            ProcessEntry::NotStarted { config, activity },
+                        );
+                        drop(processes);
+                        self.notify_lifecycle();
+                        return Ok(None);
+                    }
+                    activity.set_status(ProcessStatus::Running);
+                    processes.insert(
+                        name.to_string(),
+                        ProcessEntry::Launching { config, activity },
+                    );
+                    // No await between the Launching insert and the settle
+                    // spawn: the settle task always completes even if this
+                    // caller is aborted mid-launch.
+                    self.spawn_launch_settle(name.to_string())
+                }
+                Some(entry) => {
+                    processes.insert(name.to_string(), entry);
+                    bail!("Process {} is not in waiting state", name)
+                }
+                None => bail!("Process {} not found", name),
+            }
         };
-        drop(processes);
-
-        let result = self.launch_or_register_not_started(config, activity).await;
-
-        // Wake any API Wait handlers that are blocked on Waiting entries.
-        if let Some(notify) = &self.task_notify {
-            notify.notify_waiters();
-        }
-
-        result
+        self.notify_lifecycle();
+        Self::join_launch_settle(settle).await.map(Some)
     }
 
     /// Start a command with the given configuration.
@@ -674,26 +793,191 @@ impl NativeProcessManager {
         activity: Activity,
     ) -> Result<Option<Arc<Job>>> {
         if !config.start.enable {
+            let mut processes = self.processes.write().await;
+            // Checked under the write lock so it serializes with stop_all's
+            // post-cancel map reads (see launch_waiting).
+            if self.shutdown.is_cancelled() {
+                bail!("process manager is shutting down");
+            }
             activity.set_status(ProcessStatus::NotStarted);
             info!("Registered auto start off process: {}", config.name);
-            self.processes.write().await.insert(
+            processes.insert(
                 config.name.clone(),
                 ProcessEntry::NotStarted { config, activity },
             );
+            drop(processes);
+            self.notify_lifecycle();
             return Ok(None);
         }
 
-        self.launch(&config, activity).await.map(Some)
+        let name = config.name.clone();
+        let settle = {
+            let mut processes = self.processes.write().await;
+            // Checked under the write lock so it serializes with stop_all's
+            // post-cancel map reads (see launch_waiting).
+            if self.shutdown.is_cancelled() {
+                bail!("process manager is shutting down");
+            }
+            activity.set_status(ProcessStatus::Running);
+            processes.insert(name.clone(), ProcessEntry::Launching { config, activity });
+            // No await between the Launching insert and the settle spawn: the
+            // settle task always completes even if this caller is aborted.
+            self.spawn_launch_settle(name)
+        };
+        self.notify_lifecycle();
+        Self::join_launch_settle(settle).await.map(Some)
     }
 
-    /// Launch a process: sets up probes, sockets, supervisor, and log tailers.
-    async fn launch(&self, config: &ProcessConfig, activity: Activity) -> Result<Arc<Job>> {
-        activity.set_status(ProcessStatus::Running);
+    /// Await a detached launch settle task spawned by [`Self::spawn_launch_settle`].
+    async fn join_launch_settle(settle: JoinHandle<Result<Arc<Job>>>) -> Result<Arc<Job>> {
+        match settle.await {
+            Ok(result) => result,
+            Err(e) => bail!("process launch task failed: {}", e),
+        }
+    }
 
+    /// Spawn the detached settle task for an entry already transitioned to
+    /// `Launching`. Runs `launch_setup` and settles the entry under a single
+    /// write lock: `Active` on success, `Stopped` on failure or when shutdown
+    /// raced the launch (the spawned child is stopped before the entry leaves
+    /// `Launching`). Detached so an aborted caller can never strand a
+    /// `Launching` entry.
+    fn spawn_launch_settle(&self, name: String) -> JoinHandle<Result<Arc<Job>>> {
+        let processes = Arc::clone(&self.processes);
+        let entries_changed = Arc::clone(&self.entries_changed);
+        let task_notify = self.task_notify.clone();
+        let shutdown = self.shutdown.clone();
+        let state_dir = self.state_dir.clone();
+        tokio::spawn(async move {
+            let (config, activity_ref) = {
+                let procs = processes.read().await;
+                match procs.get(&name) {
+                    Some(ProcessEntry::Launching { config, activity }) => {
+                        (config.clone(), activity.ref_handle())
+                    }
+                    _ => bail!("process {} is not launching", name),
+                }
+            };
+
+            let setup = Self::launch_setup(&state_dir, &config, &activity_ref).await;
+
+            let mut procs = processes.write().await;
+            match procs.remove(&name) {
+                Some(ProcessEntry::Launching { config, activity }) => match setup {
+                    Err(e) => {
+                        activity.fail();
+                        procs.insert(
+                            name.clone(),
+                            ProcessEntry::Stopped {
+                                config,
+                                activity,
+                                terminal_phase: None,
+                            },
+                        );
+                        drop(procs);
+                        notify_lifecycle_parts(&entries_changed, &task_notify);
+                        Err(e)
+                    }
+                    Ok(setup) if shutdown.is_cancelled() => {
+                        // Shutdown raced the launch: keep the entry Launching
+                        // while the spawned child is stopped, so the map never
+                        // reports the process gone or stopped before the child
+                        // is dead. Bounded by the stop grace period.
+                        procs.insert(name.clone(), ProcessEntry::Launching { config, activity });
+                        drop(procs);
+                        setup.stdout_tailer.abort();
+                        setup.stderr_tailer.abort();
+                        setup
+                            .job
+                            .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
+                            .await;
+                        let mut procs = processes.write().await;
+                        match procs.remove(&name) {
+                            Some(ProcessEntry::Launching { config, activity }) => {
+                                activity.set_status(ProcessStatus::Stopped);
+                                procs.insert(
+                                    name.clone(),
+                                    ProcessEntry::Stopped {
+                                        config,
+                                        activity,
+                                        terminal_phase: None,
+                                    },
+                                );
+                            }
+                            Some(other) => {
+                                procs.insert(name.clone(), other);
+                            }
+                            None => {}
+                        }
+                        drop(procs);
+                        notify_lifecycle_parts(&entries_changed, &task_notify);
+                        bail!("process manager is shutting down")
+                    }
+                    Ok(setup) => {
+                        let resources = ProcessResources {
+                            config,
+                            job: setup.job.clone(),
+                            activity,
+                            notify_socket: setup.notify_socket,
+                            status_tx: setup.status_tx,
+                            stderr_log: setup.stderr_log,
+                        };
+                        let supervisor_task =
+                            crate::supervisor::spawn_supervisor(&resources, shutdown.clone());
+                        let notify_forwarder = spawn_notify_forwarder(
+                            task_notify.clone(),
+                            Arc::clone(&entries_changed),
+                            setup.status_rx.clone(),
+                        );
+                        procs.insert(
+                            name.clone(),
+                            ProcessEntry::Active(JobHandle {
+                                resources,
+                                status_rx: setup.status_rx,
+                                supervisor_task,
+                                output_readers: Some((setup.stdout_tailer, setup.stderr_tailer)),
+                                notify_forwarder,
+                            }),
+                        );
+                        drop(procs);
+                        notify_lifecycle_parts(&entries_changed, &task_notify);
+                        info!("Command '{}' started", name);
+                        Ok(setup.job)
+                    }
+                },
+                other => {
+                    // Unreachable given every other path refuses to touch a
+                    // Launching entry; defensive so a spawned child can never
+                    // detach from the map.
+                    if let Some(entry) = other {
+                        procs.insert(name.clone(), entry);
+                    }
+                    drop(procs);
+                    if let Ok(setup) = setup {
+                        setup.stdout_tailer.abort();
+                        setup.stderr_tailer.abort();
+                        setup
+                            .job
+                            .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
+                            .await;
+                    }
+                    bail!("process {} entry changed during launch", name)
+                }
+            }
+        })
+    }
+
+    /// Set up everything a launch produces before the entry settles to
+    /// `Active`: probes, sockets, command, job start, and log tailers.
+    async fn launch_setup(
+        state_dir: &Path,
+        config: &ProcessConfig,
+        activity: &devenv_activity::ActivityRef,
+    ) -> Result<LaunchSetup> {
         // Create notify socket if configured via ready.notify
         let uses_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let notify_socket = if uses_notify {
-            let socket = NotifySocket::new(&self.state_dir, &config.name).await?;
+            let socket = NotifySocket::new(state_dir, &config.name).await?;
             info!(
                 "Created notify socket for {} at {}",
                 config.name,
@@ -709,7 +993,7 @@ impl NativeProcessManager {
 
         // Build the command (creates log directory and wrapper script)
         let proc_cmd = crate::command::build_command(
-            &self.state_dir,
+            state_dir,
             config,
             notify_socket.as_ref().map(|s| s.path()),
             watchdog_usec,
@@ -793,9 +1077,9 @@ impl NativeProcessManager {
         // Spawn file tailers to emit output to activity
         let stderr_log = proc_cmd.stderr_log.clone();
         let stdout_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.ref_handle(), false);
+            crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.clone(), false);
         let stderr_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.ref_handle(), true);
+            crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.clone(), true);
 
         // Create status channel for supervisor state observation
         let initial_status = crate::supervisor_state::JobStatus {
@@ -815,33 +1099,15 @@ impl NativeProcessManager {
             });
         }
 
-        let resources = ProcessResources {
-            config: config.clone(),
-            job: job.clone(),
-            activity,
-            notify_socket,
+        Ok(LaunchSetup {
+            job,
             status_tx,
+            status_rx,
+            notify_socket,
+            stdout_tailer,
+            stderr_tailer,
             stderr_log,
-        };
-
-        // Spawn supervision task
-        let supervisor_task =
-            crate::supervisor::spawn_supervisor(&resources, self.shutdown.clone());
-
-        // Store the job handle
-        let mut processes = self.processes.write().await;
-        processes.insert(
-            config.name.clone(),
-            ProcessEntry::Active(JobHandle {
-                resources,
-                status_rx,
-                supervisor_task,
-                output_readers: Some((stdout_tailer, stderr_tailer)),
-            }),
-        );
-
-        info!("Command '{}' started", config.name);
-        Ok(job)
+        })
     }
 
     /// Stop a process by name
@@ -849,15 +1115,27 @@ impl NativeProcessManager {
         // Extract the handle and immediately insert a Stopped entry so the process
         // stays visible in the map during teardown. Without this, concurrent API
         // queries (list, status) would see "not found" during the teardown window.
-        let (job, supervisor_task, output_readers, ports) = {
+        let (job, supervisor_task, notify_forwarder, output_readers, ports) = {
             let mut processes = self.processes.write().await;
 
             match processes.remove(name) {
                 Some(ProcessEntry::Active(handle)) => {
                     let ports = declared_ports(&handle.resources.config);
+                    // Preserve a terminal supervisor phase so run summaries and
+                    // dependents keep the terminal outcome after teardown.
+                    let terminal_phase = match handle.status_rx.borrow().phase {
+                        crate::supervisor_state::SupervisorPhase::Exited => {
+                            Some(ProcessPhase::Exited)
+                        }
+                        crate::supervisor_state::SupervisorPhase::GaveUp => {
+                            Some(ProcessPhase::GaveUp)
+                        }
+                        _ => None,
+                    };
                     let JobHandle {
                         resources,
                         supervisor_task,
+                        notify_forwarder,
                         output_readers,
                         ..
                     } = handle;
@@ -869,19 +1147,34 @@ impl NativeProcessManager {
                     } = resources;
 
                     activity.set_status(ProcessStatus::Stopping);
-                    processes.insert(name.to_string(), ProcessEntry::Stopped { config, activity });
+                    processes.insert(
+                        name.to_string(),
+                        ProcessEntry::Stopped {
+                            config,
+                            activity,
+                            terminal_phase,
+                        },
+                    );
 
-                    (job, supervisor_task, output_readers, ports)
+                    (
+                        job,
+                        supervisor_task,
+                        notify_forwarder,
+                        output_readers,
+                        ports,
+                    )
                 }
                 Some(
                     entry @ (ProcessEntry::NotStarted { .. }
                     | ProcessEntry::Stopped { .. }
-                    | ProcessEntry::Waiting { .. }),
+                    | ProcessEntry::Waiting { .. }
+                    | ProcessEntry::Launching { .. }),
                 ) => {
                     let state = match &entry {
                         ProcessEntry::NotStarted { .. } => "auto start off",
                         ProcessEntry::Stopped { .. } => "already stopped",
                         ProcessEntry::Waiting { .. } => "waiting for dependencies",
+                        ProcessEntry::Launching { .. } => "starting",
                         ProcessEntry::Active(_) => unreachable!(),
                     };
                     processes.insert(name.to_string(), entry);
@@ -897,6 +1190,7 @@ impl NativeProcessManager {
 
         // Abort the supervisor task first to prevent restarts
         supervisor_task.abort();
+        notify_forwarder.abort();
 
         // Abort output reader tasks
         if let Some((stdout_reader, stderr_reader)) = output_readers {
@@ -961,6 +1255,7 @@ impl NativeProcessManager {
             }
         }
 
+        self.notify_lifecycle();
         info!("Process {} stopped", name);
         Ok(())
     }
@@ -973,19 +1268,59 @@ impl NativeProcessManager {
     /// can tell apart a process the user stopped from one that never started.
     /// Errors if the process is not currently `Active`.
     pub async fn stop_and_keep(&self, name: &str) -> Result<()> {
-        let handle = {
+        // Extract the handle and insert the Stopped entry under the same write
+        // lock, so the entry never vanishes mid-teardown: get_phase keeps
+        // answering, run_foreground's empty-map check cannot fire, and a
+        // concurrent re-arm cannot launch into a missing slot and later be
+        // clobbered by a trailing insert.
+        let (job, supervisor_task, notify_forwarder, output_readers, ports) = {
             let mut processes = self.processes.write().await;
 
             match processes.remove(name) {
-                Some(ProcessEntry::Active(handle)) => handle,
+                Some(ProcessEntry::Active(handle)) => {
+                    let ports = declared_ports(&handle.resources.config);
+                    let JobHandle {
+                        resources,
+                        supervisor_task,
+                        notify_forwarder,
+                        output_readers,
+                        ..
+                    } = handle;
+                    let ProcessResources {
+                        config,
+                        activity,
+                        job,
+                        ..
+                    } = resources;
+
+                    activity.set_status(ProcessStatus::Stopping);
+                    processes.insert(
+                        name.to_string(),
+                        ProcessEntry::Stopped {
+                            config,
+                            activity,
+                            terminal_phase: None,
+                        },
+                    );
+
+                    (
+                        job,
+                        supervisor_task,
+                        notify_forwarder,
+                        output_readers,
+                        ports,
+                    )
+                }
                 Some(
                     entry @ (ProcessEntry::NotStarted { .. }
                     | ProcessEntry::Waiting { .. }
-                    | ProcessEntry::Stopped { .. }),
+                    | ProcessEntry::Stopped { .. }
+                    | ProcessEntry::Launching { .. }),
                 ) => {
                     let state = match &entry {
                         ProcessEntry::NotStarted { .. } => "not running",
                         ProcessEntry::Stopped { .. } => "already stopped",
+                        ProcessEntry::Launching { .. } => "starting",
                         _ => "waiting for dependencies",
                     };
                     processes.insert(name.to_string(), entry);
@@ -996,26 +1331,18 @@ impl NativeProcessManager {
         };
 
         let grace_period = Duration::from_secs(5);
-        let ports = declared_ports(&handle.resources.config);
 
         trace!("Stopping process (keeping visible): {}", name);
-        handle
-            .resources
-            .activity
-            .set_status(ProcessStatus::Stopping);
 
-        handle.supervisor_task.abort();
+        supervisor_task.abort();
+        notify_forwarder.abort();
 
-        if let Some((stdout_reader, stderr_reader)) = handle.output_readers {
+        if let Some((stdout_reader, stderr_reader)) = output_readers {
             stdout_reader.abort();
             stderr_reader.abort();
         }
 
-        handle
-            .resources
-            .job
-            .stop_with_signal(Signal::Terminate, grace_period)
-            .await;
+        job.stop_with_signal(Signal::Terminate, grace_period).await;
 
         if !ports.is_empty() {
             let release_status =
@@ -1063,27 +1390,17 @@ impl NativeProcessManager {
             }
         }
 
-        handle.resources.activity.set_status(ProcessStatus::Stopped);
-
-        // Destructure to move Activity out without dropping it.
-        // Activity::drop sends Process::Complete which would remove it from the TUI.
-        let ProcessResources {
-            config,
-            activity,
-            job: _,
-            notify_socket: _,
-            status_tx: _,
-            stderr_log: _,
-        } = handle.resources;
-
-        self.processes
-            .write()
-            .await
-            .insert(name.to_string(), ProcessEntry::Stopped { config, activity });
-
-        if let Some(notify) = &self.task_notify {
-            notify.notify_waiters();
+        // Update the TUI activity only if the entry is still the Stopped
+        // placeholder inserted above; a concurrent re-arm may have already
+        // transitioned it onward.
+        {
+            let processes = self.processes.read().await;
+            if let Some(ProcessEntry::Stopped { activity, .. }) = processes.get(name) {
+                activity.set_status(ProcessStatus::Stopped);
+            }
         }
+
+        self.notify_lifecycle();
 
         info!("Process {} stopped", name);
         Ok(())
@@ -1096,29 +1413,49 @@ impl NativeProcessManager {
         self.shutdown.cancel();
     }
 
-    /// Stop all processes and clear not-started/waiting entries
+    /// Stop all active processes, draining in-flight launches first.
+    ///
+    /// Entries are never removed: stopped processes keep a `Stopped` entry
+    /// (with any terminal phase preserved) so run summaries and API queries
+    /// still see them after teardown.
     pub async fn stop_all(&self) -> Result<()> {
         trace!("stop_all: shutting down supervisors");
-        // Signal supervisors first so they exit gracefully
+        // Cancelling the token also blocks new launches and makes in-flight
+        // launch settles transition their Launching entries to Stopped.
         self.shutdown_supervisors();
 
-        let names = active_names(&*self.processes.read().await);
+        loop {
+            let notified = self.entries_changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
 
-        trace!("stop_all: stopping {} processes: {:?}", names.len(), names);
-        for (name, result) in names
-            .iter()
-            .zip(futures::future::join_all(names.iter().map(|name| self.stop(name))).await)
-        {
-            if let Err(err) = result {
-                warn!("Failed to stop process {}: {}", name, err);
+            let names = active_names(&*self.processes.read().await);
+            if !names.is_empty() {
+                trace!("stop_all: stopping {} processes: {:?}", names.len(), names);
+                for (name, result) in names
+                    .iter()
+                    .zip(futures::future::join_all(names.iter().map(|name| self.stop(name))).await)
+                {
+                    if let Err(err) = result {
+                        warn!("Failed to stop process {}: {}", name, err);
+                    }
+                }
+                continue;
             }
-        }
 
-        // Clear not-started and waiting processes (their activities complete on drop)
-        self.processes
-            .write()
-            .await
-            .retain(|_, entry| matches!(entry, ProcessEntry::Active(_)));
+            let launching = self
+                .processes
+                .read()
+                .await
+                .values()
+                .any(|e| matches!(e, ProcessEntry::Launching { .. }));
+            if !launching {
+                break;
+            }
+            // A launch is settling; it transitions to Active (stopped on the
+            // next iteration) or Stopped, and fires entries_changed either way.
+            notified.await;
+        }
 
         Ok(())
     }
@@ -1129,6 +1466,11 @@ impl NativeProcessManager {
     /// task if it exited (e.g., due to max restarts), and restarts the underlying job.
     pub async fn restart(&self, name: &str) -> Result<()> {
         let mut processes = self.processes.write().await;
+        // Checked under the write lock so it serializes with stop_all's
+        // post-cancel map reads (see launch_waiting).
+        if self.shutdown.is_cancelled() {
+            bail!("process manager is shutting down");
+        }
         let handle = match processes.get_mut(name) {
             Some(ProcessEntry::Active(h)) => h,
             Some(ProcessEntry::NotStarted { .. }) => {
@@ -1142,6 +1484,9 @@ impl NativeProcessManager {
             }
             Some(ProcessEntry::Waiting { .. }) => {
                 bail!("Process {} is waiting for dependencies", name)
+            }
+            Some(ProcessEntry::Launching { .. }) => {
+                bail!("Process {} is starting", name)
             }
             None => bail!("Process {} not running", name),
         };
@@ -1207,38 +1552,42 @@ impl NativeProcessManager {
 
     /// Start a previously not-started or stopped process, reusing its existing TUI activity.
     pub async fn start_not_started(&self, name: &str) -> Result<Arc<Job>> {
-        let (config, activity) = {
+        let settle = {
             let mut processes = self.processes.write().await;
+            // Checked under the write lock so it serializes with stop_all's
+            // post-cancel map reads (see launch_waiting).
+            if self.shutdown.is_cancelled() {
+                bail!("process manager is shutting down");
+            }
             match processes.get(name) {
                 Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }) => {}
                 Some(_) => bail!("Process {} is already running", name),
                 None => bail!("Process {} not found", name),
             }
             // Safe: we just checked the variant above.
-            match processes.remove(name).unwrap() {
+            let (config, activity) = match processes.remove(name).unwrap() {
                 ProcessEntry::NotStarted { config, activity }
-                | ProcessEntry::Stopped { config, activity } => (config, activity),
+                | ProcessEntry::Stopped {
+                    config, activity, ..
+                } => (config, activity),
                 _ => unreachable!(),
-            }
+            };
+
+            // Reset the activity so it no longer shows as stopped
+            activity.reset();
+            activity.set_status(ProcessStatus::Running);
+
+            info!("Starting not-started process: {}", name);
+            processes.insert(
+                name.to_string(),
+                ProcessEntry::Launching { config, activity },
+            );
+            // No await between the Launching insert and the settle spawn: the
+            // settle task always completes even if this caller is aborted.
+            self.spawn_launch_settle(name.to_string())
         };
-
-        // Reset the activity so it no longer shows as stopped
-        activity.reset();
-
-        info!("Starting not-started process: {}", name);
-        // Move the activity into launch (not clone) so the original is not
-        // dropped — Activity::drop sends Process::Complete which would
-        // immediately mark the process as stopped in the TUI.
-        let job = self.launch(&config, activity).await?;
-
-        // Notify the task system so it re-checks dependencies.
-        // Dependent processes will be launched by the task scheduler once
-        // it sees this dependency's phase has changed.
-        if let Some(notify) = &self.task_notify {
-            notify.notify_waiters();
-        }
-
-        Ok(job)
+        self.notify_lifecycle();
+        Self::join_launch_settle(settle).await
     }
 
     /// Get list of running processes
@@ -1332,8 +1681,11 @@ impl NativeProcessManager {
     fn process_info(name: &str, entry: &ProcessEntry) -> ProcessInfo {
         let (phase, restart_count) = match entry {
             ProcessEntry::NotStarted { .. } => (ProcessPhase::NotStarted, 0),
-            ProcessEntry::Stopped { .. } => (ProcessPhase::Stopped, 0),
+            ProcessEntry::Stopped { terminal_phase, .. } => {
+                (terminal_phase.unwrap_or(ProcessPhase::Stopped), 0)
+            }
             ProcessEntry::Waiting { .. } => (ProcessPhase::Waiting, 0),
+            ProcessEntry::Launching { .. } => (ProcessPhase::Starting, 0),
             ProcessEntry::Active(handle) => {
                 let status = handle.status_rx.borrow();
                 (ProcessPhase::from(status.phase), status.restart_count)
@@ -1342,7 +1694,8 @@ impl NativeProcessManager {
         let config = match entry {
             ProcessEntry::NotStarted { config, .. }
             | ProcessEntry::Stopped { config, .. }
-            | ProcessEntry::Waiting { config, .. } => config,
+            | ProcessEntry::Waiting { config, .. }
+            | ProcessEntry::Launching { config, .. } => config,
             ProcessEntry::Active(handle) => &handle.resources.config,
         };
         let mut ports: Vec<String> = config
@@ -1439,9 +1792,12 @@ impl NativeProcessManager {
                     }
 
                     let procs = processes.read().await;
-                    let has_waiting = procs
-                        .values()
-                        .any(|e| matches!(e, ProcessEntry::Waiting { .. }));
+                    let has_waiting = procs.values().any(|e| {
+                        matches!(
+                            e,
+                            ProcessEntry::Waiting { .. } | ProcessEntry::Launching { .. }
+                        )
+                    });
 
                     if has_waiting {
                         drop(procs);
@@ -1470,7 +1826,8 @@ impl NativeProcessManager {
                             }
                             ProcessEntry::NotStarted { .. }
                             | ProcessEntry::Stopped { .. }
-                            | ProcessEntry::Waiting { .. } => None,
+                            | ProcessEntry::Waiting { .. }
+                            | ProcessEntry::Launching { .. } => None,
                         })
                         .collect();
                     drop(procs);
@@ -1611,7 +1968,8 @@ impl NativeProcessManager {
                     let config = match entry {
                         ProcessEntry::NotStarted { config, .. }
                         | ProcessEntry::Stopped { config, .. }
-                        | ProcessEntry::Waiting { config, .. } => config,
+                        | ProcessEntry::Waiting { config, .. }
+                        | ProcessEntry::Launching { config, .. } => config,
                         ProcessEntry::Active(handle) => &handle.resources.config,
                     };
                     for (port_name, &port) in &config.ports {
@@ -2046,7 +2404,7 @@ impl Drop for NativeProcessManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{RestartPolicy, StartConfig};
+    use crate::config::{ListenKind, ListenSpec, RestartPolicy, StartConfig};
     use std::net::Ipv4Addr;
 
     #[tokio::test]
@@ -2141,7 +2499,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_cancel_waiting_removes_entry() {
+    async fn test_cancel_waiting_marks_stopped() {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
         let config = test_config("cancel-me");
@@ -2153,7 +2511,76 @@ mod tests {
         );
 
         manager.cancel_waiting("cancel-me").await;
-        assert_eq!(manager.get_phase("cancel-me").await, None);
+        assert_eq!(
+            manager.get_phase("cancel-me").await,
+            Some(ProcessPhase::Stopped)
+        );
+        assert!(manager.list().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_launch_failure_marks_stopped() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        // An unparsable TCP listen address makes `activation_from_listen`
+        // fail inside launch_setup.
+        let config = ProcessConfig {
+            listen: vec![ListenSpec {
+                name: "bad".to_string(),
+                kind: ListenKind::Tcp,
+                address: Some("not-an-address".to_string()),
+                path: None,
+                backlog: None,
+                mode: None,
+            }],
+            ..test_config("fail-launch")
+        };
+
+        manager.register_waiting(config, None).await;
+        let result = manager.launch_waiting("fail-launch").await;
+
+        assert!(
+            result.is_err(),
+            "launch must fail on an invalid listen spec"
+        );
+        assert_eq!(
+            manager.get_phase("fail-launch").await,
+            Some(ProcessPhase::Stopped),
+            "failed launch must keep a Stopped entry, not vanish"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_supervisor_transitions_fire_task_notify() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        let notify = Arc::new(Notify::new());
+        manager.set_task_notify(notify.clone());
+
+        manager
+            .start_command(&test_config("short-lived"), None)
+            .await
+            .unwrap();
+
+        // Event-driven wait: the forwarder must wake the task system on each
+        // supervisor status transition until the process reaches Exited. The
+        // timeout is a failure bound, never a poll interval.
+        tokio::time::timeout(Duration::from_secs(60), async {
+            loop {
+                let notified = notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                if manager.get_phase("short-lived").await == Some(ProcessPhase::Exited) {
+                    break;
+                }
+                notified.await;
+            }
+        })
+        .await
+        .expect("task_notify should fire on supervisor transitions until Exited");
+
+        let _ = manager.stop_all().await;
     }
 
     #[tokio::test]
