@@ -49,6 +49,8 @@ The default timeout is 120 seconds.
 
 When processes are already running in the background (started with `devenv up -d`), a second `devenv up` attaches to them instead of failing. It starts any processes that are enabled but not currently running, honoring their `after`/`before` dependencies, and streams a live view of process status and logs. Press Ctrl-C to detach, leaving the processes running.
 
+An attaching `devenv up` reports which processes it scheduled and which were already running, and exits nonzero when nothing could be started.
+
 You can also pass a subset of processes to start:
 
 ```shell-session
@@ -56,6 +58,18 @@ $ devenv up -d            # start everything in the background
 $ devenv processes stop api
 $ devenv up api           # attach and bring api back up
 ```
+
+A bare `devenv up` starts only processes with `start.enable = true`; explicitly named processes always start, even when their `start.enable` is `false`.
+
+The attached session is a non-interactive live view: stdin is not connected to the processes, and Ctrl-C detaches while leaving them running (the TUI restart/stop keybindings still work).
+
+!!! note "Configuration changes are not picked up by attach"
+
+    An attaching `devenv up <name>` schedules into the running process manager using the configuration that manager was started with. Edits to `devenv.nix` are not picked up by attach-scheduled processes, and names that are not part of the running manager's process set are rejected. Restart the manager to pick up changes:
+
+    ```shell-session
+    $ devenv processes down && devenv up -d
+    ```
 
 To attach a live view without starting anything (native process manager only):
 

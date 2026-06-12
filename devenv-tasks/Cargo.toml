@@ -10,6 +10,7 @@ devenv-cache-core.workspace = true
 devenv-core.workspace = true
 devenv-processes.workspace = true
 
+async-trait.workspace = true
 clap.workspace = true
 console.workspace = true
 miette.workspace = true

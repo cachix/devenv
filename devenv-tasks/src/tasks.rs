@@ -7,7 +7,7 @@ use crate::types::{
     TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
-use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase};
+use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase, UpOutcome};
 use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{EdgeRef, Reversed};
@@ -119,10 +119,18 @@ impl TasksBuilder {
             bash: self.config.bash,
             refresh_task_cache: self.refresh_task_cache,
             ignore_process_deps: self.config.ignore_process_deps,
+            task_index_by_name: HashMap::new(),
+            start_with_deps_lock: Mutex::new(()),
         };
 
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
+        // Built after schedule(): it replaces the graph with the roots'
+        // subgraph, invalidating any node indices computed before it.
+        for index in tasks.graph.node_indices() {
+            let name = tasks.graph[index].read().await.task.name.clone();
+            tasks.task_index_by_name.insert(name, index);
+        }
         Ok(tasks)
     }
 }
@@ -158,6 +166,27 @@ pub struct Tasks {
     pub(crate) refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
     pub(crate) ignore_process_deps: bool,
+    /// Full task name -> graph node index. Built after `schedule()`, which
+    /// replaces the graph with the scheduled subgraph and invalidates any
+    /// earlier node indices.
+    pub(crate) task_index_by_name: HashMap<String, NodeIndex>,
+    /// Serializes `start_with_deps` calls. Two concurrent `up`s for the same
+    /// stopped process would otherwise both observe the pre-re-arm phase and
+    /// spawn duplicate dependency waiters whose launch-race loser records a
+    /// false `Failed` launch outcome in the graph node.
+    pub(crate) start_with_deps_lock: Mutex<()>,
+}
+
+/// One dependency's evaluation, produced by `Tasks::eval_dep` and shared
+/// between the dependency waiter and the parked judgment so the dependency
+/// waiter and the manager's `Wait` settled rule can never diverge.
+struct DepEval {
+    /// Full task name of the dependency (e.g. `devenv:processes:db`).
+    task_name: String,
+    sat: DepSatisfaction,
+    /// Live manager phase for process-type dependencies (`None` for oneshot
+    /// dependencies and for process dependencies without a manager entry).
+    live_phase: Option<ProcessPhase>,
 }
 
 impl Tasks {
@@ -609,8 +638,17 @@ impl Tasks {
     /// resolved against the live task graph exactly like the cold-start path.
     ///
     /// `names` are process names without the `devenv:processes:` prefix. An
-    /// empty `names` is a no-op. Processes already active are left untouched
-    /// (and count as satisfied dependencies). Returns the names it scheduled.
+    /// empty `names` is a no-op. Every requested name is classified into
+    /// exactly one [`UpOutcome`] bucket:
+    /// - `scheduled`: re-armed `Waiting` and handed to the dependency-driven
+    ///   launch path;
+    /// - `skipped`: already running, starting, or pending on a dependency —
+    ///   left untouched (already-running ones count as satisfied
+    ///   dependencies);
+    /// - `unknown`: not present in this scheduler's task graph (the manager
+    ///   was started with a different configuration or a subset);
+    /// - `failed`: known but could not be scheduled (e.g. building the
+    ///   process config failed).
     ///
     /// Returns once the processes have been *scheduled*, not once they are
     /// ready: each one launches in a detached task that waits for its
@@ -618,13 +656,19 @@ impl Tasks {
     /// satisfied simply stays `Waiting` in the manager (visible in the TUI),
     /// rather than blocking the caller — so an attaching `devenv up` never
     /// hangs on a dependent it cannot complete.
-    pub async fn start_with_deps(&self, names: &[String]) -> Vec<String> {
-        let mut scheduled = Vec::new();
+    pub async fn start_with_deps(&self, names: &[String]) -> UpOutcome {
+        // Serialized: concurrent calls for the same stopped name would both
+        // read the pre-re-arm phase and spawn duplicate dependency waiters
+        // (see the field doc on `start_with_deps_lock`). The loop never
+        // awaits long work — launches are detached — so the hold is short.
+        let _serialize = self.start_with_deps_lock.lock().await;
+        let mut outcome = UpOutcome::default();
 
         for name in names {
             let task_name = format!("{PROCESS_TASK_PREFIX}{name}");
-            let Some(index) = self.find_task_index(&task_name).await else {
-                tracing::warn!(process = %name, "start_with_deps: no such process task");
+            let Some(&index) = self.task_index_by_name.get(&task_name) else {
+                tracing::debug!(process = %name, "up requested for a process not in the task graph");
+                outcome.unknown.push(name.clone());
                 continue;
             };
 
@@ -637,6 +681,7 @@ impl Tasks {
                 // A mid-launch `Launching` entry reports `Starting`, so an
                 // in-flight launch is skipped here too.
                 Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::Waiting) => {
+                    outcome.skipped.push(name.clone());
                     continue;
                 }
                 // Exited or gave up on its own: the manager entry is still
@@ -653,10 +698,13 @@ impl Tasks {
                 _ => {}
             }
 
-            // Re-arm the manager entry as Waiting with auto-start forced on, so
-            // `run_process`'s `launch_waiting` actually launches it even if it
-            // was registered auto-start-off (e.g. a non-shell process in a
-            // `devenv shell` daemon).
+            // Names arriving here were explicitly chosen (by the user or by
+            // the client's up-enabled default set, see
+            // `Devenv::resolve_launch_processes`); an explicitly requested
+            // process always starts, so force `start.enable` on for the
+            // launch — `run_process`'s `launch_waiting` then launches it even
+            // if it was registered auto-start-off (e.g. a non-shell process
+            // in a `devenv shell` daemon).
             let config = {
                 let ts = self.graph[index].read().await;
                 match ts.build_process_config(&self.env, &self.bash) {
@@ -666,6 +714,7 @@ impl Tasks {
                     }
                     Err(e) => {
                         tracing::error!(process = %name, "failed to build process config: {e}");
+                        outcome.failed.push(name.clone());
                         continue;
                     }
                 }
@@ -681,7 +730,7 @@ impl Tasks {
             }
             self.notify_finished.notify_waiters();
 
-            scheduled.push(name.clone());
+            outcome.scheduled.push(name.clone());
 
             let deps = self.collect_deps(index);
             let task_state = Arc::clone(&self.graph[index]);
@@ -730,7 +779,7 @@ impl Tasks {
             });
         }
 
-        scheduled
+        outcome
     }
 
     /// Increment the completed counter, update the orchestration progress bar, and
@@ -790,18 +839,6 @@ impl Tasks {
     }
 
     /// Collect dependency edges for a task node.
-    /// Find the graph node for a task by its full name (e.g.
-    /// `devenv:processes:web`). Linear over the node set, which is fine for the
-    /// occasional `start_with_deps` call.
-    async fn find_task_index(&self, task_name: &str) -> Option<NodeIndex> {
-        for index in self.graph.node_indices() {
-            if self.graph[index].read().await.task.name == task_name {
-                return Some(index);
-            }
-        }
-        None
-    }
-
     fn collect_deps(&self, index: NodeIndex) -> Vec<(Arc<RwLock<TaskState>>, DependencyKind)> {
         self.graph
             .edges_directed(index, petgraph::Direction::Incoming)
@@ -809,9 +846,128 @@ impl Tasks {
             .collect()
     }
 
-    /// Wait for task dependencies to be satisfied in the background.
+    /// Evaluate one dependency edge. Shared verbatim between the dependency
+    /// waiter loop (`wait_for_task_deps`) and the parked judgment
+    /// (`dependency_parked`) so the two can never diverge.
+    ///
     /// Process dependencies are evaluated against the manager's live phase;
     /// the graph node is only consulted for graph-owned launch outcomes.
+    /// The dep's read guard is held only for the duration of this call.
+    async fn eval_dep(
+        dep_state: &Arc<RwLock<TaskState>>,
+        dep_kind: &DependencyKind,
+        process_manager: &Arc<NativeProcessManager>,
+    ) -> DepEval {
+        let dep_guard = dep_state.read().await;
+        tracing::trace!(
+            "  dep {} status={:?} kind={:?}",
+            dep_guard.task.name,
+            dep_guard.status,
+            dep_kind
+        );
+        if dep_guard.task.r#type == TaskType::Process {
+            let pname = crate::types::process_name(&dep_guard.task.name);
+            let live_phase = process_manager.get_phase(pname).await;
+            let sat = match live_phase {
+                // A live manager phase wins: it cannot go stale and a
+                // re-armed Waiting entry outranks a dead Completed node.
+                Some(
+                    phase @ (ProcessPhase::Waiting
+                    | ProcessPhase::Starting
+                    | ProcessPhase::Ready
+                    | ProcessPhase::Exited
+                    | ProcessPhase::GaveUp),
+                ) => crate::types::is_process_dep_satisfied(phase, dep_kind),
+                // No entry, NotStarted, or Stopped: a terminal node
+                // status is the graph-owned launch outcome (launch
+                // failure, dependency failure, cancellation) and is
+                // conclusive; otherwise fall back to the phase itself
+                // so e.g. an auto-start-off dep satisfies @completed.
+                phase => match &dep_guard.status {
+                    TaskStatus::Completed(_) => {
+                        crate::types::is_dep_satisfied(&dep_guard.status, dep_kind)
+                    }
+                    _ => match phase {
+                        Some(p) => crate::types::is_process_dep_satisfied(p, dep_kind),
+                        None => DepSatisfaction::NotYet,
+                    },
+                },
+            };
+            DepEval {
+                task_name: dep_guard.task.name.clone(),
+                sat,
+                live_phase,
+            }
+        } else {
+            DepEval {
+                task_name: dep_guard.task.name.clone(),
+                sat: crate::types::is_dep_satisfied(&dep_guard.status, dep_kind),
+                live_phase: None,
+            }
+        }
+    }
+
+    /// Whether the named `Waiting` process is dependency-parked: it has at
+    /// least one unsatisfied dependency, and every unsatisfied dependency is
+    /// blocked on external action — a stopped or not-started process, or
+    /// transitively another parked `Waiting` process. Judged live against the
+    /// task graph and the manager's phases at call time (consulted by the
+    /// manager's `Wait` settled rule via [`devenv_processes::ProcessScheduler`]),
+    /// so it can never act on stale state.
+    ///
+    /// Anything else still in flight (a starting/launching dependency, a
+    /// running oneshot, a missing manager entry) counts as progressing —
+    /// conservative, so `Wait` keeps blocking. A process with no unsatisfied
+    /// dependencies is not parked (it is about to launch), and unknown names
+    /// are not parked.
+    pub async fn dependency_parked(&self, process_name: &str) -> bool {
+        let task_name = format!("{PROCESS_TASK_PREFIX}{process_name}");
+        self.task_dependency_parked(&task_name).await
+    }
+
+    /// Recursive core of [`Self::dependency_parked`], keyed by full task
+    /// name. The graph is an acyclic toposorted DAG (cycles are rejected at
+    /// build time), so recursing over `Waiting` dependencies terminates.
+    /// Boxed because async recursion needs a sized future. `eval_dep` drops
+    /// the dependency's read guard before any recursion below, so no node
+    /// lock is held across a relock (Edition 2024 scrutinee rule).
+    fn task_dependency_parked<'a>(
+        &'a self,
+        task_name: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send + 'a>> {
+        Box::pin(async move {
+            let Some(&index) = self.task_index_by_name.get(task_name) else {
+                return false;
+            };
+            let mut any_blocker = false;
+            for (dep_state, dep_kind) in self.collect_deps(index) {
+                let eval = Self::eval_dep(&dep_state, &dep_kind, &self.process_manager).await;
+                // NeverSatisfiable deps are not blockers: external action is
+                // already required either way, and the dependency waiter will
+                // conclude (cancel_waiting) once its evaluation reaches them.
+                if eval.sat != DepSatisfaction::NotYet {
+                    continue;
+                }
+                any_blocker = true;
+                let parked = match eval.live_phase {
+                    Some(ProcessPhase::NotStarted | ProcessPhase::Stopped) => true,
+                    Some(ProcessPhase::Waiting) => {
+                        self.task_dependency_parked(&eval.task_name).await
+                    }
+                    // Starting/Ready processes, live oneshots, and missing
+                    // manager entries are progressing.
+                    _ => false,
+                };
+                if !parked {
+                    return false;
+                }
+            }
+            any_blocker
+        })
+    }
+
+    /// Wait for task dependencies to be satisfied in the background.
+    /// Each dependency is evaluated via [`Self::eval_dep`].
     /// Returns `(cancelled, dependency_failed)`.
     async fn wait_for_task_deps(
         deps: &[(Arc<RwLock<TaskState>>, DependencyKind)],
@@ -832,44 +988,10 @@ impl Tasks {
             let mut all_satisfied = true;
 
             for (dep_state, dep_kind) in deps {
-                let dep_guard = dep_state.read().await;
-                tracing::trace!(
-                    "  dep {} status={:?} kind={:?}",
-                    dep_guard.task.name,
-                    dep_guard.status,
-                    dep_kind
-                );
-                let sat = if dep_guard.task.r#type == TaskType::Process {
-                    let pname = crate::types::process_name(&dep_guard.task.name);
-                    match process_manager.get_phase(pname).await {
-                        // A live manager phase wins: it cannot go stale and a
-                        // re-armed Waiting entry outranks a dead Completed node.
-                        Some(
-                            phase @ (ProcessPhase::Waiting
-                            | ProcessPhase::Starting
-                            | ProcessPhase::Ready
-                            | ProcessPhase::Exited
-                            | ProcessPhase::GaveUp),
-                        ) => crate::types::is_process_dep_satisfied(phase, dep_kind),
-                        // No entry, NotStarted, or Stopped: a terminal node
-                        // status is the graph-owned launch outcome (launch
-                        // failure, dependency failure, cancellation) and is
-                        // conclusive; otherwise fall back to the phase itself
-                        // so e.g. an auto-start-off dep satisfies @completed.
-                        phase => match &dep_guard.status {
-                            TaskStatus::Completed(_) => {
-                                crate::types::is_dep_satisfied(&dep_guard.status, dep_kind)
-                            }
-                            _ => match phase {
-                                Some(p) => crate::types::is_process_dep_satisfied(p, dep_kind),
-                                None => DepSatisfaction::NotYet,
-                            },
-                        },
-                    }
-                } else {
-                    crate::types::is_dep_satisfied(&dep_guard.status, dep_kind)
-                };
-                match sat {
+                match Self::eval_dep(dep_state, dep_kind, process_manager)
+                    .await
+                    .sat
+                {
                     DepSatisfaction::Satisfied => {}
                     DepSatisfaction::NeverSatisfiable => return (false, true),
                     DepSatisfaction::NotYet => {
@@ -933,8 +1055,6 @@ impl Tasks {
 
         // Pre-register all process tasks with the process manager so they
         // appear in the TUI immediately, regardless of topological sort order.
-        // Also register dependency edges so that when an auto start off process is
-        // manually started, its dependents are launched automatically.
         let mut process_configs: HashMap<NodeIndex, ProcessConfig> = HashMap::new();
         for &index in &self.tasks_order {
             if self.shutdown.is_cancelled() {
@@ -1374,6 +1494,22 @@ impl Tasks {
     }
 }
 
+/// The owner-side hooks the process manager delegates to: `ApiRequest::Up`
+/// scheduling and the `Wait` parked judgment, both of which need the
+/// dependency graph that lives here. Registered via
+/// `NativeProcessManager::set_scheduler` (weakly, so the manager never keeps
+/// the scheduler alive).
+#[async_trait::async_trait]
+impl devenv_processes::ProcessScheduler for Tasks {
+    async fn up(&self, names: Vec<String>) -> UpOutcome {
+        self.start_with_deps(&names).await
+    }
+
+    async fn dependency_parked(&self, process_name: &str) -> bool {
+        Tasks::dependency_parked(self, process_name).await
+    }
+}
+
 /// Block until the manager reports one of `terminal` phases for `name`.
 /// Returns the reached phase, or `None` on shutdown or when the manager has
 /// no entry for the process. Event-driven: wakes on `notify_finished`, which
@@ -1717,8 +1853,8 @@ mod schedule_tests {
         );
 
         // Attach path: bring the stopped process back up.
-        let scheduled = tasks.start_with_deps(&["web".to_string()]).await;
-        assert_eq!(scheduled, vec!["web".to_string()]);
+        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        assert_eq!(outcome.scheduled, vec!["web".to_string()]);
         // start_with_deps must relaunch the stopped process.
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
@@ -1762,8 +1898,8 @@ mod schedule_tests {
 
         // Attach path: relaunch the self-exited process. The second run sleeps,
         // so reaching Ready proves start_with_deps actually relaunched it.
-        let scheduled = tasks.start_with_deps(&["web".to_string()]).await;
-        assert_eq!(scheduled, vec!["web".to_string()]);
+        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        assert_eq!(outcome.scheduled, vec!["web".to_string()]);
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
         let _ = tasks.process_manager.stop_all().await;
@@ -1797,8 +1933,8 @@ mod schedule_tests {
         tasks.process_manager.stop_and_keep("gamma").await.unwrap();
 
         // Attach `up beta`: beta must stay waiting (gamma is stopped).
-        let scheduled = tasks.start_with_deps(&["beta".to_string()]).await;
-        assert_eq!(scheduled, vec!["beta".to_string()]);
+        let outcome = tasks.start_with_deps(&["beta".to_string()]).await;
+        assert_eq!(outcome.scheduled, vec!["beta".to_string()]);
 
         // Drive the detached dep waiter on this current-thread test runtime:
         // wake it explicitly and yield so it evaluates its dependencies. Yields
@@ -1830,6 +1966,128 @@ mod schedule_tests {
         // Now bring gamma up; beta should follow automatically.
         let _ = tasks.start_with_deps(&["gamma".to_string()]).await;
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
+
+        let _ = tasks.process_manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn start_with_deps_classifies_names() {
+        let (tasks, _tmp) = build_test_tasks(
+            vec![long_process_task("web", vec![])],
+            vec![format!("{PROCESS_TASK_PREFIX}web")],
+            false,
+        )
+        .await;
+
+        let parent = Arc::new(devenv_activity::start!(
+            devenv_activity::Activity::operation("test").parent(None)
+        ));
+        let _ = tasks.run_with_parent_activity(parent).await;
+        wait_phase(&tasks, "web", ProcessPhase::Ready).await;
+
+        // Already running: untouched.
+        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        assert_eq!(outcome.skipped, vec!["web".to_string()]);
+        assert!(outcome.scheduled.is_empty());
+        assert!(outcome.unknown.is_empty());
+        assert!(outcome.failed.is_empty());
+
+        // Not in the task graph: unknown.
+        let outcome = tasks.start_with_deps(&["nosuch".to_string()]).await;
+        assert_eq!(outcome.unknown, vec!["nosuch".to_string()]);
+        assert!(outcome.scheduled.is_empty());
+        assert!(outcome.skipped.is_empty());
+
+        // Stopped: re-armed and scheduled.
+        tasks.process_manager.stop_and_keep("web").await.unwrap();
+        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        assert_eq!(outcome.scheduled, vec!["web".to_string()]);
+        assert!(outcome.skipped.is_empty());
+        wait_phase(&tasks, "web", ProcessPhase::Ready).await;
+
+        let _ = tasks.process_manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn dependency_parked_judges_live_and_transitive() {
+        // Chain: beta after gamma@started, gamma after delta@started. The
+        // parked judgment must be live (no stored flag) and transitive.
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                long_process_task("delta", vec![]),
+                long_process_task("gamma", vec!["delta@started"]),
+                long_process_task("beta", vec!["gamma@started"]),
+            ],
+            vec![
+                format!("{PROCESS_TASK_PREFIX}delta"),
+                format!("{PROCESS_TASK_PREFIX}gamma"),
+                format!("{PROCESS_TASK_PREFIX}beta"),
+            ],
+            false,
+        )
+        .await;
+        let tasks = Arc::new(tasks);
+        // Register the scheduler as the daemon does, so the manager's Wait
+        // settled rule can consult the live parked judgment.
+        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
+        tasks
+            .process_manager()
+            .set_scheduler(Arc::downgrade(&scheduler));
+
+        let parent = Arc::new(devenv_activity::start!(
+            devenv_activity::Activity::operation("test").parent(None)
+        ));
+        let _ = tasks.run_with_parent_activity(parent).await;
+        wait_phase(&tasks, "delta", ProcessPhase::Ready).await;
+        wait_phase(&tasks, "gamma", ProcessPhase::Ready).await;
+        wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
+
+        // All Ready: nothing is parked, and Wait is settled.
+        assert!(!tasks.dependency_parked("beta").await);
+        assert!(tasks.process_manager.wait_settled().await);
+
+        // Stop the whole chain, then schedule only beta: its gamma dependency
+        // is Stopped, so beta is parked and Wait settles instead of hanging.
+        tasks.process_manager.stop_and_keep("beta").await.unwrap();
+        tasks.process_manager.stop_and_keep("gamma").await.unwrap();
+        tasks.process_manager.stop_and_keep("delta").await.unwrap();
+
+        let outcome = tasks.start_with_deps(&["beta".to_string()]).await;
+        assert_eq!(outcome.scheduled, vec!["beta".to_string()]);
+        assert_eq!(
+            tasks.process_manager.get_phase("beta").await,
+            Some(ProcessPhase::Waiting)
+        );
+        assert!(
+            tasks.dependency_parked("beta").await,
+            "beta must be parked: gamma is stopped"
+        );
+        assert!(
+            tasks.process_manager.wait_settled().await,
+            "a parked Waiting process must settle Wait"
+        );
+
+        // Schedule gamma too: it parks on stopped delta, and beta is now
+        // transitively parked through gamma's Waiting entry.
+        let outcome = tasks.start_with_deps(&["gamma".to_string()]).await;
+        assert_eq!(outcome.scheduled, vec!["gamma".to_string()]);
+        assert!(
+            tasks.dependency_parked("gamma").await,
+            "gamma must be parked: delta is stopped"
+        );
+        assert!(
+            tasks.dependency_parked("beta").await,
+            "beta must be transitively parked through waiting gamma"
+        );
+        assert!(tasks.process_manager.wait_settled().await);
+
+        // Unpark the chain: once delta runs, gamma and beta follow and the
+        // judgment flips back to progressing/launched.
+        let outcome = tasks.start_with_deps(&["delta".to_string()]).await;
+        assert_eq!(outcome.scheduled, vec!["delta".to_string()]);
+        wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
+        assert!(!tasks.dependency_parked("beta").await);
+        assert!(!tasks.dependency_parked("gamma").await);
 
         let _ = tasks.process_manager.stop_all().await;
     }

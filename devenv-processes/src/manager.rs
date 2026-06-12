@@ -97,6 +97,30 @@ pub enum ApiResponse {
     Ok,
     /// All port allocations from managed processes.
     PortAllocations { ports: Vec<PortInfo> },
+    /// Result of an `Up` request: how each requested name was classified.
+    /// (An old daemon answers `Up` with the legacy bare `Ok` instead.)
+    Up { outcome: UpOutcome },
+}
+
+/// Outcome of bringing a set of processes up via the owning scheduler.
+/// Each requested name lands in exactly one bucket.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct UpOutcome {
+    /// Newly armed: re-registered Waiting and handed to the dependency-driven
+    /// launch path.
+    #[serde(default)]
+    pub scheduled: Vec<String>,
+    /// Already running, starting, or pending on a dependency: left untouched.
+    #[serde(default)]
+    pub skipped: Vec<String>,
+    /// Not present in the manager's task graph (the manager was started with a
+    /// different configuration or a subset of processes).
+    #[serde(default)]
+    pub unknown: Vec<String>,
+    /// Known but could not be scheduled (e.g. building the process config
+    /// failed).
+    #[serde(default)]
+    pub failed: Vec<String>,
 }
 
 /// Event pushed by the daemon on an `ApiRequest::Attach` connection.
@@ -304,20 +328,40 @@ pub struct NativeProcessManager {
     /// clean them up on drop. Set to false for control-client instances that
     /// connect to an existing daemon — they should not delete the daemon's files.
     owns_runtime_files: bool,
-    /// Channel to the owner (the daemon's task scheduler) for servicing
-    /// `ApiRequest::Up`. The manager can't drive dependency ordering itself —
-    /// that lives in `devenv-tasks` — so it forwards the request and awaits the
-    /// names that were scheduled. Set once, after the manager is wrapped in an
-    /// `Arc`; unset on managers without an owning scheduler.
-    up_tx: std::sync::OnceLock<mpsc::Sender<UpRequest>>,
+    /// The owning task scheduler (devenv-tasks) servicing `ApiRequest::Up`
+    /// and the `Wait` parked judgment. The manager can't drive dependency
+    /// ordering itself — the graph lives in `devenv-tasks` — so it delegates.
+    /// Set once, after the manager is wrapped in an `Arc`; unset on managers
+    /// without an owning scheduler.
+    scheduler: std::sync::OnceLock<std::sync::Weak<dyn ProcessScheduler>>,
 }
 
-/// An `ApiRequest::Up` forwarded from the control socket to the owning task
-/// scheduler: the requested process names and a reply channel for the names it
-/// scheduled.
-pub struct UpRequest {
-    pub names: Vec<String>,
-    pub reply: tokio::sync::oneshot::Sender<Vec<String>>,
+/// Owner-side scheduler hooks. Implemented by the task scheduler that owns
+/// this manager (devenv-tasks), keeping the dependency graph out of
+/// devenv-processes. Held weakly so the manager never keeps its owner alive;
+/// a dead `Weak` (the owner is gone, e.g. a `devenv test`-owned manager after
+/// its run) behaves like no scheduler at all.
+#[async_trait]
+pub trait ProcessScheduler: Send + Sync {
+    /// Service `ApiRequest::Up`: bring the named processes up honouring their
+    /// dependencies, classifying every requested name into an [`UpOutcome`]
+    /// bucket.
+    ///
+    /// Called directly from the per-connection API task, so a long-running
+    /// `up` blocks only that one connection — other clients, further `Up`
+    /// requests, and shutdown handling proceed concurrently. The scheduler is
+    /// registered before the cold start runs; an `Up` arriving mid-startup is
+    /// served concurrently — names already pre-registered `Waiting` classify
+    /// as `skipped`, and the launch race handling in `launch_waiting` makes
+    /// the residual pre-registration race safe.
+    async fn up(&self, names: Vec<String>) -> UpOutcome;
+
+    /// Whether the named `Waiting` process is dependency-parked: all of its
+    /// unsatisfied dependencies are blocked on external action (a stopped or
+    /// not-started dependency, or transitively another parked `Waiting`
+    /// process). Judged live against the scheduler's graph at call time, so
+    /// the `Wait` settled rule never acts on stale information.
+    async fn dependency_parked(&self, process_name: &str) -> bool;
 }
 
 /// Display ports for a process: socket-activation `listen` specs plus declared
@@ -607,15 +651,16 @@ impl NativeProcessManager {
             task_notify: None,
             entries_changed: Arc::new(Notify::new()),
             owns_runtime_files: true,
-            up_tx: std::sync::OnceLock::new(),
+            scheduler: std::sync::OnceLock::new(),
         })
     }
 
-    /// Set the channel used to forward `ApiRequest::Up` to the owning task
-    /// scheduler (the daemon). Without it, `Up` requests are rejected. Can be
-    /// called after the manager is wrapped in an `Arc`; ignored if already set.
-    pub fn set_up_handler(&self, tx: mpsc::Sender<UpRequest>) {
-        let _ = self.up_tx.set(tx);
+    /// Register the owning task scheduler that services `ApiRequest::Up` and
+    /// the `Wait` parked judgment. Without it, `Up` requests are rejected and
+    /// `Waiting` entries never settle a `Wait`. Can be called after the
+    /// manager is wrapped in an `Arc`; ignored if already set.
+    pub fn set_scheduler(&self, scheduler: std::sync::Weak<dyn ProcessScheduler>) {
+        let _ = self.scheduler.set(scheduler);
     }
 
     /// Mark this instance as a control client that should not clean up
@@ -1708,6 +1753,98 @@ impl NativeProcessManager {
         }
     }
 
+    /// Settled rule for `ApiRequest::Wait`: respond once no process can make
+    /// further startup progress on its own. A process counts as settled when
+    /// it is
+    /// - Active with a supervisor phase of Ready, Exited, or GaveUp,
+    /// - NotStarted or Stopped (terminal until a user starts it),
+    /// - Waiting and the owning scheduler judges it dependency-parked: its
+    ///   dependency chain is blocked on a stopped/not-started (or transitively
+    ///   parked) dependency, which only external action can unblock. Without
+    ///   this, a `Wait` against e.g. `up <name>` whose dependency was stopped
+    ///   would block forever.
+    ///
+    /// Not settled: Launching, Active still Starting, and Waiting whose
+    /// dependencies are live and progressing (about to start). `Wait` remains
+    /// a legitimately long-blocking request.
+    async fn handle_wait(&self) -> ApiResponse {
+        // Event-driven: every relevant transition fires `entries_changed`
+        // (map transitions via notify_lifecycle, supervisor phase changes via
+        // the per-process forwarder). The settled judgment also depends on
+        // graph-owned oneshot task statuses (via the scheduler's
+        // `dependency_parked`), whose completions fire only `task_notify`,
+        // so register on both. Register before checking so a transition
+        // between the check and the await cannot be missed.
+        let task_notify = self
+            .task_notify
+            .clone()
+            // No scheduler-side notifier: a dummy that never fires, so the
+            // loop wakes via `entries_changed` alone.
+            .unwrap_or_else(|| Arc::new(Notify::new()));
+        loop {
+            let entries_notified = self.entries_changed.notified();
+            let task_notified = task_notify.notified();
+            tokio::pin!(entries_notified, task_notified);
+            entries_notified.as_mut().enable();
+            task_notified.as_mut().enable();
+            if self.wait_settled().await {
+                return ApiResponse::Ready;
+            }
+            tokio::select! {
+                _ = &mut entries_notified => {}
+                _ = &mut task_notified => {}
+            }
+        }
+    }
+
+    /// True when every entry is settled per the `Wait` rule documented on
+    /// [`Self::handle_wait`]. Public as a test/diagnostic surface.
+    ///
+    /// `Waiting` entries are judged live by the owning scheduler
+    /// ([`ProcessScheduler::dependency_parked`]); with no scheduler registered
+    /// or one already dropped (e.g. a `devenv test`-owned manager after its
+    /// run), `Waiting` is never settled, preserving the historical `Wait`
+    /// semantics.
+    pub async fn wait_settled(&self) -> bool {
+        // Snapshot Waiting names under the map read lock and drop the guard
+        // before consulting the scheduler: dependency_parked re-enters
+        // get_phase, and a queued writer on this write-preferring lock would
+        // deadlock that second read.
+        let waiting: Vec<String> = {
+            let procs = self.processes.read().await;
+            let mut waiting = Vec::new();
+            for (name, entry) in procs.iter() {
+                match entry {
+                    ProcessEntry::Launching { .. } => return false,
+                    ProcessEntry::Active(handle) => {
+                        let phase: ProcessPhase = handle.status_rx.borrow().phase.into();
+                        if !matches!(
+                            phase,
+                            ProcessPhase::Ready | ProcessPhase::Exited | ProcessPhase::GaveUp
+                        ) {
+                            return false;
+                        }
+                    }
+                    ProcessEntry::Waiting { .. } => waiting.push(name.clone()),
+                    ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. } => {}
+                }
+            }
+            waiting
+        };
+        if waiting.is_empty() {
+            return true;
+        }
+        let Some(scheduler) = self.scheduler.get().and_then(std::sync::Weak::upgrade) else {
+            return false;
+        };
+        for name in waiting {
+            if !scheduler.dependency_parked(&name).await {
+                return false;
+            }
+        }
+        true
+    }
+
     /// Start the API socket server for external queries (e.g., `devenv processes wait`).
     ///
     /// Listens on `state_dir/native.sock` using newline-delimited JSON (`ApiRequest`/`ApiResponse`).
@@ -1835,83 +1972,7 @@ impl NativeProcessManager {
         }
 
         let response = match serde_json::from_str::<ApiRequest>(&line) {
-            Ok(ApiRequest::Wait) => {
-                let processes = &manager.processes;
-                let task_notify = &manager.task_notify;
-                // Poll until no Waiting entries remain and all Active processes
-                // are ready. This avoids a race where the API server starts
-                // before processes transition from Waiting to Active.
-                loop {
-                    // Register and enable the notification BEFORE checking state
-                    // to prevent missed wakeups (same pattern as wait_for_task_deps).
-                    let notified = task_notify.as_ref().map(|n| n.notified());
-                    tokio::pin!(notified);
-                    if let Some(n) = notified.as_mut().as_pin_mut() {
-                        n.enable();
-                    }
-
-                    let procs = processes.read().await;
-                    let has_waiting = procs.values().any(|e| {
-                        matches!(
-                            e,
-                            ProcessEntry::Waiting { .. } | ProcessEntry::Launching { .. }
-                        )
-                    });
-
-                    if has_waiting {
-                        drop(procs);
-                        match notified.as_pin_mut() {
-                            Some(notified) => {
-                                tokio::select! {
-                                    _ = notified => {},
-                                    _ = tokio::time::sleep(Duration::from_secs(1)) => {},
-                                }
-                            }
-                            None => {
-                                tokio::time::sleep(Duration::from_millis(100)).await;
-                            }
-                        }
-                        continue;
-                    }
-
-                    let receivers: Vec<(
-                        String,
-                        tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
-                    )> = procs
-                        .iter()
-                        .filter_map(|(name, entry)| match entry {
-                            ProcessEntry::Active(handle) => {
-                                Some((name.clone(), handle.status_rx.clone()))
-                            }
-                            ProcessEntry::NotStarted { .. }
-                            | ProcessEntry::Stopped { .. }
-                            | ProcessEntry::Waiting { .. }
-                            | ProcessEntry::Launching { .. } => None,
-                        })
-                        .collect();
-                    drop(procs);
-
-                    for (name, mut rx) in receivers {
-                        {
-                            let status = rx.borrow_and_update();
-                            if status.is_ready() || status.is_gave_up() {
-                                continue;
-                            }
-                        }
-                        trace!("API: waiting for process {} to become ready", name);
-                        while rx.changed().await.is_ok() {
-                            let status = rx.borrow();
-                            if status.is_ready() || status.is_gave_up() {
-                                break;
-                            }
-                        }
-                    }
-
-                    break;
-                }
-
-                ApiResponse::Ready
-            }
+            Ok(ApiRequest::Wait) => manager.handle_wait().await,
             Ok(ApiRequest::List) => {
                 let procs = manager.processes.read().await;
                 let mut list: Vec<ProcessInfo> = procs
@@ -1994,26 +2055,16 @@ impl NativeProcessManager {
                     None => Self::process_not_found(&name),
                 }
             }
-            Ok(ApiRequest::Up { names }) => match manager.up_tx.get() {
-                Some(up_tx) => {
-                    let (reply, rx) = tokio::sync::oneshot::channel();
-                    if up_tx.send(UpRequest { names, reply }).await.is_err() {
-                        ApiResponse::Error {
-                            message: "process scheduler is no longer running".to_string(),
-                        }
-                    } else {
-                        match rx.await {
-                            Ok(_started) => ApiResponse::Ok,
-                            Err(_) => ApiResponse::Error {
-                                message: "process scheduler dropped the request".to_string(),
-                            },
-                        }
-                    }
+            Ok(ApiRequest::Up { names }) => {
+                match manager.scheduler.get().and_then(std::sync::Weak::upgrade) {
+                    Some(scheduler) => ApiResponse::Up {
+                        outcome: scheduler.up(names).await,
+                    },
+                    None => ApiResponse::Error {
+                        message: "this manager has no process scheduler to handle `up`".to_string(),
+                    },
                 }
-                None => ApiResponse::Error {
-                    message: "this manager has no process scheduler to handle `up`".to_string(),
-                },
-            },
+            }
             Ok(ApiRequest::Stop { name }) => match manager.stop(&name).await {
                 Ok(()) => ApiResponse::Ok,
                 Err(e) => ApiResponse::Error {
@@ -2610,6 +2661,7 @@ impl NativeProcessManager {
                     .await
                     .into_diagnostic()
                     .wrap_err("Failed to remove stale PID file")?;
+                pid::remove_manager_mode(&manager_pid_file).await;
                 return Ok(());
             }
             Err(e) => {
@@ -2666,6 +2718,7 @@ impl NativeProcessManager {
 
         // Remove PID file (may already be gone if the daemon cleaned up)
         let _ = tokio::fs::remove_file(&manager_pid_file).await;
+        pid::remove_manager_mode(&manager_pid_file).await;
 
         info!("Native process manager stopped");
         Ok(())
@@ -2707,8 +2760,9 @@ impl ProcessManager for NativeProcessManager {
         let token = options.cancellation_token.unwrap_or_default();
         let result = self.run_foreground(token, None).await;
 
-        // Clean up PID file
+        // Clean up PID file (and mode marker, which is paired with it)
         let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;
+        pid::remove_manager_mode(&self.manager_pid_file()).await;
 
         result
     }
@@ -2742,6 +2796,7 @@ impl Drop for NativeProcessManager {
         if self.owns_runtime_files {
             let _ = std::fs::remove_file(self.api_socket_path());
             let _ = std::fs::remove_file(self.manager_pid_file());
+            let _ = std::fs::remove_file(pid::manager_mode_file(&self.manager_pid_file()));
         }
     }
 }
@@ -3344,6 +3399,214 @@ mod tests {
         // A listen spec shadows a same-named declared port; the result is
         // sorted, so both the daemon TUI and attach views agree.
         assert_eq!(display_ports(&config), vec!["db:5432", "web:8080"]);
+    }
+
+    /// Test scheduler with a canned parked judgment and `Up` outcome.
+    struct StubScheduler {
+        parked: std::sync::atomic::AtomicBool,
+        outcome: UpOutcome,
+    }
+
+    #[async_trait]
+    impl ProcessScheduler for StubScheduler {
+        async fn up(&self, _names: Vec<String>) -> UpOutcome {
+            self.outcome.clone()
+        }
+
+        async fn dependency_parked(&self, _process_name: &str) -> bool {
+            self.parked.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    fn stub_scheduler(outcome: UpOutcome) -> Arc<StubScheduler> {
+        Arc::new(StubScheduler {
+            parked: std::sync::atomic::AtomicBool::new(false),
+            outcome,
+        })
+    }
+
+    #[tokio::test]
+    async fn wait_settled_judges_waiting_via_scheduler() {
+        use std::sync::atomic::Ordering;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let stub = stub_scheduler(UpOutcome::default());
+        let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
+        manager.set_scheduler(Arc::downgrade(&scheduler));
+
+        // Empty map settles trivially.
+        assert!(manager.wait_settled().await);
+
+        // Waiting with progressing dependencies: not settled.
+        manager.register_waiting(test_config("waiter"), None).await;
+        assert!(!manager.wait_settled().await);
+
+        // Waiting and dependency-parked: settled.
+        stub.parked.store(true, Ordering::SeqCst);
+        assert!(manager.wait_settled().await);
+
+        // A Launching entry is never settled, even with everything parked.
+        let config = test_config("mid-launch");
+        let activity = manager.create_process_activity(&config, None);
+        manager.processes.write().await.insert(
+            "mid-launch".to_string(),
+            ProcessEntry::Launching { config, activity },
+        );
+        assert!(!manager.wait_settled().await);
+        manager.processes.write().await.remove("mid-launch");
+
+        // NotStarted and Stopped are terminal until a user starts them:
+        // settled without consulting the scheduler.
+        stub.parked.store(false, Ordering::SeqCst);
+        manager
+            .register_waiting(auto_start_off_config("idle"), None)
+            .await;
+        manager.launch_waiting("idle").await.unwrap(); // -> NotStarted
+        manager.cancel_waiting("waiter").await; // -> Stopped
+        assert!(manager.wait_settled().await);
+    }
+
+    #[tokio::test]
+    async fn wait_settled_without_scheduler_treats_waiting_as_unsettled() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        manager.register_waiting(test_config("waiter"), None).await;
+        assert!(
+            !manager.wait_settled().await,
+            "without a scheduler, Waiting must keep Wait blocking (historical semantics)"
+        );
+
+        manager.cancel_waiting("waiter").await; // -> Stopped
+        assert!(manager.wait_settled().await);
+    }
+
+    /// Scheduler that reports every `dependency_parked` consultation over a
+    /// channel, so tests can synchronize with `handle_wait`'s loop without
+    /// timing.
+    struct SignalingScheduler {
+        parked: std::sync::atomic::AtomicBool,
+        consulted: tokio::sync::mpsc::UnboundedSender<()>,
+    }
+
+    #[async_trait]
+    impl ProcessScheduler for SignalingScheduler {
+        async fn up(&self, _names: Vec<String>) -> UpOutcome {
+            UpOutcome::default()
+        }
+
+        async fn dependency_parked(&self, _process_name: &str) -> bool {
+            let _ = self.consulted.send(());
+            self.parked.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    /// Regression test: a Waiting process can flip to dependency-parked when
+    /// a graph-owned oneshot dependency completes, which fires only
+    /// `task_notify` (no `entries_changed` transition). `handle_wait` must
+    /// wake on that signal too, or `devenv processes wait` hangs forever.
+    #[tokio::test]
+    async fn handle_wait_wakes_on_task_notify_only() {
+        use std::sync::atomic::Ordering;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let task_notify = Arc::new(Notify::new());
+        manager.set_task_notify(task_notify.clone());
+        let manager = Arc::new(manager);
+
+        let (consulted_tx, mut consulted_rx) = tokio::sync::mpsc::unbounded_channel();
+        let stub = Arc::new(SignalingScheduler {
+            parked: std::sync::atomic::AtomicBool::new(false),
+            consulted: consulted_tx,
+        });
+        let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
+        manager.set_scheduler(Arc::downgrade(&scheduler));
+
+        // A Waiting entry judged progressing: Wait blocks.
+        manager.register_waiting(test_config("waiter"), None).await;
+
+        let waiter = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            async move { manager.handle_wait().await }
+        });
+
+        // Wait until the loop has consulted the scheduler once: by then it
+        // has already registered on both notifiers (register-before-check),
+        // so a wakeup fired after this point cannot be missed.
+        consulted_rx
+            .recv()
+            .await
+            .expect("handle_wait must consult the scheduler for a Waiting entry");
+
+        // Simulate an oneshot dependency completing: the only signal is the
+        // graph-side task_notify; the manager map does not transition.
+        stub.parked.store(true, Ordering::SeqCst);
+        task_notify.notify_waiters();
+
+        // Failure bound only; the wait itself is event-driven.
+        let response = tokio::time::timeout(std::time::Duration::from_secs(60), waiter)
+            .await
+            .expect("handle_wait must wake on task_notify, not only entries_changed")
+            .unwrap();
+        assert!(matches!(response, ApiResponse::Ready));
+    }
+
+    #[tokio::test]
+    async fn up_request_over_socket_uses_scheduler() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let outcome = UpOutcome {
+            scheduled: vec!["a".to_string()],
+            skipped: vec!["b".to_string()],
+            unknown: vec!["c".to_string()],
+            failed: vec!["d".to_string()],
+        };
+        let stub = stub_scheduler(outcome.clone());
+        let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
+        manager.set_scheduler(Arc::downgrade(&scheduler));
+        manager.start_api_server().unwrap();
+
+        let response = NativeProcessManager::api_request(
+            &manager.api_socket_path(),
+            &ApiRequest::Up {
+                names: vec!["a".to_string()],
+            },
+        )
+        .await
+        .unwrap();
+
+        match response {
+            ApiResponse::Up { outcome: got } => assert_eq!(got, outcome),
+            other => panic!("expected Up response, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn up_request_without_scheduler_errors() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        manager.start_api_server().unwrap();
+
+        let response = NativeProcessManager::api_request(
+            &manager.api_socket_path(),
+            &ApiRequest::Up {
+                names: vec!["a".to_string()],
+            },
+        )
+        .await
+        .unwrap();
+
+        match response {
+            ApiResponse::Error { message } => {
+                assert!(
+                    message.contains("no process scheduler"),
+                    "unexpected error message: {message}"
+                );
+            }
+            other => panic!("expected Error response, got {other:?}"),
+        }
     }
 
     #[test]

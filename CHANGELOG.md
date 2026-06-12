@@ -34,6 +34,9 @@
 - Fixed stopping a process from an attached session falsely reporting "did not respond in time" while the stop was still gracefully completing, and starting processes on attach timing out while setup tasks (e.g. migrations) were still legitimately running.
 - Process port listings now include ports derived from `listen` readiness probes, not just explicitly declared ports, in both the TUI and `devenv processes list`.
 - Attaching with a newer devenv to a process manager started by an older version now explains the version mismatch and suggests `devenv processes down`, instead of failing with a cryptic parse error.
+- `devenv up <name>` against running processes no longer exits 0 silently when the name does not exist — it now reports what was scheduled and what was already running, and fails on unknown names.
+- `devenv processes wait` no longer hangs forever when a process is waiting on a dependency that is stopped or not started.
+- `devenv up -d` no longer silently schedules processes into another terminal's foreground `devenv up` session — it now asks you to attach with plain `devenv up` or stop the session first.
 
 ### Improvements
 
@@ -47,6 +50,8 @@
 - Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).
 - `devenv up` now attaches to an already-running process manager (started by `devenv up -d`) and starts the requested up-enabled processes over the control socket — honouring the positional process subset (e.g. `devenv up foo`) and `after`/`before` dependency ordering — instead of failing with "Processes already running" ([#971](https://github.com/cachix/devenv/issues/971)).
 - Added `devenv processes attach` to attach to running processes and stream their status, ports, and logs until Ctrl-C, leaving them running (native process manager only).
+- Explicitly named processes in `devenv up <name>` now always start, even with `processes.<name>.start.enable = false` (previously only the attach path did this).
+- While a long `devenv up` attach request is being scheduled, the process manager keeps answering other clients and shutdown signals.
 
 ### Breaking Changes
 
