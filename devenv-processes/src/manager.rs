@@ -4,7 +4,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -54,6 +54,10 @@ pub enum ApiRequest {
     Stop { name: String },
     /// Query all port allocations from running processes.
     Ports,
+    /// Hold the connection open and stream `AttachEvent` lines (snapshot,
+    /// status changes, log lines) until the client disconnects or the
+    /// manager shuts down.
+    Attach,
 }
 
 /// Port allocation info from a running process.
@@ -65,7 +69,7 @@ pub struct PortInfo {
 }
 
 /// Summary information about a managed process.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProcessInfo {
     pub name: String,
     pub phase: ProcessPhase,
@@ -93,6 +97,50 @@ pub enum ApiResponse {
     Ok,
     /// All port allocations from managed processes.
     PortAllocations { ports: Vec<PortInfo> },
+}
+
+/// Event pushed by the daemon on an `ApiRequest::Attach` connection.
+/// Newline-delimited JSON, one event per line.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum AttachEvent {
+    /// Full process list, sent once when the stream opens.
+    Snapshot { processes: Vec<ProcessInfo> },
+    /// A process changed phase/ports/restart count, or newly appeared.
+    Status { info: ProcessInfo },
+    /// One log line from a process log file (backlog or live tail).
+    Log {
+        name: String,
+        stream: LogStream,
+        line: String,
+    },
+}
+
+/// Which output stream an `AttachEvent::Log` line came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogStream {
+    Stdout,
+    Stderr,
+}
+
+/// Live attach stream to a running manager. Dropping it closes the connection.
+pub struct AttachStream {
+    rx: mpsc::Receiver<Result<AttachEvent>>,
+    reader_task: JoinHandle<()>,
+}
+
+impl AttachStream {
+    /// Next event from the daemon; `None` means the daemon closed the stream.
+    pub async fn next(&mut self) -> Option<Result<AttachEvent>> {
+        self.rx.recv().await
+    }
+}
+
+impl Drop for AttachStream {
+    fn drop(&mut self) {
+        self.reader_task.abort();
+    }
 }
 
 use watchexec_supervisor::{
@@ -272,6 +320,32 @@ pub struct UpRequest {
     pub reply: tokio::sync::oneshot::Sender<Vec<String>>,
 }
 
+/// Display ports for a process: socket-activation `listen` specs plus declared
+/// `ports` not shadowed by a same-named listen spec; "name:port", deduped by
+/// name, sorted.
+pub fn display_ports(config: &ProcessConfig) -> Vec<String> {
+    let mut ports: Vec<String> = config
+        .listen
+        .iter()
+        .filter_map(|spec| {
+            spec.address.as_ref().and_then(|addr| {
+                addr.rsplit(':')
+                    .next()
+                    .map(|port| format!("{}:{}", spec.name, port))
+            })
+        })
+        .collect();
+    let listen_names: std::collections::HashSet<&str> =
+        config.listen.iter().map(|s| s.name.as_str()).collect();
+    for (name, port) in &config.ports {
+        if !listen_names.contains(name.as_str()) {
+            ports.push(format!("{}:{}", name, port));
+        }
+    }
+    ports.sort();
+    ports
+}
+
 /// Build a human-readable description of the readiness probe for TUI display.
 fn probe_description(config: &ProcessConfig) -> Option<String> {
     let ready = config.ready.as_ref()?;
@@ -288,6 +362,14 @@ fn probe_description(config: &ProcessConfig) -> Option<String> {
     }
     None
 }
+
+/// Failure bound for a single attach event write: a client that stops reading
+/// (full socket buffer) must not park the handler with shutdown unobserved
+/// while the event queue grows behind it.
+const ATTACH_WRITE_STALL_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Lines of backlog per log file sent when an attach stream opens.
+const ATTACH_BACKLOG_LINES: usize = 50;
 
 const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(15);
 const PORT_RELEASE_INITIAL_DELAY: Duration = Duration::from_millis(25);
@@ -599,24 +681,7 @@ impl NativeProcessManager {
 
     /// Create a TUI activity for a process without launching it.
     fn create_process_activity(&self, config: &ProcessConfig, parent_id: Option<u64>) -> Activity {
-        let mut ports: Vec<String> = config
-            .listen
-            .iter()
-            .filter_map(|spec| {
-                spec.address.as_ref().and_then(|addr| {
-                    addr.rsplit(':')
-                        .next()
-                        .map(|port| format!("{}:{}", spec.name, port))
-                })
-            })
-            .collect();
-        let listen_names: std::collections::HashSet<&str> =
-            config.listen.iter().map(|s| s.name.as_str()).collect();
-        for (name, port) in &config.ports {
-            if !listen_names.contains(name.as_str()) {
-                ports.push(format!("{}:{}", name, port));
-            }
-        }
+        let ports = display_ports(config);
 
         let mut builder = Activity::process(&config.name)
             .command(&config.exec)
@@ -1698,17 +1763,11 @@ impl NativeProcessManager {
             | ProcessEntry::Launching { config, .. } => config,
             ProcessEntry::Active(handle) => &handle.resources.config,
         };
-        let mut ports: Vec<String> = config
-            .ports
-            .iter()
-            .map(|(n, p)| format!("{n}:{p}"))
-            .collect();
-        ports.sort();
         ProcessInfo {
             name: name.to_string(),
             phase,
             restart_count,
-            ports,
+            ports: display_ports(config),
         }
     }
 
@@ -1982,6 +2041,10 @@ impl NativeProcessManager {
                 }
                 ApiResponse::PortAllocations { ports }
             }
+            Ok(ApiRequest::Attach) => {
+                Self::handle_attach_client(reader, writer, manager).await;
+                return;
+            }
             Err(e) => ApiResponse::Error {
                 message: format!("invalid request: {}", e),
             },
@@ -1993,9 +2056,284 @@ impl NativeProcessManager {
         }
     }
 
+    /// Serialize one attach event as a JSON line and write it.
+    async fn write_attach_event(
+        writer: &mut tokio::net::unix::OwnedWriteHalf,
+        event: &AttachEvent,
+    ) -> std::io::Result<()> {
+        use tokio::io::AsyncWriteExt;
+
+        let mut json = serde_json::to_vec(event)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        json.push(b'\n');
+        writer.write_all(&json).await
+    }
+
+    /// Write one event, treating manager shutdown, a write error, and a write
+    /// stalled past the failure bound all as disconnect. Returns false when
+    /// the connection should be torn down.
+    async fn write_attach_event_bounded(
+        writer: &mut tokio::net::unix::OwnedWriteHalf,
+        event: &AttachEvent,
+        shutdown: &CancellationToken,
+    ) -> bool {
+        tokio::select! {
+            res = tokio::time::timeout(
+                ATTACH_WRITE_STALL_TIMEOUT,
+                Self::write_attach_event(writer, event),
+            ) => matches!(res, Ok(Ok(()))),
+            _ = shutdown.cancelled() => false,
+        }
+    }
+
+    /// Serve one attach connection: snapshot, then status diffs and log tails
+    /// until the client disconnects or the manager shuts down.
+    async fn handle_attach_client(
+        mut reader: tokio::io::BufReader<tokio::net::unix::OwnedReadHalf>,
+        mut writer: tokio::net::unix::OwnedWriteHalf,
+        manager: Arc<Self>,
+    ) {
+        use tokio::io::AsyncReadExt;
+
+        // Every exit path cancels the feeder and tailers.
+        let conn = CancellationToken::new();
+        let _guard = conn.clone().drop_guard();
+
+        // Snapshot under a short read lock, dropped before any I/O.
+        let snapshot: Vec<ProcessInfo> = {
+            let procs = manager.processes.read().await;
+            let mut list: Vec<ProcessInfo> = procs
+                .iter()
+                .map(|(name, entry)| Self::process_info(name, entry))
+                .collect();
+            list.sort_by(|a, b| a.name.cmp(&b.name));
+            list
+        };
+
+        if !Self::write_attach_event_bounded(
+            &mut writer,
+            &AttachEvent::Snapshot {
+                processes: snapshot.clone(),
+            },
+            &manager.shutdown,
+        )
+        .await
+        {
+            return;
+        }
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<AttachEvent>();
+        tokio::spawn(Self::attach_feed(
+            Arc::clone(&manager),
+            snapshot,
+            tx,
+            conn.clone(),
+        ));
+
+        // Writer/disconnect loop; never touches the processes map, so no
+        // lock is ever held across a write.
+        let mut probe = [0u8; 64];
+        loop {
+            tokio::select! {
+                ev = rx.recv() => match ev {
+                    Some(ev) => {
+                        if !Self::write_attach_event_bounded(&mut writer, &ev, &manager.shutdown)
+                            .await
+                        {
+                            break;
+                        }
+                    }
+                    None => break,
+                },
+                // The client never sends after the request line; 0 or Err
+                // means it disconnected.
+                n = reader.read(&mut probe) => {
+                    if matches!(n, Ok(0) | Err(_)) {
+                        break;
+                    }
+                }
+                _ = manager.shutdown.cancelled() => break,
+            }
+        }
+    }
+
+    /// Feed an attach connection: per-process log tailers (bounded backlog,
+    /// then append-only) plus status diffs woken by `entries_changed`.
+    async fn attach_feed(
+        manager: Arc<Self>,
+        snapshot: Vec<ProcessInfo>,
+        tx: mpsc::UnboundedSender<AttachEvent>,
+        conn: CancellationToken,
+    ) {
+        let mut prev: BTreeMap<String, ProcessInfo> = snapshot
+            .into_iter()
+            .map(|info| (info.name.clone(), info))
+            .collect();
+        for name in prev.keys() {
+            Self::spawn_attach_tailers(&manager.state_dir, name, &tx, &conn);
+        }
+
+        loop {
+            // Register before reading so a transition between the read and
+            // the await cannot be missed (same idiom as stop_all).
+            let notified = manager.entries_changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
+            let current: BTreeMap<String, ProcessInfo> = {
+                let procs = manager.processes.read().await;
+                procs
+                    .iter()
+                    .map(|(name, entry)| (name.clone(), Self::process_info(name, entry)))
+                    .collect()
+            };
+            // Lock released above; sends never run under it. Entries are
+            // never removed from the map, so there are no removal events.
+            for (name, info) in &current {
+                let is_new = !prev.contains_key(name);
+                if prev.get(name) != Some(info)
+                    && tx.send(AttachEvent::Status { info: info.clone() }).is_err()
+                {
+                    return;
+                }
+                if is_new {
+                    Self::spawn_attach_tailers(&manager.state_dir, name, &tx, &conn);
+                }
+            }
+            prev = current;
+
+            tokio::select! {
+                _ = notified => {}
+                _ = conn.cancelled() => return,
+            }
+        }
+    }
+
+    /// Spawn stdout+stderr attach tailers for one process: emit a backlog of
+    /// the last complete lines, then tail strictly append-only from the
+    /// recorded byte offset. `wait_for_create` covers processes that have not
+    /// started yet. Tailer handles are not retained: tailers exit via `conn`
+    /// or send failure.
+    fn spawn_attach_tailers(
+        state_dir: &Path,
+        name: &str,
+        tx: &mpsc::UnboundedSender<AttachEvent>,
+        conn: &CancellationToken,
+    ) {
+        let (stdout_path, stderr_path) = crate::command::log_paths(state_dir, name);
+        for (path, stream) in [
+            (stdout_path, LogStream::Stdout),
+            (stderr_path, LogStream::Stderr),
+        ] {
+            let (backlog, offset) = crate::log_tailer::read_backlog(&path, ATTACH_BACKLOG_LINES);
+            for line in backlog {
+                // Send errors are ignored: the connection is going away.
+                let _ = tx.send(AttachEvent::Log {
+                    name: name.to_string(),
+                    stream,
+                    line,
+                });
+            }
+            let tx = tx.clone();
+            let name = name.to_string();
+            crate::log_tailer::spawn_tail_to(path, offset, true, conn.clone(), move |line| {
+                tx.send(AttachEvent::Log {
+                    name: name.clone(),
+                    stream,
+                    line,
+                })
+                .is_ok()
+            });
+        }
+    }
+
+    /// Connect to a running manager and open an attach event stream.
+    pub async fn attach_stream(socket_path: &Path) -> Result<AttachStream> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let mut stream = tokio::net::UnixStream::connect(socket_path)
+            .await
+            .into_diagnostic()
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to connect to native manager at {}",
+                    socket_path.display()
+                )
+            })?;
+
+        let mut request_json = serde_json::to_vec(&ApiRequest::Attach).into_diagnostic()?;
+        request_json.push(b'\n');
+        stream
+            .write_all(&request_json)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to send attach request to native manager")?;
+
+        // The reader task owns the socket so read_line's cancel-unsafety is
+        // contained; the consumer can select! on next() safely.
+        let (tx, rx) = mpsc::channel::<Result<AttachEvent>>(256);
+        let reader_task = tokio::spawn(async move {
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            loop {
+                line.clear();
+                match reader.read_line(&mut line).await {
+                    Ok(0) | Err(_) => return,
+                    Ok(_) => {}
+                }
+                let event = match serde_json::from_str::<AttachEvent>(&line) {
+                    Ok(event) => Ok(event),
+                    // An older daemon answers Attach with a one-shot
+                    // ApiResponse::Error ("unknown variant"); surface it as
+                    // the stream error.
+                    Err(_) => match serde_json::from_str::<ApiResponse>(&line) {
+                        Ok(ApiResponse::Error { message }) => Err(miette::miette!("{}", message)),
+                        _ => Err(miette::miette!(
+                            "unexpected attach response: {}",
+                            line.trim_end()
+                        )),
+                    },
+                };
+                if tx.send(event).await.is_err() {
+                    return;
+                }
+            }
+        });
+
+        Ok(AttachStream { rx, reader_task })
+    }
+
     /// Connect to a running native manager's API socket and send a request.
     pub async fn api_request(socket_path: &Path, request: &ApiRequest) -> Result<ApiResponse> {
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let stream = Self::send_api_request(socket_path, request).await?;
+        Self::read_api_response(stream).await
+    }
+
+    /// One-shot request whose reply legitimately takes as long as the work it
+    /// triggers (the daemon answers `Up` only after the full task DAG and
+    /// process launches complete): only the connect/send phase is bounded,
+    /// the reply read is unbounded and callers race it against cancellation.
+    pub async fn api_request_bounded_connect(
+        socket_path: &Path,
+        request: &ApiRequest,
+        connect_timeout: Duration,
+    ) -> Result<ApiResponse> {
+        let stream = tokio::time::timeout(
+            connect_timeout,
+            Self::send_api_request(socket_path, request),
+        )
+        .await
+        .map_err(|_| miette::miette!("timed out connecting to the process manager"))??;
+        Self::read_api_response(stream).await
+    }
+
+    /// Connect to the manager socket and write one JSON request line,
+    /// returning the stream positioned to read the reply.
+    async fn send_api_request(
+        socket_path: &Path,
+        request: &ApiRequest,
+    ) -> Result<tokio::net::UnixStream> {
+        use tokio::io::AsyncWriteExt;
 
         let mut stream = tokio::net::UnixStream::connect(socket_path)
             .await
@@ -2015,7 +2353,14 @@ impl NativeProcessManager {
             .into_diagnostic()
             .wrap_err("Failed to send request to native manager")?;
 
-        let mut reader = BufReader::new(&mut stream);
+        Ok(stream)
+    }
+
+    /// Read the single JSON response line of a one-shot request.
+    async fn read_api_response(stream: tokio::net::UnixStream) -> Result<ApiResponse> {
+        use tokio::io::{AsyncBufReadExt, BufReader};
+
+        let mut reader = BufReader::new(stream);
         let mut response = String::new();
         reader
             .read_line(&mut response)
@@ -2979,5 +3324,177 @@ mod tests {
             Some(ProcessPhase::Stopped),
             "handle_command(Stop) should call stop_and_keep"
         );
+    }
+
+    #[test]
+    fn test_display_ports_merges_listen_and_ports() {
+        let config = ProcessConfig {
+            listen: vec![ListenSpec {
+                name: "web".to_string(),
+                kind: ListenKind::Tcp,
+                address: Some("127.0.0.1:8080".to_string()),
+                path: None,
+                backlog: None,
+                mode: None,
+            }],
+            ports: HashMap::from([("web".to_string(), 9999), ("db".to_string(), 5432)]),
+            ..test_config("ports-proc")
+        };
+
+        // A listen spec shadows a same-named declared port; the result is
+        // sorted, so both the daemon TUI and attach views agree.
+        assert_eq!(display_ports(&config), vec!["db:5432", "web:8080"]);
+    }
+
+    #[test]
+    fn test_attach_event_serde() {
+        let event = AttachEvent::Log {
+            name: "proc".to_string(),
+            stream: LogStream::Stderr,
+            line: "boom".to_string(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains(r#""event":"log""#), "wire format: {json}");
+        assert!(json.contains(r#""stream":"stderr""#), "wire format: {json}");
+
+        let back: AttachEvent = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            back,
+            AttachEvent::Log {
+                ref name,
+                stream: LogStream::Stderr,
+                ref line,
+            } if name == "proc" && line == "boom"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_attach_stream_end_to_end() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        // Failure bound only; every wait below is event-driven.
+        const BOUND: Duration = Duration::from_secs(30);
+
+        async fn next_event(
+            lines: &mut tokio::io::Lines<BufReader<tokio::net::unix::OwnedReadHalf>>,
+        ) -> AttachEvent {
+            let line = tokio::time::timeout(BOUND, lines.next_line())
+                .await
+                .expect("timed out waiting for attach event")
+                .expect("attach stream read failed")
+                .expect("attach stream closed unexpectedly");
+            serde_json::from_str(&line).expect("invalid attach event")
+        }
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+
+        // No ports/ready config: the supervisor reports Ready immediately,
+        // and the echo lands in the stdout log before or shortly after the
+        // attach, exercising backlog or live tail respectively.
+        let config = ProcessConfig {
+            name: "attach-proc".to_string(),
+            exec: "echo attach-line; sleep 100".to_string(),
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Never,
+                max: Some(0),
+                window: None,
+            },
+            ..Default::default()
+        };
+        manager.start_command(&config, None).await.unwrap();
+        manager.start_api_server().unwrap();
+
+        let mut stream = tokio::net::UnixStream::connect(manager.api_socket_path())
+            .await
+            .unwrap();
+        stream
+            .write_all(b"{\"command\":\"attach\"}\n")
+            .await
+            .unwrap();
+        // The write half stays alive: dropping it would read as a client
+        // disconnect on the server.
+        let (reader, _writer) = stream.into_split();
+        let mut lines = BufReader::new(reader).lines();
+
+        // 1. Snapshot arrives first and contains the process.
+        match next_event(&mut lines).await {
+            AttachEvent::Snapshot { processes } => {
+                assert!(
+                    processes.iter().any(|p| p.name == "attach-proc"),
+                    "snapshot must contain attach-proc: {processes:?}"
+                );
+            }
+            other => panic!("expected snapshot first, got {other:?}"),
+        }
+
+        // 2. The echoed line arrives as a Log event (backlog or live tail).
+        loop {
+            match next_event(&mut lines).await {
+                AttachEvent::Log {
+                    name,
+                    stream: LogStream::Stdout,
+                    line,
+                } if name == "attach-proc" && line == "attach-line" => break,
+                _ => {}
+            }
+        }
+
+        // 3. An appended line is tailed append-only: it arrives exactly once
+        // and the backlog line is never re-emitted.
+        let (stdout_log, _) = crate::command::log_paths(temp_dir.path(), "attach-proc");
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&stdout_log)
+                .unwrap();
+            f.write_all(b"live-line\n").unwrap();
+        }
+        loop {
+            match next_event(&mut lines).await {
+                AttachEvent::Log {
+                    name,
+                    stream: LogStream::Stdout,
+                    line,
+                } if name == "attach-proc" => {
+                    if line == "live-line" {
+                        break;
+                    }
+                    assert_ne!(line, "attach-line", "backlog line must not be re-emitted");
+                }
+                _ => {}
+            }
+        }
+
+        // 4. A phase change is pushed as a Status diff via entries_changed.
+        manager.stop_and_keep("attach-proc").await.unwrap();
+        loop {
+            match next_event(&mut lines).await {
+                AttachEvent::Status { info }
+                    if info.name == "attach-proc" && info.phase == ProcessPhase::Stopped =>
+                {
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        // 5. Manager shutdown closes the stream: drain any buffered events
+        // and assert EOF.
+        manager.shutdown_supervisors();
+        loop {
+            let line = tokio::time::timeout(BOUND, lines.next_line())
+                .await
+                .expect("timed out waiting for stream EOF")
+                .expect("attach stream read failed");
+            match line {
+                None => break,
+                Some(line) => {
+                    let _: AttachEvent =
+                        serde_json::from_str(&line).expect("invalid event before EOF");
+                }
+            }
+        }
     }
 }

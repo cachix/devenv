@@ -724,14 +724,25 @@ impl Devenv {
             requested.to_vec()
         };
 
-        match self
-            .native_api_request(&processes::ApiRequest::Up {
-                names: names.clone(),
-            })
-            .await?
-        {
+        // The daemon answers `Up` only after the full before-process task DAG
+        // and process launches complete, which is legitimately unbounded user
+        // work, so only the connect/send phase is bounded; the reply is raced
+        // against Ctrl-C so the first interrupt is never dead.
+        let token = self.shutdown.cancellation_token();
+        let up_request = processes::ApiRequest::Up {
+            names: names.clone(),
+        };
+        let response = tokio::select! {
+            _ = token.cancelled() => bail!("interrupted"),
+            r = self.native_api_request_bounded_connect(
+                &up_request,
+                std::time::Duration::from_secs(10),
+            ) => r?,
+        };
+        match response {
             processes::ApiResponse::Ok => {}
             processes::ApiResponse::Error { message } => {
+                Self::bail_if_stale_daemon(&message)?;
                 bail!("Failed to start processes on running manager: {}", message)
             }
             other => bail!("Unexpected response to up request: {:?}", other),
@@ -740,112 +751,160 @@ impl Devenv {
         Ok(names)
     }
 
-    /// New log lines to emit from a polled "last N lines" snapshot.
-    ///
-    /// The daemon's `Logs` API returns a tail window, so as output grows old
-    /// lines scroll off the top. We emit the lines after the last one we already
-    /// emitted; if it scrolled out of the window, we emit the whole window.
-    fn delta_lines(prev_last: &mut Option<String>, text: &str) -> Vec<String> {
-        let lines: Vec<&str> = text.lines().collect();
-        let start = match prev_last {
-            Some(last) => lines
-                .iter()
-                .rposition(|l| l == last)
-                .map(|i| i + 1)
-                .unwrap_or(0),
-            None => 0,
-        };
-        if let Some(l) = lines.last() {
-            *prev_last = Some((*l).to_string());
-        }
-        lines[start..].iter().map(|s| (*s).to_string()).collect()
-    }
-
-    /// Foreground view while attached to a running daemon: poll the control
-    /// socket and mirror process state, ports, and logs into the activity system
-    /// so the TUI renders the process list and the status-line summary. Returns
-    /// when the user interrupts (Ctrl-C) or the daemon goes away, leaving the
-    /// daemon and its processes running.
-    async fn run_attached_foreground(&self) -> Result<()> {
-        struct ProcState {
-            activity: Activity,
-            last_stdout: Option<String>,
-            last_stderr: Option<String>,
-        }
-
-        let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
-        let parent_id = parent.id();
+    /// Foreground view while attached to a running daemon: consume one
+    /// streaming `Attach` connection and mirror process state, ports, and logs
+    /// into the activity system under `parent`. Ctrl-C detaches cleanly
+    /// (processes keep running); a stream EOF or error means the daemon went
+    /// away and is an error. TUI restart/stop keybindings arrive on
+    /// `command_rx` and are forwarded to the daemon as one-shot requests.
+    async fn run_attached_foreground(
+        &self,
+        parent: &Activity,
+        mut command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
+    ) -> Result<()> {
+        let mut stream =
+            processes::NativeProcessManager::attach_stream(&self.native_socket_path()).await?;
         let token = self.shutdown.cancellation_token();
-        let mut procs: HashMap<String, ProcState> = HashMap::new();
+        let parent_id = parent.id();
+        let mut procs: HashMap<String, Activity> = HashMap::new();
+
+        fn upsert(
+            procs: &mut HashMap<String, Activity>,
+            parent_id: u64,
+            info: &processes::ProcessInfo,
+        ) {
+            let activity = procs.entry(info.name.clone()).or_insert_with(|| {
+                devenv_activity::start!(
+                    Activity::process(&info.name)
+                        .parent(Some(parent_id))
+                        .ports(info.ports.clone())
+                )
+            });
+            activity.set_status(Devenv::phase_to_process_status(info.phase));
+        }
 
         loop {
-            match self.native_api_request(&processes::ApiRequest::List).await {
-                Ok(processes::ApiResponse::ProcessList { processes }) => {
-                    for info in &processes {
-                        let state = procs.entry(info.name.clone()).or_insert_with(|| {
-                            let activity = devenv_activity::start!(
-                                Activity::process(&info.name)
-                                    .parent(Some(parent_id))
-                                    .ports(info.ports.clone())
-                            );
-                            ProcState {
-                                activity,
-                                last_stdout: None,
-                                last_stderr: None,
-                            }
-                        });
-                        state
-                            .activity
-                            .set_status(Self::phase_to_process_status(info.phase));
+            tokio::select! {
+                _ = token.cancelled() => {
+                    message(ActivityLevel::Info, "detached, processes left running");
+                    return Ok(());
+                }
+                cmd = async {
+                    match command_rx.as_mut() {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending().await,
                     }
-
-                    // Mirror recent log output for each process.
-                    for info in &processes {
-                        let logs = self
-                            .native_api_request(&processes::ApiRequest::Logs {
-                                name: info.name.clone(),
-                                lines: Some(50),
-                            })
-                            .await;
-                        if let Ok(processes::ApiResponse::ProcessLogs { stdout, stderr }) = logs
-                            && let Some(state) = procs.get_mut(&info.name)
-                        {
-                            for line in Self::delta_lines(&mut state.last_stdout, &stdout) {
-                                state.activity.log(line);
+                } => {
+                    match cmd {
+                        Some(cmd) => {
+                            let request = match cmd {
+                                processes::ProcessCommand::Restart(name) => {
+                                    processes::ApiRequest::Restart { name }
+                                }
+                                processes::ProcessCommand::Stop(name) => {
+                                    processes::ApiRequest::Stop { name }
+                                }
+                            };
+                            // Ctrl-C must not be dead while the one-shot is in
+                            // flight: race the request against the token. The
+                            // bound must exceed the daemon's own worst case for
+                            // stop/restart (5s SIGTERM grace + 15s port release).
+                            tokio::select! {
+                                _ = token.cancelled() => {
+                                    message(ActivityLevel::Info, "detached, processes left running");
+                                    return Ok(());
+                                }
+                                result = self.native_api_request_timeout(
+                                    &request,
+                                    std::time::Duration::from_secs(30),
+                                ) => match result {
+                                    Ok(processes::ApiResponse::Ok) => {}
+                                    Ok(processes::ApiResponse::Error { message: m }) => {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("process command failed: {m}"),
+                                        );
+                                    }
+                                    Ok(other) => {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("unexpected response: {other:?}"),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("process command failed: {e}"),
+                                        );
+                                    }
+                                },
                             }
-                            for line in Self::delta_lines(&mut state.last_stderr, &stderr) {
-                                state.activity.error(line);
+                        }
+                        // Channel closed (TUI gone): a closed channel returns
+                        // None forever, so disable the arm and keep streaming.
+                        None => command_rx = None,
+                    }
+                }
+                ev = stream.next() => match ev {
+                    Some(Ok(processes::AttachEvent::Snapshot { processes })) => {
+                        for info in &processes {
+                            upsert(&mut procs, parent_id, info);
+                        }
+                    }
+                    Some(Ok(processes::AttachEvent::Status { info })) => {
+                        upsert(&mut procs, parent_id, &info);
+                    }
+                    Some(Ok(processes::AttachEvent::Log { name, stream: log_stream, line })) => {
+                        if let Some(activity) = procs.get(&name) {
+                            match log_stream {
+                                processes::LogStream::Stdout => activity.log(line),
+                                processes::LogStream::Stderr => activity.error(line),
                             }
                         }
                     }
+                    Some(Err(e)) => {
+                        // A Ctrl-C racing the stream teardown is a deliberate
+                        // detach, not a daemon failure.
+                        if token.is_cancelled() {
+                            message(ActivityLevel::Info, "detached, processes left running");
+                            return Ok(());
+                        }
+                        Self::bail_if_stale_daemon(&e.to_string())?;
+                        message(ActivityLevel::Error, "lost connection to the process manager");
+                        return Err(e.wrap_err("attach stream failed"));
+                    }
+                    None => {
+                        if token.is_cancelled() {
+                            message(ActivityLevel::Info, "detached, processes left running");
+                            return Ok(());
+                        }
+                        message(
+                            ActivityLevel::Error,
+                            "the process manager went away (stopped or crashed)",
+                        );
+                        bail!("process manager connection closed");
+                    }
                 }
-                Ok(_) => {}
-                Err(e) => {
-                    debug!(error = %e, "attached manager no longer reachable");
-                    break;
-                }
-            }
-
-            tokio::select! {
-                _ = token.cancelled() => break,
-                _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {}
             }
         }
-        Ok(())
     }
 
     /// Attach to an already-running process manager and stream a live view of
     /// its processes (status, ports, logs) until the user detaches with Ctrl-C,
     /// leaving the manager and its processes running. Unlike `devenv up`, this
     /// does not start any processes. Fails when no manager is running.
-    pub async fn attach(&self) -> Result<()> {
+    pub async fn attach(
+        &self,
+        command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
+    ) -> Result<()> {
         let pid_file = self.native_manager_pid_file();
         let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await
         else {
             bail!("No processes running. Start them with: devenv up -d");
         };
         info!(%pid, "attached to running process manager");
-        self.run_attached_foreground().await
+        let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
+        self.run_attached_foreground(&parent, command_rx).await
     }
 
     /// Get the path to the .devenv/state directory
@@ -1866,7 +1925,11 @@ impl Devenv {
                     .attach_start_up_processes(&config.tasks, &processes)
                     .await?;
                 info!(?started, "attached to running process manager");
-                self.run_attached_foreground().await?;
+                // Reuse the already-open "Running processes" operation as the
+                // parent so the TUI shows a single process tree, and hand the
+                // TUI's restart/stop channel to the attach loop.
+                self.run_attached_foreground(&phase4, options.command_rx.take())
+                    .await?;
                 return Ok(RunMode::Detached);
             }
 
@@ -2154,14 +2217,61 @@ impl Devenv {
         processes::native_socket_path(&self.devenv_dotfile)
     }
 
+    /// Bail with upgrade guidance when the daemon predates this request type.
+    fn bail_if_stale_daemon(message: &str) -> Result<()> {
+        if message.contains("unknown variant") {
+            bail!(
+                "the running process manager was started by an older devenv; \
+                 restart it with `devenv processes down` then `devenv up -d`"
+            );
+        }
+        Ok(())
+    }
+
+    /// One-shot request with a failure-bound timeout; a wedged daemon (accepts
+    /// connections but never replies) must not hang the attach session. Not
+    /// for `Wait`, which blocks legitimately.
+    async fn native_api_request_timeout(
+        &self,
+        request: &processes::ApiRequest,
+        timeout: std::time::Duration,
+    ) -> Result<processes::ApiResponse> {
+        tokio::time::timeout(timeout, self.native_api_request(request))
+            .await
+            .map_err(|_| miette!("process manager did not respond in time"))?
+    }
+
+    /// One-shot request whose reply takes as long as the work it triggers
+    /// (the daemon answers `Up` only after the full task DAG and process
+    /// launches complete): bound only the connect/send phase, callers race
+    /// the unbounded reply against Ctrl-C.
+    async fn native_api_request_bounded_connect(
+        &self,
+        request: &processes::ApiRequest,
+        connect_timeout: std::time::Duration,
+    ) -> Result<processes::ApiResponse> {
+        let socket_path = self.require_native_manager()?;
+        processes::NativeProcessManager::api_request_bounded_connect(
+            &socket_path,
+            request,
+            connect_timeout,
+        )
+        .await
+    }
+
     /// Send an API request to the running native process manager and return the response.
     async fn native_api_request(
         &self,
         request: &processes::ApiRequest,
     ) -> Result<processes::ApiResponse> {
+        let socket_path = self.require_native_manager()?;
+        processes::NativeProcessManager::api_request(&socket_path, request).await
+    }
+
+    /// Resolve the native manager socket, failing when no native manager runs.
+    fn require_native_manager(&self) -> Result<std::path::PathBuf> {
         if self.native_manager_pid_file().exists() {
-            let socket_path = self.native_socket_path();
-            processes::NativeProcessManager::api_request(&socket_path, request).await
+            Ok(self.native_socket_path())
         } else if self.processes_pid().exists() {
             bail!("This subcommand is only supported with the native process manager")
         } else {
@@ -2854,33 +2964,6 @@ mod tests {
         assert_eq!(
             Devenv::up_enabled_process_names(&configs),
             vec!["alpha".to_string()]
-        );
-    }
-
-    #[test]
-    fn test_delta_lines() {
-        // First poll emits the whole snapshot and remembers the last line.
-        let mut last = None;
-        assert_eq!(
-            Devenv::delta_lines(&mut last, "a\nb\nc\n"),
-            vec!["a".to_string(), "b".to_string(), "c".to_string()]
-        );
-        assert_eq!(last.as_deref(), Some("c"));
-
-        // Next poll: only lines after the previously-seen last line.
-        assert_eq!(
-            Devenv::delta_lines(&mut last, "b\nc\nd\ne"),
-            vec!["d".to_string(), "e".to_string()]
-        );
-        assert_eq!(last.as_deref(), Some("e"));
-
-        // No new output -> nothing emitted.
-        assert!(Devenv::delta_lines(&mut last, "c\nd\ne").is_empty());
-
-        // Window scrolled past the last seen line -> emit the whole window.
-        assert_eq!(
-            Devenv::delta_lines(&mut last, "x\ny\nz"),
-            vec!["x".to_string(), "y".to_string(), "z".to_string()]
         );
     }
 

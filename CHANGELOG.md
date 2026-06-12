@@ -28,6 +28,12 @@
 - Fixed lifecycle races in the native process manager: a process being relaunched could be started twice, leaving an orphaned copy that kept its port bound but no longer appeared in `devenv processes list`, and the background manager could shut itself down while its only process was mid-relaunch.
 - Fixed a process whose dependency could not be satisfied vanishing from `devenv processes list` instead of showing as stopped, and fixed a relaunched process that had previously failed leaving its dependents permanently blocked on the stale failure.
 - Fixed repeated `devenv up` attaches against a long-running process manager accumulating one background watcher task per process per attach.
+- Fixed attached sessions (`devenv up` against a running manager, `devenv processes attach`) dropping or duplicating process log lines. Logs were polled and diffed twice a second, losing bursts of more than 50 lines, repeated lines, and partially written lines; the process manager now streams logs and status over the attach connection.
+- Fixed an attached session exiting silently with code 0 when the process manager stopped or crashed. The session now reports the lost connection and exits nonzero, while Ctrl-C still detaches cleanly and leaves processes running.
+- Fixed the restart (Ctrl-R) and stop (Ctrl-X) keybindings doing nothing when attached to an already running process manager, and fixed Ctrl-C being ignored while the attach request was still in flight.
+- Fixed stopping a process from an attached session falsely reporting "did not respond in time" while the stop was still gracefully completing, and starting processes on attach timing out while setup tasks (e.g. migrations) were still legitimately running.
+- Process port listings now include ports derived from `listen` readiness probes, not just explicitly declared ports, in both the TUI and `devenv processes list`.
+- Attaching with a newer devenv to a process manager started by an older version now explains the version mismatch and suggests `devenv processes down`, instead of failing with a cryptic parse error.
 
 ### Improvements
 
