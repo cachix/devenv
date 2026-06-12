@@ -739,7 +739,7 @@ impl Devenv {
     /// `resolve_launch_processes`.
     ///
     /// Dependency ordering and readiness-waiting are delegated to the daemon's
-    /// own task scheduler over the control socket (`ApiRequest::Up`): it owns
+    /// own task scheduler over the control socket (`ApiRequest::Start`): it owns
     /// the live task graph, so `after`/`before` ordering, already-running
     /// dependencies, and out-of-subset dependencies are all resolved exactly
     /// like the cold-start path — the CLI no longer re-derives them.
@@ -751,23 +751,23 @@ impl Devenv {
     /// nothing was scheduled or skipped, so `devenv up` exits nonzero when it
     /// acted on nothing.
     async fn attach_start_up_processes(&self, names: &[String]) -> Result<()> {
-        // The daemon answers `Up` only after the full before-process task DAG
-        // and process launches complete, which is legitimately unbounded user
-        // work, so only the connect/send phase is bounded; the reply is raced
-        // against Ctrl-C so the first interrupt is never dead.
+        // The daemon answers `Start` only after the full before-process task
+        // DAG and process launches complete, which is legitimately unbounded
+        // user work, so only the connect/send phase is bounded; the reply is
+        // raced against Ctrl-C so the first interrupt is never dead.
         let token = self.shutdown.cancellation_token();
-        let up_request = processes::ApiRequest::Up {
+        let start_request = processes::ApiRequest::Start {
             names: names.to_vec(),
         };
         let response = tokio::select! {
             _ = token.cancelled() => bail!("interrupted"),
             r = self.native_api_request_bounded_connect(
-                &up_request,
+                &start_request,
                 std::time::Duration::from_secs(10),
             ) => r?,
         };
         match response {
-            processes::ApiResponse::Up { outcome } => {
+            processes::ApiResponse::Start { outcome } => {
                 if !outcome.unknown.is_empty() {
                     bail!(
                         "Process(es) not known to the running process manager (it was started with a different configuration): {}. Restart it with `devenv processes down` and `devenv up -d` to pick up configuration changes",
@@ -807,7 +807,7 @@ impl Devenv {
                 Self::bail_if_stale_daemon(&msg)?;
                 bail!("Failed to start processes on running manager: {}", msg)
             }
-            other => bail!("Unexpected response to up request: {:?}", other),
+            other => bail!("Unexpected response to start request: {:?}", other),
         }
 
         Ok(())
@@ -2006,9 +2006,9 @@ impl Devenv {
 
             // Answer `devenv up` attach requests against this manager: a
             // second `devenv up` finds our PID file and attaches over the
-            // control socket; the per-connection API task serves `Up` through
+            // control socket; the per-connection API task serves `Start` through
             // this scheduler. Registered before the run, matching the daemon,
-            // so an `Up` arriving mid-startup is answered (classifying
+            // so a `Start` arriving mid-startup is answered (classifying
             // against the pre-registered Waiting entries) instead of
             // rejected. The coerced `Arc<dyn _>` shares its refcount with
             // `tasks_runner`, so the manager's `Weak` stays upgradable as
@@ -2310,8 +2310,11 @@ impl Devenv {
     }
 
     /// Bail with upgrade guidance when the daemon predates this request type.
+    /// "unknown variant" covers requests the old daemon has no arm for;
+    /// "missing field" covers a reshaped variant it knows under the same tag
+    /// (e.g. the old single-name `start` receiving the new `names` list).
     fn bail_if_stale_daemon(message: &str) -> Result<()> {
-        if message.contains("unknown variant") {
+        if message.contains("unknown variant") || message.contains("missing field") {
             bail!(
                 "the running process manager was started by an older devenv; \
                  restart it with `devenv processes down` then `devenv up -d`"
@@ -2334,7 +2337,7 @@ impl Devenv {
     }
 
     /// One-shot request whose reply takes as long as the work it triggers
-    /// (the daemon answers `Up` only after the full task DAG and process
+    /// (the daemon answers `Start` only after the full task DAG and process
     /// launches complete): bound only the connect/send phase, callers race
     /// the unbounded reply against Ctrl-C.
     async fn native_api_request_bounded_connect(
@@ -2467,11 +2470,36 @@ impl Devenv {
         .await
     }
 
+    /// Start one process on the running manager through its scheduler, so
+    /// `after`/`before` dependencies are honoured like any other launch. The
+    /// reply is truthful: already running is an error (matching the historic
+    /// `processes start` strictness), unknown names get config-skew guidance.
     pub async fn processes_start(&self, name: &str) -> Result<()> {
-        self.expect_ok_response(&processes::ApiRequest::Start {
-            name: name.to_string(),
-        })
-        .await
+        let request = processes::ApiRequest::Start {
+            names: vec![name.to_string()],
+        };
+        match self.native_api_request(&request).await? {
+            processes::ApiResponse::Start { outcome } => {
+                if outcome.scheduled.contains(&name.to_string()) {
+                    return Ok(());
+                }
+                if outcome.skipped.contains(&name.to_string()) {
+                    bail!("Process '{}' is already running or waiting", name);
+                }
+                if outcome.unknown.contains(&name.to_string()) {
+                    bail!(
+                        "Process '{}' is not known to the running process manager (it was started with a different configuration). Restart it with `devenv processes down` and `devenv up -d` to pick up configuration changes",
+                        name
+                    );
+                }
+                bail!("Failed to start process '{}'", name);
+            }
+            processes::ApiResponse::Error { message: msg } => {
+                Self::bail_if_stale_daemon(&msg)?;
+                bail!("{}", msg)
+            }
+            other => bail!("Unexpected response: {:?}", other),
+        }
     }
 
     pub async fn processes_stop(&self, name: &str) -> Result<()> {

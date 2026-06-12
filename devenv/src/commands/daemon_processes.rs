@@ -45,7 +45,7 @@ pub fn run(config_file: &Path) -> Result<()> {
             devenv_activity::Activity::operation("Running processes").parent(None)
         );
 
-        // Service `devenv up` attaches: `Up` requests are served live by the
+        // Service `devenv up` attaches: `Start` requests are served live by the
         // per-connection API task through the task scheduler — which owns the
         // dependency graph — so it brings the requested processes up in
         // dependency order, rather than the client re-deriving the order and
@@ -54,7 +54,7 @@ pub fn run(config_file: &Path) -> Result<()> {
         // Register the scheduler BEFORE the run below. The API socket starts
         // accepting connections as soon as processes are pre-registered (well
         // before `run_with_parent_activity` returns). Without the scheduler
-        // set, an `Up` arriving mid-startup is rejected outright; registered
+        // set, a `Start` arriving mid-startup is rejected outright; registered
         // here it is answered concurrently — names already pre-registered
         // `Waiting` classify as `skipped`. The coerced `Arc<dyn _>` shares
         // its refcount with `tasks_runner`, so the `Weak` the manager holds

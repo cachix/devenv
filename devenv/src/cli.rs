@@ -989,7 +989,9 @@ pub enum ProcessesCommand {
         name: String,
     },
 
-    #[command(about = "Start a process (or all processes if no name given).")]
+    #[command(
+        about = "Start a process, honoring its dependencies (or all processes if no name given)."
+    )]
     Start {
         #[arg(help = "Name of the process. If omitted, starts all processes (same as 'up').")]
         name: Option<String>,

@@ -51,6 +51,7 @@
 - `devenv up` now attaches to an already-running process manager (started by `devenv up -d`) and starts the requested up-enabled processes over the control socket — honouring the positional process subset (e.g. `devenv up foo`) and `after`/`before` dependency ordering — instead of failing with "Processes already running" ([#971](https://github.com/cachix/devenv/issues/971)).
 - Added `devenv processes attach` to attach to running processes and stream their status, ports, and logs until Ctrl-C, leaving them running (native process manager only).
 - Explicitly named processes in `devenv up <name>` now always start, even with `processes.<name>.start.enable = false` (previously only the attach path did this).
+- `devenv processes start <name>` (and restarting a stopped process) now goes through the same dependency-aware launch path as `devenv up`: `after`/`before` ordering is honored instead of launching the process immediately with its dependencies missing, and unknown names fail with guidance.
 - While a long `devenv up` attach request is being scheduled, the process manager keeps answering other clients and shutdown signals.
 
 ### Breaking Changes

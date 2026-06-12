@@ -40,16 +40,17 @@ pub enum ApiRequest {
     Status { name: String },
     /// Get the last N lines of stdout/stderr logs for a process.
     Logs { name: String, lines: Option<usize> },
-    /// Restart a process (or start it if not started).
+    /// Restart a running process in place (or bring a stopped one back
+    /// through the scheduler, honouring its dependencies).
     Restart { name: String },
-    /// Start a process that has `start.enable = false`.
-    Start { name: String },
-    /// Bring up the named processes, honouring their `after`/`before`
+    /// Start the named processes, honouring their `after`/`before`
     /// dependencies. Driven by the task scheduler that owns this manager, so
-    /// already-running and out-of-subset dependencies resolve against the live
-    /// task graph. Used by `devenv up` attaching to a running manager (the
-    /// client resolves the up-enabled default set before sending).
-    Up { names: Vec<String> },
+    /// already-running and out-of-subset dependencies resolve against the
+    /// live task graph; explicitly named processes start even with
+    /// `start.enable = false`. Used by `devenv up` attaching to a running
+    /// manager (the client resolves the up-enabled default set before
+    /// sending) and by `devenv processes start`.
+    Start { names: Vec<String> },
     /// Stop a running process.
     Stop { name: String },
     /// Query all port allocations from running processes.
@@ -97,15 +98,14 @@ pub enum ApiResponse {
     Ok,
     /// All port allocations from managed processes.
     PortAllocations { ports: Vec<PortInfo> },
-    /// Result of an `Up` request: how each requested name was classified.
-    /// (An old daemon answers `Up` with the legacy bare `Ok` instead.)
-    Up { outcome: UpOutcome },
+    /// Result of a `Start` request: how each requested name was classified.
+    Start { outcome: StartOutcome },
 }
 
-/// Outcome of bringing a set of processes up via the owning scheduler.
+/// Outcome of starting a set of processes via the owning scheduler.
 /// Each requested name lands in exactly one bucket.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct UpOutcome {
+pub struct StartOutcome {
     /// Newly armed: re-registered Waiting and handed to the dependency-driven
     /// launch path.
     #[serde(default)]
@@ -328,7 +328,7 @@ pub struct NativeProcessManager {
     /// clean them up on drop. Set to false for control-client instances that
     /// connect to an existing daemon — they should not delete the daemon's files.
     owns_runtime_files: bool,
-    /// The owning task scheduler (devenv-tasks) servicing `ApiRequest::Up`
+    /// The owning task scheduler (devenv-tasks) servicing `ApiRequest::Start`
     /// and the `Wait` parked judgment. The manager can't drive dependency
     /// ordering itself — the graph lives in `devenv-tasks` — so it delegates.
     /// Set once, after the manager is wrapped in an `Arc`; unset on managers
@@ -343,18 +343,18 @@ pub struct NativeProcessManager {
 /// its run) behaves like no scheduler at all.
 #[async_trait]
 pub trait ProcessScheduler: Send + Sync {
-    /// Service `ApiRequest::Up`: bring the named processes up honouring their
-    /// dependencies, classifying every requested name into an [`UpOutcome`]
+    /// Service `ApiRequest::Start`: bring the named processes up honouring their
+    /// dependencies, classifying every requested name into a [`StartOutcome`]
     /// bucket.
     ///
     /// Called directly from the per-connection API task, so a long-running
-    /// `up` blocks only that one connection — other clients, further `Up`
+    /// `start` blocks only that one connection — other clients, further `Start`
     /// requests, and shutdown handling proceed concurrently. The scheduler is
-    /// registered before the cold start runs; an `Up` arriving mid-startup is
+    /// registered before the cold start runs; a `Start` arriving mid-startup is
     /// served concurrently — names already pre-registered `Waiting` classify
     /// as `skipped`, and the launch race handling in `launch_waiting` makes
     /// the residual pre-registration race safe.
-    async fn up(&self, names: Vec<String>) -> UpOutcome;
+    async fn start(&self, names: Vec<String>) -> StartOutcome;
 
     /// Whether the named `Waiting` process is dependency-parked: all of its
     /// unsatisfied dependencies are blocked on external action (a stopped or
@@ -655,8 +655,8 @@ impl NativeProcessManager {
         })
     }
 
-    /// Register the owning task scheduler that services `ApiRequest::Up` and
-    /// the `Wait` parked judgment. Without it, `Up` requests are rejected and
+    /// Register the owning task scheduler that services `ApiRequest::Start` and
+    /// the `Wait` parked judgment. Without it, `Start` requests are rejected and
     /// `Waiting` entries never settle a `Wait`. Can be called after the
     /// manager is wrapped in an `Arc`; ignored if already set.
     pub fn set_scheduler(&self, scheduler: std::sync::Weak<dyn ProcessScheduler>) {
@@ -2015,10 +2015,29 @@ impl NativeProcessManager {
                 match procs.get(&name) {
                     Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }) => {
                         drop(procs);
-                        match manager.start_not_started(&name).await {
-                            Ok(_) => ApiResponse::Ok,
-                            Err(e) => ApiResponse::Error {
-                                message: format!("failed to restart process '{}': {}", name, e),
+                        // A stopped process is brought back through the
+                        // scheduler so its `after`/`before` dependencies are
+                        // honoured like any other launch; the dep-blind
+                        // direct start remains only as a fallback for
+                        // managers without a registered scheduler.
+                        match manager.scheduler.get().and_then(std::sync::Weak::upgrade) {
+                            Some(scheduler) => {
+                                let outcome = scheduler.start(vec![name.clone()]).await;
+                                if outcome.scheduled.contains(&name)
+                                    || outcome.skipped.contains(&name)
+                                {
+                                    ApiResponse::Ok
+                                } else {
+                                    ApiResponse::Error {
+                                        message: format!("failed to restart process '{}'", name),
+                                    }
+                                }
+                            }
+                            None => match manager.start_not_started(&name).await {
+                                Ok(_) => ApiResponse::Ok,
+                                Err(e) => ApiResponse::Error {
+                                    message: format!("failed to restart process '{}': {}", name, e),
+                                },
                             },
                         }
                     }
@@ -2034,34 +2053,14 @@ impl NativeProcessManager {
                     None => Self::process_not_found(&name),
                 }
             }
-            Ok(ApiRequest::Start { name }) => {
-                let procs = manager.processes.read().await;
-                match procs.get(&name) {
-                    Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }) => {
-                        drop(procs);
-                        match manager.start_not_started(&name).await {
-                            Ok(_) => ApiResponse::Ok,
-                            Err(e) => ApiResponse::Error {
-                                message: format!("failed to start process '{}': {}", name, e),
-                            },
-                        }
-                    }
-                    Some(_) => ApiResponse::Error {
-                        message: format!(
-                            "process '{}' is already running; use restart instead",
-                            name
-                        ),
-                    },
-                    None => Self::process_not_found(&name),
-                }
-            }
-            Ok(ApiRequest::Up { names }) => {
+            Ok(ApiRequest::Start { names }) => {
                 match manager.scheduler.get().and_then(std::sync::Weak::upgrade) {
-                    Some(scheduler) => ApiResponse::Up {
-                        outcome: scheduler.up(names).await,
+                    Some(scheduler) => ApiResponse::Start {
+                        outcome: scheduler.start(names).await,
                     },
                     None => ApiResponse::Error {
-                        message: "this manager has no process scheduler to handle `up`".to_string(),
+                        message: "this manager has no process scheduler to handle `start`"
+                            .to_string(),
                     },
                 }
             }
@@ -2361,7 +2360,7 @@ impl NativeProcessManager {
     }
 
     /// One-shot request whose reply legitimately takes as long as the work it
-    /// triggers (the daemon answers `Up` only after the full task DAG and
+    /// triggers (the daemon answers `Start` only after the full task DAG and
     /// process launches complete): only the connect/send phase is bounded,
     /// the reply read is unbounded and callers race it against cancellation.
     pub async fn api_request_bounded_connect(
@@ -3401,15 +3400,15 @@ mod tests {
         assert_eq!(display_ports(&config), vec!["db:5432", "web:8080"]);
     }
 
-    /// Test scheduler with a canned parked judgment and `Up` outcome.
+    /// Test scheduler with a canned parked judgment and start outcome.
     struct StubScheduler {
         parked: std::sync::atomic::AtomicBool,
-        outcome: UpOutcome,
+        outcome: StartOutcome,
     }
 
     #[async_trait]
     impl ProcessScheduler for StubScheduler {
-        async fn up(&self, _names: Vec<String>) -> UpOutcome {
+        async fn start(&self, _names: Vec<String>) -> StartOutcome {
             self.outcome.clone()
         }
 
@@ -3418,7 +3417,7 @@ mod tests {
         }
     }
 
-    fn stub_scheduler(outcome: UpOutcome) -> Arc<StubScheduler> {
+    fn stub_scheduler(outcome: StartOutcome) -> Arc<StubScheduler> {
         Arc::new(StubScheduler {
             parked: std::sync::atomic::AtomicBool::new(false),
             outcome,
@@ -3431,7 +3430,7 @@ mod tests {
 
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
-        let stub = stub_scheduler(UpOutcome::default());
+        let stub = stub_scheduler(StartOutcome::default());
         let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
         manager.set_scheduler(Arc::downgrade(&scheduler));
 
@@ -3492,8 +3491,8 @@ mod tests {
 
     #[async_trait]
     impl ProcessScheduler for SignalingScheduler {
-        async fn up(&self, _names: Vec<String>) -> UpOutcome {
-            UpOutcome::default()
+        async fn start(&self, _names: Vec<String>) -> StartOutcome {
+            StartOutcome::default()
         }
 
         async fn dependency_parked(&self, _process_name: &str) -> bool {
@@ -3554,10 +3553,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn up_request_over_socket_uses_scheduler() {
+    async fn start_request_over_socket_uses_scheduler() {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
-        let outcome = UpOutcome {
+        let outcome = StartOutcome {
             scheduled: vec!["a".to_string()],
             skipped: vec!["b".to_string()],
             unknown: vec!["c".to_string()],
@@ -3570,7 +3569,7 @@ mod tests {
 
         let response = NativeProcessManager::api_request(
             &manager.api_socket_path(),
-            &ApiRequest::Up {
+            &ApiRequest::Start {
                 names: vec!["a".to_string()],
             },
         )
@@ -3578,20 +3577,20 @@ mod tests {
         .unwrap();
 
         match response {
-            ApiResponse::Up { outcome: got } => assert_eq!(got, outcome),
-            other => panic!("expected Up response, got {other:?}"),
+            ApiResponse::Start { outcome: got } => assert_eq!(got, outcome),
+            other => panic!("expected Start response, got {other:?}"),
         }
     }
 
     #[tokio::test]
-    async fn up_request_without_scheduler_errors() {
+    async fn start_request_without_scheduler_errors() {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
         manager.start_api_server().unwrap();
 
         let response = NativeProcessManager::api_request(
             &manager.api_socket_path(),
-            &ApiRequest::Up {
+            &ApiRequest::Start {
                 names: vec!["a".to_string()],
             },
         )

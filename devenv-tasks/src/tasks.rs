@@ -7,7 +7,7 @@ use crate::types::{
     TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
-use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase, UpOutcome};
+use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase, StartOutcome};
 use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{EdgeRef, Reversed};
@@ -639,7 +639,7 @@ impl Tasks {
     ///
     /// `names` are process names without the `devenv:processes:` prefix. An
     /// empty `names` is a no-op. Every requested name is classified into
-    /// exactly one [`UpOutcome`] bucket:
+    /// exactly one [`StartOutcome`] bucket:
     /// - `scheduled`: re-armed `Waiting` and handed to the dependency-driven
     ///   launch path;
     /// - `skipped`: already running, starting, or pending on a dependency —
@@ -656,13 +656,13 @@ impl Tasks {
     /// satisfied simply stays `Waiting` in the manager (visible in the TUI),
     /// rather than blocking the caller — so an attaching `devenv up` never
     /// hangs on a dependent it cannot complete.
-    pub async fn start_with_deps(&self, names: &[String]) -> UpOutcome {
+    pub async fn start_with_deps(&self, names: &[String]) -> StartOutcome {
         // Serialized: concurrent calls for the same stopped name would both
         // read the pre-re-arm phase and spawn duplicate dependency waiters
         // (see the field doc on `start_with_deps_lock`). The loop never
         // awaits long work — launches are detached — so the hold is short.
         let _serialize = self.start_with_deps_lock.lock().await;
-        let mut outcome = UpOutcome::default();
+        let mut outcome = StartOutcome::default();
 
         for name in names {
             let task_name = format!("{PROCESS_TASK_PREFIX}{name}");
@@ -741,7 +741,7 @@ impl Tasks {
 
             // Detached: wait for deps and launch in the background so a
             // never-satisfiable dependency leaves this process `Waiting` instead
-            // of blocking the `Up` reply. Mirrors how the cold-start path spawns
+            // of blocking the `Start` reply. Mirrors how the cold-start path spawns
             // per-process dependency checkers.
             tokio::spawn(async move {
                 let (dep_cancelled, dep_failed) =
@@ -1494,14 +1494,14 @@ impl Tasks {
     }
 }
 
-/// The owner-side hooks the process manager delegates to: `ApiRequest::Up`
+/// The owner-side hooks the process manager delegates to: `ApiRequest::Start`
 /// scheduling and the `Wait` parked judgment, both of which need the
 /// dependency graph that lives here. Registered via
 /// `NativeProcessManager::set_scheduler` (weakly, so the manager never keeps
 /// the scheduler alive).
 #[async_trait::async_trait]
 impl devenv_processes::ProcessScheduler for Tasks {
-    async fn up(&self, names: Vec<String>) -> UpOutcome {
+    async fn start(&self, names: Vec<String>) -> StartOutcome {
         self.start_with_deps(&names).await
     }
 

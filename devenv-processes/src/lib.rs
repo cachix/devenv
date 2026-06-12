@@ -70,7 +70,7 @@ pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use manager::{
     ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, NativeProcessManager,
     PortInfo, ProcessCommand, ProcessInfo, ProcessPhase, ProcessResources, ProcessScheduler,
-    ProcessState, UpOutcome,
+    ProcessState, StartOutcome,
 };
 pub use pid::{
     ManagerMode, PidStatus, check_pid_file, manager_mode_file, read_manager_mode, read_pid,
