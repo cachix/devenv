@@ -105,7 +105,6 @@ If you would like to integrate with the LLVM compiler infrastructure:
 { pkgs, config, lib, ... }:
 let
   inherit (lib) getExe;
-  getCommand = package: builtins.baseNameOf (getExe package);
   cfg = config.languages.cplusplus.conan.config;
   c = "'c': '${getExe cfg.stdenv.cc}'";
   cpp = "'cpp': '${builtins.dirOf (getExe cfg.stdenv.cc)}/clang++'";
@@ -145,7 +144,6 @@ Or even:
 { pkgs, config, lib, ... }:
 let
   inherit (lib) getExe;
-  getCommand = package: builtins.baseNameOf (getExe package);
   cfg = config.languages.cplusplus.conan.config;
   c = "'c': '${getExe cfg.stdenv.cc}'";
   cpp = "'cpp': '${builtins.dirOf (getExe cfg.stdenv.cc)}/clang++'";
