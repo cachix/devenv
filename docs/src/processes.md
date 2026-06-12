@@ -59,7 +59,7 @@ $ devenv processes stop api
 $ devenv up api           # attach and bring api back up
 ```
 
-A bare `devenv up` starts only processes with `start.enable = true`; explicitly named processes always start, even when their `start.enable` is `false`. The same applies to `devenv processes start <name>`, which uses the same dependency-aware launch path: if a dependency is not running, the process waits for it instead of starting without it.
+A bare `devenv up` starts only processes with `start.enable = true`; explicitly named processes always start, even when their `start.enable` is `false`. The same applies to `devenv processes start <name>`, which uses the same dependency-aware launch path: if a dependency is not running, the process waits for it instead of starting without it. When no process manager is running yet, `devenv processes start <name>` starts one in the background launching only the named process, like `devenv up -d <name>`.
 
 The attached session is a non-interactive live view: stdin is not connected to the processes, and Ctrl-C detaches while leaving them running (the TUI restart/stop keybindings still work).
 

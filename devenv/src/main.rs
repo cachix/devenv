@@ -951,8 +951,30 @@ async fn dispatch_command(
             ProcessesCommand::Start {
                 name: Some(name), ..
             } => {
-                devenv.processes_start(&name).await?;
-                Ok(CommandResult::Done)
+                if devenv.native_manager_running().await {
+                    devenv.processes_start(&name).await?;
+                    Ok(CommandResult::Done)
+                } else {
+                    // No manager yet: cold-start one in the background
+                    // launching only this process, exactly like
+                    // `devenv up -d <name>`. The manager registers the full
+                    // process set, so later starts schedule into it.
+                    let options = devenv::ProcessOptions {
+                        detach: true,
+                        log_to_file: true,
+                        strict_ports: config_strict_ports,
+                        command_rx,
+                        daemon: true,
+                    };
+                    run_up(
+                        devenv,
+                        vec![name],
+                        devenv::tasks::RunMode::Before,
+                        options,
+                        verbosity,
+                    )
+                    .await
+                }
             }
             ProcessesCommand::Attach {} => {
                 devenv.attach(command_rx).await?;

@@ -146,4 +146,25 @@ grep -q "No processes running" attach_out.txt || {
   exit 1
 }
 
+# `devenv processes start <name>` with no manager running cold-starts one in
+# the background launching only the named process; the manager still owns the
+# full process set (beta is registered, visible as not started), so a
+# follow-up named start schedules into it over the socket instead of erroring
+# or spawning a second manager.
+devenv processes start alpha
+wait_for_manager || { echo "FAIL: processes start did not cold-start a manager"; exit 1; }
+wait_for_port "$PORT_A" || { echo "FAIL: alpha not started by cold processes start"; devenv processes down || true; exit 1; }
+if reachable "$PORT_B"; then
+  echo "FAIL: beta started by cold 'processes start alpha'"
+  devenv processes down || true
+  exit 1
+fi
+devenv processes list | grep -q beta || { echo "FAIL: beta missing from list after cold subset start"; devenv processes down || true; exit 1; }
+devenv processes start beta
+devenv processes wait
+wait_for_port "$PORT_B" || { echo "FAIL: beta not started over the socket"; devenv processes down || true; exit 1; }
+devenv processes down
+wait_for_port_free "$PORT_A" || { echo "FAIL: alpha still bound after final down"; exit 1; }
+wait_for_port_free "$PORT_B" || { echo "FAIL: beta still bound after final down"; exit 1; }
+
 echo "All process-up-attach tests passed!"

@@ -655,6 +655,17 @@ impl Devenv {
             .unwrap_or_else(|_| self.devenv_dotfile.join("native-manager.pid"))
     }
 
+    /// Whether a native process manager is currently running for this project.
+    /// Used to decide between talking to it over the socket and cold-starting
+    /// one; callers must tolerate the manager appearing or vanishing between
+    /// this check and the follow-up action (both paths fail or attach safely).
+    pub async fn native_manager_running(&self) -> bool {
+        matches!(
+            processes::check_pid_file(&self.native_manager_pid_file()).await,
+            Ok(processes::PidStatus::Running(_))
+        )
+    }
+
     /// Names of processes that `devenv up` should start: process tasks whose
     /// `start.enable` is true; `false` processes are excluded.
     fn up_enabled_process_names(task_configs: &[tasks::TaskConfig]) -> Vec<String> {
@@ -676,6 +687,15 @@ impl Devenv {
     /// the up-enabled default set is used and `start.enable = false`
     /// processes are excluded (cold start still registers them so they
     /// appear as not started).
+    ///
+    /// With names, the launch set is the named processes plus the
+    /// configured-enabled processes in their dependency closure (a cold
+    /// `devenv up api` still brings up the database `api` needs), and every
+    /// other process is force-disabled: it stays registered in the manager —
+    /// the manager always owns the full process set — but is parked as not
+    /// started, so a later `devenv up <other>` or `devenv processes start
+    /// <other>` schedules into the same manager instead of being rejected as
+    /// unknown.
     /// Bails when a requested name is not in the configuration.
     fn resolve_launch_processes(
         task_configs: &mut [tasks::TaskConfig],
@@ -704,17 +724,52 @@ impl Devenv {
             );
         }
 
-        for t in task_configs.iter_mut() {
-            let requested_here = t
-                .name
-                .strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)
-                .is_some_and(|name| requested.iter().any(|r| r == name));
-            if requested_here {
-                // Default `StartConfig.enable` is true and
-                // `build_process_config` falls back to the default config, so
-                // both the `Some(false)` and `None` shapes end up enabled.
-                t.process.get_or_insert_with(Default::default).start.enable = true;
+        // Dependency closure of the requested processes, traversing `after`
+        // edges and reversed `before` edges through tasks of every type
+        // (a process may depend on a oneshot that depends on a process).
+        // `@kind` suffixes are stripped: the closure asks "which tasks does
+        // this launch need", not how readiness is judged.
+        let dep_name = |dep: &str| -> String {
+            dep.rsplit_once('@')
+                .map(|(name, _)| name)
+                .unwrap_or(dep)
+                .to_string()
+        };
+        let mut edges: HashMap<String, Vec<String>> = HashMap::new();
+        for t in task_configs.iter() {
+            edges
+                .entry(t.name.clone())
+                .or_default()
+                .extend(t.after.iter().map(|d| dep_name(d)));
+            for b in &t.before {
+                edges.entry(dep_name(b)).or_default().push(t.name.clone());
             }
+        }
+        let mut needed: HashSet<String> = HashSet::new();
+        let mut queue: Vec<String> = requested
+            .iter()
+            .map(|p| format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, p))
+            .collect();
+        while let Some(name) = queue.pop() {
+            if !needed.insert(name.clone()) {
+                continue;
+            }
+            if let Some(deps) = edges.get(&name) {
+                queue.extend(deps.iter().cloned());
+            }
+        }
+
+        for t in task_configs.iter_mut() {
+            let Some(name) = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX) else {
+                continue;
+            };
+            let requested_here = requested.iter().any(|r| r == name);
+            // Default `StartConfig.enable` is true and `build_process_config`
+            // falls back to the default config, so the `None` shape counts as
+            // enabled.
+            let configured_enabled = t.process.as_ref().is_none_or(|p| p.start.enable);
+            let enable = requested_here || (needed.contains(&t.name) && configured_enabled);
+            t.process.get_or_insert_with(Default::default).start.enable = enable;
         }
 
         Ok(requested.to_vec())
@@ -1927,18 +1982,16 @@ impl Devenv {
             // explicitly named ones); the resolved set feeds the cold start,
             // the daemon config, and the attach paths alike.
             let launch_names = Self::resolve_launch_processes(&mut task_configs, &processes)?;
-            let roots: Vec<String> = if processes.is_empty() {
-                task_configs
-                    .iter()
-                    .filter(|t| t.name.starts_with(devenv_tasks::PROCESS_TASK_PREFIX))
-                    .map(|t| t.name.clone())
-                    .collect()
-            } else {
-                processes
-                    .iter()
-                    .map(|p| format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, p))
-                    .collect()
-            };
+            // The manager always owns the full process set: every process
+            // task is a root, so the cold start and the daemon register them
+            // all (visible as not started) and can schedule any of them later
+            // over the socket. Which ones launch now is decided by the
+            // `start.enable` flags resolved above.
+            let roots: Vec<String> = task_configs
+                .iter()
+                .filter(|t| t.name.starts_with(devenv_tasks::PROCESS_TASK_PREFIX))
+                .map(|t| t.name.clone())
+                .collect();
 
             if roots.is_empty() {
                 bail!("No process tasks found to run");
@@ -2264,9 +2317,7 @@ impl Devenv {
                 self.devenv_dotfile.clone(),
             ))
         } else {
-            bail!(
-                "No process manager is running. Start processes first with `devenv processes start` or `devenv up -d`"
-            )
+            bail!("No process manager is running. Start processes first with `devenv up -d`")
         };
 
         manager.stop().await
@@ -2298,9 +2349,7 @@ impl Devenv {
         } else if self.processes_pid().exists() {
             bail!("'devenv processes wait' is not yet supported for the process-compose backend")
         } else {
-            bail!(
-                "No process manager is running. Start processes first with `devenv processes start` or `devenv up -d`"
-            )
+            bail!("No process manager is running. Start processes first with `devenv up -d`")
         }
     }
 
@@ -2370,9 +2419,7 @@ impl Devenv {
         } else if self.processes_pid().exists() {
             bail!("This subcommand is only supported with the native process manager")
         } else {
-            bail!(
-                "No process manager is running. Start processes first with `devenv processes start` or `devenv up -d`"
-            )
+            bail!("No process manager is running. Start processes first with `devenv up -d`")
         }
     }
 
@@ -3117,8 +3164,46 @@ mod tests {
         // missing process config (None) which is materialized as enabled.
         assert!(configs[1].process.as_ref().unwrap().start.enable);
         assert!(configs[2].process.as_ref().unwrap().start.enable);
-        // Unrequested processes are untouched.
-        assert!(configs[0].process.as_ref().unwrap().start.enable);
+        // Unrequested processes outside the dependency closure are parked:
+        // registered (they stay roots) but not launched.
+        assert!(!configs[0].process.as_ref().unwrap().start.enable);
+    }
+
+    #[test]
+    fn resolve_launch_processes_enables_dependency_closure() {
+        // beta -> migrate (oneshot) -> gamma(enabled); beta -> delta(disabled);
+        // epsilon declares itself `before` beta. alpha is unrelated.
+        let mut configs = vec![
+            process_task("alpha", true),
+            process_task("beta", true),
+            process_task("gamma", true),
+            process_task("delta", false),
+            process_task("epsilon", true),
+            tasks::TaskConfig {
+                name: "devenv:migrate".to_string(),
+                after: vec![format!("{}gamma@ready", devenv_tasks::PROCESS_TASK_PREFIX)],
+                ..Default::default()
+            },
+        ];
+        configs[1].after = vec![
+            "devenv:migrate".to_string(),
+            format!("{}delta@started", devenv_tasks::PROCESS_TASK_PREFIX),
+        ];
+        configs[4].before = vec![format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX)];
+
+        Devenv::resolve_launch_processes(&mut configs, &["beta".to_string()]).unwrap();
+
+        let enable = |i: usize| configs[i].process.as_ref().unwrap().start.enable;
+        // gamma is reached through the oneshot and keeps its configured
+        // enable; epsilon is a reversed `before` dependency.
+        assert!(enable(1), "requested beta launches");
+        assert!(enable(2), "gamma launches via the oneshot dependency");
+        assert!(enable(4), "epsilon launches via its before edge");
+        // delta is in the closure but configured disabled: stays parked
+        // (beta waits on it, matching the attach semantics).
+        assert!(!enable(3), "disabled dependency stays parked");
+        // alpha is enabled in config but unrelated: parked.
+        assert!(!enable(0), "unrelated process stays parked");
     }
 
     #[test]
