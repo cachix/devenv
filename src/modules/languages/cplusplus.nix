@@ -106,7 +106,11 @@ in
       languages.cplusplus.conan.config.profiles.platformToolRequires = lib.mkDefault {
         cmake = cfg.cmake.package.version;
       };
-      languages.cplusplus.conan.config.defaults.enable = lib.mkDefault false;
+      languages.cplusplus.conan.config.devShell.tools = lib.mkDefault {
+        conan = null;
+        cmake = null;
+        "${cfg.package.cc.pname}" = null;
+      };
       languages.cplusplus.package = lib.mkDefault cfg.conan.config.stdenv.cc;
     })
 
