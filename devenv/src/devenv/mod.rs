@@ -79,6 +79,10 @@ pub struct DevenvOptions {
     pub shell_cwd: Option<PathBuf>,
     pub shutdown: Arc<tokio_shutdown::Shutdown>,
     pub is_testing: bool,
+    /// Whether a `devenv.nix` project file is required. Commands that operate
+    /// outside of a project (e.g. `gc`) set this to `false` so they can run
+    /// from any directory.
+    pub require_project_file: bool,
 }
 
 impl DevenvOptions {
@@ -101,6 +105,7 @@ impl DevenvOptions {
             shell_cwd: None,
             shutdown,
             is_testing: false,
+            require_project_file: true,
         }
     }
 
@@ -360,7 +365,8 @@ impl Devenv {
         // Create port allocator shared with backend for holding port reservations
         let port_allocator = Arc::new(PortAllocator::new());
 
-        if options.input_overrides.nix_module_options.is_empty()
+        if options.require_project_file
+            && options.input_overrides.nix_module_options.is_empty()
             && !options.from_external
             && !devenv_root.join("devenv.nix").exists()
         {

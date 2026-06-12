@@ -376,6 +376,8 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
 
     // Per-command backend flags.
     let is_testing = matches!(&command, Commands::Test { .. });
+    // `gc` operates on the global devenv store and doesn't need a project.
+    let require_project_file = !matches!(&command, Commands::Gc { .. });
     let test_dirs = TestDirs::setup(&command)?;
     let use_pty = shell_settings.reload
         && matches!(&command, Commands::Shell { cmd: None, .. })
@@ -404,6 +406,7 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         shell_cwd,
         shutdown,
         is_testing,
+        require_project_file,
     };
 
     let backend = BackendOptions {

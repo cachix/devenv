@@ -21,6 +21,11 @@ let
   # Check if any individual hooks are enabled
   anyHookEnabled = builtins.any (hook: hook.enable or false) (lib.attrValues (cfg.hooks or { }));
 
+  # Absolute config path (quoted for shell use): git runs hooks from the
+  # repository toplevel, which differs from the devenv root when devenv
+  # lives in a subdirectory.
+  configArg = ''"$DEVENV_ROOT/${cfg.configPath}"'';
+
   # A default module stub for when git-hooks is not available.
   # Uses freeformType to accept any attributes (tools, hooks, etc.) without type errors.
   defaultModule = lib.types.submoduleWith {
@@ -138,7 +143,6 @@ in
             let
               executable = lib.getExe package;
               git = lib.getExe cfg.gitPackage;
-              configPath = cfg.configPath;
               installStages = cfg.installStages;
             in
             ''
@@ -147,15 +151,10 @@ in
                 exit 0
               fi
 
-              # Use an absolute config path: git runs hooks from the repository
-              # toplevel, which differs from the devenv root when devenv lives
-              # in a subdirectory.
-              config="$DEVENV_ROOT/${configPath}"
-
               # Install hooks for configured stages
               if [ -z "${lib.concatStringsSep " " installStages}" ]; then
                 # Default: install pre-commit hook
-                ${executable} install -c "$config"
+                ${executable} install -c ${configArg}
               else
                 for stage in ${lib.concatStringsSep " " installStages}; do
                   case $stage in
@@ -163,10 +162,10 @@ in
                       # Skip manual stage - it's not a git hook
                       ;;
                     commit|merge-commit|push)
-                      ${executable} install -c "$config" -t "pre-$stage"
+                      ${executable} install -c ${configArg} -t "pre-$stage"
                       ;;
                     *)
-                      ${executable} install -c "$config" -t "$stage"
+                      ${executable} install -c ${configArg} -t "$stage"
                       ;;
                   esac
                 done
@@ -176,7 +175,7 @@ in
           before = [ "devenv:enterShell" ];
         };
         "devenv:git-hooks:run" = {
-          exec = ''${lib.getExe package} run -a -c "$DEVENV_ROOT/${cfg.configPath}"'';
+          exec = "${lib.getExe package} run -a -c ${configArg}";
           after = [ "devenv:git-hooks:install" ];
           before = [ "devenv:enterTest" ];
         };
