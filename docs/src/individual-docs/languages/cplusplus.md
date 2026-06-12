@@ -64,7 +64,7 @@ There correspond the following conan-flake options:
 
 You can check [the list of available options](/reference/options.md#languagescplusplusconanenable). The [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option, however, maps the whole of the options available in the [conan-flake](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
 
-Config the `devenv.nix` file accordingly. For example:
+Config the `devenv.nix` file accordingly. For example, the above is equivalent to the following:
 
 ```nix
 languages.cplusplus = {
