@@ -1,12 +1,17 @@
-{ pkgs, config, ... }:
+{ pkgs, config, lib, ... }:
 let
-  getCommand = package: builtins.baseNameOf (pkgs.lib.getExe package);
+  inherit (lib) getExe;
+  getCommand = package: builtins.baseNameOf (getExe package);
+  cfg = config.languages.cplusplus.conan.config;
+  c = "'c': '${getExe cfg.stdenv.cc}'";
+  cpp = "'cpp': '${builtins.dirOf (getExe cfg.stdenv.cc)}/clang++'";
 in
 {
   stdenv = pkgs.overrideCC
     (
       pkgs.llvmPackages.libcxxStdenv.override {
         targetPlatform.useLLVM = true;
+        targetPlatform.linker = "lld";
       }
     )
     pkgs.llvmPackages.clangUseLLVM;
@@ -17,8 +22,14 @@ in
       enable = true;
       install.enable = true;
       config = {
-        # By default: compiler.libcxx=libstdc++11, so undo it:
-        compilerLibCxx = null;
+        profiles = {
+          settings.build_type = "Release";
+          conf = {
+            "tools.build:compiler_executables" = "{${c}, ${cpp}}";
+          };
+        };
+        # By default: compiler.libcxx=libstdc++11, so set it:
+        compilerLibCxx = "libc++";
       };
     };
   };
