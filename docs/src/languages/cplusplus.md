@@ -46,18 +46,19 @@ There correspond the following conan-flake options:
 
 ```nix
 {
-  buildType = "Debug";
   compilerCppStd = "14";
 
-  profiles.platformToolRequires = {
-    cmake = pkgs.cmake.version;
+  profiles = {
+    settings.build_type = "Debug";
+
+    platformToolRequires = {
+      cmake = pkgs.cmake.version;
+    };
   };
 
   devShell = {
     # Programs you want to make available in the shell:
-    tools = {
-      inherit (pkgs) cmake;
-    };
+    tools = { inherit (pkgs) cmake; };
   };
 }
 ```
@@ -73,7 +74,7 @@ languages.cplusplus = {
     enable = true;
     install.enable = true;
     config = {
-      buildType = "Debug";
+      profiles.settings.build_type = "Debug";
       compilerCppStd = "14";
     };
   };
@@ -83,7 +84,7 @@ languages.cplusplus = {
 By default, when Conan is enabled:
 
 - The default C++ package is set to `config.stdenv.cc`
-- Conan is configured to use the same CMake available in the developmemnt shell; it's not necessary to set the `languages.cplusplus.conan.config.profiles.platformToolRequires.cmake` and `languages.cplusplus.conan.config.devShell.tools` options explicitly
+- Conan is configured to use the same CMake available in the developmemnt shell; as can be seen from the above example, the devenv integration automatically takes care of the CMake part by default, and the `profiles.platformToolRequires` and `devShell.tools` options are not required to be set explicitly in the `languages.cplusplus.conan.config` namespace
 
 ### In Action:
 
@@ -102,8 +103,14 @@ conan profile show # This would show the configured profile.
 If you would like to integrate with the LLVM compiler infrastructure:
 
 ```nix
-{ pkgs, ... }:
-
+{ pkgs, config, lib, ... }:
+let
+  inherit (lib) getExe;
+  getCommand = package: builtins.baseNameOf (getExe package);
+  cfg = config.languages.cplusplus.conan.config;
+  c = "'c': '${getExe cfg.stdenv.cc}'";
+  cpp = "'cpp': '${builtins.dirOf (getExe cfg.stdenv.cc)}/clang++'";
+in
 {
   languages.cplusplus = {
     enable = true;
@@ -111,15 +118,22 @@ If you would like to integrate with the LLVM compiler infrastructure:
       enable = true;
       install.enable = true;
       config = {
+        profiles = {
+          settings.build_type = "Release";
+          conf = {
+            "tools.build:compiler_executables" = "{${c}, ${cpp}}";
+          };
+        };
         stdenv = pkgs.overrideCC
           (
             pkgs.llvmPackages.libcxxStdenv.override {
               targetPlatform.useLLVM = true;
+              targetPlatform.linker = "lld";
             }
           )
           pkgs.llvmPackages.clangUseLLVM;
-        # By default: compiler.libcxx=libstdc++11, so undo it:
-        compilerLibCxx = null;
+        # By default: compiler.libcxx=libstdc++11, so set it:
+        compilerLibCxx = "libc++";
       };
     };
   };
@@ -129,13 +143,20 @@ If you would like to integrate with the LLVM compiler infrastructure:
 Or even:
 
 ```nix
-{ pkgs, ... }:
-
+{ pkgs, config, lib, ... }:
+let
+  inherit (lib) getExe;
+  getCommand = package: builtins.baseNameOf (getExe package);
+  cfg = config.languages.cplusplus.conan.config;
+  c = "'c': '${getExe cfg.stdenv.cc}'";
+  cpp = "'cpp': '${builtins.dirOf (getExe cfg.stdenv.cc)}/clang++'";
+in
 {
   stdenv = pkgs.overrideCC
     (
       pkgs.llvmPackages.libcxxStdenv.override {
         targetPlatform.useLLVM = true;
+        targetPlatform.linker = "lld";
       }
     )
     pkgs.llvmPackages.clangUseLLVM;
@@ -146,8 +167,14 @@ Or even:
       enable = true;
       install.enable = true;
       config = {
-        # By default: compiler.libcxx=libstdc++11, so undo it:
-        compilerLibCxx = null;
+        profiles = {
+          settings.build_type = "Release";
+          conf = {
+            "tools.build:compiler_executables" = "{${c}, ${cpp}}";
+          };
+        };
+        # By default: compiler.libcxx=libstdc++11, so set it:
+        compilerLibCxx = "libc++";
       };
     };
   };
@@ -183,7 +210,7 @@ With [local-recipe-index](https://docs.conan.io/2/tutorial/conan_repositories/se
       install.enable = true;
 
       config = {
-        buildType = "Release";
+        profiles.settings.build_type = "Release";
         compilerCppStd = "17";
 
         remotes.local = {
