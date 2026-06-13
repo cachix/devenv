@@ -1,0 +1,5 @@
+# Conan
+.conan2
+.conanrc
+/conan-toolchain/config/
+/devenv-toolchain/config/

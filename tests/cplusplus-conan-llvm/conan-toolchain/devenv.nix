@@ -2,6 +2,7 @@
 let
   inherit (lib) getExe;
   getCommand = package: builtins.baseNameOf (getExe package);
+  cfg = config.languages.cplusplus;
 in
 {
   languages.cplusplus = {
@@ -21,19 +22,28 @@ in
             }
           )
           pkgs.llvmPackages.clangUseLLVM;
+        remotes.local = {
+          url = "./repo";
+          local = true;
+          allowedPackages = [ "hello-world/0.0.1.cci.20260428" ];
+        };
+        offline = true;
       };
     };
   };
   enterTest = ''
-    ${getCommand config.languages.cplusplus.package} --version
-    ${getCommand config.languages.cplusplus.package} --version \
+    ${getCommand cfg.package} --version \
       | grep clang
-    ${getCommand config.languages.cplusplus.cmake.package} --version
-    ${getCommand config.languages.cplusplus.lsp.package} --version \
-      | grep ${pkgs.lib.escapeShellArg config.languages.cplusplus.lsp.package.version}
-    ${getCommand config.languages.cplusplus.conan.package} --version
-    echo "enable:"${pkgs.lib.escapeShellArg config.languages.cplusplus.tools.enable}":" | grep "enable:1:"
-    ${getCommand config.languages.cplusplus.conan.package} profile show \
-      | grep "cmake/"${pkgs.lib.escapeShellArg config.languages.cplusplus.cmake.package.version}
+    ${getCommand cfg.cmake.package} --version
+    ${getCommand cfg.conan.package} --version
+
+    # Standalone command line tools must be enabled by default for clang (and, a fortiori, for LLVM toolchains):
+    echo "enable:"${pkgs.lib.escapeShellArg cfg.tools.enable}":" | grep "enable:1:"
+
+    ${getCommand cfg.conan.package} profile show \
+      | grep "cmake/"${pkgs.lib.escapeShellArg cfg.cmake.package.version}
+
+    ! ${getCommand cfg.conan.package} create . --build=missing 2>&1 \
+      | grep -F "_GLIBCXX_USE_CXX11_ABI 1"
   '';
 }
