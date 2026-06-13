@@ -2,6 +2,8 @@
 
 let
   cfg = config.devcontainer;
+  settingsFormatJSON = pkgs.formats.json { };
+  file = settingsFormatJSON.generate "devcontainer.json" cfg.settings;
 in
 {
   options.devcontainer = {
@@ -9,7 +11,7 @@ in
 
     settings = lib.mkOption {
       type = lib.types.submodule {
-        freeformType = (pkgs.formats.json { }).type;
+        freeformType = settingsFormatJSON.type;
 
         options.image = lib.mkOption {
           type = lib.types.str;
@@ -53,6 +55,9 @@ in
   };
 
   config = lib.mkIf config.devcontainer.enable {
-    files.".devcontainer.json".json = cfg.settings;
+    enterShell = ''
+      mkdir -p ${config.env.DEVENV_ROOT}/.devcontainer
+      cat ${file} > ${config.env.DEVENV_ROOT}/.devcontainer/devcontainer.json
+    '';
   };
 }
