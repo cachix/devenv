@@ -45,10 +45,9 @@ There correspond the following conan-flake options:
 
 ```nix
 {
-  compilerCppStd = "14";
-
   profiles = {
-    settings.build_type = "Debug";
+    settings.compiler."compiler.cppstd" = "14";
+    settings.rest.build_type = "Debug";
 
     platformToolRequires = {
       cmake = pkgs.cmake.version;
@@ -73,8 +72,10 @@ languages.cplusplus = {
     enable = true;
     install.enable = true;
     config = {
-      profiles.settings.build_type = "Debug";
-      compilerCppStd = "14";
+      profiles = {
+        settings.compiler."compiler.cppstd" = "14";
+        settings.rest.build_type = "Debug";
+      };
     };
   };
 };
@@ -103,12 +104,6 @@ If you would like to integrate with the LLVM compiler infrastructure:
 
 ```nix
 { pkgs, config, lib, ... }:
-let
-  inherit (lib) getExe;
-  cfg = config.languages.cplusplus.conan.config;
-  c = "'c': '${getExe cfg.stdenv.cc}'";
-  cpp = "'cpp': '${builtins.dirOf (getExe cfg.stdenv.cc)}/clang++'";
-in
 {
   languages.cplusplus = {
     enable = true;
@@ -117,10 +112,7 @@ in
       install.enable = true;
       config = {
         profiles = {
-          settings.build_type = "Release";
-          conf = {
-            "tools.build:compiler_executables" = "{${c}, ${cpp}}";
-          };
+          settings.rest.build_type = "Release";
         };
         stdenv = pkgs.overrideCC
           (
@@ -130,8 +122,6 @@ in
             }
           )
           pkgs.llvmPackages.clangUseLLVM;
-        # By default: compiler.libcxx=libstdc++11, so set it:
-        compilerLibCxx = "libc++";
       };
     };
   };
@@ -142,12 +132,6 @@ Or even:
 
 ```nix
 { pkgs, config, lib, ... }:
-let
-  inherit (lib) getExe;
-  cfg = config.languages.cplusplus.conan.config;
-  c = "'c': '${getExe cfg.stdenv.cc}'";
-  cpp = "'cpp': '${builtins.dirOf (getExe cfg.stdenv.cc)}/clang++'";
-in
 {
   stdenv = pkgs.overrideCC
     (
@@ -165,13 +149,8 @@ in
       install.enable = true;
       config = {
         profiles = {
-          settings.build_type = "Release";
-          conf = {
-            "tools.build:compiler_executables" = "{${c}, ${cpp}}";
-          };
+          settings.rest.build_type = "Release";
         };
-        # By default: compiler.libcxx=libstdc++11, so set it:
-        compilerLibCxx = "libc++";
       };
     };
   };
@@ -207,8 +186,10 @@ With [local-recipe-index](https://docs.conan.io/2/tutorial/conan_repositories/se
       install.enable = true;
 
       config = {
-        profiles.settings.build_type = "Release";
-        compilerCppStd = "17";
+        profiles = {
+          settings.compiler."compiler.cppstd" = "17";
+          settings.rest.build_type = "Release";
+        };
 
         remotes.local = {
           url = "./repo";
