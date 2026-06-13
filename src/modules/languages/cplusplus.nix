@@ -134,12 +134,17 @@ in
       };
 
       languages.cplusplus.package = lib.mkDefault cfg.conan.config.stdenv.cc;
+
+      #
+      env = cfg.conan.config.devShell.env;
+      packages = with cfg.conan.config.outputs.devShell; buildInputs ++ nativeBuildInputs;
     })
 
-    # The preferred way to consume conan-flake from another devShell is to add
-    # its outputing devShell to the inputsFrom option:
+    #
     (lib.mkIf (cfg.enable && cfg.conan.enable && cfg.conan.install.enable) {
-      inputsFrom = [ cfg.conan.config.outputs.devShell ];
+      enterShell = ''
+        ${cfg.conan.config.outputs.devShell.shellHook}
+      '';
     })
   ];
 }
