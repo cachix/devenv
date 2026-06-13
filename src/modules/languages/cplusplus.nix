@@ -101,20 +101,43 @@ in
 
     #
     (lib.mkIf (cfg.enable && cfg.conan.enable) {
-      languages.cplusplus.conan.config.stdenv = lib.mkDefault (if config.stdenv.hasCC then config.stdenv else pkgs.stdenv);
       languages.cplusplus.conan.config.package = lib.mkDefault cfg.conan.package;
+
+      # conan-flake uses its stdenv option to figure out the compiler
+      # infrastructure and feed Conan user settings and default profile from
+      # what it can get from there. So try to use the one devenv is configured
+      # with, _unless_ it lacks C/C++ compilaltion support - in which case fall
+      # back to the system's default stdenv:
+      languages.cplusplus.conan.config.stdenv = lib.mkDefault (
+        if config.stdenv.hasCC
+        then config.stdenv
+        else pkgs.stdenv
+      );
+
+      # Tell Conan to use the already installed system-wide CMake when resolving
+      # the dependencies on platform tools:
       languages.cplusplus.conan.config.profiles.platformToolRequires = lib.mkDefault {
         cmake = cfg.cmake.package.version;
       };
+
+      # By default, conan-flake makes these tools available in the devShell, but
+      # we're handling them here:
       languages.cplusplus.conan.config.devShell.tools = lib.mkDefault {
-        conan = null;
-        cmake = null;
-        "${cfg.package.cc.pname}" = null;
+        conan = null; # cf. languages.cplusplus.conan.package
+        cmake = null; # cf. languages.cplusplus.cmake.package
+
+        # By default, the "${cfg.conan.config.stdenv.cc.cc.pname}" entry is set to
+        # cfg.conan.config.stdenv.cc, that is, it would be equivalent to:
+        # "${cfg.conan.config.stdenv.cc.cc.pname}" = cfg.conan.config.stdenv.cc;
+        "${cfg.conan.config.stdenv.cc.cc.pname}" = null;
+        # We will handle this with languages.cplusplus.package, cf. below:
       };
+
       languages.cplusplus.package = lib.mkDefault cfg.conan.config.stdenv.cc;
     })
 
-    #
+    # The preferred way to consume conan-flake from another devShell is to add
+    # its outputing devShell to the inputsFrom option:
     (lib.mkIf (cfg.enable && cfg.conan.enable && cfg.conan.install.enable) {
       inputsFrom = [ cfg.conan.config.outputs.devShell ];
     })
