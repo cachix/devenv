@@ -1,6 +1,6 @@
 ## Getting Started
 
-The easiest way to get started with C++ is to simply enable it:
+To get started with C++ in devenv, you can enable it in the `languages.cplusplus` namespace:
 
 ```nix
 languages.cplusplus = {
@@ -10,8 +10,8 @@ languages.cplusplus = {
 
 This will automatically:
 
-- Use `clang` as the default C++ package
-- Install it along with CMake and other tools
+- Use `clang` as the default C++ package.
+- Install it along with CMake and other tools.
 
 Alternatively, you can manually specify packages:
 
@@ -63,7 +63,7 @@ There correspond the following conan-flake options:
 
 You can check [the list of available options](/reference/options.md#languagescplusplusconanenable). The [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option, however, maps the whole of the options available in the [conan-flake](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
 
-Config the `devenv.nix` file accordingly. For example, the above is equivalent to the following:
+Config the `devenv.nix` file accordingly. For example, the above is actually equivalent to the following:
 
 ```nix
 languages.cplusplus = {
@@ -83,8 +83,8 @@ languages.cplusplus = {
 
 By default, when Conan is enabled:
 
-- The default C++ package is set to `config.stdenv.cc`
-- Conan is configured to use the same CMake available in the developmemnt shell; as can be seen from the above example, the devenv integration automatically takes care of the CMake part by default, and the `profiles.platformToolRequires` and `devShell.tools` options are not required to be set explicitly in the `languages.cplusplus.conan.config` namespace
+- The default C++ package is set to `config.stdenv.cc`.
+- Conan is configured to use the default CMake package, already available in the developmemnt shell; as can be seen from the above example, the devenv integration automatically takes care of the CMake part by default, and the `profiles.platformToolRequires` and `devShell.tools` options are not required to be set explicitly.
 
 ### In Action:
 
@@ -159,7 +159,7 @@ Or even:
 
 In this second use case:
 
-- By default, conan-flake is configured using the same stdenv as devenv's (that is, `config.stdenv`)
+- By default, conan-flake is configured using the same stdenv as devenv's (that is, `config.stdenv`).
 
 ### In Action:
 
@@ -206,10 +206,10 @@ With [local-recipe-index](https://docs.conan.io/2/tutorial/conan_repositories/se
 }
 ```
 
-The options in the `languages.cplusplus.conan.config` namespace:
+The options:
 
-- `remotes.local.url`: is taken as a relative path to the root of the configuration
-- `offline`: enable only local remotes (that is, only of local-recipe-index type)
+- `remotes.local.url`: is taken as a relative path to the root of the configuration.
+- `offline`: enable only local remotes (that is, only of local-recipe-index type).
 
 ### In Action:
 
