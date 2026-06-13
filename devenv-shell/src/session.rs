@@ -8,6 +8,7 @@ use crate::escape_state::{
     EscapeState, cleanup_forwarded_modes as escape_state_cleanup,
     process_escape_events as escape_state_process,
 };
+use crate::passthrough::PassthroughFilter;
 use crate::protocol::{ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
@@ -1011,6 +1012,18 @@ impl ShellSession {
         let mut esc_events = Vec::new();
         let mut vt_input = Vec::new();
 
+        // On the alternate screen, a full-screen app's output is forwarded
+        // straight to the real terminal (rewritten to protect the status row)
+        // instead of re-rendering every changed row through the VT. The app
+        // already scrolls and repaints minimally; re-deriving that frame from
+        // the VT each time is what made nested full-screen TUIs lag.
+        let mut passthrough_filter = PassthroughFilter::new();
+        // Whether the reserved scroll region is currently asserted on the real
+        // terminal for the active alt-screen passthrough excursion.
+        let mut passthrough_region_set = false;
+        // Raw PTY bytes accumulated across a batch for passthrough forwarding.
+        let mut frame_bytes: Vec<u8> = Vec::new();
+
         loop {
             // Use select! to handle both events and spinner animation
             let event = if resize_pending {
@@ -1108,16 +1121,40 @@ impl ShellSession {
 
                 Event::PtyOutput(data) => {
                     let was_in_alt = esc.in_alternate_screen;
+                    // Already on the alternate screen at the batch start: forward
+                    // the app's bytes directly instead of re-rendering. The frame
+                    // that *enters* the alt screen (was_in_alt == false) still
+                    // goes through the mediated path so the transition is drawn.
+                    let passthrough = was_in_alt;
                     esc.reset_batch();
-                    escape_state_process(
-                        &mut scanner,
-                        &data,
-                        &mut esc,
-                        stdout,
-                        pty,
-                        self.pty_size(),
-                        &mut esc_events,
-                    )?;
+                    if passthrough {
+                        frame_bytes.clear();
+                        frame_bytes.extend_from_slice(&data);
+                    }
+                    // In passthrough, track escape state without forwarding mode
+                    // bytes (the raw stream we forward already carries them); the
+                    // host still answers the text-area query via the PTY.
+                    if passthrough {
+                        escape_state_process(
+                            &mut scanner,
+                            &data,
+                            &mut esc,
+                            &mut io::sink(),
+                            pty,
+                            self.pty_size(),
+                            &mut esc_events,
+                        )?;
+                    } else {
+                        escape_state_process(
+                            &mut scanner,
+                            &data,
+                            &mut esc,
+                            stdout,
+                            pty,
+                            self.pty_size(),
+                            &mut esc_events,
+                        )?;
+                    }
 
                     // Feed output into VT and track how many lines scrolled off
                     let filtered = vt_input_filter.filter(&data, &mut vt_input);
@@ -1128,20 +1165,36 @@ impl ShellSession {
                     while let Ok(event) = event_rx.try_recv() {
                         match event {
                             Event::PtyOutput(more) => {
-                                escape_state_process(
-                                    &mut scanner,
-                                    &more,
-                                    &mut esc,
-                                    stdout,
-                                    pty,
-                                    self.pty_size(),
-                                    &mut esc_events,
-                                )?;
+                                if passthrough {
+                                    frame_bytes.extend_from_slice(&more);
+                                    escape_state_process(
+                                        &mut scanner,
+                                        &more,
+                                        &mut esc,
+                                        &mut io::sink(),
+                                        pty,
+                                        self.pty_size(),
+                                        &mut esc_events,
+                                    )?;
+                                } else {
+                                    escape_state_process(
+                                        &mut scanner,
+                                        &more,
+                                        &mut esc,
+                                        stdout,
+                                        pty,
+                                        self.pty_size(),
+                                        &mut esc_events,
+                                    )?;
+                                }
                                 let filtered = vt_input_filter.filter(&more, &mut vt_input);
                                 let text = utf8_acc.accumulate(filtered);
                                 total_scroll += feed_vt(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
+                                if passthrough_region_set {
+                                    stdout.write_all(b"\x1b[r")?;
+                                }
                                 escape_state_cleanup(&esc, stdout)?;
                                 renderer.render_with_scroll(stdout, vt)?;
                                 return Ok(exit_code);
@@ -1162,62 +1215,114 @@ impl ShellSession {
                         }
                     }
 
-                    // Begin synchronized output so the terminal buffers
-                    // all writes atomically (mode 2026).
-                    queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-
-                    // Handle alternate screen transitions
-                    if was_in_alt != esc.in_alternate_screen {
-                        renderer.invalidate();
-                    }
-
-                    // Consume offset if needed: when cursor would land
-                    // off-screen or VT scrolled, push old TUI content
-                    // into native scrollback to make room.
-                    if renderer.row_offset > 0 {
+                    if passthrough {
+                        // Alternate-screen passthrough: forward the app's frame,
+                        // rewritten so its scrolling and addressing stay above
+                        // the reserved status row.
+                        let pt_t0 = std::time::Instant::now();
                         let content_rows = renderer.content_rows;
-                        let visible_rows = renderer.visible_rows();
-                        let cursor_row = vt.cursor_y().map(|r| r as usize).unwrap_or(0);
-                        let cursor_excess = (cursor_row + 1).saturating_sub(visible_rows);
-                        let need = total_scroll.max(cursor_excess);
+                        let mut out: Vec<u8> = Vec::new();
+                        if !passthrough_region_set {
+                            // Reserve the status row on the real terminal.
+                            out.extend_from_slice(format!("\x1b[1;{content_rows}r").as_bytes());
+                            passthrough_region_set = true;
+                        }
+                        passthrough_filter.rewrite(&frame_bytes, content_rows, &mut out);
+                        stdout.write_all(&out)?;
 
-                        let consumed = if esc.in_alternate_screen || esc.erase_display {
-                            // Alternate screen or explicit screen clear (CSI 2J):
-                            // consume the entire offset so the shell owns the
-                            // full visible area.
-                            renderer.row_offset as usize
-                        } else {
-                            need.min(renderer.row_offset as usize)
-                        };
-                        if consumed > 0 {
-                            Renderer::scroll_region(stdout, content_rows, consumed)?;
-                            renderer.row_offset -= consumed as u16;
+                        if !esc.in_alternate_screen {
+                            // The app left the alt screen mid-batch: release the
+                            // reserved region and hand back to the mediated
+                            // renderer, which redraws the restored primary screen
+                            // on the next batch.
+                            stdout.write_all(b"\x1b[r")?;
+                            passthrough_region_set = false;
+                            passthrough_filter.reset();
                             renderer.invalidate();
                         }
-                    }
 
-                    if esc.clear_scrollback {
-                        queue!(stdout, Clear(ClearType::Purge))?;
-                    }
-
-                    if esc.in_alternate_screen || renderer.row_offset > 0 {
-                        renderer.render(stdout, vt)?;
+                        // The app's forwarded frame already positioned the real
+                        // cursor; only touch it if we draw the status line, and
+                        // wrap that excursion in a synchronized update so the
+                        // cursor never visibly flashes onto the status row.
+                        if self.config.show_status_line {
+                            queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+                            self.status_line
+                                .draw(stdout, self.size.cols, self.size.rows)?;
+                            renderer.write_cursor(stdout, vt)?;
+                            queue!(stdout, terminal::EndSynchronizedUpdate)?;
+                        }
+                        stdout.flush()?;
+                        tracing::debug!(
+                            in_bytes = frame_bytes.len(),
+                            out_bytes = out.len(),
+                            elapsed_us = pt_t0.elapsed().as_micros() as u64,
+                            "alt passthrough frame"
+                        );
                     } else {
-                        renderer.render_with_scroll(stdout, vt)?;
-                    }
+                        if esc.in_alternate_screen {
+                            tracing::debug!("alt mediated render");
+                        }
+                        // Begin synchronized output so the terminal buffers
+                        // all writes atomically (mode 2026).
+                        queue!(stdout, terminal::BeginSynchronizedUpdate)?;
 
-                    if self.config.show_status_line {
-                        self.status_line
-                            .draw(stdout, self.size.cols, self.size.rows)?;
-                    }
-                    renderer.write_cursor(stdout, vt)?;
+                        // Handle alternate screen transitions
+                        if was_in_alt != esc.in_alternate_screen {
+                            renderer.invalidate();
+                        }
 
-                    // End synchronized output and flush.
-                    queue!(stdout, terminal::EndSynchronizedUpdate)?;
-                    stdout.flush()?;
+                        // Consume offset if needed: when cursor would land
+                        // off-screen or VT scrolled, push old TUI content
+                        // into native scrollback to make room.
+                        if renderer.row_offset > 0 {
+                            let content_rows = renderer.content_rows;
+                            let visible_rows = renderer.visible_rows();
+                            let cursor_row = vt.cursor_y().map(|r| r as usize).unwrap_or(0);
+                            let cursor_excess = (cursor_row + 1).saturating_sub(visible_rows);
+                            let need = total_scroll.max(cursor_excess);
+
+                            let consumed = if esc.in_alternate_screen || esc.erase_display {
+                                // Alternate screen or explicit screen clear (CSI 2J):
+                                // consume the entire offset so the shell owns the
+                                // full visible area.
+                                renderer.row_offset as usize
+                            } else {
+                                need.min(renderer.row_offset as usize)
+                            };
+                            if consumed > 0 {
+                                Renderer::scroll_region(stdout, content_rows, consumed)?;
+                                renderer.row_offset -= consumed as u16;
+                                renderer.invalidate();
+                            }
+                        }
+
+                        if esc.clear_scrollback {
+                            queue!(stdout, Clear(ClearType::Purge))?;
+                        }
+
+                        if esc.in_alternate_screen || renderer.row_offset > 0 {
+                            renderer.render(stdout, vt)?;
+                        } else {
+                            renderer.render_with_scroll(stdout, vt)?;
+                        }
+
+                        if self.config.show_status_line {
+                            self.status_line
+                                .draw(stdout, self.size.cols, self.size.rows)?;
+                        }
+                        renderer.write_cursor(stdout, vt)?;
+
+                        // End synchronized output and flush.
+                        queue!(stdout, terminal::EndSynchronizedUpdate)?;
+                        stdout.flush()?;
+                    }
                 }
 
                 Event::PtyExit(exit_code) => {
+                    if passthrough_region_set {
+                        stdout.write_all(b"\x1b[r")?;
+                    }
                     self.clear_status_row(stdout, esc.in_alternate_screen)?;
                     escape_state_cleanup(&esc, stdout)?;
                     stdout.flush()?;
@@ -1287,6 +1392,9 @@ impl ShellSession {
             }
         }
 
+        if passthrough_region_set {
+            stdout.write_all(b"\x1b[r")?;
+        }
         self.clear_status_row(stdout, esc.in_alternate_screen)?;
         escape_state_cleanup(&esc, stdout)?;
         stdout.flush()?;
