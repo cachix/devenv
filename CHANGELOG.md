@@ -48,7 +48,7 @@
 
 ### Improvements
 
-- Sped up `devenv shell` when running nested full-screen TUIs (e.g. neovim, claude-code), where rendering previously lagged on larger terminals. Each frame now reads and redraws only the rows that actually changed instead of the whole screen, so a single-line update no longer costs a full-screen repaint.
+- Sped up `devenv shell` when running nested full-screen TUIs (e.g. neovim, claude-code), where rendering previously lagged on larger terminals. Full-screen apps now have their output forwarded straight to the terminal (with the status line row kept protected) instead of being re-rendered frame by frame, and outside of full-screen apps each frame redraws only the rows that actually changed.
 - `DEVENV_HOME` now overrides where devenv stores all per-user data (GC roots, trust database, cached keys), not just the trust database.
 - `DEVENV_RUNTIME` can now be set to override where a project stores its sockets and other runtime files. To relocate runtime files for all projects at once, prefer `XDG_RUNTIME_DIR`, which keeps each project's directory separate.
 
