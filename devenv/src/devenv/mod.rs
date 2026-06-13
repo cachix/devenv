@@ -885,6 +885,8 @@ impl Devenv {
         let parent_id = parent.id();
         let mut procs: HashMap<String, Activity> = HashMap::new();
 
+        let detached = || message(ActivityLevel::Info, "detached, processes left running");
+
         fn upsert(
             procs: &mut HashMap<String, Activity>,
             parent_id: u64,
@@ -903,7 +905,7 @@ impl Devenv {
         loop {
             tokio::select! {
                 _ = token.cancelled() => {
-                    message(ActivityLevel::Info, "detached, processes left running");
+                    detached();
                     return Ok(());
                 }
                 cmd = async {
@@ -928,7 +930,7 @@ impl Devenv {
                             // stop/restart (5s SIGTERM grace + 15s port release).
                             tokio::select! {
                                 _ = token.cancelled() => {
-                                    message(ActivityLevel::Info, "detached, processes left running");
+                                    detached();
                                     return Ok(());
                                 }
                                 result = self.native_api_request_timeout(
@@ -983,7 +985,7 @@ impl Devenv {
                         // A Ctrl-C racing the stream teardown is a deliberate
                         // detach, not a daemon failure.
                         if token.is_cancelled() {
-                            message(ActivityLevel::Info, "detached, processes left running");
+                            detached();
                             return Ok(());
                         }
                         Self::bail_if_stale_daemon(&e.to_string())?;
@@ -992,7 +994,7 @@ impl Devenv {
                     }
                     None => {
                         if token.is_cancelled() {
-                            message(ActivityLevel::Info, "detached, processes left running");
+                            detached();
                             return Ok(());
                         }
                         message(

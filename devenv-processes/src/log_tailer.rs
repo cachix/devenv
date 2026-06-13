@@ -126,20 +126,14 @@ async fn tail_lines<F>(
 /// starts, so a missing file aborts instead of being awaited. Lifecycle is
 /// managed by aborting the returned handle.
 pub fn spawn_file_tailer(path: PathBuf, activity: ActivityRef, is_stderr: bool) -> JoinHandle<()> {
-    tokio::spawn(tail_lines(
-        path,
-        0,
-        false,
-        CancellationToken::new(),
-        move |line| {
-            if is_stderr {
-                activity.error(&line);
-            } else {
-                activity.log(&line);
-            }
-            true
-        },
-    ))
+    spawn_tail_to(path, 0, false, CancellationToken::new(), move |line| {
+        if is_stderr {
+            activity.error(&line);
+        } else {
+            activity.log(&line);
+        }
+        true
+    })
 }
 
 /// Tail from `start_offset` into a caller-supplied sink; used by attach

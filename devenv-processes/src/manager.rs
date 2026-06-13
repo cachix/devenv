@@ -311,6 +311,19 @@ enum ProcessEntry {
     Active(JobHandle),
 }
 
+impl ProcessEntry {
+    /// The process configuration backing this entry, regardless of phase.
+    fn config(&self) -> &ProcessConfig {
+        match self {
+            ProcessEntry::NotStarted { config, .. }
+            | ProcessEntry::Stopped { config, .. }
+            | ProcessEntry::Waiting { config, .. }
+            | ProcessEntry::Launching { config, .. } => config,
+            ProcessEntry::Active(handle) => &handle.resources.config,
+        }
+    }
+}
+
 /// Native process manager using watchexec-supervisor
 pub struct NativeProcessManager {
     processes: Arc<RwLock<HashMap<String, ProcessEntry>>>,
@@ -608,6 +621,19 @@ struct LaunchSetup {
     stdout_tailer: JoinHandle<()>,
     stderr_tailer: JoinHandle<()>,
     stderr_log: PathBuf,
+}
+
+impl LaunchSetup {
+    /// Tear down a launch that never settled to `Active`: abort the output
+    /// tailers and stop the spawned child with the standard grace period. Used
+    /// when shutdown raced the launch or the entry changed underneath it.
+    async fn abort_and_stop(self) {
+        self.stdout_tailer.abort();
+        self.stderr_tailer.abort();
+        self.job
+            .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
+            .await;
+    }
 }
 
 /// Wake everyone observing the process map: the owning task scheduler's
@@ -995,12 +1021,7 @@ impl NativeProcessManager {
                         // is dead. Bounded by the stop grace period.
                         procs.insert(name.clone(), ProcessEntry::Launching { config, activity });
                         drop(procs);
-                        setup.stdout_tailer.abort();
-                        setup.stderr_tailer.abort();
-                        setup
-                            .job
-                            .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
-                            .await;
+                        setup.abort_and_stop().await;
                         let mut procs = processes.write().await;
                         match procs.remove(&name) {
                             Some(ProcessEntry::Launching { config, activity }) => {
@@ -1064,12 +1085,7 @@ impl NativeProcessManager {
                     }
                     drop(procs);
                     if let Ok(setup) = setup {
-                        setup.stdout_tailer.abort();
-                        setup.stderr_tailer.abort();
-                        setup
-                            .job
-                            .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
-                            .await;
+                        setup.abort_and_stop().await;
                     }
                     bail!("process {} entry changed during launch", name)
                 }
@@ -1220,6 +1236,95 @@ impl NativeProcessManager {
         })
     }
 
+    /// Shared teardown for [`Self::stop`] and [`Self::stop_and_keep`] once the
+    /// `Active` handle has been extracted and a `Stopped` placeholder inserted
+    /// under the write lock: abort the supervisor, forwarder, and output
+    /// readers, signal the child with the grace period, wait for declared ports
+    /// to be released, then mark the activity `Stopped`.
+    async fn finish_stop(
+        &self,
+        name: &str,
+        job: Arc<Job>,
+        supervisor_task: JoinHandle<()>,
+        notify_forwarder: JoinHandle<()>,
+        output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
+        ports: Vec<u16>,
+    ) {
+        let grace_period = Duration::from_secs(5);
+
+        // Abort the supervisor task first to prevent restarts
+        supervisor_task.abort();
+        notify_forwarder.abort();
+
+        // Abort output reader tasks
+        if let Some((stdout_reader, stderr_reader)) = output_readers {
+            stdout_reader.abort();
+            stderr_reader.abort();
+        }
+
+        // Send terminate signal with grace period
+        job.stop_with_signal(Signal::Terminate, grace_period).await;
+
+        if !ports.is_empty() {
+            let release_status =
+                wait_for_port_conflicts_to_settle(&ports, PORT_RELEASE_TIMEOUT).await;
+
+            if !release_status.ownerless_ports().is_empty() {
+                let port_list = release_status
+                    .ownerless_ports()
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                debug!(
+                    "Ports still in transient ownerless teardown after stopping {}: {}",
+                    name, port_list
+                );
+            }
+
+            if !release_status.blocking_ports().is_empty() {
+                let port_list = release_status
+                    .blocking_ports()
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let details = release_status
+                    .owned
+                    .iter()
+                    .map(|(port, owner)| format!("{}{}", port, owner))
+                    .chain(
+                        release_status
+                            .unknown
+                            .iter()
+                            .map(|(port, reason)| format!("{} ({})", port, reason)),
+                    )
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                warn!(
+                    "Ports still busy after {:.1}s for process {}: {}",
+                    PORT_RELEASE_TIMEOUT.as_secs_f32(),
+                    name,
+                    port_list
+                );
+                debug!("Port release blockers for {}: {}", name, details);
+            }
+        }
+
+        // Update the TUI activity to Stopped only if the entry is still the
+        // Stopped placeholder inserted by the caller; a concurrent re-arm may
+        // have already transitioned it onward.
+        {
+            let processes = self.processes.read().await;
+            if let Some(ProcessEntry::Stopped { activity, .. }) = processes.get(name) {
+                activity.set_status(ProcessStatus::Stopped);
+            }
+        }
+
+        self.notify_lifecycle();
+        info!("Process {} stopped", name);
+    }
+
     /// Stop a process by name
     pub async fn stop(&self, name: &str) -> Result<()> {
         // Extract the handle and immediately insert a Stopped entry so the process
@@ -1294,79 +1399,17 @@ impl NativeProcessManager {
             }
         };
 
-        let grace_period = Duration::from_secs(5);
-
         trace!("Stopping process: {}", name);
 
-        // Abort the supervisor task first to prevent restarts
-        supervisor_task.abort();
-        notify_forwarder.abort();
-
-        // Abort output reader tasks
-        if let Some((stdout_reader, stderr_reader)) = output_readers {
-            stdout_reader.abort();
-            stderr_reader.abort();
-        }
-
-        // Send terminate signal with grace period
-        job.stop_with_signal(Signal::Terminate, grace_period).await;
-
-        if !ports.is_empty() {
-            let release_status =
-                wait_for_port_conflicts_to_settle(&ports, PORT_RELEASE_TIMEOUT).await;
-
-            if !release_status.ownerless_ports().is_empty() {
-                let port_list = release_status
-                    .ownerless_ports()
-                    .iter()
-                    .map(u16::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                debug!(
-                    "Ports still in transient ownerless teardown after stopping {}: {}",
-                    name, port_list
-                );
-            }
-
-            if !release_status.blocking_ports().is_empty() {
-                let port_list = release_status
-                    .blocking_ports()
-                    .iter()
-                    .map(u16::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let details = release_status
-                    .owned
-                    .iter()
-                    .map(|(port, owner)| format!("{}{}", port, owner))
-                    .chain(
-                        release_status
-                            .unknown
-                            .iter()
-                            .map(|(port, reason)| format!("{} ({})", port, reason)),
-                    )
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                warn!(
-                    "Ports still busy after {:.1}s for process {}: {}",
-                    PORT_RELEASE_TIMEOUT.as_secs_f32(),
-                    name,
-                    port_list
-                );
-                debug!("Port release blockers for {}: {}", name, details);
-            }
-        }
-
-        // Update the TUI activity to Stopped now that teardown is complete.
-        {
-            let processes = self.processes.read().await;
-            if let Some(ProcessEntry::Stopped { activity, .. }) = processes.get(name) {
-                activity.set_status(ProcessStatus::Stopped);
-            }
-        }
-
-        self.notify_lifecycle();
-        info!("Process {} stopped", name);
+        self.finish_stop(
+            name,
+            job,
+            supervisor_task,
+            notify_forwarder,
+            output_readers,
+            ports,
+        )
+        .await;
         Ok(())
     }
 
@@ -1440,79 +1483,17 @@ impl NativeProcessManager {
             }
         };
 
-        let grace_period = Duration::from_secs(5);
-
         trace!("Stopping process (keeping visible): {}", name);
 
-        supervisor_task.abort();
-        notify_forwarder.abort();
-
-        if let Some((stdout_reader, stderr_reader)) = output_readers {
-            stdout_reader.abort();
-            stderr_reader.abort();
-        }
-
-        job.stop_with_signal(Signal::Terminate, grace_period).await;
-
-        if !ports.is_empty() {
-            let release_status =
-                wait_for_port_conflicts_to_settle(&ports, PORT_RELEASE_TIMEOUT).await;
-
-            if !release_status.ownerless_ports().is_empty() {
-                let port_list = release_status
-                    .ownerless_ports()
-                    .iter()
-                    .map(u16::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                debug!(
-                    "Ports still in transient ownerless teardown after stopping {}: {}",
-                    name, port_list
-                );
-            }
-
-            if !release_status.blocking_ports().is_empty() {
-                let port_list = release_status
-                    .blocking_ports()
-                    .iter()
-                    .map(u16::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let details = release_status
-                    .owned
-                    .iter()
-                    .map(|(port, owner)| format!("{}{}", port, owner))
-                    .chain(
-                        release_status
-                            .unknown
-                            .iter()
-                            .map(|(port, reason)| format!("{} ({})", port, reason)),
-                    )
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                warn!(
-                    "Ports still busy after {:.1}s for process {}: {}",
-                    PORT_RELEASE_TIMEOUT.as_secs_f32(),
-                    name,
-                    port_list
-                );
-                debug!("Port release blockers for {}: {}", name, details);
-            }
-        }
-
-        // Update the TUI activity only if the entry is still the Stopped
-        // placeholder inserted above; a concurrent re-arm may have already
-        // transitioned it onward.
-        {
-            let processes = self.processes.read().await;
-            if let Some(ProcessEntry::Stopped { activity, .. }) = processes.get(name) {
-                activity.set_status(ProcessStatus::Stopped);
-            }
-        }
-
-        self.notify_lifecycle();
-
-        info!("Process {} stopped", name);
+        self.finish_stop(
+            name,
+            job,
+            supervisor_task,
+            notify_forwarder,
+            output_readers,
+            ports,
+        )
+        .await;
         Ok(())
     }
 
@@ -1893,18 +1874,11 @@ impl NativeProcessManager {
                 (ProcessPhase::from(status.phase), status.restart_count)
             }
         };
-        let config = match entry {
-            ProcessEntry::NotStarted { config, .. }
-            | ProcessEntry::Stopped { config, .. }
-            | ProcessEntry::Waiting { config, .. }
-            | ProcessEntry::Launching { config, .. } => config,
-            ProcessEntry::Active(handle) => &handle.resources.config,
-        };
         ProcessInfo {
             name: name.to_string(),
             phase,
             restart_count,
-            ports: display_ports(config),
+            ports: display_ports(entry.config()),
         }
     }
 
@@ -2074,14 +2048,7 @@ impl NativeProcessManager {
                 let procs = manager.processes.read().await;
                 let mut ports = Vec::new();
                 for (name, entry) in procs.iter() {
-                    let config = match entry {
-                        ProcessEntry::NotStarted { config, .. }
-                        | ProcessEntry::Stopped { config, .. }
-                        | ProcessEntry::Waiting { config, .. }
-                        | ProcessEntry::Launching { config, .. } => config,
-                        ProcessEntry::Active(handle) => &handle.resources.config,
-                    };
-                    for (port_name, &port) in &config.ports {
+                    for (port_name, &port) in &entry.config().ports {
                         ports.push(PortInfo {
                             process_name: name.clone(),
                             port_name: port_name.clone(),
@@ -2299,25 +2266,9 @@ impl NativeProcessManager {
 
     /// Connect to a running manager and open an attach event stream.
     pub async fn attach_stream(socket_path: &Path) -> Result<AttachStream> {
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::io::{AsyncBufReadExt, BufReader};
 
-        let mut stream = tokio::net::UnixStream::connect(socket_path)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| {
-                format!(
-                    "Failed to connect to native manager at {}",
-                    socket_path.display()
-                )
-            })?;
-
-        let mut request_json = serde_json::to_vec(&ApiRequest::Attach).into_diagnostic()?;
-        request_json.push(b'\n');
-        stream
-            .write_all(&request_json)
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to send attach request to native manager")?;
+        let stream = Self::send_api_request(socket_path, &ApiRequest::Attach).await?;
 
         // The reader task owns the socket so read_line's cancel-unsafety is
         // contained; the consumer can select! on next() safely.
