@@ -9,8 +9,10 @@ in
       enable = true;
       install.enable = true;
       config = {
-        profiles.settings.build_type = "Release";
-        compilerCppStd = "17";
+        profiles = {
+          settings.compiler."compiler.cppstd" = "17";
+          settings.rest.build_type = "Release";
+        };
         remotes.local = {
           url = "./repo";
           local = true;
