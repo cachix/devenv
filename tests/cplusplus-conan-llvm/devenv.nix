@@ -2,9 +2,6 @@
 let
   inherit (lib) getExe;
   getCommand = package: builtins.baseNameOf (getExe package);
-  cfg = config.languages.cplusplus.conan.config;
-  c = "'c': '${getExe cfg.stdenv.cc}'";
-  cpp = "'cpp': '${builtins.dirOf (getExe cfg.stdenv.cc)}/clang++'";
 in
 {
   languages.cplusplus = {
@@ -14,10 +11,7 @@ in
       install.enable = true;
       config = {
         profiles = {
-          settings.build_type = "Release";
-          conf = {
-            "tools.build:compiler_executables" = "{${c}, ${cpp}}";
-          };
+          settings.rest.build_type = "Release";
         };
         stdenv = pkgs.overrideCC
           (
@@ -27,8 +21,6 @@ in
             }
           )
           pkgs.llvmPackages.clangUseLLVM;
-        # By default: compiler.libcxx=libstdc++11, so set it:
-        compilerLibCxx = "libc++";
       };
     };
   };
