@@ -1,0 +1,5 @@
+{...}: {
+  devcontainer = {
+    enable = true;
+  };
+}
