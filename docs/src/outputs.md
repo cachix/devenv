@@ -43,8 +43,10 @@ To build all defined outputs, run:
 
 ```shell-session
 $ devenv build
-/nix/store/abc123def456ghi789jkl012mno345pq-rust-app-1.0
-/nix/store/xyz987wvu654tsr321qpo987mnl654ki-python-app-1.0
+{
+  "outputs.rust-app": "/nix/store/abc123def456ghi789jkl012mno345pq-rust-app-1.0",
+  "outputs.python-app": "/nix/store/xyz987wvu654tsr321qpo987mnl654ki-python-app-1.0"
+}
 ```
 
 This command will build all outputs and display their paths in the Nix store.
@@ -53,7 +55,9 @@ To build specific output(s), you can specify them explicitly:
 
 ```shell-session
 $ devenv build outputs.rust-app
-/nix/store/abc123def456ghi789jkl012mno345pq-rust-app-1.0
+{
+  "outputs.rust-app": "/nix/store/abc123def456ghi789jkl012mno345pq-rust-app-1.0",
+}
 ```
 
 This will build only the `rust-app` output, making it easy to consume for installation or distribution.
