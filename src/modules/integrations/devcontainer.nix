@@ -3,12 +3,13 @@
 let
   cfg = config.devcontainer;
   settingsFormatJSON = pkgs.formats.json { };
+  managedByDevenvComment = "// Generated and managed by devenv. DO NOT EDIT";
   file = pkgs.runCommand "devcontainer.json" {
     nativeBuildInputs = [ pkgs.gawk ];
     jsonFile = settingsFormatJSON.generate "devcontainer.json" cfg.settings;
   } # I hate it
   ''
-    gawk 'NR==1{print "// Generated and managed by devenv. DO NOT EDIT"}1' "$jsonFile" > $out
+    gawk 'NR==1{print "${managedByDevenvComment}"}1' "$jsonFile" > $out
   '';
 in
 {
@@ -64,7 +65,7 @@ in
     tasks."devenv:devcontainer:cleanup" =  lib.mkIf (!config.devcontainer.enable) {
       description = "Cleanup old, unused devcontainer configuration created by devenv";
       exec = ''
-      if head -n 1 ${config.env.DEVENV_ROOT}/.devcontainer/devcontainer.json | grep -q "Generated and managed by devenv"; then
+      if head -n 1 ${config.env.DEVENV_ROOT}/.devcontainer/devcontainer.json | grep -q "${managedByDevenvComment}"; then
         rm -rf ${config.env.DEVENV_ROOT}/.devcontainer
       fi
     '';
@@ -79,7 +80,7 @@ in
         cat ${file} > ${config.env.DEVENV_ROOT}/.devcontainer/devcontainer.json
       }
       if [ -e ${config.env.DEVENV_ROOT}/.devcontainer ]; then
-        if head -n 1 ${config.env.DEVENV_ROOT}/.devcontainer/devcontainer.json | grep -qv "Generated and managed by devenv"; then
+        if head -n 1 ${config.env.DEVENV_ROOT}/.devcontainer/devcontainer.json | grep -qv "${managedByDevenvComment}"; then
           mv .devcontainer/ .devcontainer-old/
           echo "Your old devcontainer configuration is available at $PWD/.devcontainer-old directory" 
           generate_devcontainer
