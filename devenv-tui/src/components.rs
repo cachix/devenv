@@ -492,7 +492,9 @@ impl ProgressBarComponent {
             .saturating_sub(4); // Some padding
         let bar_width = available_width.clamp(10, 100); // Min 10, max 100 chars
 
-        let filled = (bar_width * self.percent as usize) / 100;
+        // Clamp to bar_width: progress can exceed 100% (e.g. reported bytes past
+        // the expected total), which would otherwise underflow `empty`.
+        let filled = ((bar_width * self.percent as usize) / 100).min(bar_width);
         let empty = bar_width - filled;
 
         // Split progress bar into filled and empty parts for coloring
@@ -802,16 +804,21 @@ fn shorten_store_path_aggressive(path: &str) -> String {
         }
     }
 
-    // Fallback: if it still looks like a hash, truncate and add ellipsis
+    // Fallback: if it still looks like a hash, truncate and add ellipsis.
+    // Truncate by characters, not bytes, so multi-byte UTF-8 never panics.
     if path.len() > 15 && path.chars().all(|c| c.is_alphanumeric()) {
         // Looks like just a hash, truncate to first few chars + ellipsis
-        format!("{}…", &path[..4])
+        let prefix: String = path.chars().take(4).collect();
+        format!("{}…", prefix)
     } else if path.len() > 20 {
         // For file paths (like evaluation paths), keep the end and truncate the beginning
         if path.contains('/') {
-            format!("…{}", &path[path.len() - 19..])
+            let chars: Vec<char> = path.chars().collect();
+            let tail: String = chars[chars.len().saturating_sub(19)..].iter().collect();
+            format!("…{}", tail)
         } else {
-            format!("{}…", &path[..19])
+            let prefix: String = path.chars().take(19).collect();
+            format!("{}…", prefix)
         }
     } else {
         path.to_string()

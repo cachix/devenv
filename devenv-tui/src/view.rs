@@ -973,27 +973,35 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let hide_stopped_processes = *hide_stopped_processes;
 
     if interrupt_prompt_active {
-        let prompt_text = if terminal_width < 72 {
+        // Pick prompt verbosity so the prompt plus the (non-shrinking) key hints
+        // fit within the terminal width. The full hints occupy ~39 columns, so
+        // the long prompt only fits comfortably on wide terminals.
+        let prompt_text = if terminal_width < 60 {
+            "Quit?"
+        } else if terminal_width < 100 {
             "Quit devenv? Nothing stopped."
         } else {
             "Quit devenv? Nothing has been stopped yet."
         };
+        // Compact, single-spaced hints on narrow terminals so the row never
+        // overflows; verbose hints once there is room.
+        let compact = terminal_width < 72;
 
         return element!(View(
             flex_direction: FlexDirection::Row,
             justify_content: JustifyContent::SpaceBetween,
             width: 100pct
         ) {
-            View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+            View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(content: prompt_text, color: Color::Yellow, weight: Weight::Bold)
             }
-            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
+            View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
                 Text(content: "c", color: COLOR_INTERACTIVE)
-                Text(content: " keep running • ")
+                Text(content: if compact { ":run " } else { " keep running • " })
                 Text(content: "q", color: COLOR_INTERACTIVE)
-                Text(content: " quit • ")
+                Text(content: if compact { ":quit " } else { " quit • " })
                 Text(content: "Ctrl-C", color: COLOR_INTERACTIVE)
-                Text(content: " quit")
+                Text(content: ":quit")
             }
         })
         .into_any();
@@ -1231,7 +1239,10 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
         if !use_symbols {
             if use_short_text {
-                help_children.push(element!(Text(content: " nav • ")).into_any());
+                // Compact, single-space separators on narrow terminals (< 100
+                // cols): with several hints (e.g. a process is selected) the
+                // " • " bullets pushed the bar past the right edge.
+                help_children.push(element!(Text(content: " nav ")).into_any());
             } else {
                 help_children.push(element!(Text(content: " navigate • ")).into_any());
             }
@@ -1242,7 +1253,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         if use_symbols {
             help_children.push(element!(Text(content: " ▼ • ")).into_any());
         } else if use_short_text {
-            help_children.push(element!(Text(content: " expand • ")).into_any());
+            help_children.push(element!(Text(content: " expand ")).into_any());
         } else {
             help_children.push(element!(Text(content: " expand logs • ")).into_any());
         }
@@ -1251,21 +1262,25 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                 help_children
                     .push(element!(Text(content: if use_short_text { "^X" } else { "Ctrl-X" }, color: COLOR_INTERACTIVE)).into_any());
                 if use_short_text {
-                    help_children.push(element!(Text(content: " stop • ")).into_any());
+                    help_children.push(element!(Text(content: " stop ")).into_any());
                 } else {
                     help_children.push(element!(Text(content: " stop process • ")).into_any());
                 }
             }
             help_children.push(element!(Text(content: if use_short_text { "^R" } else { "Ctrl-R" }, color: COLOR_INTERACTIVE)).into_any());
             if use_short_text {
-                help_children.push(element!(Text(content: " (re)start • ")).into_any());
+                help_children.push(element!(Text(content: " restart ")).into_any());
             } else {
                 help_children.push(element!(Text(content: " (re)start process • ")).into_any());
             }
         }
         if show_hide_toggle {
             help_children.push(element!(Text(content: if use_short_text { "^H" } else { "Ctrl-H" }, color: COLOR_INTERACTIVE)).into_any());
-            help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped • " } else { " hide stopped • " })).into_any());
+            if use_short_text {
+                help_children.push(element!(Text(content: if hide_stopped_processes { " show " } else { " hide " })).into_any());
+            } else {
+                help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped • " } else { " hide stopped • " })).into_any());
+            }
         }
         help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
         if showing_logs {
