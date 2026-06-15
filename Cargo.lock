@@ -2158,6 +2158,7 @@ dependencies = [
  "insta",
  "iocraft",
  "libc",
+ "proptest",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2165,6 +2166,7 @@ dependencies = [
  "tokio-shutdown",
  "tracing",
  "tracing-subscriber",
+ "unicode-width 0.1.14",
  "url",
 ]
 
