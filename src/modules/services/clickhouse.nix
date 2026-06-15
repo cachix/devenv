@@ -178,16 +178,18 @@ in
       ports.raft.allocate = baseRaftPort;
       exec = "exec clickhouse-server --config-file=${config.env.DEVENV_STATE}/clickhouse/server/config.xml";
 
-      ready = {
-        exec = "${cfg.package}/bin/clickhouse-client --port ${toString allocatedPort} --user default ${
-          lib.optionalString (
-            config.services.clickhouse.usersConfig.users.default ? password
-          ) "--password ${config.services.clickhouse.usersConfig.users.default.password}"
-        } -q 'SELECT 1'";
-        initial_delay = 2;
-        probe_timeout = 4;
-        failure_threshold = 5;
-      };
+      ready =
+        let
+          defaultUser = cfg.usersConfig.users.default or { };
+        in
+        {
+          exec = "${cfg.package}/bin/clickhouse-client --port ${toString allocatedPort} --user default ${
+            lib.optionalString (defaultUser ? password) "--password ${defaultUser.password}"
+          } -q 'SELECT 1'";
+          initial_delay = 2;
+          probe_timeout = 4;
+          failure_threshold = 5;
+        };
     };
   };
 }
