@@ -19,8 +19,6 @@
 , glibcLocalesUtf8
 
   # Rust
-, rustPlatform
-, buildRustCrate
 , defaultCrateOverrides
 , rustc
 , cargo
@@ -34,10 +32,8 @@ let
   cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
   inherit (cargoToml.workspace.package) version;
 
-  # Override buildRustCrate to use the newer rustc from languages.rust
-  # The default buildRustCrate uses an older rustc (1.73) which doesn't support
-  # APIs needed by newer crate versions like clap_lex 0.7.6
-  buildRustCrateNew = buildRustCrate.override {
+  # Override the rust toolchain
+  buildRustCrateForPkgs = pkgs: pkgs.buildRustCrate.override {
     inherit rustc cargo;
   };
 
@@ -45,7 +41,7 @@ let
   crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease libghostty-vt; };
 
   cargoNix = callPackage ../Cargo.nix {
-    buildRustCrateForPkgs = _: buildRustCrateNew;
+    inherit buildRustCrateForPkgs;
     defaultCrateOverrides = defaultCrateOverrides // crateConfig;
     release = cargoProfile == "release";
     # Enable tracing_unstable for dependency resolution so valuable crate is included.
