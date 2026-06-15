@@ -12,8 +12,7 @@ languages.cplusplus = {
 This will automatically:
 
 - Use `clang` as the default C++ package.
-- Install it along with CMake ([`languages.cplusplus.cmake`](/reference/options.md#languagescpluspluscmake)), the C++ Language Server ([`languages.cplusplus.lsp`](/reference/options.md#languagescpluspluslspenable)) and the standalone command line tools for C++ development ([`languages.cplusplus.tools`
-](/reference/options.md#languagescplusplustoolsenable)).
+- Install it along with CMake ([`languages.cplusplus.cmake`](/reference/options.md#languagescpluspluscmake)), the C++ Language Server ([`languages.cplusplus.lsp`](/reference/options.md#languagescpluspluslspenable)) and the standalone command line tools for C++ development ([`languages.cplusplus.tools`](/reference/options.md#languagescplusplustoolsenable)).
 
 Alternatively, you can manually specify packages:
 
