@@ -53,7 +53,7 @@
 - Added `devenv processes attach` to attach to running processes and stream their status, ports, and logs until Ctrl-C, leaving them running (native process manager only).
 - When `devenv up` attaches to an already-running process manager it now says so, and Ctrl-C opens a prompt to either detach (leave processes running) or stop the whole process manager, instead of silently detaching.
 - Explicitly named processes in `devenv up <name>` now always start, even with `processes.<name>.start.enable = false` (previously only the attach path did this).
-- `devenv processes start <name>` (and restarting a stopped process) now goes through the same dependency-aware launch path as `devenv up`: `after`/`before` ordering is honored instead of launching the process immediately with its dependencies missing, and unknown names fail with guidance. When no process manager is running yet, it starts one in the background launching only the named process (same as `devenv up -d <name>`), instead of erroring.
+- `devenv processes start <name>` (and restarting a stopped process) now goes through the same dependency-aware launch path as `devenv up`: `after`/`before` ordering is honored instead of launching the process immediately with its dependencies missing, and unknown names fail with guidance. When no process manager is running yet, it starts one in the background launching only the named process (same as `devenv up -d <name>`), instead of erroring ([#2930](https://github.com/cachix/devenv/issues/2930)).
 - While a long `devenv up` attach request is being scheduled, the process manager keeps answering other clients and shutdown signals.
 
 ### Breaking Changes
