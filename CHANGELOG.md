@@ -1,6 +1,6 @@
 # Changelog
 
-## X.Y.Z (unreleased)
+## 2.2 (unreleased)
 
 ### Bug Fixes
 

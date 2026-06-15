@@ -31,7 +31,7 @@ To stop detached processes:
 $ devenv down
 ```
 
-!!! tip "New in devenv 2.1.3"
+!!! tip "New in devenv 2.2"
 
     `devenv down` is a shorthand for `devenv processes down`.
 
@@ -45,7 +45,7 @@ The default timeout is 120 seconds.
 
 ## Attaching to running processes
 
-!!! tip "New in devenv 2.1.3"
+!!! tip "New in devenv 2.2"
 
 When processes are already running in the background (started with `devenv up -d`), a second `devenv up` attaches to them instead of failing. It starts any processes that are enabled but not currently running, honoring their `after`/`before` dependencies, and streams a live view of process status and logs. Press Ctrl-C to detach, leaving the processes running.
 
