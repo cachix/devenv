@@ -1,0 +1,65 @@
+Make pest_consume's generated parser reproducible.
+
+The `#[pest_consume::parser]` macro builds the `AliasedRule` enum, its
+dispatch/shortcut match arms, and the synthesized alias methods by iterating a
+`std::collections::HashMap`. HashMap iteration order is randomized per process,
+so the generated code (and therefore the crate's metadata SVH) comes out
+differently on every compile. That non-determinism propagates through every
+crate that links the `dhall` parser (dhall -> serde_dhall -> devenv-core -> ...)
+and breaks binary-cache reuse: a build that mixes a cached crate with a freshly
+built dependent hits rustc E0463 "can't find crate" on an SVH mismatch.
+
+Sort each generated collection so the macro output is deterministic.
+
+Upstream: https://github.com/Nadrieril/pest_consume
+
+--- a/src/make_parser.rs
++++ b/src/make_parser.rs
+@@ -333,7 +333,7 @@
+     let mut imp: ItemImpl = syn::parse(input)?;
+
+     let mut alias_map = collect_aliases(&mut imp)?;
+-    let rule_alias_branches: Vec<_> = alias_map
++    let mut rule_alias_branches: Vec<_> = alias_map
+         .iter()
+         .flat_map(|(tgt, srcs)| iter::repeat(tgt).zip(srcs))
+         .map(|(tgt, src)| {
+@@ -343,9 +343,11 @@
+             )
+         })
+         .collect();
+-    let aliased_rule_variants: Vec<_> =
++    rule_alias_branches.sort_by_key(|t| t.to_string());
++    let mut aliased_rule_variants: Vec<_> =
+         alias_map.iter().map(|(tgt, _)| tgt.clone()).collect();
+-    let shortcut_branches: Vec<_> = alias_map
++    aliased_rule_variants.sort_by_key(|i| i.to_string());
++    let mut shortcut_branches: Vec<_> = alias_map
+         .iter()
+         .flat_map(|(_tgt, srcs)| srcs)
+         .map(|AliasSrc { ident, is_shortcut }| {
+@@ -354,6 +356,7 @@
+             )
+         })
+         .collect();
++    shortcut_branches.sort_by_key(|t| t.to_string());
+
+     let fn_map: HashMap<Ident, ParsedFn> = imp
+         .items
+@@ -375,7 +378,7 @@
+         .collect::<Result<_>>()?;
+
+     // Entries that remain in the alias map don't have a matching method, so we create one.
+-    let extra_fns: Vec<_> = alias_map
++    let mut extra_fns: Vec<_> = alias_map
+         .iter()
+         .map(|(tgt, srcs)| {
+             // Get the signature of one of the functions that has this alias. They should all have
+@@ -407,6 +410,7 @@
+             ))
+         })
+         .collect::<Result<_>>()?;
++    extra_fns.sort_by_key(|f| quote!(#f).to_string());
+     imp.items.extend(extra_fns);
+
+     let ty = &imp.self_ty;

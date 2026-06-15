@@ -2,6 +2,8 @@
 
 !!! tip "New in version 2.1"
 
+    [Read more about auto activation in the v2.1 release post](blog/posts/devenv-v2.1-nix-with-zsh-fish-and-nushell-via-libghostty.md)
+
 devenv includes a built in shell hook that automatically activates your developer environment when you `cd` into a project directory. No external tools required.
 
 ## Setup
