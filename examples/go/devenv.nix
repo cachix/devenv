@@ -4,7 +4,7 @@
   packages = [ pkgs.git pkgs.gomod2nix ];
 
   languages.go.enable = true;
-  languages.go.version = "1.25.4";
+  languages.go.version = "1.26.3";
 
   git-hooks.hooks = {
     govet = {
