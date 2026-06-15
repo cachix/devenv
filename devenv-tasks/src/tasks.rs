@@ -664,6 +664,12 @@ impl Tasks {
         let _serialize = self.start_with_deps_lock.lock().await;
         let mut outcome = StartOutcome::default();
 
+        // Dedup while preserving order: a name requested twice (e.g. `devenv up
+        // foo foo`) would otherwise be re-armed on the first pass (scheduled)
+        // and seen Waiting on the second (skipped), landing in two buckets.
+        let mut seen = std::collections::HashSet::new();
+        let names: Vec<&String> = names.iter().filter(|n| seen.insert(n.as_str())).collect();
+
         for name in names {
             let task_name = format!("{PROCESS_TASK_PREFIX}{name}");
             let Some(&index) = self.task_index_by_name.get(&task_name) else {
@@ -954,9 +960,15 @@ impl Tasks {
                     Some(ProcessPhase::Waiting) => {
                         self.task_dependency_parked(&eval.task_name).await
                     }
-                    // Starting/Ready processes, live oneshots, and missing
-                    // manager entries are progressing.
-                    _ => false,
+                    // Starting/Ready processes are genuinely in flight.
+                    Some(_) => false,
+                    // A oneshot (or any non-process dep) that is unsatisfied is
+                    // parked iff its own unsatisfied dependencies are all parked:
+                    // recurse so a process blocked transitively through a oneshot
+                    // that itself waits on a stopped/not-started process is still
+                    // judged parked. A running oneshot has no unsatisfied deps, so
+                    // the recursion returns false (progressing).
+                    None => self.task_dependency_parked(&eval.task_name).await,
                 };
                 if !parked {
                     return false;

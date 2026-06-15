@@ -264,6 +264,28 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
     }
 }
 
+/// Clear any leftover log files for a process that is being registered but not
+/// yet launched, so an attach backlog/tail can't surface output written by a
+/// previous manager session (log paths are deterministic and persist across
+/// runs). A process that later launches truncates these again in
+/// `launch_setup`; one that never launches stays empty.
+fn clear_stale_logs(state_dir: &Path, name: &str) {
+    let (stdout_path, stderr_path) = crate::command::log_paths(state_dir, name);
+    let _ = std::fs::write(&stdout_path, "");
+    let _ = std::fs::write(&stderr_path, "");
+}
+
+/// The terminal process phase to preserve when stopping: a process that had
+/// already exited or given up on its own keeps that outcome after teardown
+/// (run summaries and dependents still see it); a still-starting or running
+/// process has no terminal phase yet.
+fn terminal_phase_of(phase: crate::supervisor_state::SupervisorPhase) -> Option<ProcessPhase> {
+    match ProcessPhase::from(phase) {
+        p @ (ProcessPhase::Exited | ProcessPhase::GaveUp) => Some(p),
+        _ => None,
+    }
+}
+
 /// Collect the names of all active (supervised) processes from the map.
 fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
     processes
@@ -427,6 +449,12 @@ const ATTACH_WRITE_STALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Lines of backlog per log file sent when an attach stream opens.
 const ATTACH_BACKLOG_LINES: usize = 50;
+
+/// Bound on the per-connection attach event queue. A slow client applies
+/// backpressure to the feed (status diffs await a free slot) and, once the
+/// queue is full, log lines are dropped rather than buffered without limit, so
+/// a slow-but-alive reader cannot grow daemon memory unboundedly.
+const ATTACH_EVENT_CHANNEL_CAPACITY: usize = 2048;
 
 const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(15);
 const PORT_RELEASE_INITIAL_DELAY: Duration = Duration::from_millis(25);
@@ -689,6 +717,13 @@ impl NativeProcessManager {
         let _ = self.scheduler.set(scheduler);
     }
 
+    /// The owning task scheduler, if one is registered and its owner is still
+    /// alive. A `None` means dependency-aware launching is unavailable (no
+    /// owner, or it has been dropped) and callers fall back accordingly.
+    fn scheduler(&self) -> Option<Arc<dyn ProcessScheduler>> {
+        self.scheduler.get().and_then(std::sync::Weak::upgrade)
+    }
+
     /// Mark this instance as a control client that should not clean up
     /// runtime files (socket, pid file) on drop.
     pub fn set_control_client(&mut self) {
@@ -774,6 +809,7 @@ impl NativeProcessManager {
         let activity = self.create_process_activity(&config, parent_id);
         activity.set_status(ProcessStatus::Waiting);
         let name = config.name.clone();
+        clear_stale_logs(&self.state_dir, &name);
         self.processes
             .write()
             .await
@@ -937,6 +973,7 @@ impl NativeProcessManager {
             }
             activity.set_status(ProcessStatus::NotStarted);
             info!("Registered auto start off process: {}", config.name);
+            clear_stale_logs(&self.state_dir, &config.name);
             processes.insert(
                 config.name.clone(),
                 ProcessEntry::NotStarted { config, activity },
@@ -1214,11 +1251,13 @@ impl NativeProcessManager {
         };
         let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
 
-        // If no readiness mechanism is configured, mark process as immediately ready
-        let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
-        let has_ready_config = config.ready.is_some();
-        let has_tcp_probe = (!config.listen.is_empty() || !config.ports.is_empty()) && !has_notify;
-        if !has_notify && !has_ready_config && !has_tcp_probe {
+        // If no readiness mechanism is configured, mark the process immediately
+        // ready. Uses the same predicate the supervisor relies on
+        // (`has_readiness_probe`, which counts only TCP listens), so a
+        // unix-domain-only `listen` — which the supervisor never probes — is
+        // correctly treated as having no readiness mechanism instead of waiting
+        // forever for a probe that is never spawned.
+        if !config.has_readiness_probe() {
             let _ = status_tx.send(crate::supervisor_state::JobStatus {
                 phase: crate::supervisor_state::SupervisorPhase::Ready,
                 restart_count: 0,
@@ -1338,15 +1377,7 @@ impl NativeProcessManager {
                     let ports = declared_ports(&handle.resources.config);
                     // Preserve a terminal supervisor phase so run summaries and
                     // dependents keep the terminal outcome after teardown.
-                    let terminal_phase = match handle.status_rx.borrow().phase {
-                        crate::supervisor_state::SupervisorPhase::Exited => {
-                            Some(ProcessPhase::Exited)
-                        }
-                        crate::supervisor_state::SupervisorPhase::GaveUp => {
-                            Some(ProcessPhase::GaveUp)
-                        }
-                        _ => None,
-                    };
+                    let terminal_phase = terminal_phase_of(handle.status_rx.borrow().phase);
                     let JobHandle {
                         resources,
                         supervisor_task,
@@ -1432,6 +1463,12 @@ impl NativeProcessManager {
             match processes.remove(name) {
                 Some(ProcessEntry::Active(handle)) => {
                     let ports = declared_ports(&handle.resources.config);
+                    // Preserve a terminal supervisor phase, like `stop`: a
+                    // process that had already exited or crashed keeps that
+                    // outcome after a Ctrl-X stop instead of being reported as a
+                    // plain `Stopped`, so run summaries and dependents agree
+                    // regardless of which stop path ran.
+                    let terminal_phase = terminal_phase_of(handle.status_rx.borrow().phase);
                     let JobHandle {
                         resources,
                         supervisor_task,
@@ -1452,7 +1489,7 @@ impl NativeProcessManager {
                         ProcessEntry::Stopped {
                             config,
                             activity,
-                            terminal_phase: None,
+                            terminal_phase,
                         },
                     );
 
@@ -1815,7 +1852,7 @@ impl NativeProcessManager {
         if waiting.is_empty() {
             return true;
         }
-        let Some(scheduler) = self.scheduler.get().and_then(std::sync::Weak::upgrade) else {
+        let Some(scheduler) = self.scheduler() else {
             return false;
         };
         for name in waiting {
@@ -1994,7 +2031,7 @@ impl NativeProcessManager {
                         // honoured like any other launch; the dep-blind
                         // direct start remains only as a fallback for
                         // managers without a registered scheduler.
-                        match manager.scheduler.get().and_then(std::sync::Weak::upgrade) {
+                        match manager.scheduler() {
                             Some(scheduler) => {
                                 let outcome = scheduler.start(vec![name.clone()]).await;
                                 if outcome.scheduled.contains(&name)
@@ -2027,17 +2064,14 @@ impl NativeProcessManager {
                     None => Self::process_not_found(&name),
                 }
             }
-            Ok(ApiRequest::Start { names }) => {
-                match manager.scheduler.get().and_then(std::sync::Weak::upgrade) {
-                    Some(scheduler) => ApiResponse::Start {
-                        outcome: scheduler.start(names).await,
-                    },
-                    None => ApiResponse::Error {
-                        message: "this manager has no process scheduler to handle `start`"
-                            .to_string(),
-                    },
-                }
-            }
+            Ok(ApiRequest::Start { names }) => match manager.scheduler() {
+                Some(scheduler) => ApiResponse::Start {
+                    outcome: scheduler.start(names).await,
+                },
+                None => ApiResponse::Error {
+                    message: "this manager has no process scheduler to handle `start`".to_string(),
+                },
+            },
             Ok(ApiRequest::Stop { name }) => match manager.stop(&name).await {
                 Ok(()) => ApiResponse::Ok,
                 Err(e) => ApiResponse::Error {
@@ -2139,7 +2173,7 @@ impl NativeProcessManager {
             return;
         }
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<AttachEvent>();
+        let (tx, mut rx) = mpsc::channel::<AttachEvent>(ATTACH_EVENT_CHANNEL_CAPACITY);
         tokio::spawn(Self::attach_feed(
             Arc::clone(&manager),
             snapshot,
@@ -2179,7 +2213,7 @@ impl NativeProcessManager {
     async fn attach_feed(
         manager: Arc<Self>,
         snapshot: Vec<ProcessInfo>,
-        tx: mpsc::UnboundedSender<AttachEvent>,
+        tx: mpsc::Sender<AttachEvent>,
         conn: CancellationToken,
     ) {
         let mut prev: BTreeMap<String, ProcessInfo> = snapshot
@@ -2209,7 +2243,10 @@ impl NativeProcessManager {
             for (name, info) in &current {
                 let is_new = !prev.contains_key(name);
                 if prev.get(name) != Some(info)
-                    && tx.send(AttachEvent::Status { info: info.clone() }).is_err()
+                    && tx
+                        .send(AttachEvent::Status { info: info.clone() })
+                        .await
+                        .is_err()
                 {
                     return;
                 }
@@ -2234,7 +2271,7 @@ impl NativeProcessManager {
     fn spawn_attach_tailers(
         state_dir: &Path,
         name: &str,
-        tx: &mpsc::UnboundedSender<AttachEvent>,
+        tx: &mpsc::Sender<AttachEvent>,
         conn: &CancellationToken,
     ) {
         let (stdout_path, stderr_path) = crate::command::log_paths(state_dir, name);
@@ -2244,8 +2281,9 @@ impl NativeProcessManager {
         ] {
             let (backlog, offset) = crate::log_tailer::read_backlog(&path, ATTACH_BACKLOG_LINES);
             for line in backlog {
-                // Send errors are ignored: the connection is going away.
-                let _ = tx.send(AttachEvent::Log {
+                // Best-effort: drop on a full/closed queue rather than buffer
+                // without bound; the connection is going away on Closed.
+                let _ = tx.try_send(AttachEvent::Log {
                     name: name.to_string(),
                     stream,
                     line,
@@ -2254,12 +2292,19 @@ impl NativeProcessManager {
             let tx = tx.clone();
             let name = name.to_string();
             crate::log_tailer::spawn_tail_to(path, offset, true, conn.clone(), move |line| {
-                tx.send(AttachEvent::Log {
+                match tx.try_send(AttachEvent::Log {
                     name: name.clone(),
                     stream,
                     line,
-                })
-                .is_ok()
+                }) {
+                    Ok(()) => true,
+                    // Queue full: drop this line but keep tailing, so a slow
+                    // client loses some output instead of the daemon buffering
+                    // it without bound.
+                    Err(mpsc::error::TrySendError::Full(_)) => true,
+                    // Consumer gone: stop the tailer.
+                    Err(mpsc::error::TrySendError::Closed(_)) => false,
+                }
             });
         }
     }
@@ -2432,8 +2477,25 @@ impl NativeProcessManager {
                 );
                 if needs_fresh_start {
                     info!("Starting inactive process: {}", name);
-                    if let Err(e) = self.start_not_started(&name).await {
-                        warn!("Failed to start process {}: {}", name, e);
+                    // Bring a stopped/not-started process back through the
+                    // scheduler so its `after`/`before` dependencies are
+                    // honoured, matching the socket `Restart`/`Start` path. The
+                    // dep-blind direct start remains only as a fallback for a
+                    // manager with no registered scheduler.
+                    match self.scheduler() {
+                        Some(scheduler) => {
+                            let outcome = scheduler.start(vec![name.clone()]).await;
+                            if !outcome.scheduled.contains(&name)
+                                && !outcome.skipped.contains(&name)
+                            {
+                                warn!("Failed to start process {}", name);
+                            }
+                        }
+                        None => {
+                            if let Err(e) = self.start_not_started(&name).await {
+                                warn!("Failed to start process {}: {}", name, e);
+                            }
+                        }
                     }
                 } else {
                     info!("Restarting process: {}", name);
