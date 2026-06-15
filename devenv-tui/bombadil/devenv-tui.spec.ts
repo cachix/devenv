@@ -61,10 +61,11 @@ export const drive = weighted<Action>([
   [12, resize],
   [8, { ScrollUp: {} }],
   [8, { ScrollDown: {} }],
-  [3, k("\x03")], // Ctrl+C  quit prompt
-  [2, k("c")], // keep running
-  [2, k("q")], // quit
-  [3, typeFromSet(CharSets.CONTROL_ALL)], // input-parser robustness
+  // NB: intentionally no quit keys (Ctrl+C / q) and no CONTROL_ALL (which
+  // includes Ctrl+C). They make the harness exit, which ends the session early
+  // and trips `exitSuccess`. The quit prompt rendering is covered by the
+  // in-process property tests instead; here the run is bounded by --time-limit.
+  [3, typeFromSet(CharSets.CONTROL_NAVIGATION.union(CharSets.CONTROL_ARROWS))], // input-parser robustness
   [2, typeFromSet(CharSets.UNICODE_CJK.union(CharSets.UNICODE_EMOTICONS))],
   [1, actions(() => [pasteText("A".repeat(8000))])], // huge paste
 ]);
