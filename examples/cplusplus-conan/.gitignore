@@ -1,0 +1,11 @@
+# Devenv
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+
+# Local Conan home
+.conan2/
+
+# conan-flake
+.conanrc
+config/

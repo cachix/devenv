@@ -2,7 +2,7 @@
 
 To get started with C++ in devenv, you can enable it in the `languages.cplusplus` namespace:
 
-```nix
+```nix title="devenv.nix"
 languages.cplusplus = {
   enable = true;
 };
@@ -11,11 +11,12 @@ languages.cplusplus = {
 This will automatically:
 
 - Use `clang` as the default C++ package.
-- Install it along with CMake and other tools.
+- Install it along with CMake ([`languages.cplusplus.cmake`](/reference/options.md#languagescpluspluscmake)), the C++ Language Server ([`languages.cplusplus.lsp`](/reference/options.md#languagescpluspluslspenable)), and the standalone command line tools for C++ development [`languages.cplusplus.tools`
+](/reference/options.md#languagescplusplustoolsenable)).
 
 Alternatively, you can manually specify packages:
 
-```nix
+```nix title="devenv.nix"
 languages.cplusplus = {
   enable = true;
   package = pkgs.stdenv.cc;
@@ -41,7 +42,7 @@ compiler.cppstd=14
 cmake/X.Y.Z
 ```
 
-There correspond the following conan-flake options:
+There corresponds the following conan-flake options:
 
 ```nix
 {
@@ -61,39 +62,63 @@ There correspond the following conan-flake options:
 }
 ```
 
-You can check [the list of available options](/reference/options.md#languagescplusplusconanenable). The [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option, however, maps the whole of the options available in the [conan-flake](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
+You can check [the list of available options](/reference/options.md#languagescplusplusconanenable). Observe that the [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option maps the whole of the options available in the [conan-flake](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
 
-Config the `devenv.nix` file accordingly. For example, the above is actually equivalent to the following:
+Set your `devenv.nix` file accordingly. For example, the above is actually equivalent to the following:
 
-```nix
-languages.cplusplus = {
-  enable = true;
-  conan = {
+```nix title="devenv.nix"
+{ pkgs, config, ... }:
+{
+  languages.cplusplus = {
     enable = true;
-    install.enable = true;
-    config = {
-      profiles = {
-        settings.compiler."compiler.cppstd" = "14";
-        settings.rest.build_type = "Debug";
+    conan = {
+      enable = true;
+      install.enable = true;
+      config = {
+        profiles = {
+          settings.compiler."compiler.cppstd" = "14";
+          settings.rest.build_type = "Debug";
+        };
       };
     };
   };
-};
+}
 ```
 
-By default, when Conan is enabled:
+By default, when `languages.cplusplus.conan` is enabled:
 
-- The default C++ package is set to `config.stdenv.cc`.
-- Conan is configured to use the default CMake package, already available in the developmemnt shell; as can be seen from the above example, the devenv integration automatically takes care of the CMake part by default, and the `profiles.platformToolRequires` and `devShell.tools` options are not required to be set explicitly.
+- The C++ package is set to `config.stdenv.cc` &mdash; that is, the system C compiler configured for devenv to use for the developer environment.
+- Whenever devenv is configured without a C compiler toolchain (see the recipe [Skip the C compiler toolchain](../../recipes/nix.md#skip-the-c-compiler-toolchain) for an example), the C++ package is defaulted to `pkgs.stdenv.cc` instead.
+- Conan is configured to use the default `languages.cplusplus.cmake` package available in the developer shell; as can be seen from the above example, the devenv integration automatically takes care of the CMake part, and the `profiles.platformToolRequires` and `devShell.tools` options are not required to be set explicitly.
 
 ### In Action:
 
 ```shell-session
 $ devenv shell
-Building shell ...
-Entering shell ...
+$ conan profile show
+Host profile:
+[settings]
+arch=x86_64
+build_type=Debug
+compiler=gcc
+compiler.cppstd=14
+compiler.libcxx=libstdc++11
+compiler.version=15.2.0
+os=Linux
+[platform_tool_requires]
+cmake/4.1.2
 
-conan profile show # This would show the configured profile.
+Build profile:
+[settings]
+arch=x86_64
+build_type=Debug
+compiler=gcc
+compiler.cppstd=14
+compiler.libcxx=libstdc++11
+compiler.version=15.2.0
+os=Linux
+[platform_tool_requires]
+cmake/4.1.2
 ```
 
 ## Additional Examples
@@ -102,7 +127,7 @@ conan profile show # This would show the configured profile.
 
 If you would like to integrate with the LLVM compiler infrastructure:
 
-```nix
+```nix title="devenv.nix"
 { pkgs, config, lib, ... }:
 {
   languages.cplusplus = {
@@ -130,7 +155,7 @@ If you would like to integrate with the LLVM compiler infrastructure:
 
 Or even:
 
-```nix
+```nix title="devenv.nix"
 { pkgs, config, lib, ... }:
 {
   stdenv = pkgs.overrideCC
@@ -165,18 +190,28 @@ In this second use case:
 
 ```shell-session
 $ devenv shell
-Building shell ...
-Entering shell ...
+$ conan create . --build=missing # This would create and test the current package.
+...
+======== Testing the package: Building ========
 
-conan profile show # This would show the configured profile.
-conan create . --build=missing # This would create and test the current package.
+======== Testing the package: Executing test ========
+example/0.0.1 (test package): Running test()
+example/0.0.1 (test package): RUN: example
+hello-world: Hello World Release!
+  hello-world: __x86_64__ defined
+  hello-world: __cplusplus202002
+  hello-world: __GNUC__4
+  hello-world: __GNUC_MINOR__2
+  hello-world: __clang_major__21
+  hello-world: __clang_minor__1
+example/0.0.1 test_package
 ```
 
 ### A local-recipe-index remote
 
 With [local-recipe-index](https://docs.conan.io/2/tutorial/conan_repositories/setup_local_recipes_index.html) remotes it's possible to declare dependencies from a simplified local index structure:
 
-```nix
+```nix title="devenv.nix"
 {
   languages.cplusplus = {
     enable = true;
@@ -215,12 +250,9 @@ The options:
 
 ```shell-session
 $ devenv shell
-Building shell ...
-Entering shell ...
-
-conan profile show # This would show the configured profile.
-conan remote list # This would list the configured remotes.
-conan create . --build=missing # This would create and test the current package.
+$ conan remote list # This would list the configured remotes.
+conancenter: https://center2.conan.io [Verify SSL: True, Enabled: False]
+local: /path/to/config/root/./repo [local-recipes-index, Enabled: True, Allowed packages: hello-world/0.0.1.cci.20260428]
 ```
 
 [comment]: # (Please add your documentation on top of this line)
