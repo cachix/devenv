@@ -7,7 +7,7 @@ let
   file = pkgs.runCommand "devcontainer.json" {
     nativeBuildInputs = [ pkgs.gawk ];
     jsonFile = settingsFormatJSON.generate "devcontainer.json" cfg.settings;
-  } # I hate it
+  }
   ''
     gawk 'NR==1{print "${managedByDevenvComment}"}1' "$jsonFile" > $out
   '';
