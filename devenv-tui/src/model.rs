@@ -164,6 +164,10 @@ pub struct UiState {
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
     pub interrupt_prompt_active: bool,
+    /// When the interrupt prompt is open while attached to a running process
+    /// manager: the prompt offers detach (leave running) vs stop the manager,
+    /// rather than the in-process "keep running vs quit".
+    pub interrupt_prompt_attached: bool,
     pub view_mode: ViewMode,
 }
 
@@ -189,6 +193,7 @@ impl UiState {
             },
             terminal_size: TerminalSize { width, height },
             interrupt_prompt_active: false,
+            interrupt_prompt_attached: false,
             view_mode: ViewMode::Main,
         }
     }
@@ -198,16 +203,24 @@ impl UiState {
         self.terminal_size = TerminalSize { width, height };
     }
 
-    pub fn show_interrupt_prompt(&mut self) {
+    pub fn show_interrupt_prompt(&mut self, attached: bool) {
         self.interrupt_prompt_active = true;
+        self.interrupt_prompt_attached = attached;
     }
 
     pub fn clear_interrupt_prompt(&mut self) {
         self.interrupt_prompt_active = false;
+        self.interrupt_prompt_attached = false;
     }
 
     pub fn interrupt_prompt_active(&self) -> bool {
         self.interrupt_prompt_active
+    }
+
+    /// Whether the open interrupt prompt is the attached-mode (detach vs stop)
+    /// variant.
+    pub fn interrupt_prompt_attached(&self) -> bool {
+        self.interrupt_prompt_attached
     }
 
     /// Toggle the `hide_stopped_processes` filter.
@@ -1644,7 +1657,7 @@ mod tests {
 
         assert!(!ui.interrupt_prompt_active());
 
-        ui.show_interrupt_prompt();
+        ui.show_interrupt_prompt(false);
         assert!(ui.interrupt_prompt_active());
 
         ui.clear_interrupt_prompt();

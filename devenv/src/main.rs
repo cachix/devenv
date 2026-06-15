@@ -461,6 +461,7 @@ impl Renderer {
         backend_done_rx: tokio::sync::oneshot::Receiver<()>,
         command_tx: tokio::sync::mpsc::Sender<ProcessCommand>,
         verbosity: VerbosityLevel,
+        attached: Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<u16> {
         match self {
             Renderer::Tui(activity_rx) => {
@@ -472,6 +473,7 @@ impl Renderer {
                 current_thread_runtime("TUI")?.block_on(async {
                     Ok(devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                         .with_command_sender(command_tx)
+                        .with_attached_flag(attached)
                         .filter_level(filter_level)
                         .run(backend_done_rx)
                         .await
@@ -575,8 +577,13 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
         command_tx,
     } = render_side;
 
+    // Shared with the TUI: the backend sets this true while attached to a
+    // running process manager, so the Ctrl-C prompt offers detach vs stop.
+    let attached = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
     // Backend on dedicated thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
+    let attached_backend = attached.clone();
     let devenv_thread = std::thread::Builder::new()
         .name("devenv".into())
         .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
@@ -584,7 +591,13 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
             build_gc_runtime().block_on(async {
                 shutdown_clone.install_signals().await;
 
-                let output = run_backend(backend, shutdown_clone.clone(), backend_side).await;
+                let output = run_backend(
+                    backend,
+                    shutdown_clone.clone(),
+                    backend_side,
+                    attached_backend,
+                )
+                .await;
 
                 // Fallback for paths that didn't run cleanup themselves
                 // (PTY shell, REPL). No-op when run_backend already did it.
@@ -596,7 +609,8 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
         .into_diagnostic()
         .wrap_err("Failed to spawn devenv thread")?;
 
-    let tui_render_height = renderer.drive(&shutdown, backend_done_rx, command_tx, verbosity)?;
+    let tui_render_height =
+        renderer.drive(&shutdown, backend_done_rx, command_tx, verbosity, attached)?;
 
     // Signal backend that terminal is available (with TUI render height for cursor positioning)
     let _ = terminal_ready_tx.send(tui_render_height);
@@ -642,6 +656,7 @@ async fn run_backend(
     backend: BackendOptions,
     shutdown: Arc<Shutdown>,
     side: BackendSide,
+    attached: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<CommandResult> {
     let BackendSide {
         backend_done_tx,
@@ -664,7 +679,8 @@ async fn run_backend(
     // `backend_done_tx` is the renderer's stop signal: send at the right
     // point, or — on early return / panic — its drop closes the channel,
     // which the renderer also treats as "stop". No guard needed.
-    let devenv = Devenv::new(devenv_options).await?;
+    let mut devenv = Devenv::new(devenv_options).await?;
+    devenv.set_attach_indicator(attached);
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd, args } = command {

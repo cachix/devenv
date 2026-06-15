@@ -266,6 +266,10 @@ pub struct Devenv {
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
 
+    // Set true while attached to an already-running process manager. Shared
+    // with the TUI so its Ctrl-C prompt offers detach vs stop the manager.
+    attach_indicator: Arc<std::sync::atomic::AtomicBool>,
+
     // Task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV) set by
     // run_enter_shell_tasks(). Injected into the bash script by prepare_shell()
     // so they take effect AFTER the Nix shell env is applied.
@@ -547,9 +551,16 @@ impl Devenv {
             port_allocator,
             native_process_manager: OnceCell::new(),
             shutdown: options.shutdown,
+            attach_indicator: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             task_exports: std::sync::Mutex::new(BTreeMap::new()),
             task_messages: std::sync::Mutex::new(Vec::new()),
         })
+    }
+
+    /// Share the TUI's attach-mode flag so the interrupt prompt reflects
+    /// whether this run is attached to an already-running process manager.
+    pub fn set_attach_indicator(&mut self, flag: Arc<std::sync::atomic::AtomicBool>) {
+        self.attach_indicator = flag;
     }
 
     pub fn processes_log(&self) -> PathBuf {
@@ -885,6 +896,11 @@ impl Devenv {
         let parent_id = parent.id();
         let mut procs: HashMap<String, Activity> = HashMap::new();
 
+        // Tell the TUI we are attached so its Ctrl-C prompt offers detach vs
+        // stop the manager instead of the in-process keep-running vs quit.
+        self.attach_indicator
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+
         let detached = || message(ActivityLevel::Info, "detached, processes left running");
 
         fn upsert(
@@ -915,6 +931,24 @@ impl Devenv {
                     }
                 } => {
                     match cmd {
+                        // Stop the whole manager (chosen from the attach-mode
+                        // Ctrl-C prompt): tear the daemon down and exit.
+                        Some(processes::ProcessCommand::StopManager) => {
+                            message(ActivityLevel::Info, "stopping the process manager");
+                            match self.down().await {
+                                Ok(()) => {
+                                    message(ActivityLevel::Info, "process manager stopped");
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    message(
+                                        ActivityLevel::Error,
+                                        format!("failed to stop the process manager: {e}"),
+                                    );
+                                    return Err(e);
+                                }
+                            }
+                        }
                         Some(cmd) => {
                             let request = match cmd {
                                 processes::ProcessCommand::Restart(name) => {
@@ -923,6 +957,8 @@ impl Devenv {
                                 processes::ProcessCommand::Stop(name) => {
                                     processes::ApiRequest::Stop { name }
                                 }
+                                // Handled above.
+                                processes::ProcessCommand::StopManager => unreachable!(),
                             };
                             // Ctrl-C must not be dead while the one-shot is in
                             // flight: race the request against the token. The
@@ -1022,6 +1058,10 @@ impl Devenv {
             bail!("No processes running. Start them with: devenv up -d");
         };
         info!(%pid, "attached to running process manager");
+        message(
+            ActivityLevel::Info,
+            "Attaching to the running process manager",
+        );
         let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
         self.run_attached_foreground(&parent, command_rx).await
     }
@@ -2042,6 +2082,10 @@ impl Devenv {
                 }
                 // Interactive foreground `devenv up`: attach and stream status
                 // until the user detaches (Ctrl-C), leaving the manager running.
+                message(
+                    ActivityLevel::Info,
+                    "Attaching to the already-running process manager",
+                );
                 self.attach_start_up_processes(&launch_names).await?;
                 info!(names = ?launch_names, "attached to running process manager");
                 // Reuse the already-open "Running processes" operation as the

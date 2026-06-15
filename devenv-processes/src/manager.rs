@@ -23,6 +23,10 @@ pub enum ProcessCommand {
     Restart(String),
     /// Stop a running process but keep it visible and restartable
     Stop(String),
+    /// Tear down the whole process manager (stop every process and shut the
+    /// daemon down). Sent from the TUI's attach-mode interrupt prompt; the
+    /// attached client services it by issuing a `down`.
+    StopManager,
 }
 
 /// Request sent by a client to the native manager API socket.
@@ -2509,6 +2513,12 @@ impl NativeProcessManager {
                 if let Err(e) = self.stop_and_keep(&name).await {
                     warn!("Failed to stop process {}: {}", name, e);
                 }
+            }
+            // Only the attach client (run_attached_foreground) services this;
+            // an in-process manager's interrupt prompt offers quit instead of
+            // detach/stop, so it is never sent here.
+            ProcessCommand::StopManager => {
+                debug!("ignoring StopManager on an in-process manager");
             }
         }
     }
