@@ -901,6 +901,17 @@ impl Devenv {
         self.attach_indicator
             .store(true, std::sync::atomic::Ordering::Relaxed);
 
+        // Announce the attach as a child of the processes operation so it shows
+        // in the tree (a standalone message with no parent is not rendered).
+        async {
+            message(
+                ActivityLevel::Info,
+                "Attached to the running process manager — Ctrl-C to detach or stop it",
+            );
+        }
+        .in_activity(parent)
+        .await;
+
         let detached = || message(ActivityLevel::Info, "detached, processes left running");
 
         fn upsert(
@@ -1058,10 +1069,6 @@ impl Devenv {
             bail!("No processes running. Start them with: devenv up -d");
         };
         info!(%pid, "attached to running process manager");
-        message(
-            ActivityLevel::Info,
-            "Attaching to the running process manager",
-        );
         let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
         self.run_attached_foreground(&parent, command_rx).await
     }
@@ -2082,10 +2089,7 @@ impl Devenv {
                 }
                 // Interactive foreground `devenv up`: attach and stream status
                 // until the user detaches (Ctrl-C), leaving the manager running.
-                message(
-                    ActivityLevel::Info,
-                    "Attaching to the already-running process manager",
-                );
+                // run_attached_foreground announces the attach in the tree.
                 self.attach_start_up_processes(&launch_names).await?;
                 info!(names = ?launch_names, "attached to running process manager");
                 // Reuse the already-open "Running processes" operation as the
