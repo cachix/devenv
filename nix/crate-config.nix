@@ -11,6 +11,7 @@
 , libghostty-vt
 , gitRev ? ""
 , isRelease ? false
+,
 }:
 
 let
@@ -42,7 +43,10 @@ let
   '';
 
   tracingUnstable = attrs: {
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+    ];
   };
 
   # Override for crates needing nix C libraries
@@ -65,15 +69,18 @@ let
 
   # Override for crates needing dbus (Linux only)
   dbusOverride = attrs: {
-    buildInputs = (attrs.buildInputs or [ ])
-      ++ lib.optional stdenv.isLinux dbus;
+    buildInputs = (attrs.buildInputs or [ ]) ++ lib.optional stdenv.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
 
   # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen.
   devenvBase = attrs: {
-    buildInputs = (attrs.buildInputs or [ ])
-      ++ [ openssl libghostty-vt ]
+    buildInputs =
+      (attrs.buildInputs or [ ])
+      ++ [
+        openssl
+        libghostty-vt
+      ]
       ++ nixLibs
       ++ lib.optional stdenv.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
@@ -90,10 +97,13 @@ let
 in
 {
   # Main devenv crate
-  devenv = attrs: devenvBase attrs // {
-    DEVENV_GIT_REV = gitRev;
-    DEVENV_IS_RELEASE = if isRelease then "true" else "";
-  };
+  devenv =
+    attrs:
+    devenvBase attrs
+    // {
+      DEVENV_GIT_REV = gitRev;
+      DEVENV_IS_RELEASE = if isRelease then "true" else "";
+    };
 
   # devenv-run-tests needs the same deps as devenv
   devenv-run-tests = devenvBase;
@@ -108,14 +118,20 @@ in
       pkg-config
       rustPlatform.bindgenHook
     ];
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+    ];
   };
 
   # devenv-snix-backend needs protobuf
   devenv-snix-backend = attrs: {
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ protobuf ];
     preConfigure = (attrs.preConfigure or "") + protoSetup;
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [ "--cfg" "tracing_unstable" ];
+    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+      "--cfg"
+      "tracing_unstable"
+    ];
   };
 
   # snix crates need protobuf
@@ -148,6 +164,14 @@ in
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
       rustPlatform.bindgenHook
     ];
+  };
+
+  # pest_consume's parser macro generates the AliasedRule enum and dispatch arms
+  # by iterating a std::HashMap, so the generated parser (and thus the crate's
+  # metadata SVH) is non-deterministic.
+  # Patch the macro to sort the rule iteration so its output is reproducible.
+  pest_consume_macros = attrs: {
+    patches = (attrs.patches or [ ]) ++ [ ./pest-consume-macros-deterministic.patch ];
   };
 
   # rmcp uses env!("CARGO_CRATE_NAME") at compile time
