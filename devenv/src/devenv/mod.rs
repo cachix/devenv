@@ -46,6 +46,26 @@ use tracing::{Instrument, debug, debug_span, info, info_span, instrument, trace,
 const RESTART_FOR_CONFIG_GUIDANCE: &str =
     "Restart it with `devenv processes down` and `devenv up -d` to pick up configuration changes";
 
+/// Detect whether we are running inside an AI coding agent.
+///
+/// LLM tools typically allocate a PTY so `is_terminal()` returns true, but their
+/// verbose TUI output wastes tokens and a streaming attach view would hang them.
+/// We use the `detect-coding-agent` crate to recognize well-known AI agents
+/// (Claude Code, Cursor, Aider, ...) from their environment variables.
+///
+/// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
+/// even when running under a detected agent). The result is cached for the
+/// process lifetime.
+pub fn is_ai_agent() -> bool {
+    static CACHED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        if std::env::var_os("DEVENV_NO_AI_AGENT").is_some() {
+            return false;
+        }
+        detect_coding_agent::is_agent()
+    })
+}
+
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
     include_str!("../../direnvrc").replace(
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=0",
@@ -698,13 +718,6 @@ impl Devenv {
         // hang on the streaming attach view, so they are excluded alongside
         // CI and non-tty stdin/stderr.
         stdin_is_tty && stderr_is_tty && !is_ci && !is_ai_agent
-    }
-
-    /// Whether this `devenv` invocation is running under a detected coding
-    /// agent (mirrors the binary's `is_ai_agent`, which the library can't
-    /// reach). `DEVENV_NO_AI_AGENT=1` opts out of detection.
-    fn running_under_ai_agent() -> bool {
-        std::env::var_os("DEVENV_NO_AI_AGENT").is_none() && detect_coding_agent::is_agent()
     }
 
     /// Names of processes that `devenv up` should start: process tasks whose
@@ -2117,7 +2130,7 @@ impl Devenv {
                     std::io::stdin().is_terminal(),
                     std::io::stderr().is_terminal(),
                     std::env::var_os("CI").is_some(),
-                    Self::running_under_ai_agent(),
+                    is_ai_agent(),
                 );
                 if options.detach || !interactive {
                     bail!(

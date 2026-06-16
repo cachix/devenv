@@ -10,6 +10,7 @@ use devenv::{
     },
     commands,
     config::{self, Config},
+    is_ai_agent,
     processes::ProcessCommand,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
     tracing as devenv_tracing,
@@ -23,7 +24,7 @@ use std::{
     os, panic,
     path::{Path, PathBuf},
     process::{self, Command},
-    sync::{Arc, OnceLock},
+    sync::Arc,
     time::Duration,
 };
 use tempfile::TempDir;
@@ -1294,25 +1295,6 @@ fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<(
 }
 
 // Logging helpers
-
-/// Detect whether we are running inside an AI coding agent.
-///
-/// LLM tools typically allocate a PTY so is_terminal() returns true,
-/// but their verbose TUI output wastes tokens. We use the `detect-coding-agent`
-/// crate to recognize well-known AI agents (Claude Code, Cursor, Aider, ...) from
-/// their environment variables.
-///
-/// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
-/// even when running under a detected agent).
-fn is_ai_agent() -> bool {
-    static CACHED: OnceLock<bool> = OnceLock::new();
-    *CACHED.get_or_init(|| {
-        if env::var_os("DEVENV_NO_AI_AGENT").is_some() {
-            return false;
-        }
-        detect_coding_agent::is_agent()
-    })
-}
 
 /// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
 fn resolve_verbosity(cli_options: &CliOptions) -> VerbosityLevel {

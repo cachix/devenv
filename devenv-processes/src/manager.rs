@@ -1524,45 +1524,13 @@ impl NativeProcessManager {
     /// distinct variant from `NotStarted` so callers of [`Self::get_phase`]
     /// can tell apart a process the user stopped from one that never started.
     /// Errors if the process is not currently `Active`.
+    ///
+    /// Identical to [`Self::stop`]: both keep the entry visible as `Stopped` and
+    /// report a plain `Stopped` (the user's final word) rather than preserving a
+    /// self-exit phase. Kept as a distinct, intent-revealing name for the Ctrl-X
+    /// path that wants the process to remain restartable.
     pub async fn stop_and_keep(&self, name: &str) -> Result<()> {
-        // Extract the handle and insert the Stopped entry under the same write
-        // lock, so the entry never vanishes mid-teardown: get_phase keeps
-        // answering, run_foreground's empty-map check cannot fire, and a
-        // concurrent re-arm cannot launch into a missing slot and later be
-        // clobbered by a trailing insert.
-        // An explicit Ctrl-X stop reports a plain `Stopped` (the user's final
-        // word) rather than preserving a self-exit phase, so a process the user
-        // stopped after it had exited is not later mistaken for a live one.
-        let parts = {
-            let mut processes = self.processes.write().await;
-
-            match processes.remove(name) {
-                Some(ProcessEntry::Active(handle)) => {
-                    take_active_for_stop(handle, name, &mut processes, false)
-                }
-                Some(
-                    entry @ (ProcessEntry::NotStarted { .. }
-                    | ProcessEntry::Waiting { .. }
-                    | ProcessEntry::Stopped { .. }
-                    | ProcessEntry::Launching { .. }),
-                ) => {
-                    let state = match &entry {
-                        ProcessEntry::NotStarted { .. } => "not running",
-                        ProcessEntry::Stopped { .. } => "already stopped",
-                        ProcessEntry::Launching { .. } => "starting",
-                        _ => "waiting for dependencies",
-                    };
-                    processes.insert(name.to_string(), entry);
-                    bail!("Process {} is {}, cannot stop", name, state)
-                }
-                None => bail!("Process {} not found", name),
-            }
-        };
-
-        trace!("Stopping process (keeping visible): {}", name);
-
-        self.finish_stop(name, parts).await;
-        Ok(())
+        self.stop_inner(name, false).await
     }
 
     /// Signal all supervisors to shut down gracefully.
