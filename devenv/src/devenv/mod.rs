@@ -41,6 +41,11 @@ use tokio::process;
 use tokio::sync::OnceCell;
 use tracing::{Instrument, debug, debug_span, info, info_span, instrument, trace, warn};
 
+/// Trailing guidance shown when the running manager doesn't recognise a process
+/// name because it was started under a different configuration.
+const RESTART_FOR_CONFIG_GUIDANCE: &str =
+    "Restart it with `devenv processes down` and `devenv up -d` to pick up configuration changes";
+
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
     include_str!("../../direnvrc").replace(
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=0",
@@ -677,14 +682,43 @@ impl Devenv {
         )
     }
 
+    /// Whether an interactive foreground `devenv up` should attach to an
+    /// already-running process manager (vs. failing fast). Attaching streams a
+    /// live view until the user detaches with Ctrl-C, which only makes sense
+    /// at an interactive terminal — scripts, CI, piped output, and AI agents
+    /// would otherwise block forever. Pure so the truth table is unit-testable;
+    /// the call site supplies the real tty/CI/AI-agent values.
+    fn should_attach_to_running_manager(
+        stdin_is_tty: bool,
+        stderr_is_tty: bool,
+        is_ci: bool,
+        is_ai_agent: bool,
+    ) -> bool {
+        // AI agents (and other PTY-allocating wrappers) report ttys but would
+        // hang on the streaming attach view, so they are excluded alongside
+        // CI and non-tty stdin/stderr.
+        stdin_is_tty && stderr_is_tty && !is_ci && !is_ai_agent
+    }
+
+    /// Whether this `devenv` invocation is running under a detected coding
+    /// agent (mirrors the binary's `is_ai_agent`, which the library can't
+    /// reach). `DEVENV_NO_AI_AGENT=1` opts out of detection.
+    fn running_under_ai_agent() -> bool {
+        std::env::var_os("DEVENV_NO_AI_AGENT").is_none() && detect_coding_agent::is_agent()
+    }
+
     /// Names of processes that `devenv up` should start: process tasks whose
-    /// `start.enable` is true; `false` processes are excluded.
+    /// `start.enable` is true; only an explicit `start.enable = false` is
+    /// excluded. A missing `process` config counts as enabled — matching
+    /// `StartConfig::default()`, `build_process_config`, and
+    /// `resolve_launch_processes` (`is_none_or`), so the default launch set
+    /// here agrees with the cold-start and named paths.
     fn up_enabled_process_names(task_configs: &[tasks::TaskConfig]) -> Vec<String> {
         task_configs
             .iter()
             .filter_map(|t| {
                 let name = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)?;
-                let enabled = t.process.as_ref().is_some_and(|p| p.start.enable);
+                let enabled = t.process.as_ref().is_none_or(|p| p.start.enable);
                 enabled.then(|| name.to_string())
             })
             .collect()
@@ -836,8 +870,9 @@ impl Devenv {
             processes::ApiResponse::Start { outcome } => {
                 if !outcome.unknown.is_empty() {
                     bail!(
-                        "Process(es) not known to the running process manager (it was started with a different configuration): {}. Restart it with `devenv processes down` and `devenv up -d` to pick up configuration changes",
-                        outcome.unknown.join(", ")
+                        "Process(es) not known to the running process manager (it was started with a different configuration): {}. {}",
+                        outcome.unknown.join(", "),
+                        RESTART_FOR_CONFIG_GUIDANCE
                     );
                 }
                 if !outcome.failed.is_empty() {
@@ -2078,9 +2113,12 @@ impl Devenv {
                 // forever. Both fail fast like a fresh foreground start that
                 // finds a manager already running; interactive foreground
                 // `devenv up` is the only intended attacher on this path.
-                let interactive = std::io::stdin().is_terminal()
-                    && std::io::stderr().is_terminal()
-                    && std::env::var_os("CI").is_none();
+                let interactive = Self::should_attach_to_running_manager(
+                    std::io::stdin().is_terminal(),
+                    std::io::stderr().is_terminal(),
+                    std::env::var_os("CI").is_some(),
+                    Self::running_under_ai_agent(),
+                );
                 if options.detach || !interactive {
                     bail!(
                         "Processes already running with PID {}. Stop them first with: devenv processes down",
@@ -2120,6 +2158,14 @@ impl Devenv {
             tasks_runner
                 .process_manager()
                 .set_scheduler(Arc::downgrade(&scheduler));
+            // This in-process manager (interactive foreground `up`, or a
+            // detached owner like `devenv test`) is owned by a live devenv
+            // process: mark it Foreground so a `devenv up -d` from another
+            // terminal refuses to schedule into it. Set before the run so a
+            // `Mode` query during startup is answered correctly.
+            tasks_runner
+                .process_manager()
+                .set_mode(processes::ManagerMode::Foreground);
 
             // Start command processing before task execution so that
             // Ctrl-R works even while tasks are still running (e.g. when
@@ -2141,13 +2187,6 @@ impl Devenv {
             // while processes are still starting up.
 
             let pid_file = tasks_runner.process_manager().manager_pid_file();
-            // This in-process manager (interactive foreground `up`, or a
-            // detached owner like `devenv test`) is owned by a live devenv
-            // process: mark it Foreground so a `devenv up -d` from another
-            // terminal refuses to schedule into it instead of silently
-            // attaching. Marker first, so a reader who sees the pid as
-            // running never observes a missing marker.
-            processes::write_manager_mode(&pid_file, processes::ManagerMode::Foreground).await;
             processes::write_pid(&pid_file, std::process::id())
                 .await
                 .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
@@ -2165,7 +2204,6 @@ impl Devenv {
                 trace!("devenv.up: run_foreground returned");
 
                 let _ = tokio::fs::remove_file(&pid_file).await;
-                processes::remove_manager_mode(&pid_file).await;
                 result?;
             } else {
                 // Store manager for later stop via down()
@@ -2247,11 +2285,14 @@ impl Devenv {
             // A foreground `devenv up` session in another terminal owns its
             // processes: scheduling into it from here would silently mutate a
             // session the user is watching, and its exit would tear the
-            // processes down anyway. `None` (no marker) means an older devenv
-            // started the manager — treat it as a daemon and attach, which
-            // preserves the previous behavior.
+            // processes down anyway. The running manager answers its own mode
+            // over the control socket, so a live foreground session is always
+            // detected. `None` (an older daemon that predates the `Mode`
+            // request) is treated as a daemon and attached, preserving the
+            // previous behavior.
             if matches!(
-                processes::read_manager_mode(&pid_file).await,
+                processes::NativeProcessManager::query_manager_mode(&self.native_socket_path())
+                    .await,
                 Some(processes::ManagerMode::Foreground)
             ) {
                 bail!(
@@ -2585,8 +2626,9 @@ impl Devenv {
                 }
                 if outcome.unknown.contains(&name.to_string()) {
                     bail!(
-                        "Process '{}' is not known to the running process manager (it was started with a different configuration). Restart it with `devenv processes down` and `devenv up -d` to pick up configuration changes",
-                        name
+                        "Process '{}' is not known to the running process manager (it was started with a different configuration). {}",
+                        name,
+                        RESTART_FOR_CONFIG_GUIDANCE
                     );
                 }
                 bail!("Failed to start process '{}'", name);
@@ -3181,6 +3223,56 @@ mod tests {
         assert_eq!(
             Devenv::up_enabled_process_names(&configs),
             vec!["alpha".to_string()]
+        );
+    }
+
+    #[test]
+    fn up_enabled_process_names_treats_missing_config_as_enabled() {
+        // Regression: a process task with `process: None` defaults to
+        // `start.enable = true` (StartConfig::default and
+        // build_process_config both treat the missing config as enabled), and
+        // `resolve_launch_processes` agrees via `is_none_or`. The default-set
+        // helper must too, or a bare `devenv up` attaching to a running
+        // manager silently drops such a process from the launch set while a
+        // cold start would have launched it.
+        let configs = vec![
+            process_task("alpha", true),
+            tasks::TaskConfig {
+                name: format!("{}gamma", devenv_tasks::PROCESS_TASK_PREFIX),
+                process: None,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(
+            Devenv::up_enabled_process_names(&configs),
+            vec!["alpha".to_string(), "gamma".to_string()],
+            "a process with no explicit `process` config defaults to enabled"
+        );
+    }
+
+    #[test]
+    fn should_attach_to_running_manager_excludes_ai_agents() {
+        // A human at an interactive terminal (tty stdin+stderr, not CI, not an
+        // AI agent) attaches to the running manager and streams a live view.
+        assert!(Devenv::should_attach_to_running_manager(
+            true, true, false, false
+        ));
+        // CI or a non-tty stdin/stderr never attaches (would block forever).
+        assert!(!Devenv::should_attach_to_running_manager(
+            true, true, true, false
+        ));
+        assert!(!Devenv::should_attach_to_running_manager(
+            false, true, false, false
+        ));
+        assert!(!Devenv::should_attach_to_running_manager(
+            true, false, false, false
+        ));
+        // Regression: an AI agent (e.g. Claude Code) allocates a PTY so the
+        // tty checks pass, but it must NOT attach — `devenv up` against a
+        // running manager streams until Ctrl-C and would hang the agent.
+        assert!(
+            !Devenv::should_attach_to_running_manager(true, true, false, true),
+            "an AI agent must not attach: it would hang on the streaming view"
         );
     }
 

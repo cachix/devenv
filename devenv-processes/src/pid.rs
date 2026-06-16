@@ -3,7 +3,7 @@
 use miette::{IntoDiagnostic, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tokio::fs;
 use tracing::warn;
 
@@ -19,8 +19,7 @@ pub enum PidStatus {
 }
 
 /// Check if a PID file exists and the process is still running.
-/// Removes stale PID files automatically (together with the mode marker, so a
-/// crashed session's marker never misclassifies the next manager).
+/// Removes stale PID files automatically.
 pub async fn check_pid_file(pid_file: &Path) -> Result<PidStatus> {
     let pid_str = match fs::read_to_string(pid_file).await {
         Ok(s) => s,
@@ -30,7 +29,6 @@ pub async fn check_pid_file(pid_file: &Path) -> Result<PidStatus> {
         Err(e) => {
             warn!("Unreadable PID file {}: {}", pid_file.display(), e);
             let _ = fs::remove_file(pid_file).await;
-            remove_manager_mode(pid_file).await;
             return Ok(PidStatus::StaleRemoved);
         }
     };
@@ -44,7 +42,6 @@ pub async fn check_pid_file(pid_file: &Path) -> Result<PidStatus> {
                 pid_str.trim()
             );
             let _ = fs::remove_file(pid_file).await;
-            remove_manager_mode(pid_file).await;
             return Ok(PidStatus::StaleRemoved);
         }
     };
@@ -56,13 +53,11 @@ pub async fn check_pid_file(pid_file: &Path) -> Result<PidStatus> {
         Err(nix::errno::Errno::ESRCH) => {
             warn!("Stale PID {} in {}, removing", pid, pid_file.display());
             let _ = fs::remove_file(pid_file).await;
-            remove_manager_mode(pid_file).await;
             Ok(PidStatus::StaleRemoved)
         }
         Err(e) => {
             warn!("Error checking PID {}: {}, removing file", pid, e);
             let _ = fs::remove_file(pid_file).await;
-            remove_manager_mode(pid_file).await;
             Ok(PidStatus::StaleRemoved)
         }
     }
@@ -83,53 +78,4 @@ pub async fn write_pid(pid_file: &Path, pid: u32) -> Result<()> {
 /// Remove a PID file
 pub async fn remove_pid(pid_file: &Path) -> Result<()> {
     fs::remove_file(pid_file).await.into_diagnostic()
-}
-
-/// How the running native manager session was started. Stored in a sibling
-/// file of the pid file because the pid file format is a bare integer that
-/// older readers parse strictly (and delete on mismatch).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ManagerMode {
-    /// An interactive `devenv up` (or an in-process detached manager such as
-    /// `devenv test`) owns the session from a live devenv process.
-    Foreground,
-    /// A detached daemon spawned by `devenv up -d` owns the session.
-    Daemon,
-}
-
-/// Path of the mode marker: the pid file with extension `mode`.
-pub fn manager_mode_file(pid_file: &Path) -> PathBuf {
-    pid_file.with_extension("mode")
-}
-
-/// Best-effort write of the mode marker next to the pid file.
-///
-/// Written before the pid file so that a reader who sees the pid as running
-/// never observes a missing marker for a session that has one.
-pub async fn write_manager_mode(pid_file: &Path, mode: ManagerMode) {
-    let contents = match mode {
-        ManagerMode::Foreground => "foreground",
-        ManagerMode::Daemon => "daemon",
-    };
-    if let Err(e) = fs::write(manager_mode_file(pid_file), contents).await {
-        warn!(error = %e, path = %pid_file.display(), "failed to write manager mode marker");
-    }
-}
-
-/// Read the mode marker; `None` when missing or unrecognized. Callers treat
-/// `None` as `Daemon` for compatibility with managers started by older devenv
-/// versions that wrote no marker.
-pub async fn read_manager_mode(pid_file: &Path) -> Option<ManagerMode> {
-    let contents = fs::read_to_string(manager_mode_file(pid_file)).await.ok()?;
-    match contents.trim() {
-        "foreground" => Some(ManagerMode::Foreground),
-        "daemon" => Some(ManagerMode::Daemon),
-        _ => None,
-    }
-}
-
-/// Best-effort removal, paired with pid-file removal everywhere so stale
-/// markers from crashed sessions cannot misclassify a later manager.
-pub async fn remove_manager_mode(pid_file: &Path) {
-    let _ = fs::remove_file(manager_mode_file(pid_file)).await;
 }

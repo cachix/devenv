@@ -28,6 +28,10 @@
 - Fixed lifecycle races in the native process manager: a process being relaunched could be started twice, leaving an orphaned copy that kept its port bound but no longer appeared in `devenv processes list`; a process whose dependency could not be satisfied vanished from the list instead of showing as stopped; and a relaunched process that had previously failed left its dependents permanently blocked on the stale failure.
 - Fixed `devenv processes wait` hanging forever when a process is waiting on a dependency that is stopped or not started.
 - Fixed `devenv up -d` silently scheduling processes into another terminal's foreground `devenv up` session; it now asks you to attach with plain `devenv up` or stop the session first.
+- Fixed `devenv up` attaching to a running process manager and then blocking, with no way to interrupt it, when run under an AI coding agent or with piped output. It now attaches only at an interactive terminal and otherwise reports that processes are already running.
+- Fixed `devenv processes wait` returning before a process was up when that process was waiting on a one-shot setup task (e.g. a migration) that was still running; a running setup task now counts as in progress.
+- Fixed a process that exited on its own and was then explicitly stopped still showing as exited (and counting as succeeded in run summaries) instead of stopped.
+- Fixed `devenv up` with no arguments not starting a process whose configuration omits `start.enable`, even though it defaults to enabled and `devenv up <name>` would start it.
 
 ### Improvements
 

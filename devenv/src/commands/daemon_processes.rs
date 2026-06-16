@@ -63,14 +63,16 @@ pub fn run(config_file: &Path) -> Result<()> {
         tasks_runner
             .process_manager()
             .set_scheduler(Arc::downgrade(&scheduler));
+        // Declare this as a daemon session before the run, so a `Mode` query
+        // arriving during startup (the API socket accepts as soon as processes
+        // are pre-registered) is answered correctly.
+        tasks_runner
+            .process_manager()
+            .set_mode(crate::processes::ManagerMode::Daemon);
 
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 
         let pid_file = tasks_runner.process_manager().manager_pid_file();
-        // Mode marker first: a reader who sees the pid as running must never
-        // observe a missing marker for a session that has one.
-        crate::processes::write_manager_mode(&pid_file, crate::processes::ManagerMode::Daemon)
-            .await;
         crate::processes::write_pid(&pid_file, std::process::id())
             .await
             .map_err(|e| miette::miette!("Failed to write PID: {}", e))?;
@@ -82,7 +84,6 @@ pub fn run(config_file: &Path) -> Result<()> {
             .map_err(|e| miette::miette!("Process manager error: {}", e));
 
         let _ = tokio::fs::remove_file(&pid_file).await;
-        crate::processes::remove_manager_mode(&pid_file).await;
         result
     })
 }

@@ -63,6 +63,26 @@ pub enum ApiRequest {
     /// status changes, log lines) until the client disconnects or the
     /// manager shuts down.
     Attach,
+    /// Ask the running manager how its session was started (foreground vs
+    /// daemon). Answered authoritatively by the live manager, so a missing or
+    /// stale on-disk marker can never misclassify it.
+    Mode,
+}
+
+/// How the running native manager session was started. The manager answers
+/// this over its control socket ([`ApiRequest::Mode`]), so there is a single
+/// authoritative source rather than a sibling file that can go missing or
+/// stale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagerMode {
+    /// An interactive `devenv up` (or an in-process detached manager such as
+    /// `devenv test`) owns the session from a live devenv process. A
+    /// `devenv up -d` from another terminal must not schedule into it.
+    Foreground,
+    /// A detached daemon spawned by `devenv up -d` owns the session; a later
+    /// `devenv up` attaches and schedules into it.
+    Daemon,
 }
 
 /// Port allocation info from a running process.
@@ -104,6 +124,8 @@ pub enum ApiResponse {
     PortAllocations { ports: Vec<PortInfo> },
     /// Result of a `Start` request: how each requested name was classified.
     Start { outcome: StartOutcome },
+    /// How the running manager's session was started.
+    Mode { mode: ManagerMode },
 }
 
 /// Outcome of starting a set of processes via the owning scheduler.
@@ -290,6 +312,70 @@ fn terminal_phase_of(phase: crate::supervisor_state::SupervisorPhase) -> Option<
     }
 }
 
+/// The pieces of a torn-down `Active` handle that [`Manager::finish_stop`] needs
+/// to abort the supervisor, kill the job, and release ports.
+struct StopParts {
+    job: Arc<Job>,
+    supervisor_task: JoinHandle<()>,
+    notify_forwarder: JoinHandle<()>,
+    output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
+    ports: Vec<u16>,
+}
+
+/// Tear an `Active` handle out for stopping: preserve its terminal supervisor
+/// phase, drop a `Stopped` placeholder into the map under the same lock (so the
+/// entry never vanishes mid-teardown), and return the pieces `finish_stop` needs.
+fn take_active_for_stop(
+    handle: JobHandle,
+    name: &str,
+    processes: &mut HashMap<String, ProcessEntry>,
+    preserve_terminal: bool,
+) -> StopParts {
+    let ports = declared_ports(&handle.resources.config);
+    // A self-exit/give-up outcome is preserved only for shutdown teardown,
+    // where the run summary and dependents still want to see how the process
+    // ended. An explicit user stop (`devenv processes stop`, Ctrl-X) is the
+    // user's final word, so it reports a plain `Stopped` instead — otherwise a
+    // process the user stopped after it had already exited would keep showing
+    // `Exited` in `devenv processes list` and count as succeeded in summaries.
+    let terminal_phase = if preserve_terminal {
+        terminal_phase_of(handle.status_rx.borrow().phase)
+    } else {
+        None
+    };
+    let JobHandle {
+        resources,
+        supervisor_task,
+        notify_forwarder,
+        output_readers,
+        ..
+    } = handle;
+    let ProcessResources {
+        config,
+        activity,
+        job,
+        ..
+    } = resources;
+
+    activity.set_status(ProcessStatus::Stopping);
+    processes.insert(
+        name.to_string(),
+        ProcessEntry::Stopped {
+            config,
+            activity,
+            terminal_phase,
+        },
+    );
+
+    StopParts {
+        job,
+        supervisor_task,
+        notify_forwarder,
+        output_readers,
+        ports,
+    }
+}
+
 /// Collect the names of all active (supervised) processes from the map.
 fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
     processes
@@ -373,6 +459,12 @@ pub struct NativeProcessManager {
     /// Set once, after the manager is wrapped in an `Arc`; unset on managers
     /// without an owning scheduler.
     scheduler: std::sync::OnceLock<std::sync::Weak<dyn ProcessScheduler>>,
+    /// How this session was started, reported over `ApiRequest::Mode`. Set once
+    /// by the CLI that owns the manager (foreground `devenv up` vs `up -d`
+    /// daemon). An unset manager answers `Foreground` — the conservative
+    /// default: another terminal's `up -d` will refuse to schedule into a
+    /// manager that has not declared itself a daemon.
+    mode: std::sync::OnceLock<ManagerMode>,
 }
 
 /// Owner-side scheduler hooks. Implemented by the task scheduler that owns
@@ -710,7 +802,21 @@ impl NativeProcessManager {
             entries_changed: Arc::new(Notify::new()),
             owns_runtime_files: true,
             scheduler: std::sync::OnceLock::new(),
+            mode: std::sync::OnceLock::new(),
         })
+    }
+
+    /// Declare how this manager's session was started, so it can answer
+    /// `ApiRequest::Mode` authoritatively. Set once by the owning CLI; ignored
+    /// if already set.
+    pub fn set_mode(&self, mode: ManagerMode) {
+        let _ = self.mode.set(mode);
+    }
+
+    /// This manager's declared session mode. Defaults to `Foreground` when
+    /// unset (the conservative choice: do not auto-schedule into it).
+    pub fn mode(&self) -> ManagerMode {
+        self.mode.get().copied().unwrap_or(ManagerMode::Foreground)
     }
 
     /// Register the owning task scheduler that services `ApiRequest::Start` and
@@ -1368,51 +1474,25 @@ impl NativeProcessManager {
         info!("Process {} stopped", name);
     }
 
-    /// Stop a process by name
+    /// Stop a process by name. An explicit stop reports a plain `Stopped`
+    /// (the user's final word), even if the process had already exited.
     pub async fn stop(&self, name: &str) -> Result<()> {
+        self.stop_inner(name, false).await
+    }
+
+    /// Stop a process by name, optionally preserving a terminal supervisor
+    /// phase (`Exited`/`GaveUp`) into the `Stopped` entry. Only shutdown
+    /// teardown (`stop_all`) preserves it; explicit stops do not.
+    async fn stop_inner(&self, name: &str, preserve_terminal: bool) -> Result<()> {
         // Extract the handle and immediately insert a Stopped entry so the process
         // stays visible in the map during teardown. Without this, concurrent API
         // queries (list, status) would see "not found" during the teardown window.
-        let (job, supervisor_task, notify_forwarder, output_readers, ports) = {
+        let parts = {
             let mut processes = self.processes.write().await;
 
             match processes.remove(name) {
                 Some(ProcessEntry::Active(handle)) => {
-                    let ports = declared_ports(&handle.resources.config);
-                    // Preserve a terminal supervisor phase so run summaries and
-                    // dependents keep the terminal outcome after teardown.
-                    let terminal_phase = terminal_phase_of(handle.status_rx.borrow().phase);
-                    let JobHandle {
-                        resources,
-                        supervisor_task,
-                        notify_forwarder,
-                        output_readers,
-                        ..
-                    } = handle;
-                    let ProcessResources {
-                        config,
-                        activity,
-                        job,
-                        ..
-                    } = resources;
-
-                    activity.set_status(ProcessStatus::Stopping);
-                    processes.insert(
-                        name.to_string(),
-                        ProcessEntry::Stopped {
-                            config,
-                            activity,
-                            terminal_phase,
-                        },
-                    );
-
-                    (
-                        job,
-                        supervisor_task,
-                        notify_forwarder,
-                        output_readers,
-                        ports,
-                    )
+                    take_active_for_stop(handle, name, &mut processes, preserve_terminal)
                 }
                 Some(
                     entry @ (ProcessEntry::NotStarted { .. }
@@ -1438,11 +1518,11 @@ impl NativeProcessManager {
 
         self.finish_stop(
             name,
-            job,
-            supervisor_task,
-            notify_forwarder,
-            output_readers,
-            ports,
+            parts.job,
+            parts.supervisor_task,
+            parts.notify_forwarder,
+            parts.output_readers,
+            parts.ports,
         )
         .await;
         Ok(())
@@ -1461,49 +1541,15 @@ impl NativeProcessManager {
         // answering, run_foreground's empty-map check cannot fire, and a
         // concurrent re-arm cannot launch into a missing slot and later be
         // clobbered by a trailing insert.
-        let (job, supervisor_task, notify_forwarder, output_readers, ports) = {
+        // An explicit Ctrl-X stop reports a plain `Stopped` (the user's final
+        // word) rather than preserving a self-exit phase, so a process the user
+        // stopped after it had exited is not later mistaken for a live one.
+        let parts = {
             let mut processes = self.processes.write().await;
 
             match processes.remove(name) {
                 Some(ProcessEntry::Active(handle)) => {
-                    let ports = declared_ports(&handle.resources.config);
-                    // Preserve a terminal supervisor phase, like `stop`: a
-                    // process that had already exited or crashed keeps that
-                    // outcome after a Ctrl-X stop instead of being reported as a
-                    // plain `Stopped`, so run summaries and dependents agree
-                    // regardless of which stop path ran.
-                    let terminal_phase = terminal_phase_of(handle.status_rx.borrow().phase);
-                    let JobHandle {
-                        resources,
-                        supervisor_task,
-                        notify_forwarder,
-                        output_readers,
-                        ..
-                    } = handle;
-                    let ProcessResources {
-                        config,
-                        activity,
-                        job,
-                        ..
-                    } = resources;
-
-                    activity.set_status(ProcessStatus::Stopping);
-                    processes.insert(
-                        name.to_string(),
-                        ProcessEntry::Stopped {
-                            config,
-                            activity,
-                            terminal_phase,
-                        },
-                    );
-
-                    (
-                        job,
-                        supervisor_task,
-                        notify_forwarder,
-                        output_readers,
-                        ports,
-                    )
+                    take_active_for_stop(handle, name, &mut processes, false)
                 }
                 Some(
                     entry @ (ProcessEntry::NotStarted { .. }
@@ -1528,11 +1574,11 @@ impl NativeProcessManager {
 
         self.finish_stop(
             name,
-            job,
-            supervisor_task,
-            notify_forwarder,
-            output_readers,
-            ports,
+            parts.job,
+            parts.supervisor_task,
+            parts.notify_forwarder,
+            parts.output_readers,
+            parts.ports,
         )
         .await;
         Ok(())
@@ -1564,10 +1610,15 @@ impl NativeProcessManager {
             let names = active_names(&*self.processes.read().await);
             if !names.is_empty() {
                 trace!("stop_all: stopping {} processes: {:?}", names.len(), names);
-                for (name, result) in names
-                    .iter()
-                    .zip(futures::future::join_all(names.iter().map(|name| self.stop(name))).await)
-                {
+                for (name, result) in names.iter().zip(
+                    futures::future::join_all(
+                        // Shutdown teardown preserves a self-exit/give-up phase
+                        // so the run summary still reflects how each process
+                        // ended (unlike an explicit user stop).
+                        names.iter().map(|name| self.stop_inner(name, true)),
+                    )
+                    .await,
+                ) {
                     if let Err(err) = result {
                         warn!("Failed to stop process {}: {}", name, err);
                     }
@@ -2076,6 +2127,9 @@ impl NativeProcessManager {
                     message: "this manager has no process scheduler to handle `start`".to_string(),
                 },
             },
+            Ok(ApiRequest::Mode) => ApiResponse::Mode {
+                mode: manager.mode(),
+            },
             Ok(ApiRequest::Stop { name }) => match manager.stop(&name).await {
                 Ok(()) => ApiResponse::Ok,
                 Err(e) => ApiResponse::Error {
@@ -2357,6 +2411,18 @@ impl NativeProcessManager {
     pub async fn api_request(socket_path: &Path, request: &ApiRequest) -> Result<ApiResponse> {
         let stream = Self::send_api_request(socket_path, request).await?;
         Self::read_api_response(stream).await
+    }
+
+    /// Ask a running manager how its session was started. `None` means the
+    /// manager could not be reached or did not answer with a mode (e.g. a
+    /// daemon predating `ApiRequest::Mode`); callers treat that as `Daemon`
+    /// for backward compatibility. A live foreground manager always answers
+    /// `Foreground`, so it can never be misread.
+    pub async fn query_manager_mode(socket_path: &Path) -> Option<ManagerMode> {
+        match Self::api_request(socket_path, &ApiRequest::Mode).await {
+            Ok(ApiResponse::Mode { mode }) => Some(mode),
+            _ => None,
+        }
     }
 
     /// One-shot request whose reply legitimately takes as long as the work it
@@ -2683,7 +2749,6 @@ impl NativeProcessManager {
                     .await
                     .into_diagnostic()
                     .wrap_err("Failed to remove stale PID file")?;
-                pid::remove_manager_mode(&manager_pid_file).await;
                 return Ok(());
             }
             Err(e) => {
@@ -2740,7 +2805,6 @@ impl NativeProcessManager {
 
         // Remove PID file (may already be gone if the daemon cleaned up)
         let _ = tokio::fs::remove_file(&manager_pid_file).await;
-        pid::remove_manager_mode(&manager_pid_file).await;
 
         info!("Native process manager stopped");
         Ok(())
@@ -2782,9 +2846,8 @@ impl ProcessManager for NativeProcessManager {
         let token = options.cancellation_token.unwrap_or_default();
         let result = self.run_foreground(token, None).await;
 
-        // Clean up PID file (and mode marker, which is paired with it)
+        // Clean up PID file
         let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;
-        pid::remove_manager_mode(&self.manager_pid_file()).await;
 
         result
     }
@@ -2818,7 +2881,6 @@ impl Drop for NativeProcessManager {
         if self.owns_runtime_files {
             let _ = std::fs::remove_file(self.api_socket_path());
             let _ = std::fs::remove_file(self.manager_pid_file());
-            let _ = std::fs::remove_file(pid::manager_mode_file(&self.manager_pid_file()));
         }
     }
 }
@@ -3001,6 +3063,53 @@ mod tests {
         })
         .await
         .expect("task_notify should fire on supervisor transitions until Exited");
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn explicit_stop_after_self_exit_reports_stopped() {
+        // Regression (#9): a process that exits on its own reaches `Exited`
+        // while still `Active`. An explicit user stop (Ctrl-X /
+        // `devenv processes stop`) is the user's final word, so afterwards the
+        // process must report `Stopped` — not the preserved `Exited` terminal
+        // phase, which masks the stop in `devenv processes list` and miscounts
+        // it as succeeded in run summaries.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let notify = Arc::new(Notify::new());
+        manager.set_task_notify(notify.clone());
+
+        // `echo hello` exits immediately; RestartPolicy::Never keeps it Exited.
+        manager
+            .start_command(&test_config("self-exit"), None)
+            .await
+            .unwrap();
+
+        // Event-driven wait until the process has exited on its own. The
+        // timeout is a failure bound, never a poll interval.
+        tokio::time::timeout(Duration::from_secs(60), async {
+            loop {
+                let notified = notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                if manager.get_phase("self-exit").await == Some(ProcessPhase::Exited) {
+                    break;
+                }
+                notified.await;
+            }
+        })
+        .await
+        .expect("process should exit on its own");
+
+        // Explicit stop: the user's final word.
+        manager.stop_and_keep("self-exit").await.unwrap();
+
+        assert_eq!(
+            manager.get_phase("self-exit").await,
+            Some(ProcessPhase::Stopped),
+            "an explicit stop must report Stopped, not the preserved Exited phase"
+        );
 
         let _ = manager.stop_all().await;
     }
@@ -3629,6 +3738,35 @@ mod tests {
             }
             other => panic!("expected Error response, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn manager_mode_round_trips_over_socket() {
+        // Regression (#15): the running manager answers its own session mode
+        // over the control socket, so there is one authoritative source
+        // instead of a sibling file that could go missing or stale.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        manager.set_mode(ManagerMode::Daemon);
+        manager.start_api_server().unwrap();
+        assert_eq!(
+            NativeProcessManager::query_manager_mode(&manager.api_socket_path()).await,
+            Some(ManagerMode::Daemon),
+            "a daemon-declared manager must report Daemon over the socket"
+        );
+
+        // An undeclared manager defaults to Foreground (fail-closed): another
+        // terminal's `up -d` refuses to schedule into a manager that has not
+        // declared itself a daemon, instead of the old None=Daemon fail-open.
+        let temp_dir2 = tempfile::tempdir().unwrap();
+        let undeclared =
+            Arc::new(NativeProcessManager::new(temp_dir2.path().to_path_buf()).unwrap());
+        undeclared.start_api_server().unwrap();
+        assert_eq!(
+            NativeProcessManager::query_manager_mode(&undeclared.api_socket_path()).await,
+            Some(ManagerMode::Foreground),
+            "an undeclared manager must default to Foreground"
+        );
     }
 
     #[test]

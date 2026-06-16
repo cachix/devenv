@@ -68,14 +68,11 @@ pub use config::{
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use manager::{
-    ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, NativeProcessManager,
-    PortInfo, ProcessCommand, ProcessInfo, ProcessPhase, ProcessResources, ProcessScheduler,
-    ProcessState, StartOutcome,
+    ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, ManagerMode,
+    NativeProcessManager, PortInfo, ProcessCommand, ProcessInfo, ProcessPhase, ProcessResources,
+    ProcessScheduler, ProcessState, StartOutcome,
 };
-pub use pid::{
-    ManagerMode, PidStatus, check_pid_file, manager_mode_file, read_manager_mode, read_pid,
-    remove_manager_mode, remove_pid, write_manager_mode, write_pid,
-};
+pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;
 pub use pty::PtyProcess;
 pub use socket_activation::{

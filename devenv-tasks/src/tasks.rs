@@ -187,6 +187,13 @@ struct DepEval {
     /// Live manager phase for process-type dependencies (`None` for oneshot
     /// dependencies and for process dependencies without a manager entry).
     live_phase: Option<ProcessPhase>,
+    /// True when this dependency is itself actively in flight: a oneshot whose
+    /// command is currently running. Such a dependency is progressing on its
+    /// own, so a process waiting on it is never dependency-parked — its
+    /// (possibly since-regressed) dependencies are irrelevant now that it has
+    /// launched. Always false for process dependencies, whose progress is read
+    /// from `live_phase`.
+    dep_in_flight: bool,
 }
 
 impl Tasks {
@@ -903,12 +910,17 @@ impl Tasks {
                 task_name: dep_guard.task.name.clone(),
                 sat,
                 live_phase,
+                dep_in_flight: false,
             }
         } else {
             DepEval {
                 task_name: dep_guard.task.name.clone(),
                 sat: crate::types::is_dep_satisfied(&dep_guard.status, dep_kind),
                 live_phase: None,
+                dep_in_flight: matches!(
+                    dep_guard.status,
+                    TaskStatus::Oneshot(OneshotStatus::Running(_))
+                ),
             }
         }
     }
@@ -962,12 +974,15 @@ impl Tasks {
                     }
                     // Starting/Ready processes are genuinely in flight.
                     Some(_) => false,
-                    // A oneshot (or any non-process dep) that is unsatisfied is
-                    // parked iff its own unsatisfied dependencies are all parked:
-                    // recurse so a process blocked transitively through a oneshot
-                    // that itself waits on a stopped/not-started process is still
-                    // judged parked. A running oneshot has no unsatisfied deps, so
-                    // the recursion returns false (progressing).
+                    // A currently-running oneshot is progressing on its own —
+                    // it has already launched, so whatever it depended on (even
+                    // a since-stopped process) no longer blocks it. Not parked.
+                    None if eval.dep_in_flight => false,
+                    // A oneshot that has NOT launched yet (or any non-process
+                    // dep) is parked iff its own unsatisfied dependencies are
+                    // all parked: recurse so a process blocked transitively
+                    // through a oneshot that itself waits on a
+                    // stopped/not-started process is still judged parked.
                     None => self.task_dependency_parked(&eval.task_name).await,
                 };
                 if !parked {
@@ -2102,6 +2117,59 @@ mod schedule_tests {
         assert!(!tasks.dependency_parked("gamma").await);
 
         let _ = tasks.process_manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn dependency_parked_does_not_park_on_running_oneshot() {
+        // Regression: a Waiting process `p` depends on a oneshot `migrate`
+        // (@succeeded); the oneshot in turn depends on a process `d` (@started).
+        // `d` started, the oneshot launched and is still running, then `d` was
+        // stopped. The oneshot is *progressing* (it will finish and let `p`
+        // launch), so `p` must NOT be judged dependency-parked — otherwise
+        // `devenv processes wait` settles early while the migration is still
+        // in flight. The bug recurses into the running oneshot's now-stale
+        // dependencies and wrongly concludes it is parked on stopped `d`.
+        let mut migrate = oneshot_task("devenv:tasks:migrate", vec![]);
+        migrate.after = vec![format!("{PROCESS_TASK_PREFIX}d@started")];
+        let mut p = long_process_task("p", vec![]);
+        p.after = vec!["devenv:tasks:migrate@succeeded".to_string()];
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![long_process_task("d", vec![]), migrate, p],
+            vec![
+                format!("{PROCESS_TASK_PREFIX}d"),
+                "devenv:tasks:migrate".to_string(),
+                format!("{PROCESS_TASK_PREFIX}p"),
+            ],
+            false,
+        )
+        .await;
+
+        // `d`: registered then stopped, so its live manager phase is Stopped.
+        let d_idx = tasks.task_index_by_name[&format!("{PROCESS_TASK_PREFIX}d")];
+        let d_cfg = tasks.graph[d_idx]
+            .read()
+            .await
+            .build_process_config(&tasks.env, &tasks.bash)
+            .unwrap();
+        tasks.process_manager.register_waiting(d_cfg, None).await;
+        tasks.process_manager.cancel_waiting("d").await; // Waiting -> Stopped
+        assert_eq!(
+            tasks.process_manager.get_phase("d").await,
+            Some(ProcessPhase::Stopped)
+        );
+
+        // The oneshot is still running (mirrors a long migration mid-flight).
+        let o_idx = tasks.task_index_by_name["devenv:tasks:migrate"];
+        tasks.graph[o_idx].write().await.status =
+            TaskStatus::Oneshot(OneshotStatus::Running(tokio::time::Instant::now()));
+
+        // `p` waits on a *running* oneshot, so it is progressing, not parked.
+        assert!(
+            !tasks.dependency_parked("p").await,
+            "a process waiting on a running oneshot must not be judged parked, \
+             even if a process the oneshot depended on was since stopped"
+        );
     }
 
     #[tokio::test]
