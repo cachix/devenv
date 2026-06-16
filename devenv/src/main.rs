@@ -302,30 +302,32 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
     // "./devenv.yaml".
     let original_cwd = env::current_dir().ok();
 
+    // A local devenv.nix takes priority over a persisted binding and over
+    // discovery into a parent root. Look it up once and share the result; skip
+    // when the user explicitly chose a source (`--from`) or is building a
+    // project via module-option overrides (`-O`).
+    let has_overrides = !cli.input_overrides.nix_module_options.is_empty();
+    let project_root = original_cwd
+        .as_deref()
+        .filter(|_| cli.from.is_none() && !has_overrides)
+        .and_then(devenv_core::paths::find_project_root);
+
     // A directory bound to an out-of-tree source via `devenv allow --from` loads
-    // that source on every invocation, as if `--from` had been passed. An
-    // explicit `--from`, `-O` overrides, and a local devenv.nix all take
-    // priority, so the binding only applies in an otherwise project-less dir.
+    // that source on every invocation, as if `--from` had been passed. The
+    // priority above means the binding only applies in an otherwise
+    // project-less dir without explicit `--from`/`-O`.
     let from_source = cli.from.clone().or_else(|| {
-        if !cli.input_overrides.nix_module_options.is_empty() {
-            return None;
-        }
-        let cwd = original_cwd.as_deref()?;
-        if devenv_core::paths::find_project_root(cwd).is_some() {
+        if has_overrides || project_root.is_some() {
             return None;
         }
         let home = devenv_core::paths::resolve_home().ok()?;
-        commands::hook::trusted_from(&home, cwd).ok().flatten()
+        commands::hook::trusted_from(&home, original_cwd.as_deref()?)
+            .ok()
+            .flatten()
     });
 
-    let discovered_root =
-        if from_source.is_none() && cli.input_overrides.nix_module_options.is_empty() {
-            original_cwd.as_deref().and_then(|cwd| {
-                devenv_core::paths::find_project_root(cwd).filter(|r| r.as_path() != cwd)
-            })
-        } else {
-            None
-        };
+    let discovered_root = project_root
+        .filter(|r| from_source.is_none() && Some(r.as_path()) != original_cwd.as_deref());
     // When discovery moves us into a parent root, remember the directory the
     // user actually invoked from so the interactive shell and `-- cmd` still
     // run there. The devenv environment is root-scoped; the cwd is not.
@@ -391,7 +393,6 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
 
     // If a source is provided (via --from or a persisted `allow --from`
     // binding), create a new input and add it to imports.
-    let from_external = from_source.is_some();
     if let Some(from) = &from_source {
         let url = if let Some(path_str) = from.strip_prefix("path:") {
             let path = Path::new(path_str);
@@ -454,7 +455,7 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         cache_settings,
         secret_settings,
         input_overrides,
-        from_external,
+        from_external: from_source.is_some(),
         require_version_match,
         devenv_root: None,
         devenv_dotfile: test_dirs.dotfile.clone(),

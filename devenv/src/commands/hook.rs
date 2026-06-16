@@ -163,22 +163,33 @@ fn is_trusted(home: &Path, abs_str: &str) -> Result<bool> {
     Ok(find_trust_entry(home, abs_str)?.is_some())
 }
 
-/// Look up an out-of-tree `--from` source bound to `dir` (or the nearest trusted
-/// ancestor) via `devenv allow --from`. Returns `None` when no ancestor is
-/// trusted, or the nearest one is trusted only as an in-tree project.
-pub fn trusted_from(home: &Path, dir: &Path) -> Result<Option<String>> {
+/// Walk up from `dir` to the nearest ancestor bound to an out-of-tree source via
+/// `devenv allow --from`, returning its trust entry (whose `from` is always set).
+/// In-tree trust entries (no `from`) are skipped.
+fn nearest_from(home: &Path, dir: &Path) -> Result<Option<TrustEntry>> {
     let entries = read_trust_entries(&trust_db_path(home))?;
-    let mut current = dir.to_path_buf();
+    if entries.is_empty() {
+        return Ok(None);
+    }
+    // Canonicalize once; ancestors of a canonical path are themselves canonical,
+    // so we can match by string without re-canonicalizing at each level.
+    let mut current = fs::canonicalize(dir).into_diagnostic()?;
     loop {
-        if let Ok(abs) = canonical_str(&current)
-            && let Some(entry) = entries.iter().find(|e| e.path == abs)
+        if let Some(abs) = current.to_str()
+            && let Some(entry) = entries.iter().find(|e| e.path == abs && e.from.is_some())
         {
-            return Ok(entry.from.clone());
+            return Ok(Some(entry.clone()));
         }
         if !current.pop() {
             return Ok(None);
         }
     }
+}
+
+/// Look up the out-of-tree `--from` source bound to `dir` (or the nearest bound
+/// ancestor) via `devenv allow --from`. Returns `None` when no ancestor is bound.
+pub fn trusted_from(home: &Path, dir: &Path) -> Result<Option<String>> {
+    Ok(nearest_from(home, dir)?.and_then(|entry| entry.from))
 }
 
 /// Trust `project_dir`, optionally binding it to an out-of-tree `--from` source.
@@ -228,18 +239,6 @@ fn revoke_path(home: &Path, project_dir: &Path) -> Result<()> {
 
 // ---- Project discovery ----
 
-fn find_project(start: &Path) -> Option<PathBuf> {
-    let mut dir = start.to_path_buf();
-    loop {
-        if dir.join("devenv.nix").exists() {
-            return Some(dir);
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
-}
-
 /// Result of checking whether the hook should activate.
 enum ActivationCheck {
     /// Activate devenv in this project directory.
@@ -253,19 +252,25 @@ enum ActivationCheck {
 fn check_activation(home: &Path) -> Result<ActivationCheck> {
     let cwd = env::current_dir().into_diagnostic()?;
 
-    let project_dir = match find_project(&cwd) {
-        Some(dir) => dir,
-        None => return Ok(ActivationCheck::Skip),
-    };
-
-    let abs_str = canonical_str(&project_dir)?;
-
-    if !is_trusted(home, &abs_str)? {
-        eprintln!("devenv: {abs_str} is not allowed. Run 'devenv allow' to trust this directory.");
-        return Ok(ActivationCheck::Untrusted);
+    // A local devenv.nix takes priority; its directory must be trusted.
+    if let Some(project_dir) = devenv_core::paths::find_project_root(&cwd) {
+        let abs_str = canonical_str(&project_dir)?;
+        if !is_trusted(home, &abs_str)? {
+            eprintln!(
+                "devenv: {abs_str} is not allowed. Run 'devenv allow' to trust this directory."
+            );
+            return Ok(ActivationCheck::Untrusted);
+        }
+        return Ok(ActivationCheck::Activate(abs_str));
     }
 
-    Ok(ActivationCheck::Activate(abs_str))
+    // No local project: a directory bound out-of-tree via `allow --from` is
+    // trusted by that binding itself, so activate it directly.
+    if let Some(entry) = nearest_from(home, &cwd)? {
+        return Ok(ActivationCheck::Activate(entry.path));
+    }
+
+    Ok(ActivationCheck::Skip)
 }
 
 #[cfg(test)]
@@ -284,23 +289,6 @@ mod tests {
         let hash = "a".repeat(64);
         let entry = format!("{hash}:/home/me/project");
         assert_eq!(entry_path(&entry), "/home/me/project");
-    }
-
-    #[test]
-    fn test_find_project() {
-        let dir = TempDir::new().unwrap();
-
-        // No devenv.nix
-        assert!(find_project(dir.path()).is_none());
-
-        // Add devenv.nix
-        fs::write(dir.path().join("devenv.nix"), "{ }\n").unwrap();
-        assert_eq!(find_project(dir.path()), Some(dir.path().to_path_buf()));
-
-        // Subdirectory should find parent's devenv.nix
-        let sub = dir.path().join("sub").join("deep");
-        fs::create_dir_all(&sub).unwrap();
-        assert_eq!(find_project(&sub), Some(dir.path().to_path_buf()));
     }
 
     #[test]
@@ -392,6 +380,56 @@ mod tests {
         let content = fs::read_to_string(devenv_home_dir.join("allowed")).unwrap();
         let line = content.lines().next().unwrap();
         assert_eq!(parse_entry(line).unwrap(), entry);
+    }
+
+    #[test]
+    fn test_bound_out_of_tree_dir_activates() {
+        let dir = TempDir::new().unwrap();
+        // An out-of-tree work dir: no local devenv.nix.
+        let work = dir.path().join("work");
+        fs::create_dir_all(&work).unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+        // Unbound: nothing to activate.
+        assert!(nearest_from(&devenv_home_dir, &work).unwrap().is_none());
+
+        // Bind it to an out-of-tree source via `allow --from`.
+        allow_path(
+            &devenv_home_dir,
+            &work,
+            Some("github:cachix/devenv"),
+        )
+        .unwrap();
+
+        let abs = canonical_str(&work).unwrap();
+        let entry = nearest_from(&devenv_home_dir, &work).unwrap().unwrap();
+        assert_eq!(entry.path, abs);
+        assert_eq!(entry.from.as_deref(), Some("github:cachix/devenv"));
+
+        // A subdirectory of the bound dir resolves to the same binding.
+        let sub = work.join("nested");
+        fs::create_dir_all(&sub).unwrap();
+        assert_eq!(
+            nearest_from(&devenv_home_dir, &sub).unwrap().unwrap().path,
+            abs
+        );
+    }
+
+    #[test]
+    fn test_in_tree_trust_is_not_a_binding() {
+        let dir = TempDir::new().unwrap();
+        let project = dir.path().join("project");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+        // Plain in-tree trust (no --from) is not an out-of-tree binding.
+        allow_path(&devenv_home_dir, &project, None).unwrap();
+        assert!(
+            nearest_from(&devenv_home_dir, &project)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
