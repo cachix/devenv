@@ -2582,7 +2582,17 @@ list of string
 
 
 
-Set to true when the environment is building a container.
+Devenv set it to true when the environment is a container.
+
+Example:
+
+```nix
+{ pkgs, config, lib, ... }:
+{
+  packages = [ pkgs.openssl ]
+  ++ lib.optionals (!config.container.isBuilding) [ pkgs.git ];
+}
+```
 
 
 
