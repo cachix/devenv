@@ -64,15 +64,13 @@ pub enum ApiRequest {
     /// manager shuts down.
     Attach,
     /// Ask the running manager how its session was started (foreground vs
-    /// daemon). Answered authoritatively by the live manager, so a missing or
-    /// stale on-disk marker can never misclassify it.
+    /// daemon). Answered authoritatively by the live manager itself.
     Mode,
 }
 
 /// How the running native manager session was started. The manager answers
-/// this over its control socket ([`ApiRequest::Mode`]), so there is a single
-/// authoritative source rather than a sibling file that can go missing or
-/// stale.
+/// this over its control socket ([`ApiRequest::Mode`]), so the live process is
+/// the single source of truth for its own mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagerMode {
@@ -1390,15 +1388,14 @@ impl NativeProcessManager {
     /// under the write lock: abort the supervisor, forwarder, and output
     /// readers, signal the child with the grace period, wait for declared ports
     /// to be released, then mark the activity `Stopped`.
-    async fn finish_stop(
-        &self,
-        name: &str,
-        job: Arc<Job>,
-        supervisor_task: JoinHandle<()>,
-        notify_forwarder: JoinHandle<()>,
-        output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
-        ports: Vec<u16>,
-    ) {
+    async fn finish_stop(&self, name: &str, parts: StopParts) {
+        let StopParts {
+            job,
+            supervisor_task,
+            notify_forwarder,
+            output_readers,
+            ports,
+        } = parts;
         let grace_period = Duration::from_secs(5);
 
         // Abort the supervisor task first to prevent restarts
@@ -1516,15 +1513,7 @@ impl NativeProcessManager {
 
         trace!("Stopping process: {}", name);
 
-        self.finish_stop(
-            name,
-            parts.job,
-            parts.supervisor_task,
-            parts.notify_forwarder,
-            parts.output_readers,
-            parts.ports,
-        )
-        .await;
+        self.finish_stop(name, parts).await;
         Ok(())
     }
 
@@ -1572,15 +1561,7 @@ impl NativeProcessManager {
 
         trace!("Stopping process (keeping visible): {}", name);
 
-        self.finish_stop(
-            name,
-            parts.job,
-            parts.supervisor_task,
-            parts.notify_forwarder,
-            parts.output_readers,
-            parts.ports,
-        )
-        .await;
+        self.finish_stop(name, parts).await;
         Ok(())
     }
 
@@ -3743,8 +3724,8 @@ mod tests {
     #[tokio::test]
     async fn manager_mode_round_trips_over_socket() {
         // Regression (#15): the running manager answers its own session mode
-        // over the control socket, so there is one authoritative source
-        // instead of a sibling file that could go missing or stale.
+        // over the control socket, so the live process is the single source of
+        // truth for its own mode.
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
         manager.set_mode(ManagerMode::Daemon);
