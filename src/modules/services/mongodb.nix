@@ -61,9 +61,21 @@ let
         done
 
         if ${lib.boolToString cfg.replication.enable}; then
-            echo "Initialising replica-set"
             rootAuthDatabase="admin"
-            ${pkgs.mongosh}/bin/mongosh ''${mongoShellArgs} "$rootAuthDatabase" --eval 'rs.initiate()' >/dev/null
+            # Only initiate the replica-set if it has not been initialised yet,
+            # otherwise a restart errors with "already initialized".
+            ${pkgs.mongosh}/bin/mongosh ''${mongoShellArgs} "$rootAuthDatabase" --quiet --eval '
+                try {
+                    rs.status();
+                } catch (e) {
+                    if (e.codeName === "NotYetInitialized") {
+                        print("Initialising replica-set");
+                        rs.initiate();
+                    } else {
+                        throw e;
+                    }
+                }
+            ' >/dev/null
         fi
 
         if [ "${cfg.initDatabaseUsername}" ] && [ "${cfg.initDatabasePassword}" ]; then
@@ -72,7 +84,7 @@ let
             ${pkgs.mongosh}/bin/mongosh ''${mongoShellArgs} "$rootAuthDatabase" >/dev/null <<-EOJS
                 db.createUser({
                     user: "${cfg.initDatabaseUsername}",
-                    pwd: "${cfg.initDatabasePassword}",``
+                    pwd: "${cfg.initDatabasePassword}",
                     roles: [ { role: 'root', db: "$rootAuthDatabase" } ]
                 })
     	EOJS
