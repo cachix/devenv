@@ -79,7 +79,7 @@ A common deployment strategy is to run each [process](./processes.md) as an entr
   };
 
   # Exclude the source repo to make the container smaller.
-  containers."processes".copyToRoot = null;
+  # containers.processes.copyToRoot = null;
 }
 ```
 
