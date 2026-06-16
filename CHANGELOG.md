@@ -73,6 +73,7 @@
 - `devenv hook fish`/`devenv hook nu` are now loaded automatically by fish and nushell, via `share/fish/vendor_conf.d/devenv.fish` and `share/nushell/vendor/autoload/devenv.nu` respectively. Bash and zsh have no equivalent mechanism, so they still need manual configuration.
 - Bumped secretspec to 0.12, which adds a `[providers]` alias map in `secretspec.toml`, a key prefix for the AWS Secrets Manager provider, audit logging and access reasons for secret reads, and support for custom Bitwarden instances.
 - Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).
+- `devenv --from <source> allow` now binds a directory to an out-of-tree source, so you can use a devenv without a local `devenv.nix`. Once allowed, every subsequent `devenv` command in that directory loads its configuration from `<source>` automatically, without repeating `--from`. An explicit `--from`, `-O` overrides, or a local `devenv.nix` still take priority.
 
 ### Breaking Changes
 
