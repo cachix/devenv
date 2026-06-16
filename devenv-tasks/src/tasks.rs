@@ -880,7 +880,10 @@ impl Tasks {
         );
         if dep_guard.task.r#type == TaskType::Process {
             let pname = crate::types::process_name(&dep_guard.task.name);
-            let live_phase = process_manager.get_phase(pname).await;
+            // The dependency phase, not the displayed phase: a process the user
+            // explicitly stopped after it had exited still satisfies
+            // `<proc>@started` (it did run), so a dependent is not stranded.
+            let live_phase = process_manager.get_dependency_phase(pname).await;
             let sat = match live_phase {
                 // A live manager phase wins: it cannot go stale and a
                 // re-armed Waiting entry outranks a dead Completed node.
@@ -1818,9 +1821,9 @@ mod schedule_tests {
         names
     }
 
-    /// A long-running process task keyed under the `devenv:processes:` prefix,
-    /// so `start_with_deps` (which strips that prefix) can find it.
-    fn long_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
+    /// A process task running `command`, keyed under the `devenv:processes:`
+    /// prefix so `start_with_deps` (which strips that prefix) can find it.
+    fn process_task_with_command(name: &str, after: Vec<&str>, command: &str) -> TaskConfig {
         TaskConfig {
             name: format!("{PROCESS_TASK_PREFIX}{name}"),
             r#type: TaskType::Process,
@@ -1828,9 +1831,21 @@ mod schedule_tests {
                 .into_iter()
                 .map(|a| format!("{PROCESS_TASK_PREFIX}{a}"))
                 .collect(),
-            command: Some("sleep 100".to_string()),
+            command: Some(command.to_string()),
             ..Default::default()
         }
+    }
+
+    /// A long-running process task.
+    fn long_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
+        process_task_with_command(name, after, "sleep 100")
+    }
+
+    /// A process task that exits successfully on its own and is not restarted
+    /// (the default restart policy is `OnFailure`, and `echo` exits 0). Used to
+    /// drive a process to the `Exited` phase in tests.
+    fn self_exit_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
+        process_task_with_command(name, after, "echo")
     }
 
     /// Event-driven phase wait: wakes on `notify_finished` (the manager fires
@@ -2170,6 +2185,78 @@ mod schedule_tests {
             "a process waiting on a running oneshot must not be judged parked, \
              even if a process the oneshot depended on was since stopped"
         );
+    }
+
+    #[tokio::test]
+    async fn dependency_on_started_survives_explicit_stop_of_self_exited_process() {
+        // Regression (code-review finding #1): process `p` starts and exits on
+        // its own (reaching `Exited`). A dependent `d` declares
+        // `after = ["p@started"]`. A process that exited *did* start, so
+        // `p@started` is satisfied and `d` is not dependency-parked. The user
+        // then explicitly stops `p` (`devenv processes stop p` / Ctrl-X).
+        // Because `p` already started, `p@started` must REMAIN satisfied and
+        // `d` must still not be parked.
+        //
+        // This currently FAILS: an explicit stop reports a plain `Stopped`
+        // (terminal_phase = None), erasing the `Exited` phase that satisfied
+        // `p@started`. `is_process_dep_satisfied(Stopped, Started)` is `NotYet`,
+        // so `d` is wrongly judged dependency-parked and `devenv processes wait`
+        // settles early while `d` never launches. (Shutdown teardown via
+        // `stop_all` preserves `Exited`, so this only affects mid-session
+        // explicit stops.)
+        let p = self_exit_process_task("p", vec![]);
+        let mut d = long_process_task("d", vec![]);
+        d.after = vec![format!("{PROCESS_TASK_PREFIX}p@started")];
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![p, d],
+            vec![
+                format!("{PROCESS_TASK_PREFIX}p"),
+                format!("{PROCESS_TASK_PREFIX}d"),
+            ],
+            false,
+        )
+        .await;
+
+        // Launch `p` for real and let it exit on its own.
+        let p_idx = tasks.task_index_by_name[&format!("{PROCESS_TASK_PREFIX}p")];
+        let p_cfg = tasks.graph[p_idx]
+            .read()
+            .await
+            .build_process_config(&tasks.env, &tasks.bash)
+            .unwrap();
+        tasks
+            .process_manager
+            .start_command(&p_cfg, None)
+            .await
+            .unwrap();
+
+        // Wait until `p` has exited on its own.
+        wait_phase(&tasks, "p", ProcessPhase::Exited).await;
+
+        // Sanity: while `p` is `Exited`, `p@started` is satisfied, so `d` is
+        // not parked. (This passes today.)
+        assert!(
+            !tasks.dependency_parked("d").await,
+            "an exited process satisfies @started, so d must not be parked"
+        );
+
+        // The user explicitly stops `p`.
+        tasks.process_manager.stop_and_keep("p").await.unwrap();
+        assert_eq!(
+            tasks.process_manager.get_phase("p").await,
+            Some(ProcessPhase::Stopped),
+        );
+
+        // `p` already started, so `d`'s `p@started` must remain satisfied and
+        // `d` must NOT be judged dependency-parked. FAILS on current code.
+        assert!(
+            !tasks.dependency_parked("d").await,
+            "a process that started then exited still satisfies @started after \
+             an explicit stop; d must not be judged dependency-parked"
+        );
+
+        let _ = tasks.process_manager.stop_all().await;
     }
 
     #[tokio::test]

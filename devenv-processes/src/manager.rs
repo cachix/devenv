@@ -310,6 +310,26 @@ fn terminal_phase_of(phase: crate::supervisor_state::SupervisorPhase) -> Option<
     }
 }
 
+/// The phase to *display* for a `Stopped` entry (lists, run summaries, the
+/// TUI). An explicit user stop reads as a plain `Stopped`, even if the process
+/// had exited on its own — the user's stop is its final word. Otherwise the
+/// terminal phase it reached (if any) is surfaced.
+fn display_phase(terminal_phase: Option<ProcessPhase>, user_stopped: bool) -> ProcessPhase {
+    if user_stopped {
+        ProcessPhase::Stopped
+    } else {
+        terminal_phase.unwrap_or(ProcessPhase::Stopped)
+    }
+}
+
+/// The phase a *dependent* should be judged against for a `Stopped` entry: the
+/// furthest lifecycle point the process reached, regardless of who stopped it.
+/// `@started` satisfaction is monotonic — a process that ran and exited still
+/// started — so an explicit stop never masks the terminal phase here.
+fn lifecycle_phase(terminal_phase: Option<ProcessPhase>) -> ProcessPhase {
+    terminal_phase.unwrap_or(ProcessPhase::Stopped)
+}
+
 /// The pieces of a torn-down `Active` handle that [`Manager::finish_stop`] needs
 /// to abort the supervisor, kill the job, and release ports.
 struct StopParts {
@@ -320,27 +340,24 @@ struct StopParts {
     ports: Vec<u16>,
 }
 
-/// Tear an `Active` handle out for stopping: preserve its terminal supervisor
-/// phase, drop a `Stopped` placeholder into the map under the same lock (so the
-/// entry never vanishes mid-teardown), and return the pieces `finish_stop` needs.
+/// Tear an `Active` handle out for stopping: always record the terminal
+/// supervisor phase it reached, drop a `Stopped` placeholder into the map under
+/// the same lock (so the entry never vanishes mid-teardown), and return the
+/// pieces `finish_stop` needs.
+///
+/// `user_stopped` marks an explicit user stop (`devenv processes stop`, Ctrl-X)
+/// vs. shutdown teardown. It controls only how the entry is *displayed*
+/// ([`display_phase`]): the terminal phase is recorded either way, so a process
+/// the user stops after it had exited shows `Stopped` in `devenv processes
+/// list` and run summaries without un-satisfying a dependent on `@started`.
 fn take_active_for_stop(
     handle: JobHandle,
     name: &str,
     processes: &mut HashMap<String, ProcessEntry>,
-    preserve_terminal: bool,
+    user_stopped: bool,
 ) -> StopParts {
     let ports = declared_ports(&handle.resources.config);
-    // A self-exit/give-up outcome is preserved only for shutdown teardown,
-    // where the run summary and dependents still want to see how the process
-    // ended. An explicit user stop (`devenv processes stop`, Ctrl-X) is the
-    // user's final word, so it reports a plain `Stopped` instead — otherwise a
-    // process the user stopped after it had already exited would keep showing
-    // `Exited` in `devenv processes list` and count as succeeded in summaries.
-    let terminal_phase = if preserve_terminal {
-        terminal_phase_of(handle.status_rx.borrow().phase)
-    } else {
-        None
-    };
+    let terminal_phase = terminal_phase_of(handle.status_rx.borrow().phase);
     let JobHandle {
         resources,
         supervisor_task,
@@ -362,6 +379,7 @@ fn take_active_for_stop(
             config,
             activity,
             terminal_phase,
+            user_stopped,
         },
     );
 
@@ -395,15 +413,22 @@ enum ProcessEntry {
         config: ProcessConfig,
         activity: Activity,
     },
-    /// Process was explicitly stopped by the user; can be started again.
+    /// Process was stopped (by the user or on shutdown teardown); can be
+    /// started again.
     Stopped {
         config: ProcessConfig,
         activity: Activity,
-        /// Terminal supervisor phase preserved when the process had already
-        /// exited or given up on its own before the explicit stop; reported
-        /// instead of `Stopped` so run summaries and dependents keep the
-        /// terminal outcome after teardown.
+        /// The terminal supervisor phase the process reached on its own
+        /// (`Exited`/`GaveUp`), or `None` if it was stopped before reaching
+        /// one. Recorded independently of how the process was stopped, so a
+        /// dependent on `<proc>@started` still observes that it ran (see
+        /// [`lifecycle_phase`]).
         terminal_phase: Option<ProcessPhase>,
+        /// Whether the user explicitly stopped it (`devenv processes stop`,
+        /// Ctrl-X) rather than shutdown teardown. An explicit stop is
+        /// *displayed* as a plain `Stopped` even when `terminal_phase` is
+        /// `Some`, so lists and run summaries reflect the stop.
+        user_stopped: bool,
     },
     /// Process is waiting for dependencies before starting.
     Waiting {
@@ -851,13 +876,35 @@ impl NativeProcessManager {
     }
 
     /// Query the current lifecycle phase of a process entry.
+    /// The phase to display for a process: lists, run summaries, and the TUI.
+    /// After an explicit user stop this reports a plain `Stopped` even if the
+    /// process had exited on its own. For judging a *dependent* against this
+    /// process, use [`Self::get_dependency_phase`] instead.
     pub async fn get_phase(&self, name: &str) -> Option<ProcessPhase> {
+        self.phase_of(name, false).await
+    }
+
+    /// The phase a dependent should be judged against. Unlike
+    /// [`Self::get_phase`], an explicit user stop does not mask a preserved
+    /// terminal phase here, so a dependent on `<proc>@started` still sees that
+    /// the process started and ran, and the stop does not strand it.
+    pub async fn get_dependency_phase(&self, name: &str) -> Option<ProcessPhase> {
+        self.phase_of(name, true).await
+    }
+
+    async fn phase_of(&self, name: &str, for_dependency: bool) -> Option<ProcessPhase> {
         let processes = self.processes.read().await;
         match processes.get(name) {
             Some(ProcessEntry::NotStarted { .. }) => Some(ProcessPhase::NotStarted),
-            Some(ProcessEntry::Stopped { terminal_phase, .. }) => {
-                Some(terminal_phase.unwrap_or(ProcessPhase::Stopped))
-            }
+            Some(ProcessEntry::Stopped {
+                terminal_phase,
+                user_stopped,
+                ..
+            }) => Some(if for_dependency {
+                lifecycle_phase(*terminal_phase)
+            } else {
+                display_phase(*terminal_phase, *user_stopped)
+            }),
             Some(ProcessEntry::Waiting { .. }) => Some(ProcessPhase::Waiting),
             Some(ProcessEntry::Launching { .. }) => Some(ProcessPhase::Starting),
             Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.borrow().phase.into()),
@@ -984,6 +1031,10 @@ impl NativeProcessManager {
                         config,
                         activity,
                         terminal_phase: None,
+                        // A dependency failure/cancel, not a user stop; the
+                        // entry never ran, so it displays as `Stopped` either
+                        // way.
+                        user_stopped: false,
                     },
                 );
                 info!("Cancelled waiting process: {}", name);
@@ -1153,6 +1204,8 @@ impl NativeProcessManager {
                                 config,
                                 activity,
                                 terminal_phase: None,
+                                // Launch failure, not a user stop.
+                                user_stopped: false,
                             },
                         );
                         drop(procs);
@@ -1177,6 +1230,9 @@ impl NativeProcessManager {
                                         config,
                                         activity,
                                         terminal_phase: None,
+                                        // Shutdown raced the launch, not a user
+                                        // stop.
+                                        user_stopped: false,
                                     },
                                 );
                             }
@@ -1471,16 +1527,19 @@ impl NativeProcessManager {
         info!("Process {} stopped", name);
     }
 
-    /// Stop a process by name. An explicit stop reports a plain `Stopped`
-    /// (the user's final word), even if the process had already exited.
+    /// Stop a process by name. An explicit stop is *displayed* as a plain
+    /// `Stopped` (the user's final word) even if the process had already
+    /// exited, but a dependent on `<proc>@started` still sees that it ran.
     pub async fn stop(&self, name: &str) -> Result<()> {
-        self.stop_inner(name, false).await
+        self.stop_inner(name, true).await
     }
 
-    /// Stop a process by name, optionally preserving a terminal supervisor
-    /// phase (`Exited`/`GaveUp`) into the `Stopped` entry. Only shutdown
-    /// teardown (`stop_all`) preserves it; explicit stops do not.
-    async fn stop_inner(&self, name: &str, preserve_terminal: bool) -> Result<()> {
+    /// Stop a process by name. `user_stopped` marks an explicit user stop
+    /// (`devenv processes stop`, Ctrl-X) vs. shutdown teardown (`stop_all`):
+    /// the former is displayed as a plain `Stopped`, the latter keeps the
+    /// terminal phase. Either way the terminal phase is recorded, so dependents
+    /// still observe that the process ran.
+    async fn stop_inner(&self, name: &str, user_stopped: bool) -> Result<()> {
         // Extract the handle and immediately insert a Stopped entry so the process
         // stays visible in the map during teardown. Without this, concurrent API
         // queries (list, status) would see "not found" during the teardown window.
@@ -1489,7 +1548,7 @@ impl NativeProcessManager {
 
             match processes.remove(name) {
                 Some(ProcessEntry::Active(handle)) => {
-                    take_active_for_stop(handle, name, &mut processes, preserve_terminal)
+                    take_active_for_stop(handle, name, &mut processes, user_stopped)
                 }
                 Some(
                     entry @ (ProcessEntry::NotStarted { .. }
@@ -1525,12 +1584,12 @@ impl NativeProcessManager {
     /// can tell apart a process the user stopped from one that never started.
     /// Errors if the process is not currently `Active`.
     ///
-    /// Identical to [`Self::stop`]: both keep the entry visible as `Stopped` and
-    /// report a plain `Stopped` (the user's final word) rather than preserving a
-    /// self-exit phase. Kept as a distinct, intent-revealing name for the Ctrl-X
+    /// Identical to [`Self::stop`]: both keep the entry visible as `Stopped`
+    /// (the user's final word) while still recording the terminal phase for
+    /// dependents. Kept as a distinct, intent-revealing name for the Ctrl-X
     /// path that wants the process to remain restartable.
     pub async fn stop_and_keep(&self, name: &str) -> Result<()> {
-        self.stop_inner(name, false).await
+        self.stop_inner(name, true).await
     }
 
     /// Signal all supervisors to shut down gracefully.
@@ -1561,10 +1620,10 @@ impl NativeProcessManager {
                 trace!("stop_all: stopping {} processes: {:?}", names.len(), names);
                 for (name, result) in names.iter().zip(
                     futures::future::join_all(
-                        // Shutdown teardown preserves a self-exit/give-up phase
-                        // so the run summary still reflects how each process
-                        // ended (unlike an explicit user stop).
-                        names.iter().map(|name| self.stop_inner(name, true)),
+                        // Shutdown teardown (not a user stop): the preserved
+                        // self-exit/give-up phase is displayed as-is, so the run
+                        // summary still reflects how each process ended.
+                        names.iter().map(|name| self.stop_inner(name, false)),
                     )
                     .await,
                 ) {
@@ -1905,9 +1964,11 @@ impl NativeProcessManager {
     fn process_info(name: &str, entry: &ProcessEntry) -> ProcessInfo {
         let (phase, restart_count) = match entry {
             ProcessEntry::NotStarted { .. } => (ProcessPhase::NotStarted, 0),
-            ProcessEntry::Stopped { terminal_phase, .. } => {
-                (terminal_phase.unwrap_or(ProcessPhase::Stopped), 0)
-            }
+            ProcessEntry::Stopped {
+                terminal_phase,
+                user_stopped,
+                ..
+            } => (display_phase(*terminal_phase, *user_stopped), 0),
             ProcessEntry::Waiting { .. } => (ProcessPhase::Waiting, 0),
             ProcessEntry::Launching { .. } => (ProcessPhase::Starting, 0),
             ProcessEntry::Active(handle) => {
