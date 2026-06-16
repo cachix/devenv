@@ -1,5 +1,5 @@
 !!! tip "New in version 0.6"
-    
+
     [Read more about containers in the v0.6 release post](blog/posts/devenv-v0.6-generating-containers-and-instant-shell-activation.md)
 
 !!! note
@@ -11,6 +11,14 @@
     - [Nixcademy Tutorial: Build and Deploy Linux Systems from macOS](https://nixcademy.com/posts/macos-linux-builder/)
     - [Official Nixpkgs documentation: Set the remote builder up using Nix](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin-builder).
     - [Official nix-darwin documentation: Use the nix-darwin linux-builder module](https://github.com/LnL7/nix-darwin/blob/master/modules/nix/linux-builder.nix).
+
+
+To use 'containers' command, add the following dependencies:
+
+```shell-session
+$ devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
+$ devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bi
+```
 
 Use `devenv container build <name>` to generate an [OCI container](https://opencontainers.org/) from your development environment.
 
@@ -71,7 +79,7 @@ A common deployment strategy is to run each [process](./processes.md) as an entr
   };
 
   # Exclude the source repo to make the container smaller.
-  containers."processes".copyToRoot = null;
+  # containers.processes.copyToRoot = null;
 }
 ```
 
