@@ -436,7 +436,18 @@ in
       isBuilding = lib.mkOption {
         type = types.bool;
         default = false;
-        description = "Set to true when the environment is building a container.";
+        description = ''
+          Devenv set it to true when the environment is a container.
+
+          Example:
+          ```nix
+          { pkgs, config, lib, ... }:
+          {
+            packages = [ pkgs.openssl ]
+            ++ lib.optionals (!config.container.isBuilding) [ pkgs.git ];
+          }
+          ```
+        '';
       };
     };
   };
