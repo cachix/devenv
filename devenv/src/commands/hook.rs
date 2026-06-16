@@ -8,6 +8,7 @@
 
 use crate::cli::HookShell;
 use miette::{IntoDiagnostic, Result};
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
@@ -43,8 +44,11 @@ pub fn print(shell: &HookShell) {
 }
 
 /// Trust the current working directory for auto-activation.
-pub fn allow() -> Result<()> {
-    allow_path(&env::current_dir().into_diagnostic()?)
+///
+/// `from` persists an out-of-tree source (the `--from` value), so later commands
+/// in this directory resolve their devenv.nix from it without a local file.
+pub fn allow(from: Option<&str>) -> Result<()> {
+    allow_path(&env::current_dir().into_diagnostic()?, from)
 }
 
 /// Revoke trust for the current working directory.
@@ -75,9 +79,18 @@ fn canonical_str(path: &Path) -> Result<String> {
         .map(String::from)
 }
 
-/// Extract the project path from a trust entry.
+/// A trusted directory and, optionally, the out-of-tree source its devenv.nix
+/// comes from (the `--from` value passed to `devenv allow`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct TrustEntry {
+    path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    from: Option<String>,
+}
+
+/// Extract the project path from a legacy (non-JSON) trust entry.
 ///
-/// Current format: `<path>` (one path per line).
+/// Plain format: `<path>` (one path per line).
 /// Legacy format: `<64-char-hash>:<path>` — the hash is stripped for backward
 /// compatibility with trust databases written by older devenv versions.
 fn entry_path(entry: &str) -> &str {
@@ -88,8 +101,21 @@ fn entry_path(entry: &str) -> &str {
     }
 }
 
-fn remove_path_entries(entries: &mut Vec<String>, abs_str: &str) {
-    entries.retain(|e| entry_path(e) != abs_str);
+/// Parse one line of the trust database. Lines starting with `{` are the
+/// current JSONL format; anything else is a legacy plain/hash path line.
+fn parse_entry(line: &str) -> Option<TrustEntry> {
+    if line.starts_with('{') {
+        serde_json::from_str(line).ok()
+    } else {
+        Some(TrustEntry {
+            path: entry_path(line).to_string(),
+            from: None,
+        })
+    }
+}
+
+fn remove_path_entries(entries: &mut Vec<TrustEntry>, abs_str: &str) {
+    entries.retain(|e| e.path != abs_str);
 }
 
 // ---- Trust database ----
@@ -109,50 +135,82 @@ fn trust_db_path() -> Result<PathBuf> {
     Ok(devenv_home()?.join("allowed"))
 }
 
-fn read_trust_entries(db_path: &Path) -> Result<Vec<String>> {
+fn read_trust_entries(db_path: &Path) -> Result<Vec<TrustEntry>> {
     match fs::read_to_string(db_path) {
         Ok(content) => Ok(content
             .lines()
             .filter(|l| !l.is_empty())
-            .map(String::from)
+            .filter_map(parse_entry)
             .collect()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(e).into_diagnostic(),
     }
 }
 
-fn write_trust_entries(db_path: &Path, entries: &[String]) -> Result<()> {
+fn write_trust_entries(db_path: &Path, entries: &[TrustEntry]) -> Result<()> {
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent).into_diagnostic()?;
     }
-    let content = if entries.is_empty() {
-        String::new()
-    } else {
-        entries.join("\n") + "\n"
-    };
+    let mut content = String::new();
+    for entry in entries {
+        content.push_str(&serde_json::to_string(entry).into_diagnostic()?);
+        content.push('\n');
+    }
     fs::write(db_path, content).into_diagnostic()
 }
 
-fn is_trusted(abs_str: &str) -> Result<bool> {
+fn find_trust_entry(abs_str: &str) -> Result<Option<TrustEntry>> {
     let db_path = trust_db_path()?;
     let entries = read_trust_entries(&db_path)?;
-    Ok(entries.iter().any(|e| entry_path(e) == abs_str))
+    Ok(entries.into_iter().find(|e| e.path == abs_str))
 }
 
-fn allow_path(project_dir: &Path) -> Result<()> {
+fn is_trusted(abs_str: &str) -> Result<bool> {
+    Ok(find_trust_entry(abs_str)?.is_some())
+}
+
+/// Look up an out-of-tree `--from` source bound to `dir` (or the nearest trusted
+/// ancestor) via `devenv allow --from`. Returns `None` when no ancestor is
+/// trusted, or the nearest one is trusted only as an in-tree project.
+pub fn trusted_from(dir: &Path) -> Result<Option<String>> {
+    let entries = read_trust_entries(&trust_db_path()?)?;
+    let mut current = dir.to_path_buf();
+    loop {
+        if let Ok(abs) = canonical_str(&current)
+            && let Some(entry) = entries.iter().find(|e| e.path == abs)
+        {
+            return Ok(entry.from.clone());
+        }
+        if !current.pop() {
+            return Ok(None);
+        }
+    }
+}
+
+/// Trust `project_dir`, optionally binding it to an out-of-tree `--from` source.
+///
+/// When `from` is `None` a local `devenv.nix` must exist. When `from` is set the
+/// directory needs no local `devenv.nix`; the module comes from the source.
+fn allow_path(project_dir: &Path, from: Option<&str>) -> Result<()> {
     let abs_str = canonical_str(project_dir)?;
 
-    if !project_dir.join("devenv.nix").exists() {
+    if from.is_none() && !project_dir.join("devenv.nix").exists() {
         miette::bail!("No devenv.nix found in {abs_str}");
     }
 
     let db_path = trust_db_path()?;
     let mut entries = read_trust_entries(&db_path)?;
     remove_path_entries(&mut entries, &abs_str);
-    entries.push(abs_str.clone());
+    entries.push(TrustEntry {
+        path: abs_str.clone(),
+        from: from.map(String::from),
+    });
     write_trust_entries(&db_path, &entries)?;
 
-    eprintln!("devenv: allowed {abs_str}");
+    match from {
+        Some(from) => eprintln!("devenv: allowed {abs_str} from {from}"),
+        None => eprintln!("devenv: allowed {abs_str}"),
+    }
     Ok(())
 }
 
@@ -271,7 +329,7 @@ mod tests {
         let devenv_home_dir = dir.path().join("devenv-home");
         set_devenv_home(&devenv_home_dir);
 
-        allow_path(&project).unwrap();
+        allow_path(&project, None).unwrap();
 
         let db_path = devenv_home_dir.join("allowed");
         let content = fs::read_to_string(&db_path).unwrap();
@@ -302,7 +360,7 @@ mod tests {
         assert!(!is_trusted(&abs_str).unwrap());
 
         // Allow and verify
-        allow_path(&project).unwrap();
+        allow_path(&project, None).unwrap();
         assert!(is_trusted(&abs_str).unwrap());
 
         // Changing devenv.nix should not invalidate trust
@@ -330,6 +388,53 @@ mod tests {
         fs::write(devenv_home_dir.join("allowed"), legacy_entry).unwrap();
 
         assert!(is_trusted(&abs_str).unwrap());
+
+        unset_devenv_home();
+    }
+
+    #[test]
+    fn test_allow_persists_from_as_jsonl() {
+        let dir = TempDir::new().unwrap();
+        // No local devenv.nix: an out-of-tree source is bound instead.
+        let project = dir.path().join("out-of-tree");
+        fs::create_dir_all(&project).unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+        set_devenv_home(&devenv_home_dir);
+
+        allow_path(&project, Some("github:cachix/devenv")).unwrap();
+
+        let abs_str = canonical_str(&project).unwrap();
+        let entry = find_trust_entry(&abs_str).unwrap().unwrap();
+        assert_eq!(entry.from.as_deref(), Some("github:cachix/devenv"));
+
+        // Each line is a self-contained JSON object.
+        let content = fs::read_to_string(devenv_home_dir.join("allowed")).unwrap();
+        let line = content.lines().next().unwrap();
+        assert_eq!(parse_entry(line).unwrap(), entry);
+
+        unset_devenv_home();
+    }
+
+    #[test]
+    fn test_legacy_plain_entries_have_no_from() {
+        let dir = TempDir::new().unwrap();
+        let project = dir.path().join("myproject");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+        set_devenv_home(&devenv_home_dir);
+
+        let abs_str = canonical_str(&project).unwrap();
+
+        // Seed the trust DB with a legacy plain-path line.
+        fs::create_dir_all(&devenv_home_dir).unwrap();
+        fs::write(devenv_home_dir.join("allowed"), format!("{abs_str}\n")).unwrap();
+
+        let entry = find_trust_entry(&abs_str).unwrap().unwrap();
+        assert_eq!(entry.path, abs_str);
+        assert_eq!(entry.from, None);
 
         unset_devenv_home();
     }
