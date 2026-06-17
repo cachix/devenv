@@ -61,6 +61,69 @@ nixpkgs:
   allow_unfree: true
 ```
 
+## Choosing SDK versions
+
+The platform, build-tool, NDK and other versions you can select with
+`platforms.version`, `buildTools.version`, `ndk.version` and friends come from the
+`androidenv` packages bundled with nixpkgs. That set lags behind Google's releases,
+so a recently released version (for example `platforms;android-36`) may not be
+available yet, and selecting it fails.
+
+To pick from the full, up-to-date set of versions, add the
+[android-nixpkgs](https://github.com/tadfisher/android-nixpkgs) input, which is
+regenerated daily from Google's SDK repositories. Its presence switches the SDK
+source, and the release track is chosen by the input's URL ref (`stable` by default,
+or `beta`, `preview`, `canary`):
+
+```yaml title="devenv.yaml"
+inputs:
+  android-nixpkgs:
+    url: github:tadfisher/android-nixpkgs   # or .../beta, .../preview, .../canary
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+```
+
+The same options now resolve against android-nixpkgs, so you can select newer versions:
+
+```nix title="devenv.nix"
+{ ... }:
+
+{
+  android = {
+    enable = true;
+    platforms.version = [ "34" "35" "36" ];
+    buildTools.version = [ "35.0.0" ];
+  };
+}
+```
+
+`platforms.version`, `buildTools.version`, `ndk.version` and `emulator.enable` are
+mapped onto SDK packages automatically. To choose versions that aren't covered by
+those options (system images, sources, CMake, extras), select the packages directly
+with `android.android-nixpkgs.packages`:
+
+```nix title="devenv.nix"
+{ ... }:
+
+{
+  android = {
+    enable = true;
+    android-nixpkgs.packages = sdkPkgs: with sdkPkgs; [
+      cmdline-tools-latest
+      platform-tools
+      build-tools-35-0-0
+      platforms-android-36
+      emulator
+      system-images-android-36-google-apis-playstore-x86-64
+    ];
+  };
+}
+```
+
+!!! note
+    android-nixpkgs supports `x86_64-linux`, `x86_64-darwin` and `aarch64-darwin`.
+
 ## Emulators
 
 Creating emulators via the android-studio GUI may not work as expected due to conflicts between the immutable Nix store paths and Android Studio requiring a mutable path. Therefore, it's recommended to create an emulator via the CLI:
