@@ -32,6 +32,7 @@
 - Fixed `devenv processes wait` returning before a process was up when that process was waiting on a one-shot setup task (e.g. a migration) that was still running; a running setup task now counts as in progress.
 - Fixed a process that exited on its own and was then explicitly stopped still showing as exited (and counting as succeeded in run summaries) instead of stopped.
 - Fixed `devenv up` with no arguments not starting a process whose configuration omits `start.enable`, even though it defaults to enabled and `devenv up <name>` would start it.
+- Fixed a process that exits on its own (a crash, or a one-shot that runs to completion with no restart) continuing to show as `running` in the `devenv up` TUI after it had stopped; it now shows as stopped.
 
 ### Improvements
 

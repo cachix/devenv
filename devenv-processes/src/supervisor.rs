@@ -463,6 +463,23 @@ pub fn spawn_supervisor(
             refresh_deadline!(state, current_deadline, deadline_fut);
         }
 
+        // The supervisor loop has ended. If the process reached a terminal phase
+        // on its own — exited without a restart, or gave up after exhausting its
+        // restart budget — reflect that in the activity. The `status_tx` channel
+        // already carries the terminal phase to the manager/task system, but the
+        // activity status drives the TUI, and nothing else updates it here: leave
+        // it untouched and a self-exited process keeps showing as `running`.
+        // A shutdown-driven exit is skipped: the manager's stop path owns the
+        // `Stopping`/`Stopped` activity transition in that case.
+        if !shutdown.is_cancelled()
+            && matches!(
+                state.phase(),
+                SupervisorPhase::Exited | SupervisorPhase::GaveUp
+            )
+        {
+            activity.set_status(ProcessStatus::Stopped);
+        }
+
         trace!("Supervision task for {} exiting", name);
     })
 }

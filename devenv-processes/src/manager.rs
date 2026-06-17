@@ -875,7 +875,6 @@ impl NativeProcessManager {
         notify_lifecycle_parts(&self.entries_changed, &self.task_notify);
     }
 
-    /// Query the current lifecycle phase of a process entry.
     /// The phase to display for a process: lists, run summaries, and the TUI.
     /// After an explicit user stop this reports a plain `Stopped` even if the
     /// process had exited on its own. For judging a *dependent* against this
@@ -3120,6 +3119,56 @@ mod tests {
             Some(ProcessPhase::Stopped),
             "an explicit stop must report Stopped, not the preserved Exited phase"
         );
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn self_exit_updates_activity_status_to_stopped() {
+        // Regression: a process that exits on its own (RestartPolicy::Never)
+        // used to keep showing as `running` in the foreground `devenv up` TUI.
+        // The manager's process phase reached `Exited` (so `devenv processes
+        // list` was correct), but nothing updated the *activity* status that
+        // drives the TUI — only the explicit-stop path called `set_status`. The
+        // supervisor must emit a terminal `Stopped` activity status when it ends
+        // without a restart. This is the only seam the bug is observable from:
+        // `get_phase` was already correct, so it must assert on the activity
+        // event stream, not the phase.
+        let (mut rx, handle) = devenv_activity::init();
+        let _guard = handle.install();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // `echo hello` exits immediately; RestartPolicy::Never keeps it terminal.
+        manager
+            .start_command(&test_config("self-exit"), None)
+            .await
+            .unwrap();
+
+        // Event-driven: read activity events until the self-exit process reports
+        // a terminal `Stopped` status. The timeout is a failure bound, not a
+        // poll interval — without the fix this never arrives and the test fails.
+        tokio::time::timeout(Duration::from_secs(60), async {
+            let mut proc_id: Option<u64> = None;
+            while let Some(event) = rx.recv().await {
+                if let devenv_activity::ActivityEvent::Process(p) = event {
+                    match p {
+                        devenv_activity::Process::Start { id, name, .. } if name == "self-exit" => {
+                            proc_id = Some(id);
+                        }
+                        devenv_activity::Process::Status { id, status, .. }
+                            if Some(id) == proc_id && status == ProcessStatus::Stopped =>
+                        {
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        })
+        .await
+        .expect("a self-exited process must emit a terminal Stopped activity status");
 
         let _ = manager.stop_all().await;
     }
