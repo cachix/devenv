@@ -67,12 +67,36 @@ let
                   // (if locked.type or null == "git" && isRelativePath (locked.url or null)
                 then { url = toString src + "/${locked.url}"; }
                 else { });
+
+                # Local path inputs without a pinned narHash resolve to the live
+                # filesystem path instead of a fetchTree store copy. The lock file
+                # never carries a narHash for them (Nix strips volatile attributes
+                # from local inputs), so a store copy would hide edits from the
+                # eval cache: nothing in the cache key changes when the directory
+                # content changes. Evaluating from the live path makes the eval
+                # cache track every file that is read, so edits invalidate it.
+                isLivePath =
+                  locked.type or null == "path"
+                  && !(locked ? narHash)
+                  && builtins.substring 0 1 (resolvedLocked.path or "") == "/";
               in
-              builtins.fetchTree (node.info or { } // removeAttrs resolvedLocked [ "dir" ]);
+              if isLivePath then
+                {
+                  lastModified = 0;
+                  lastModifiedDate = formatSecondsSinceEpoch 0;
+                  outPath = /. + resolvedLocked.path;
+                }
+              else
+                builtins.fetchTree (node.info or { } // removeAttrs resolvedLocked [ "dir" ]);
 
           subdir = if key == lockFile.root then "" else node.locked.dir or "";
 
-          outPath = sourceInfo + ((if subdir == "" then "" else "/") + subdir);
+          # Concatenate on sourceInfo.outPath directly (not the attrset, whose
+          # string coercion would turn live path values into context-free
+          # strings) so live path inputs keep a path-typed outPath. Path values
+          # copy to the store on string interpolation, which keeps derivation
+          # references to input files working.
+          outPath = sourceInfo.outPath + ((if subdir == "" then "" else "/") + subdir);
 
           # Resolve a input spec into a node name. An input spec is
           # either a node name, or a 'follows' path from the root

@@ -1,0 +1,6 @@
+inputs:
+  config-repo:
+    url: path:../config-repo/
+    flake: false
+imports:
+  - config-repo
