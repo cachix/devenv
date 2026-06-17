@@ -1,6 +1,7 @@
-# Test that a foreground `devenv up` refuses to start when a daemon is already
-# running, and that `devenv processes down` correctly stops the daemon without
-# leaving orphaned child processes.
+# Exercises daemon pid-file/socket ownership: a second `up -d` attaches
+# instead of clobbering the daemon's runtime files, a non-interactive
+# foreground `up` fails fast, `down` stops the daemon without orphaning its
+# children, and `down` is idempotent.
 { pkgs, ... }:
 {
   packages = [ pkgs.python3 pkgs.curl ];

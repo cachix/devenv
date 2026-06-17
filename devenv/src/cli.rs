@@ -940,6 +940,11 @@ pub enum ProcessesCommand {
         up_args: UpArgs,
     },
 
+    #[command(
+        about = "Attach to running processes and stream their status and logs until Ctrl-C, leaving them running."
+    )]
+    Attach {},
+
     #[command(about = "Stop processes running in the background.")]
     Down {},
 
@@ -984,9 +989,13 @@ pub enum ProcessesCommand {
         name: String,
     },
 
-    #[command(about = "Start a process (or all processes if no name given).")]
+    #[command(
+        about = "Start a process, honoring its dependencies (or all processes if no name given)."
+    )]
     Start {
-        #[arg(help = "Name of the process. If omitted, starts all processes (same as 'up').")]
+        #[arg(
+            help = "Name of the process. If omitted, starts all processes (same as 'up'). A named process always starts in the background, starting the process manager if needed."
+        )]
         name: Option<String>,
 
         #[arg(short, long, help = "Start processes in the background.")]

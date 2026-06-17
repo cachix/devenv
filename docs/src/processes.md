@@ -31,7 +31,7 @@ To stop detached processes:
 $ devenv down
 ```
 
-!!! tip "New in devenv 2.1.3"
+!!! tip "New in devenv 2.2"
 
     `devenv down` is a shorthand for `devenv processes down`.
 
@@ -42,6 +42,40 @@ $ devenv processes wait --timeout 120
 ```
 
 The default timeout is 120 seconds.
+
+## Attaching to running processes
+
+!!! tip "New in devenv 2.2"
+
+When processes are already running in the background (started with `devenv up -d`), a second `devenv up` attaches to them instead of failing. It starts any processes that are enabled but not currently running, honoring their `after`/`before` dependencies, and streams a live view of process status and logs. Press Ctrl-C to detach, leaving the processes running.
+
+An attaching `devenv up` reports which processes it scheduled and which were already running, and exits nonzero when nothing could be started.
+
+You can also pass a subset of processes to start:
+
+```shell-session
+$ devenv up -d            # start everything in the background
+$ devenv processes stop api
+$ devenv up api           # attach and bring api back up
+```
+
+A bare `devenv up` starts only processes with `start.enable = true`; explicitly named processes always start, even when their `start.enable` is `false`. The same applies to `devenv processes start <name>`, which uses the same dependency-aware launch path: if a dependency is not running, the process waits for it instead of starting without it. When no process manager is running yet, `devenv processes start <name>` starts one in the background launching only the named process, like `devenv up -d <name>`.
+
+The attached session is a non-interactive live view: stdin is not connected to the processes, and Ctrl-C detaches while leaving them running (the TUI restart/stop keybindings still work).
+
+!!! note "Configuration changes are not picked up by attach"
+
+    An attaching `devenv up <name>` schedules into the running process manager using the configuration that manager was started with. Edits to `devenv.nix` are not picked up by attach-scheduled processes, and names that are not part of the running manager's process set are rejected. Restart the manager to pick up changes:
+
+    ```shell-session
+    $ devenv processes down && devenv up -d
+    ```
+
+To attach a live view without starting anything (native process manager only):
+
+```shell-session
+$ devenv processes attach
+```
 
 ## Dependencies
 

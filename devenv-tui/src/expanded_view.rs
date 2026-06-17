@@ -170,6 +170,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let shutdown = shutdown.clone();
         let command_tx = command_tx.clone();
         let notify = notify.clone();
+        let attached = config.attached.load(std::sync::atomic::Ordering::Relaxed);
         move |event| match event {
             TerminalEvent::Key(key_event) => {
                 if key_event.kind == KeyEventKind::Release {
@@ -180,6 +181,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     &ui_state,
                     &shutdown,
                     command_tx.as_ref(),
+                    attached,
                     &mut scroll_offset,
                     total_visual_rows,
                     viewport_height,
@@ -240,10 +242,10 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             None
         };
 
-    let interrupt_prompt_active = ui_state
+    let (interrupt_prompt_active, interrupt_prompt_attached) = ui_state
         .read()
-        .map(|ui| ui.interrupt_prompt_active())
-        .unwrap_or(false);
+        .map(|ui| (ui.interrupt_prompt_active(), ui.interrupt_prompt_attached()))
+        .unwrap_or((false, false));
 
     render_expanded_view(
         &state,
@@ -252,6 +254,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         height,
         selection.as_ref(),
         interrupt_prompt_active,
+        interrupt_prompt_attached,
     )
 }
 
@@ -367,12 +370,13 @@ fn handle_key_event(
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
     command_tx: Option<&mpsc::Sender<ProcessCommand>>,
+    attached: bool,
     scroll_offset: &mut State<usize>,
     total_visual_rows: usize,
     viewport_height: usize,
     sel: &mut SelectionState<'_>,
 ) {
-    if handle_interrupt_prompt_key(&key_event, ui_state, shutdown) {
+    if handle_interrupt_prompt_key(&key_event, ui_state, shutdown, command_tx) {
         return;
     }
 
@@ -442,7 +446,7 @@ fn handle_key_event(
                     }
                 }
                 sel.clear();
-            } else if !request_interrupt_prompt(command_tx, ui_state) {
+            } else if !request_interrupt_prompt(command_tx, ui_state, attached) {
                 shutdown.handle_interrupt();
             }
         }
@@ -569,6 +573,7 @@ fn render_expanded_view(
     height: u16,
     selection: Option<&Selection>,
     interrupt_prompt_active: bool,
+    interrupt_prompt_attached: bool,
 ) -> AnyElement<'static> {
     let viewport_height = calculate_viewport_height(height);
     let total_rows = visual_rows.len();
@@ -590,7 +595,12 @@ fn render_expanded_view(
 
     // Build footer text - show copy hint when selection is active
     let footer_text = if interrupt_prompt_active {
-        if width < 88 {
+        if interrupt_prompt_attached {
+            format!(
+                "{} \u{2502} Detach or stop the process manager?  Ctrl-C:detach  s:stop manager  Esc:keep watching",
+                progress
+            )
+        } else if width < 88 {
             format!(
                 "{} \u{2502} Quit devenv?  c:keep running  q/Ctrl-C:quit",
                 progress
@@ -774,7 +784,7 @@ mod tests {
         };
         let visual_rows = build_visual_rows(&state.logs, content_width_for(100));
 
-        let mut element = render_expanded_view(&state, &visual_rows, 100, 8, None, true);
+        let mut element = render_expanded_view(&state, &visual_rows, 100, 8, None, true, false);
         let output = element.render(Some(100)).to_string();
 
         assert!(output.contains("Quit devenv? Nothing has been stopped yet"));
@@ -854,6 +864,7 @@ mod tests {
             (visual_rows.len() as u16) + 2,
             None,
             false,
+            false,
         );
         let output = element.render(Some(width as usize)).to_string();
 
@@ -890,8 +901,15 @@ mod tests {
         // Select columns [2..13] of the logical line, which spans the boundary
         // of the two wrap segments.
         let selection = Selection::from_anchor_cursor((0, 2), (0, 13));
-        let mut element =
-            render_expanded_view(&state, &visual_rows, width, 6, Some(&selection), false);
+        let mut element = render_expanded_view(
+            &state,
+            &visual_rows,
+            width,
+            6,
+            Some(&selection),
+            false,
+            false,
+        );
         let output = element.render(Some(width as usize)).to_string();
         assert!(output.contains("cdefghij"));
         assert!(output.contains("KLM"));

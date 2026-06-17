@@ -3,8 +3,8 @@ use crate::config::TaskConfig;
 use crate::executor::{ExecutionContext, OutputCallback};
 use crate::task_cache::{TaskCache, find_files_matching_patterns};
 use crate::types::{
-    Output, Outputs, ProcessPhase, ProcessTaskStatus, Skipped, TaskCompleted, TaskFailure,
-    TaskStatus, TaskType, VerbosityLevel, get_or_create_devenv_env_mut, process_name,
+    Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel,
+    get_or_create_devenv_env_mut, process_name,
 };
 use base64::Engine;
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
@@ -71,13 +71,10 @@ impl TaskState {
         verbosity: VerbosityLevel,
         sudo_context: Option<SudoContext>,
     ) -> Self {
-        let status = match task.r#type {
-            TaskType::Process => TaskStatus::Process(ProcessTaskStatus {
-                name: process_name(&task.name).to_string(),
-                phase: ProcessPhase::Waiting,
-            }),
-            _ => TaskStatus::Pending,
-        };
+        // Process tasks stay `Pending` while their launch is in flight or
+        // their process is alive; the manager owns the live phase. The graph
+        // only records terminal launch outcomes as `Completed`.
+        let status = TaskStatus::Pending;
         Self {
             task,
             status,

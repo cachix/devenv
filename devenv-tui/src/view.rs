@@ -165,6 +165,7 @@ pub fn view(
             can_go_up,
             can_go_down,
             interrupt_prompt_active: ui_state.interrupt_prompt_active(),
+            interrupt_prompt_attached: ui_state.interrupt_prompt_attached(),
             hide_stopped_processes: ui_state.hide_stopped_processes,
         })) {
             SummaryView
@@ -943,6 +944,7 @@ struct SummaryViewContext {
     can_go_up: bool,
     can_go_down: bool,
     interrupt_prompt_active: bool,
+    interrupt_prompt_attached: bool,
     hide_stopped_processes: bool,
 }
 
@@ -963,6 +965,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         can_go_up,
         can_go_down,
         interrupt_prompt_active,
+        interrupt_prompt_attached,
         hide_stopped_processes,
     } = ctx;
     let selected = selected.as_ref();
@@ -970,9 +973,38 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let can_go_up = *can_go_up;
     let can_go_down = *can_go_down;
     let interrupt_prompt_active = *interrupt_prompt_active;
+    let interrupt_prompt_attached = *interrupt_prompt_attached;
     let hide_stopped_processes = *hide_stopped_processes;
 
     if interrupt_prompt_active {
+        if interrupt_prompt_attached {
+            // Attached to a running manager: Ctrl-C detaches (leaves processes
+            // running), `s` stops the whole manager, Esc keeps watching.
+            let prompt_text = if terminal_width < 72 {
+                "Detach or stop the manager?"
+            } else {
+                "Detach or stop the process manager?"
+            };
+            return element!(View(
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                width: 100pct
+            ) {
+                View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    Text(content: prompt_text, color: Color::Yellow, weight: Weight::Bold)
+                }
+                View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
+                    Text(content: "Ctrl-C", color: COLOR_INTERACTIVE)
+                    Text(content: " detach • ")
+                    Text(content: "s", color: COLOR_INTERACTIVE)
+                    Text(content: " stop manager • ")
+                    Text(content: "Esc", color: COLOR_INTERACTIVE)
+                    Text(content: " keep watching")
+                }
+            })
+            .into_any();
+        }
+
         let prompt_text = if terminal_width < 72 {
             "Quit devenv? Nothing stopped."
         } else {
@@ -1340,6 +1372,7 @@ mod tests {
             can_go_up: false,
             can_go_down: false,
             interrupt_prompt_active,
+            interrupt_prompt_attached: false,
             hide_stopped_processes,
         }
     }

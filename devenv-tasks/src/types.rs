@@ -287,12 +287,9 @@ pub enum DepSatisfaction {
     NeverSatisfiable,
 }
 
-/// Check whether a process task status satisfies the given dependency kind.
-pub fn is_process_dep_satisfied(
-    status: &ProcessTaskStatus,
-    kind: &DependencyKind,
-) -> DepSatisfaction {
-    match (status.phase, kind) {
+/// Check whether a live process phase satisfies the given dependency kind.
+pub fn is_process_dep_satisfied(phase: ProcessPhase, kind: &DependencyKind) -> DepSatisfaction {
+    match (phase, kind) {
         // Waiting: nothing satisfied yet
         (ProcessPhase::Waiting, _) => DepSatisfaction::NotYet,
 
@@ -354,6 +351,10 @@ fn is_completed_dep_satisfied(completed: &TaskCompleted, kind: &DependencyKind) 
 }
 
 /// Check whether `status` satisfies the given `kind`.
+///
+/// Process dependencies are evaluated against the manager's live phase via
+/// `is_process_dep_satisfied`; this function only covers graph-owned statuses
+/// (oneshot lifecycle and terminal launch outcomes).
 pub fn is_dep_satisfied(status: &TaskStatus, kind: &DependencyKind) -> DepSatisfaction {
     match status {
         TaskStatus::Pending => DepSatisfaction::NotYet,
@@ -362,8 +363,6 @@ pub fn is_dep_satisfied(status: &TaskStatus, kind: &DependencyKind) -> DepSatisf
             DependencyKind::Started => DepSatisfaction::Satisfied,
             _ => DepSatisfaction::NotYet,
         },
-
-        TaskStatus::Process(ps) => is_process_dep_satisfied(ps, kind),
 
         TaskStatus::Completed(completed) => is_completed_dep_satisfied(completed, kind),
     }
@@ -387,16 +386,9 @@ pub fn process_name(task_name: &str) -> &str {
 pub use devenv_processes::ProcessPhase;
 
 #[derive(Debug, Clone)]
-pub struct ProcessTaskStatus {
-    pub name: String,
-    pub phase: ProcessPhase,
-}
-
-#[derive(Debug, Clone)]
 pub enum TaskStatus {
     Pending,
     Oneshot(OneshotStatus),
-    Process(ProcessTaskStatus),
     Completed(TaskCompleted),
 }
 
@@ -405,13 +397,6 @@ mod tests {
     use super::*;
 
     // ── helpers ──────────────────────────────────────────────────────
-
-    fn make_process_status(phase: ProcessPhase) -> ProcessTaskStatus {
-        ProcessTaskStatus {
-            name: "test".to_string(),
-            phase,
-        }
-    }
 
     fn make_success() -> TaskCompleted {
         TaskCompleted::Success(Duration::from_secs(0), Output(None))
@@ -544,8 +529,7 @@ mod tests {
         ];
 
         for (phase, kind, expected) in &table {
-            let status = make_process_status(*phase);
-            let actual = is_process_dep_satisfied(&status, kind);
+            let actual = is_process_dep_satisfied(*phase, kind);
             assert_eq!(
                 actual, *expected,
                 "phase={:?}, kind={:?}: expected {:?}, got {:?}",
@@ -559,9 +543,8 @@ mod tests {
     fn process_dep_satisfied_all_combinations_covered() {
         for phase in &ALL_PHASES {
             for kind in &ALL_KINDS {
-                let status = make_process_status(*phase);
                 // Should not panic for any combination
-                let _ = is_process_dep_satisfied(&status, kind);
+                let _ = is_process_dep_satisfied(*phase, kind);
             }
         }
     }
@@ -660,36 +643,15 @@ mod tests {
     }
 
     #[test]
-    fn dep_satisfied_process_delegates() {
-        // Spot check: delegates to is_process_dep_satisfied
-        let ps = make_process_status(ProcessPhase::Ready);
-        let status = TaskStatus::Process(ps);
-
+    fn process_dep_satisfied_ready_spot_check() {
         assert_eq!(
-            is_dep_satisfied(&status, &DependencyKind::Ready),
+            is_process_dep_satisfied(ProcessPhase::Ready, &DependencyKind::Ready),
             DepSatisfaction::Satisfied,
         );
         assert_eq!(
-            is_dep_satisfied(&status, &DependencyKind::Succeeded),
+            is_process_dep_satisfied(ProcessPhase::Ready, &DependencyKind::Succeeded),
             DepSatisfaction::NotYet,
         );
-    }
-
-    #[test]
-    fn dep_satisfied_process_delegates_all_combinations() {
-        for phase in &ALL_PHASES {
-            for kind in &ALL_KINDS {
-                let ps = make_process_status(*phase);
-                let expected = is_process_dep_satisfied(&ps, kind);
-                let status = TaskStatus::Process(make_process_status(*phase));
-                let actual = is_dep_satisfied(&status, kind);
-                assert_eq!(
-                    actual, expected,
-                    "Process delegation mismatch: phase={:?}, kind={:?}",
-                    phase, kind
-                );
-            }
-        }
     }
 
     #[test]

@@ -82,6 +82,10 @@ pub struct TuiConfig {
     pub max_fps: u64,
     /// Minimum activity level to display (activities below this level are filtered out)
     pub filter_level: ActivityLevel,
+    /// Set by the backend when this run is attached to an already-running
+    /// process manager. Shared with the backend so the interrupt prompt can
+    /// offer detach vs stop instead of the in-process keep-running vs quit.
+    pub attached: Arc<AtomicBool>,
 }
 
 impl Default for TuiConfig {
@@ -93,6 +97,7 @@ impl Default for TuiConfig {
             log_viewport_collapsed: 10,
             max_fps: 60,
             filter_level: ActivityLevel::Info,
+            attached: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -122,6 +127,14 @@ impl TuiApp {
     /// Set the command sender for process control commands.
     pub fn with_command_sender(mut self, tx: mpsc::Sender<ProcessCommand>) -> Self {
         self.command_tx = Some(tx);
+        self
+    }
+
+    /// Share the attach-mode flag with the backend. When set true (the backend
+    /// is attached to a running manager), the interrupt prompt offers detach vs
+    /// stop the manager instead of keep-running vs quit.
+    pub fn with_attached_flag(mut self, attached: Arc<AtomicBool>) -> Self {
+        self.config.attached = attached;
         self
     }
 
@@ -417,13 +430,14 @@ impl TuiApp {
 pub(crate) fn request_interrupt_prompt(
     command_tx: Option<&mpsc::Sender<ProcessCommand>>,
     ui_state: &Arc<RwLock<UiState>>,
+    attached: bool,
 ) -> bool {
     if command_tx.is_none() {
         return false;
     }
 
     if let Ok(mut ui) = ui_state.write() {
-        ui.show_interrupt_prompt();
+        ui.show_interrupt_prompt(attached);
         true
     } else {
         false
@@ -434,20 +448,35 @@ pub(crate) fn handle_interrupt_prompt_key(
     key_event: &KeyEvent,
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
+    command_tx: Option<&mpsc::Sender<ProcessCommand>>,
 ) -> bool {
-    let prompt_active = ui_state
+    let (prompt_active, attached) = ui_state
         .read()
-        .map(|ui| ui.interrupt_prompt_active())
-        .unwrap_or(false);
+        .map(|ui| (ui.interrupt_prompt_active(), ui.interrupt_prompt_attached()))
+        .unwrap_or((false, false));
     if !prompt_active {
         return false;
     }
 
     match key_event.code {
+        // Ctrl-C: in attach mode this detaches (processes keep running); in
+        // process mode it quits (stops everything). Both raise the same
+        // shutdown interrupt — the foreground loop interprets it per mode.
         KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             shutdown.handle_interrupt();
         }
-        KeyCode::Char('q') => {
+        // s: stop the whole process manager (attach mode only).
+        KeyCode::Char('s') if attached => {
+            if let Some(tx) = command_tx {
+                let _ = tx.try_send(ProcessCommand::StopManager);
+            }
+            if let Ok(mut ui) = ui_state.write() {
+                ui.clear_interrupt_prompt();
+            }
+        }
+        // q quits in process mode; in attach mode detach is Ctrl-C and stop is
+        // `s`, so q is not a shortcut there.
+        KeyCode::Char('q') if !attached => {
             shutdown.handle_interrupt();
         }
         KeyCode::Esc => {
@@ -607,6 +636,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let shutdown = shutdown.clone();
         let command_tx = command_tx.clone();
         let notify = notify.clone();
+        let attached_flag = config.attached.clone();
         let mut scroll_handle = scroll_handle;
         let scroll_view_active = scroll_view_active;
 
@@ -615,12 +645,21 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 && key_event.kind != KeyEventKind::Release
             {
                 debug!("Key event: {:?}", key_event);
-                if !handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown) {
+                if !handle_interrupt_prompt_key(
+                    &key_event,
+                    &ui_state,
+                    &shutdown,
+                    command_tx.as_ref(),
+                ) {
                     match key_event.code {
                         KeyCode::Char('c')
                             if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
-                            if !request_interrupt_prompt(command_tx.as_ref(), &ui_state) {
+                            if !request_interrupt_prompt(
+                                command_tx.as_ref(),
+                                &ui_state,
+                                attached_flag.load(Ordering::Relaxed),
+                            ) {
                                 shutdown.handle_interrupt();
                             }
                         }
@@ -894,10 +933,10 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(1);
         let ui_state = Arc::new(RwLock::new(UiState::new()));
 
-        assert!(!request_interrupt_prompt(None, &ui_state));
+        assert!(!request_interrupt_prompt(None, &ui_state, false));
         assert!(!ui_state.read().unwrap().interrupt_prompt_active());
 
-        assert!(request_interrupt_prompt(Some(&tx), &ui_state));
+        assert!(request_interrupt_prompt(Some(&tx), &ui_state, false));
         assert!(ui_state.read().unwrap().interrupt_prompt_active());
         assert!(rx.try_recv().is_err());
     }
@@ -905,17 +944,53 @@ mod tests {
     #[test]
     fn test_interrupt_prompt_keys_dismiss_and_quit() {
         let ui_state = Arc::new(RwLock::new(UiState::new()));
-        ui_state.write().unwrap().show_interrupt_prompt();
+        ui_state.write().unwrap().show_interrupt_prompt(false);
         let shutdown = tokio_shutdown::Shutdown::new();
 
         let dismiss = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('c'));
-        assert!(handle_interrupt_prompt_key(&dismiss, &ui_state, &shutdown));
+        assert!(handle_interrupt_prompt_key(
+            &dismiss, &ui_state, &shutdown, None
+        ));
         assert!(!ui_state.read().unwrap().interrupt_prompt_active());
         assert!(!shutdown.is_cancelled());
 
-        ui_state.write().unwrap().show_interrupt_prompt();
+        ui_state.write().unwrap().show_interrupt_prompt(false);
         let quit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'));
-        assert!(handle_interrupt_prompt_key(&quit, &ui_state, &shutdown));
+        assert!(handle_interrupt_prompt_key(
+            &quit, &ui_state, &shutdown, None
+        ));
+        assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn test_interrupt_prompt_attached_stop_sends_command() {
+        let (tx, mut rx) = mpsc::channel(1);
+        let ui_state = Arc::new(RwLock::new(UiState::new()));
+        ui_state.write().unwrap().show_interrupt_prompt(true);
+        let shutdown = tokio_shutdown::Shutdown::new();
+
+        // `s` in attached mode stops the manager via a command, not a shutdown.
+        let stop = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('s'));
+        assert!(handle_interrupt_prompt_key(
+            &stop,
+            &ui_state,
+            &shutdown,
+            Some(&tx)
+        ));
+        assert!(matches!(rx.try_recv(), Ok(ProcessCommand::StopManager)));
+        assert!(!shutdown.is_cancelled());
+        assert!(!ui_state.read().unwrap().interrupt_prompt_active());
+
+        // Ctrl-C in attached mode detaches (raises the shutdown interrupt).
+        ui_state.write().unwrap().show_interrupt_prompt(true);
+        let mut ctrl_c = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('c'));
+        ctrl_c.modifiers = KeyModifiers::CONTROL;
+        assert!(handle_interrupt_prompt_key(
+            &ctrl_c,
+            &ui_state,
+            &shutdown,
+            Some(&tx)
+        ));
         assert!(shutdown.is_cancelled());
     }
 }

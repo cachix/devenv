@@ -30,18 +30,46 @@ pub fn run(config_file: &Path) -> Result<()> {
 
         let _ = tokio::fs::remove_file(config_file).await;
 
-        let tasks_runner = tasks::Tasks::builder(
-            config,
-            devenv_core::VerbosityLevel::Normal,
-            shutdown.clone(),
-        )
-        .build()
-        .await
-        .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?;
+        let tasks_runner = Arc::new(
+            tasks::Tasks::builder(
+                config,
+                devenv_core::VerbosityLevel::Normal,
+                shutdown.clone(),
+            )
+            .build()
+            .await
+            .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?,
+        );
 
         let phase = devenv_activity::start!(
             devenv_activity::Activity::operation("Running processes").parent(None)
         );
+
+        // Service `devenv up` attaches: `Start` requests are served live by the
+        // per-connection API task through the task scheduler — which owns the
+        // dependency graph — so it brings the requested processes up in
+        // dependency order, rather than the client re-deriving the order and
+        // force-starting each one.
+        //
+        // Register the scheduler BEFORE the run below. The API socket starts
+        // accepting connections as soon as processes are pre-registered (well
+        // before `run_with_parent_activity` returns). Without the scheduler
+        // set, a `Start` arriving mid-startup is rejected outright; registered
+        // here it is answered concurrently — names already pre-registered
+        // `Waiting` classify as `skipped`. The coerced `Arc<dyn _>` shares
+        // its refcount with `tasks_runner`, so the `Weak` the manager holds
+        // stays upgradable for the daemon's lifetime.
+        let scheduler: Arc<dyn crate::processes::ProcessScheduler> = tasks_runner.clone();
+        tasks_runner
+            .process_manager()
+            .set_scheduler(Arc::downgrade(&scheduler));
+        // Declare this as a daemon session before the run, so a `Mode` query
+        // arriving during startup (the API socket accepts as soon as processes
+        // are pre-registered) is answered correctly.
+        tasks_runner
+            .process_manager()
+            .set_mode(crate::processes::ManagerMode::Daemon);
+
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 
         let pid_file = tasks_runner.process_manager().manager_pid_file();
