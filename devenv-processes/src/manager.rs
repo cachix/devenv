@@ -323,9 +323,15 @@ fn display_phase(terminal_phase: Option<ProcessPhase>, user_stopped: bool) -> Pr
 }
 
 /// The phase a *dependent* should be judged against for a `Stopped` entry: the
-/// furthest lifecycle point the process reached, regardless of who stopped it.
-/// `@started` satisfaction is monotonic — a process that ran and exited still
-/// started — so an explicit stop never masks the terminal phase here.
+/// furthest *terminal* phase (`Exited`/`GaveUp`) the process reached on its
+/// own, regardless of who stopped it, else `Stopped`. A process that ran to a
+/// terminal state did start (and complete), so an explicit stop afterwards does
+/// not un-satisfy a dependent on `<proc>@started`/`@completed`. This is
+/// deliberately narrower than "any phase it ever reached": a process stopped
+/// while still `Starting`/`Ready` has no terminal phase recorded and reads as a
+/// plain `Stopped`, so a dependent on `@started` waits for it to be (re)started
+/// rather than treating the interrupted run as satisfying — see the
+/// `dependency_parked_judges_live_and_transitive` test.
 fn lifecycle_phase(terminal_phase: Option<ProcessPhase>) -> ProcessPhase {
     terminal_phase.unwrap_or(ProcessPhase::Stopped)
 }
@@ -3148,8 +3154,11 @@ mod tests {
 
         // Event-driven: read activity events until the self-exit process reports
         // a terminal `Stopped` status. The timeout is a failure bound, not a
-        // poll interval — without the fix this never arrives and the test fails.
-        tokio::time::timeout(Duration::from_secs(60), async {
+        // poll interval — without the fix this never arrives and the test times
+        // out. The block returns whether the status was actually observed, so a
+        // channel that closes before it arrives (the `while let` falling
+        // through) fails the test rather than passing silently.
+        let saw_stopped = tokio::time::timeout(Duration::from_secs(60), async {
             let mut proc_id: Option<u64> = None;
             while let Some(event) = rx.recv().await {
                 if let devenv_activity::ActivityEvent::Process(p) = event {
@@ -3160,15 +3169,21 @@ mod tests {
                         devenv_activity::Process::Status { id, status, .. }
                             if Some(id) == proc_id && status == ProcessStatus::Stopped =>
                         {
-                            return;
+                            return true;
                         }
                         _ => {}
                     }
                 }
             }
+            // Channel closed before the Stopped status arrived: not observed.
+            false
         })
         .await
-        .expect("a self-exited process must emit a terminal Stopped activity status");
+        .expect("timed out waiting for the self-exit process's activity status");
+        assert!(
+            saw_stopped,
+            "a self-exited process must emit a terminal Stopped activity status"
+        );
 
         let _ = manager.stop_all().await;
     }
