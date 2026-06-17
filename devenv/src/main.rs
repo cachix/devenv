@@ -974,8 +974,7 @@ async fn dispatch_command(
                 } else {
                     // No manager yet: cold-start one in the background
                     // launching only this process, exactly like
-                    // `devenv up -d <name>`. The manager registers the full
-                    // process set, so later starts schedule into it.
+                    // `devenv up -d <name>`.
                     let options = devenv::ProcessOptions {
                         detach: true,
                         log_to_file: true,

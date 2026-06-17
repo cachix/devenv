@@ -737,6 +737,28 @@ impl Devenv {
             .collect()
     }
 
+    /// Process task roots for a cold native-manager start. A bare `up` keeps
+    /// every process task as a root so disabled processes are still registered
+    /// as not-started. An explicit subset uses only the resolved launch names
+    /// as roots; `RunMode::Before` then pulls just their prerequisites instead
+    /// of scheduling unrelated process dependency chains.
+    fn process_roots_for_launch(
+        task_configs: &[tasks::TaskConfig],
+        requested: &[String],
+        launch_names: &[String],
+    ) -> Vec<String> {
+        let subset = !requested.is_empty();
+        let launch_set: HashSet<&str> = launch_names.iter().map(String::as_str).collect();
+
+        task_configs
+            .iter()
+            .filter_map(|t| {
+                let name = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)?;
+                (!subset || launch_set.contains(name)).then(|| t.name.clone())
+            })
+            .collect()
+    }
+
     /// Single decision point for which processes `devenv up` launches:
     /// explicitly named processes always start, even with `start.enable =
     /// false` (their configs are force-enabled here so the cold start, the
@@ -749,11 +771,10 @@ impl Devenv {
     /// With names, the launch set is the named processes plus the
     /// configured-enabled processes in their dependency closure (a cold
     /// `devenv up api` still brings up the database `api` needs), and every
-    /// other process is force-disabled: it stays registered in the manager —
-    /// the manager always owns the full process set — but is parked as not
-    /// started, so a later `devenv up <other>` or `devenv processes start
-    /// <other>` schedules into the same manager instead of being rejected as
-    /// unknown.
+    /// other process is force-disabled so it cannot launch merely because it
+    /// exists in the config. The cold-start roots are selected separately by
+    /// `process_roots_for_launch`, so explicit subset starts do not schedule
+    /// unrelated process dependency chains.
     /// Bails when a requested name is not in the configuration.
     fn resolve_launch_processes(
         task_configs: &mut [tasks::TaskConfig],
@@ -2079,16 +2100,7 @@ impl Devenv {
             // explicitly named ones); the resolved set feeds the cold start,
             // the daemon config, and the attach paths alike.
             let launch_names = Self::resolve_launch_processes(&mut task_configs, &processes)?;
-            // The manager always owns the full process set: every process
-            // task is a root, so the cold start and the daemon register them
-            // all (visible as not started) and can schedule any of them later
-            // over the socket. Which ones launch now is decided by the
-            // `start.enable` flags resolved above.
-            let roots: Vec<String> = task_configs
-                .iter()
-                .filter(|t| t.name.starts_with(devenv_tasks::PROCESS_TASK_PREFIX))
-                .map(|t| t.name.clone())
-                .collect();
+            let roots = Self::process_roots_for_launch(&task_configs, &processes, &launch_names);
 
             if roots.is_empty() {
                 bail!("No process tasks found to run");
@@ -3319,9 +3331,56 @@ mod tests {
         // missing process config (None) which is materialized as enabled.
         assert!(configs[1].process.as_ref().unwrap().start.enable);
         assert!(configs[2].process.as_ref().unwrap().start.enable);
-        // Unrequested processes outside the dependency closure are parked:
-        // registered (they stay roots) but not launched.
+        // Unrequested processes outside the dependency closure are parked if
+        // they enter the scheduled graph later, but explicit subset roots do
+        // not schedule them merely because they exist.
         assert!(!configs[0].process.as_ref().unwrap().start.enable);
+    }
+
+    #[test]
+    fn process_roots_for_launch_keeps_bare_up_full_set() {
+        let configs = vec![
+            process_task("alpha", true),
+            process_task("beta", false),
+            tasks::TaskConfig {
+                name: "devenv:not-a-process".to_string(),
+                ..Default::default()
+            },
+        ];
+        let launch_names = vec!["alpha".to_string()];
+
+        assert_eq!(
+            Devenv::process_roots_for_launch(&configs, &[], &launch_names),
+            vec![
+                format!("{}alpha", devenv_tasks::PROCESS_TASK_PREFIX),
+                format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX),
+            ],
+            "bare up keeps all process roots so disabled processes register as not-started"
+        );
+    }
+
+    #[test]
+    fn process_roots_for_launch_limits_explicit_subset_roots() {
+        let mut configs = vec![
+            process_task("alpha", true),
+            process_task("beta", true),
+            process_task("gamma", true),
+        ];
+        configs[1].after = vec![format!("{}gamma", devenv_tasks::PROCESS_TASK_PREFIX)];
+
+        let requested = vec!["beta".to_string()];
+        let launch_names = Devenv::resolve_launch_processes(&mut configs, &requested).unwrap();
+
+        assert_eq!(
+            launch_names,
+            vec!["beta".to_string()],
+            "resolved launch names remain the user-requested roots"
+        );
+        assert_eq!(
+            Devenv::process_roots_for_launch(&configs, &requested, &launch_names),
+            vec![format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX)],
+            "RunMode::Before will pull beta's prerequisites without making alpha a root"
+        );
     }
 
     #[test]

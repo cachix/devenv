@@ -1013,6 +1013,7 @@ impl NativeProcessManager {
         };
         activity.reset();
         activity.set_status(ProcessStatus::Waiting);
+        clear_stale_logs(&self.state_dir, &name);
         processes.insert(name.clone(), ProcessEntry::Waiting { config, activity });
         info!("Re-armed waiting process: {}", name);
         drop(processes);
@@ -3291,6 +3292,35 @@ mod tests {
             manager.get_phase("relaunch-me").await,
             Some(ProcessPhase::Stopped)
         );
+
+        let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_rearm_waiting_clears_stale_logs() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let name = "rearm-logs";
+
+        manager
+            .register_waiting(auto_start_off_config(name), None)
+            .await;
+        manager.launch_waiting(name).await.unwrap();
+        assert_eq!(
+            manager.get_phase(name).await,
+            Some(ProcessPhase::NotStarted)
+        );
+
+        let (stdout_log, stderr_log) = crate::command::log_paths(temp_dir.path(), name);
+        std::fs::create_dir_all(stdout_log.parent().unwrap()).unwrap();
+        std::fs::write(&stdout_log, "old stdout\n").unwrap();
+        std::fs::write(&stderr_log, "old stderr\n").unwrap();
+
+        manager.rearm_waiting(test_config(name)).await;
+
+        assert_eq!(manager.get_phase(name).await, Some(ProcessPhase::Waiting));
+        assert_eq!(std::fs::read_to_string(&stdout_log).unwrap(), "");
+        assert_eq!(std::fs::read_to_string(&stderr_log).unwrap(), "");
 
         let _ = manager.stop_all().await;
     }

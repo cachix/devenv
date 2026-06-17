@@ -1767,6 +1767,15 @@ mod schedule_tests {
         roots: Vec<String>,
         ignore_process_deps: bool,
     ) -> (Tasks, tempfile::TempDir) {
+        build_test_tasks_with_run_mode(task_configs, roots, RunMode::All, ignore_process_deps).await
+    }
+
+    async fn build_test_tasks_with_run_mode(
+        task_configs: Vec<TaskConfig>,
+        roots: Vec<String>,
+        run_mode: RunMode,
+        ignore_process_deps: bool,
+    ) -> (Tasks, tempfile::TempDir) {
         let tmp = tempfile::tempdir().unwrap();
         let cache_dir = tmp.path().to_path_buf();
         let runtime_dir = tmp.path().join("runtime");
@@ -1775,7 +1784,7 @@ mod schedule_tests {
         let config = Config {
             tasks: task_configs,
             roots,
-            run_mode: RunMode::All,
+            run_mode,
             runtime_dir,
             cache_dir,
             sudo_context: None,
@@ -1809,6 +1818,16 @@ mod schedule_tests {
             after: after.into_iter().map(String::from).collect(),
             command: Some("true".to_string()),
             ..Default::default()
+        }
+    }
+
+    fn disabled_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
+        TaskConfig {
+            process: Some(devenv_processes::ProcessConfig {
+                start: devenv_processes::config::StartConfig { enable: false },
+                ..Default::default()
+            }),
+            ..process_task(name, after)
         }
     }
 
@@ -2257,6 +2276,42 @@ mod schedule_tests {
         );
 
         let _ = tasks.process_manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn before_mode_subset_roots_skip_unrelated_process_dependency_chains() {
+        let api = format!("{PROCESS_TASK_PREFIX}api");
+        let db = format!("{PROCESS_TASK_PREFIX}db");
+        let worker = format!("{PROCESS_TASK_PREFIX}worker");
+        let blocked = format!("{PROCESS_TASK_PREFIX}blocked");
+
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![
+                process_task(&api, vec![&format!("{db}@started")]),
+                process_task(&db, vec![]),
+                disabled_process_task(&worker, vec![&format!("{blocked}@started")]),
+                process_task(&blocked, vec![]),
+            ],
+            vec![api.clone()],
+            RunMode::Before,
+            false,
+        )
+        .await;
+
+        let names = task_names(&tasks).await;
+        assert!(names.contains(&api), "requested process must be scheduled");
+        assert!(
+            names.contains(&db),
+            "requested process dependencies must be scheduled"
+        );
+        assert!(
+            !names.contains(&worker),
+            "unrelated disabled process must not become a root for a subset start"
+        );
+        assert!(
+            !names.contains(&blocked),
+            "dependencies of unrelated processes must not be scheduled"
+        );
     }
 
     #[tokio::test]
