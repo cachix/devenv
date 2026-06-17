@@ -193,6 +193,21 @@ fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
         .collect()
 }
 
+/// Returns true if any entry can still do work: a process waiting for
+/// dependencies, a not-started process the user can launch, or an active
+/// process whose supervisor is still running. An `Active` entry with a
+/// finished supervisor task is terminal: the process exited on its own
+/// (without watch paths to revive it) or gave up restarting. Entries are
+/// kept in the map after exit so the TUI can keep showing them, so map
+/// emptiness alone cannot detect "everything is done".
+fn has_live_processes(processes: &HashMap<String, ProcessEntry>) -> bool {
+    processes.values().any(|entry| match entry {
+        ProcessEntry::Active(handle) => !handle.supervisor_task.is_finished(),
+        ProcessEntry::NotStarted { .. } | ProcessEntry::Waiting { .. } => true,
+        ProcessEntry::Stopped { .. } => false,
+    })
+}
+
 /// A managed process entry: not started, waiting for dependencies, or active.
 enum ProcessEntry {
     /// Process has `start.enable = false`: visible in TUI but not yet launched.
@@ -1700,11 +1715,11 @@ impl NativeProcessManager {
                     self.handle_command(cmd).await;
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    let is_empty = self.processes.read().await.is_empty();
-                    if !is_empty {
+                    let processes = self.processes.read().await;
+                    if !processes.is_empty() {
                         saw_processes = true;
                     }
-                    if is_empty && saw_processes {
+                    if saw_processes && !has_live_processes(&processes) {
                         trace!("All processes exited, shutting down");
                         break;
                     }
