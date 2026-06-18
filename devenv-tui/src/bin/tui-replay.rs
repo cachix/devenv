@@ -23,6 +23,20 @@ struct Args {
     /// Replay speed multiplier (e.g., 2.0 for 2x speed, 0.5 for half speed)
     #[arg(long, short, default_value = "1.0")]
     speed: f64,
+
+    /// Keep the TUI running after the trace drains instead of exiting.
+    ///
+    /// The trace provides a deterministic data stream while the program stays
+    /// live for input. Intended for fuzzing the input/render path (e.g. with
+    /// `bombadil terminal test`), bounded by the fuzzer's timeout or Ctrl+C.
+    #[arg(long)]
+    hold: bool,
+
+    /// Number of times to replay the trace (0 = repeat forever).
+    ///
+    /// Useful for continuous data churn while fuzzing.
+    #[arg(long = "loop", default_value = "1")]
+    loop_count: u64,
 }
 
 /// Raw trace event as it appears in the JSONL file
@@ -155,6 +169,27 @@ async fn replay_events(
     Ok(())
 }
 
+/// Replays the trace `loop_count` times (0 = forever), reopening the file each
+/// iteration since `TraceStream` consumes it.
+async fn run_replays(
+    path: &PathBuf,
+    tx: &mpsc::UnboundedSender<ActivityEvent>,
+    speed: f64,
+    loop_count: u64,
+) -> Result<()> {
+    let mut iteration: u64 = 0;
+    loop {
+        let file = File::open(path)
+            .with_context(|| format!("Failed to open trace file: {}", path.display()))?;
+        replay_events(TraceStream::new(file), tx, speed).await?;
+
+        iteration += 1;
+        if loop_count != 0 && iteration >= loop_count {
+            return Ok(());
+        }
+    }
+}
+
 async fn ctrl_c() {
     signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
 }
@@ -170,7 +205,9 @@ async fn main() -> Result<()> {
         bail!("Speed must be greater than 0");
     }
 
-    let file = File::open(&args.trace_file)
+    // Validate the trace file exists before spawning the TUI; run_replays
+    // reopens it (once per loop iteration).
+    File::open(&args.trace_file)
         .with_context(|| format!("Failed to open trace file: {}", args.trace_file.display()))?;
 
     let (tx, rx) = mpsc::unbounded_channel();
@@ -197,16 +234,44 @@ async fn main() -> Result<()> {
 
     info!("Starting trace replay from: {}", args.trace_file.display());
 
-    let stream = TraceStream::new(file);
+    // Run the replay on its own task with a cloned sender. The original `tx`
+    // stays alive in `main` so the activity channel never closes — in hold mode
+    // a closed channel would make the TUI exit (see TuiApp::run).
+    let mut replay_task = tokio::spawn({
+        let replay_tx = tx.clone();
+        let path = args.trace_file.clone();
+        let speed = args.speed;
+        let loop_count = args.loop_count;
+        async move { run_replays(&path, &replay_tx, speed, loop_count).await }
+    });
 
     tokio::select! {
-        result = replay_events(stream, &tx, args.speed) => {
-            if let Err(e) = result {
-                warn!("Replay error: {e}");
+        result = &mut replay_task => {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => warn!("Replay error: {e}"),
+                Err(e) => warn!("Replay task panicked: {e}"),
             }
-            // Signal TUI that replay is done
-            if let Some(tx) = backend_done_tx.take() {
-                let _ = tx.send(());
+
+            if args.hold {
+                // Hold the TUI open for input fuzzing: do NOT signal
+                // backend_done and keep `tx`/`backend_done_tx` alive. Wait for
+                // the TUI to exit on its own or for an interrupt (the fuzzer's
+                // timeout kills the process).
+                info!("Trace drained; holding TUI open (--hold). Ctrl+C to exit.");
+                tokio::select! {
+                    _ = &mut tui_task => info!("TUI exited"),
+                    _ = ctrl_c() => {
+                        info!("Interrupted");
+                        shutdown.shutdown();
+                    }
+                }
+            } else {
+                // Signal TUI that replay is done and let it drain and exit.
+                if let Some(tx) = backend_done_tx.take() {
+                    let _ = tx.send(());
+                }
+                let _ = (&mut tui_task).await;
             }
         }
         _ = &mut tui_task => {

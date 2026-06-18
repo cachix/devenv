@@ -1,0 +1,95 @@
+name: "TUI fuzz"
+
+# End-to-end fuzzing of the real TUI binary through a PTY using bombadil
+# (experimental, pinned). This complements the deterministic property tests in
+# devenv-tui/tests/tui_proptest.rs, which already run on every PR via the
+# `cargo nextest run --features devenv/test-all` step in build.yml.
+#
+# Runs nightly (and on demand) rather than per-PR: it is slow and the trace it
+# records grows fast. On a property violation it stops early and uploads the
+# reproducer so it can be replayed with `bombadil terminal test --reproduce`.
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # nightly, 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      time-limit:
+        description: "bombadil --time-limit (e.g. 120s, 5m, 1h)"
+        required: false
+        default: "120s"
+
+concurrency:
+  group: tui-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BOMBADIL_VERSION: v0.6.0
+
+jobs:
+  fuzz:
+    name: bombadil terminal fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Cachix
+        uses: cachix/cachix-action@v17
+        with:
+          name: devenv
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build devenv
+        id: build-devenv
+        run: |
+          devenv_path=$(nix build -L --print-out-paths --system x86_64-linux .#devenv)
+          echo "path=$devenv_path" >> "$GITHUB_OUTPUT"
+
+      - name: Build tui-replay (deterministic)
+        run: |
+          "${{ steps.build-devenv.outputs.path }}/bin/devenv" shell -- \
+            cargo build -p devenv-tui --features deterministic-tui --bin tui-replay
+
+      - name: Fetch bombadil ${{ env.BOMBADIL_VERSION }}
+        run: |
+          curl -fsSL -o bombadil \
+            "https://github.com/antithesishq/bombadil/releases/download/${BOMBADIL_VERSION}/bombadil-x86_64-linux"
+          chmod +x bombadil
+          ./bombadil --version
+
+      - name: Run terminal fuzz
+        run: |
+          bin=$(find target -maxdepth 3 -type f -name tui-replay | head -1)
+          echo "Fuzzing $bin"
+          ./bombadil terminal test \
+            --time-limit "${{ github.event.inputs.time-limit || '120s' }}" \
+            --exit-on-violation \
+            --scrollback-lines-max 100 \
+            --specification devenv-tui/bombadil/devenv-tui.spec.ts \
+            --output-path bombadil-out \
+            -- "$bin" --hold --loop 0 devenv-tui/replays/quick-test
+
+      - name: Compress reproducer
+        if: failure()
+        run: |
+          if [ -d bombadil-out ]; then
+            tar -C bombadil-out -cf - . | zstd -19 -T0 -o bombadil-reproducer.tar.zst || true
+          fi
+
+      - name: Upload reproducer
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bombadil-reproducer
+          path: bombadil-reproducer.tar.zst
+          if-no-files-found: ignore
+          retention-days: 14
