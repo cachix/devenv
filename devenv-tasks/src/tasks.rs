@@ -125,8 +125,10 @@ impl TasksBuilder {
 
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
-        // Built after schedule(): it replaces the graph with the roots'
-        // subgraph, invalidating any node indices computed before it.
+        // schedule() narrows what runs (`tasks_order`) but keeps the full graph,
+        // so this lookup covers every configured task. start_with_deps relies on
+        // that: a process this run did not bring up can still be found and
+        // scheduled later instead of being rejected as unknown.
         for index in tasks.graph.node_indices() {
             let name = tasks.graph[index].read().await.task.name.clone();
             tasks.task_index_by_name.insert(name, index);
@@ -166,9 +168,10 @@ pub struct Tasks {
     pub(crate) refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
     pub(crate) ignore_process_deps: bool,
-    /// Full task name -> graph node index. Built after `schedule()`, which
-    /// replaces the graph with the scheduled subgraph and invalidates any
-    /// earlier node indices.
+    /// Full task name -> graph node index. Covers every configured task:
+    /// `schedule()` narrows what runs (`tasks_order`) but keeps the full graph,
+    /// so a process not brought up by this run is still addressable here and can
+    /// be scheduled later by `start_with_deps`.
     pub(crate) task_index_by_name: HashMap<String, NodeIndex>,
     /// Serializes `start_with_deps` calls. Two concurrent `up`s for the same
     /// stopped process would otherwise both observe the pre-re-arm phase and
@@ -215,6 +218,10 @@ impl Tasks {
     pub async fn get_completion_status(&self) -> TasksStatus {
         let mut status = TasksStatus::new();
 
+        // `tasks_order` is fixed after `schedule()`, so the scheduled set is
+        // constant for this call; build it once rather than per failed task.
+        let scheduled: HashSet<NodeIndex> = self.tasks_order.iter().copied().collect();
+
         for index in &self.tasks_order {
             let task_state = self.graph[*index].read().await;
             match &task_state.status {
@@ -241,14 +248,14 @@ impl Tasks {
                     TaskCompleted::Success(_, _) => status.succeeded += 1,
                     TaskCompleted::Failed(_, _) => {
                         status.failed += 1;
-                        if self.is_soft_failure(index) {
+                        if self.is_soft_failure(index, &scheduled) {
                             status.soft_failed += 1;
                         }
                     }
                     TaskCompleted::Skipped(_) => status.skipped += 1,
                     TaskCompleted::DependencyFailed => {
                         status.dependency_failed += 1;
-                        if self.is_soft_failure(index) {
+                        if self.is_soft_failure(index, &scheduled) {
                             status.soft_dependency_failed += 1;
                         }
                     }
@@ -266,13 +273,17 @@ impl Tasks {
     /// 1. The task is NOT a root task, AND
     /// 2. The task has at least one outgoing edge (someone depends on it), AND
     /// 3. ALL outgoing edges use `DependencyKind::Completed`
-    fn is_soft_failure(&self, index: &NodeIndex) -> bool {
+    fn is_soft_failure(&self, index: &NodeIndex, scheduled: &HashSet<NodeIndex>) -> bool {
         if self.roots.contains(index) {
             return false;
         }
+        // Only dependents scheduled in this run count. The graph now retains
+        // tasks that were not scheduled (so they stay startable later), and an
+        // unscheduled dependent must not change how a failure is classified.
         let outgoing: Vec<_> = self
             .graph
             .edges_directed(*index, petgraph::Direction::Outgoing)
+            .filter(|e| scheduled.contains(&e.target()))
             .collect();
         !outgoing.is_empty()
             && outgoing
@@ -587,20 +598,21 @@ impl Tasks {
             }
         }
 
-        self.graph = subgraph;
+        // The subgraph exists only to order the scheduled set. Keep the full
+        // graph as `self.graph` so every configured task stays addressable and
+        // `task_index_by_name` (built right after) covers all of them; a later
+        // `start_with_deps` can then find and schedule a process this run did
+        // not bring up instead of rejecting it as unknown. `self.roots` keeps
+        // its full-graph indices for the same reason (no remap).
+        let full_by_sub: HashMap<NodeIndex, NodeIndex> =
+            node_map.iter().map(|(&full, &sub)| (sub, full)).collect();
 
-        // Update roots to use the new node indices from the subgraph
-        self.roots = self
-            .roots
-            .iter()
-            .filter_map(|&old_index| node_map.get(&old_index).copied())
-            .collect();
-
-        // Run topological sort on the subgraph
-        match toposort(&self.graph, None) {
-            Ok(indexes) => Ok(indexes),
+        // Topologically sort the scheduled subgraph, then map the order back
+        // onto the retained full graph.
+        match toposort(&subgraph, None) {
+            Ok(order) => Ok(order.into_iter().map(|sub| full_by_sub[&sub]).collect()),
             Err(cycle) => Err(Error::CycleDetected(
-                self.graph[cycle.node_id()].read().await.task.name.clone(),
+                subgraph[cycle.node_id()].read().await.task.name.clone(),
             )),
         }
     }
@@ -2312,6 +2324,54 @@ mod schedule_tests {
             !names.contains(&blocked),
             "dependencies of unrelated processes must not be scheduled"
         );
+    }
+
+    #[tokio::test]
+    async fn subset_cold_start_keeps_unrelated_processes_known() {
+        // A subset cold start runs only the requested closure, but the
+        // scheduler must keep every configured process addressable so a later
+        // `start_with_deps` (a `devenv processes start <other>` or a plain
+        // `devenv up` attach) finds it instead of rejecting it as unknown.
+        let api = format!("{PROCESS_TASK_PREFIX}api");
+        let db = format!("{PROCESS_TASK_PREFIX}db");
+        let worker = format!("{PROCESS_TASK_PREFIX}worker");
+        let blocked = format!("{PROCESS_TASK_PREFIX}blocked");
+
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![
+                process_task(&api, vec![&format!("{db}@started")]),
+                process_task(&db, vec![]),
+                process_task(&worker, vec![&format!("{blocked}@started")]),
+                process_task(&blocked, vec![]),
+            ],
+            vec![api.clone()],
+            RunMode::Before,
+            false,
+        )
+        .await;
+
+        // Only the requested closure runs.
+        let scheduled = task_names(&tasks).await;
+        assert!(scheduled.contains(&api), "requested process must run");
+        assert!(scheduled.contains(&db), "its dependency must run");
+        assert!(
+            !scheduled.contains(&worker),
+            "an unrelated process must not run on a subset start"
+        );
+        assert!(
+            !scheduled.contains(&blocked),
+            "an unrelated dependency must not run on a subset start"
+        );
+
+        // ...but every configured process stays known, so a later start finds it.
+        for name in [&api, &db, &worker, &blocked] {
+            assert!(
+                tasks.task_index_by_name.contains_key(name),
+                "{name} must remain addressable after a subset cold start"
+            );
+        }
+
+        let _ = tasks.process_manager.stop_all().await;
     }
 
     #[tokio::test]

@@ -741,7 +741,10 @@ impl Devenv {
     /// every process task as a root so disabled processes are still registered
     /// as not-started. An explicit subset uses only the resolved launch names
     /// as roots; `RunMode::Before` then pulls just their prerequisites instead
-    /// of scheduling unrelated process dependency chains.
+    /// of scheduling unrelated process dependency chains. Narrowing the roots
+    /// only limits what *runs*: the scheduler keeps every configured process in
+    /// its task graph, so a later `devenv processes start <other>` or a plain
+    /// `devenv up` still resolves them rather than rejecting them as unknown.
     fn process_roots_for_launch(
         task_configs: &[tasks::TaskConfig],
         requested: &[String],
