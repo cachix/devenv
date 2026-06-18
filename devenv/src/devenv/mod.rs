@@ -737,27 +737,26 @@ impl Devenv {
             .collect()
     }
 
-    /// Process task roots for a cold native-manager start. A bare `up` keeps
-    /// every process task as a root so disabled processes are still registered
-    /// as not-started. An explicit subset uses only the resolved launch names
-    /// as roots; `RunMode::Before` then pulls just their prerequisites instead
-    /// of scheduling unrelated process dependency chains. Narrowing the roots
-    /// only limits what *runs*: the scheduler keeps every configured process in
-    /// its task graph, so a later `devenv processes start <other>` or a plain
-    /// `devenv up` still resolves them rather than rejecting them as unknown.
+    /// Process task roots for a cold native-manager start. A bare `up` (empty
+    /// `requested`) keeps every process task as a root so disabled processes are
+    /// still registered as not-started. An explicit subset uses only the
+    /// requested names as roots; `RunMode::Before` then pulls just their
+    /// prerequisites instead of scheduling unrelated process dependency chains.
+    /// Narrowing the roots only limits what *runs*: the scheduler keeps every
+    /// configured process in its task graph, so a later `devenv processes start
+    /// <other>` or a plain `devenv up` still resolves them rather than rejecting
+    /// them as unknown.
     fn process_roots_for_launch(
         task_configs: &[tasks::TaskConfig],
         requested: &[String],
-        launch_names: &[String],
     ) -> Vec<String> {
-        let subset = !requested.is_empty();
-        let launch_set: HashSet<&str> = launch_names.iter().map(String::as_str).collect();
+        let requested_set: HashSet<&str> = requested.iter().map(String::as_str).collect();
 
         task_configs
             .iter()
             .filter_map(|t| {
                 let name = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)?;
-                (!subset || launch_set.contains(name)).then(|| t.name.clone())
+                (requested_set.is_empty() || requested_set.contains(name)).then(|| t.name.clone())
             })
             .collect()
     }
@@ -2103,7 +2102,7 @@ impl Devenv {
             // explicitly named ones); the resolved set feeds the cold start,
             // the daemon config, and the attach paths alike.
             let launch_names = Self::resolve_launch_processes(&mut task_configs, &processes)?;
-            let roots = Self::process_roots_for_launch(&task_configs, &processes, &launch_names);
+            let roots = Self::process_roots_for_launch(&task_configs, &processes);
 
             if roots.is_empty() {
                 bail!("No process tasks found to run");
@@ -3350,10 +3349,8 @@ mod tests {
                 ..Default::default()
             },
         ];
-        let launch_names = vec!["alpha".to_string()];
-
         assert_eq!(
-            Devenv::process_roots_for_launch(&configs, &[], &launch_names),
+            Devenv::process_roots_for_launch(&configs, &[]),
             vec![
                 format!("{}alpha", devenv_tasks::PROCESS_TASK_PREFIX),
                 format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX),
@@ -3380,7 +3377,7 @@ mod tests {
             "resolved launch names remain the user-requested roots"
         );
         assert_eq!(
-            Devenv::process_roots_for_launch(&configs, &requested, &launch_names),
+            Devenv::process_roots_for_launch(&configs, &requested),
             vec![format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX)],
             "RunMode::Before will pull beta's prerequisites without making alpha a root"
         );

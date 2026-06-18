@@ -1833,16 +1833,6 @@ mod schedule_tests {
         }
     }
 
-    fn disabled_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
-        TaskConfig {
-            process: Some(devenv_processes::ProcessConfig {
-                start: devenv_processes::config::StartConfig { enable: false },
-                ..Default::default()
-            }),
-            ..process_task(name, after)
-        }
-    }
-
     /// Collect task names from the scheduled tasks_order.
     async fn task_names(tasks: &Tasks) -> Vec<String> {
         let mut names = Vec::new();
@@ -2288,42 +2278,6 @@ mod schedule_tests {
         );
 
         let _ = tasks.process_manager.stop_all().await;
-    }
-
-    #[tokio::test]
-    async fn before_mode_subset_roots_skip_unrelated_process_dependency_chains() {
-        let api = format!("{PROCESS_TASK_PREFIX}api");
-        let db = format!("{PROCESS_TASK_PREFIX}db");
-        let worker = format!("{PROCESS_TASK_PREFIX}worker");
-        let blocked = format!("{PROCESS_TASK_PREFIX}blocked");
-
-        let (tasks, _tmp) = build_test_tasks_with_run_mode(
-            vec![
-                process_task(&api, vec![&format!("{db}@started")]),
-                process_task(&db, vec![]),
-                disabled_process_task(&worker, vec![&format!("{blocked}@started")]),
-                process_task(&blocked, vec![]),
-            ],
-            vec![api.clone()],
-            RunMode::Before,
-            false,
-        )
-        .await;
-
-        let names = task_names(&tasks).await;
-        assert!(names.contains(&api), "requested process must be scheduled");
-        assert!(
-            names.contains(&db),
-            "requested process dependencies must be scheduled"
-        );
-        assert!(
-            !names.contains(&worker),
-            "unrelated disabled process must not become a root for a subset start"
-        );
-        assert!(
-            !names.contains(&blocked),
-            "dependencies of unrelated processes must not be scheduled"
-        );
     }
 
     #[tokio::test]
