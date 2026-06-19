@@ -67,6 +67,8 @@ path = "src/bin/tui-replay.rs"
 insta.workspace = true
 devenv-activity = { workspace = true, features = ["test-helpers"] }
 tokio = { workspace = true, features = ["test-util"] }
+proptest.workspace = true
+unicode-width = "0.1"
 
 [features]
 default = []

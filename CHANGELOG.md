@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- Fixed the TUI crashing on activity names or store paths containing multi-byte characters (e.g. non-ASCII package names or evaluation paths) when shortened for narrow terminals.
+- Fixed the TUI crashing with an arithmetic overflow when a download or task reported progress beyond its expected total.
+- Fixed the quit confirmation prompt overflowing past the right edge on terminals narrower than ~82 columns; the prompt now adapts to the available width.
+- Fixed the bottom navigation hint bar overflowing the right edge on standard ~80 column terminals when a process was selected; the hints are now more compact on narrower terminals.
 - Fixed editing `enterShell` while a `devenv shell` is running causing a parse error (e.g. `(eval):6: parse error near '\n'`) on reload under zsh and fish. The `enterShell` output was being mixed into the environment data the reload applies; it now goes to the terminal as it does on a fresh shell entry ([#2919](https://github.com/cachix/devenv/issues/2919)).
 - Fixed `devenv up` (and other TUI commands) burning significant CPU while idle — roughly 10-15% per managed process — even when every process was quiet. The foreground UI was recomputing its layout dozens of times per second regardless of whether anything changed, and each idle process woke the whole UI twice a second. The TUI now only redraws when the model actually changes, with a slow heartbeat to keep elapsed timers ticking ([#2915](https://github.com/cachix/devenv/issues/2915)).
 - Fixed `devenv container` placing `copyToRoot` directories under a hash-prefixed subdirectory (e.g. `/env/<hash>-source`) instead of in the working directory. The project root and other directory paths now land directly under the working directory, and single files keep their original name ([#2914](https://github.com/cachix/devenv/issues/2914)).
