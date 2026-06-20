@@ -53,6 +53,18 @@ let
         default = false;
         description = "Make the file executable";
       };
+
+      copy = mkOption {
+        type = types.enum [ "symlink" "copy" "replace" ];
+        default = "symlink";
+        description = ''
+          How to materialize the file in the project root:
+
+          - `symlink` (default): symlink to the read-only file in the Nix store. Edits are not possible.
+          - `copy`: copy the file into place once, only if it does not already exist, and make it writable so it can be edited. Existing files are left untouched, which is useful for seeding editable templates.
+          - `replace`: overwrite the file with a fresh writable copy on every shell entry.
+        '';
+      };
     } // (mapAttrs
       (name: format: mkOption {
         type = types.nullOr format.type;
@@ -87,7 +99,7 @@ let
       };
   });
   # Track successfully created files for partial state saving
-  createFileScript = filename: fileOption: ''
+  createSymlinkScript = filename: fileOption: ''
     if [ -L "${filename}" ]; then
       # Only update symlink if target changed (same content = same store path)
       if [ "$(readlink "${filename}")" != "${fileOption.file}" ]; then
@@ -106,6 +118,35 @@ let
       echo "${filename}" >> "$DEVENV_FILES_CREATED"
     fi
   '';
+
+  # Copy the file into place as a writable file the user can edit.
+  # "copy" only seeds the file when missing; "replace" overwrites it every time.
+  createCopyScript = filename: fileOption: ''
+    # Drop a previous devenv-managed symlink into the store so we can seed a writable copy
+    if [ -L "${filename}" ] && [[ "$(readlink "${filename}")" == /nix/store/* ]]; then
+      rm "${filename}"
+    fi
+    ${optionalString (fileOption.copy == "replace") ''
+      if [ -e "${filename}" ] || [ -L "${filename}" ]; then
+        echo "Replacing ${filename}"
+        rm -rf "${filename}"
+      fi
+    ''}
+    if [ -e "${filename}" ]; then
+      echo "Keeping existing ${filename}"
+    else
+      echo "Creating ${filename}"
+      mkdir -p "${dirOf filename}"
+      cp -RL ${fileOption.file} "${filename}"
+      chmod -R u+w "${filename}"
+    fi
+    echo "${filename}" >> "$DEVENV_FILES_CREATED"
+  '';
+
+  createFileScript = filename: fileOption:
+    if fileOption.copy == "symlink"
+    then createSymlinkScript filename fileOption
+    else createCopyScript filename fileOption;
 
   cleanupScript = ''
     # Read previously managed files from state
