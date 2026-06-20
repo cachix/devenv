@@ -132,29 +132,29 @@ This is particularly useful for:
 ## Copying Files Instead of Symlinking
 
 By default, files are symlinked to a read-only path in the Nix store, so they cannot be edited.
-Set the `copy` attribute to materialize an editable file instead:
+Set the `copyMode` attribute to materialize an editable file instead:
 
 ```nix title="devenv.nix"
 {
   # Seed an editable template once; never overwrites the user's edits.
-  files.".env.local".copy = "copy";
+  files.".env.local".copyMode = "seed";
   files.".env.local".text = ''
     API_URL=http://localhost:8080
   '';
 
   # Always overwrite with a fresh writable copy on every shell entry.
-  files."config/generated.toml".copy = "replace";
+  files."config/generated.toml".copyMode = "copy";
   files."config/generated.toml".toml = {
     server.port = 8000;
   };
 }
 ```
 
-The `copy` attribute accepts:
+The `copyMode` attribute accepts:
 
-- `symlink` (default): symlink to the read-only file in the Nix store. Edits are not possible.
-- `copy`: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched. This is useful for seeding configuration files from templates that the user can then edit to fit their project.
-- `replace`: overwrite the file with a fresh writable copy on every shell entry.
+- `symlink` (default): symlink to the read-only file in the Nix store. Edits are not possible; devenv keeps the link pointed at the current contents.
+- `seed`: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. This is useful for seeding configuration files from templates that the user can then edit to fit their project.
+- `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. This is useful when a tool must write to the file in place but devenv should remain the source of truth.
 
 !!! tip "New in version 2.2"
 

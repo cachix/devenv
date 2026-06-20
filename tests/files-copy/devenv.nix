@@ -1,10 +1,10 @@
 { pkgs, ... }: {
   files."template.txt" = {
     text = "default content\n";
-    copy = "copy";
+    copyMode = "seed";
   };
   files."managed.txt" = {
     text = "managed content\n";
-    copy = "replace";
+    copyMode = "copy";
   };
 }
