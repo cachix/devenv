@@ -35,7 +35,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         ref: ${{ inputs.ref }}
 
