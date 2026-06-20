@@ -3827,20 +3827,20 @@ attribute set of (submodule)
 
 
 
-## files.\<name>.copy
+## files.\<name>.copyMode
 
 
 
 How to materialize the file in the project root:
 
- - ` symlink ` (default): symlink to the read-only file in the Nix store. Edits are not possible.
- - ` copy `: copy the file into place once, only if it does not already exist, and make it writable so it can be edited. Existing files are left untouched, which is useful for seeding editable templates.
- - ` replace `: overwrite the file with a fresh writable copy on every shell entry.
+ - ` symlink ` (default): symlink to the read-only file in the Nix store. Edits are not possible; devenv keeps the link pointed at the current contents.
+ - ` seed `: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. Useful for seeding configuration from templates the user then edits.
+ - ` copy `: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. Useful when a tool must write to the file in place but devenv should remain the source of truth.
 
 
 
 *Type:*
-one of “symlink”, “copy”, “replace”
+one of “symlink”, “seed”, “copy”
 
 
 
