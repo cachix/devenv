@@ -55,9 +55,18 @@ jobs:
           echo "path=$devenv_path" >> "$GITHUB_OUTPUT"
 
       - name: Build tui-replay (deterministic)
+        id: build-tui-replay
         run: |
-          "${{ steps.build-devenv.outputs.path }}/bin/devenv" shell -- \
-            cargo build -p devenv-tui --features deterministic-tui --bin tui-replay
+          # Ask cargo for the absolute path of the binary it built, rather than
+          # guessing at the layout under target/. bombadil spawns the target in
+          # its own working directory, so a relative path would not resolve.
+          bin=$("${{ steps.build-devenv.outputs.path }}/bin/devenv" shell -- \
+            cargo build -p devenv-tui --features deterministic-tui --bin tui-replay \
+              --message-format=json -q \
+            | jq -rR 'fromjson? | select(.reason == "compiler-artifact" and .target.name == "tui-replay") | .executable // empty' \
+            | tail -1)
+          echo "Built tui-replay at $bin"
+          echo "bin=$bin" >> "$GITHUB_OUTPUT"
 
       - name: Fetch bombadil ${{ env.BOMBADIL_VERSION }}
         run: |
@@ -68,15 +77,13 @@ jobs:
 
       - name: Run terminal fuzz
         run: |
-          bin=$(find target -maxdepth 3 -type f -name tui-replay | head -1)
-          echo "Fuzzing $bin"
           ./bombadil terminal test \
             --time-limit "${{ github.event.inputs.time-limit || '120s' }}" \
             --exit-on-violation \
             --scrollback-lines-max 100 \
             --specification devenv-tui/bombadil/devenv-tui.spec.ts \
             --output-path bombadil-out \
-            -- "$bin" --hold --loop 0 devenv-tui/replays/quick-test
+            -- "${{ steps.build-tui-replay.outputs.bin }}" --hold --loop 0 devenv-tui/replays/quick-test
 
       - name: Compress reproducer
         if: failure()
