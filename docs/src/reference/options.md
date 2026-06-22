@@ -3827,6 +3827,34 @@ attribute set of (submodule)
 
 
 
+## files.\<name>.copyMode
+
+
+
+How to materialize the file in the project root:
+
+ - ` symlink ` (default): symlink to the read-only file in the Nix store. Edits are not possible; devenv keeps the link pointed at the current contents.
+ - ` seed `: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. Useful for seeding configuration from templates the user then edits.
+ - ` copy `: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. Useful when a tool must write to the file in place but devenv should remain the source of truth.
+
+
+
+*Type:*
+one of “symlink”, “seed”, “copy”
+
+
+
+*Default:*
+
+```nix
+"symlink"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
 ## files.\<name>.executable
 
 
@@ -6021,8 +6049,6 @@ false
 
 ## git-hooks.hooks.biome.settings.binPath
 
-
-
 ` biome ` binary path.
 For example, if you want to use the ` biome ` binary from ` node_modules `, use ` "./node_modules/.bin/biome" `.
 Use a string instead of a path to avoid having to Git track the file in projects that use Nix flakes.
@@ -6056,6 +6082,8 @@ null or string or absolute path
 
 
 ## git-hooks.hooks.biome.settings.configPath
+
+
 
 Path to the configuration JSON file
 
@@ -8294,8 +8322,6 @@ string
 
 ## git-hooks.hooks.isort.settings.profile
 
-
-
 Built-in profiles to allow easy interoperability with common projects and code styles.
 
 
@@ -8317,6 +8343,8 @@ one of “”, “black”, “django”, “pycharm”, “google”, “open_s
 
 
 ## git-hooks.hooks.lacheck
+
+
 
 lacheck hook
 
