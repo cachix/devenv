@@ -52,7 +52,7 @@ in
     };
   };
 
-  config = lib.mkIf config.devcontainer.enable {
-    files.".devcontainer.json".json = cfg.settings;
+  config = lib.mkIf cfg.enable {
+    files.".devcontainer/devcontainer.json" = { copyMode = "copy"; json = cfg.settings; };
   };
 }
