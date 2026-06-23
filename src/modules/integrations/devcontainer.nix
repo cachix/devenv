@@ -7,17 +7,6 @@ in
   options.devcontainer = {
     enable = lib.mkEnableOption "generation .devcontainer.json for devenv integration";
 
-    copyMode = mkOption {
-        type = types.enum [ "seed" "copy" ];
-        default = "copy";
-        description = ''
-          Difference between options
-
-          - `seed`: copy the file into place once, only if it does not already exist, and make it writable.
-          - `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry.
-        '';
-      };
-
     settings = lib.mkOption {
       type = lib.types.submodule {
         freeformType = (pkgs.formats.json { }).type;
@@ -64,6 +53,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    files.".devcontainer/devcontainer.json" = { copyMode = cfg.copyMode; json = cfg.settings; };
+    files.".devcontainer/devcontainer.json" = { copyMode = "copy"; json = cfg.settings; };
   };
 }
