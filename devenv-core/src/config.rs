@@ -239,8 +239,11 @@ impl Clean {
     /// Variables devenv requires internally and must survive env cleaning.
     /// `_DEVENV_HOOK_DIR` marks shells spawned by `devenv hook`; the shell
     /// hooks rely on its presence to know whether `cd`-ing out of the
-    /// project should exit the current shell.
-    const ALWAYS_KEEP: &'static [&'static str] = &["_DEVENV_HOOK_DIR"];
+    /// project should exit the current shell. `_DEVENV_EXIT_NONCE` is the
+    /// per-activation nonce the inner shell stamps into `.devenv/exit-dir`;
+    /// without it the outer hook can no longer follow the user out of the
+    /// project on cd-out.
+    const ALWAYS_KEEP: &'static [&'static str] = &["_DEVENV_HOOK_DIR", "_DEVENV_EXIT_NONCE"];
 
     /// Return host environment variables filtered by the clean/keep settings.
     ///
@@ -1613,6 +1616,32 @@ fn is_default<T: Default + PartialEq>(t: &T) -> bool {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn clean_keeps_internal_hook_markers() {
+        // SAFETY: nextest runs each test in its own process, so mutating the
+        // environment here does not race other tests.
+        unsafe {
+            std::env::set_var("_DEVENV_HOOK_DIR", "/tmp/project");
+            std::env::set_var("_DEVENV_EXIT_NONCE", "nonce-123");
+            std::env::set_var("DEVENV_CLEAN_TEST_DROPPED", "1");
+        }
+        let clean = Clean {
+            enabled: true,
+            keep: vec![],
+        };
+        let kept = clean.kept_env_vars();
+        assert!(kept.contains_key("_DEVENV_HOOK_DIR"));
+        // The per-activation nonce must survive cleaning, or the outer hook can
+        // no longer follow the user out of the project on cd-out.
+        assert!(kept.contains_key("_DEVENV_EXIT_NONCE"));
+        assert!(!kept.contains_key("DEVENV_CLEAN_TEST_DROPPED"));
+        unsafe {
+            std::env::remove_var("_DEVENV_HOOK_DIR");
+            std::env::remove_var("_DEVENV_EXIT_NONCE");
+            std::env::remove_var("DEVENV_CLEAN_TEST_DROPPED");
+        }
+    }
 
     #[test]
     fn invalid_flake_input_from_input_with_url_and_follows() {
