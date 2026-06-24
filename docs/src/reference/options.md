@@ -3611,6 +3611,64 @@ string
 
 
 
+## devenv.preFlight
+
+
+
+Pre-flight commands run during devenv startup, before its
+internal subsystems initialize. Useful for fetching tokens or
+other values that devenv-core itself reads from the environment
+early. Commands run in dependency-key alphabetical order.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  cachix-auth.command = "echo CACHIX_AUTH_TOKEN=$(get-token-somehow)";
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## devenv.preFlight.\<name>.command
+
+
+
+Shell command run during devenv startup, before its internal
+subsystems (cachix, substituter netrc, etc.) initialize.
+Lines of ` KEY=value ` written to stdout are merged into
+devenv’s process environment and become visible to those
+subsystems.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
 ## devenv.warnOnNewVersion
 
 
@@ -6025,8 +6083,6 @@ submodule
 
 ## git-hooks.hooks.biome.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -8297,8 +8353,6 @@ false
 
 
 ## git-hooks.hooks.isort.settings.flags
-
-
 
 Flags passed to isort. See all available [here](https://pycqa.github.io/isort/docs/configuration/options.html).
 
