@@ -108,6 +108,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Ruby" ];
     assertions = [
       {
         assertion = cfg.version == null || cfg.versionFile == null;

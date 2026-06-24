@@ -15,6 +15,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:deno" ];
     packages = [
       cfg.package
     ];

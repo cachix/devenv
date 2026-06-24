@@ -28,6 +28,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Nix" ];
     packages = with pkgs; [
       statix
       deadnix

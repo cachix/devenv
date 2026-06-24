@@ -319,6 +319,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Node" ];
     changelogs = [
       {
         date = "2026-05-12";

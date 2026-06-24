@@ -20,6 +20,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:clojure" ];
     packages = [
       (pkgs.clojure.override {
         jdk = config.languages.java.jdk.package;

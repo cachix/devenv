@@ -39,6 +39,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:crystal" ];
     # enable compiler tooling by default to expose things like cc
     languages.c.enable = lib.mkDefault true;
 

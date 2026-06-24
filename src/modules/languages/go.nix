@@ -82,6 +82,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Go" ];
     languages.go.package = lib.mkIf (cfg.version != null) (
       go-bin.versions.${cfg.version}
         or (throw "Unsupported Go version '${cfg.version}', see https://github.com/purpleclay/go-overlay for supported versions")

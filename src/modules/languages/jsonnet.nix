@@ -20,6 +20,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:jsonnet" ];
     packages = [
       pkgs.go-jsonnet
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
