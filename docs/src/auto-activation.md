@@ -80,7 +80,7 @@ devenv: /home/user/myproject is not allowed. Run 'devenv allow' to trust this di
 
 !!! note
     The hook detects projects by looking for a `devenv.nix` file.
-    Before version 2.1.3, it looked for `devenv.yaml` instead, so projects with only `devenv.nix` were not auto-detected.
+    Before version 2.2, it looked for `devenv.yaml` instead, so projects with only `devenv.nix` were not auto-detected.
 
 ## Automatic deactivation
 
