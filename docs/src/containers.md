@@ -17,7 +17,7 @@ To use 'containers' command, add the following dependencies:
 
 ```shell-session
 $ devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
-$ devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bi
+$ devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin
 ```
 
 Use `devenv container build <name>` to generate an [OCI container](https://opencontainers.org/) from your development environment.
