@@ -414,6 +414,20 @@ in
             Previously, `pass` without `user` was silently ignored.
           '';
         }
+        {
+          date = "2026-06-26";
+          title = "services.postgres: port allocation is now scoped to listen_addresses";
+          when = cfg.enable;
+          description = ''
+            Port auto-allocation now reserves the configured `port` only on
+            `services.postgres.listen_addresses` when it is a concrete IP, rather
+            than across all interfaces. Several PostgreSQL instances can now share
+            the same `port` as long as each binds a different address (e.g.
+            `127.0.0.1` and `127.0.0.2`) instead of the port being silently
+            incremented. Wildcards (`*`/`0.0.0.0`/`::`), the empty string, and
+            hostnames keep the previous all-interfaces behaviour.
+          '';
+        }
       ];
     }
     (lib.mkIf cfg.enable {
@@ -449,6 +463,11 @@ in
 
       processes.postgres = {
         ports.main.allocate = basePort;
+        # Scope auto-allocation to the address Postgres actually binds, so the
+        # same port can be used on different loopback addresses (e.g. several
+        # instances each on their own 127.0.0.x) without being treated as taken.
+        # The allocator treats "*"/"0.0.0.0"/""/hostnames as all-interfaces.
+        ports.main.listenAddress = cfg.listen_addresses;
         exec = "${startScript}/bin/start-postgres";
 
         ready = {

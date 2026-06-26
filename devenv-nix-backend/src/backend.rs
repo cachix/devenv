@@ -431,21 +431,39 @@ impl NixCBackend {
                 eval_state,
                 PrimOpMeta {
                     name: cstr!("allocatePort"),
-                    doc: cstr!("Allocate a free port starting from base"),
-                    args: [cstr!("processName"), cstr!("portName"), cstr!("basePort")],
+                    doc: cstr!("Allocate a free port from base, scoped to a listen address"),
+                    args: [
+                        cstr!("processName"),
+                        cstr!("portName"),
+                        cstr!("basePort"),
+                        cstr!("listenAddress"),
+                    ],
                 },
-                Box::new(move |es, [process_name, port_name, base_port]| {
-                    let process = es.require_string(process_name)?;
-                    let port_name_str = es.require_string(port_name)?;
-                    let base_raw = es.require_int(base_port)?;
-                    let base = u16::try_from(base_raw).map_err(|_| {
-                        anyhow::anyhow!("basePort must be between 0 and 65535, got {}", base_raw)
-                    })?;
-                    let allocated = port_allocator
-                        .allocate(&process, &port_name_str, base)
-                        .map_err(|e| anyhow::anyhow!("{}", e))?;
-                    es.new_value_int(allocated as i64)
-                }),
+                Box::new(
+                    move |es, [process_name, port_name, base_port, listen_address]| {
+                        let process = es.require_string(process_name)?;
+                        let port_name_str = es.require_string(port_name)?;
+                        let base_raw = es.require_int(base_port)?;
+                        let base = u16::try_from(base_raw).map_err(|_| {
+                            anyhow::anyhow!(
+                                "basePort must be between 0 and 65535, got {}",
+                                base_raw
+                            )
+                        })?;
+                        // Empty string means "no specific address" → reserve across
+                        // all interfaces (the conservative default).
+                        let listen = es.require_string(listen_address)?;
+                        let listen_addr = if listen.is_empty() {
+                            None
+                        } else {
+                            Some(listen.as_str())
+                        };
+                        let allocated = port_allocator
+                            .allocate_addr(&process, &port_name_str, base, listen_addr)
+                            .map_err(|e| anyhow::anyhow!("{}", e))?;
+                        es.new_value_int(allocated as i64)
+                    },
+                ),
             )
             .to_miette()
             .wrap_err("Failed to create allocatePort primop")?;

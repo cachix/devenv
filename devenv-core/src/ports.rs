@@ -206,6 +206,27 @@ impl PortAllocator {
     ///
     /// In strict mode, only tries the base port and fails with process info if unavailable.
     pub fn allocate(&self, process_name: &str, port_name: &str, base: u16) -> Result<u16, String> {
+        self.allocate_addr(process_name, port_name, base, None)
+    }
+
+    /// Like [`Self::allocate`], but reserves the port on a specific listen
+    /// address when `listen_addr` names a concrete IP.
+    ///
+    /// This makes allocation listen-address-aware: the same base port can be
+    /// used by several instances as long as each binds a different address
+    /// (e.g. Postgres on `127.0.0.2:5432` and `127.0.0.3:5432`), instead of the
+    /// allocator reserving the port across all interfaces and treating it as
+    /// globally taken — which would silently increment to the next port.
+    ///
+    /// A `None`, wildcard (`""`, `"*"`, `"0.0.0.0"`, `"::"`), or non-IP address
+    /// reserves across all interfaces — the conservative default.
+    pub fn allocate_addr(
+        &self,
+        process_name: &str,
+        port_name: &str,
+        base: u16,
+        listen_addr: Option<&str>,
+    ) -> Result<u16, String> {
         if !self.enabled.load(Ordering::SeqCst) {
             return Ok(base);
         }
@@ -235,7 +256,7 @@ impl PortAllocator {
                 ));
             }
 
-            match reserve_exact_port(base) {
+            match reserve_exact_port(listen_addr, base) {
                 Ok(listeners) => {
                     ports.insert(
                         key,
@@ -270,7 +291,7 @@ impl PortAllocator {
                 continue;
             }
 
-            let Ok(listeners) = reserve_port(port) else {
+            let Ok(listeners) = reserve_port(listen_addr, port) else {
                 continue;
             };
 
@@ -354,10 +375,13 @@ impl PortAllocator {
         let strict = self.strict.load(Ordering::SeqCst);
         let allow_in_use = self.allow_in_use.load(Ordering::SeqCst);
 
+        // Replay re-acquires across all interfaces; if it fails because another
+        // instance holds the port on a different address, the cache is
+        // invalidated and a fresh, listen-address-aware allocation takes over.
         let reserve_result = if strict {
-            reserve_exact_port(port)
+            reserve_exact_port(None, port)
         } else {
-            reserve_port(port)
+            reserve_port(None, port)
         };
 
         match reserve_result {
@@ -468,14 +492,52 @@ impl Default for PortAllocator {
 /// including wildcard bindings. This is critical on macOS/BSD where
 /// `SO_REUSEADDR` would allow both `0.0.0.0:port` and `127.0.0.1:port`
 /// to coexist.
-fn reserve_port(port: u16) -> Result<Vec<TcpListener>, std::io::Error> {
-    reserve_port_with(port, bind_no_reuse, ipv6_socket_available)
+fn reserve_port(listen_addr: Option<&str>, port: u16) -> Result<Vec<TcpListener>, std::io::Error> {
+    match listen_addr.map(str::trim) {
+        // A concrete listen address: reserve the port on that address only, so
+        // the same port is free to be reused on other addresses.
+        Some(addr) if !is_wildcard_addr(addr) => reserve_specific_port(addr, port),
+        // No address, a wildcard, or a hostname: reserve across all interfaces.
+        _ => reserve_port_with(port, bind_no_reuse, ipv6_socket_available),
+    }
 }
 
-fn reserve_exact_port(port: u16) -> Result<Vec<TcpListener>, std::io::Error> {
+/// Listen addresses that mean "all interfaces", for which the port must be
+/// reserved across every interface rather than a single address.
+fn is_wildcard_addr(addr: &str) -> bool {
+    matches!(addr, "" | "*" | "0.0.0.0" | "::" | "[::]" | "::0")
+}
+
+/// Reserve `port` on a single specific address. Falls back to an all-interfaces
+/// reservation when `addr` is not a parseable IP (e.g. a hostname like
+/// `localhost`), preserving the conservative default rather than failing.
+fn reserve_specific_port(addr: &str, port: u16) -> Result<Vec<TcpListener>, std::io::Error> {
+    // `bind_no_reuse` formats the socket address as `{host}:{port}`, so IPv6
+    // literals must be bracketed (`[::1]`) to parse.
+    let (domain, host) = if addr.contains(':') {
+        let bare = addr.trim_start_matches('[').trim_end_matches(']');
+        (socket2::Domain::IPV6, format!("[{bare}]"))
+    } else {
+        (socket2::Domain::IPV4, addr.to_string())
+    };
+    match bind_no_reuse(domain, &host, port) {
+        Ok(listener) => Ok(vec![listener]),
+        // Not a parseable IP (e.g. a hostname like `localhost`): fall back to an
+        // all-interfaces reservation rather than failing the allocation.
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => {
+            reserve_port_with(port, bind_no_reuse, ipv6_socket_available)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn reserve_exact_port(
+    listen_addr: Option<&str>,
+    port: u16,
+) -> Result<Vec<TcpListener>, std::io::Error> {
     reserve_exact_port_with(
         port,
-        reserve_port,
+        |p| reserve_port(listen_addr, p),
         lookup_process_using_port,
         std::thread::sleep,
     )
@@ -644,6 +706,60 @@ mod tests {
         allocator.set_enabled(true);
         let port = allocator.allocate("server", "http", 49152).unwrap();
         assert!(port >= 49152);
+    }
+
+    #[test]
+    fn is_wildcard_addr_classifies_special_listen_addresses() {
+        for addr in ["", "*", "0.0.0.0", "::", "[::]", "::0"] {
+            assert!(is_wildcard_addr(addr), "{addr:?} should be all-interfaces");
+        }
+        for addr in ["127.0.0.1", "127.42.0.12", "192.168.1.2", "::1"] {
+            assert!(
+                !is_wildcard_addr(addr),
+                "{addr:?} should be a specific address"
+            );
+        }
+    }
+
+    // Binding distinct 127.0.0.x addresses requires the whole 127.0.0.0/8 to be
+    // loopback, which is automatic on Linux but not macOS (needs `ifconfig lo0
+    // alias`). Gate to Linux so the suite stays portable.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn allocate_addr_is_listen_address_aware() {
+        use std::net::TcpListener;
+
+        // Skip in environments where 127.0.0.2 isn't bindable (e.g. a restricted
+        // build sandbox) rather than failing.
+        let Ok(probe) = TcpListener::bind("127.0.0.2:0") else {
+            eprintln!("skipping: 127.0.0.2 is not bindable in this environment");
+            return;
+        };
+        let base = probe.local_addr().unwrap().port();
+        drop(probe);
+
+        // Hold `base` on 127.0.0.2 — taken on that address (and on the wildcard).
+        let _held = TcpListener::bind(("127.0.0.2", base)).unwrap();
+
+        // Same port on a *different* address is honored, not incremented.
+        let scoped = PortAllocator::new();
+        scoped.set_enabled(true);
+        let got = scoped
+            .allocate_addr("app", "pg", base, Some("127.0.0.3"))
+            .unwrap();
+        assert_eq!(
+            got, base,
+            "port should be reusable on a distinct listen address"
+        );
+
+        // All-interfaces (None) sees the held port and bumps past it.
+        let wildcard = PortAllocator::new();
+        wildcard.set_enabled(true);
+        let bumped = wildcard.allocate_addr("app", "pg", base, None).unwrap();
+        assert_ne!(
+            bumped, base,
+            "all-interfaces reservation must avoid the held port"
+        );
     }
 
     #[test]

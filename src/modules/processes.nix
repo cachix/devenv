@@ -9,8 +9,8 @@ let
   devenvPrimops = config._module.args.devenvPrimops or { };
 
   # Capture primop for use in submodule (specialArgs don't propagate to types.submodule)
-  # Signature: allocatePort processName portName basePort
-  allocatePort = devenvPrimops.allocatePort or (_proc: _port: base: base);
+  # Signature: allocatePort processName portName basePort listenAddress
+  allocatePort = devenvPrimops.allocatePort or (_proc: _port: base: _addr: base);
 
   # Port type factory - needs process name for stable cache key
   mkPortType = processName: types.submodule ({ config, name, ... }: {
@@ -21,13 +21,29 @@ let
         example = 8080;
       };
 
+      listenAddress = lib.mkOption {
+        type = types.str;
+        default = "";
+        description = ''
+          Listen address this port will be bound to. When set to a concrete IP,
+          auto-allocation is scoped to that address — the same port can be reused
+          on other addresses without being treated as taken (e.g. running several
+          instances on different loopback addresses with identical ports).
+
+          Empty, a wildcard (`*`/`0.0.0.0`/`::`), or a hostname reserves the port
+          across all interfaces (the conservative default).
+        '';
+        example = "127.0.0.1";
+      };
+
       value = lib.mkOption {
         type = types.port;
         readOnly = true;
         description = "Resolved port value (allocated by devenv)";
         defaultText = lib.literalMD "Allocated port based on `allocate`";
-        # Pass process name and port name for stable caching across evaluations
-        default = allocatePort processName name config.allocate;
+        # Pass process name and port name for stable caching across evaluations,
+        # plus the listen address so allocation is scoped to it when concrete.
+        default = allocatePort processName name config.allocate config.listenAddress;
       };
     };
   });
