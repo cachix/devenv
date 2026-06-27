@@ -9,6 +9,11 @@
 , llvmPackages
 , rustPlatform
 , libghostty-vt
+, pcre2
+, bzip2
+, libunistring
+, llhttp
+, mimalloc
 , gitRev ? ""
 , isRelease ? false
 ,
@@ -23,7 +28,25 @@ let
     nix.libs.nix-cmd-c
     nix.libs.nix-fetchers-c
     nix.libs.nix-main-c
-    llvmPackages.clang-unwrapped
+  ]
+  # libclang is only needed by bindgen, which runs on the build host and gets
+  # it from `rustPlatform.bindgenHook`; nothing links libclang at runtime. On
+  # the static (musl) build, pulling clang-unwrapped in as a buildInput forces
+  # an enormous static LLVM+clang compile whose final tool links exhaust RAM
+  # and disk. Keep it on glibc (cheap, already cached); drop it for the static
+  # build and rely on bindgenHook alone.
+  ++ lib.optional (!stdenv.hostPlatform.isStatic) llvmPackages.clang-unwrapped
+  ++ [
+    # [static-link-spike] With static Nix libs, pkg-config (PKG_CONFIG_ALL_STATIC)
+    # walks the full Requires.private tree; libgit2 needs libpcre2-8, whose .pc
+    # isn't otherwise on the path. Add it so the static link resolves.
+    pcre2.dev
+    # These transitive static deps (libarchive→bz2, libidn2→unistring, curl→llhttp)
+    # have no .pc file, so pkg-config emits `-lbz2`/`-lunistring`/`-lllhttp` with no
+    # `-L`; add the packages so their lib dirs reach the linker search path.
+    bzip2
+    libunistring
+    llhttp
   ];
 
   protoSetup = ''
@@ -49,11 +72,47 @@ let
     ];
   };
 
+  # [static-link-spike] Tell pkg-config to emit the static link line (Libs.private),
+  # so the now-static Nix C++ libs (libnixstore/expr/util) are pulled in transitively
+  # when crates link the C-API libs.
+  staticPkgConfig = { PKG_CONFIG_ALL_STATIC = "1"; };
+
+  # [static-link-spike] The static Nix archives reference boost's *compiled*
+  # component libs (iostreams/context/url), which boost's pkg-config doesn't
+  # enumerate. boost's lib dir is already on -L (propagated), so link them
+  # explicitly. --start-group handles the archive<->boost reference ordering.
+  #
+  # The Nix libs are C++ (built with musl g++), so the final binary also needs
+  # the C++ runtime for `operator new`/`operator delete`/etc. Rust links libc
+  # but not libstdc++, and on the dynamic (glibc) build these come in via the
+  # Nix .so's NEEDED; for the static build we must link libstdc++ ourselves.
+  # Put it in the same group so it resolves symbols the Nix archives reference.
+  staticBoostLinkOpts = [
+    "-C"
+    "link-arg=-Wl,--start-group"
+    "-C"
+    "link-arg=-lboost_context"
+    "-C"
+    "link-arg=-lboost_iostreams"
+    "-C"
+    "link-arg=-lboost_url"
+    "-C"
+    "link-arg=-lstdc++"
+    # libstdc++ pulls wide-char/locale/threading helpers from libc
+    # (btowc, wmemset, setlocale, get_nprocs, …). rustc's own -lc is emitted
+    # before this trailing group, so ld can't back-resolve those; include -lc
+    # inside the group so --start-group/--end-group iterates until resolved.
+    "-C"
+    "link-arg=-lc"
+    "-C"
+    "link-arg=-Wl,--end-group"
+  ];
+
   # Override for crates needing nix C libraries
   nixLibsOverride = attrs: {
     buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-  };
+  } // staticPkgConfig;
 
   # Common overrides for crates needing openssl
   opensslOverride = attrs: {
@@ -73,16 +132,37 @@ let
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
 
+  # [tier2] On the static (musl) build, use mimalloc instead of musl's mallocng.
+  # musl returns freed memory to the kernel aggressively, so devenv's
+  # alloc-heavy init triggers hundreds of mmap/munmap syscalls (~8 ms of system
+  # time). mimalloc keeps a userspace heap and avoids that churn.
+  #
+  # We can't override `malloc` at link time (Rust links its bundled musl libc.a
+  # before our -lmimalloc → multiple-definition). Instead build mimalloc with
+  # MI_OVERRIDE=OFF (exposes only the `mi_*` API, no `malloc` symbols) and route
+  # Rust's allocator to it via a `#[global_allocator]` gated on `--cfg
+  # use_mimalloc` (see devenv/src/main.rs).
+  mimallocNoOverride = mimalloc.overrideAttrs (o: {
+    cmakeFlags = (o.cmakeFlags or [ ]) ++ [ "-DMI_OVERRIDE=OFF" ];
+  });
+  staticAllocLinkOpts = lib.optionals stdenv.hostPlatform.isStatic [
+    "--cfg"
+    "use_mimalloc"
+    "-C"
+    "link-arg=-lmimalloc"
+  ];
+
   # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen.
   devenvBase = attrs: {
     buildInputs =
       (attrs.buildInputs or [ ])
-      ++ [
+        ++ [
         openssl
         libghostty-vt
       ]
-      ++ nixLibs
-      ++ lib.optional stdenv.isLinux dbus;
+        ++ nixLibs
+        ++ lib.optional stdenv.isLinux dbus
+        ++ lib.optional stdenv.hostPlatform.isStatic mimallocNoOverride;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
       pkg-config
       protobuf
@@ -92,8 +172,8 @@ let
     extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
       "--cfg"
       "tracing_unstable"
-    ];
-  };
+    ] ++ staticAllocLinkOpts ++ staticBoostLinkOpts;
+  } // staticPkgConfig;
 in
 {
   # Main devenv crate
@@ -122,7 +202,7 @@ in
       "--cfg"
       "tracing_unstable"
     ];
-  };
+  } // staticPkgConfig;
 
   # devenv-snix-backend needs protobuf
   devenv-snix-backend = attrs: {
@@ -198,13 +278,21 @@ in
       pkg-config
       rustPlatform.bindgenHook
     ];
-  };
+  } // staticPkgConfig;
 
   # libghostty-vt-sys has a pkg-config feature that finds the pre-built
   # library from the ghostty flake, so just provide pkg-config + the library.
+  #
+  # [tier2] For the static build, also enable the crate's `link-static`
+  # feature. Its build script otherwise defaults to dynamic linking and emits
+  # `-lghostty-vt` (the .so, which our static `.dev` output doesn't ship) →
+  # "cannot find -lghostty-vt". With `link-static` it probes the
+  # `libghostty-vt-static` pkg-config module and links `libghostty-vt.a`.
   libghostty-vt-sys = attrs: {
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
     buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
+  } // lib.optionalAttrs stdenv.hostPlatform.isStatic {
+    features = (attrs.features or [ ]) ++ [ "link-static" ];
   };
 
   nix-bindings-util = nixLibsOverride;
