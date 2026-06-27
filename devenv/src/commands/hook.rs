@@ -24,22 +24,31 @@ const HOOK_NU: &str = include_str!(concat!(env!("OUT_DIR"), "/hook.nu"));
 
 // ---- CLI entry points ----
 
-/// Print the shell hook script for `shell` to stdout.
-pub fn print(shell: &HookShell) {
-    let script = match shell {
+/// The hook script for `shell`.
+///
+/// The hook runs `devenv hook-should-activate` on every prompt — cheap with the
+/// static binary — so there's no per-directory activation cache to invalidate;
+/// `devenv allow`/`revoke` take effect on the next prompt automatically.
+fn hook_script(shell: &HookShell) -> &'static str {
+    match shell {
         HookShell::Bash => HOOK_BASH,
         HookShell::Zsh => HOOK_ZSH,
         HookShell::Fish => HOOK_FISH,
         HookShell::Nu => HOOK_NU,
-    };
+    }
+}
+
+/// Print the shell hook script for `shell` to stdout.
+pub fn print(shell: &HookShell) {
+    let script = hook_script(shell);
     // `BrokenPipe` (e.g. `devenv hook fish | source` after `source` finishes
     // reading) is a normal lifecycle event, not a panic.
     let mut out = io::stdout().lock();
-    if let Err(e) = out.write_all(script.as_bytes()).and_then(|()| out.flush()) {
-        if e.kind() != io::ErrorKind::BrokenPipe {
-            eprintln!("devenv: failed to write hook script: {e}");
-            std::process::exit(1);
-        }
+    if let Err(e) = out.write_all(script.as_bytes()).and_then(|()| out.flush())
+        && e.kind() != io::ErrorKind::BrokenPipe
+    {
+        eprintln!("devenv: failed to write hook script: {e}");
+        std::process::exit(1);
     }
 }
 
@@ -305,6 +314,28 @@ mod tests {
         let hash = "a".repeat(64);
         let entry = format!("{hash}:/home/me/project");
         assert_eq!(entry_path(&entry), "/home/me/project");
+    }
+
+    #[test]
+    fn test_hook_script_runs_should_activate() {
+        // The hook calls `hook-should-activate` every prompt; there's no trust-DB
+        // path baked into the script anymore (no caching to invalidate).
+        for shell in [
+            HookShell::Bash,
+            HookShell::Zsh,
+            HookShell::Fish,
+            HookShell::Nu,
+        ] {
+            let script = hook_script(&shell);
+            assert!(
+                !script.contains("@DEVENV_TRUST_DB@"),
+                "{shell:?} hook left an unsubstituted placeholder"
+            );
+            assert!(
+                script.contains("hook-should-activate"),
+                "{shell:?} hook does not call hook-should-activate"
+            );
+        }
     }
 
     #[test]

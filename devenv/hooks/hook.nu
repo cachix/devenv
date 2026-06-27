@@ -3,6 +3,14 @@
 #   mkdir ($nu.default-config-dir | path join autoload)
 #   devenv hook nu | save --force ($nu.default-config-dir | path join autoload/devenv-hook.nu)
 
+# The project dir we last auto-activated. Lets you `exit` a devenv shell back to
+# the parent shell without it immediately re-spawning; cleared once you cd
+# elsewhere. `devenv hook-should-activate` is cheap (static binary), so apart
+# from this guard the hook runs it every prompt — no result caching, so
+# `devenv allow`/`revoke` take effect on the next prompt without a re-`cd`.
+$env._DEVENV_HOOK_ACTIVATED = ""
+# Last directory reported as untrusted, so the "not allowed" hint is shown once
+# per entry rather than on every prompt.
 $env._DEVENV_HOOK_UNTRUSTED = ""
 
 # `_DEVENV_HOOK_DIR` is set only on shells the hook itself spawned;
@@ -19,6 +27,12 @@ def --env _devenv_hook [] {
         return
     }
 
+    # Just exited the devenv shell for this dir — don't re-spawn until you leave.
+    if ($env._DEVENV_HOOK_ACTIVATED == $env.PWD) {
+        return
+    }
+    $env._DEVENV_HOOK_ACTIVATED = ""
+
     let result = (^devenv hook-should-activate | complete)
     let retrying = ($env._DEVENV_HOOK_UNTRUSTED == $env.PWD)
     if not $retrying and ($result.stderr | str trim) != "" {
@@ -28,8 +42,10 @@ def --env _devenv_hook [] {
     if $result.exit_code == 0 {
         let dir = ($result.stdout | str trim)
         if $dir != "" {
-            with-env { _DEVENV_HOOK_DIR: $dir } { do { cd $dir; ^devenv shell } }
             $env._DEVENV_HOOK_UNTRUSTED = ""
+            # Mark activated before launching so exiting the shell doesn't re-launch.
+            $env._DEVENV_HOOK_ACTIVATED = $env.PWD
+            with-env { _DEVENV_HOOK_DIR: $dir } { do { cd $dir; ^devenv shell } }
             let exit_dir_file = ($dir + "/.devenv/exit-dir")
             if ($exit_dir_file | path exists) {
                 let target_dir = (open $exit_dir_file | str trim)
@@ -46,15 +62,9 @@ def --env _devenv_hook [] {
     }
 }
 
-$env.config = ($env.config | upsert hooks.env_change.PWD (
-    ($env.config | get -o hooks.env_change.PWD | default []) | append {|| _devenv_hook }
-))
-
-# Retry activation on each prompt for untrusted directories (after `devenv allow`)
+# Run on every prompt. hook-should-activate is cheap, so there's no separate
+# env_change/PWD trigger or trust-DB stamp: each prompt re-checks, which makes
+# `devenv allow`/`revoke` (and out-of-tree bindings) take effect immediately.
 $env.config = ($env.config | upsert hooks.pre_prompt (
-    ($env.config | get -o hooks.pre_prompt | default []) | append {||
-        if $env._DEVENV_HOOK_UNTRUSTED != "" {
-            _devenv_hook
-        }
-    }
+    ($env.config | get -o hooks.pre_prompt | default []) | append {|| _devenv_hook }
 ))
