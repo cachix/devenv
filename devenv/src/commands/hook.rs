@@ -258,7 +258,7 @@ fn revoke_path(project_dir: &Path) -> Result<()> {
 enum ActivationCheck {
     /// Activate devenv in this project directory.
     Activate(String),
-    /// No project found or already activated; safe to cache and skip future checks.
+    /// No project here; nothing to activate.
     Skip,
     /// Project found but not trusted; should retry on next prompt.
     Untrusted,
