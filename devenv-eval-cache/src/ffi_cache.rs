@@ -139,6 +139,11 @@ pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConf
     let mut inputs: Vec<Input> = Vec::new();
 
     for op in ops {
+        // A directory must be hashed recursively over its contents when its whole
+        // tree ends up in the Nix store (`copied source`, tracked devenv paths).
+        // `readDir` and friends only observe the listing, so name-only hashing is
+        // sufficient and avoids spurious invalidation.
+        let recursive = matches!(op, EvalOp::CopiedSource { .. } | EvalOp::TrackedPath { .. });
         match op {
             EvalOp::ReadFile { source }
             | EvalOp::ReadDir { source }
@@ -166,7 +171,7 @@ pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConf
                 }
 
                 // Create file input descriptor
-                if let Ok(desc) = FileInputDesc::new(source, fallback_time) {
+                if let Ok(desc) = FileInputDesc::new(source, fallback_time, recursive) {
                     inputs.push(Input::File(desc));
                 }
             }
@@ -183,9 +188,10 @@ pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConf
         }
     }
 
-    // Add extra watch paths
+    // Add extra watch paths. These are meant to trigger re-evaluation on any
+    // change, so watch directories recursively.
     for path in &config.extra_watch_paths {
-        if let Ok(desc) = FileInputDesc::new(path.clone(), fallback_time) {
+        if let Ok(desc) = FileInputDesc::new(path.clone(), fallback_time, true) {
             inputs.push(Input::File(desc));
         }
     }
