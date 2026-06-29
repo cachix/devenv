@@ -1,11 +1,16 @@
-{ config, pkgs, lib, bootstrapPkgs ? null, ... }:
+{ config
+, pkgs
+, lib
+, bootstrapPkgs ? null
+, ...
+}:
 let
   types = lib.types;
   # Returns a list of all the entries in a folder
-  listEntries = path:
-    map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
+  listEntries = path: map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
-  drvOrPackageToPaths = drvOrPackage:
+  drvOrPackageToPaths =
+    drvOrPackage:
     let
       outputs =
         if drvOrPackage ? outputs then
@@ -17,9 +22,7 @@ let
       # would be importable but their dependencies (propagatedBuildInputs) would not,
       # since dontAddPythonPath prevents the setup hook from adding them to PYTHONPATH.
       pythonDeps =
-        if drvOrPackage ? requiredPythonModules
-        then drvOrPackage.requiredPythonModules
-        else [ ];
+        if drvOrPackage ? requiredPythonModules then drvOrPackage.requiredPythonModules else [ ];
     in
     outputs ++ pythonDeps;
 
@@ -30,23 +33,26 @@ let
     ignoreSingleFileOutputs = true;
   };
 
-  failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
+  failedAssertions = builtins.map (x: x.message) (
+    builtins.filter (x: !x.assertion) config.assertions
+  );
 
   performAssertions =
     let
-      formatAssertionMessage = message:
+      formatAssertionMessage =
+        message:
         let
           lines = lib.splitString "\n" message;
         in
         "- ${lib.concatStringsSep "\n  " lines}";
     in
-    if failedAssertions != [ ]
-    then
+    if failedAssertions != [ ] then
       throw ''
         Failed assertions:
         ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
       ''
-    else lib.trivial.showWarnings config.warnings;
+    else
+      lib.trivial.showWarnings config.warnings;
 in
 {
   options = {
@@ -111,15 +117,15 @@ in
 
       # Remove the default apple-sdk on macOS.
       # Allow users to specify an optional SDK in `apple.sdk`.
-      apply = stdenv:
-        if stdenv.isDarwin
-        then
+      apply =
+        stdenv:
+        if stdenv.isDarwin then
           stdenv.override
             (prev: {
-              extraBuildInputs =
-                builtins.filter (x: !(x ? sdkroot)) prev.extraBuildInputs;
+              extraBuildInputs = builtins.filter (x: !(x ? sdkroot)) prev.extraBuildInputs;
             })
-        else stdenv;
+        else
+          stdenv;
 
     };
 
@@ -193,7 +199,12 @@ in
       type = types.listOf types.unspecified;
       internal = true;
       default = [ ];
-      example = [{ assertion = false; message = "you can't enable this for that reason"; }];
+      example = [
+        {
+          assertion = false;
+          message = "you can't enable this for that reason";
+        }
+      ];
       description = ''
         This option allows modules to express conditions that must
         hold for the evaluation of the configuration to succeed,
@@ -295,13 +306,15 @@ in
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
   ++ (listEntries ./integrations)
-  ++ (listEntries ./process-managers)
-  ;
+  ++ (listEntries ./process-managers);
 
   config = {
     assertions = [
       {
-        assertion = config.devenv.flakesIntegration || config.overlays == [ ] || (config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "1.4.2");
+        assertion =
+          config.devenv.flakesIntegration
+          || config.overlays == [ ]
+          || (config.devenv.cli.version != null && lib.versionAtLeast config.devenv.cli.version "1.4.2");
         message = ''
           Using overlays requires devenv 1.4.2 or higher, while your current version is ${toString config.devenv.cli.version}.
         '';
@@ -325,9 +338,12 @@ in
     ++ lib.optional (config.apple.sdk != null) config.apple.sdk;
 
     enterShell = lib.mkBefore ''
-      ${lib.optionalString (config.devenv.cli.version == null || !lib.versionAtLeast config.devenv.cli.version "2.1") ''
-        export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
-      ''}
+      ${lib.optionalString
+        (config.devenv.cli.version == null || !lib.versionAtLeast config.devenv.cli.version "2.1")
+        ''
+          export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
+        ''
+      }
 
       # Override temp directories that stdenv set to NIX_BUILD_TOP.
       # Only reset those that still point to the Nix build dir; leave
@@ -348,6 +364,9 @@ in
           export LOCALE_ARCHIVE=${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive
         fi
       ''}
+
+      # Make `man <tool>` find the man pages of packages in the profile.
+      export MANPATH="$DEVENV_PROFILE/share/man:''${MANPATH:+$MANPATH:}"
 
       # direnv helper
       if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
@@ -373,24 +392,37 @@ in
         # On macOS, route apple-sdk packages (identified by `passthru.sdkroot`) into `buildInputs`
         # so they participate in the SDK version comparison done by stdenv's setup hooks.
         partitioned =
-          if pkgs.stdenv.isDarwin
-          then builtins.partition (pkg: pkg ? sdkroot) config.packages
-          else { right = [ ]; wrong = config.packages; };
+          if pkgs.stdenv.isDarwin then
+            builtins.partition (pkg: pkg ? sdkroot) config.packages
+          else
+            {
+              right = [ ];
+              wrong = config.packages;
+            };
       in
       performAssertions (
-        (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-          inherit (config) hardeningDisable inputsFrom name;
-          buildInputs = partitioned.right;
-          nativeBuildInputs = partitioned.wrong;
-          shellHook = ''
-            ${lib.optionalString config.devenv.debug "set -x"}
-            ${config.enterShell}
-          '';
-        } // config.env)
+        (pkgs.mkShell.override { stdenv = config.stdenv; }) (
+          {
+            inherit (config) hardeningDisable inputsFrom name;
+            buildInputs = partitioned.right;
+            nativeBuildInputs = partitioned.wrong;
+            shellHook = ''
+              ${lib.optionalString config.devenv.debug "set -x"}
+              ${config.enterShell}
+            '';
+          }
+          // config.env
+        )
       );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
-    infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
+    infoSections."packages" = builtins.map (package: package.name) (
+      builtins.filter
+        (
+          package: !(builtins.elem package.name (builtins.attrNames config.scripts))
+        )
+        config.packages
+    );
 
     ci = [ config.shell ];
     ciDerivation = pkgs.runCommand "ci" { } "echo ${toString config.ci} > $out";
