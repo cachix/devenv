@@ -326,8 +326,9 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
             .flatten()
     });
 
-    let discovered_root = project_root
-        .filter(|r| from_source.is_none() && Some(r.as_path()) != original_cwd.as_deref());
+    // `project_root` is only `Some` when no `--from`/`-O` was given, which is
+    // exactly when `from_source` stays `None`, so no extra guard is needed here.
+    let discovered_root = project_root.filter(|r| Some(r.as_path()) != original_cwd.as_deref());
     // When discovery moves us into a parent root, remember the directory the
     // user actually invoked from so the interactive shell and `-- cmd` still
     // run there. The devenv environment is root-scoped; the cwd is not.
