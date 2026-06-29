@@ -32,7 +32,9 @@ use std::sync::{Arc, Mutex};
 use tracing::{error, trace, warn};
 
 use crate::eval_op::{EvalOp, OpObserver};
-use crate::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
+use crate::internal_log::{
+    ActivityType, Field, InternalLog, NixMessageKind, ResultType, Verbosity,
+};
 
 /// State for tracking the current evaluation activity.
 ///
@@ -200,6 +202,12 @@ impl NixLogBridge {
     pub fn begin_eval(&self, activity_id: u64) -> EvalActivityGuard<'_> {
         let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
         state.current_eval_id = Some(activity_id);
+        // Scope recorded errors to this eval, so the pre-REPL replay shows
+        // only this eval's failures, not ones left over from an earlier eval
+        // or store init.
+        if let Ok(mut errors) = self.pre_repl_errors.lock() {
+            errors.clear();
+        }
         EvalActivityGuard { bridge: self }
     }
 
@@ -290,36 +298,42 @@ impl NixLogBridge {
                     }
                 }
 
-                // Handle regular log messages from Nix builds
-                // Note: Nix daemon incorrectly labels many routine build messages as
-                // Verbosity::Error (e.g., "setting up chroot environment", "executing builder").
-                // Only treat Error-level messages as actual errors if they pass is_nix_error()
-                // or is_builtin_trace() checks.
-                if log.is_nix_error() || log.is_builtin_trace() {
-                    let (summary, details) = parse_nix_error(msg);
-                    message_with_details(ActivityLevel::Error, summary, details);
-                    error!("{msg}");
-                } else {
-                    let activity_level = match level {
-                        // Remap the Error level to Debug for non-error messages
-                        Verbosity::Error => ActivityLevel::Debug,
-                        Verbosity::Warn => ActivityLevel::Warn,
-                        Verbosity::Notice => ActivityLevel::Warn,
-                        Verbosity::Info => ActivityLevel::Info,
-                        Verbosity::Talkative => ActivityLevel::Debug,
-                        Verbosity::Chatty => ActivityLevel::Debug,
-                        Verbosity::Debug => ActivityLevel::Debug,
-                        Verbosity::Vomit => ActivityLevel::Trace,
-                    };
-                    // Warn+ surface as top-level messages so they stand out.
-                    // Lower levels render as nested log lines under the
-                    // current activity (or as orphan indented lines when
-                    // there is no parent on the stack).
-                    if activity_level <= ActivityLevel::Warn {
-                        message(activity_level, msg);
-                    } else {
-                        let id = devenv_activity::current_activity_id().unwrap_or(0);
-                        log_to_evaluate(id, msg);
+                match log.message_kind() {
+                    NixMessageKind::Error => {
+                        let (summary, details) = parse_nix_error(msg);
+                        message_with_details(ActivityLevel::Error, summary, details);
+                        error!("{msg}");
+                        // Record so the error survives TUI teardown and can be replayed before the REPL.
+                        self.store_pre_repl_error(msg.to_string());
+                    }
+                    NixMessageKind::Trace => {
+                        let (summary, details) = parse_nix_error(msg);
+                        message_with_details(ActivityLevel::Error, summary, details);
+                        error!("{msg}");
+                    }
+                    NixMessageKind::Warning => {
+                        message(ActivityLevel::Warn, msg);
+                        warn!("{msg}");
+                    }
+                    NixMessageKind::Other => {
+                        // Not a classified error/warning/trace, so an Error
+                        // verbosity here is just mislabeled daemon noise — keep
+                        // it quiet at Debug.
+                        let activity_level = match level {
+                            Verbosity::Error => ActivityLevel::Debug,
+                            Verbosity::Warn | Verbosity::Notice => ActivityLevel::Warn,
+                            Verbosity::Info => ActivityLevel::Info,
+                            Verbosity::Talkative | Verbosity::Chatty | Verbosity::Debug => {
+                                ActivityLevel::Debug
+                            }
+                            Verbosity::Vomit => ActivityLevel::Trace,
+                        };
+                        if activity_level <= ActivityLevel::Warn {
+                            message(activity_level, msg);
+                        } else {
+                            let id = devenv_activity::current_activity_id().unwrap_or(0);
+                            log_to_evaluate(id, msg);
+                        }
                     }
                 }
             }
@@ -718,11 +732,11 @@ pub fn extract_package_name(store_path: &str) -> String {
     extract_nix_name(store_path, false)
 }
 
-/// Regex for stripping ANSI escape codes
+/// Regex for stripping ANSI escape codes (color).
 static ANSI_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*m").expect("valid regex"));
 
-/// Strip ANSI escape codes from a string
+/// Strip ANSI color codes so the extracted error summary is plain text.
 fn strip_ansi_codes(s: &str) -> String {
     ANSI_REGEX.replace_all(s, "").to_string()
 }
@@ -763,6 +777,63 @@ fn parse_nix_error(msg: &str) -> (String, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An `Error`-level `Msg` — the verbosity real errors and mislabeled
+    /// daemon lines share.
+    fn error_level_msg(msg: &str) -> InternalLog {
+        InternalLog::Msg {
+            level: Verbosity::Error,
+            msg: msg.to_string(),
+            raw_msg: None,
+        }
+    }
+
+    #[test]
+    fn process_internal_log_records_real_errors() {
+        let bridge = NixLogBridge::new();
+        let _guard = bridge.begin_eval(1);
+
+        let msg = "\u{1b}[31;1merror:\u{1b}[0m syntax error, unexpected '}'";
+        bridge.process_internal_log(error_level_msg(msg));
+
+        assert_eq!(bridge.take_pre_repl_errors(), vec![msg.to_string()]);
+    }
+
+    #[test]
+    fn process_internal_log_does_not_record_mislabeled_warnings() {
+        let bridge = NixLogBridge::new();
+        let _guard = bridge.begin_eval(1);
+
+        // A restricted-settings notice: a warning the daemon forwards at Error
+        // level, in magenta. It must not be recorded as the evaluation error.
+        bridge.process_internal_log(error_level_msg(
+            "\u{1b}[35;1mwarning:\u{1b}[0m ignoring the client-specified setting \
+             'trusted-public-keys', because it is a restricted setting and you \
+             are not a trusted user",
+        ));
+
+        assert!(bridge.take_pre_repl_errors().is_empty());
+    }
+
+    #[test]
+    fn begin_eval_clears_stale_pre_repl_errors() {
+        let bridge = NixLogBridge::new();
+        bridge.store_pre_repl_error("error: stale message from store init".to_string());
+
+        let _guard = bridge.begin_eval(1);
+
+        assert!(bridge.take_pre_repl_errors().is_empty());
+    }
+
+    #[test]
+    fn test_strip_ansi_codes() {
+        assert_eq!(strip_ansi_codes("\x1b[31;1merror:\x1b[0m"), "error:");
+        assert_eq!(strip_ansi_codes("no codes here"), "no codes here");
+        assert_eq!(
+            strip_ansi_codes("\x1b[34;1mblue\x1b[0m and \x1b[32mgreen\x1b[0m"),
+            "blue and green"
+        );
+    }
 
     #[test]
     fn test_extract_derivation_name() {
@@ -827,16 +898,6 @@ mod tests {
             Some(ResultType::BuildLogLine)
         );
         assert_eq!(result_type_from_str("unknown"), None);
-    }
-
-    #[test]
-    fn test_strip_ansi_codes() {
-        assert_eq!(strip_ansi_codes("\x1b[31;1merror:\x1b[0m"), "error:");
-        assert_eq!(strip_ansi_codes("no codes here"), "no codes here");
-        assert_eq!(
-            strip_ansi_codes("\x1b[34;1mblue\x1b[0m and \x1b[32mgreen\x1b[0m"),
-            "blue and green"
-        );
     }
 
     #[test]
