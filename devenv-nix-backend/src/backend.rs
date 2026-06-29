@@ -208,6 +208,39 @@ fn eval_cache_error_into_miette(e: devenv_eval_cache::Error<miette::Error>) -> m
     }
 }
 
+/// Build the logical `<storedir>/<basename>` store-path string from a path that
+/// may have been `real_path`-translated for a relocated/chroot store.
+///
+/// `Store::parse_store_path` only accepts the logical form (e.g.
+/// `/nix/store/<hash>-<name>`), but several call sites cache the *real* path
+/// returned by [`Store::real_path`], which differs for a relocated store
+/// (e.g. `/srv/nix/store/<hash>-<name>`). The basename is identical between the
+/// two forms, so the logical path is just the store's logical dir joined with
+/// that basename. Returns `None` if the path has no basename. See devenv #2499.
+fn logical_store_path_str(storedir: &str, path: &str) -> Option<String> {
+    let basename = std::path::Path::new(path).file_name()?.to_str()?;
+    Some(format!("{}/{}", storedir.trim_end_matches('/'), basename))
+}
+
+/// Parse a possibly `real_path`-translated store path into its logical
+/// [`StorePath`]. Use instead of `store.parse_store_path` whenever the input may
+/// be a cached real path (gc-root creation). See [`logical_store_path_str`].
+fn parse_logical_store_path(
+    store: &mut Store,
+    path: &str,
+) -> Result<nix_bindings_store::path::StorePath> {
+    let storedir = store
+        .get_storedir()
+        .to_miette()
+        .wrap_err("Failed to get store directory")?;
+    let logical = logical_store_path_str(&storedir, path)
+        .ok_or_else(|| miette!("store path '{}' has no basename", path))?;
+    store
+        .parse_store_path(&logical)
+        .to_miette()
+        .wrap_err("Failed to parse store path")
+}
+
 fn cache_key_for(
     bootstrap_args: &BootstrapArgs,
     port_allocator: &PortAllocator,
@@ -809,10 +842,10 @@ impl NixCBackend {
         };
 
         let mut store = self.cnix_store.inner().clone();
-        let store_path = store
-            .parse_store_path(&out_path_str)
-            .to_miette()
-            .wrap_err("Failed to parse output store path")?;
+        // `out_path_str` is the real_path-translated path, which differs from the
+        // logical store path under a relocated/chroot store; gc-root creation
+        // needs the logical form. See devenv #2499.
+        let store_path = parse_logical_store_path(&mut store, &out_path_str)?;
 
         if gc_root.symlink_metadata().is_ok() {
             std::fs::remove_file(gc_root)
@@ -1338,10 +1371,9 @@ impl Evaluator for NixCBackend {
 
             if let Some(gc_root_base) = &opts.gc_root {
                 let mut store = self.cnix_store.inner().clone();
-                let store_path = store
-                    .parse_store_path(&path_str)
-                    .to_miette()
-                    .wrap_err("Failed to parse store path")?;
+                // `path_str` is real_path-translated; gc-root creation needs the
+                // logical store path (differs under a relocated store). See #2499.
+                let store_path = parse_logical_store_path(&mut store, &path_str)?;
 
                 let sanitized_attr = attr_path.replace('.', "-");
                 let attr_gc_root = gc_root_base.with_file_name(format!(
@@ -1633,7 +1665,7 @@ pub fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{cache_key_for, core_config_watch_paths};
+    use super::{cache_key_for, core_config_watch_paths, logical_store_path_str};
     use devenv_core::{PortAllocator, bootstrap_args::BootstrapArgs};
     use serde::Serialize;
     use tempfile::TempDir;
@@ -1672,5 +1704,36 @@ mod tests {
 
         assert_ne!(shell_key.key_hash, up_key.key_hash);
         assert_ne!(up_key.key_hash, strict_key.key_hash);
+    }
+
+    // Regression for devenv #2499: a shell built against a relocated/chroot store
+    // caches the real_path-translated path; gc-root creation must still recover
+    // the logical store path so `parse_store_path` accepts it.
+    #[test]
+    fn logical_store_path_str_recovers_logical_path_from_relocated_real_path() {
+        let name = "rdd4pnr4x9rqc9wgbibhngv217w2xvxl-bash-interactive-5.2p26";
+        let logical = format!("/nix/store/{name}");
+
+        // Real path under a relocated store root maps back to the logical path.
+        let real = format!("/srv/nix/store/{name}");
+        assert_eq!(
+            logical_store_path_str("/nix/store", &real).as_deref(),
+            Some(logical.as_str())
+        );
+
+        // An already-logical path is unchanged.
+        assert_eq!(
+            logical_store_path_str("/nix/store", &logical).as_deref(),
+            Some(logical.as_str())
+        );
+
+        // A trailing slash on the store dir is handled.
+        assert_eq!(
+            logical_store_path_str("/nix/store/", &real).as_deref(),
+            Some(logical.as_str())
+        );
+
+        // A path with no basename yields None rather than a malformed path.
+        assert_eq!(logical_store_path_str("/nix/store", "/"), None);
     }
 }
