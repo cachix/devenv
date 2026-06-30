@@ -22,8 +22,8 @@
 //! This guard-based API ensures eval scopes are always properly closed.
 
 use devenv_activity::{
-    Activity, ActivityLevel, ExpectedCategory, FetchKind, log_to_evaluate, message,
-    message_with_details, op_to_evaluate, set_expected,
+    Activity, ActivityLevel, ExpectedCategory, FetchKind, append_eval_log, append_eval_op, message,
+    message_with_details, set_expected,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -312,7 +312,10 @@ impl NixLogBridge {
                         error!("{msg}");
                     }
                     NixMessageKind::Warning => {
-                        message(ActivityLevel::Warn, msg);
+                        // TODO: Nix warnings need better handling
+                        // Nix prints lots of warnings for innocuous things, e.g. ignored settings.
+                        let id = devenv_activity::current_activity_id().unwrap_or(0);
+                        append_eval_log(id, msg);
                         warn!("{msg}");
                     }
                     NixMessageKind::Other => {
@@ -332,7 +335,7 @@ impl NixLogBridge {
                             message(activity_level, msg);
                         } else {
                             let id = devenv_activity::current_activity_id().unwrap_or(0);
-                            log_to_evaluate(id, msg);
+                            append_eval_log(id, msg);
                         }
                     }
                 }
@@ -653,7 +656,7 @@ impl NixLogBridge {
             return false;
         };
 
-        op_to_evaluate(id, op.into());
+        append_eval_op(id, op.into());
         true
     }
 }

@@ -136,7 +136,7 @@ pub fn set_expected(category: ExpectedCategory, expected: u64) {
 ///
 /// Use this when you have the activity ID but not the Activity object,
 /// such as when logging from FFI callbacks where the Activity is owned elsewhere.
-pub fn log_to_evaluate(id: u64, line: impl Into<String>) {
+pub fn append_eval_log(id: u64, line: impl Into<String>) {
     use crate::events::Evaluate;
 
     let line = line.into();
@@ -159,7 +159,7 @@ pub fn log_to_evaluate(id: u64, line: impl Into<String>) {
 ///
 /// Use this for parsed/structured evaluation operations (readDir, pathExists, etc.)
 /// that carry richer data than plain text log lines.
-pub fn op_to_evaluate(id: u64, op: crate::events::EvalOp) {
+pub fn append_eval_op(id: u64, op: crate::events::EvalOp) {
     use crate::events::Evaluate;
 
     send_activity_event(ActivityEvent::Evaluate(Evaluate::Op {
