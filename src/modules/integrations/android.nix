@@ -1,7 +1,15 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, lib, inputs, ... }:
 
 let
   cfg = config.android;
+
+  # android-nixpkgs (https://github.com/tadfisher/android-nixpkgs) is auto-generated
+  # daily from Google's SDK repositories, so new platform/build-tool versions are
+  # available much sooner than in nixpkgs' androidenv. Opt in by adding the
+  # `android-nixpkgs` input to devenv.yaml; its presence switches the SDK source.
+  # The channel (stable/beta/preview/canary) is selected by the input's URL ref.
+  android-nixpkgs = inputs.android-nixpkgs or null;
+  useAndroidNixpkgs = android-nixpkgs != null;
 
   # Read available package versions from nixpkgs
   repoJson = builtins.fromJSON (builtins.readFile "${toString pkgs.path}/pkgs/development/mobile/androidenv/repo.json");
@@ -47,8 +55,33 @@ let
     sdkExtraArgs = sdkArgs;
   };
 
-  androidSdk = androidComposition.androidsdk;
-  platformTools = androidComposition.platform-tools;
+  # nixpkgs androidenv source
+  nixpkgsAndroidSdk = androidComposition.androidsdk;
+  nixpkgsPlatformTools = androidComposition.platform-tools;
+  nixpkgsAndroidHome = "${nixpkgsAndroidSdk}/libexec/android-sdk";
+
+  # Map a version (e.g. "35.0.0") to its android-nixpkgs attribute suffix ("35-0-0").
+  dashVersion = lib.replaceStrings [ "." ] [ "-" ];
+
+  # Package selection derived from the shared android.* options. System images,
+  # sources, cmake and extras aren't covered; install additional android-nixpkgs
+  # packages by adding them to devenv's top-level `packages` option directly,
+  # e.g. `inputs.android-nixpkgs.sdk.${pkgs.system} (sdkPkgs: [ ... ])`.
+  androidNixpkgsSelection = sdkPkgs:
+    [
+      sdkPkgs.cmdline-tools-latest
+      sdkPkgs.platform-tools
+    ]
+    ++ map (v: sdkPkgs."build-tools-${dashVersion v}") cfg.buildTools.version
+    ++ map (v: sdkPkgs."platforms-android-${v}") cfg.platforms.version
+    ++ lib.optional cfg.emulator.enable sdkPkgs.emulator
+    ++ lib.optionals cfg.ndk.enable (map (v: sdkPkgs."ndk-${dashVersion v}") cfg.ndk.version);
+
+  androidNixpkgsSdk = android-nixpkgs.sdk.${pkgs.system} androidNixpkgsSelection;
+  androidNixpkgsHome = "${androidNixpkgsSdk}/share/android-sdk";
+
+  # The active SDK source's root directory.
+  androidHome = if useAndroidNixpkgs then androidNixpkgsHome else nixpkgsAndroidHome;
 in
 {
   options.android = {
@@ -268,13 +301,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [
-      androidSdk
-      platformTools
-      androidEmulator
-    ]
-    ++ lib.optional cfg.flutter.enable cfg.flutter.package
-    ++ lib.optional cfg.android-studio.enable cfg.android-studio.package;
+    packages =
+      # android-nixpkgs composes a single SDK derivation that already bundles
+      # platform-tools and the emulator; nixpkgs androidenv ships them separately.
+      (if useAndroidNixpkgs
+      then [ androidNixpkgsSdk ]
+      else [ nixpkgsAndroidSdk nixpkgsPlatformTools androidEmulator ])
+      ++ lib.optional cfg.flutter.enable cfg.flutter.package
+      ++ lib.optional cfg.android-studio.enable cfg.android-studio.package;
 
     # Nested conditional for flutter
     languages = lib.mkMerge [
@@ -342,11 +376,16 @@ in
       };
     };
 
-    env.ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
-    env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk-bundle";
+    env.ANDROID_HOME = androidHome;
+    # nixpkgs installs the NDK under `ndk-bundle`; android-nixpkgs installs it
+    # under `ndk/<version>`.
+    env.ANDROID_NDK_ROOT =
+      if useAndroidNixpkgs
+      then "${config.env.ANDROID_HOME}/ndk/${lib.head cfg.ndk.version}"
+      else "${config.env.ANDROID_HOME}/ndk-bundle";
 
     # override the aapt2 binary that gradle uses with the patched one from the sdk
-    env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/${lib.head cfg.buildTools.version}/aapt2";
+    env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${config.env.ANDROID_HOME}/build-tools/${lib.head cfg.buildTools.version}/aapt2";
 
     env.FLUTTER_ROOT = if cfg.flutter.enable then cfg.flutter.package else "";
     env.DART_ROOT = if cfg.flutter.enable then "${cfg.flutter.package}/bin/cache/dart-sdk" else "";
@@ -355,7 +394,7 @@ in
       set -e
       export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pkgs.lib.makeLibraryPath [pkgs.vulkan-loader pkgs.libGL]}:${config.env.ANDROID_HOME}/build-tools/${lib.head cfg.buildTools.version}/lib64/:${config.env.ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
 
-      export PATH="$PATH:${config.env.ANDROID_HOME}/tools:${config.env.ANDROID_HOME}/tools/bin:${config.env.ANDROID_HOME}/platform-tools"
+      export PATH="$PATH:${config.env.ANDROID_HOME}/tools:${config.env.ANDROID_HOME}/tools/bin:${config.env.ANDROID_HOME}/platform-tools:${config.env.ANDROID_HOME}/cmdline-tools/latest/bin:${config.env.ANDROID_HOME}/emulator"
       cat <<EOF > local.properties
       # This file was automatically generated by nix-shell.
       sdk.dir=$ANDROID_HOME
