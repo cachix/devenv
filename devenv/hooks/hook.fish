@@ -1,49 +1,15 @@
 # devenv hook for fish
 # Usage: devenv hook fish | source
 
+# The project dir we last auto-activated. Lets you `exit` a devenv shell back to
+# the parent shell without it immediately re-spawning; cleared once you cd
+# elsewhere. `devenv hook-should-activate` is cheap (static binary), so apart
+# from this guard the hook runs it every prompt — no result caching, so
+# `devenv allow`/`revoke` take effect on the next prompt without a re-`cd`.
+set -q _DEVENV_HOOK_ACTIVATED; or set -g _DEVENV_HOOK_ACTIVATED ""
+# Last directory reported as untrusted, so the "not allowed" hint is shown once
+# per entry rather than on every prompt.
 set -q _DEVENV_HOOK_UNTRUSTED; or set -g _DEVENV_HOOK_UNTRUSTED ""
-set -q _DEVENV_ACTIVATE_DIR; or set -g _DEVENV_ACTIVATE_DIR ""
-
-function _devenv_hook --on-variable PWD
-    # `DEVENV_ROOT` set means a devenv shell is already active — hook does
-    # nothing. Hook-spawned shells (marked by `_DEVENV_HOOK_DIR`) additionally
-    # `exit` when cd-ing outside the project so the parent shell can follow.
-    if test -n "$DEVENV_ROOT"
-        if test -n "$_DEVENV_HOOK_DIR"
-            switch $PWD
-                case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
-                case '*'
-                    printf '%s' $PWD > "$DEVENV_ROOT/.devenv/exit-dir"
-                    exit
-            end
-        end
-        return
-    end
-
-    # Suppress stderr when retrying the same untrusted PWD (the "not allowed"
-    # message was already shown the first time round).
-    set -l project_dir
-    if test "$_DEVENV_HOOK_UNTRUSTED" = "$PWD"
-        set project_dir (devenv hook-should-activate 2>/dev/null)
-    else
-        set project_dir (devenv hook-should-activate)
-    end
-    set -l exit_code $status
-
-    if test $exit_code -eq 0 -a -n "$project_dir"
-        # Signal to _devenv_hook_prompt to activate on the next prompt rather
-        # than spawning here. Spawning inside a PWD event handler means the
-        # subprocess inherits whatever in-progress shell state exists at that
-        # moment (e.g. zoxide's __zoxide_loop recursion guard), which leaks
-        # into the devenv shell and breaks tools that set such sentinels.
-        set -g _DEVENV_ACTIVATE_DIR $project_dir
-        set -g _DEVENV_HOOK_UNTRUSTED ""
-    else if test $exit_code -ne 0
-        set -g _DEVENV_HOOK_UNTRUSTED $PWD
-    else
-        set -g _DEVENV_HOOK_UNTRUSTED ""
-    end
-end
 
 # Spawn devenv shell in $project_dir and follow the user if they cd'd out.
 function _devenv_hook_activate
@@ -60,36 +26,47 @@ function _devenv_hook_activate
     end
 end
 
-function _devenv_hook_prompt --on-event fish_prompt
-    if test -n "$_DEVENV_ACTIVATE_DIR"
-        set -l project_dir $_DEVENV_ACTIVATE_DIR
-        set -g _DEVENV_ACTIVATE_DIR ""
-        _devenv_hook_activate $project_dir
-    else if test -n "$_DEVENV_HOOK_UNTRUSTED"
-        # Retry activation after `devenv allow`; activates immediately if now trusted.
-        _devenv_hook
-        if test -n "$_DEVENV_ACTIVATE_DIR"
-            set -l project_dir $_DEVENV_ACTIVATE_DIR
-            set -g _DEVENV_ACTIVATE_DIR ""
-            _devenv_hook_activate $project_dir
+# Runs on every prompt (after fish has entered its main loop, so the spawned
+# devenv shell inherits the real terminal rather than the `| source` pipe).
+function _devenv_hook --on-event fish_prompt
+    # `DEVENV_ROOT` set means a devenv shell is already active — hook does
+    # nothing. Hook-spawned shells (marked by `_DEVENV_HOOK_DIR`) additionally
+    # `exit` when cd-ing outside the project so the parent shell can follow.
+    if test -n "$DEVENV_ROOT"
+        if test -n "$_DEVENV_HOOK_DIR"
+            switch $PWD
+                case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
+                case '*'
+                    printf '%s' $PWD > "$DEVENV_ROOT/.devenv/exit-dir"
+                    exit
+            end
         end
+        return
     end
-end
 
-# Trigger initial check on the first prompt rather than inline.
-#
-# The hook is typically loaded via `devenv hook fish | source`, which makes
-# `source`'s stdin a pipe. `devenv shell` spawned inline would inherit that
-# closed pipe, detect no tty, and exit immediately on EOF.
-#
-# Deferring to fish_prompt runs the initial check after fish has entered
-# its main loop, where stdin is the real terminal.
-function _devenv_hook_init --on-event fish_prompt
-    functions -e _devenv_hook_init
-    _devenv_hook
-    if test -n "$_DEVENV_ACTIVATE_DIR"
-        set -l project_dir $_DEVENV_ACTIVATE_DIR
-        set -g _DEVENV_ACTIVATE_DIR ""
+    # Just exited the devenv shell for this dir — don't re-spawn until you leave.
+    if test "$_DEVENV_HOOK_ACTIVATED" = "$PWD"
+        return
+    end
+    set -g _DEVENV_HOOK_ACTIVATED ""
+
+    # Suppress stderr when re-checking the same untrusted PWD (hint already shown).
+    set -l project_dir
+    if test "$_DEVENV_HOOK_UNTRUSTED" = "$PWD"
+        set project_dir (devenv hook-should-activate 2>/dev/null)
+    else
+        set project_dir (devenv hook-should-activate)
+    end
+    set -l exit_code $status
+
+    if test $exit_code -eq 0 -a -n "$project_dir"
+        set -g _DEVENV_HOOK_UNTRUSTED ""
+        # Mark activated before launching so exiting the shell doesn't re-launch.
+        set -g _DEVENV_HOOK_ACTIVATED "$PWD"
         _devenv_hook_activate $project_dir
+    else if test $exit_code -ne 0
+        set -g _DEVENV_HOOK_UNTRUSTED "$PWD"
+    else
+        set -g _DEVENV_HOOK_UNTRUSTED ""
     end
 end

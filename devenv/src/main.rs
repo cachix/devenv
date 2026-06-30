@@ -66,7 +66,7 @@ fn main_inner() -> Result<()> {
                 return Ok(());
             }
             Commands::Allow => {
-                return commands::hook::allow();
+                return commands::hook::allow(cli.from.as_deref());
             }
             Commands::Revoke => {
                 return commands::hook::revoke();
@@ -263,14 +263,33 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
     // module-option overrides (`-O`). Has to run before Config::load() reads
     // "./devenv.yaml".
     let original_cwd = env::current_dir().ok();
-    let discovered_root = if cli.from.is_none() && cli.input_overrides.nix_module_options.is_empty()
-    {
-        original_cwd.as_deref().and_then(|cwd| {
-            devenv_core::paths::find_project_root(cwd).filter(|r| r.as_path() != cwd)
-        })
-    } else {
-        None
-    };
+
+    // A local devenv.nix takes priority over a persisted binding and over
+    // discovery into a parent root. Look it up once and share the result; skip
+    // when the user explicitly chose a source (`--from`) or is building a
+    // project via module-option overrides (`-O`).
+    let has_overrides = !cli.input_overrides.nix_module_options.is_empty();
+    let project_root = original_cwd
+        .as_deref()
+        .filter(|_| cli.from.is_none() && !has_overrides)
+        .and_then(devenv_core::paths::find_project_root);
+
+    // A directory bound to an out-of-tree source via `devenv allow --from` loads
+    // that source on every invocation, as if `--from` had been passed. The
+    // priority above means the binding only applies in an otherwise
+    // project-less dir without explicit `--from`/`-O`.
+    let from_source = cli.from.clone().or_else(|| {
+        if has_overrides || project_root.is_some() {
+            return None;
+        }
+        commands::hook::trusted_from(original_cwd.as_deref()?)
+            .ok()
+            .flatten()
+    });
+
+    // `project_root` is only `Some` when no `--from`/`-O` was given, which is
+    // exactly when `from_source` stays `None`, so no extra guard is needed here.
+    let discovered_root = project_root.filter(|r| Some(r.as_path()) != original_cwd.as_deref());
     // When discovery moves us into a parent root, remember the directory the
     // user actually invoked from so the interactive shell and `-- cmd` still
     // run there. The devenv environment is root-scoped; the cwd is not.
@@ -334,9 +353,9 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
             .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
     }
 
-    // If --from is provided, create a new input and add it to imports.
-    let from_external = cli.from.is_some();
-    if let Some(from) = &cli.from {
+    // If a source is provided (via --from or a persisted `allow --from`
+    // binding), create a new input and add it to imports.
+    if let Some(from) = &from_source {
         let url = if let Some(path_str) = from.strip_prefix("path:") {
             let path = Path::new(path_str);
             let full_path = if path.is_relative() {
@@ -398,7 +417,7 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
         cache_settings,
         secret_settings,
         input_overrides,
-        from_external,
+        from_external: from_source.is_some(),
         require_version_match,
         devenv_root: None,
         devenv_dotfile: test_dirs.dotfile.clone(),
