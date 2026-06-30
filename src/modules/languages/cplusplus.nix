@@ -19,8 +19,10 @@ let
 
   conanSubmodule =
     if conan-flake != null then
-    # We automatically configure Conan with the correct tree root for the project.
-      conan-flake.lib.submoduleWith pkgs { inherit configRoot; }
+      conan-flake.lib.submoduleWith lib
+        {
+          specialArgs = { inherit pkgs; };
+        }
     else
       lib.types.attrs;
 in
@@ -90,7 +92,7 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
-      packages = with pkgs; [
+      packages = [
         cfg.cmake.package
         cfg.package
       ]
@@ -101,6 +103,8 @@ in
 
     #
     (lib.mkIf (cfg.enable && cfg.conan.enable) {
+      languages.cplusplus.conan.config.configRoot = lib.mkDefault configRoot;
+
       languages.cplusplus.conan.config.package = lib.mkDefault cfg.conan.package;
 
       # conan-flake uses its stdenv option to figure out the compiler
