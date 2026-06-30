@@ -24721,6 +24721,36 @@ ${config.devenv.runtime}/pc.sock
 
 
 
+## process.start
+
+
+
+Default start mode for every process, overridable per-process with
+` processes.<name>.start.enable `:
+
+ - ` true `: start with ` devenv up `.
+ - ` false `: do not auto-start.
+ - ` "interactive-shell" `: start when entering an interactive ` devenv shell `
+   and stop on shell exit (also started by ` devenv up `).
+
+
+
+*Type:*
+boolean or value “interactive-shell” (singular enum)
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes
 
 
@@ -25744,22 +25774,30 @@ submodule
 
 
 
-Whether to start this process automatically with ` devenv up `.
+When to start this process:
 
-Disabled processes are still visible in the TUI as stopped
-and can be started manually by selecting them and pressing Enter.
+ - ` true `: start automatically with ` devenv up `.
+ - ` false `: never auto-start. The process is still visible in the
+   TUI as stopped and can be started manually by selecting it and
+   pressing Enter.
+ - ` "interactive-shell" `: start when entering an interactive
+   ` devenv shell ` and stop it when the shell exits. It is also
+   started by ` devenv up `. Only interactive shells start it:
+   ` devenv shell -- <cmd> ` and non-interactive shells do not.
+
+Defaults to ` process.start `.
 
 
 
 *Type:*
-boolean
+boolean or value “interactive-shell” (singular enum)
 
 
 
 *Default:*
 
 ```nix
-true
+config.process.start
 ```
 
 *Declared by:*
