@@ -83,50 +83,6 @@ list of string
 
 
 
-## android.android-nixpkgs.packages
-
-
-
-A function selecting which packages to install from android-nixpkgs.
-Only used when the ` android-nixpkgs ` input is present. When set, it fully
-overrides the default selection derived from the other ` android.* ` options.
-See the [android-nixpkgs package list](https://github.com/tadfisher/android-nixpkgs)
-for available attribute names.
-
-
-
-*Type:*
-null or (function that evaluates to a(n) list of package)
-
-
-
-*Default:*
-
-```nix
-null
-```
-
-
-
-*Example:*
-
-```nix
-sdkPkgs: with sdkPkgs; [
-  cmdline-tools-latest
-  platform-tools
-  build-tools-35-0-0
-  platforms-android-36
-  emulator
-  system-images-android-36-google-apis-playstore-x86-64
-]
-
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
-
-
-
 ## android.android-studio.enable
 
 

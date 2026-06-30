@@ -63,10 +63,11 @@ let
   # Map a version (e.g. "35.0.0") to its android-nixpkgs attribute suffix ("35-0-0").
   dashVersion = lib.replaceStrings [ "." ] [ "-" ];
 
-  # Default package selection derived from the shared android.* options.
-  # Anything not covered here (system images, sources, cmake, extras) can be
-  # selected via `android.android-nixpkgs.packages`.
-  defaultSelection = sdkPkgs:
+  # Package selection derived from the shared android.* options. System images,
+  # sources, cmake and extras aren't covered; install additional android-nixpkgs
+  # packages by adding them to devenv's top-level `packages` option directly,
+  # e.g. `inputs.android-nixpkgs.sdk.${pkgs.system} (sdkPkgs: [ ... ])`.
+  androidNixpkgsSelection = sdkPkgs:
     [
       sdkPkgs.cmdline-tools-latest
       sdkPkgs.platform-tools
@@ -76,8 +77,7 @@ let
     ++ lib.optional cfg.emulator.enable sdkPkgs.emulator
     ++ lib.optionals cfg.ndk.enable (map (v: sdkPkgs."ndk-${dashVersion v}") cfg.ndk.version);
 
-  androidNixpkgsSdk = android-nixpkgs.sdk.${pkgs.system}
-    (if cfg.android-nixpkgs.packages != null then cfg.android-nixpkgs.packages else defaultSelection);
+  androidNixpkgsSdk = android-nixpkgs.sdk.${pkgs.system} androidNixpkgsSelection;
   androidNixpkgsHome = "${androidNixpkgsSdk}/share/android-sdk";
 
   # The active SDK source's root directory.
@@ -86,28 +86,6 @@ in
 {
   options.android = {
     enable = lib.mkEnableOption "tools for Android Development";
-
-    android-nixpkgs.packages = lib.mkOption {
-      type = lib.types.nullOr (lib.types.functionTo (lib.types.listOf lib.types.package));
-      default = null;
-      example = lib.literalExpression ''
-        sdkPkgs: with sdkPkgs; [
-          cmdline-tools-latest
-          platform-tools
-          build-tools-35-0-0
-          platforms-android-36
-          emulator
-          system-images-android-36-google-apis-playstore-x86-64
-        ]
-      '';
-      description = ''
-        A function selecting which packages to install from android-nixpkgs.
-        Only used when the `android-nixpkgs` input is present. When set, it fully
-        overrides the default selection derived from the other `android.*` options.
-        See the [android-nixpkgs package list](https://github.com/tadfisher/android-nixpkgs)
-        for available attribute names.
-      '';
-    };
 
     platforms.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;

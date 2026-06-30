@@ -75,19 +75,21 @@ regenerated daily from Google's SDK repositories. Its presence switches the SDK
 source, and the release track is chosen by the input's URL ref (`stable` by default,
 or `beta`, `preview`, `canary`):
 
-```yaml title="devenv.yaml"
-inputs:
-  android-nixpkgs:
-    url: github:tadfisher/android-nixpkgs   # or .../beta, .../preview, .../canary
-    inputs:
-      nixpkgs:
-        follows: nixpkgs
+```shell-session
+$ devenv inputs add android-nixpkgs github:tadfisher/android-nixpkgs --follows nixpkgs
 ```
 
-The same options now resolve against android-nixpkgs, so you can select newer versions:
+Use a different release track by pointing the URL at `.../beta`, `.../preview` or `.../canary` instead.
+
+The same options now resolve against android-nixpkgs, so you can select newer
+versions. `platforms.version`, `buildTools.version`, `ndk.version` and
+`emulator.enable` are mapped onto SDK packages automatically. Other components
+(system images, sources, CMake, extras) aren't covered by those options; install
+them by adding the android-nixpkgs derivation you want to devenv's `packages`
+directly:
 
 ```nix title="devenv.nix"
-{ ... }:
+{ inputs, pkgs, ... }:
 
 {
   android = {
@@ -95,29 +97,12 @@ The same options now resolve against android-nixpkgs, so you can select newer ve
     platforms.version = [ "34" "35" "36" ];
     buildTools.version = [ "35.0.0" ];
   };
-}
-```
 
-`platforms.version`, `buildTools.version`, `ndk.version` and `emulator.enable` are
-mapped onto SDK packages automatically. To choose versions that aren't covered by
-those options (system images, sources, CMake, extras), select the packages directly
-with `android.android-nixpkgs.packages`:
-
-```nix title="devenv.nix"
-{ ... }:
-
-{
-  android = {
-    enable = true;
-    android-nixpkgs.packages = sdkPkgs: with sdkPkgs; [
-      cmdline-tools-latest
-      platform-tools
-      build-tools-35-0-0
-      platforms-android-36
-      emulator
+  packages = [
+    (inputs.android-nixpkgs.sdk.${pkgs.system} (sdkPkgs: with sdkPkgs; [
       system-images-android-36-google-apis-playstore-x86-64
-    ];
-  };
+    ]))
+  ];
 }
 ```
 
