@@ -2758,6 +2758,8 @@ null
 
 ## containers.\<name>.isBuilding
 
+
+
 Set to true when the environment is building this container.
 
 
@@ -2779,8 +2781,6 @@ false
 
 
 ## containers.\<name>.layers
-
-
 
 The layers to create.
 
@@ -6011,6 +6011,8 @@ false
 
 ## git-hooks.hooks.biome.settings.binPath
 
+
+
 ` biome ` binary path.
 For example, if you want to use the ` biome ` binary from ` node_modules `, use ` "./node_modules/.bin/biome" `.
 Use a string instead of a path to avoid having to Git track the file in projects that use Nix flakes.
@@ -6044,8 +6046,6 @@ null or string or absolute path
 
 
 ## git-hooks.hooks.biome.settings.configPath
-
-
 
 Path to the configuration JSON file
 
@@ -8284,6 +8284,8 @@ string
 
 ## git-hooks.hooks.isort.settings.profile
 
+
+
 Built-in profiles to allow easy interoperability with common projects and code styles.
 
 
@@ -8305,8 +8307,6 @@ one of “”, “black”, “django”, “pycharm”, “google”, “open_s
 
 
 ## git-hooks.hooks.lacheck
-
-
 
 lacheck hook
 
