@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv shell` failing with `Failed to parse output store path … is not in the Nix store` when using a relocated/chroot Nix store (e.g. `NIX_REMOTE='local?root=…'` or a bind-mounted store). The realized shell path was translated to its physical location and then fed back into store-path parsing, which only accepts the logical `/nix/store/…` form; the logical path is now recovered before creating the GC root ([#2499](https://github.com/cachix/devenv/issues/2499)).
 - Fixed the TUI crashing on activity names or store paths containing multi-byte characters (e.g. non-ASCII package names or evaluation paths) when shortened for narrow terminals.
 - Fixed the TUI crashing with an arithmetic overflow when a download or task reported progress beyond its expected total.
 - Fixed the quit confirmation prompt overflowing past the right edge on terminals narrower than ~82 columns; the prompt now adapts to the available width.
