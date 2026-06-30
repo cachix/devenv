@@ -1,4 +1,12 @@
 ``devenv`` has first-class integration for [pre-commit](https://pre-commit.com/) via [git-hooks.nix](https://github.com/cachix/git-hooks.nix).
+This integration _requires_ to have the `git-hooks` input the `devenv.yaml` file, as in [the inputs page](inputs.md).
+
+If this is not already in the file, add it using `devenv inputs add git-hooks github:cachix/git-hooks.nix` or insert it manually:
+```yaml title="devenv.yml snippet"
+inputs:
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+```
 
 ## Set up
 
@@ -31,6 +39,8 @@ We recommend a two-step approach for integrating your linters and formatters.
   };
 }
 ```
+
+The full list can be found in the reference.
 
 In action:
 
