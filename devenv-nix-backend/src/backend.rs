@@ -573,10 +573,7 @@ impl NixCBackend {
 
         let value = self.enriched(
             eval_state.require_attrs_select(&root_attrs, clean_path),
-            format!(
-                "Failed to get attribute '{}' from devenv configuration",
-                attr_path
-            ),
+            format!("Failed to get attribute '{}'", attr_path),
         )?;
 
         self.enriched(
@@ -603,7 +600,7 @@ impl NixCBackend {
 
         let shell_drv = self.enriched(
             eval_state.require_attrs_select(&devenv, "shell"),
-            "Failed to get shell attribute from devenv",
+            "Failed to get shell attribute",
         )?;
         self.enriched(
             eval_state.force(&shell_drv),
@@ -674,10 +671,7 @@ impl NixCBackend {
 
         let value = self.enriched(
             eval_state.require_attrs_select(&root_attrs, attr_path),
-            format!(
-                "Failed to get attribute '{}' from devenv configuration",
-                attr_path
-            ),
+            format!("Failed to get attribute '{}'", attr_path),
         )?;
         self.enriched(
             eval_state.force(&value),
@@ -936,14 +930,14 @@ impl NixCBackend {
             let pkgs = eval_state
                 .require_attrs_select(&devenv_attrs, "pkgs")
                 .to_miette()
-                .wrap_err("Failed to get pkgs attribute from devenv")?;
+                .wrap_err("Failed to get pkgs attribute")?;
             env.insert("pkgs", &pkgs)
                 .to_miette()
                 .wrap_err("Failed to inject pkgs into REPL scope")?;
             let inputs = eval_state
                 .require_attrs_select(&devenv_attrs, "inputs")
                 .to_miette()
-                .wrap_err("Failed to get inputs attribute from devenv")?;
+                .wrap_err("Failed to get inputs attribute")?;
             env.insert("inputs", &inputs)
                 .to_miette()
                 .wrap_err("Failed to inject inputs into REPL scope")?;
@@ -965,7 +959,7 @@ impl NixCBackend {
         let devenv = self.get_or_eval_devenv(&mut eval_state)?;
         let pkgs = self.enriched(
             eval_state.require_attrs_select(&devenv, "pkgs"),
-            "Failed to get pkgs attribute from devenv configuration",
+            "Failed to get pkgs attribute",
         )?;
 
         let cache = EvalCache::new(&mut eval_state, &pkgs, None)
