@@ -1038,7 +1038,10 @@ pub enum TasksCommand {
         input_json: Option<String>,
     },
     #[command(about = "List all available tasks.")]
-    List {},
+    List {
+        #[arg(long, help = "Print tasks as JSON for machine consumption.")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Clone)]

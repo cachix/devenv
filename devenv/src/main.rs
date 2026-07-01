@@ -997,8 +997,8 @@ async fn dispatch_command(
                     .await?;
                 Ok(CommandResult::Print(format!("{output}\n")))
             }
-            TasksCommand::List {} => {
-                let output = devenv.tasks_list().await?;
+            TasksCommand::List { json } => {
+                let output = devenv.tasks_list(json).await?;
                 Ok(CommandResult::Print(format!("{output}\n")))
             }
         },

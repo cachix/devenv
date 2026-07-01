@@ -26,6 +26,7 @@ use nix::unistd::Pid;
 use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
 use processes::ProcessManager as _;
 use secrecy::ExposeSecret;
+use serde::Serialize;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
@@ -1132,8 +1133,12 @@ impl Devenv {
         Ok(serde_json::to_string(&outputs).expect("parsing of outputs failed"))
     }
 
-    pub async fn tasks_list(&self) -> Result<String> {
+    pub async fn tasks_list(&self, json: bool) -> Result<String> {
         let tasks = self.load_tasks().await?;
+
+        if json {
+            return format_tasks_json(&tasks);
+        }
 
         if tasks.is_empty() {
             return Ok("No tasks defined.".to_string());
@@ -2440,6 +2445,39 @@ fn format_tasks_tree(tasks: &[tasks::TaskConfig]) -> String {
     output
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskListItem<'a> {
+    name: &'a str,
+    description: &'a str,
+    r#type: tasks::TaskType,
+    after: &'a [String],
+    before: &'a [String],
+    has_exec: bool,
+    has_status: bool,
+    cwd: Option<&'a str>,
+    exec_if_modified: &'a [String],
+}
+
+fn format_tasks_json(tasks: &[tasks::TaskConfig]) -> Result<String> {
+    let items: Vec<_> = tasks
+        .iter()
+        .map(|task| TaskListItem {
+            name: &task.name,
+            description: &task.description,
+            r#type: task.r#type,
+            after: &task.after,
+            before: &task.before,
+            has_exec: task.command.is_some(),
+            has_status: task.status.is_some(),
+            cwd: task.cwd.as_deref(),
+            exec_if_modified: &task.exec_if_modified,
+        })
+        .collect();
+
+    serde_json::to_string_pretty(&items).into_diagnostic()
+}
+
 fn build_bootstrap_args(
     config: &NixConfig,
     imports: &[String],
@@ -2694,6 +2732,42 @@ mod tests {
             .unwrap_or_default();
         build_children.sort();
         assert_eq!(build_children, vec!["myapp:setup"]);
+    }
+
+    #[test]
+    fn test_format_tasks_json() {
+        let tasks = vec![tasks::TaskConfig {
+            name: "test:run".to_string(),
+            description: "Run tests".to_string(),
+            r#type: tasks::TaskType::Oneshot,
+            after: vec!["test:build".to_string()],
+            before: vec!["test:report".to_string()],
+            command: Some("cargo test".to_string()),
+            status: Some("test -f target/debug/app".to_string()),
+            cwd: Some("crates/app".to_string()),
+            exec_if_modified: vec!["src/**/*.rs".to_string()],
+            ..Default::default()
+        }];
+
+        let output = format_tasks_json(&tasks).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+
+        assert_eq!(
+            value,
+            serde_json::json!([
+                {
+                    "name": "test:run",
+                    "description": "Run tests",
+                    "type": "oneshot",
+                    "after": ["test:build"],
+                    "before": ["test:report"],
+                    "hasExec": true,
+                    "hasStatus": true,
+                    "cwd": "crates/app",
+                    "execIfModified": ["src/**/*.rs"]
+                }
+            ])
+        );
     }
 
     #[test]

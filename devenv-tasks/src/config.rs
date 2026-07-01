@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub struct TaskConfig {
     pub name: String,
     #[serde(default)]
+    pub description: String,
+    #[serde(default)]
     pub r#type: TaskType,
     #[serde(default)]
     pub after: Vec<String>,
