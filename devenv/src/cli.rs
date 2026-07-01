@@ -860,6 +860,7 @@ pub enum Commands {
         http: Option<Option<u16>>,
     },
 
+    #[cfg(feature = "lsp")]
     #[command(about = "Start the nixd language server for devenv.nix.")]
     Lsp {
         #[arg(long, help = "Print nixd configuration and exit")]
