@@ -25,6 +25,7 @@ use crossterm::{
     style::ResetColor,
     terminal::{self, Clear, ClearType},
 };
+use libghostty_vt::render::{Dirty, RenderState, RowIterator};
 use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef};
 use libghostty_vt::style::{Style, StyleColor, Underline};
 use libghostty_vt::terminal::{Options as TerminalOptions, Point, Terminal};
@@ -226,10 +227,34 @@ struct Renderer {
     scrollback_flushed: usize,
     /// Reusable buffer for SGR line rendering (avoids per-line allocation).
     line_buf: String,
+    /// libghostty render state. Snapshotted each `render` to read per-row dirty
+    /// flags (so clean rows can be skipped) and to clear the terminal's dirty
+    /// state. `None` if it could not be allocated, in which case `render` falls
+    /// back to reading every row.
+    render_state: Option<RenderState<'static>>,
+    /// Reusable iterator over the render-state snapshot's rows, used to read and
+    /// acknowledge each row's dirty flag. Paired with `render_state`; `None`
+    /// disables dirty tracking and forces every row to be read.
+    row_iter: Option<RowIterator<'static>>,
+    /// Per-row dirty flags for the current frame, rebuilt by `refresh_dirty`
+    /// from the render-state snapshot. Empty when dirty tracking is unavailable,
+    /// in which case every row is treated as dirty.
+    dirty_rows: Vec<bool>,
+    /// Number of VT rows whose cells were read from the terminal across this
+    /// renderer's lifetime. Used by tests to assert dirty-row tracking avoids
+    /// re-reading unchanged rows.
+    rows_read: u64,
 }
 
 impl Renderer {
     fn new(content_rows: u16) -> Self {
+        let render_state = RenderState::new().ok();
+        let row_iter = RowIterator::new().ok();
+        if render_state.is_none() || row_iter.is_none() {
+            tracing::debug!(
+                "dirty-row tracking unavailable, renderer will read every row each frame"
+            );
+        }
         Self {
             prev_lines: Vec::new(),
             prev_cursor: CursorState {
@@ -241,6 +266,10 @@ impl Renderer {
             content_rows,
             scrollback_flushed: 0,
             line_buf: String::new(),
+            render_state,
+            row_iter,
+            dirty_rows: Vec::new(),
+            rows_read: 0,
         }
     }
 
@@ -304,15 +333,87 @@ impl Renderer {
         queue!(stdout, ResetColor)
     }
 
+    /// Rebuild `dirty_rows` from a fresh render-state snapshot and consume the
+    /// terminal's dirty state in the same pass.
+    ///
+    /// The snapshot's per-row `dirty()` reflects changes the bare per-row bit
+    /// (`grid_ref(...).row().is_dirty()`) misses — most importantly a viewport
+    /// scroll, which rotates rows and marks dirtiness at the page level without
+    /// setting each shifted row's own bit. `update` only snapshots the dirty
+    /// state; it does not reset the render state's own per-row and global dirty
+    /// layers, so we acknowledge each row (`set_dirty(false)`) and the global
+    /// flag here, or every row would report dirty forever. Leaves `dirty_rows`
+    /// empty when dirty tracking is unavailable, in which case `is_row_dirty`
+    /// treats every row as dirty so `render` reads them all.
+    fn refresh_dirty(&mut self, vt: &Terminal<'static, '_>) {
+        let Self {
+            render_state,
+            row_iter,
+            dirty_rows,
+            ..
+        } = self;
+        dirty_rows.clear();
+        let (Some(rs), Some(row_iter)) = (render_state, row_iter) else {
+            return;
+        };
+        let snapshot = match rs.update(vt) {
+            Ok(snapshot) => snapshot,
+            Err(e) => {
+                tracing::trace!(error = %e, "render-state update failed, reading all rows");
+                return;
+            }
+        };
+        {
+            let mut iter = match row_iter.update(&snapshot) {
+                Ok(iter) => iter,
+                Err(e) => {
+                    tracing::trace!(error = %e, "row-iterator update failed, reading all rows");
+                    return;
+                }
+            };
+            while let Some(row) = iter.next() {
+                dirty_rows.push(row.dirty().unwrap_or(true));
+                // If clearing the bit ever fails it stays set and the row
+                // reports dirty forever, silently disabling the skip for it.
+                if let Err(e) = row.set_dirty(false) {
+                    tracing::trace!(error = %e, "failed to clear row dirty flag");
+                }
+            }
+        }
+        let _ = snapshot.set_dirty(Dirty::Clean);
+    }
+
+    /// Whether VT row `row_idx` changed since the last `render`.
+    ///
+    /// Returns `true` when dirty tracking is unavailable or the row is beyond
+    /// the snapshot, so callers fall back to reading the row unconditionally.
+    fn is_row_dirty(&self, row_idx: usize) -> bool {
+        self.dirty_rows.get(row_idx).copied().unwrap_or(true)
+    }
+
     /// Render changed VT lines to stdout. Skips lines that haven't changed
     /// and clips rows that would fall outside the visible area.
-    fn render(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
+    ///
+    /// Rows the terminal reports as clean are skipped without reading their
+    /// cells at all, so a nested full-screen app (e.g. an editor) only costs
+    /// per-cell FFI reads for the handful of rows it actually repaints rather
+    /// than the whole screen every frame.
+    fn render(&mut self, stdout: &mut impl Write, vt: &Terminal<'static, '_>) -> io::Result<()> {
         let offset = self.row_offset as usize;
         let max_row = self.visible_rows();
         let rows = vt.rows().unwrap_or(0) as usize;
+        // Snapshot which rows changed since the last frame (and clear the
+        // terminal's dirty state) before diffing, so clean rows can be skipped.
+        self.refresh_dirty(vt);
         for row_idx in 0..rows.min(max_row) {
+            // Skip clean rows we already have a baseline for: their cells cannot
+            // have changed, so there's no need to read or diff them.
+            if row_idx < self.prev_lines.len() && !self.is_row_dirty(row_idx) {
+                continue;
+            }
             let point = active_point(row_idx as u32);
             let cells = cells_in_row(vt, point);
+            self.rows_read += 1;
             if row_idx < self.prev_lines.len() && cells == self.prev_lines[row_idx] {
                 continue;
             }
@@ -340,7 +441,7 @@ impl Renderer {
     fn render_with_scroll(
         &mut self,
         stdout: &mut impl Write,
-        vt: &mut Terminal<'_, '_>,
+        vt: &mut Terminal<'static, '_>,
     ) -> io::Result<()> {
         let vt_scrollback = vt.scrollback_rows().unwrap_or(0);
         let unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
@@ -432,7 +533,11 @@ impl Renderer {
     }
 
     /// Full redraw of all VT lines (after resize or initialization).
-    fn render_full(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
+    fn render_full(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'static, '_>,
+    ) -> io::Result<()> {
         self.invalidate();
         self.render(stdout, vt)
     }
@@ -796,7 +901,10 @@ impl ShellSession {
         std::thread::Builder::new()
             .name("session-pty".into())
             .spawn(move || {
-                let mut buf = [0u8; 4096];
+                // A large read buffer keeps a single PTY-output burst (e.g. a
+                // full-screen TUI repaint) in one read so it feeds the VT and
+                // renders as one frame instead of fragmenting across syscalls.
+                let mut buf = [0u8; 65536];
                 loop {
                     match pty_reader.read(&mut buf) {
                         Ok(0) => {
@@ -917,7 +1025,7 @@ impl ShellSession {
     fn event_loop(
         &mut self,
         pty: &Arc<Pty>,
-        vt: &mut Terminal<'_, '_>,
+        vt: &mut Terminal<'static, '_>,
         renderer: &mut Renderer,
         event_rx: std::sync::mpsc::Receiver<Event>,
         coordinator_tx: &tokio_mpsc::Sender<ShellEvent>,
@@ -1319,6 +1427,128 @@ impl Default for ShellSession {
 mod tests {
     use super::*;
     use portable_pty::CommandBuilder;
+
+    fn make_vt(cols: u16, rows: u16) -> Terminal<'static, 'static> {
+        Terminal::new(TerminalOptions {
+            cols,
+            rows,
+            max_scrollback: DEFAULT_MAX_SCROLLBACK,
+        })
+        .expect("create terminal")
+    }
+
+    /// A nested full-screen app that repaints a single row must not cost a
+    /// full-screen re-read. Dirty-row tracking should limit per-cell reads to
+    /// the rows that actually changed, which is what keeps `devenv shell` fast
+    /// when running editors like neovim on large terminals.
+    #[test]
+    fn render_reads_only_dirty_rows() {
+        let rows: u16 = 50;
+        let mut vt = make_vt(80, rows);
+        let mut renderer = Renderer::new(rows);
+        assert!(
+            renderer.render_state.is_some(),
+            "dirty tracking requires a render state"
+        );
+        let mut out: Vec<u8> = Vec::new();
+
+        // Fill the screen, then draw the first frame.
+        for i in 0..rows {
+            vt.vt_write(format!("line {i}\r\n").as_bytes());
+        }
+        renderer.render(&mut out, &vt).unwrap();
+        let full_reads = renderer.rows_read;
+        assert!(
+            full_reads >= rows as u64,
+            "first frame should read every row, read {full_reads}"
+        );
+
+        // Repaint a single row in place, like a TUI updating one line.
+        vt.vt_write(b"\x1b[10;1Hchanged");
+        let before = renderer.rows_read;
+        renderer.render(&mut out, &vt).unwrap();
+        let delta = renderer.rows_read - before;
+
+        assert!(
+            delta < rows as u64,
+            "second frame must not re-read the whole screen, read {delta} of {rows} rows"
+        );
+        // Only the edited row, plus at most the cursor's prior and landing
+        // rows, should be re-read.
+        assert!(
+            delta <= 5,
+            "expected only a handful of dirty rows, read {delta}"
+        );
+    }
+
+    /// A frame where nothing changed must read no rows at all.
+    #[test]
+    fn render_skips_all_rows_when_clean() {
+        let rows: u16 = 20;
+        let mut vt = make_vt(80, rows);
+        let mut renderer = Renderer::new(rows);
+        let mut out: Vec<u8> = Vec::new();
+
+        vt.vt_write(b"hello\r\nworld\r\n");
+        renderer.render(&mut out, &vt).unwrap();
+
+        let before = renderer.rows_read;
+        renderer.render(&mut out, &vt).unwrap();
+        assert_eq!(
+            renderer.rows_read, before,
+            "an unchanged frame must not read any rows"
+        );
+    }
+
+    /// Scrolling a full-screen (alternate-screen) app shifts every row's
+    /// on-screen content, but libghostty marks a scroll only at the page level,
+    /// not via each row's own dirty bit. The renderer must read dirty state
+    /// through the render-state snapshot (which reflects the page-level flag) so
+    /// the shifted rows are redrawn; reading the bare row bit skipped them and
+    /// left stale content on screen.
+    #[test]
+    fn render_redraws_scrolled_rows() {
+        let rows: u16 = 6;
+        let mut vt = make_vt(80, rows);
+        let mut renderer = Renderer::new(rows);
+        assert!(
+            renderer.render_state.is_some(),
+            "dirty tracking requires a render state"
+        );
+        let mut out: Vec<u8> = Vec::new();
+
+        // A full-screen app on the alternate screen fills every row.
+        vt.vt_write(b"\x1b[?1049h");
+        vt.vt_write(b"L0\r\nL1\r\nL2\r\nL3\r\nL4\r\nL5");
+        renderer.render(&mut out, &vt).unwrap();
+
+        // Scroll up one line: row 0 now shows "L1", ..., row 4 shows "L5", and a
+        // new bottom line "L6" appears. Every row's content changed.
+        vt.vt_write(b"\r\nL6");
+        let before = renderer.rows_read;
+        let mut out2: Vec<u8> = Vec::new();
+        renderer.render(&mut out2, &vt).unwrap();
+        let frame = String::from_utf8_lossy(&out2);
+
+        for line in ["L1", "L2", "L3", "L4", "L5", "L6"] {
+            assert!(
+                frame.contains(line),
+                "scrolled row {line:?} was not redrawn (stale): {frame:?}"
+            );
+        }
+        // Every row's content shifted, so the snapshot must mark all of them
+        // dirty and `render` must re-read each one. If dirty came from the bare
+        // per-row bit instead of the page-level snapshot flag, the shifted rows
+        // would be skipped without reading (delta < rows) and left stale — this
+        // assertion, not the substring check above, is what guards the
+        // page-level dirty path (a plain content-diff redraw would also satisfy
+        // the substring check).
+        let delta = renderer.rows_read - before;
+        assert_eq!(
+            delta, rows as u64,
+            "every scrolled row must be re-read via the snapshot dirty flag, read {delta} of {rows}"
+        );
+    }
 
     /// Regression test for devenv#2845: when the process-wide shutdown token is
     /// cancelled (e.g. from the SIGHUP/SIGINT/SIGTERM handler), the inner shell
