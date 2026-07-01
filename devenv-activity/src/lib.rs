@@ -71,8 +71,8 @@ pub use builders::{
 pub use handle::{ActivityGuard, ActivityHandle, init};
 pub use serde_valuable::SerdeValue;
 pub use stack::{
-    current_activity_id, current_activity_level, emit_task_hierarchy, log_to_evaluate, log_to_task,
-    message, message_with_details, op_to_evaluate, set_expected,
+    append_eval_log, append_eval_op, current_activity_id, current_activity_level,
+    emit_task_hierarchy, log_to_task, message, message_with_details, set_expected,
 };
 
 // Traits

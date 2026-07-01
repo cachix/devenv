@@ -1,7 +1,33 @@
 use num_enum::TryFromPrimitive;
+use regex::Regex;
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 use std::fmt::{self, Display, Formatter};
+use std::sync::LazyLock;
+
+/// Matches the `error:`/`warning:`/`trace:` keyword Nix prefixes onto a log line.
+/// Leading ANSI codes and whitespace are ignored.
+static NIX_MESSAGE_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?:\x1b\[[0-9;]*m|\s)*(error|warning|trace):").expect("valid regex")
+});
+
+/// What a Nix log message actually is, recovered from its text.
+///
+/// The nix-daemon protocol can't carry a log level, so forwarded build output
+/// all arrives at `Error` verbosity. The level is therefore unreliable; we
+/// recover the kind from the `error:`/`warning:`/`trace:` keyword the message
+/// carries instead.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum NixMessageKind {
+    /// A real evaluation or build error (`error:`).
+    Error,
+    /// A warning (`warning:`).
+    Warning,
+    /// Output from `builtins.trace`.
+    Trace,
+    /// Anything else — ordinary log output.
+    Other,
+}
 
 /// Represents Nix's JSON structured log format (--log-format=internal-json).
 ///
@@ -50,37 +76,20 @@ impl InternalLog {
             .map(serde_json::from_str)
     }
 
-    /// Check if the log is an actual error message.
-    ///
-    /// In additional to checking the verbosity level of the message, we look for the `error:` prefix in the message.
-    /// Most messages during the builds (probably from the nix-daemon) are incorrectly logged as errors.
-    pub fn is_nix_error(&self) -> bool {
-        if let InternalLog::Msg {
-            level: Verbosity::Error,
-            msg,
-            ..
-        } = self
-            && msg.starts_with("\u{1b}[31;1merror:")
-        {
-            return true;
+    /// Classify a message by its leading keyword (see [`NixMessageKind`]).
+    pub fn message_kind(&self) -> NixMessageKind {
+        let InternalLog::Msg { msg, .. } = self else {
+            return NixMessageKind::Other;
+        };
+        let Some(caps) = NIX_MESSAGE_PREFIX.captures(msg) else {
+            return NixMessageKind::Other;
+        };
+        match &caps[1] {
+            "error" => NixMessageKind::Error,
+            "warning" => NixMessageKind::Warning,
+            "trace" => NixMessageKind::Trace,
+            _ => NixMessageKind::Other,
         }
-
-        false
-    }
-
-    /// Check if the log is a trace message from `builtins.trace`.
-    pub fn is_builtin_trace(&self) -> bool {
-        if let InternalLog::Msg {
-            level: Verbosity::Error,
-            msg,
-            ..
-        } = self
-            && msg.starts_with("trace:")
-        {
-            return true;
-        }
-
-        false
     }
 }
 
@@ -276,27 +285,83 @@ mod test {
         assert_eq!(verbosity, Verbosity::Error);
     }
 
-    #[test]
-    // Ensure that only messages containing the prefix `error:` are detected as error messages.
-    // See `is_nix_error` for more details.
-    fn test_is_nix_error() {
-        let log = InternalLog::Msg {
+    /// An `Error`-level `Msg` — the verbosity real errors and mislabeled
+    /// daemon lines share.
+    fn error_level_msg(msg: &str) -> InternalLog {
+        InternalLog::Msg {
             level: Verbosity::Error,
-            msg: "\u{1b}[31;1merror:\u{1b}[0m\nsomething went wrong".to_string(),
+            msg: msg.to_string(),
             raw_msg: None,
-        };
-        assert!(log.is_nix_error());
+        }
     }
 
     #[test]
-    // Ensure we don't interpret non-error messages as errors.
-    // See `is_nix_error` for more details.
-    fn test_is_nix_error_misleveled_msgs() {
-        let log = InternalLog::Msg {
-            level: Verbosity::Error,
-            msg: "not an error".to_string(),
-            raw_msg: None,
-        };
-        assert!(!log.is_nix_error());
+    fn message_kind_classifies_by_keyword_ignoring_level() {
+        use NixMessageKind::*;
+
+        // The leading keyword decides the kind. The level plays no part: the
+        // same `error:` line is an error whether it arrives at Error verbosity
+        // (the daemon default) or mislabeled at some other level.
+        assert_eq!(error_level_msg("error: boom").message_kind(), Error);
+        assert_eq!(
+            error_level_msg("\u{1b}[31;1merror:\u{1b}[0m\nsomething went wrong").message_kind(),
+            Error
+        );
+        assert_eq!(
+            InternalLog::Msg {
+                level: Verbosity::Info,
+                msg: "error: still an error at info level".to_string(),
+                raw_msg: None,
+            }
+            .message_kind(),
+            Error
+        );
+
+        // Traces from `builtins.trace`.
+        assert_eq!(
+            error_level_msg("trace: from builtins.trace").message_kind(),
+            Trace
+        );
+
+        // Warnings, colored or not, at any level. Nix colors them magenta
+        // (35;1) and the daemon forwards them at Error level — including the
+        // restricted-settings notice that untrusted users see.
+        assert_eq!(
+            error_level_msg("\u{1b}[35;1mwarning:\u{1b}[0m mislabeled at Error").message_kind(),
+            Warning
+        );
+        assert_eq!(
+            error_level_msg(
+                "\u{1b}[35;1mwarning:\u{1b}[0m ignoring the client-specified setting \
+                 'trusted-public-keys', because it is a restricted setting and you \
+                 are not a trusted user"
+            )
+            .message_kind(),
+            Warning
+        );
+        assert_eq!(
+            InternalLog::Msg {
+                level: Verbosity::Warn,
+                msg: "warning: correctly labeled".to_string(),
+                raw_msg: None,
+            }
+            .message_kind(),
+            Warning
+        );
+
+        // Anchoring: a build line that merely *mentions* the keyword mid-text
+        // must not be classified by it.
+        assert_eq!(
+            error_level_msg("checking for error: handling support... yes").message_kind(),
+            Other
+        );
+        // Ordinary output with no leading keyword.
+        assert_eq!(
+            error_level_msg("building '/nix/store/...'").message_kind(),
+            Other
+        );
+
+        // Non-Msg variants are never classified.
+        assert_eq!(InternalLog::Stop { id: 1 }.message_kind(), Other);
     }
 }
