@@ -57,7 +57,9 @@ nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2
 nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
 
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master" }
-libghostty-vt-sys = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master", default-features = false, features = ["pkg-config"] }
+libghostty-vt-sys = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master", default-features = false, features = [
+  "pkg-config",
+] }
 base64 = "0.22"
 anyhow = "1.0.102"
 async-priority-channel = "0.2.0"
@@ -120,7 +122,7 @@ ser_nix = "0.2.4"
 similar = "3.1.0"
 sha2 = "0.11.0"
 shell-escape = "0.1.5"
-sqlx = { version = "0.8.6", features = ["time", "sqlite", "runtime-tokio"] }
+sqlx = { version = "0.9.0", features = ["time", "sqlite", "runtime-tokio"] }
 strum = { version = "0.28", features = ["derive"] }
 tempfile = "3.27.0"
 termimad = "0.34"
@@ -173,7 +175,7 @@ syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
 reqwest = { version = "0.13", features = ["json", "query", "stream"] }
 axum = "0.8"
 caps = "0.5"
-rmcp = { version = "1.6", features = [
+rmcp = { version = "2.0", features = [
   "server",
   "transport-io",
   "transport-streamable-http-server",
@@ -181,10 +183,12 @@ rmcp = { version = "1.6", features = [
 sd-notify = "0.5"
 
 # Optional OpenTelemetry dependencies
-opentelemetry = "0.31"
-opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.31", default-features = false, features = ["trace"] }
-tracing-opentelemetry = "0.32"
+opentelemetry = "0.32"
+opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = [
+  "trace",
+] }
+tracing-opentelemetry = "0.33"
 
 # Optional snix dependencies
 snix-eval = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
