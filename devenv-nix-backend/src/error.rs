@@ -1,31 +1,26 @@
 //! Helpers for shaping Nix evaluation errors into miette diagnostics.
+//!
+//! These work on the Nix C bindings' already-rendered error text. There is no
+//! structured error type exposed by `nix-bindings-rust` to key off; the
+//! bindings stringify the C++ exception's `what()` into a single message and
+//! return it as `anyhow::Error`.
+//!
+//! The eval-returned error is always rendered in full and in Nix's natural
+//! order: `--show-trace` frames first, the actionable `error: …` paragraph
+//! last. That keeps the actionable message at the bottom of the terminal
+//! where the cursor lands, instead of requiring the user to scroll up past
+//! the trace to find it.
 
-/// Returns true if the message looks like a Nix warning (e.g. starts with
-/// `warning:`). Some Nix warnings (such as restricted-settings notices) get
-/// emitted through the FFI logger at the error verbosity, which would otherwise
-/// shadow the actual evaluation error we want to surface.
-pub(crate) fn looks_like_warning(msg: &str) -> bool {
-    let trimmed = msg.trim_start();
-    trimmed.starts_with("warning:") || trimmed.starts_with("\u{1b}[33;1mwarning:")
-}
-
-/// Pick the most useful raw error text to display.
+/// Shape a raw Nix error string into a `MietteDiagnostic` for rendering.
 ///
-/// Prefer the most recent entry from `nix_errors` that is not a warning —
-/// when Nix logs a full tree-style trace through the FFI logger, we want to
-/// surface that. If no real error was logged (e.g. a syntax error where the
-/// diagnostic only arrives via the FFI return value), fall back to
-/// `ffi_fallback`.
-pub(crate) fn select_raw_error<'a>(
-    nix_errors: &'a [String],
-    ffi_fallback: impl FnOnce() -> String,
-) -> std::borrow::Cow<'a, str> {
-    nix_errors
-        .iter()
-        .rev()
-        .find(|msg| !looks_like_warning(msg))
-        .map(|s| std::borrow::Cow::Borrowed(s.as_str()))
-        .unwrap_or_else(|| std::borrow::Cow::Owned(ffi_fallback()))
+/// Pure function over the FFI return text so it can be unit-tested without
+/// running an actual evaluation. The caller wraps the result with
+/// `Report::from(..)` to get a `miette::Error`.
+///
+/// The raw text is rendered as-is (modulo dedenting) — no reordering, no
+/// filtering — so whatever eval returned is shown in full.
+pub(crate) fn format_eval_error(raw: &str, context: &str) -> miette::MietteDiagnostic {
+    miette::diagnostic!("{context}: {}", dedent_lines(raw))
 }
 
 /// Strip the longest leading whitespace common to non-blank, non-zero-indent
@@ -57,70 +52,124 @@ mod tests {
     use super::*;
 
     #[test]
-    fn warning_prefix_is_detected() {
-        assert!(looks_like_warning(
-            "warning: Ignoring the client-specified setting 'system'"
-        ));
-        assert!(looks_like_warning(
-            "  warning: leading whitespace is tolerated"
-        ));
-        assert!(looks_like_warning("\u{1b}[33;1mwarning:\u{1b}[0m colored"));
-    }
+    fn format_eval_error_keeps_error_below_trace() {
+        // Missing-input shape: Nix `--show-trace` frames followed by an
+        // assertion paragraph. Natural order is preserved — frames first,
+        // the actionable error last — so the suggestion sits at the bottom
+        // of the terminal output.
+        let raw = "\
+… from call site
+  at /tmp/devenv.nix:1:1:
+… while calling 'throw' builtin
 
-    #[test]
-    fn error_prefix_is_not_treated_as_warning() {
-        assert!(!looks_like_warning(
-            "error: syntax error, unexpected '}', expecting ';'"
-        ));
-        assert!(!looks_like_warning("\u{1b}[31;1merror:\u{1b}[0m foo"));
-        assert!(!looks_like_warning(""));
-    }
+error: Failed assertions:
+- To use 'git-hooks', run the following command:
 
-    #[test]
-    fn select_raw_error_falls_back_to_ffi_when_only_warnings_logged() {
-        // Reproduces issue #2820: a stale Nix warning shouldn't shadow the
-        // real FFI error (a syntax error in devenv.nix in that scenario).
-        let nix_errors = vec![
-            "warning: Ignoring the client-specified setting 'system', because \
-             it is a restricted setting and you are not a trusted user"
-                .to_string(),
-        ];
-        let ffi = || "error: syntax error, unexpected '}', expecting ';'".to_string();
-        assert_eq!(
-            select_raw_error(&nix_errors, ffi),
-            "error: syntax error, unexpected '}', expecting ';'"
+    $ devenv inputs add git-hooks github:cachix/git-hooks.nix --follows nixpkgs";
+        let diag = format_eval_error(raw, "Failed to get shell attribute from devenv");
+        assert!(
+            diag.message
+                .starts_with("Failed to get shell attribute from devenv: "),
+            "message should be prefixed with the context, got: {}",
+            diag.message
+        );
+        let trace_pos = diag
+            .message
+            .find("… from call site")
+            .expect("trace frames should be in the message");
+        let suggestion_pos = diag
+            .message
+            .find("devenv inputs add git-hooks")
+            .expect("the actionable suggestion should be in the message");
+        assert!(
+            trace_pos < suggestion_pos,
+            "the trace must precede the error so the actionable part is last:\n{}",
+            diag.message
+        );
+        assert!(
+            diag.message.trim_end().ends_with("--follows nixpkgs"),
+            "the actionable suggestion should be the last thing rendered:\n{}",
+            diag.message
         );
     }
 
     #[test]
-    fn select_raw_error_prefers_logged_error_over_ffi() {
-        let nix_errors = vec![
-            "warning: stale warning from earlier".to_string(),
-            "error: real error logged via the FFI callback".to_string(),
-        ];
-        let ffi = || "ffi-fallback".to_string();
-        assert_eq!(
-            select_raw_error(&nix_errors, ffi),
-            "error: real error logged via the FFI callback"
+    fn format_eval_error_renders_bare_syntax_error() {
+        // Syntax-error shape: a single `error: …` paragraph with source
+        // context and no frames.
+        let raw =
+            "error: syntax error, unexpected '}', expecting ';'\n       at /tmp/devenv.nix:5:1:";
+        let diag = format_eval_error(raw, "Failed to get attribute 'config.cachix.enable'");
+        assert!(diag.message.contains("syntax error"));
+        assert!(diag.message.contains("devenv.nix"));
+    }
+
+    #[test]
+    fn format_eval_error_always_includes_the_eval_error() {
+        // Regression lock: a stale Nix `warning: …` line must never replace
+        // the eval-returned error. The raw FFI text is rendered in full, so
+        // even if a warning is present the real error follows it at the bottom.
+        let raw = "\
+warning: Ignoring the client-specified setting 'system', because it is a restricted setting and you are not a trusted user
+
+error: syntax error, unexpected '}', expecting ';'
+       at /tmp/devenv.nix:5:1:";
+        let diag = format_eval_error(raw, "Failed to get shell attribute from devenv");
+        let warning_pos = diag
+            .message
+            .find("Ignoring the client-specified setting")
+            .expect("the warning text is part of the raw error and stays visible");
+        let error_pos = diag
+            .message
+            .find("error: syntax error")
+            .expect("the eval error must always be rendered");
+        assert!(
+            warning_pos < error_pos,
+            "the eval error must come after (below) the warning:\n{}",
+            diag.message
         );
     }
 
     #[test]
-    fn select_raw_error_skips_trailing_warning_to_find_earlier_error() {
-        let nix_errors = vec![
-            "error: real error logged via the FFI callback".to_string(),
-            "warning: noisy warning emitted after the error".to_string(),
-        ];
-        let ffi = || "ffi-fallback".to_string();
-        assert_eq!(
-            select_raw_error(&nix_errors, ffi),
-            "error: real error logged via the FFI callback"
-        );
+    fn format_eval_error_renders_input_with_no_error_line() {
+        // Degraded shape — if Nix ever returns text without an `error:`
+        // line (format change, unrelated diagnostic, etc.), the whole text
+        // is still shown.
+        let raw = "some unexpected text\nthat does not contain the keyword";
+        let diag = format_eval_error(raw, "Failed to evaluate");
+        assert!(diag.message.contains("some unexpected text"));
+        assert!(diag.message.contains("does not contain the keyword"));
     }
 
     #[test]
-    fn select_raw_error_uses_ffi_when_no_logs() {
-        let ffi = || "ffi-only".to_string();
-        assert_eq!(select_raw_error(&[], ffi), "ffi-only");
+    fn format_eval_error_strips_common_indentation() {
+        // Nix's C-bindings logger wraps trace output in a uniform left margin
+        // (7 spaces in practice). `dedent_lines` strips that so the message
+        // reads at the natural depth instead of being shoved off-screen.
+        let raw = "\
+       … from call site
+         at /tmp/devenv.nix:1:1:
+
+       error: boom";
+        let diag = format_eval_error(raw, "ctx");
+        // The first raw line lands on the context line; the rest of the
+        // margin is stripped so the `at …` pointer keeps only its relative
+        // two-space depth and the error paragraph starts at column 0.
+        assert!(diag.message.starts_with("ctx: … from call site"));
+        assert!(
+            diag.message.contains("\n  at /tmp/devenv.nix:1:1:"),
+            "location line should keep only its relative depth, message was:\n{}",
+            diag.message
+        );
+        assert!(diag.message.ends_with("\nerror: boom"));
+    }
+
+    #[test]
+    fn dedent_lines_preserves_relative_depth() {
+        let text = "       … frame\n         at /tmp/x.nix:1:1:\n\n       error: boom";
+        let dedented = dedent_lines(text);
+        assert!(dedented.lines().next().unwrap().starts_with("… frame"));
+        assert!(dedented.contains("\n  at /tmp/x.nix:1:1:"));
+        assert!(dedented.ends_with("error: boom"));
     }
 }

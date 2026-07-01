@@ -165,17 +165,7 @@ fn create_log_callback(
     bridge: Arc<NixLogBridge>,
 ) -> impl Fn(i32, &str) + Clone + Send + Sync + 'static {
     move |level: i32, msg: &str| {
-        // Convert level to Verbosity
         let verbosity = level.try_into().unwrap_or(Verbosity::Info);
-
-        // Store error-level messages to be printed after TUI exits.
-        // This ensures Nix evaluation errors are displayed cleanly
-        // before the REPL, not mixed with TUI output.
-        if level == 0 {
-            // Level 0 = Error
-            bridge.store_pre_repl_error(msg.to_string());
-        }
-
         let log = InternalLog::Msg {
             msg: msg.to_string(),
             raw_msg: None,
@@ -232,6 +222,38 @@ mod tests {
         assert!(result.is_ok(), "Simple evaluation should work");
 
         // eval_guard drops here, calling end_eval automatically
+    }
+
+    #[test]
+    fn ffi_callback_does_not_record_mislabeled_warning_as_error() {
+        let bridge = NixLogBridge::new();
+        let on_log = create_log_callback(Arc::clone(&bridge));
+
+        // Nix forwards raw daemon stderr at error level (0) because plain
+        // stderr lines carry no level. A restricted-settings notice arrives
+        // this way, in magenta (35;1), and must not be recorded as the error.
+        on_log(
+            0,
+            "\u{1b}[35;1mwarning:\u{1b}[0m ignoring the client-specified setting \
+             'trusted-public-keys', because it is a restricted setting and you \
+             are not a trusted user",
+        );
+
+        assert!(
+            bridge.take_pre_repl_errors().is_empty(),
+            "a warning must not be recorded as an evaluation error"
+        );
+    }
+
+    #[test]
+    fn ffi_callback_records_real_error() {
+        let bridge = NixLogBridge::new();
+        let on_log = create_log_callback(Arc::clone(&bridge));
+
+        let msg = "\u{1b}[31;1merror:\u{1b}[0m something failed";
+        on_log(0, msg);
+
+        assert_eq!(bridge.take_pre_repl_errors(), vec![msg.to_string()]);
     }
 
     #[test]
