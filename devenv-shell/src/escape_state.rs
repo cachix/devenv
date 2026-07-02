@@ -8,7 +8,8 @@
 use crate::escape::{CLEANUP_MODES, DecModeEvent, EscapeScanner, SequenceEvent};
 use crate::pty::Pty;
 use crate::terminal_commands::{
-    ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys, SetKeypadMode,
+    AUTOWRAP_MODE, ORIGIN_MODE, ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys, SetDecMode,
+    SetKeypadMode,
 };
 use crossterm::event::PopKeyboardEnhancementFlags;
 use crossterm::{Command, queue, terminal};
@@ -41,6 +42,14 @@ pub struct EscapeState {
     pub modify_other_keys: bool,
     /// Mode 2048 (in-band resize) is enabled by the PTY program.
     pub in_band_resize: bool,
+    /// DECOM (mode 6, origin mode) is enabled by the PTY program. During
+    /// passthrough the raw stream carries it to the real terminal, where it
+    /// makes absolute host addressing region-relative.
+    pub origin_mode: bool,
+    /// DECAWM (mode 7, autowrap) was disabled by the PTY program. Wrap is on
+    /// by default, so cleanup must re-enable it if the program dies without
+    /// restoring it.
+    pub wraparound_disabled: bool,
 }
 
 impl EscapeState {
@@ -54,6 +63,8 @@ impl EscapeState {
             kitty_keyboard_depth: 0,
             modify_other_keys: false,
             in_band_resize: false,
+            origin_mode: false,
+            wraparound_disabled: false,
         }
     }
 
@@ -70,6 +81,18 @@ impl EscapeState {
             self.in_band_resize = true;
         } else if event.disables_in_band_resize() {
             self.in_band_resize = false;
+        }
+
+        if event.sets_mode(ORIGIN_MODE) {
+            self.origin_mode = true;
+        } else if event.resets_mode(ORIGIN_MODE) {
+            self.origin_mode = false;
+        }
+
+        if event.resets_mode(AUTOWRAP_MODE) {
+            self.wraparound_disabled = true;
+        } else if event.sets_mode(AUTOWRAP_MODE) {
+            self.wraparound_disabled = false;
         }
 
         if !event.has_forwarded_mode() {
@@ -222,6 +245,17 @@ pub fn cleanup_forwarded_modes(esc: &EscapeState, stdout: &mut impl Write) -> io
     }
     if esc.modify_other_keys {
         queue!(stdout, ResetModifyOtherKeys)?;
+        needs_flush = true;
+    }
+    // Modes the passthrough stream can carry to the real terminal raw and
+    // that alter it beyond the session: origin mode is off by default and
+    // autowrap on, so restore both if the program left them flipped.
+    if esc.origin_mode {
+        queue!(stdout, ResetDecMode(ORIGIN_MODE))?;
+        needs_flush = true;
+    }
+    if esc.wraparound_disabled {
+        queue!(stdout, SetDecMode(AUTOWRAP_MODE))?;
         needs_flush = true;
     }
     if needs_flush {
