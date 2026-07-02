@@ -5,34 +5,54 @@
 //! re-rendering it through the VT (which costs a per-cell read of every changed
 //! row each frame). The application's PTY is sized one row shorter than the real
 //! terminal — the bottom row is reserved for devenv's status line — so the
-//! application never *addresses* the status row. But it can still *scroll over*
-//! it if it resets its scroll region to the full screen, and it can be told the
-//! wrong height if it queries the terminal directly. This filter rewrites the
+//! application never knowingly *addresses* the status row. But it can still
+//! scroll over it, address it via clamped absolute moves, or be told the wrong
+//! height if it queries the terminal directly. This filter rewrites the
 //! forwarded stream so the reserved bottom row stays protected:
 //!
-//! - A scroll-region reset (`CSI r`, no params) becomes an explicit
-//!   `CSI 1 ; content_rows r`, so a reset cannot expose the status row.
+//! - Any DECSTBM (`CSI top;bottom r`) whose bottom margin is omitted, zero, or
+//!   beyond the app's height is clamped to `content_rows`, so no scroll-region
+//!   form can expose the status row.
+//! - Absolute row addressing (`CSI row;col H`/`f`, `CSI row d`) beyond the
+//!   app's height is clamped to `content_rows`; the real terminal would clamp
+//!   it to its own (one-row-taller) bottom, i.e. the status row — this also
+//!   keeps the `CSI 999;999H` + DSR-6 size probe from reporting the full
+//!   height.
 //! - Entering the alternate screen (`CSI ? 1049 h` / `47h` / `1047h`) injects
-//!   the same explicit scroll region afterwards, in case the app relies on the
-//!   default region rather than setting its own.
-//! - The text-area-size query (`CSI 18 t`) is dropped, because the host answers
-//!   it with the reserved (one-row-shorter) size; letting the real terminal
-//!   answer too would report the full height and invite the app to draw into
-//!   the status row.
+//!   the reserved scroll region afterwards, in case the app relies on the
+//!   default region rather than setting its own; DECSTR (`CSI !p`) and RIS
+//!   (`ESC c`) reset the margins, so the region is re-asserted after them too.
+//! - The size queries `CSI 18 t` (cells; the host answers it with the reserved
+//!   size) and `CSI 14 t` (pixels; never forwarded by the mediated path either)
+//!   are dropped, so the real terminal cannot report the unreserved height.
+//! - Mode 2048 (in-band resize) is stripped from DEC mode lists: the host
+//!   sends its own in-band reports with the reserved size, while the real
+//!   terminal would immediately report its full height.
 //!
 //! Everything else passes through verbatim: content, styling, cursor moves,
-//! the app's own explicit scroll regions (already within its shorter height),
-//! and OSC/DCS strings. State is carried across calls so escape sequences split
-//! across reads are still rewritten correctly.
+//! in-bounds scroll regions, and OSC/DCS strings.
+//!
+//! The output is *boundary-clean*: `rewrite` never leaves `out` ending inside
+//! an escape sequence or a multi-byte UTF-8 character. CSI sequences, OSC/DCS
+//! strings, and partial codepoints split across reads are buffered and emitted
+//! only once complete, so the caller can safely interleave its own writes
+//! (status line, cursor moves) between `rewrite` calls. The only exception is
+//! a string sequence larger than [`MAX_STRING_LEN`], which is flushed in
+//! chunks to bound memory.
 
-/// Alternate-screen modes whose entry should (re)assert the reserved scroll
-/// region: 1049 (save+alt+clear), 1047 (alt), 47 (legacy alt).
-const ALT_SCREEN_MODES: [u16; 3] = [1049, 1047, 47];
+use crate::escape::{ALT_SCREEN_MODES, IN_BAND_RESIZE_MODE};
+use std::io::Write;
 
 /// A malformed/oversized CSI sequence is flushed verbatim once it exceeds this
 /// many bytes, so a stray `ESC [` in the stream cannot make the filter buffer
 /// unboundedly.
 const MAX_CSI_LEN: usize = 64;
+
+/// OSC/DCS strings are buffered until their terminator so host writes are
+/// never injected mid-string; payloads beyond this size (huge OSC 52
+/// clipboards, sixel images) are flushed in chunks to bound memory, giving up
+/// the boundary guarantee only for those.
+const MAX_STRING_LEN: usize = 1 << 20;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
@@ -45,13 +65,22 @@ enum State {
     DcsEsc,
 }
 
-/// Stateful rewriter for one passthrough session. Reused across PTY reads.
+/// Stateful rewriter for one shell session. Fed every PTY read (the session
+/// discards the output for mediated batches) so its parse state stays aligned
+/// with the byte stream across mediated/passthrough handoffs — a sequence
+/// split across the handoff is emitted whole instead of leaking a raw tail.
 pub struct PassthroughFilter {
     state: State,
     /// Bytes of the CSI sequence currently being accumulated (includes the
-    /// leading `ESC [`). Only CSI sequences are buffered, since they are the
-    /// only ones rewritten; all other bytes are copied straight to the output.
+    /// leading `ESC [`).
     csi: Vec<u8>,
+    /// Bytes of the OSC/DCS string currently being accumulated (includes the
+    /// leading `ESC ]` / `ESC P`).
+    string_buf: Vec<u8>,
+    /// Partial UTF-8 codepoint held back until its continuation bytes arrive.
+    utf8: [u8; 4],
+    utf8_len: u8,
+    utf8_need: u8,
 }
 
 impl PassthroughFilter {
@@ -59,15 +88,11 @@ impl PassthroughFilter {
         Self {
             state: State::Ground,
             csi: Vec::new(),
+            string_buf: Vec::new(),
+            utf8: [0; 4],
+            utf8_len: 0,
+            utf8_need: 0,
         }
-    }
-
-    /// Reset to the ground state, discarding any partially-buffered sequence.
-    /// Called when passthrough is (re)entered so a sequence left dangling by a
-    /// previous excursion cannot leak into a new one.
-    pub fn reset(&mut self) {
-        self.state = State::Ground;
-        self.csi.clear();
     }
 
     /// Append the rewritten form of `data` to `out`. `content_rows` is the
@@ -77,10 +102,32 @@ impl PassthroughFilter {
         for &b in data {
             match self.state {
                 State::Ground => {
-                    if b == 0x1b {
-                        self.state = State::Esc;
-                    } else {
-                        out.push(b);
+                    if self.utf8_need > 0 {
+                        if (0x80..=0xbf).contains(&b) {
+                            self.utf8[self.utf8_len as usize] = b;
+                            self.utf8_len += 1;
+                            if self.utf8_len == self.utf8_need {
+                                out.extend_from_slice(&self.utf8[..self.utf8_len as usize]);
+                                self.utf8_len = 0;
+                                self.utf8_need = 0;
+                            }
+                            continue;
+                        }
+                        // Malformed continuation: flush what was held and
+                        // process the byte normally.
+                        out.extend_from_slice(&self.utf8[..self.utf8_len as usize]);
+                        self.utf8_len = 0;
+                        self.utf8_need = 0;
+                    }
+                    match b {
+                        0x1b => self.state = State::Esc,
+                        // Multi-byte UTF-8 lead: hold the codepoint back until
+                        // complete so host writes interleaved between reads
+                        // can never split it on the real terminal.
+                        0xc2..=0xdf => self.begin_utf8(b, 2),
+                        0xe0..=0xef => self.begin_utf8(b, 3),
+                        0xf0..=0xf4 => self.begin_utf8(b, 4),
+                        _ => out.push(b),
                     }
                 }
                 State::Esc => match b {
@@ -90,11 +137,13 @@ impl PassthroughFilter {
                         self.state = State::Csi;
                     }
                     b']' => {
-                        out.extend_from_slice(b"\x1b]");
+                        self.string_buf.clear();
+                        self.string_buf.extend_from_slice(b"\x1b]");
                         self.state = State::Osc;
                     }
                     b'P' => {
-                        out.extend_from_slice(b"\x1bP");
+                        self.string_buf.clear();
+                        self.string_buf.extend_from_slice(b"\x1bP");
                         self.state = State::Dcs;
                     }
                     0x1b => {
@@ -105,6 +154,11 @@ impl PassthroughFilter {
                         // Two-byte escape (e.g. ESC =, ESC >, ESC c): verbatim.
                         out.push(0x1b);
                         out.push(b);
+                        if b == b'c' {
+                            // RIS (full reset) clears the scroll margins;
+                            // re-assert the reserved region right after.
+                            push_scroll_region(content_rows, out);
+                        }
                         self.state = State::Ground;
                     }
                 },
@@ -114,6 +168,19 @@ impl PassthroughFilter {
                         // start a new sequence.
                         self.csi.clear();
                         self.state = State::Esc;
+                    } else if b == 0x18 || b == 0x1a {
+                        // CAN/SUB abort the sequence; the buffered bytes are
+                        // dropped (the terminal never executes them).
+                        self.csi.clear();
+                        out.push(b);
+                        self.state = State::Ground;
+                    } else if b < 0x20 {
+                        // C0 controls inside a CSI are executed immediately
+                        // while the sequence continues (VT500 semantics).
+                        // Emit the control now; the CSI follows when complete.
+                        out.push(b);
+                    } else if b == 0x7f {
+                        // DEL is ignored inside a CSI.
                     } else {
                         self.csi.push(b);
                         if (0x40..=0x7e).contains(&b) {
@@ -122,8 +189,8 @@ impl PassthroughFilter {
                             self.csi.clear();
                             self.state = State::Ground;
                         } else if !(0x20..=0x3f).contains(&b) || self.csi.len() > MAX_CSI_LEN {
-                            // Invalid intermediate/param byte or runaway length:
-                            // emit what we have verbatim and resync to ground.
+                            // Invalid byte or runaway length: emit what we
+                            // have verbatim and resync to ground.
                             out.extend_from_slice(&self.csi);
                             self.csi.clear();
                             self.state = State::Ground;
@@ -131,30 +198,56 @@ impl PassthroughFilter {
                     }
                 }
                 State::Osc => {
-                    out.push(b);
+                    self.string_buf.push(b);
                     match b {
-                        0x07 => self.state = State::Ground, // BEL terminator
+                        0x07 => self.flush_string(out), // BEL terminator
                         0x1b => self.state = State::OscEsc,
-                        _ => {}
+                        _ => self.spill_oversized_string(out),
                     }
                 }
                 State::OscEsc => {
-                    // ESC \ is the ST terminator; anything else, best-effort
-                    // return to ground (OSC payloads do not contain bare ESC).
-                    out.push(b);
-                    self.state = State::Ground;
+                    // ESC \ is the ST terminator; anything else aborted the
+                    // string (OSC payloads do not contain bare ESC). Either
+                    // way the buffered bytes are flushed verbatim.
+                    self.string_buf.push(b);
+                    self.flush_string(out);
                 }
                 State::Dcs => {
-                    out.push(b);
+                    self.string_buf.push(b);
                     if b == 0x1b {
                         self.state = State::DcsEsc;
+                    } else {
+                        self.spill_oversized_string(out);
                     }
                 }
                 State::DcsEsc => {
-                    out.push(b);
-                    self.state = State::Ground;
+                    self.string_buf.push(b);
+                    self.flush_string(out);
                 }
             }
+        }
+    }
+
+    fn begin_utf8(&mut self, lead: u8, need: u8) {
+        self.utf8[0] = lead;
+        self.utf8_len = 1;
+        self.utf8_need = need;
+    }
+
+    /// Emit the buffered OSC/DCS string and return to ground.
+    fn flush_string(&mut self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.string_buf);
+        self.string_buf.clear();
+        self.state = State::Ground;
+    }
+
+    /// Flush the buffered string prefix once it exceeds [`MAX_STRING_LEN`],
+    /// keeping the parse state. Bounds memory for huge payloads at the cost
+    /// of the boundary guarantee for them.
+    fn spill_oversized_string(&mut self, out: &mut Vec<u8>) {
+        if self.string_buf.len() > MAX_STRING_LEN {
+            out.extend_from_slice(&self.string_buf);
+            self.string_buf.clear();
         }
     }
 }
@@ -165,63 +258,164 @@ impl Default for PassthroughFilter {
     }
 }
 
+/// Parse `;`-separated numeric CSI parameters. Empty entries are `None`
+/// (default). Returns `None` if any entry is non-numeric (colon subparams,
+/// garbage) — callers then pass the sequence through verbatim.
+fn parse_params(params: &[u8]) -> Option<Vec<Option<u16>>> {
+    if params.is_empty() {
+        return Some(Vec::new());
+    }
+    params
+        .split(|&b| b == b';')
+        .map(|p| {
+            if p.is_empty() {
+                Some(None)
+            } else {
+                std::str::from_utf8(p).ok()?.parse::<u16>().ok().map(Some)
+            }
+        })
+        .collect()
+}
+
+/// Read parameter `idx`, treating omitted and `0` as the given default.
+fn param_or(params: &[Option<u16>], idx: usize, default: u16) -> u16 {
+    params
+        .get(idx)
+        .copied()
+        .flatten()
+        .filter(|&v| v > 0)
+        .unwrap_or(default)
+}
+
 /// Append the rewritten form of one complete CSI sequence (`seq`, including the
 /// leading `ESC [`) to `out`.
 fn rewrite_csi(seq: &[u8], content_rows: u16, out: &mut Vec<u8>) {
-    // seq is `ESC [ <params/intermediates> <final>`; len >= 3.
+    // seq is `ESC [ <marker?> <params> <intermediates> <final>`; len >= 3.
     let final_byte = seq[seq.len() - 1];
-    let params = &seq[2..seq.len() - 1];
+    let body = &seq[2..seq.len() - 1];
+    let (marker, rest) = match body.first() {
+        Some(&m @ (b'?' | b'<' | b'=' | b'>')) => (Some(m), &body[1..]),
+        _ => (None, body),
+    };
+    let inter_start = rest
+        .iter()
+        .position(|b| (0x20..=0x2f).contains(b))
+        .unwrap_or(rest.len());
+    let (param_bytes, intermediates) = rest.split_at(inter_start);
 
-    // Scroll-region reset (`CSI r`) → explicit region protecting the status row.
-    if final_byte == b'r' && params.is_empty() {
-        push_scroll_region(content_rows, out);
-        return;
+    match (marker, intermediates, final_byte) {
+        // DECSTBM. The real terminal resolves an omitted/zero bottom margin to
+        // its own (one-row-taller) height, so every form is normalized with
+        // the bottom clamped to the app's height.
+        (None, [], b'r') => {
+            let Some(p) = parse_params(param_bytes) else {
+                out.extend_from_slice(seq);
+                return;
+            };
+            let top = param_or(&p, 0, 1);
+            let bottom = param_or(&p, 1, content_rows).min(content_rows);
+            if top < bottom {
+                let _ = write!(out, "\x1b[{top};{bottom}r");
+            } else {
+                // Degenerate after clamping: fall back to the full protected
+                // region rather than forwarding a region the terminal would
+                // resolve against its taller height.
+                push_scroll_region(content_rows, out);
+            }
+        }
+
+        // XTWINOPS size queries. 18 (cells) is answered by the host with the
+        // reserved size; 14 (pixels) is not forwarded by the mediated path
+        // either — the real terminal's answer would describe the unreserved
+        // full-height text area.
+        (None, [], b't') => {
+            let Some(p) = parse_params(param_bytes) else {
+                out.extend_from_slice(seq);
+                return;
+            };
+            match p.first().copied().flatten() {
+                Some(14) | Some(18) => {}
+                _ => out.extend_from_slice(seq),
+            }
+        }
+
+        // CUP/HVP: absolute addressing is not confined by DECSTBM, so a row
+        // beyond the app's height (e.g. the `CSI 999;999H` size probe) would
+        // clamp onto the real terminal's bottom row — the status row.
+        (None, [], b'H' | b'f') => {
+            let Some(p) = parse_params(param_bytes) else {
+                out.extend_from_slice(seq);
+                return;
+            };
+            if param_or(&p, 0, 1) > content_rows {
+                let col = param_or(&p, 1, 1);
+                let _ = write!(out, "\x1b[{content_rows};{col}");
+                out.push(final_byte);
+            } else {
+                out.extend_from_slice(seq);
+            }
+        }
+
+        // VPA: same clamp as CUP for the row-only form.
+        (None, [], b'd') => {
+            let Some(p) = parse_params(param_bytes) else {
+                out.extend_from_slice(seq);
+                return;
+            };
+            if param_or(&p, 0, 1) > content_rows {
+                let _ = write!(out, "\x1b[{content_rows}d");
+            } else {
+                out.extend_from_slice(seq);
+            }
+        }
+
+        // DEC private mode set/reset. Mode 2048 (in-band resize) is stripped:
+        // the host sends its own reports with the reserved size, while the
+        // real terminal would immediately report its full height. Entering
+        // the alternate screen asserts the reserved scroll region, in case
+        // the app relies on the default region.
+        (Some(b'?'), [], b'h' | b'l') => {
+            let Some(p) = parse_params(param_bytes) else {
+                out.extend_from_slice(seq);
+                return;
+            };
+            let modes: Vec<u16> = p.into_iter().flatten().collect();
+            let kept: Vec<u16> = modes
+                .iter()
+                .copied()
+                .filter(|&m| m != IN_BAND_RESIZE_MODE)
+                .collect();
+            if kept.len() == modes.len() {
+                out.extend_from_slice(seq);
+            } else if !kept.is_empty() {
+                out.extend_from_slice(b"\x1b[?");
+                for (i, m) in kept.iter().enumerate() {
+                    if i > 0 {
+                        out.push(b';');
+                    }
+                    let _ = write!(out, "{m}");
+                }
+                out.push(final_byte);
+            }
+            if final_byte == b'h' && kept.iter().any(|m| ALT_SCREEN_MODES.contains(m)) {
+                push_scroll_region(content_rows, out);
+            }
+        }
+
+        // DECSTR (soft reset) clears the scroll margins; re-assert the
+        // reserved region right after.
+        (None, [b'!'], b'p') => {
+            out.extend_from_slice(seq);
+            push_scroll_region(content_rows, out);
+        }
+
+        _ => out.extend_from_slice(seq),
     }
-
-    // Text-area-size query (`CSI 18 t`) → drop; the host answers it instead.
-    if final_byte == b't' && params == b"18" {
-        return;
-    }
-
-    // Entering the alternate screen (`CSI ? <modes> h`) → verbatim, then assert
-    // the reserved scroll region in case the app relies on the default.
-    if final_byte == b'h' && params.first() == Some(&b'?') && mode_list_has_alt(&params[1..]) {
-        out.extend_from_slice(seq);
-        push_scroll_region(content_rows, out);
-        return;
-    }
-
-    out.extend_from_slice(seq);
-}
-
-/// Whether a `;`-separated DEC mode parameter list contains an alt-screen mode.
-fn mode_list_has_alt(modes: &[u8]) -> bool {
-    modes
-        .split(|&b| b == b';')
-        .filter_map(|m| std::str::from_utf8(m).ok()?.parse::<u16>().ok())
-        .any(|m| ALT_SCREEN_MODES.contains(&m))
 }
 
 fn push_scroll_region(content_rows: u16, out: &mut Vec<u8>) {
-    out.extend_from_slice(b"\x1b[1;");
-    let mut buf = itoa_u16(content_rows);
-    out.append(&mut buf);
-    out.push(b'r');
-}
-
-/// Decimal-encode a `u16` without pulling in a formatting allocation per call
-/// site (the value is at most 5 digits).
-fn itoa_u16(mut n: u16) -> Vec<u8> {
-    if n == 0 {
-        return vec![b'0'];
-    }
-    let mut digits = Vec::with_capacity(5);
-    while n > 0 {
-        digits.push(b'0' + (n % 10) as u8);
-        n /= 10;
-    }
-    digits.reverse();
-    digits
+    // Vec<u8>'s io::Write never fails.
+    let _ = write!(out, "\x1b[1;{content_rows}r");
 }
 
 #[cfg(test)]
@@ -249,6 +443,26 @@ mod tests {
     }
 
     #[test]
+    fn default_param_scroll_region_forms_are_clamped() {
+        // `CSI 0;0r`, `CSI ;r` and `CSI 0r` are semantically identical to a
+        // bare reset; the real terminal resolves the defaulted bottom to its
+        // full (one-row-taller) height.
+        for input in [&b"\x1b[0;0r"[..], b"\x1b[;r", b"\x1b[0r"] {
+            let mut f = PassthroughFilter::new();
+            assert_eq!(run(&mut f, input, 24), b"\x1b[1;24r", "input {input:?}");
+        }
+    }
+
+    #[test]
+    fn omitted_or_oversized_bottom_margin_is_clamped() {
+        let mut f = PassthroughFilter::new();
+        // Top-only DECSTBM: the bottom defaults to the page's last line.
+        assert_eq!(run(&mut f, b"\x1b[5r", 24), b"\x1b[5;24r");
+        // Bottom beyond the app's height clamps to it.
+        assert_eq!(run(&mut f, b"\x1b[1;999r", 24), b"\x1b[1;24r");
+    }
+
+    #[test]
     fn explicit_scroll_region_passes_through() {
         let mut f = PassthroughFilter::new();
         // The app's PTY is already one row shorter, so an explicit region is
@@ -258,16 +472,64 @@ mod tests {
     }
 
     #[test]
+    fn dec_mode_restore_is_not_mistaken_for_decstbm() {
+        let mut f = PassthroughFilter::new();
+        // XTRESTORE (`CSI ? ... r`) restores DEC modes; it is not a scroll
+        // region and must pass verbatim.
+        assert_eq!(run(&mut f, b"\x1b[?1049r", 24), b"\x1b[?1049r");
+    }
+
+    #[test]
     fn text_area_size_query_is_stripped() {
         let mut f = PassthroughFilter::new();
         assert_eq!(run(&mut f, b"a\x1b[18tb", 24), b"ab");
+        // Leading zeros are still the same query.
+        assert_eq!(run(&mut f, b"\x1b[018t", 24), b"");
+    }
+
+    #[test]
+    fn pixel_size_query_is_stripped() {
+        let mut f = PassthroughFilter::new();
+        // The mediated path never forwards CSI 14 t; the real terminal's
+        // answer would describe the full-height text area.
+        assert_eq!(run(&mut f, b"\x1b[14t", 24), b"");
     }
 
     #[test]
     fn other_xtwinops_pass_through() {
         let mut f = PassthroughFilter::new();
-        // CSI 14 t (text area in pixels) is not the one we intercept.
-        assert_eq!(run(&mut f, b"\x1b[14t", 24), b"\x1b[14t");
+        // Cell size (16) and title query (21) are forwarded in mediated mode
+        // too.
+        assert_eq!(run(&mut f, b"\x1b[16t", 24), b"\x1b[16t");
+        assert_eq!(run(&mut f, b"\x1b[21t", 24), b"\x1b[21t");
+    }
+
+    #[test]
+    fn absolute_row_addressing_is_clamped() {
+        let mut f = PassthroughFilter::new();
+        // The `CSI 999;999H` size probe would land the cursor on the real
+        // terminal's bottom row (the status row) and make a DSR-6 report the
+        // unreserved height.
+        assert_eq!(run(&mut f, b"\x1b[999;999H", 24), b"\x1b[24;999H");
+        assert_eq!(run(&mut f, b"\x1b[999d", 24), b"\x1b[24d");
+        assert_eq!(run(&mut f, b"\x1b[30;1f", 24), b"\x1b[24;1f");
+        // In-bounds addressing is untouched, byte for byte.
+        assert_eq!(run(&mut f, b"\x1b[10;5H", 24), b"\x1b[10;5H");
+        assert_eq!(run(&mut f, b"\x1b[24;80H", 24), b"\x1b[24;80H");
+    }
+
+    #[test]
+    fn in_band_resize_mode_is_stripped() {
+        let mut f = PassthroughFilter::new();
+        // The real terminal would answer ?2048h with an in-band report of its
+        // full height; the host sends its own reports with the PTY size.
+        assert_eq!(run(&mut f, b"\x1b[?2048h", 24), b"");
+        assert_eq!(run(&mut f, b"\x1b[?2048l", 24), b"");
+        // Stripped from compound lists, keeping the other modes.
+        assert_eq!(
+            run(&mut f, b"\x1b[?1049;2048h", 24),
+            b"\x1b[?1049h\x1b[1;24r"
+        );
     }
 
     #[test]
@@ -311,10 +573,42 @@ mod tests {
     }
 
     #[test]
+    fn soft_reset_reasserts_scroll_region() {
+        let mut f = PassthroughFilter::new();
+        // DECSTR clears the scroll margins on the real terminal.
+        assert_eq!(run(&mut f, b"\x1b[!p", 24), b"\x1b[!p\x1b[1;24r");
+    }
+
+    #[test]
+    fn full_reset_reasserts_scroll_region() {
+        let mut f = PassthroughFilter::new();
+        // RIS clears the scroll margins on the real terminal.
+        assert_eq!(run(&mut f, b"\x1bc", 24), b"\x1bc\x1b[1;24r");
+    }
+
+    #[test]
     fn sgr_and_cursor_moves_pass_through() {
         let mut f = PassthroughFilter::new();
         let input = b"\x1b[1;31m\x1b[10;5HX\x1b[0m";
         assert_eq!(run(&mut f, input, 24), input);
+    }
+
+    #[test]
+    fn c0_inside_csi_is_executed_and_sequence_continues() {
+        let mut f = PassthroughFilter::new();
+        // Per the VT500 parser, a C0 control inside a CSI is executed while
+        // the sequence continues collecting — the filter must not desync from
+        // the terminal and treat the remainder as plain text.
+        assert_eq!(run(&mut f, b"\x1b[1\rH", 24), b"\r\x1b[1H");
+        // A CSI final smuggled past a C0 still gets rewritten.
+        assert_eq!(run(&mut f, b"\x1b[\rr", 24), b"\r\x1b[1;24r");
+    }
+
+    #[test]
+    fn can_aborts_csi() {
+        let mut f = PassthroughFilter::new();
+        // CAN drops the partial sequence; following bytes are plain text.
+        assert_eq!(run(&mut f, b"\x1b[12\x18X", 24), b"\x18X");
     }
 
     #[test]
@@ -333,10 +627,51 @@ mod tests {
     }
 
     #[test]
+    fn osc_split_across_reads_is_held_until_complete() {
+        let mut f = PassthroughFilter::new();
+        let mut out = Vec::new();
+        // The output must never end mid-OSC: host writes between reads would
+        // be injected into the string on the real terminal.
+        f.rewrite(b"\x1b]52;c;aGVsbG8", 24, &mut out);
+        assert_eq!(out, b"", "partial OSC must be withheld");
+        f.rewrite(b"\x07after", 24, &mut out);
+        assert_eq!(out, b"\x1b]52;c;aGVsbG8\x07after");
+    }
+
+    #[test]
     fn dcs_payload_passes_through() {
         let mut f = PassthroughFilter::new();
         let input = b"\x1bP1$r0m\x1b\\after";
         assert_eq!(run(&mut f, input, 24), input);
+    }
+
+    #[test]
+    fn dcs_split_across_reads_is_held_until_complete() {
+        let mut f = PassthroughFilter::new();
+        let mut out = Vec::new();
+        f.rewrite(b"\x1bP1$r0", 24, &mut out);
+        assert_eq!(out, b"", "partial DCS must be withheld");
+        f.rewrite(b"m\x1b\\", 24, &mut out);
+        assert_eq!(out, b"\x1bP1$r0m\x1b\\");
+    }
+
+    #[test]
+    fn utf8_split_across_reads_is_held_until_complete() {
+        let mut f = PassthroughFilter::new();
+        let mut out = Vec::new();
+        // "中" (e4 b8 ad) split across reads: emitting the partial bytes would
+        // let host writes interleave mid-codepoint and render U+FFFD.
+        f.rewrite(b"a\xe4\xb8", 24, &mut out);
+        assert_eq!(out, b"a", "partial codepoint must be withheld");
+        f.rewrite(b"\xadb", 24, &mut out);
+        assert_eq!(out, "a中b".as_bytes());
+    }
+
+    #[test]
+    fn invalid_utf8_is_flushed_verbatim() {
+        let mut f = PassthroughFilter::new();
+        // A lead byte followed by a non-continuation must not swallow bytes.
+        assert_eq!(run(&mut f, b"\xe4Xy", 24), b"\xe4Xy");
     }
 
     #[test]
@@ -364,18 +699,5 @@ mod tests {
         let mut f = PassthroughFilter::new();
         let out = run(&mut f, b"before\x1b[rmiddle\x1b[18tafter", 30);
         assert_eq!(out, b"before\x1b[1;30rmiddleafter");
-    }
-
-    #[test]
-    fn reset_clears_dangling_state() {
-        let mut f = PassthroughFilter::new();
-        let mut out = Vec::new();
-        f.rewrite(b"\x1b[12", 24, &mut out); // partial CSI left dangling
-        f.reset();
-        // After reset, a fresh content byte is emitted as ground, not appended
-        // to the abandoned CSI.
-        out.clear();
-        f.rewrite(b"X", 24, &mut out);
-        assert_eq!(out, b"X");
     }
 }

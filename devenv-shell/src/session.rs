@@ -491,6 +491,7 @@ impl Renderer {
         // Snapshot which rows changed since the last frame (and clear the
         // terminal's dirty state) before diffing, so clean rows can be skipped.
         self.refresh_dirty(vt);
+        let mut drew = false;
         for row_idx in 0..rows.min(max_row) {
             // Skip clean rows we already have a baseline for: their cells cannot
             // have changed, so there's no need to read or diff them.
@@ -516,6 +517,7 @@ impl Renderer {
             )?;
             stdout.write_all(self.line_buf.as_bytes())?;
             queue!(stdout, ResetColor)?;
+            drew = true;
             if row_idx >= self.prev_lines.len() {
                 self.prev_lines.resize_with(row_idx + 1, String::new);
             }
@@ -524,7 +526,9 @@ impl Renderer {
             baseline.clear();
             baseline.push_str(&self.line_buf);
         }
-        self.update_cursor(stdout, vt)
+        // Drawing rows moved the physical cursor even when the VT cursor is
+        // unchanged, so force a reposition in that case.
+        self.update_cursor(stdout, vt, drew)
     }
 
     /// Push unflushed VT scrollback lines into native terminal scrollback,
@@ -639,10 +643,18 @@ impl Renderer {
     }
 
     /// Position the real terminal cursor to match the VT cursor.
-    fn update_cursor(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
+    ///
+    /// `force` repositions even when the VT cursor is unchanged — needed after
+    /// row draws, which move the physical cursor behind the diff's back.
+    fn update_cursor(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        force: bool,
+    ) -> io::Result<()> {
         let offset = self.row_offset as usize;
         let cur = CursorState::from_terminal(vt);
-        if cur != self.prev_cursor {
+        if force || cur != self.prev_cursor {
             if cur.visible && !self.prev_cursor.visible {
                 queue!(stdout, cursor::Show)?;
             } else if !cur.visible && self.prev_cursor.visible {
@@ -688,6 +700,68 @@ impl Renderer {
         }
         self.prev_cursor = CursorState::from_terminal(vt);
     }
+}
+
+/// State for alternate-screen passthrough (see the `passthrough` module).
+///
+/// Owned one level above the event loop so a `?` error escaping the loop can
+/// still release the scroll region — an asserted region outlives the process
+/// on the user's terminal if nothing resets it.
+struct PassthroughState {
+    /// Byte-stream rewriter. Fed every PTY batch — mediated output is
+    /// discarded — so its parse state stays aligned with the stream across
+    /// mediated/passthrough handoffs and a sequence split across the handoff
+    /// is forwarded whole instead of leaking a raw tail.
+    filter: PassthroughFilter,
+    /// The reserved scroll region is currently asserted on the real terminal.
+    region_set: bool,
+    /// Rewritten app bytes for the current batch (reused allocation).
+    out: Vec<u8>,
+    /// Raw bytes fed this batch, for tracing.
+    in_bytes: usize,
+}
+
+impl PassthroughState {
+    fn new() -> Self {
+        Self {
+            filter: PassthroughFilter::new(),
+            region_set: false,
+            out: Vec::new(),
+            in_bytes: 0,
+        }
+    }
+}
+
+/// Release the passthrough scroll region if asserted. Resetting DECSTBM homes
+/// the real cursor as a side effect, so put it back at the VT (== app) cursor.
+fn release_passthrough_region(
+    stdout: &mut impl Write,
+    renderer: &Renderer,
+    vt: &Terminal<'_, '_>,
+    pt: &mut PassthroughState,
+) -> io::Result<()> {
+    if pt.region_set {
+        queue!(stdout, ResetScrollRegion)?;
+        renderer.write_cursor(stdout, vt)?;
+        pt.region_set = false;
+    }
+    Ok(())
+}
+
+/// Re-assert the app's current SGR attributes after host output (status line,
+/// cursor moves) reset them. During passthrough the app's raw stream owns the
+/// terminal's attribute state, and apps cache what they last set — text they
+/// draw after a host reset would otherwise render unstyled.
+fn restore_app_pen(stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
+    let Ok(pen) = vt.cursor_style() else {
+        return Ok(());
+    };
+    if pen != Style::default() {
+        let mut s = String::new();
+        dump_style(&mut s, &pen);
+        stdout.write_all(s.as_bytes())?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Error)]
@@ -1128,6 +1202,35 @@ impl ShellSession {
         coordinator_tx: &tokio_mpsc::Sender<ShellEvent>,
         stdout: &mut Box<dyn Write + Send>,
     ) -> Result<Option<u32>, SessionError> {
+        // On the alternate screen, a full-screen app's output is forwarded
+        // straight to the real terminal (rewritten to protect the status row)
+        // instead of re-rendering every changed row through the VT. The app
+        // already scrolls and repaints minimally; re-deriving that frame from
+        // the VT each time is what made nested full-screen TUIs lag.
+        let mut pt = PassthroughState::new();
+        let result =
+            self.event_loop_inner(pty, vt, renderer, event_rx, coordinator_tx, stdout, &mut pt);
+        // Normal exits release the region themselves; an error propagating
+        // out of the loop must not leave the user's terminal with a clamped
+        // scroll region. Best effort — don't mask the original error.
+        if pt.region_set {
+            let _ = release_passthrough_region(stdout, renderer, vt, &mut pt);
+            let _ = stdout.flush();
+        }
+        result
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn event_loop_inner(
+        &mut self,
+        pty: &Arc<Pty>,
+        vt: &mut Terminal<'static, '_>,
+        renderer: &mut Renderer,
+        event_rx: std::sync::mpsc::Receiver<Event>,
+        coordinator_tx: &tokio_mpsc::Sender<ShellEvent>,
+        stdout: &mut Box<dyn Write + Send>,
+        pt: &mut PassthroughState,
+    ) -> Result<Option<u32>, SessionError> {
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
         let mut scanner = EscapeScanner::new();
         let mut vt_input_filter = VtInputFilter::new();
@@ -1136,18 +1239,6 @@ impl ShellSession {
         let mut resize_pending = false;
         let mut esc_events = Vec::new();
         let mut vt_input = Vec::new();
-
-        // On the alternate screen, a full-screen app's output is forwarded
-        // straight to the real terminal (rewritten to protect the status row)
-        // instead of re-rendering every changed row through the VT. The app
-        // already scrolls and repaints minimally; re-deriving that frame from
-        // the VT each time is what made nested full-screen TUIs lag.
-        let mut passthrough_filter = PassthroughFilter::new();
-        // Whether the reserved scroll region is currently asserted on the real
-        // terminal for the active alt-screen passthrough excursion.
-        let mut passthrough_region_set = false;
-        // Raw PTY bytes accumulated across a batch for passthrough forwarding.
-        let mut frame_bytes: Vec<u8> = Vec::new();
 
         loop {
             // Use select! to handle both events and spinner animation
@@ -1158,14 +1249,8 @@ impl ShellSession {
                 match event_rx.recv_timeout(spinner_interval) {
                     Ok(event) => Some(event),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        if self.config.show_status_line {
-                            queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                            self.status_line
-                                .draw(stdout, self.size.cols, self.size.rows)?;
-                            renderer.write_cursor(stdout, vt)?;
-                            queue!(stdout, terminal::EndSynchronizedUpdate)?;
-                            stdout.flush()?;
-                        }
+                        self.draw_status_overlay(stdout, vt, renderer, &esc, pt)?;
+                        stdout.flush()?;
                         continue;
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
@@ -1175,14 +1260,8 @@ impl ShellSession {
                     Ok(event) => Some(event),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         self.status_line.state_mut().clear_reloaded();
-                        if self.config.show_status_line {
-                            queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                            self.status_line
-                                .draw(stdout, self.size.cols, self.size.rows)?;
-                            renderer.write_cursor(stdout, vt)?;
-                            queue!(stdout, terminal::EndSynchronizedUpdate)?;
-                            stdout.flush()?;
-                        }
+                        self.draw_status_overlay(stdout, vt, renderer, &esc, pt)?;
+                        stdout.flush()?;
                         continue;
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
@@ -1234,6 +1313,9 @@ impl ShellSession {
                             self.status_line
                                 .draw(stdout, self.size.cols, self.size.rows)?;
                             renderer.write_cursor(stdout, vt)?;
+                            if pt.region_set {
+                                restore_app_pen(stdout, vt)?;
+                            }
                             stdout.flush()?;
                         }
                         continue;
@@ -1252,29 +1334,38 @@ impl ShellSession {
                     // goes through the mediated path so the transition is drawn.
                     let passthrough = was_in_alt;
                     esc.reset_batch();
-                    if passthrough {
-                        frame_bytes.clear();
-                        frame_bytes.extend_from_slice(&data);
+                    // Cursor position before this batch is applied to the VT,
+                    // for restoring it after the region assert that starts an
+                    // excursion (DECSTBM homes the real cursor).
+                    let entry_cursor =
+                        (passthrough && !pt.region_set).then(|| CursorState::from_terminal(vt));
+                    pt.out.clear();
+                    pt.in_bytes = 0;
+                    let mut sink = io::sink();
+
+                    // Feed the filter on every batch so its parse state spans
+                    // the mediated/passthrough handoff; mediated output is
+                    // drawn from the VT, so its rewritten bytes are dropped.
+                    pt.filter.rewrite(&data, renderer.content_rows, &mut pt.out);
+                    pt.in_bytes += data.len();
+                    if !passthrough {
+                        pt.out.clear();
                     }
-                    // In passthrough, track escape state without forwarding mode
-                    // bytes (the raw stream we forward already carries them); the
-                    // host still answers the text-area query via the PTY.
-                    if passthrough {
+                    {
+                        // Track escape state. In passthrough the raw stream we
+                        // forward already carries mode bytes, so suppress the
+                        // scanner's copies; it still answers the text-area
+                        // query via the PTY either way.
+                        let mut esc_out: &mut dyn Write = if passthrough {
+                            &mut sink
+                        } else {
+                            &mut **stdout
+                        };
                         escape_state_process(
                             &mut scanner,
                             &data,
                             &mut esc,
-                            &mut io::sink(),
-                            pty,
-                            self.pty_size(),
-                            &mut esc_events,
-                        )?;
-                    } else {
-                        escape_state_process(
-                            &mut scanner,
-                            &data,
-                            &mut esc,
-                            stdout,
+                            &mut esc_out,
                             pty,
                             self.pty_size(),
                             &mut esc_events,
@@ -1290,23 +1381,22 @@ impl ShellSession {
                     while let Ok(event) = event_rx.try_recv() {
                         match event {
                             Event::PtyOutput(more) => {
-                                if passthrough {
-                                    frame_bytes.extend_from_slice(&more);
+                                pt.filter.rewrite(&more, renderer.content_rows, &mut pt.out);
+                                pt.in_bytes += more.len();
+                                if !passthrough {
+                                    pt.out.clear();
+                                }
+                                {
+                                    let mut esc_out: &mut dyn Write = if passthrough {
+                                        &mut sink
+                                    } else {
+                                        &mut **stdout
+                                    };
                                     escape_state_process(
                                         &mut scanner,
                                         &more,
                                         &mut esc,
-                                        &mut io::sink(),
-                                        pty,
-                                        self.pty_size(),
-                                        &mut esc_events,
-                                    )?;
-                                } else {
-                                    escape_state_process(
-                                        &mut scanner,
-                                        &more,
-                                        &mut esc,
-                                        stdout,
+                                        &mut esc_out,
                                         pty,
                                         self.pty_size(),
                                         &mut esc_events,
@@ -1317,9 +1407,24 @@ impl ShellSession {
                                 total_scroll += feed_vt(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
-                                if passthrough_region_set {
-                                    stdout.write_all(b"\x1b[r")?;
+                                if passthrough {
+                                    // Forward the batch accumulated so far —
+                                    // the app's final frame, alt-screen exit,
+                                    // and mode resets. `esc` already tracked
+                                    // these bytes; cleanup below relies on the
+                                    // real terminal having received them, and
+                                    // dropping them would leave it stuck on
+                                    // the alternate screen.
+                                    stdout.write_all(&pt.out)?;
+                                    // The forwarded bytes drove the real
+                                    // terminal directly; adopt the VT as the
+                                    // renderer baseline instead of redrawing,
+                                    // and account for the scrolling the raw
+                                    // bytes already performed.
+                                    renderer.sync(vt);
+                                    renderer.scrollback_flushed = vt.scrollback_rows().unwrap_or(0);
                                 }
+                                release_passthrough_region(stdout, renderer, vt, pt)?;
                                 escape_state_cleanup(&esc, stdout)?;
                                 renderer.render_with_scroll(stdout, vt)?;
                                 return Ok(exit_code);
@@ -1344,50 +1449,56 @@ impl ShellSession {
                         // Alternate-screen passthrough: forward the app's frame,
                         // rewritten so its scrolling and addressing stay above
                         // the reserved status row.
-                        let pt_t0 = std::time::Instant::now();
-                        let content_rows = renderer.content_rows;
-                        let mut out: Vec<u8> = Vec::new();
-                        if !passthrough_region_set {
+                        if !pt.region_set {
                             // Reserve the status row on the real terminal.
-                            out.extend_from_slice(format!("\x1b[1;{content_rows}r").as_bytes());
-                            passthrough_region_set = true;
+                            // DECSTBM homes the real cursor, so put it back
+                            // where the app left it before forwarding bytes
+                            // that may rely on cursor continuity.
+                            queue!(
+                                stdout,
+                                SetScrollRegion {
+                                    top: 1,
+                                    bottom: renderer.content_rows
+                                }
+                            )?;
+                            if let Some(cur) = entry_cursor {
+                                let offset = renderer.row_offset as usize;
+                                queue!(
+                                    stdout,
+                                    cursor::MoveTo(cur.col, (cur.row as usize + offset) as u16)
+                                )?;
+                            }
+                            pt.region_set = true;
                         }
-                        passthrough_filter.rewrite(&frame_bytes, content_rows, &mut out);
-                        stdout.write_all(&out)?;
+                        stdout.write_all(&pt.out)?;
 
                         if !esc.in_alternate_screen {
-                            // The app left the alt screen mid-batch: release the
-                            // reserved region and hand back to the mediated
-                            // renderer, which redraws the restored primary screen
-                            // on the next batch.
-                            stdout.write_all(b"\x1b[r")?;
-                            passthrough_region_set = false;
-                            passthrough_filter.reset();
-                            renderer.invalidate();
+                            // The app left the alt screen mid-batch. The raw
+                            // bytes above already drove the real terminal
+                            // through the exit (restore plus any post-exit
+                            // scrolling), so adopt the VT as the renderer
+                            // baseline instead of redrawing, account for the
+                            // scrollback the raw bytes already pushed out, and
+                            // reset SGR so the mediated renderer starts from
+                            // the default state it assumes.
+                            release_passthrough_region(stdout, renderer, vt, pt)?;
+                            queue!(stdout, ResetColor)?;
+                            renderer.sync(vt);
+                            renderer.scrollback_flushed = vt.scrollback_rows().unwrap_or(0);
                         }
 
                         // The app's forwarded frame already positioned the real
                         // cursor; only touch it if we draw the status line, and
                         // wrap that excursion in a synchronized update so the
                         // cursor never visibly flashes onto the status row.
-                        if self.config.show_status_line {
-                            queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                            self.status_line
-                                .draw(stdout, self.size.cols, self.size.rows)?;
-                            renderer.write_cursor(stdout, vt)?;
-                            queue!(stdout, terminal::EndSynchronizedUpdate)?;
-                        }
+                        self.draw_status_overlay(stdout, vt, renderer, &esc, pt)?;
                         stdout.flush()?;
-                        tracing::debug!(
-                            in_bytes = frame_bytes.len(),
-                            out_bytes = out.len(),
-                            elapsed_us = pt_t0.elapsed().as_micros() as u64,
+                        tracing::trace!(
+                            in_bytes = pt.in_bytes,
+                            out_bytes = pt.out.len(),
                             "alt passthrough frame"
                         );
                     } else {
-                        if esc.in_alternate_screen {
-                            tracing::debug!("alt mediated render");
-                        }
                         // Begin synchronized output so the terminal buffers
                         // all writes atomically (mode 2026).
                         queue!(stdout, terminal::BeginSynchronizedUpdate)?;
@@ -1445,9 +1556,7 @@ impl ShellSession {
                 }
 
                 Event::PtyExit(exit_code) => {
-                    if passthrough_region_set {
-                        stdout.write_all(b"\x1b[r")?;
-                    }
+                    release_passthrough_region(stdout, renderer, vt, pt)?;
                     self.clear_status_row(stdout, esc.in_alternate_screen)?;
                     escape_state_cleanup(&esc, stdout)?;
                     stdout.flush()?;
@@ -1463,6 +1572,11 @@ impl ShellSession {
                         renderer.render_with_scroll(stdout, vt)?;
                     }
                     self.draw_status_and_cursor(stdout, vt, renderer)?;
+                    if pt.region_set {
+                        // The mediated redraw above reset SGR while the
+                        // passthrough app's raw stream owns attribute state.
+                        restore_app_pen(stdout, vt)?;
+                    }
                     queue!(stdout, terminal::EndSynchronizedUpdate)?;
                     stdout.flush()?;
                 }
@@ -1500,11 +1614,28 @@ impl ShellSession {
                             tracing::warn!("failed to resize terminal: {e}");
                         }
                         renderer.discard_vt_scrollback(vt);
+                        if pt.region_set {
+                            // Terminals reset DECSTBM on resize (and the old
+                            // bounds are stale for the new size anyway):
+                            // re-assert the reserved region for the new
+                            // geometry. The write_cursor below repairs the
+                            // homing side effect.
+                            queue!(
+                                stdout,
+                                SetScrollRegion {
+                                    top: 1,
+                                    bottom: pty_size.rows
+                                }
+                            )?;
+                        }
                         renderer.render_full(stdout, vt)?;
                         if self.config.show_status_line && !esc.in_alternate_screen {
                             self.status_line.draw(stdout, cols, rows)?;
                         }
                         renderer.write_cursor(stdout, vt)?;
+                        if pt.region_set {
+                            restore_app_pen(stdout, vt)?;
+                        }
                         stdout.flush()?;
                         if let Err(e) = coordinator_tx.try_send(ShellEvent::Resize {
                             cols: pty_size.cols,
@@ -1517,9 +1648,7 @@ impl ShellSession {
             }
         }
 
-        if passthrough_region_set {
-            stdout.write_all(b"\x1b[r")?;
-        }
+        release_passthrough_region(stdout, renderer, vt, pt)?;
         self.clear_status_row(stdout, esc.in_alternate_screen)?;
         escape_state_cleanup(&esc, stdout)?;
         stdout.flush()?;
@@ -1586,6 +1715,40 @@ impl ShellSession {
         }
 
         Ok(0)
+    }
+
+    /// Draw the status line inside a synchronized update and restore the
+    /// cursor — and, during a passthrough excursion, the app's SGR pen.
+    ///
+    /// Deferred while origin mode is active or a wrap is pending: the host's
+    /// absolute cursor writes would land in the wrong place (DECOM makes them
+    /// region-relative) or clear the terminal's pending-wrap state the app
+    /// relies on. The next frame or spinner tick retries.
+    ///
+    /// Does not flush.
+    fn draw_status_overlay(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        renderer: &Renderer,
+        esc: &EscapeState,
+        pt: &PassthroughState,
+    ) -> Result<(), SessionError> {
+        if !self.config.show_status_line {
+            return Ok(());
+        }
+        if pt.region_set && (esc.origin_mode || vt.is_cursor_pending_wrap().unwrap_or(false)) {
+            return Ok(());
+        }
+        queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+        self.status_line
+            .draw(stdout, self.size.cols, self.size.rows)?;
+        renderer.write_cursor(stdout, vt)?;
+        if pt.region_set {
+            restore_app_pen(stdout, vt)?;
+        }
+        queue!(stdout, terminal::EndSynchronizedUpdate)?;
+        Ok(())
     }
 
     /// Draw status line and reposition cursor.
