@@ -88,12 +88,23 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      # The GitHub ARM runner ships a v1 /etc/containers/registries.conf, which
+      # newer skopeo rejects. Point skopeo at a minimal v2 config instead.
+      CONTAINERS_REGISTRIES_CONF: ${{ github.workspace }}/registries.conf
+
     steps:
       - name: Checkout repository
         id: checkout
         uses: actions/checkout@v7
         with:
           ref: ${{ env.REF }}
+
+      - name: Write skopeo registries.conf (v2)
+        run: |
+          cat > "$CONTAINERS_REGISTRIES_CONF" <<'EOF'
+          unqualified-search-registries = ["docker.io", "quay.io"]
+          EOF
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
