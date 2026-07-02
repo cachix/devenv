@@ -197,7 +197,8 @@ fn posix_activates_sibling_after_cd_out() {
         fs::create_dir_all(project_b.join(".devenv")).unwrap();
         let (_bin_dir, calls) = sibling_activation_shim(&project_a, &project_b);
         let script = format!(
-            "{src}\n\
+            "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+             {src}\n\
              {po}\n\
              cd {project_a:?}\n\
              _devenv_hook\n\
