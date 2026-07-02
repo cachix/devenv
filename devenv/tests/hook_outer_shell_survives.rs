@@ -4,6 +4,7 @@
 //! - `outer_shell_survives_cd_out` — #2805
 //! - `inner_shell_exits_on_cd_out` — hook-spawned shell must `exit` + write exit-dir
 //! - `no_respawn_inside_devenv_shell` — follow-up to #2815
+//! - `posix_activates_sibling_after_cd_out` — #2944
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -63,6 +64,17 @@ fn shells() -> Vec<(&'static str, String, fn(&Path) -> String)> {
     .collect()
 }
 
+fn posix_shells() -> Vec<(&'static str, String)> {
+    let bin = devenv_bin();
+    [
+        ("bash", format!(r#"eval "$({bin} hook bash)""#)),
+        ("zsh", format!(r#"eval "$({bin} hook zsh)""#)),
+    ]
+    .into_iter()
+    .filter(|(s, _)| have(s))
+    .collect()
+}
+
 fn posix_path_override(dir: &Path) -> String {
     format!(r#"export PATH="{}:$PATH""#, dir.display())
 }
@@ -73,6 +85,42 @@ fn fish_path_override(dir: &Path) -> String {
 
 fn run(shell: &str, script: &str) -> std::process::Output {
     Command::new(shell).arg("-c").arg(script).output().unwrap()
+}
+
+fn sibling_activation_shim(project_a: &Path, project_b: &Path) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let calls = dir.path().join("calls");
+    let bin = dir.path().join("devenv");
+    fs::write(
+        &bin,
+        format!(
+            r#"#!/bin/sh
+set -eu
+case "$1" in
+  hook-should-activate)
+    if [ -d "$PWD/.devenv" ]; then
+      printf '%s\n' "$PWD"
+    fi
+    ;;
+  shell)
+    printf 'shell %s\n' "$PWD" >> {calls:?}
+    if [ "$PWD" = {project_a:?} ]; then
+      printf '%s' {project_b:?} > {project_a:?}/.devenv/exit-dir
+    fi
+    ;;
+  *)
+    printf '%s\n' "$*" >> {calls:?}
+    ;;
+esac
+"#,
+            calls = calls,
+            project_a = project_a.display().to_string(),
+            project_b = project_b.display().to_string(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+    (dir, calls)
 }
 
 #[test]
@@ -135,6 +183,46 @@ fn no_respawn_inside_devenv_shell() {
             recorded.is_empty(),
             "[{shell}] hook re-invoked devenv from inside a manually-entered shell.\n\
              Recorded:\n{recorded}",
+        );
+    }
+}
+
+#[test]
+fn posix_activates_sibling_after_cd_out() {
+    for (shell, src) in posix_shells() {
+        let parent = tempfile::tempdir().unwrap();
+        let project_a = parent.path().join("project-a");
+        let project_b = parent.path().join("project-b");
+        fs::create_dir_all(project_a.join(".devenv")).unwrap();
+        fs::create_dir_all(project_b.join(".devenv")).unwrap();
+        let (_bin_dir, calls) = sibling_activation_shim(&project_a, &project_b);
+        let script = format!(
+            "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+             {src}\n\
+             {po}\n\
+             cd {project_a:?}\n\
+             _devenv_hook\n\
+             _devenv_hook\n\
+             printf 'PWD=%s\\n' \"$PWD\"\n",
+            po = posix_path_override(calls.parent().unwrap()),
+        );
+        let out = run(shell, &script);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            out.status.success(),
+            "[{shell}] sibling activation script failed.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
+        );
+        assert!(
+            stdout.contains(&format!("PWD={}", project_b.display())),
+            "[{shell}] parent shell did not follow exit-dir to sibling.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
+        );
+        let recorded = fs::read_to_string(&calls).unwrap_or_default();
+        assert!(
+            recorded.contains(&format!("shell {}", project_b.display())),
+            "[{shell}] sibling project was not activated after cd-out.\nRecorded:\n{recorded}\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
         );
     }
 }

@@ -46,7 +46,6 @@ _devenv_hook() {
             rm -f "$exit_dir_file"
             if [[ -d "$target_dir" ]]; then
                 cd "$target_dir"
-                _DEVENV_HOOK_PWD="$PWD"
             fi
         fi
     elif [[ $exit_code -eq 0 ]]; then
