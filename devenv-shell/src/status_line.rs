@@ -389,9 +389,12 @@ impl StatusLine {
             content.truncate(pos);
         }
 
-        // Move to the last row, clear it, write content
+        // Move to the last row, clear it, write content. Reset SGR before
+        // clearing: with background color erase, a clear inherits the current
+        // background, and a passthrough app's colors may still be active.
         queue!(
             stdout,
+            ResetColor,
             cursor::MoveTo(0, total_rows - 1),
             Clear(ClearType::CurrentLine)
         )?;
