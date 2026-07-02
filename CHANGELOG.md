@@ -75,6 +75,7 @@
 - Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).
 - `devenv --from <source> allow` now binds a directory to an out-of-tree source, so you can use a devenv without a local `devenv.nix`. Every subsequent `devenv` command in that directory then loads its configuration from `<source>` without repeating `--from`, and the shell hook auto-activates the environment on `cd` just as it does for a local project.
 - `--from path:<dir>` sources now load their full configuration: the source's `devenv.yaml` (inputs and imports, including sibling imports within its git repository) is merged, and its modules are imported from the live directory so edits apply immediately without re-fetching.
+- `devenv --from <source> --profile <name> allow` also persists the profiles, so every subsequent command in the bound directory activates them automatically; explicit `--profile` flags still take priority.
 
 ### Breaking Changes
 
