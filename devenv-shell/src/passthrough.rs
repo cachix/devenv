@@ -98,8 +98,15 @@ impl PassthroughFilter {
     /// Append the rewritten form of `data` to `out`. `content_rows` is the
     /// number of rows available to the app (the real terminal height minus the
     /// reserved status row).
+    ///
+    /// The Ground and OSC/DCS states copy runs of uninteresting bytes in bulk;
+    /// this runs on every PTY read (mediated batches included, for handoff
+    /// continuity), so plain output must cost a scan, not a per-byte loop.
     pub fn rewrite(&mut self, data: &[u8], content_rows: u16, out: &mut Vec<u8>) {
-        for &b in data {
+        let n = data.len();
+        let mut i = 0;
+        while i < n {
+            let b = data[i];
             match self.state {
                 State::Ground => {
                     if self.utf8_need > 0 {
@@ -111,6 +118,7 @@ impl PassthroughFilter {
                                 self.utf8_len = 0;
                                 self.utf8_need = 0;
                             }
+                            i += 1;
                             continue;
                         }
                         // Malformed continuation: flush what was held and
@@ -119,16 +127,51 @@ impl PassthroughFilter {
                         self.utf8_len = 0;
                         self.utf8_need = 0;
                     }
-                    match b {
-                        0x1b => self.state = State::Esc,
-                        // Multi-byte UTF-8 lead: hold the codepoint back until
-                        // complete so host writes interleaved between reads
-                        // can never split it on the real terminal.
-                        0xc2..=0xdf => self.begin_utf8(b, 2),
-                        0xe0..=0xef => self.begin_utf8(b, 3),
-                        0xf0..=0xf4 => self.begin_utf8(b, 4),
-                        _ => out.push(b),
+                    // Bulk-copy the run of plain bytes up to the next ESC.
+                    // Complete multi-byte UTF-8 codepoints stay inside the
+                    // run (their continuations are verified so a malformed
+                    // sequence cannot swallow an ESC); only a codepoint split
+                    // at the end of `data` is held back, so host writes
+                    // interleaved between reads can never split it on the
+                    // real terminal.
+                    let start = i;
+                    loop {
+                        while i < n && data[i] != 0x1b && !(0xc2..=0xf4).contains(&data[i]) {
+                            i += 1;
+                        }
+                        if i == n || data[i] == 0x1b {
+                            break;
+                        }
+                        let need = Self::utf8_need_of(data[i]);
+                        if i + need <= n
+                            && data[i + 1..i + need]
+                                .iter()
+                                .all(|c| (0x80..=0xbf).contains(c))
+                        {
+                            i += need;
+                            continue;
+                        }
+                        break;
                     }
+                    out.extend_from_slice(&data[start..i]);
+                    if i == n {
+                        break;
+                    }
+                    let b = data[i];
+                    i += 1;
+                    if b == 0x1b {
+                        self.state = State::Esc;
+                    } else {
+                        let need = Self::utf8_need_of(b);
+                        if i + need - 1 <= n {
+                            // Malformed lead (the scan above rejected it):
+                            // emit it verbatim and rescan from the next byte.
+                            out.push(b);
+                        } else {
+                            self.begin_utf8(b, need as u8);
+                        }
+                    }
+                    continue;
                 }
                 State::Esc => match b {
                     b'[' => {
@@ -163,7 +206,31 @@ impl PassthroughFilter {
                     }
                 },
                 State::Csi => {
-                    if b == 0x1b {
+                    // Bulk-collect parameter and intermediate bytes.
+                    let start = i;
+                    while i < n && (0x20..=0x3f).contains(&data[i]) {
+                        i += 1;
+                    }
+                    self.csi.extend_from_slice(&data[start..i]);
+                    if self.csi.len() > MAX_CSI_LEN {
+                        // Runaway length: emit verbatim and resync to ground.
+                        out.extend_from_slice(&self.csi);
+                        self.csi.clear();
+                        self.state = State::Ground;
+                        continue;
+                    }
+                    if i == n {
+                        break;
+                    }
+                    let b = data[i];
+                    i += 1;
+                    if (0x40..=0x7e).contains(&b) {
+                        // Final byte: the CSI is complete.
+                        self.csi.push(b);
+                        rewrite_csi(&self.csi, content_rows, out);
+                        self.csi.clear();
+                        self.state = State::Ground;
+                    } else if b == 0x1b {
                         // Abort the partial CSI (matches terminal behavior) and
                         // start a new sequence.
                         self.csi.clear();
@@ -182,28 +249,33 @@ impl PassthroughFilter {
                     } else if b == 0x7f {
                         // DEL is ignored inside a CSI.
                     } else {
+                        // Invalid byte: emit what we have verbatim and resync
+                        // to ground.
                         self.csi.push(b);
-                        if (0x40..=0x7e).contains(&b) {
-                            // Final byte: the CSI is complete.
-                            rewrite_csi(&self.csi, content_rows, out);
-                            self.csi.clear();
-                            self.state = State::Ground;
-                        } else if !(0x20..=0x3f).contains(&b) || self.csi.len() > MAX_CSI_LEN {
-                            // Invalid byte or runaway length: emit what we
-                            // have verbatim and resync to ground.
-                            out.extend_from_slice(&self.csi);
-                            self.csi.clear();
-                            self.state = State::Ground;
-                        }
+                        out.extend_from_slice(&self.csi);
+                        self.csi.clear();
+                        self.state = State::Ground;
                     }
+                    continue;
                 }
                 State::Osc => {
-                    self.string_buf.push(b);
-                    match b {
-                        0x07 => self.flush_string(out), // BEL terminator
-                        0x1b => self.state = State::OscEsc,
-                        _ => self.spill_oversized_string(out),
+                    // Bulk-buffer the payload up to the next BEL or ESC.
+                    let start = i;
+                    while i < n && data[i] != 0x07 && data[i] != 0x1b {
+                        i += 1;
                     }
+                    self.string_buf.extend_from_slice(&data[start..i]);
+                    if i == n {
+                        self.spill_oversized_string(out);
+                        break;
+                    }
+                    self.string_buf.push(data[i]);
+                    match data[i] {
+                        0x07 => self.flush_string(out), // BEL terminator
+                        _ => self.state = State::OscEsc,
+                    }
+                    i += 1;
+                    continue;
                 }
                 State::OscEsc => {
                     // ESC \ is the ST terminator; anything else aborted the
@@ -213,18 +285,37 @@ impl PassthroughFilter {
                     self.flush_string(out);
                 }
                 State::Dcs => {
-                    self.string_buf.push(b);
-                    if b == 0x1b {
-                        self.state = State::DcsEsc;
-                    } else {
-                        self.spill_oversized_string(out);
+                    // Bulk-buffer the payload up to the next ESC.
+                    let start = i;
+                    while i < n && data[i] != 0x1b {
+                        i += 1;
                     }
+                    self.string_buf.extend_from_slice(&data[start..i]);
+                    if i == n {
+                        self.spill_oversized_string(out);
+                        break;
+                    }
+                    self.string_buf.push(0x1b);
+                    self.state = State::DcsEsc;
+                    i += 1;
+                    continue;
                 }
                 State::DcsEsc => {
                     self.string_buf.push(b);
                     self.flush_string(out);
                 }
             }
+            i += 1;
+        }
+    }
+
+    /// Expected byte length of a UTF-8 sequence with lead byte `b`
+    /// (`0xc2..=0xf4`).
+    fn utf8_need_of(b: u8) -> usize {
+        match b {
+            0xc2..=0xdf => 2,
+            0xe0..=0xef => 3,
+            _ => 4,
         }
     }
 
