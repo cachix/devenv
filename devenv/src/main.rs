@@ -285,8 +285,15 @@ fn enter_discovered_project_root() -> Result<()> {
     let Ok(cwd) = env::current_dir() else {
         return Ok(());
     };
-    let Some(root) = devenv_core::paths::find_project_root(&cwd).filter(|r| r.as_path() != cwd)
-    else {
+    let root = if let Some(root) = devenv_core::paths::find_project_root(&cwd) {
+        Some(root)
+    } else {
+        // A dir bound via `devenv allow --from` roots at the bound directory.
+        let home = devenv_core::paths::resolve_home()?;
+        commands::hook::trusted_from(&home, &cwd)?
+            .map(|(bound_dir, _)| PathBuf::from(bound_dir))
+    };
+    let Some(root) = root.filter(|r| r.as_path() != cwd) else {
         return Ok(());
     };
     enter_root(&root)
@@ -296,38 +303,30 @@ fn enter_discovered_project_root() -> Result<()> {
 fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptions)> {
     let command = cli.command;
 
-    // Walk up parent directories to find devenv.nix. Skip when the user has
-    // explicitly chosen a source (`--from`) or is constructing a project via
-    // module-option overrides (`-O`). Has to run before Config::load() reads
-    // "./devenv.yaml".
+    // Source priority: explicit `--from` / `-O` overrides > a local devenv.nix
+    // (here or in an ancestor) > a binding persisted by `devenv allow --from`.
+    // Has to run before Config::load() reads "./devenv.yaml".
     let original_cwd = env::current_dir().ok();
-
-    // A local devenv.nix takes priority over a persisted binding and over
-    // discovery into a parent root. Look it up once and share the result; skip
-    // when the user explicitly chose a source (`--from`) or is building a
-    // project via module-option overrides (`-O`).
     let has_overrides = !cli.input_overrides.nix_module_options.is_empty();
-    let project_root = original_cwd
-        .as_deref()
-        .filter(|_| cli.from.is_none() && !has_overrides)
-        .and_then(devenv_core::paths::find_project_root);
-
-    // A directory bound to an out-of-tree source via `devenv allow --from` loads
-    // that source on every invocation, as if `--from` had been passed. The
-    // priority above means the binding only applies in an otherwise
-    // project-less dir without explicit `--from`/`-O`.
-    let from_source = cli.from.clone().or_else(|| {
-        if has_overrides || project_root.is_some() {
-            return None;
+    let mut from_source = cli.from.clone();
+    let mut project_root = None;
+    if from_source.is_none()
+        && !has_overrides
+        && let Some(cwd) = original_cwd.as_deref()
+    {
+        project_root = devenv_core::paths::find_project_root(cwd);
+        // A bound directory behaves as if `--from <source>` were passed and is
+        // entered as the project root below, matching hook activation, so its
+        // devenv.yaml, .devenv state, and processes are shared by all subdirs.
+        if project_root.is_none() {
+            let home = devenv_core::paths::resolve_home()?;
+            if let Some((bound_dir, from)) = commands::hook::trusted_from(&home, cwd)? {
+                project_root = Some(PathBuf::from(bound_dir));
+                from_source = Some(from);
+            }
         }
-        let home = devenv_core::paths::resolve_home().ok()?;
-        commands::hook::trusted_from(&home, original_cwd.as_deref()?)
-            .ok()
-            .flatten()
-    });
+    }
 
-    // `project_root` is only `Some` when no `--from`/`-O` was given, which is
-    // exactly when `from_source` stays `None`, so no extra guard is needed here.
     let discovered_root = project_root.filter(|r| Some(r.as_path()) != original_cwd.as_deref());
     // When discovery moves us into a parent root, remember the directory the
     // user actually invoked from so the interactive shell and `-- cmd` still
@@ -379,7 +378,24 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
     // Backend options. Read before the `From` conversions consume `cli.nix_args`.
     let nix_debugger = cli.nix_args.nix_debugger;
 
-    let mut config = Config::load()?;
+    // A `path:` source resolves to a live directory whose devenv.yaml graph is
+    // merged into the config by Config::load_with_source, which also appends
+    // the source's module as an absolute `path:` import. Relative refs resolve
+    // against the invocation cwd (persisted bindings are always absolute).
+    let from_path = from_source
+        .as_deref()
+        .and_then(|from| from.strip_prefix("path:"))
+        .map(|path_str| {
+            let path = Path::new(path_str);
+            let full_path = if path.is_relative() {
+                env::current_dir().unwrap_or_default().join(path)
+            } else {
+                path.to_path_buf()
+            };
+            fs::canonicalize(&full_path).unwrap_or(full_path)
+        });
+
+    let mut config = Config::load_with_source(from_path.as_deref())?;
     config.check_version(crate_version!())?;
 
     let input_overrides = InputOverrides::from(cli.input_overrides);
@@ -392,24 +408,15 @@ fn resolve(cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptio
             .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
     }
 
-    // If a source is provided (via --from or a persisted `allow --from`
-    // binding), create a new input and add it to imports.
-    if let Some(from) = &from_source {
-        let url = if let Some(path_str) = from.strip_prefix("path:") {
-            let path = Path::new(path_str);
-            let full_path = if path.is_relative() {
-                env::current_dir().unwrap_or_default().join(path)
-            } else {
-                path.to_path_buf()
-            };
-            let abs_path = fs::canonicalize(&full_path).unwrap_or(full_path);
-            format!("path:{}", abs_path.display())
-        } else {
-            from.clone()
-        };
-
+    // A non-path source (flake ref, via --from or a persisted binding) is
+    // fetched as the `from` input and its devenv.nix imported from the store.
+    // Its devenv.yaml is not merged (that needs a fetch before config load);
+    // `path:` sources get the full merge via Config::load_with_source above.
+    if from_path.is_none()
+        && let Some(from) = &from_source
+    {
         let from_input = devenv_core::config::Input {
-            url: Some(url),
+            url: Some(from.clone()),
             flake: false,
             follows: None,
             inputs: BTreeMap::new(),
@@ -611,7 +618,7 @@ fn run(
     let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
 
     if let Some(root) = &ui.discovered_root {
-        tracing::info!("Discovered devenv.nix in {}", root.display());
+        tracing::info!("using project root {}", root.display());
     }
 
     let tui = ui.tui;

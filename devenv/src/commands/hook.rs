@@ -111,21 +111,49 @@ fn entry_path(entry: &str) -> &str {
     }
 }
 
+/// One line of the trust database: a parsed entry, or a line this version
+/// cannot parse (corrupt, or written by a different devenv version) kept
+/// verbatim so rewriting the database does not destroy it.
+#[derive(Debug, PartialEq, Eq)]
+enum TrustLine {
+    Entry(TrustEntry),
+    Unknown(String),
+}
+
+impl TrustLine {
+    fn entry(&self) -> Option<&TrustEntry> {
+        match self {
+            TrustLine::Entry(entry) => Some(entry),
+            TrustLine::Unknown(_) => None,
+        }
+    }
+
+    fn into_entry(self) -> Option<TrustEntry> {
+        match self {
+            TrustLine::Entry(entry) => Some(entry),
+            TrustLine::Unknown(_) => None,
+        }
+    }
+}
+
 /// Parse one line of the trust database. Lines starting with `{` are the
 /// current JSONL format; anything else is a legacy plain/hash path line.
-fn parse_entry(line: &str) -> Option<TrustEntry> {
+fn parse_line(line: &str) -> TrustLine {
     if line.starts_with('{') {
-        serde_json::from_str(line).ok()
+        match serde_json::from_str(line) {
+            Ok(entry) => TrustLine::Entry(entry),
+            Err(_) => TrustLine::Unknown(line.to_string()),
+        }
     } else {
-        Some(TrustEntry {
+        TrustLine::Entry(TrustEntry {
             path: entry_path(line).to_string(),
             from: None,
         })
     }
 }
 
-fn remove_path_entries(entries: &mut Vec<TrustEntry>, abs_str: &str) {
-    entries.retain(|e| e.path != abs_str);
+fn remove_path_entries(lines: &mut Vec<TrustLine>, abs_str: &str) {
+    lines.retain(|l| l.entry().is_none_or(|e| e.path != abs_str));
 }
 
 // ---- Trust database ----
@@ -138,25 +166,30 @@ fn trust_db_path(home: &Path) -> PathBuf {
     home.join("allowed")
 }
 
-fn read_trust_entries(db_path: &Path) -> Result<Vec<TrustEntry>> {
+fn read_trust_lines(db_path: &Path) -> Result<Vec<TrustLine>> {
     match fs::read_to_string(db_path) {
         Ok(content) => Ok(content
             .lines()
             .filter(|l| !l.is_empty())
-            .filter_map(parse_entry)
+            .map(parse_line)
             .collect()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(e).into_diagnostic(),
     }
 }
 
-fn write_trust_entries(db_path: &Path, entries: &[TrustEntry]) -> Result<()> {
+fn write_trust_lines(db_path: &Path, lines: &[TrustLine]) -> Result<()> {
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent).into_diagnostic()?;
     }
     let mut content = String::new();
-    for entry in entries {
-        content.push_str(&serde_json::to_string(entry).into_diagnostic()?);
+    for line in lines {
+        match line {
+            TrustLine::Entry(entry) => {
+                content.push_str(&serde_json::to_string(entry).into_diagnostic()?)
+            }
+            TrustLine::Unknown(raw) => content.push_str(raw),
+        }
         content.push('\n');
     }
     fs::write(db_path, content).into_diagnostic()
@@ -164,8 +197,11 @@ fn write_trust_entries(db_path: &Path, entries: &[TrustEntry]) -> Result<()> {
 
 fn find_trust_entry(home: &Path, abs_str: &str) -> Result<Option<TrustEntry>> {
     let db_path = trust_db_path(home);
-    let entries = read_trust_entries(&db_path)?;
-    Ok(entries.into_iter().find(|e| e.path == abs_str))
+    let lines = read_trust_lines(&db_path)?;
+    Ok(lines
+        .into_iter()
+        .filter_map(TrustLine::into_entry)
+        .find(|e| e.path == abs_str))
 }
 
 fn is_trusted(home: &Path, abs_str: &str) -> Result<bool> {
@@ -176,8 +212,8 @@ fn is_trusted(home: &Path, abs_str: &str) -> Result<bool> {
 /// `devenv allow --from`, returning its trust entry (whose `from` is always set).
 /// In-tree trust entries (no `from`) are skipped.
 fn nearest_from(home: &Path, dir: &Path) -> Result<Option<TrustEntry>> {
-    let entries = read_trust_entries(&trust_db_path(home))?;
-    if entries.is_empty() {
+    let lines = read_trust_lines(&trust_db_path(home))?;
+    if lines.is_empty() {
         return Ok(None);
     }
     // Canonicalize once; ancestors of a canonical path are themselves canonical,
@@ -185,7 +221,10 @@ fn nearest_from(home: &Path, dir: &Path) -> Result<Option<TrustEntry>> {
     let mut current = fs::canonicalize(dir).into_diagnostic()?;
     loop {
         if let Some(abs) = current.to_str()
-            && let Some(entry) = entries.iter().find(|e| e.path == abs && e.from.is_some())
+            && let Some(entry) = lines
+                .iter()
+                .filter_map(TrustLine::entry)
+                .find(|e| e.path == abs && e.from.is_some())
         {
             return Ok(Some(entry.clone()));
         }
@@ -195,10 +234,35 @@ fn nearest_from(home: &Path, dir: &Path) -> Result<Option<TrustEntry>> {
     }
 }
 
-/// Look up the out-of-tree `--from` source bound to `dir` (or the nearest bound
-/// ancestor) via `devenv allow --from`. Returns `None` when no ancestor is bound.
-pub fn trusted_from(home: &Path, dir: &Path) -> Result<Option<String>> {
-    Ok(nearest_from(home, dir)?.and_then(|entry| entry.from))
+/// Look up the out-of-tree binding for `dir` (or its nearest bound ancestor)
+/// created by `devenv allow --from`. Returns the bound directory and the
+/// source it is bound to, or `None` when no ancestor is bound.
+pub fn trusted_from(home: &Path, dir: &Path) -> Result<Option<(String, String)>> {
+    Ok(nearest_from(home, dir)?.and_then(|TrustEntry { path, from }| Some((path, from?))))
+}
+
+/// Normalize a `--from` source for persistence. `path:` refs are resolved
+/// against `base` and canonicalized so the stored binding points at the same
+/// directory no matter where later commands run from, and must exist.
+fn normalize_from(from: &str, base: &Path) -> Result<String> {
+    if from.is_empty() {
+        miette::bail!("--from requires a non-empty source");
+    }
+    let Some(path_str) = from.strip_prefix("path:") else {
+        return Ok(from.to_string());
+    };
+    let path = Path::new(path_str);
+    let full_path = if path.is_relative() {
+        base.join(path)
+    } else {
+        path.to_path_buf()
+    };
+    let abs_path = fs::canonicalize(&full_path)
+        .map_err(|e| miette::miette!("--from source '{from}' does not resolve: {e}"))?;
+    let abs = abs_path
+        .to_str()
+        .ok_or_else(|| miette::miette!("Path is not valid UTF-8: {}", abs_path.display()))?;
+    Ok(format!("path:{abs}"))
 }
 
 /// Trust `project_dir`, optionally binding it to an out-of-tree `--from` source.
@@ -207,21 +271,33 @@ pub fn trusted_from(home: &Path, dir: &Path) -> Result<Option<String>> {
 /// directory needs no local `devenv.nix`; the module comes from the source.
 fn allow_path(home: &Path, project_dir: &Path, from: Option<&str>) -> Result<()> {
     let abs_str = canonical_str(project_dir)?;
+    let from = from.map(|f| normalize_from(f, project_dir)).transpose()?;
 
     if from.is_none() && !project_dir.join("devenv.nix").exists() {
         miette::bail!("No devenv.nix found in {abs_str}");
     }
 
-    let db_path = trust_db_path(home);
-    let mut entries = read_trust_entries(&db_path)?;
-    remove_path_entries(&mut entries, &abs_str);
-    entries.push(TrustEntry {
-        path: abs_str.clone(),
-        from: from.map(String::from),
-    });
-    write_trust_entries(&db_path, &entries)?;
+    // A devenv.nix here or in an ancestor always takes priority over a
+    // binding, so tell the user when the binding cannot apply.
+    if from.is_some()
+        && let Some(root) = devenv_core::paths::find_project_root(project_dir)
+    {
+        eprintln!(
+            "devenv: warning: devenv.nix in {} takes priority; the binding will not be used while it exists",
+            root.display()
+        );
+    }
 
-    match from {
+    let db_path = trust_db_path(home);
+    let mut lines = read_trust_lines(&db_path)?;
+    remove_path_entries(&mut lines, &abs_str);
+    lines.push(TrustLine::Entry(TrustEntry {
+        path: abs_str.clone(),
+        from: from.clone(),
+    }));
+    write_trust_lines(&db_path, &lines)?;
+
+    match &from {
         Some(from) => eprintln!("devenv: allowed {abs_str} from {from}"),
         None => eprintln!("devenv: allowed {abs_str}"),
     }
@@ -232,14 +308,14 @@ fn revoke_path(home: &Path, project_dir: &Path) -> Result<()> {
     let db_path = trust_db_path(home);
     let abs_str = canonical_str(project_dir)?;
 
-    let mut entries = read_trust_entries(&db_path)?;
-    let before = entries.len();
-    remove_path_entries(&mut entries, &abs_str);
+    let mut lines = read_trust_lines(&db_path)?;
+    let before = lines.len();
+    remove_path_entries(&mut lines, &abs_str);
 
-    if entries.len() == before {
+    if lines.len() == before {
         eprintln!("devenv: {abs_str} was not in the allow list");
     } else {
-        write_trust_entries(&db_path, &entries)?;
+        write_trust_lines(&db_path, &lines)?;
         eprintln!("devenv: revoked {abs_str}");
     }
 
@@ -410,7 +486,79 @@ mod tests {
         // Each line is a self-contained JSON object.
         let content = fs::read_to_string(devenv_home_dir.join("allowed")).unwrap();
         let line = content.lines().next().unwrap();
-        assert_eq!(parse_entry(line).unwrap(), entry);
+        assert_eq!(parse_line(line), TrustLine::Entry(entry));
+    }
+
+    #[test]
+    fn test_unparseable_lines_survive_rewrite() {
+        let dir = TempDir::new().unwrap();
+        let project = dir.path().join("myproject");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+
+        // Seed the DB with a JSON-looking line this version cannot parse
+        // (e.g. written by a future devenv).
+        let unknown = r#"{"version":2,"entries":[]}"#;
+        fs::create_dir_all(&devenv_home_dir).unwrap();
+        fs::write(devenv_home_dir.join("allowed"), format!("{unknown}\n")).unwrap();
+
+        // Rewrites via allow and revoke must preserve the line verbatim.
+        allow_path(&devenv_home_dir, &project, None).unwrap();
+        revoke_path(&devenv_home_dir, &project).unwrap();
+
+        let content = fs::read_to_string(devenv_home_dir.join("allowed")).unwrap();
+        assert!(content.contains(unknown));
+    }
+
+    #[test]
+    fn test_allow_from_normalizes_relative_path() {
+        let dir = TempDir::new().unwrap();
+        let envs = dir.path().join("envs");
+        fs::create_dir_all(&envs).unwrap();
+        let work = dir.path().join("work");
+        fs::create_dir_all(&work).unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+
+        // A relative `path:` source is resolved against the bound directory at
+        // allow time, so later commands agree on it regardless of their cwd.
+        allow_path(&devenv_home_dir, &work, Some("path:../envs")).unwrap();
+
+        let abs_str = canonical_str(&work).unwrap();
+        let entry = find_trust_entry(&devenv_home_dir, &abs_str)
+            .unwrap()
+            .unwrap();
+        let expected = format!("path:{}", canonical_str(&envs).unwrap());
+        assert_eq!(entry.from.as_deref(), Some(expected.as_str()));
+    }
+
+    #[test]
+    fn test_allow_from_rejects_broken_source() {
+        let dir = TempDir::new().unwrap();
+        let work = dir.path().join("work");
+        fs::create_dir_all(&work).unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+
+        assert!(allow_path(&devenv_home_dir, &work, Some("")).is_err());
+        assert!(
+            allow_path(
+                &devenv_home_dir,
+                &work,
+                Some("path:./does-not-exist")
+            )
+            .is_err()
+        );
+
+        // Nothing was persisted.
+        let abs_str = canonical_str(&work).unwrap();
+        assert!(
+            find_trust_entry(&devenv_home_dir, &abs_str)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
