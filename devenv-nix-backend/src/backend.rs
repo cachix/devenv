@@ -88,7 +88,7 @@ pub fn init_nix(
     let gc_registration = gc_register_my_thread()
         .to_miette()
         .wrap_err("Failed to register thread with Nix garbage collector")?;
-    settings::set("experimental-features", "flakes nix-command")
+    settings::set("extra-experimental-features", "flakes nix-command")
         .to_miette()
         .wrap_err("Failed to enable experimental features")?;
     apply_nix_settings(nix_settings)?;
