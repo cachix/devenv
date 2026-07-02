@@ -258,6 +258,61 @@ async fn test_eval_empty_attributes_array() {
 }
 
 #[nix_test]
+async fn test_unfree_package_error_mentions_devenv_yaml_options() {
+    let env = TestEnv::builder()
+        .nix(
+            r#"{ pkgs, ... }: {
+  packages = [ pkgs.terraform ];
+}"#,
+        )
+        .build()
+        .await;
+
+    let err = env
+        .backend
+        .eval(&["shell.drvPath"])
+        .await
+        .expect_err("unfree package should fail without allow_unfree");
+    let message = format!("{err:#}");
+
+    assert!(
+        message.contains("devenv: package 'terraform' has an unfree license."),
+        "{message}"
+    );
+    assert!(message.contains("allow_unfree: true"), "{message}");
+    assert!(message.contains("permitted_unfree_packages:"), "{message}");
+}
+
+#[nix_test]
+async fn test_unfree_package_can_still_be_allowed_by_devenv_yaml_options() {
+    let nix = r#"{ pkgs, ... }: {
+  packages = [ pkgs.terraform ];
+}"#;
+
+    for yaml in [
+        r#"allow_unfree: true
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+"#,
+        r#"nixpkgs:
+  permitted_unfree_packages:
+    - terraform
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+"#,
+    ] {
+        let env = TestEnv::builder().yaml(yaml).nix(nix).build().await;
+
+        env.backend
+            .eval(&["shell.drvPath"])
+            .await
+            .expect("unfree package should be allowed by devenv.yaml");
+    }
+}
+
+#[nix_test]
 async fn test_eval_nonexistent_attribute() {
     let env = TestEnv::new().await;
 
