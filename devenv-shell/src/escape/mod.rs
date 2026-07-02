@@ -31,11 +31,11 @@ const FORWARDED_MODES: &[u16] = &[
 ];
 
 /// Modes that control alternate screen buffer.
-const ALT_SCREEN_MODES: &[u16] = &[47, 1047, 1049];
+pub(crate) const ALT_SCREEN_MODES: &[u16] = &[47, 1047, 1049];
 
 /// Mode 2048: in-band resize reports. Not forwarded to the real terminal
 /// because the PTY has fewer rows than the real terminal (status line).
-const IN_BAND_RESIZE_MODE: u16 = 2048;
+pub(crate) const IN_BAND_RESIZE_MODE: u16 = 2048;
 
 /// Modes that need explicit reset on session exit. Excludes alternate screen
 /// modes (handled via `LeaveAlternateScreen`) and synchronized output (mode
@@ -85,6 +85,16 @@ impl DecModeEvent {
     /// Whether this event disables in-band resize (mode 2048).
     pub fn disables_in_band_resize(&self) -> bool {
         matches!(self, DecModeEvent::Reset { modes, .. } if modes.contains(&IN_BAND_RESIZE_MODE))
+    }
+
+    /// Whether this event sets (enables) the given mode.
+    pub fn sets_mode(&self, mode: u16) -> bool {
+        matches!(self, DecModeEvent::Set { modes, .. } if modes.contains(&mode))
+    }
+
+    /// Whether this event resets (disables) the given mode.
+    pub fn resets_mode(&self, mode: u16) -> bool {
+        matches!(self, DecModeEvent::Reset { modes, .. } if modes.contains(&mode))
     }
 
     /// Raw bytes of the original sequence for forwarding.
