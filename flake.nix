@@ -239,7 +239,7 @@
       };
 
       overlays.default = final: prev: {
-        devenv = self.packages.${prev.system}.default;
+        devenv = self.packages.${prev.stdenv.hostPlatform.system}.default;
       };
     };
 }
