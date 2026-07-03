@@ -3,9 +3,10 @@
 //! Uses the external process-compose tool to manage processes.
 
 use async_trait::async_trait;
-use miette::{IntoDiagnostic, Result, bail};
+use miette::{IntoDiagnostic, Result, bail, miette};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -15,7 +16,7 @@ use tokio::process::Command;
 use tracing::{debug, info, warn};
 
 use crate::pid::{self, PidStatus};
-use crate::{ProcessManager, StartOptions};
+use crate::{ProcessConfig, ProcessManager, StartOptions};
 
 /// Process manager using external process-compose tool
 pub struct ProcessComposeManager {
@@ -23,6 +24,16 @@ pub struct ProcessComposeManager {
     procfile_script: PathBuf,
     /// Directory for state files
     state_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProcessComposeProcess {
+    pub name: String,
+    pub status: String,
+    #[serde(default)]
+    pub is_ready: Option<String>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
 }
 
 impl ProcessComposeManager {
@@ -51,6 +62,115 @@ impl ProcessComposeManager {
     /// Path to the wrapper script
     fn wrapper_script(&self) -> PathBuf {
         self.state_dir.join("processes")
+    }
+
+    pub async fn list(
+        &self,
+        process_compose: PathBuf,
+        socket_path: PathBuf,
+    ) -> Result<Vec<ProcessComposeProcess>> {
+        match pid::check_pid_file(&self.pid_file()).await? {
+            PidStatus::Running(_) => {}
+            PidStatus::NotFound | PidStatus::StaleRemoved => {
+                bail!("No processes running (PID file not found)");
+            }
+        }
+
+        let output = Command::new(process_compose)
+            .arg("list")
+            .arg("--output")
+            .arg("json")
+            .env("PC_SOCKET_PATH", socket_path)
+            .output()
+            .await
+            .into_diagnostic()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!(
+                "Failed to list process-compose processes: {}",
+                stderr.trim()
+            );
+        }
+
+        serde_json::from_slice(&output.stdout).map_err(|e| {
+            miette!(
+                "Failed to parse process-compose list output: {}\n{}",
+                e,
+                String::from_utf8_lossy(&output.stdout)
+            )
+        })
+    }
+
+    pub async fn wait_for_ready(
+        &self,
+        process_compose: PathBuf,
+        socket_path: PathBuf,
+        process_configs: &HashMap<String, ProcessConfig>,
+        timeout: std::time::Duration,
+    ) -> Result<()> {
+        let start = std::time::Instant::now();
+
+        loop {
+            let processes = match self
+                .list(process_compose.clone(), socket_path.clone())
+                .await
+            {
+                Ok(processes) => processes,
+                Err(e) if start.elapsed() < timeout => {
+                    debug!("Waiting for process-compose to be ready: {}", e);
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
+            let mut pending = Vec::new();
+            let mut not_ready = Vec::new();
+            let mut failed = Vec::new();
+
+            for process in processes {
+                if process.status == "Pending" {
+                    pending.push(process.name.clone());
+                }
+
+                if process.status == "Running"
+                    && process.is_ready.as_deref() != Some("Ready")
+                    && process_configs
+                        .get(&process.name)
+                        .is_some_and(ProcessConfig::has_readiness_probe)
+                {
+                    not_ready.push(process.name.clone());
+                }
+
+                if process.status == "Exited" && process.exit_code.unwrap_or(0) != 0 {
+                    failed.push(process.name);
+                }
+            }
+
+            if !failed.is_empty() {
+                warn!("Some processes have failed: {}", failed.join(", "));
+            }
+
+            if pending.is_empty() && not_ready.is_empty() {
+                return Ok(());
+            }
+
+            if start.elapsed() >= timeout {
+                let mut waiting_for = Vec::new();
+                if !pending.is_empty() {
+                    waiting_for.push(format!("Pending: [{}]", pending.join(", ")));
+                }
+                if !not_ready.is_empty() {
+                    waiting_for.push(format!("Not Ready: [{}]", not_ready.join(", ")));
+                }
+                bail!(
+                    "Timed out waiting for process-compose processes to be ready: {}",
+                    waiting_for.join(" ")
+                );
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
     }
 
     /// Prepare the foreground command without exec'ing.
