@@ -1553,14 +1553,31 @@ fn write_nixpkgs_config(nixpkgs_config: &NixpkgsConfig, dotfile_dir: &Path) -> R
         r#"let
   cfg = {base};
   getName = pkg: (builtins.parseDrvName (pkg.name or pkg.pname or "")).name;
+  unfreePackageError = pkg:
+    let
+      name = getName pkg;
+    in
+      throw ''
+        devenv: package '${{name}}' has an unfree license.
+
+        To allow all unfree packages, add this to devenv.yaml:
+
+          allow_unfree: true
+
+        To allow only this package, add this to devenv.yaml:
+
+          nixpkgs:
+            permitted_unfree_packages:
+              - ${{name}}
+      '';
 in cfg // {{
   allowUnfreePredicate =
     if cfg.allowUnfree or false then
       (_: true)
     else if (cfg.permittedUnfreePackages or []) != [] then
-      (pkg: builtins.elem (getName pkg) (cfg.permittedUnfreePackages or []))
+      (pkg: builtins.elem (getName pkg) (cfg.permittedUnfreePackages or []) || unfreePackageError pkg)
     else
-      (_: false);
+      unfreePackageError;
 }}"#,
         base = nixpkgs_config_base
     );
@@ -1653,8 +1670,10 @@ pub fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{cache_key_for, core_config_watch_paths, logical_store_path_str};
-    use devenv_core::{PortAllocator, bootstrap_args::BootstrapArgs};
+    use super::{
+        cache_key_for, core_config_watch_paths, logical_store_path_str, write_nixpkgs_config,
+    };
+    use devenv_core::{PortAllocator, bootstrap_args::BootstrapArgs, config::NixpkgsConfig};
     use serde::Serialize;
     use tempfile::TempDir;
 
@@ -1692,6 +1711,18 @@ mod tests {
 
         assert_ne!(shell_key.key_hash, up_key.key_hash);
         assert_ne!(up_key.key_hash, strict_key.key_hash);
+    }
+
+    #[test]
+    fn nixpkgs_config_unfree_predicate_mentions_devenv_yaml_options() {
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        let config_path = write_nixpkgs_config(&NixpkgsConfig::default(), temp_dir.path()).unwrap();
+        let config = std::fs::read_to_string(config_path).unwrap();
+
+        assert!(config.contains("devenv: package '${name}' has an unfree license."));
+        assert!(config.contains("allow_unfree: true"));
+        assert!(config.contains("permitted_unfree_packages:"));
+        assert!(config.contains("else\n      unfreePackageError;"));
     }
 
     // Regression for devenv #2499: a shell built against a relocated/chroot store
