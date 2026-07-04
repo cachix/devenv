@@ -164,6 +164,9 @@ pub fn process_escape_events(
             SequenceEvent::ForwardDcs { raw_bytes } => {
                 stdout.write_all(&raw_bytes)?;
             }
+            SequenceEvent::ForwardScreenTitle { raw_bytes } => {
+                stdout.write_all(&raw_bytes)?;
+            }
             SequenceEvent::KittyKeyboard {
                 raw_bytes,
                 stack_delta,

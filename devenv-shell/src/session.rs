@@ -202,6 +202,85 @@ fn feed_vt(vt: &mut Terminal<'_, '_>, text: &str) -> usize {
     total_after.saturating_sub(total_before)
 }
 
+#[derive(Debug, Default)]
+struct VtInputFilter {
+    state: VtInputFilterState,
+    pending: Vec<u8>,
+}
+
+#[derive(Debug, Default)]
+enum VtInputFilterState {
+    #[default]
+    Ground,
+    Esc,
+    TmuxTitle,
+    TmuxTitleEsc,
+}
+
+impl VtInputFilter {
+    fn new() -> Self {
+        Self {
+            state: VtInputFilterState::Ground,
+            pending: Vec::new(),
+        }
+    }
+
+    fn filter<'a>(&mut self, data: &'a [u8], output: &'a mut Vec<u8>) -> &'a [u8] {
+        output.clear();
+
+        for &byte in data {
+            match self.state {
+                VtInputFilterState::Ground => {
+                    if byte == 0x1b {
+                        self.pending.clear();
+                        self.pending.push(byte);
+                        self.state = VtInputFilterState::Esc;
+                    } else {
+                        output.push(byte);
+                    }
+                }
+
+                VtInputFilterState::Esc => {
+                    self.pending.push(byte);
+                    if byte == b'k' {
+                        self.pending.clear();
+                        self.state = VtInputFilterState::TmuxTitle;
+                    } else if byte == 0x1b {
+                        self.pending.clear();
+                        self.pending.push(byte);
+                    } else {
+                        output.extend_from_slice(&self.pending);
+                        self.pending.clear();
+                        self.state = VtInputFilterState::Ground;
+                    }
+                }
+
+                VtInputFilterState::TmuxTitle => {
+                    if byte == 0x1b {
+                        self.state = VtInputFilterState::TmuxTitleEsc;
+                    }
+                }
+
+                VtInputFilterState::TmuxTitleEsc => {
+                    if byte == b'\\' {
+                        self.state = VtInputFilterState::Ground;
+                    } else if byte == 0x1b {
+                        self.state = VtInputFilterState::Esc;
+                        self.pending.clear();
+                        self.pending.push(byte);
+                    } else {
+                        self.state = VtInputFilterState::Ground;
+                        output.push(0x1b);
+                        output.push(byte);
+                    }
+                }
+            }
+        }
+
+        output
+    }
+}
+
 /// Differential renderer that draws VT state to a bounded terminal region.
 ///
 /// Instead of passing raw PTY output to stdout (which conflicts with the status
@@ -925,10 +1004,12 @@ impl ShellSession {
     ) -> Result<Option<u32>, SessionError> {
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
         let mut scanner = EscapeScanner::new();
+        let mut vt_input_filter = VtInputFilter::new();
         let mut utf8_acc = Utf8Accumulator::new();
         let mut esc = EscapeState::new();
         let mut resize_pending = false;
         let mut esc_events = Vec::new();
+        let mut vt_input = Vec::new();
 
         loop {
             // Use select! to handle both events and spinner animation
@@ -1039,7 +1120,8 @@ impl ShellSession {
                     )?;
 
                     // Feed output into VT and track how many lines scrolled off
-                    let text = utf8_acc.accumulate(&data);
+                    let filtered = vt_input_filter.filter(&data, &mut vt_input);
+                    let text = utf8_acc.accumulate(filtered);
                     let mut total_scroll = feed_vt(vt, &text);
 
                     // Batch: drain any additional pending PtyOutput events
@@ -1055,7 +1137,8 @@ impl ShellSession {
                                     self.pty_size(),
                                     &mut esc_events,
                                 )?;
-                                let text = utf8_acc.accumulate(&more);
+                                let filtered = vt_input_filter.filter(&more, &mut vt_input);
+                                let text = utf8_acc.accumulate(filtered);
                                 total_scroll += feed_vt(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
@@ -1319,6 +1402,37 @@ impl Default for ShellSession {
 mod tests {
     use super::*;
     use portable_pty::CommandBuilder;
+
+    fn filter_chunks(chunks: &[&[u8]]) -> Vec<u8> {
+        let mut filter = VtInputFilter::new();
+        let mut output = Vec::new();
+        let mut combined = Vec::new();
+
+        for chunk in chunks {
+            let filtered = filter.filter(chunk, &mut output);
+            combined.extend_from_slice(filtered);
+        }
+
+        combined
+    }
+
+    #[test]
+    fn vt_input_filter_strips_tmux_title_sequence() {
+        let filtered = filter_chunks(&[b"hello \x1bkecho hello\x1b\\world"]);
+        assert_eq!(filtered, b"hello world");
+    }
+
+    #[test]
+    fn vt_input_filter_strips_tmux_title_sequence_across_chunks() {
+        let filtered = filter_chunks(&[b"hello \x1bkec", b"ho hello", b"\x1b\\world"]);
+        assert_eq!(filtered, b"hello world");
+    }
+
+    #[test]
+    fn vt_input_filter_preserves_other_escape_sequences() {
+        let filtered = filter_chunks(&[b"hello \x1b[31mred\x1b[0m"]);
+        assert_eq!(filtered, b"hello \x1b[31mred\x1b[0m");
+    }
 
     /// Regression test for devenv#2845: when the process-wide shutdown token is
     /// cancelled (e.g. from the SIGHUP/SIGINT/SIGTERM handler), the inner shell
