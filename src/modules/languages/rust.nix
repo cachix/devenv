@@ -109,6 +109,19 @@ in
       '';
     };
 
+    clangLinker.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = pkgs.stdenv.isLinux;
+      defaultText = lib.literalExpression "pkgs.stdenv.isLinux";
+      description = ''
+        Use Clang as the Rust linker driver on Linux.
+
+        This avoids GCC's `collect2` wrapper, which can hit `Argument list too long`
+        in large Nix development environments before the final linker receives
+        Rust's response file.
+      '';
+    };
+
     cranelift = {
       enable = lib.mkOption {
         type = lib.types.bool;
@@ -367,6 +380,7 @@ in
           lib.optional cfg.mold.enable pkgs.mold-wrapped
           ++ lib.optional cfg.lld.enable pkgs.llvmPackages.bintools
           ++ lib.optional cfg.wild.enable pkgs.wild
+          ++ lib.optional cfg.clangLinker.enable pkgs.clang
           ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv
           ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
@@ -375,6 +389,7 @@ in
 
         env =
           let
+            clangLinkerFlags = lib.optionalString cfg.clangLinker.enable "-C linker=clang";
             moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=mold";
             lldFlags = lib.optionalString cfg.lld.enable "-C link-arg=-fuse-ld=lld";
             # TODO: Work around rustc's default lld selection and missing native GCC Wild support;
@@ -386,7 +401,7 @@ in
               "-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin"
               + lib.optionalString pkgs.stdenv.isAarch64 " -Z unstable-options"
             );
-            linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags lldFlags wildFlags ]);
+            linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ clangLinkerFlags moldFlags lldFlags wildFlags ]);
             optionalEnv = cond: str: if cond then str else null;
           in
           {
