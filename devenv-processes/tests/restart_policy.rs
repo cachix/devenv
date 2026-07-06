@@ -272,6 +272,86 @@ async fn test_max_restarts_limit() {
     .expect("Test timed out");
 }
 
+/// Manual restart of an exited process must publish a fresh status.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_manual_restart_after_exit_reports_fresh_status() {
+    timeout(TEST_TIMEOUT, async {
+        let ctx = TestContext::new();
+        // First run exits cleanly; the run after restart() keeps running.
+        let marker = ctx.temp_path().join("first-run-done");
+        let script = ctx
+            .create_script(
+                "exit_then_run.sh",
+                &format!(
+                    "#!/bin/sh\nif [ -f {m} ]; then sleep 30; else touch {m}; exit 0; fi\n",
+                    m = marker.display()
+                ),
+            )
+            .await;
+
+        let config = ProcessConfig {
+            name: "restart-status".to_string(),
+            exec: script.to_string_lossy().to_string(),
+            args: vec![],
+            restart: RestartConfig {
+                on: RestartPolicy::OnFailure,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let manager = ctx.create_manager();
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+
+        // Wait until the clean exit is reported (supervisor stops monitoring).
+        let exited = wait_for_condition(
+            || async {
+                manager
+                    .job_state("restart-status")
+                    .await
+                    .is_some_and(|s| s.phase == SupervisorPhase::Exited)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(exited, "Process should report Exited after a clean exit");
+
+        manager
+            .restart("restart-status")
+            .await
+            .expect("Failed to restart");
+
+        // The restarted process has no readiness mechanism, so it must be
+        // reported Ready with a fresh restart quota — not the stale Exited.
+        let ready = wait_for_condition(
+            || async {
+                manager
+                    .job_state("restart-status")
+                    .await
+                    .is_some_and(|s| s.phase == SupervisorPhase::Ready && s.restart_count == 0)
+            },
+            RESTART_TIMEOUT,
+        )
+        .await;
+        assert!(
+            ready,
+            "Restarted process should report Ready, not the stale Exited phase"
+        );
+
+        // And it must stay Ready while the process keeps running.
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let status = manager.job_state("restart-status").await.unwrap();
+        assert_eq!(status.phase, SupervisorPhase::Ready);
+
+        manager.stop_all().await.expect("Failed to stop");
+    })
+    .await
+    .expect("Test timed out");
+}
+
 /// Test that max_restarts=None allows unlimited restarts (with manual stop)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_unlimited_restarts() {

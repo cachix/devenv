@@ -180,6 +180,19 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
     }
 }
 
+/// Gets initial process state, processes with no readiness mechanism are 
+// immediately `Ready`, everything else is `Starting` until a probe or notify fires.
+fn initial_phase(config: &ProcessConfig) -> crate::supervisor_state::SupervisorPhase {
+    let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
+    let has_ready_config = config.ready.is_some();
+    let has_tcp_probe = (!config.listen.is_empty() || !config.ports.is_empty()) && !has_notify;
+    if !has_notify && !has_ready_config && !has_tcp_probe {
+        crate::supervisor_state::SupervisorPhase::Ready
+    } else {
+        crate::supervisor_state::SupervisorPhase::Starting
+    }
+}
+
 /// Collect the names of all active (supervised) processes from the map.
 fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
     processes
@@ -735,23 +748,13 @@ impl NativeProcessManager {
         let stderr_tailer =
             crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.ref_handle(), true);
 
-        // Create status channel for supervisor state observation
+        // Create status channel for supervisor state observation. 
+        // Processes with no readiness mechanism are reported Ready right away.
         let initial_status = crate::supervisor_state::JobStatus {
-            phase: crate::supervisor_state::SupervisorPhase::Starting,
+            phase: initial_phase(config),
             restart_count: 0,
         };
         let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
-
-        // If no readiness mechanism is configured, mark process as immediately ready
-        let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
-        let has_ready_config = config.ready.is_some();
-        let has_tcp_probe = (!config.listen.is_empty() || !config.ports.is_empty()) && !has_notify;
-        if !has_notify && !has_ready_config && !has_tcp_probe {
-            let _ = status_tx.send(crate::supervisor_state::JobStatus {
-                phase: crate::supervisor_state::SupervisorPhase::Ready,
-                restart_count: 0,
-            });
-        }
 
         let resources = ProcessResources {
             config: config.clone(),
@@ -1113,16 +1116,34 @@ impl NativeProcessManager {
             ),
         ));
 
-        // Check if supervisor task has exited (e.g., due to max restarts)
-        if handle.supervisor_task.is_finished() {
-            // Supervisor has exited — start fresh with new supervision.
+        // Check if the old supervision still monitors the job. It doesn't when
+        // the supervisor task has exited (e.g., due to max restarts), or when
+        // it is parked in the Exited phase (kept alive only to react to file
+        // changes — its job-wait arm is disabled).
+        let supervisor_finished = handle.supervisor_task.is_finished();
+        let supervisor_parked =
+            handle.status_rx.borrow().phase == crate::supervisor_state::SupervisorPhase::Exited;
+        if supervisor_finished || supervisor_parked {
+            // Start fresh with new supervision.
             // Order matters: start job first, then spawn supervisor (like start_command does).
             // This gives the process a fresh restart quota (restart_count = 0).
             info!(
-                "Supervisor for {} has exited, starting fresh with new supervision",
+                "Supervisor for {} no longer monitors the job, starting fresh with new supervision",
                 name
             );
+            if !supervisor_finished {
+                handle.supervisor_task.abort();
+            }
             handle.resources.job.start().await;
+
+            // Publish a fresh status (needed for processes without readiness probe)
+            let _ = handle
+                .resources
+                .status_tx
+                .send(crate::supervisor_state::JobStatus {
+                    phase: initial_phase(&handle.resources.config),
+                    restart_count: 0,
+                });
             handle.supervisor_task =
                 crate::supervisor::spawn_supervisor(&handle.resources, self.shutdown.clone());
         } else {
