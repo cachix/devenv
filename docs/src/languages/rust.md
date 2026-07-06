@@ -196,6 +196,34 @@ one of “nixpkgs”, “stable”, “beta”, “nightly”
 
 
 
+### languages\.rust\.clangLinker\.enable
+
+
+
+Use Clang as the Rust linker driver on Linux\.
+
+This avoids GCC’s ` collect2 ` wrapper, which can hit ` Argument list too long `
+in large Nix development environments before the final linker receives
+Rust’s response file\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+pkgs.stdenv.isLinux
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ### languages\.rust\.components
 
 
