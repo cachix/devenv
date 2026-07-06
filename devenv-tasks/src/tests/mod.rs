@@ -286,6 +286,91 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
     Ok(())
 }
 
+/// Regression test for https://github.com/cachix/devenv/issues/2984
+///
+/// When a task's `status` command exits nonzero, that is a normal status/cache
+/// miss and the task's `command` should run. The internal "check status" probe
+/// activity must NOT be rendered as a failed activity in that case: only a
+/// spawn/execution error of the status command is a real probe failure.
+#[tokio::test]
+async fn test_status_miss_not_rendered_as_failed() -> Result<(), Error> {
+    use devenv_activity::{ActivityEvent, ActivityOutcome, Command};
+
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Status exits nonzero -> cache miss -> the command must run.
+    let status_script = create_script("#!/bin/sh\nexit 1")?;
+    let status = status_script.to_str().unwrap().to_string();
+    let command_script = create_script("#!/bin/sh\necho exec-ran")?;
+    let command = command_script.to_str().unwrap();
+
+    let config = Config::try_from(json!({
+        "roots": ["demo:status_miss"],
+        "run_mode": "all",
+        "tasks": [
+            {
+                "name": "demo:status_miss",
+                "command": command,
+                "status": status
+            }
+        ]
+    }))
+    .unwrap();
+
+    // Capture activity events so we can inspect how the status probe is rendered.
+    let (mut activity_rx, handle) = devenv_activity::init();
+    let activity_guard = handle.install();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+    tasks.run(false).await;
+
+    // Stop capturing so the channel closes and the drain below terminates.
+    drop(activity_guard);
+
+    // A nonzero status is a cache miss, so the command must have actually run.
+    match &tasks.graph[tasks.tasks_order[0]].read().await.status {
+        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+        other => panic!("Expected Success status for status-miss task, got: {other:?}"),
+    }
+
+    // Locate the "check status" probe activity for our status command and record
+    // the outcome it completed with. Matching on the command string keeps the
+    // assertion robust even if unrelated activities share the channel.
+    let mut status_activity_id = None;
+    let mut status_outcome = None;
+    while let Ok(event) = activity_rx.try_recv() {
+        match event {
+            ActivityEvent::Command(Command::Start {
+                id, name, command, ..
+            }) if name == "check status" && command.as_deref() == Some(status.as_str()) => {
+                status_activity_id = Some(id);
+            }
+            ActivityEvent::Command(Command::Complete { id, outcome, .. })
+                if Some(id) == status_activity_id =>
+            {
+                status_outcome = Some(outcome);
+            }
+            _ => {}
+        }
+    }
+
+    assert!(
+        status_activity_id.is_some(),
+        "expected a 'check status' probe activity to be emitted"
+    );
+    assert_eq!(
+        status_outcome,
+        Some(ActivityOutcome::Success),
+        "status miss (nonzero exit) must not be rendered as a failed activity",
+    );
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn test_status_output_caching() -> Result<(), Error> {
     // Create a unique tempdir for this test

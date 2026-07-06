@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed a task whose `status` command exits nonzero being rendered as a failed `check status` activity, making successful runs look like they contained a failure. A nonzero status is a normal cache miss that runs the task's command; only a failure to spawn the status command itself is now reported as a failure ([#2984](https://github.com/cachix/devenv/issues/2984)).
 - Fixed `devenv processes restart` leaving a restarted process reported as "exited" by `devenv processes list`/`status` even though it was running. When the process had previously exited (restart policy said stop), the restart spawned a fresh job and supervisor but never published a new status, and processes without readiness probes produce no further status events until they exit again. Restarting such a process now also replaces a supervisor parked after exit (kept alive only for file watching), which previously stopped monitoring the restarted job ([#2982](https://github.com/cachix/devenv/issues/2982)).
 - Fixed devenv overriding user-configured experimental features in `nix.conf` ([#2931](https://github.com/cachix/devenv/issues/2931)).
 - Fixed `devenv hook bash`/`zsh` skipping activation for a sibling project after following `.devenv/exit-dir` from a hook-spawned shell that cd'd out of the previous project ([#2944](https://github.com/cachix/devenv/issues/2944)).
