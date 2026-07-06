@@ -6674,6 +6674,11 @@ rec {
             packageId = "blake3";
           }
           {
+            name = "libsqlite3-sys";
+            packageId = "libsqlite3-sys";
+            usesDefaultFeatures = false;
+          }
+          {
             name = "miette";
             packageId = "miette";
             features = [ "fancy" ];

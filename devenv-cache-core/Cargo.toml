@@ -13,6 +13,7 @@ sqlx = { workspace = true, features = [
     "migrate",
     "macros",
 ] }
+libsqlite3-sys.workspace = true
 
 # Error handling
 thiserror.workspace = true
