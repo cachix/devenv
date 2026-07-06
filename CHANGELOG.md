@@ -35,6 +35,7 @@
 - Fixed `devenv inputs add` from a subdirectory writing to a stray `devenv.yaml` in the subdir instead of the enclosing project. It now walks up to find `devenv.nix` the same way `devenv shell` does, so the input is added where the rest of devenv reads it.
 - Fixed `devenv gc` failing with "File devenv.nix does not exist" when run outside of a project. Garbage collection operates on the global devenv store and no longer requires a `devenv.nix` ([#2928](https://github.com/cachix/devenv/issues/2928)).
 - Fixed unfree package errors suggesting only generic Nix/NixOS configuration. They now point devenv users to `allow_unfree: true` or `nixpkgs.permitted_unfree_packages` in `devenv.yaml` ([#2850](https://github.com/cachix/devenv/issues/2850)).
+- Fixed `devenv shell` failing outright with a SQLite `disk I/O error` on filesystems that don't support shared-memory mmap (seen on virtiofs/9p VM mounts and similar). The eval cache and task cache databases now fall back to a plain rollback-journal mode on these filesystems instead of hard-crashing ([#2947](https://github.com/cachix/devenv/issues/2947)).
 
 ### Improvements
 
