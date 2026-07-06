@@ -1,8 +1,8 @@
 //! Stateful byte-level scanner for escape sequences in raw PTY output.
 //!
-//! Detects DEC private mode sequences, CSI queries, DCS sequences, and
-//! OSC queries so they can be forwarded to the real terminal (the VT backend
-//! consumes them internally).
+//! Detects DEC private mode sequences, CSI queries, DCS sequences, screen/tmux
+//! title sequences, and OSC queries so they can be forwarded to the real
+//! terminal (the VT backend consumes them internally).
 
 mod dec_mode;
 mod osc;
@@ -124,6 +124,10 @@ pub enum SequenceEvent {
     ForwardDcs {
         raw_bytes: Vec<u8>,
     },
+    /// screen/tmux title sequence (`ESC k ... ST`) forwarded verbatim.
+    ForwardScreenTitle {
+        raw_bytes: Vec<u8>,
+    },
     /// `ESC =` (DECKPAM) or `ESC >` (DECKPNM) — keypad application/numeric mode.
     /// Part of `smkx`/`rmkx` terminfo capabilities alongside DECCKM.
     KeypadMode {
@@ -151,8 +155,8 @@ pub enum SequenceEvent {
 const MAX_CSI_PARAMS: usize = 16;
 /// Maximum number of CSI intermediate bytes.
 const MAX_CSI_INTERMEDIATES: usize = 2;
-/// Maximum DCS payload size before giving up.
-const MAX_DCS_PAYLOAD: usize = 4096;
+/// Maximum string control payload size before giving up.
+const MAX_STRING_PAYLOAD: usize = 4096;
 
 /// Classification result for a complete CSI sequence.
 enum CsiClass {
@@ -244,6 +248,10 @@ enum RouterState {
     Dcs,
     /// ESC seen while in DCS — could be ST or start of new sequence.
     DcsEsc,
+    /// screen/tmux title sequence accumulator (`ESC k ... ST`).
+    ScreenTitle,
+    /// ESC seen while in screen/tmux title — could be ST or start of new sequence.
+    ScreenTitleEsc,
 }
 
 /// Full CSI parameter accumulator.
@@ -336,8 +344,9 @@ impl CsiParamState {
 
 /// Byte-level scanner that detects escape sequences in raw PTY output.
 ///
-/// Routes `ESC [` to the CSI parameter accumulator, `ESC ]` to the
-/// OSC parser, and `ESC P` to the DCS accumulator.
+/// Routes `ESC [` to the CSI parameter accumulator, `ESC ]` to the OSC parser,
+/// `ESC P` to the DCS accumulator, and `ESC k` to the screen/tmux title
+/// accumulator.
 /// State persists across calls to handle sequences split across buffer boundaries.
 pub struct EscapeScanner {
     state: RouterState,
@@ -412,6 +421,9 @@ impl EscapeScanner {
                         }
                         b'P' => {
                             self.state = RouterState::Dcs;
+                        }
+                        b'k' => {
+                            self.state = RouterState::ScreenTitle;
                         }
                         b'=' | b'>' => {
                             // DECKPAM (ESC =) / DECKPNM (ESC >)
@@ -571,7 +583,7 @@ impl EscapeScanner {
                     self.seq_bytes.push(byte);
                     if byte == 0x1b {
                         self.state = RouterState::DcsEsc;
-                    } else if self.seq_bytes.len() > MAX_DCS_PAYLOAD {
+                    } else if self.seq_bytes.len() > MAX_STRING_PAYLOAD {
                         self.reset();
                     }
                 }
@@ -606,6 +618,59 @@ impl EscapeScanner {
                             }
                             b'P' => {
                                 self.state = RouterState::Dcs;
+                            }
+                            b'k' => {
+                                self.state = RouterState::ScreenTitle;
+                            }
+                            _ => {
+                                self.reset();
+                            }
+                        }
+                    }
+                }
+
+                RouterState::ScreenTitle => {
+                    self.seq_bytes.push(byte);
+                    if byte == 0x1b {
+                        self.state = RouterState::ScreenTitleEsc;
+                    } else if self.seq_bytes.len() > MAX_STRING_PAYLOAD {
+                        self.reset();
+                    }
+                }
+
+                RouterState::ScreenTitleEsc => {
+                    if byte == b'\\' {
+                        // ST (ESC \) terminates the title string
+                        self.seq_bytes.push(byte);
+                        let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                        events.push(SequenceEvent::ForwardScreenTitle { raw_bytes });
+                        self.state = RouterState::Ground;
+                    } else if byte == 0x1b {
+                        // Another ESC — abort title string, start new sequence
+                        self.seq_bytes.clear();
+                        self.seq_bytes.push(byte);
+                        self.state = RouterState::Esc;
+                    } else {
+                        // ESC wasn't ST — abort title string. The ESC + this byte
+                        // could be a new escape sequence.
+                        self.seq_bytes.clear();
+                        self.seq_bytes.push(0x1b);
+                        self.seq_bytes.push(byte);
+                        match byte {
+                            b'[' => {
+                                self.state = RouterState::Csi;
+                                self.dec_parser.reset();
+                                self.csi_params.reset();
+                            }
+                            b']' => {
+                                self.state = RouterState::Osc;
+                                self.osc_parser.reset();
+                            }
+                            b'P' => {
+                                self.state = RouterState::Dcs;
+                            }
+                            b'k' => {
+                                self.state = RouterState::ScreenTitle;
                             }
                             _ => {
                                 self.reset();
@@ -1524,6 +1589,61 @@ mod tests {
         let mut scanner = EscapeScanner::new();
         // ESC P starts DCS, then ESC [ starts a CSI — DCS is aborted
         let events = scanner.scan(b"\x1bPdata\x1b[c");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    // -- screen/tmux title tests --
+
+    #[test]
+    fn detects_screen_title() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1bkls\x1b\\");
+        assert_eq!(events.len(), 1);
+        let SequenceEvent::ForwardScreenTitle { ref raw_bytes } = events[0] else {
+            panic!("expected ForwardScreenTitle, got {:?}", events[0]);
+        };
+        assert_eq!(raw_bytes, b"\x1bkls\x1b\\");
+    }
+
+    #[test]
+    fn screen_title_split_across_buffers() {
+        let mut scanner = EscapeScanner::new();
+
+        let events1 = scanner.scan(b"\x1bkec");
+        assert!(events1.is_empty());
+
+        let events2 = scanner.scan(b"ho hello\x1b\\");
+        assert_eq!(events2.len(), 1);
+        let SequenceEvent::ForwardScreenTitle { ref raw_bytes } = events2[0] else {
+            panic!("expected ForwardScreenTitle, got {:?}", events2[0]);
+        };
+        assert_eq!(raw_bytes, b"\x1bkecho hello\x1b\\");
+    }
+
+    #[test]
+    fn screen_title_split_at_every_byte() {
+        let mut scanner = EscapeScanner::new();
+        let seq = b"\x1bkecho hello\x1b\\";
+        for (i, &byte) in seq.iter().enumerate() {
+            let events = scanner.scan(&[byte]);
+            if i < seq.len() - 1 {
+                assert!(events.is_empty());
+            } else {
+                assert_eq!(events.len(), 1);
+                assert!(matches!(
+                    events[0],
+                    SequenceEvent::ForwardScreenTitle { .. }
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn screen_title_esc_mid_sequence_restarts() {
+        let mut scanner = EscapeScanner::new();
+        // ESC k starts a title string, then ESC [ starts a CSI — title is aborted
+        let events = scanner.scan(b"\x1bkcommand\x1b[c");
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
     }
