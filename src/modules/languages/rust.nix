@@ -389,7 +389,6 @@ in
 
         env =
           let
-            clangLinkerFlags = lib.optionalString cfg.clangLinker.enable "-C linker=clang";
             moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=mold";
             lldFlags = lib.optionalString cfg.lld.enable "-C link-arg=-fuse-ld=lld";
             # TODO: Work around rustc's default lld selection and missing native GCC Wild support;
@@ -401,7 +400,7 @@ in
               "-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin"
               + lib.optionalString pkgs.stdenv.isAarch64 " -Z unstable-options"
             );
-            linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ clangLinkerFlags moldFlags lldFlags wildFlags ]);
+            linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags lldFlags wildFlags ]);
             optionalEnv = cond: str: if cond then str else null;
           in
           {
@@ -417,6 +416,14 @@ in
             CARGO_PROFILE_DEV_BUILD_OVERRIDE_CODEGEN_BACKEND = optionalEnv cfg.cranelift.forceBuildScriptsLlvm "llvm";
             RUSTFLAGS = optionalEnv (linkerFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ linkerFlags cfg.rustflags ]));
             RUSTDOCFLAGS = optionalEnv (linkerFlags != "") linkerFlags;
+          }
+          # Configure the Clang linker driver through CARGO_TARGET_<triple>_LINKER
+          # rather than RUSTFLAGS. Setting RUSTFLAGS in the environment makes cargo
+          # ignore `[build] rustflags` from a project's `.cargo/config.toml` entirely,
+          # silently dropping any flags configured there (e.g. `--cfg tracing_unstable`).
+          # The per-target linker env var sets the linker without touching rustflags.
+          // lib.optionalAttrs cfg.clangLinker.enable {
+            "CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" = "clang";
           };
 
         git-hooks.tools = {
