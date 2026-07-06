@@ -510,10 +510,9 @@ impl TaskState {
 
                 match command.output().await {
                     Ok(output) => {
-                        if !output.status.success() {
-                            status_activity.fail();
-                        }
-
+                        // A nonzero exit is a normal status/cache miss: fall through
+                        // to run the command. Only a spawn/execution error of the
+                        // status probe itself (the `Err` arm below) is a real failure.
                         if output.status.success() {
                             // Start with cached output, merge in any exports from the status command
                             let mut result = cached_output.unwrap_or_else(|| serde_json::json!({}));
