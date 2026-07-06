@@ -180,7 +180,7 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
     }
 }
 
-/// Gets initial process state, processes with no readiness mechanism are 
+/// Gets initial process state, processes with no readiness mechanism are
 // immediately `Ready`, everything else is `Starting` until a probe or notify fires.
 fn initial_phase(config: &ProcessConfig) -> crate::supervisor_state::SupervisorPhase {
     let has_notify = config.ready.as_ref().is_some_and(|r| r.notify);
@@ -748,7 +748,7 @@ impl NativeProcessManager {
         let stderr_tailer =
             crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.ref_handle(), true);
 
-        // Create status channel for supervisor state observation. 
+        // Create status channel for supervisor state observation.
         // Processes with no readiness mechanism are reported Ready right away.
         let initial_status = crate::supervisor_state::JobStatus {
             phase: initial_phase(config),
