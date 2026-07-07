@@ -6083,6 +6083,8 @@ null or string or absolute path
 
 ## git-hooks.hooks.biome.settings.configPath
 
+
+
 Path to the configuration JSON file
 
 
@@ -8341,6 +8343,8 @@ one of “”, “black”, “django”, “pycharm”, “google”, “open_s
 
 
 ## git-hooks.hooks.lacheck
+
+
 
 lacheck hook
 
@@ -15267,6 +15271,41 @@ false
 
 ```nix
 true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
+
+
+
+## languages.cplusplus.directory
+
+
+
+The C++ project’s root directory. Defaults to the root of the devenv
+project (or the root of the git tree, if no devenv root is set).
+Can be an absolute path or one relative to the root of the devenv
+project (or of the git tree, if no devenv root is set).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+if config.devenv.root != null then config.devenv.root else config.git.root
+```
+
+
+
+*Example:*
+
+```nix
+"./directory"
 ```
 
 *Declared by:*
