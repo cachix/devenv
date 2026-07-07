@@ -6926,6 +6926,10 @@ rec {
             packageId = "async-priority-channel";
           }
           {
+            name = "devenv-activity";
+            packageId = "devenv-activity";
+          }
+          {
             name = "miette";
             packageId = "miette";
             features = [ "fancy" ];
