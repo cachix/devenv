@@ -172,6 +172,10 @@ in
 
     #
     (lib.mkIf (cfg.enable && cfg.conan.enable && cfg.conan.install.enable) {
+      languages.cplusplus.conan.config.wrappers = {
+        conanLockFile = "conan.lock";
+        conanInstall = true;
+      };
       enterShell = ''
         ${cfg.conan.config.outputs.devShell.shellHook}
       '';
