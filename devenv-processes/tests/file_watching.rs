@@ -13,21 +13,16 @@
 //! watcher is live. This replaces fixed sleeps and handles the asynchronous
 //! nature of FSEvents on macOS.
 
-#[cfg(feature = "test-file-watcher")]
+#![cfg(feature = "test-file-watcher")]
+
 mod common;
 
-#[cfg(feature = "test-file-watcher")]
 use common::*;
-#[cfg(feature = "test-file-watcher")]
 use devenv_processes::ProcessConfig;
-#[cfg(feature = "test-file-watcher")]
 use std::time::Duration;
-#[cfg(feature = "test-file-watcher")]
 use tokio::time::timeout;
 
-#[cfg(feature = "test-file-watcher")]
 const TEST_TIMEOUT: Duration = Duration::from_secs(30);
-#[cfg(feature = "test-file-watcher")]
 const WATCH_TIMEOUT: Duration = Duration::from_secs(30);
 
 // ============================================================================
@@ -35,7 +30,6 @@ const WATCH_TIMEOUT: Duration = Duration::from_secs(30);
 // ============================================================================
 
 /// Test that process restarts when a watched file changes
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_restart_on_file_change() {
     timeout(TEST_TIMEOUT, async {
@@ -104,7 +98,6 @@ sleep 3600
 }
 
 /// Test watching a directory for changes
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_watch_directory() {
     timeout(TEST_TIMEOUT, async {
@@ -179,7 +172,6 @@ sleep 3600
 // ============================================================================
 
 /// Test that ignored files don't trigger restart
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_ignore_patterns() {
     timeout(TEST_TIMEOUT, async {
@@ -260,7 +252,6 @@ sleep 3600
 }
 
 /// Test ignoring hidden files and directories
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_ignore_hidden_files() {
     timeout(TEST_TIMEOUT, async {
@@ -340,7 +331,6 @@ sleep 3600
 }
 
 /// Test that extension filter only triggers on matching extensions
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_extension_filter() {
     timeout(TEST_TIMEOUT, async {
@@ -424,7 +414,6 @@ sleep 3600
 // ============================================================================
 
 /// Test watching multiple paths
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_multiple_watch_paths() {
     timeout(TEST_TIMEOUT, async {
@@ -528,7 +517,6 @@ sleep 3600
 // ============================================================================
 
 /// Test that empty watch paths doesn't set up a watcher
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_empty_watch_paths_no_watcher() {
     timeout(TEST_TIMEOUT, async {
@@ -602,7 +590,6 @@ sleep 3600
 /// Without the fix the watcher is gone after the first (immediate) exit, so
 /// `wait_for_watcher_ready` can never observe a re-run and `baseline` stays 1,
 /// failing the assertion below.
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_oneshot_reruns_on_file_change() {
     timeout(TEST_TIMEOUT, async {
@@ -673,7 +660,6 @@ echo "started" >> {}
 }
 
 /// Test rapid file changes (debouncing behavior)
-#[cfg(feature = "test-file-watcher")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rapid_file_changes_debounced() {
     timeout(TEST_TIMEOUT, async {

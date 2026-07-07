@@ -6970,6 +6970,12 @@ rec {
         ];
         devDependencies = [
           {
+            name = "notify";
+            packageId = "notify";
+            usesDefaultFeatures = false;
+            features = [ "macos_kqueue" ];
+          }
+          {
             name = "tempfile";
             packageId = "tempfile";
           }
