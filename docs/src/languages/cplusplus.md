@@ -475,6 +475,41 @@ true
 
 
 
+### languages\.cplusplus\.directory
+
+
+
+The C++ project’s root directory\. Defaults to the root of the devenv
+project (or the root of the git tree, if no devenv root is set)\.
+Can be an absolute path or one relative to the root of the devenv
+project (or of the git tree, if no devenv root is set)\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+if config.devenv.root != null then config.devenv.root else config.git.root
+```
+
+
+
+*Example:*
+
+```nix
+"./directory"
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cplusplus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
+
+
+
 ### languages\.cplusplus\.lsp\.enable
 
 
