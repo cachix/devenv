@@ -31,7 +31,7 @@
           settings.compiler = {
             "compiler.cppstd" = "20";
           };
-          settings.rest.build_type = "Release";
+          settings._.build_type = "Release";
           runEnv = [
             {
               name = "LD_LIBRARY_PATH";
