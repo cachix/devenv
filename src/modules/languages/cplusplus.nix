@@ -9,6 +9,11 @@ let
     attribute = "conan";
   };
 
+  relativePathType = lib.types.pathWith {
+    inStore = false;
+    absolute = false;
+  };
+
   # When enabled, use getInput (throws helpful error if missing)
   # Otherwise, use tryGetInput to populate the docs when the input is available.
   conan-flake =
@@ -16,6 +21,10 @@ let
 
   # Determine config root: prefer devenv.root, fallback to git.root
   configRoot = if config.devenv.root != null then config.devenv.root else config.git.root;
+
+  homeRoot = if relativePathType.check cfg.directory then configRoot else cfg.directory;
+
+  homeDirectory = if relativePathType.check cfg.directory then cfg.directory else ".";
 
   conanSubmodule =
     if conan-flake != null then
@@ -29,6 +38,19 @@ in
 {
   options.languages.cplusplus = {
     enable = lib.mkEnableOption "tools for C++ development";
+
+    directory = lib.mkOption {
+      type = lib.types.str;
+      default = configRoot;
+      defaultText = lib.literalExpression "if config.devenv.root != null then config.devenv.root else config.git.root";
+      description = ''
+        The C++ project's root directory. Defaults to the root of the devenv
+        project (or the root of the git tree, if no devenv root is set).
+        Can be an absolute path or one relative to the root of the devenv
+        project (or of the git tree, if no devenv root is set).
+      '';
+      example = "./directory";
+    };
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -103,7 +125,11 @@ in
 
     #
     (lib.mkIf (cfg.enable && cfg.conan.enable) {
-      languages.cplusplus.conan.config.configRoot = lib.mkDefault configRoot;
+      languages.cplusplus.conan.config.configRoot = lib.mkDefault null;
+
+      languages.cplusplus.conan.config.homeRoot = lib.mkDefault homeRoot;
+
+      languages.cplusplus.conan.config.homeDirectory = lib.mkDefault homeDirectory;
 
       languages.cplusplus.conan.config.package = lib.mkDefault cfg.conan.package;
 
