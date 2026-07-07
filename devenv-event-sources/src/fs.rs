@@ -328,7 +328,38 @@ impl FileWatcher {
         // to avoid spawning its signal, keyboard, action, and error workers
         // that we don't need.
         let (ev_s, ev_r) = async_priority_channel::bounded(4096);
-        let (er_s, _er_r) = mpsc::channel(64);
+        let (er_s, mut er_r) = mpsc::channel(64);
+
+        // Task 0: drain watchexec runtime errors.
+        //
+        // The fs worker reports per-path watch failures (e.g. hitting the
+        // inotify watch limit) as non-fatal runtime errors on this channel.
+        // If nothing keeps the receiver alive, the worker's send fails and it
+        // escalates to a fatal error, exiting and leaving pending watch() calls
+        // waiting on `fs_ready` forever -- which looks like a hang under the TUI.
+        //
+        // Draining keeps the worker alive and lets us surface the failure to the
+        // user through the activity system (visible in the TUI). We report only
+        // the first error to avoid flooding when many watches fail at once, and
+        // trace the rest for developers.
+        let err_name = watch_name.clone();
+        let error_task = tokio::spawn(async move {
+            let mut reported = false;
+            while let Some(e) = er_r.recv().await {
+                if !reported {
+                    reported = true;
+                    devenv_activity::message(
+                        devenv_activity::ActivityLevel::Warn,
+                        format!(
+                            "file watcher for {err_name} failed to register a watch: {e}. \
+                             hot reload may miss changes. this is often caused by reaching \
+                             the inotify watch limit (raise fs.inotify.max_user_watches)."
+                        ),
+                    );
+                }
+                warn!(error = %e, watch = %err_name, "watchexec runtime error");
+            }
+        });
 
         // Task 1: fs worker — watches files via notify, sends raw events.
         let fs_config = wx_config.clone();
@@ -336,6 +367,12 @@ impl FileWatcher {
         let fs_task = tokio::spawn(async move {
             if let Err(e) = watchexec::sources::fs::worker(fs_config, fs_errors, ev_s).await {
                 warn!("fs worker for {} stopped: {}", watch_name, e);
+                devenv_activity::message(
+                    devenv_activity::ActivityLevel::Warn,
+                    format!(
+                        "file watcher for {watch_name} stopped: {e}. hot reload is no longer active."
+                    ),
+                );
             }
         });
 
@@ -398,7 +435,7 @@ impl FileWatcher {
             rx,
             _tx: tx,
             handle,
-            tasks: vec![fs_task, filter_task],
+            tasks: vec![fs_task, filter_task, error_task],
         }
     }
 
