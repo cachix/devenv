@@ -6926,6 +6926,10 @@ rec {
             packageId = "async-priority-channel";
           }
           {
+            name = "devenv-activity";
+            packageId = "devenv-activity";
+          }
+          {
             name = "miette";
             packageId = "miette";
             features = [ "fancy" ];
@@ -6965,6 +6969,12 @@ rec {
           }
         ];
         devDependencies = [
+          {
+            name = "notify";
+            packageId = "notify";
+            usesDefaultFeatures = false;
+            features = [ "macos_kqueue" ];
+          }
           {
             name = "tempfile";
             packageId = "tempfile";

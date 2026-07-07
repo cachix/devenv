@@ -7,6 +7,8 @@ description = "Reusable event sources for devenv (file watcher, TCP probe, notif
 
 [features]
 default = []
+# For consumers' tests (e.g. devenv-processes/test-file-watcher); this
+# crate's own tests get kqueue via the dev-dependency below instead.
 macos-kqueue = ["notify/macos_kqueue"]
 
 [dependencies]
@@ -23,6 +25,13 @@ watchexec-filterer-globset.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# macOS FSEvents can bundle a bare chmod with a stale Create/Data(Content)
+# event for the same path (verified, not a race -- see commit message).
+# kqueue reports it precisely, but opens 1 fd per watched path, so it can
+# exhaust the process's fd limit at scale (limit varies by system/config,
+# so no fixed number here); that's why it stays test-only, not a prod
+# default.
+notify = { workspace = true, features = ["macos_kqueue"] }
 
 [package.metadata.cargo-machete]
 ignored = ["notify"]
