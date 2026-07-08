@@ -15313,7 +15313,8 @@ true
 The C++ project’s root directory. Defaults to the root of the devenv
 project (or the root of the git tree, if no devenv root is set).
 Can be an absolute path or one relative to the root of the devenv
-project (or of the git tree, if no devenv root is set).
+project (or relative to the root of the git tree, if no devenv root is
+set).
 
 
 
