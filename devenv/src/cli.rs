@@ -139,6 +139,8 @@ pub enum ParseTraceOutputError {
 pub enum TracingArgsError {
     #[error("DEVENV_TRACE_TO: {0}")]
     EnvParse(#[source] ParseTraceOutputError),
+    #[error("DEVENV_TRACE_DEFAULT_TO: {0}")]
+    DefaultEnvParse(#[source] ParseTraceOutputError),
     #[error("duplicate trace destination '{spec}' (would interleave output)")]
     DuplicateDestination { spec: TraceOutputSpec },
 }
@@ -477,7 +479,9 @@ pub struct TracingCliArgs {
             Formats: json (default), pretty, full, otlp-grpc, otlp-http-protobuf, otlp-http-json\n\n\
             When format is omitted, defaults to json.\n\
             Tracing is disabled by default.\n\n\
-            [env: DEVENV_TRACE_TO=] (comma-separated)"
+            [env: DEVENV_TRACE_TO=] (comma-separated)\n\
+            [env: DEVENV_TRACE_DEFAULT_TO=] (comma-separated, used only when no explicit tracing is configured)\n\
+            [env: DEVENV_TRACE_DISABLE=1] (disables DEVENV_TRACE_DEFAULT_TO)"
     )]
     pub trace_to: Vec<TraceOutputSpec>,
 
@@ -539,23 +543,37 @@ pub struct CliOptions {
 }
 
 impl TracingCliArgs {
-    /// Parse `DEVENV_TRACE_TO` env var (comma-separated `[format:]destination` specs).
-    fn specs_from_env() -> Result<Vec<TraceOutputSpec>, TracingArgsError> {
-        let val = match env::var("DEVENV_TRACE_TO") {
+    /// Parse comma-separated `[format:]destination` specs from an environment variable.
+    fn specs_from_env_var(
+        name: &str,
+        map_err: fn(ParseTraceOutputError) -> TracingArgsError,
+    ) -> Result<Vec<TraceOutputSpec>, TracingArgsError> {
+        let val = match env::var(name) {
             Ok(v) if !v.is_empty() => v,
             _ => return Ok(Vec::new()),
         };
         val.split(',')
-            .map(|s| {
-                s.trim()
-                    .parse::<TraceOutputSpec>()
-                    .map_err(TracingArgsError::EnvParse)
-            })
+            .map(|s| s.trim().parse::<TraceOutputSpec>().map_err(map_err))
             .collect()
     }
 
+    /// Parse `DEVENV_TRACE_TO` env var (comma-separated `[format:]destination` specs).
+    fn specs_from_env() -> Result<Vec<TraceOutputSpec>, TracingArgsError> {
+        Self::specs_from_env_var("DEVENV_TRACE_TO", TracingArgsError::EnvParse)
+    }
+
+    /// Parse `DEVENV_TRACE_DEFAULT_TO` env var.
+    fn default_specs_from_env() -> Result<Vec<TraceOutputSpec>, TracingArgsError> {
+        Self::specs_from_env_var("DEVENV_TRACE_DEFAULT_TO", TracingArgsError::DefaultEnvParse)
+    }
+
+    /// Returns true when default tracing should be suppressed.
+    fn default_tracing_disabled() -> bool {
+        env::var("DEVENV_TRACE_DISABLE").is_ok_and(|v| !v.is_empty() && v != "0")
+    }
+
     /// Merge all trace sources: `DEVENV_TRACE_TO` env var, `--trace-to` CLI flags,
-    /// and legacy `--trace-output`/`--trace-format`.
+    /// legacy `--trace-output`/`--trace-format`, and `DEVENV_TRACE_DEFAULT_TO`.
     ///
     /// No validation step — specs are valid by construction (the type system
     /// rules out incompatible format/destination combinations).
@@ -568,6 +586,10 @@ impl TracingCliArgs {
         // Legacy --trace-output/--trace-format: local-only by type, no validation needed.
         if let Some(ref sink) = self.trace_output {
             specs.push(TraceOutputSpec::Render(self.trace_format, sink.clone()));
+        }
+
+        if specs.is_empty() && !Self::default_tracing_disabled() {
+            specs = Self::default_specs_from_env()?;
         }
 
         // Reject duplicate destinations (e.g. json:stderr + pretty:stderr).
@@ -1095,6 +1117,49 @@ pub enum InputsCommand {
 mod tests {
     use super::*;
     use clap::{Parser, crate_version};
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvVarGuard {
+        _lock: MutexGuard<'static, ()>,
+        saved: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvVarGuard {
+        fn new(vars: &[&'static str]) -> Self {
+            let lock = ENV_LOCK.lock().unwrap();
+            let saved = vars.iter().map(|&var| (var, env::var(var).ok())).collect();
+            for var in vars {
+                unsafe { env::remove_var(var) };
+            }
+            Self { _lock: lock, saved }
+        }
+
+        fn set(&self, name: &str, value: &str) {
+            unsafe { env::set_var(name, value) };
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            for (name, value) in &self.saved {
+                if let Some(value) = value {
+                    unsafe { env::set_var(name, value) };
+                } else {
+                    unsafe { env::remove_var(name) };
+                }
+            }
+        }
+    }
+
+    fn clean_trace_env() -> EnvVarGuard {
+        EnvVarGuard::new(&[
+            "DEVENV_TRACE_TO",
+            "DEVENV_TRACE_DEFAULT_TO",
+            "DEVENV_TRACE_DISABLE",
+        ])
+    }
 
     #[test]
     fn verify_cli() {
@@ -1170,6 +1235,7 @@ mod tests {
 
     #[test]
     fn trace_to_bare_defaults_to_json() {
+        let _env = clean_trace_env();
         let args = TracingCliArgs {
             trace_to: vec!["stderr".parse().unwrap()],
             trace_output: None,
@@ -1184,6 +1250,7 @@ mod tests {
 
     #[test]
     fn trace_to_preserves_explicit_format() {
+        let _env = clean_trace_env();
         let args = TracingCliArgs {
             trace_to: vec!["pretty:stderr".parse().unwrap()],
             trace_output: None,
@@ -1198,6 +1265,7 @@ mod tests {
 
     #[test]
     fn legacy_trace_output_uses_trace_format() {
+        let _env = clean_trace_env();
         let args = TracingCliArgs {
             trace_to: vec![],
             trace_output: Some(TraceSink::Stderr),
@@ -1213,6 +1281,7 @@ mod tests {
 
     #[test]
     fn legacy_and_new_merge_different_destinations() {
+        let _env = clean_trace_env();
         let args = TracingCliArgs {
             trace_to: vec!["json:file:/tmp/t.json".parse().unwrap()],
             trace_output: Some(TraceSink::Stderr),
@@ -1231,7 +1300,160 @@ mod tests {
     }
 
     #[test]
+    fn trace_default_applies_when_no_explicit_tracing_is_configured() {
+        let env = clean_trace_env();
+        env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
+
+        let args = TracingCliArgs {
+            trace_to: vec![],
+            trace_output: None,
+            trace_format: TraceFormat::Json,
+        };
+        let specs = args.resolve().unwrap();
+        assert_eq!(
+            specs,
+            vec![TraceOutputSpec::Render(
+                TraceFormat::Pretty,
+                TraceSink::Stderr
+            )]
+        );
+    }
+
+    #[test]
+    fn trace_default_supports_multiple_destinations() {
+        let env = clean_trace_env();
+        env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr,otlp-grpc");
+
+        let args = TracingCliArgs {
+            trace_to: vec![],
+            trace_output: None,
+            trace_format: TraceFormat::Json,
+        };
+        let specs = args.resolve().unwrap();
+        assert_eq!(specs.len(), 2);
+        assert_eq!(
+            specs[0],
+            TraceOutputSpec::Render(TraceFormat::Pretty, TraceSink::Stderr)
+        );
+        assert!(matches!(
+            specs[1],
+            TraceOutputSpec::Otlp(OtlpProtocol::Grpc, _)
+        ));
+    }
+
+    #[test]
+    fn trace_default_does_not_apply_when_trace_to_env_is_set() {
+        let env = clean_trace_env();
+        env.set("DEVENV_TRACE_TO", "json:file:/tmp/explicit.json");
+        env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
+
+        let args = TracingCliArgs {
+            trace_to: vec![],
+            trace_output: None,
+            trace_format: TraceFormat::Json,
+        };
+        let specs = args.resolve().unwrap();
+        assert_eq!(
+            specs,
+            vec![TraceOutputSpec::Render(
+                TraceFormat::Json,
+                TraceSink::File(PathBuf::from("/tmp/explicit.json"))
+            )]
+        );
+    }
+
+    #[test]
+    fn trace_default_does_not_apply_when_cli_trace_to_is_set() {
+        let env = clean_trace_env();
+        env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
+
+        let args = TracingCliArgs {
+            trace_to: vec!["json:file:/tmp/explicit.json".parse().unwrap()],
+            trace_output: None,
+            trace_format: TraceFormat::Json,
+        };
+        let specs = args.resolve().unwrap();
+        assert_eq!(
+            specs,
+            vec![TraceOutputSpec::Render(
+                TraceFormat::Json,
+                TraceSink::File(PathBuf::from("/tmp/explicit.json"))
+            )]
+        );
+    }
+
+    #[test]
+    fn trace_default_does_not_apply_when_legacy_trace_output_is_set() {
+        let env = clean_trace_env();
+        env.set("DEVENV_TRACE_DEFAULT_TO", "json:file:/tmp/default.json");
+
+        let args = TracingCliArgs {
+            trace_to: vec![],
+            trace_output: Some(TraceSink::Stderr),
+            trace_format: TraceFormat::Pretty,
+        };
+        let specs = args.resolve().unwrap();
+        assert_eq!(
+            specs,
+            vec![TraceOutputSpec::Render(
+                TraceFormat::Pretty,
+                TraceSink::Stderr
+            )]
+        );
+    }
+
+    #[test]
+    fn trace_default_can_be_disabled() {
+        let env = clean_trace_env();
+        env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
+        env.set("DEVENV_TRACE_DISABLE", "1");
+
+        let args = TracingCliArgs {
+            trace_to: vec![],
+            trace_output: None,
+            trace_format: TraceFormat::Json,
+        };
+        assert!(args.resolve().unwrap().is_empty());
+    }
+
+    #[test]
+    fn trace_default_disable_zero_is_ignored() {
+        let env = clean_trace_env();
+        env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
+        env.set("DEVENV_TRACE_DISABLE", "0");
+
+        let args = TracingCliArgs {
+            trace_to: vec![],
+            trace_output: None,
+            trace_format: TraceFormat::Json,
+        };
+        assert_eq!(
+            args.resolve().unwrap(),
+            vec![TraceOutputSpec::Render(
+                TraceFormat::Pretty,
+                TraceSink::Stderr
+            )]
+        );
+    }
+
+    #[test]
+    fn trace_default_parse_errors_name_default_env_var() {
+        let env = clean_trace_env();
+        env.set("DEVENV_TRACE_DEFAULT_TO", "json");
+
+        let args = TracingCliArgs {
+            trace_to: vec![],
+            trace_output: None,
+            trace_format: TraceFormat::Json,
+        };
+        let err = args.resolve().unwrap_err();
+        assert!(matches!(err, TracingArgsError::DefaultEnvParse(_)), "{err}");
+        assert!(err.to_string().starts_with("DEVENV_TRACE_DEFAULT_TO:"));
+    }
+
+    #[test]
     fn duplicate_destination_rejected() {
+        let _env = clean_trace_env();
         let args = TracingCliArgs {
             trace_to: vec![
                 "json:stderr".parse().unwrap(),
@@ -1249,6 +1471,7 @@ mod tests {
 
     #[test]
     fn duplicate_destination_legacy_and_new() {
+        let _env = clean_trace_env();
         let args = TracingCliArgs {
             trace_to: vec!["json:stderr".parse().unwrap()],
             trace_output: Some(TraceSink::Stderr),
@@ -1263,6 +1486,7 @@ mod tests {
 
     #[test]
     fn trace_to_multiple_from_cli() {
+        let _env = clean_trace_env();
         let cli = Cli::parse_from([
             "devenv",
             "--trace-to",
@@ -1285,6 +1509,7 @@ mod tests {
 
     #[test]
     fn legacy_trace_output_from_cli() {
+        let _env = clean_trace_env();
         let cli = Cli::parse_from([
             "devenv",
             "--trace-output",
