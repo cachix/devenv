@@ -26,6 +26,8 @@ let
 
   homeDirectory = if relativePathType.check cfg.directory then cfg.directory else ".";
 
+  dirPrefix = "${homeRoot}/${homeDirectory}/";
+
   conanSubmodule =
     if conan-flake != null then
       conan-flake.lib.submoduleWith lib
@@ -34,6 +36,35 @@ let
         }
     else
       lib.types.attrs;
+
+  initConanScript = pkgs.writeShellScript "init-conan.sh" ''
+    function _devenv-conan-lock()
+    {
+      # Avoid running "conan install" for every shell.
+      # Only run it when the "conan.lock" file or Conan version has changed.
+      # We do this by storing the Conan version and a hash of "conan.lock" in conan-flake config directory.
+      local ACTUAL_CONAN_CHECKSUM="${cfg.conan.package.version}:${config.lib._fileChecksum "${dirPrefix}conan.lock"}"
+      local CONAN_CHECKSUM_FILE="$CONAN_FLAKE_CONFIG/conan.lock.checksum"
+      if [ -f "$CONAN_CHECKSUM_FILE" ]
+        then
+          read -r EXPECTED_CONAN_CHECKSUM < "$CONAN_CHECKSUM_FILE"
+        else
+          EXPECTED_CONAN_CHECKSUM=""
+      fi
+
+      if [ "$ACTUAL_CONAN_CHECKSUM" != "$EXPECTED_CONAN_CHECKSUM" ]
+      then
+        if ${lib.getExe cfg.conan.config.wrappers.createLockInstallWrapper} --build=missing
+        then
+          echo "$ACTUAL_CONAN_CHECKSUM" > "$CONAN_CHECKSUM_FILE"
+        else
+          echo "Install failed. Run 'conan lock' and 'conan install' manually."
+        fi
+      fi
+    }
+
+    _devenv-conan-lock
+  '';
 in
 {
   options.languages.cplusplus = {
@@ -47,7 +78,8 @@ in
         The C++ project's root directory. Defaults to the root of the devenv
         project (or the root of the git tree, if no devenv root is set).
         Can be an absolute path or one relative to the root of the devenv
-        project (or of the git tree, if no devenv root is set).
+        project (or relative to the root of the git tree, if no devenv root is
+        set).
       '';
       example = "./directory";
     };
@@ -131,6 +163,13 @@ in
 
       languages.cplusplus.conan.config.homeDirectory = lib.mkDefault homeDirectory;
 
+      languages.cplusplus.conan.config.wrappers = {
+        conanLockFile = "conan.lock";
+        # Disable conan-flake automatic handling of conan install; we're
+        # handling it here, avoiding running it for every shell unnecessarily:
+        conanInstall = false;
+      };
+
       languages.cplusplus.conan.config.package = lib.mkDefault cfg.conan.package;
 
       # conan-flake uses its stdenv option to figure out the compiler
@@ -171,14 +210,15 @@ in
     })
 
     #
-    (lib.mkIf (cfg.enable && cfg.conan.enable && cfg.conan.install.enable) {
-      languages.cplusplus.conan.config.wrappers = {
-        conanLockFile = "conan.lock";
-        conanInstall = true;
-      };
-      enterShell = ''
-        ${cfg.conan.config.outputs.devShell.shellHook}
-      '';
+    (lib.mkIf cfg.enable {
+      enterShell = lib.concatStringsSep "\n" (
+        (lib.optional cfg.conan.enable ''
+          ${cfg.conan.config.outputs.devShell.shellHook}
+        '')
+        ++ (lib.optional cfg.conan.install.enable ''
+          source ${initConanScript}
+        '')
+      );
     })
   ];
 }
