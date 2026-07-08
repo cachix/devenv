@@ -48,7 +48,7 @@ There corresponds the following conan-flake options:
 {
   profiles = {
     settings.compiler."compiler.cppstd" = "14";
-    settings.rest.build_type = "Debug";
+    settings._.build_type = "Debug";
 
     platformToolRequires = {
       cmake = pkgs.cmake.version;
@@ -77,7 +77,7 @@ Set your `devenv.nix` file accordingly. For example, the above is actually equiv
       config = {
         profiles = {
           settings.compiler."compiler.cppstd" = "14";
-          settings.rest.build_type = "Debug";
+          settings._.build_type = "Debug";
         };
       };
     };
@@ -137,7 +137,7 @@ If you would like to integrate with the LLVM compiler infrastructure:
       install.enable = true;
       config = {
         profiles = {
-          settings.rest.build_type = "Release";
+          settings._.build_type = "Release";
         };
         stdenv = pkgs.overrideCC
           (
@@ -174,7 +174,7 @@ Or even:
       install.enable = true;
       config = {
         profiles = {
-          settings.rest.build_type = "Release";
+          settings._.build_type = "Release";
         };
       };
     };
@@ -225,7 +225,7 @@ With [local-recipe-index](https://docs.conan.io/2/tutorial/conan_repositories/se
       config = {
         profiles = {
           settings.compiler."compiler.cppstd" = "17";
-          settings.rest.build_type = "Release";
+          settings._.build_type = "Release";
         };
 
         remotes.local = {
