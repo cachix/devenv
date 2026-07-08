@@ -3,6 +3,7 @@
 //!
 //! - `outer_shell_survives_cd_out` — #2805
 //! - `inner_shell_exits_on_cd_out` — hook-spawned shell must `exit` + write exit-dir
+//! - `hook_dir_marker_does_not_leak_to_child_shell` — #2861
 //! - `no_respawn_inside_devenv_shell` — follow-up to #2815
 //! - `posix_activates_sibling_after_cd_out` — #2944
 
@@ -162,6 +163,34 @@ fn inner_shell_exits_on_cd_out() {
 }
 
 #[test]
+fn hook_dir_marker_does_not_leak_to_child_shell() {
+    // A new shell started from inside an active devenv shell (a new
+    // tmux/zellij pane, a manually started nested shell, ...) inherits
+    // `DEVENV_ROOT` and `_DEVENV_HOOK_DIR` via the process environment. If it
+    // also re-sources the hook (as any normal interactive rc file would), it
+    // must not conclude it is itself hook-spawned and `exit` on cd-out —
+    // nothing set up a parent to catch that exit, so doing so would just
+    // kill the pane/session (issue #2861).
+    for (shell, src, _) in shells() {
+        let tmp = fake_project();
+        let child_script = format!("{src}\ncd /\n_devenv_hook\necho SURVIVED\n");
+        let script = format!(
+            "export DEVENV_ROOT={root:?}\nexport _DEVENV_HOOK_DIR={root:?}\n\
+             {src}\n{shell} -c '{child_script}'\n",
+            root = tmp.path(),
+        );
+        let out = run(shell, &script);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains("SURVIVED"),
+            "[{shell}] a shell spawned from inside an active devenv shell inherited \
+             _DEVENV_HOOK_DIR and exited on cd-out.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
+        );
+    }
+}
+
+#[test]
 fn no_respawn_inside_devenv_shell() {
     for (shell, src, path_override) in shells() {
         let tmp = fake_project();
@@ -287,6 +316,37 @@ fn nu_inner_shell_exits_on_cd_out() {
     );
     let exit_dir = fs::read_to_string(tmp.path().join(".devenv/exit-dir")).unwrap();
     assert_eq!(exit_dir, "/", "[nu] exit-dir should record cd target");
+}
+
+#[test]
+fn nu_hook_dir_marker_does_not_leak_to_child_shell() {
+    if !have("nu") {
+        return;
+    }
+    let tmp = fake_project();
+    let hook_path = tmp.path().join("hook.nu");
+    let hook_gen = Command::new(devenv_bin())
+        .args(["hook", "nu"])
+        .output()
+        .unwrap();
+    assert!(hook_gen.status.success(), "devenv hook nu failed");
+    fs::write(&hook_path, &hook_gen.stdout).unwrap();
+
+    let root = tmp.path();
+    let child_script = format!("source {hook_path:?}\ncd /\n_devenv_hook\nprint SURVIVED\n");
+    let script = format!(
+        "$env.DEVENV_ROOT = \"{root}\"\n$env._DEVENV_HOOK_DIR = \"{root}\"\n\
+         source {hook_path:?}\ncd {root:?}\n^nu -c '{child_script}'\n",
+        root = root.display(),
+    );
+    let out = Command::new("nu").arg("-c").arg(&script).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("SURVIVED"),
+        "[nu] a shell spawned from inside an active devenv shell inherited \
+         _DEVENV_HOOK_DIR and exited on cd-out.\nstdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
 }
 
 #[test]

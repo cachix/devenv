@@ -4,12 +4,23 @@
 set -q _DEVENV_HOOK_UNTRUSTED; or set -g _DEVENV_HOOK_UNTRUSTED ""
 set -q _DEVENV_ACTIVATE_DIR; or set -g _DEVENV_ACTIVATE_DIR ""
 
+# `_DEVENV_HOOK_DIR` marks the one shell process the hook itself spawned.
+# Capture it into a non-exported variable, then erase the exported copy so
+# it cannot leak into further descendants (a new tmux/zellij pane, a
+# manually started nested shell, ...) started from this shell later on —
+# those would otherwise inherit it, wrongly conclude they too are
+# hook-spawned, and `exit` on cd-out with nothing around to catch them.
+if set -q _DEVENV_HOOK_DIR
+    set -g _devenv_hook_dir $_DEVENV_HOOK_DIR
+    set -e _DEVENV_HOOK_DIR
+end
+
 function _devenv_hook --on-variable PWD
     # `DEVENV_ROOT` set means a devenv shell is already active — hook does
-    # nothing. Hook-spawned shells (marked by `_DEVENV_HOOK_DIR`) additionally
+    # nothing. Hook-spawned shells (marked by `_devenv_hook_dir`) additionally
     # `exit` when cd-ing outside the project so the parent shell can follow.
     if test -n "$DEVENV_ROOT"
-        if test -n "$_DEVENV_HOOK_DIR"
+        if set -q _devenv_hook_dir
             switch $PWD
                 case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
                 case '*'
