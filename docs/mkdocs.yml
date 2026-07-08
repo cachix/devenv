@@ -11,6 +11,9 @@ validation:
   absolute_links: relative_to_docs
   unrecognized_links: warn
   anchors: warn
+extra:
+  status:
+    deprecated: Deprecated
 extra_css:
   - assets/top-level.css
 extra_javascript:

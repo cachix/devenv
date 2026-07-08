@@ -1,3 +1,7 @@
+---
+status: deprecated
+---
+
 !!! danger "The `.env` file leaks into `nix` store"
 
     When you use the `.env` file to store secrets, beware that this
