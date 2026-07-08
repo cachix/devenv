@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed editor-launched terminals auto-activating as Bash when `SHELL` is missing or stripped. devenv now falls back to the user's login shell before defaulting to Bash ([#2880](https://github.com/cachix/devenv/issues/2880)).
 - Fixed `devenv shell` appearing to hang under the TUI when the file watcher failed to register a watch — most commonly after reaching the inotify watch limit (`fs.inotify.max_user_watches`). The watcher no longer dies on the first failed watch, and now surfaces a warning in the TUI instead of only logging it under `--verbose --no-tui`.
 - Fixed a task whose `status` command exits nonzero being rendered as a failed `check status` activity, making successful runs look like they contained a failure. A nonzero status is a normal cache miss that runs the task's command; only a failure to spawn the status command itself is now reported as a failure ([#2984](https://github.com/cachix/devenv/issues/2984)).
 - Fixed `devenv processes restart` leaving a restarted process reported as "exited" by `devenv processes list`/`status` even though it was running. When the process had previously exited (restart policy said stop), the restart spawned a fresh job and supervisor but never published a new status, and processes without readiness probes produce no further status events until they exit again. Restarting such a process now also replaces a supervisor parked after exit (kept alive only for file watching), which previously stopped monitoring the restarted job ([#2982](https://github.com/cachix/devenv/issues/2982)).

@@ -263,8 +263,16 @@ impl Default for ShellSettings {
 impl ShellSettings {
     /// Resolve shell settings from options and config sources.
     ///
-    /// Precedence: Options > Config > Default.
+    /// Precedence: Options > Config > $SHELL > login shell > Default.
     pub fn resolve(options: ShellOptions, config: &Config) -> Self {
+        Self::resolve_with_login_shell(options, config, login_shell_name)
+    }
+
+    fn resolve_with_login_shell(
+        options: ShellOptions,
+        config: &Config,
+        login_shell: impl FnOnce() -> Option<String>,
+    ) -> Self {
         let clean = if let Some(keep) = options.clean {
             Clean {
                 enabled: true,
@@ -279,36 +287,29 @@ impl ShellSettings {
 
         let reload = options.reload.combine(config.reload).unwrap_or(true);
 
-        let shell = options
-            .shell
-            .to_owned()
-            .or(config.shell.clone())
-            .or_else(|| {
-                std::env::var("SHELL").ok().and_then(|s| {
-                    std::path::Path::new(&s)
-                        .file_name()?
-                        .to_str()
-                        .map(String::from)
-                })
-            })
-            .unwrap_or_else(|| "bash".to_string());
-
-        // Only bash, zsh, fish, and nu are supported; fall back to bash for anything else
-        let shell = match shell.as_str() {
-            "bash" | "zsh" | "fish" | "nu" => shell,
-            _ => "bash".to_string(),
+        let (shell, source) = if let Some(shell) = options.shell.to_owned() {
+            (
+                supported_shell(&shell).unwrap_or_else(|| "bash".to_string()),
+                "CLI --shell",
+            )
+        } else if let Some(shell) = config.shell.clone() {
+            (
+                supported_shell(&shell).unwrap_or_else(|| "bash".to_string()),
+                "devenv.yaml",
+            )
+        } else if let Some(shell) = shell_name_from_env().and_then(|shell| supported_shell(&shell))
+        {
+            (shell, "$SHELL env")
+        } else if let Some(shell) = login_shell().and_then(|shell| supported_shell(&shell)) {
+            (shell, "login shell")
+        } else {
+            ("bash".to_string(), "default")
         };
 
         tracing::debug!(
             "Shell settings resolved: shell={} (source: {})",
             shell,
-            if options.shell.is_some() {
-                "CLI --shell"
-            } else if config.shell.is_some() {
-                "devenv.yaml"
-            } else {
-                "$SHELL env"
-            }
+            source
         );
 
         Self {
@@ -318,6 +319,59 @@ impl ShellSettings {
             shell,
         }
     }
+}
+
+fn supported_shell(shell: &str) -> Option<String> {
+    match shell {
+        "bash" | "zsh" | "fish" | "nu" => Some(shell.to_string()),
+        _ => None,
+    }
+}
+
+fn shell_name_from_env() -> Option<String> {
+    std::env::var("SHELL")
+        .ok()
+        .and_then(|shell| shell_name_from_path(&shell))
+}
+
+fn shell_name_from_path(shell: &str) -> Option<String> {
+    std::path::Path::new(shell)
+        .file_name()?
+        .to_str()
+        .map(String::from)
+}
+
+fn login_shell_name() -> Option<String> {
+    login_shell_path().and_then(|shell| shell_name_from_path(&shell))
+}
+
+#[cfg(unix)]
+fn login_shell_path() -> Option<String> {
+    let username = std::env::var("USER")
+        .ok()
+        .or_else(|| std::env::var("LOGNAME").ok())?;
+    let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
+    login_shell_path_from_passwd(&username, &passwd)
+}
+
+#[cfg(not(unix))]
+fn login_shell_path() -> Option<String> {
+    None
+}
+
+#[cfg(unix)]
+fn login_shell_path_from_passwd(username: &str, passwd: &str) -> Option<String> {
+    passwd.lines().find_map(|line| {
+        let mut fields = line.split(':');
+        let name = fields.next()?;
+        if name != username {
+            return None;
+        }
+        fields
+            .nth(5)
+            .filter(|shell| !shell.is_empty())
+            .map(String::from)
+    })
 }
 
 // --- Secrets ---
@@ -375,6 +429,44 @@ pub struct InputOverrides {
 mod tests {
     use super::*;
     use crate::config::Config;
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvVarGuard {
+        _lock: MutexGuard<'static, ()>,
+        saved: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvVarGuard {
+        fn new(vars: &[&'static str]) -> Self {
+            let lock = ENV_LOCK.lock().unwrap();
+            let saved = vars
+                .iter()
+                .map(|&var| (var, std::env::var(var).ok()))
+                .collect();
+            for var in vars {
+                unsafe { std::env::remove_var(var) };
+            }
+            Self { _lock: lock, saved }
+        }
+
+        fn set(&self, name: &str, value: &str) {
+            unsafe { std::env::set_var(name, value) };
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            for (name, value) in &self.saved {
+                if let Some(value) = value {
+                    unsafe { std::env::set_var(name, value) };
+                } else {
+                    unsafe { std::env::remove_var(name) };
+                }
+            }
+        }
+    }
 
     #[test]
     fn flag_both_unset() {
@@ -651,6 +743,73 @@ mod tests {
         };
         let settings = ShellSettings::resolve(options, &config);
         assert_eq!(settings.shell, "zsh");
+    }
+
+    #[test]
+    fn shell_settings_shell_from_env_precedes_login_shell() {
+        let env = EnvVarGuard::new(&["SHELL"]);
+        env.set("SHELL", "/nix/store/example-bash/bin/bash");
+
+        let settings = ShellSettings::resolve_with_login_shell(
+            ShellOptions::default(),
+            &Config::default(),
+            || Some("zsh".to_string()),
+        );
+
+        assert_eq!(settings.shell, "bash");
+    }
+
+    #[test]
+    fn shell_settings_unsupported_env_shell_uses_login_shell() {
+        let env = EnvVarGuard::new(&["SHELL"]);
+        env.set("SHELL", "/bin/sh");
+
+        let settings = ShellSettings::resolve_with_login_shell(
+            ShellOptions::default(),
+            &Config::default(),
+            || Some("zsh".to_string()),
+        );
+
+        assert_eq!(settings.shell, "zsh");
+    }
+
+    #[test]
+    fn shell_settings_shell_from_login_shell_when_env_missing() {
+        let _env = EnvVarGuard::new(&["SHELL"]);
+
+        let settings = ShellSettings::resolve_with_login_shell(
+            ShellOptions::default(),
+            &Config::default(),
+            || Some("zsh".to_string()),
+        );
+
+        assert_eq!(settings.shell, "zsh");
+    }
+
+    #[test]
+    fn shell_settings_unsupported_login_shell_falls_back_to_bash() {
+        let _env = EnvVarGuard::new(&["SHELL"]);
+
+        let settings = ShellSettings::resolve_with_login_shell(
+            ShellOptions::default(),
+            &Config::default(),
+            || Some("tcsh".to_string()),
+        );
+
+        assert_eq!(settings.shell, "bash");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn login_shell_path_from_passwd_extracts_user_shell() {
+        let passwd = "\
+root:x:0:0:root:/root:/bin/bash\n\
+alice:x:1000:100:Alice:/home/alice:/run/current-system/sw/bin/zsh\n";
+
+        assert_eq!(
+            login_shell_path_from_passwd("alice", passwd),
+            Some("/run/current-system/sw/bin/zsh".to_string())
+        );
     }
 
     #[test]
