@@ -56,6 +56,31 @@ function _devenv_hook --on-variable PWD
     end
 end
 
+# `builtin cd` that still records fish's own directory history (`$dirprev`,
+# used by `cd -`/`prevd`/`nextd`) — replicates what fish's bundled `cd`
+# function does around `builtin cd`, without calling `cd` itself. Plain `cd`
+# would invoke whatever the user (or a plugin like `zoxide --cmd=cd`)
+# overrode it to, which is exactly what `builtin cd` was introduced to avoid
+# (see the "infinite loop detected" comment below) — but that also skipped
+# fish's own history bookkeeping, which lives in the `cd` function, not a
+# variable-change hook, so `cd -` after following the user out here would
+# silently skip over the project directory (#2853).
+function _devenv_builtin_cd_with_history
+    set -l previous $PWD
+    builtin cd $argv
+    set -l cd_status $status
+    if test $cd_status -eq 0 -a "$PWD" != "$previous"
+        # 25 matches fish's own MAX_DIR_HIST in share/functions/cd.fish.
+        set -l max_dir_hist 25
+        set -q dirprev; or set -l dirprev
+        set -q dirprev[$max_dir_hist]; and set -e dirprev[1]
+        set -U -q dirprev; and set -U -a dirprev $previous; or set -g -a dirprev $previous
+        set -U -q dirnext; and set -U -e dirnext; or set -e dirnext
+        set -U -q __fish_cd_direction; and set -U __fish_cd_direction prev; or set -g __fish_cd_direction prev
+    end
+    return $cd_status
+end
+
 # Spawn devenv shell in $project_dir and follow the user if they cd'd out.
 function _devenv_hook_activate
     set -l project_dir $argv[1]
@@ -75,7 +100,9 @@ function _devenv_hook_activate
         set -l target_dir (cat "$exit_dir_file")
         rm -f "$exit_dir_file"
         if test -d "$target_dir"
-            builtin cd "$target_dir"
+            # `builtin cd`, not `cd`: avoids "zoxide: infinite loop detected"
+            # when the user overrides `cd` (e.g. `zoxide init --cmd=cd`).
+            _devenv_builtin_cd_with_history "$target_dir"
         end
     end
 end
