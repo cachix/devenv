@@ -5,6 +5,7 @@
 //! - `inner_shell_exits_on_cd_out` — hook-spawned shell must `exit` + write exit-dir
 //! - `hook_dir_marker_does_not_leak_to_child_shell` — #2861
 //! - `no_respawn_inside_devenv_shell` — follow-up to #2815
+//! - `fish_deferred_activation_skips_if_already_active` — direnv/devenv double-activation race
 //! - `posix_activates_sibling_after_cd_out` — #2944
 
 use std::fs;
@@ -214,6 +215,73 @@ fn no_respawn_inside_devenv_shell() {
              Recorded:\n{recorded}",
         );
     }
+}
+
+#[test]
+fn fish_deferred_activation_skips_if_already_active() {
+    // Fish defers activation to the next prompt (see the comment on
+    // `_devenv_hook` in hook.fish) to avoid spawning inside a PWD event
+    // handler. In between the initial decision and that deferred prompt,
+    // something else (direnv loading a `.envrc` with `use devenv`, a
+    // manually entered devenv shell, ...) may have already activated an
+    // environment for this directory. `_devenv_hook_activate` must notice
+    // `DEVENV_ROOT` is now set and skip, rather than stacking a redundant
+    // devenv shell on top.
+    if !have("fish") {
+        return;
+    }
+    let tmp = fake_project();
+    let dir = tempfile::tempdir().unwrap();
+    let calls = dir.path().join("calls");
+    let shim_bin = dir.path().join("devenv");
+    fs::write(
+        &shim_bin,
+        format!(
+            r#"#!/bin/sh
+case "$1" in
+  hook-should-activate)
+    printf '%s\n' {root:?}
+    ;;
+  shell)
+    printf 'shell %s\n' "$PWD" >> {calls:?}
+    ;;
+esac
+"#,
+            root = tmp.path(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&shim_bin, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let bin = devenv_bin();
+    let script = format!(
+        // Explicitly erase: a `devenv shell` invoked to run this very test
+        // suite would otherwise leak `DEVENV_ROOT` into the spawned fish,
+        // masking the "not yet activated" starting state this test needs.
+        "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR\n\
+         {bin} hook fish | source\ncd {root:?}\n\
+         {po}\n\
+         _devenv_hook\n\
+         set -gx DEVENV_ROOT {root:?}\n\
+         _devenv_hook_prompt\n\
+         echo DONE\n",
+        po = fish_path_override(dir.path()),
+        root = tmp.path(),
+    );
+    let out = run("fish", &script);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("DONE"),
+        "fish hook hung or exited unexpectedly.\nstdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let recorded = fs::read_to_string(&calls).unwrap_or_default();
+    assert!(
+        recorded.is_empty(),
+        "fish spawned a redundant devenv shell after DEVENV_ROOT was set by \
+         something else (e.g. direnv) between the cd and the deferred prompt.\n\
+         Recorded:\n{recorded}",
+    );
 }
 
 #[test]

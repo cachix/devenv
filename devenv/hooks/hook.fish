@@ -59,6 +59,15 @@ end
 # Spawn devenv shell in $project_dir and follow the user if they cd'd out.
 function _devenv_hook_activate
     set -l project_dir $argv[1]
+    # The decision to activate was made on an earlier PWD change and only
+    # acted on at this prompt (see the comment on _devenv_hook above). In
+    # between, something else (direnv loading a `.envrc` with `use devenv`,
+    # a manually entered devenv shell, ...) may have already activated an
+    # environment for this directory. Don't stack a redundant devenv shell
+    # on top of it.
+    if test -n "$DEVENV_ROOT"
+        return
+    end
     env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook devenv shell
     # If the devenv shell exited due to cd outside the project, follow the user there
     set -l exit_dir_file "$project_dir/.devenv/exit-dir"
