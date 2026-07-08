@@ -5,6 +5,9 @@ devenv.local.yaml
 
 # Local Conan home
 .conan2/
+conan.lock
+build/
+CMakeUserPresets.json
 
 # conan-flake
 .conanrc
