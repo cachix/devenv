@@ -60,12 +60,7 @@ pub fn print(shell: &HookShell) -> Result<()> {
 /// `profiles` persists alongside it, so those commands also activate the bound
 /// profiles as if `--profile` had been passed.
 pub fn allow(home: &Path, from: Option<&str>, profiles: &[String]) -> Result<()> {
-    allow_path(
-        home,
-        &env::current_dir().into_diagnostic()?,
-        from,
-        profiles,
-    )
+    allow_path(home, &env::current_dir().into_diagnostic()?, from, profiles)
 }
 
 /// Revoke trust for the current working directory.
@@ -281,12 +276,7 @@ fn normalize_from(from: &str, base: &Path) -> Result<String> {
     let Some(path_str) = from.strip_prefix("path:") else {
         return Ok(from.to_string());
     };
-    let path = Path::new(path_str);
-    let full_path = if path.is_relative() {
-        base.join(path)
-    } else {
-        path.to_path_buf()
-    };
+    let full_path = devenv_core::paths::resolve_against(Path::new(path_str), base);
     let abs_path = fs::canonicalize(&full_path)
         .map_err(|e| miette::miette!("--from source '{from}' does not resolve: {e}"))?;
     let abs = abs_path
@@ -576,13 +566,7 @@ mod tests {
         let devenv_home_dir = dir.path().join("devenv-home");
 
         // Profiles without --from are ignored (with a warning), not stored.
-        allow_path(
-            &devenv_home_dir,
-            &project,
-            None,
-            &["backend".to_string()],
-        )
-        .unwrap();
+        allow_path(&devenv_home_dir, &project, None, &["backend".to_string()]).unwrap();
 
         let abs_str = canonical_str(&project).unwrap();
         let entry = find_trust_entry(&devenv_home_dir, &abs_str)
@@ -645,15 +629,7 @@ mod tests {
         let devenv_home_dir = dir.path().join("devenv-home");
 
         assert!(allow_path(&devenv_home_dir, &work, Some(""), &[]).is_err());
-        assert!(
-            allow_path(
-                &devenv_home_dir,
-                &work,
-                Some("path:./does-not-exist"),
-                &[],
-            )
-            .is_err()
-        );
+        assert!(allow_path(&devenv_home_dir, &work, Some("path:./does-not-exist"), &[],).is_err());
 
         // Nothing was persisted.
         let abs_str = canonical_str(&work).unwrap();
@@ -676,13 +652,7 @@ mod tests {
         assert!(nearest_from(&devenv_home_dir, &work).unwrap().is_none());
 
         // Bind it to an out-of-tree source via `allow --from`.
-        allow_path(
-            &devenv_home_dir,
-            &work,
-            Some("github:cachix/devenv"),
-            &[],
-        )
-        .unwrap();
+        allow_path(&devenv_home_dir, &work, Some("github:cachix/devenv"), &[]).unwrap();
 
         let abs = canonical_str(&work).unwrap();
         let entry = nearest_from(&devenv_home_dir, &work).unwrap().unwrap();
@@ -708,11 +678,7 @@ mod tests {
         let devenv_home_dir = dir.path().join("devenv-home");
         // Plain in-tree trust (no --from) is not an out-of-tree binding.
         allow_path(&devenv_home_dir, &project, None, &[]).unwrap();
-        assert!(
-            nearest_from(&devenv_home_dir, &project)
-                .unwrap()
-                .is_none()
-        );
+        assert!(nearest_from(&devenv_home_dir, &project).unwrap().is_none());
     }
 
     #[test]

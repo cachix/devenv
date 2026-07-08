@@ -67,11 +67,7 @@ fn main_inner() -> Result<()> {
             }
             Commands::Allow => {
                 let home = devenv_core::paths::resolve_home()?;
-                return commands::hook::allow(
-                    &home,
-                    cli.from.as_deref(),
-                    &cli.shell_args.profiles,
-                );
+                return commands::hook::allow(&home, cli.from.as_deref(), &cli.shell_args.profiles);
             }
             Commands::Revoke => {
                 let home = devenv_core::paths::resolve_home()?;
@@ -294,8 +290,7 @@ fn enter_discovered_project_root() -> Result<()> {
     } else {
         // A dir bound via `devenv allow --from` roots at the bound directory.
         let home = devenv_core::paths::resolve_home()?;
-        commands::hook::trusted_from(&home, &cwd)?
-            .map(|binding| PathBuf::from(binding.path))
+        commands::hook::trusted_from(&home, &cwd)?.map(|binding| PathBuf::from(binding.path))
     };
     let Some(root) = root.filter(|r| r.as_path() != cwd) else {
         return Ok(());
@@ -395,12 +390,10 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
         .as_deref()
         .and_then(|from| from.strip_prefix("path:"))
         .map(|path_str| {
-            let path = Path::new(path_str);
-            let full_path = if path.is_relative() {
-                env::current_dir().unwrap_or_default().join(path)
-            } else {
-                path.to_path_buf()
-            };
+            let full_path = devenv_core::paths::resolve_against(
+                Path::new(path_str),
+                &env::current_dir().unwrap_or_default(),
+            );
             fs::canonicalize(&full_path).unwrap_or(full_path)
         });
 

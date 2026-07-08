@@ -570,7 +570,12 @@ impl Config {
         // configs merge below everything local, and its imports re-emerge as
         // absolute `path:` imports so modules load from the live source tree.
         let mut source_yamls = Vec::new();
+        let mut source_dir_only_imports = Vec::new();
         let mut source_module_imports = Vec::new();
+        // Canonical root of the out-of-tree source (`None` if it doesn't
+        // resolve). Reused to import the source module and to classify which
+        // inputs were defined by source-side configs.
+        let source_root_canon = source_dir.and_then(|d| d.canonicalize().ok());
         if let Some(source_dir) = source_dir {
             let source_git_root = Self::detect_git_root(source_dir);
             let source_yaml = source_dir.join(YAML_CONFIG);
@@ -610,10 +615,20 @@ impl Config {
                     source_dir,
                     source_git_root.as_deref(),
                     &mut source_yamls,
+                    &mut source_dir_only_imports,
                     &mut visited,
                     0,
                 )?;
                 source_yamls.push(source_yaml);
+
+                // Imported directories without their own devenv.yaml still
+                // contribute a devenv.nix module.
+                for import_dir in &source_dir_only_imports {
+                    let resolved = import_dir
+                        .canonicalize()
+                        .unwrap_or_else(|_| import_dir.to_path_buf());
+                    source_module_imports.push(format!("path:{}", resolved.display()));
+                }
 
                 // Its file imports become absolute module imports, whether or
                 // not they carry a devenv.yaml (mirrors how base-config file
@@ -633,9 +648,9 @@ impl Config {
 
             // The source module itself (devenv.nix plus devenv.local.nix at
             // eval time), imported live even when the source has no yaml.
-            let canonical = source_dir
-                .canonicalize()
-                .unwrap_or_else(|_| source_dir.to_path_buf());
+            let canonical = source_root_canon
+                .clone()
+                .unwrap_or_else(|| source_dir.to_path_buf());
             source_module_imports.push(format!("path:{}", canonical.display()));
 
             // The source's devenv.local.yaml applies as machine-local
@@ -740,9 +755,14 @@ impl Config {
 
         let mut config = result.config;
 
-        // Canonical root of the out-of-tree source, for classifying which
-        // inputs were defined by source-side configs.
-        let source_root_canon = source_dir.and_then(|d| d.canonicalize().ok());
+        // Emit a canonicalized `path:` URL for a resolved input path; `None`
+        // when canonicalization fails (the caller then leaves the URL as-is).
+        let canonical_url = |resolved: &Path, query_suffix: &str| -> Option<String> {
+            resolved
+                .canonicalize()
+                .ok()
+                .map(|c| format!("path:{}{}", c.display(), query_suffix))
+        };
 
         // Normalize relative URLs in inputs using the tracked source directories
         for (name, input) in config.inputs.iter_mut() {
@@ -788,8 +808,8 @@ impl Config {
                         .is_ok_and(|dir| dir.starts_with(root))
                 });
                 if from_source_side {
-                    if let Ok(canonical) = resolved.canonicalize() {
-                        input.url = Some(format!("path:{}{}", canonical.display(), query_suffix));
+                    if let Some(url) = canonical_url(&resolved, &query_suffix) {
+                        input.url = Some(url);
                     }
                     // If canonicalization fails, leave the URL unchanged
                     continue;
@@ -803,9 +823,8 @@ impl Config {
                     let is_outside_base = rel_to_base.starts_with("../");
                     if was_absolute && is_outside_base {
                         // Preserve the absolute path - canonicalize it first
-                        if let Ok(canonical) = resolved.canonicalize() {
-                            let new_url = format!("path:{}{}", canonical.display(), query_suffix);
-                            input.url = Some(new_url);
+                        if let Some(url) = canonical_url(&resolved, &query_suffix) {
+                            input.url = Some(url);
                         }
                         // If canonicalization fails, leave the URL unchanged
                     } else {
