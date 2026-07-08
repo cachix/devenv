@@ -196,6 +196,26 @@ bind \e\cr __devenv_reload_keybind_handler
         let config_fish_content = format!(
             r#"# devenv fish init
 
+# If this shell was spawned by the devenv hook (marked by `_DEVENV_HOOK_DIR`),
+# `exit` when the user `cd`s outside the project so the parent shell can
+# follow. Handled here (devenv's own init file, not the user's hook.fish) so
+# it works regardless of whether the user's config.fish re-sources the hook
+# for this non-login shell. Erase the marker as soon as it is read so it
+# cannot leak into further descendants (a new tmux/zellij pane, a
+# manually started nested shell, ...) which would otherwise wrongly conclude
+# they too are hook-spawned.
+if set -q _DEVENV_HOOK_DIR
+    set -e _DEVENV_HOOK_DIR
+    function _devenv_shell_exit_on_cd_out --on-variable PWD
+        switch $PWD
+            case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
+            case '*'
+                printf '%s' $PWD > "$DEVENV_ROOT/.devenv/exit-dir"
+                exit
+        end
+    end
+end
+
 # Restore devenv PATH after user config may have modified it.
 # _DEVENV_PATH is a colon-separated string from bash; split into fish list.
 set -gx PATH (string split ":" -- $_DEVENV_PATH)
