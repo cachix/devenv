@@ -189,7 +189,7 @@ In this second use case:
 
 ```shell-session
 $ devenv shell
-$ conan create . --build=missing
+$ conan create . --build=missing --lockfile=conan.lock
 ...
 ======== Testing the package: Building ========
 
