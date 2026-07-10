@@ -4,7 +4,8 @@ nav:
   - Guide:
     - Getting started: getting-started.md
     - Configuration: files-and-variables.md
-    - Ad-hoc environments: ad-hoc-developer-environments.md
+    - Convenience:
+      - Ad-hoc environments: ad-hoc-developer-environments.md
     - Auto activation: auto-activation.md
     - Writing devenv.nix:
       - Basics: basics.md
