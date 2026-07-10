@@ -30,9 +30,9 @@ nav:
       - Tasks: tasks.md
       - Profiles: profiles.md
       - Overlays: overlays.md
-      - Outputs: outputs.md
     - Writing devenv.yaml:
       - Inputs: inputs.md
+      - Outputs: outputs.md
       - Composing: composing-using-imports.md
     - Overview:
       - REPL: repl.md
