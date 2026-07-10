@@ -1,5 +1,8 @@
 # devenv hook for nushell
-# Usage: Add to your config.nu:
+#
+# Loaded automatically (no config.nu edit needed) when devenv is installed via
+# Nix, which ships this under $nu.vendor-autoload-dirs. If you're running a
+# devenv build that didn't install it there, add it to your own autoload dir:
 #   mkdir ($nu.default-config-dir | path join autoload)
 #   devenv hook nu | save --force ($nu.default-config-dir | path join autoload/devenv-hook.nu)
 

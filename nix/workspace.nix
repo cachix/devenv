@@ -97,6 +97,15 @@ let
           --bash $compdir/devenv.bash \
           --fish $compdir/devenv.fish \
           --zsh $compdir/_devenv
+
+        # Make devenv hook load automatically on fish.
+        mkdir -p $out/share/fish/vendor_conf.d
+        echo "$out/bin/devenv hook fish | source" > $out/share/fish/vendor_conf.d/devenv.fish
+
+        # Make devenv hook load automatically on nushell. Unlike fish's
+        # `source`, Nu needs a static file.
+        mkdir -p $out/share/nushell/vendor/autoload
+        devenv hook nu > $out/share/nushell/vendor/autoload/devenv.nu
       '';
 
     meta.mainProgram = "devenv";

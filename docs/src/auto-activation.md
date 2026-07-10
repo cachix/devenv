@@ -8,9 +8,9 @@ devenv includes a built in shell hook that automatically activates your develope
 
 ## Setup
 
-Add one line to your shell configuration file:
-
 === "Bash"
+
+    Add one line to your shell configuration file:
 
     ```bash title="~/.bashrc"
     eval "$(devenv hook bash)"
@@ -18,11 +18,16 @@ Add one line to your shell configuration file:
 
 === "Zsh"
 
+    Add one line to your shell configuration file:
+
     ```bash title="~/.zshrc"
     eval "$(devenv hook zsh)"
     ```
 
 === "Fish"
+
+    Usually nothing to do — devenv installed via Nix ships a snippet that fish loads
+    automatically. If it doesn't load for you, add this instead:
 
     ```fish title="~/.config/fish/config.fish"
     devenv hook fish | source
@@ -30,7 +35,12 @@ Add one line to your shell configuration file:
 
 === "Nushell"
 
-    ```nu title="config.nu"
+    Usually nothing to do — devenv installed via Nix ships a snippet that nu loads
+    automatically. If it doesn't load for you, add this instead:
+
+    Run once, in Nu:
+
+    ```nu
     mkdir ($nu.default-config-dir | path join autoload)
     devenv hook nu | save --force ($nu.default-config-dir | path join autoload/devenv-hook.nu)
     ```
