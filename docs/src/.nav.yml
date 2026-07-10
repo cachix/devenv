@@ -9,21 +9,23 @@ nav:
     - Convenience:
       - Ad-hoc environments: ad-hoc-developer-environments.md
       - Auto activation: auto-activation.md
-    - Writing devenv.nix:
+    - Essentials:
       - Basics: basics.md
       - Packages: packages.md
+      - Languages: languages
       - Scripts: scripts.md
       - Creating Files: creating-files.md
-      - Tasks: tasks.md
-      - Languages: languages
+      - Git hooks: git-hooks.md
+      - Tests: tests.md
+    - Processes & Services:
       - Processes:
         - Overview: processes.md
         - Supported process managers: supported-process-managers
       - Services: services
       - Containers: containers.md
+    - Advanced:
+      - Tasks: tasks.md
       - Binary caching: binary-caching.md
-      - Git hooks: git-hooks.md
-      - Tests: tests.md
       - Profiles: profiles.md
       - Overlays: overlays.md
       - Outputs: outputs.md
