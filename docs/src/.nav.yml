@@ -14,7 +14,7 @@ nav:
       - Packages: packages.md
       - Languages: languages
       - Scripts: scripts.md
-      - Creating Files: creating-files.md
+      - Declarative files: creating-files.md
       - Git hooks: git-hooks.md
       - Tests: tests.md
     - Processes & Services:
