@@ -20,6 +20,7 @@ nav:
       - Declarative files: creating-files.md
       - Git hooks: git-hooks.md
       - Tests: tests.md
+      - Pinning: pinning.md
     - Processes & Services:
       - Processes:
         - Overview: processes.md
