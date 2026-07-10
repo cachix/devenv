@@ -140,6 +140,32 @@ export -p"#,
     )
 }
 
+/// bash/zsh function that `exit`s a hook-spawned shell when the user `cd`s
+/// outside `$DEVENV_ROOT`. Shared verbatim by both dialects since the syntax
+/// is plain POSIX, no zsh-specific features needed.
+///
+/// Resolves both `$PWD` and `$DEVENV_ROOT` through `cd -P` (builtin-only, no
+/// `realpath` dependency) before comparing. `$PWD` preserves symlinks a user
+/// navigated through (e.g. macOS's `/tmp` -> `/private/tmp`) while
+/// `$DEVENV_ROOT` is canonicalized, so comparing the raw strings can
+/// spuriously conclude the user left the project when they never did.
+/// Falls back to the raw value if resolution fails (e.g. the directory was
+/// removed out from under the shell).
+pub(crate) fn exit_on_cd_out_snippet() -> &'static str {
+    r#"__devenv_exit_on_cd_out() {
+        local resolved_pwd resolved_root
+        resolved_pwd=$(cd -P -- "$PWD" 2>/dev/null && pwd) || resolved_pwd="$PWD"
+        resolved_root=$(cd -P -- "$DEVENV_ROOT" 2>/dev/null && pwd) || resolved_root="$DEVENV_ROOT"
+        case "$resolved_pwd" in
+            "$resolved_root"|"$resolved_root"/*) ;;
+            *)
+                printf '%s' "$PWD" > "$DEVENV_ROOT/.devenv/exit-dir"
+                exit
+                ;;
+        esac
+    }"#
+}
+
 /// Context passed to [`ShellDialect::rcfile_content`] for generating the init script.
 pub struct RcfileContext<'a> {
     /// Path to the devenv environment script to source.
@@ -476,6 +502,211 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         );
         let exit_dir = std::fs::read_to_string(root.join(".devenv/exit-dir")).unwrap();
         assert_eq!(exit_dir, "/", "exit-dir should record cd target");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// A project directory reachable via a symlinked path (what `$PWD`
+    /// preserves after a real `cd`) and its canonicalized form (what
+    /// devenv's Rust side sets `DEVENV_ROOT` to). Creates the symlink itself
+    /// rather than relying on the host temp dir already being one (e.g.
+    /// macOS's /tmp -> /private/tmp), so the test is deterministic on any
+    /// platform instead of silently skipping on ones where it isn't.
+    fn symlinked_project_dirs(name: &str) -> (PathBuf, PathBuf) {
+        let tmp = unique_tmp_dir(name);
+        let real = tmp.join("real");
+        std::fs::create_dir_all(real.join(".devenv")).unwrap();
+        let symlinked = tmp.join("project");
+        std::os::unix::fs::symlink(&real, &symlinked).unwrap();
+        let canonical = std::fs::canonicalize(&symlinked).unwrap();
+        (symlinked, canonical)
+    }
+
+    #[test]
+    fn bash_rcfile_survives_cd_within_symlinked_project_root() {
+        // macOS's /tmp is a symlink to /private/tmp (and similar
+        // elsewhere). DEVENV_ROOT is canonicalized by devenv's Rust side,
+        // while $PWD preserves whatever symlinked path the user actually
+        // `cd`'d through — comparing the two as raw strings can spuriously
+        // conclude the user left the project when they're still in it.
+        let (symlinked_root, canonical_root) = symlinked_project_dirs("bash-symlink-cdout");
+        let tmp = symlinked_root.parent().unwrap().to_path_buf();
+        let empty_home = tmp.join("home");
+        std::fs::create_dir_all(&empty_home).unwrap();
+
+        let env_script = tmp.join("env.sh");
+        std::fs::write(
+            &env_script,
+            format!("export DEVENV_ROOT={canonical_root:?}\n"),
+        )
+        .unwrap();
+
+        let ctx = RcfileContext {
+            env_script_path: &env_script,
+            env_diff_helpers: BashDialect.env_diff_helpers(),
+            reload_hook: "",
+            target_shell_path: None,
+            init_dir: &tmp,
+        };
+        let rcfile_path = tmp.join("rcfile.sh");
+        std::fs::write(&rcfile_path, BashDialect.rcfile_content(&ctx)).unwrap();
+
+        let script = format!(
+            "source {rcfile_path:?}\ncd {symlinked_root:?}\n__devenv_exit_on_cd_out\necho SURVIVED\n"
+        );
+        let output = Command::new("bash")
+            .env("HOME", &empty_home)
+            .env("_DEVENV_HOOK_DIR", &canonical_root)
+            .arg("-c")
+            .arg(&script)
+            .output()
+            .expect("failed to run bash rcfile");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("SURVIVED"),
+            "[bash] symlinked project root wrongly treated as cd-out.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            !canonical_root.join(".devenv/exit-dir").exists(),
+            "[bash] exit-dir should not have been written"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn zsh_rcfile_survives_cd_within_symlinked_project_root() {
+        if Command::new("zsh").arg("--version").output().is_err() {
+            return;
+        }
+        let (symlinked_root, canonical_root) = symlinked_project_dirs("zsh-symlink-cdout");
+        let tmp = symlinked_root.parent().unwrap().to_path_buf();
+        let init_dir = tmp.join("init");
+        std::fs::create_dir_all(&init_dir).unwrap();
+        let empty_home = tmp.join("home");
+        std::fs::create_dir_all(&empty_home).unwrap();
+
+        let ctx = RcfileContext {
+            env_script_path: Path::new("/dev/null"),
+            env_diff_helpers: "",
+            reload_hook: "",
+            target_shell_path: None,
+            init_dir: &init_dir,
+        };
+        ZshDialect.write_init_files(&ctx).unwrap();
+        let zsh_dir = init_dir.join("zsh");
+
+        let script = format!("cd {symlinked_root:?}\n__devenv_exit_on_cd_out\necho SURVIVED\n");
+        let output = Command::new("zsh")
+            .env("HOME", &empty_home)
+            .env("ZDOTDIR", &zsh_dir)
+            .env("DEVENV_ROOT", &canonical_root)
+            .env("_DEVENV_HOOK_DIR", &canonical_root)
+            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+            .arg("-i")
+            .arg("-c")
+            .arg(script)
+            .output()
+            .expect("failed to run zsh rcfile");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("SURVIVED"),
+            "[zsh] symlinked project root wrongly treated as cd-out.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            !canonical_root.join(".devenv/exit-dir").exists(),
+            "[zsh] exit-dir should not have been written"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn fish_rcfile_survives_cd_within_symlinked_project_root() {
+        if Command::new("fish").arg("--version").output().is_err() {
+            return;
+        }
+        let (symlinked_root, canonical_root) = symlinked_project_dirs("fish-symlink-cdout");
+        let tmp = symlinked_root.parent().unwrap().to_path_buf();
+        let init_dir = tmp.join("init");
+        std::fs::create_dir_all(&init_dir).unwrap();
+
+        let ctx = RcfileContext {
+            env_script_path: Path::new("/dev/null"),
+            env_diff_helpers: "",
+            reload_hook: "",
+            target_shell_path: None,
+            init_dir: &init_dir,
+        };
+        FishDialect.write_init_files(&ctx).unwrap();
+        let devenv_fish = init_dir.join("devenv.fish");
+
+        let script = format!("source {devenv_fish:?}\ncd {symlinked_root:?}\necho SURVIVED\n");
+        let output = Command::new("fish")
+            .env("DEVENV_ROOT", &canonical_root)
+            .env("_DEVENV_HOOK_DIR", &canonical_root)
+            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+            .arg("-c")
+            .arg(&script)
+            .output()
+            .expect("failed to run fish rcfile");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("SURVIVED"),
+            "[fish] symlinked project root wrongly treated as cd-out.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            !canonical_root.join(".devenv/exit-dir").exists(),
+            "[fish] exit-dir should not have been written"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn nu_rcfile_survives_cd_within_symlinked_project_root() {
+        if Command::new("nu").arg("--version").output().is_err() {
+            return;
+        }
+        let (symlinked_root, canonical_root) = symlinked_project_dirs("nu-symlink-cdout");
+        let tmp = symlinked_root.parent().unwrap().to_path_buf();
+        let init_dir = tmp.join("init");
+        std::fs::create_dir_all(&init_dir).unwrap();
+
+        let ctx = RcfileContext {
+            env_script_path: Path::new("/dev/null"),
+            env_diff_helpers: "",
+            reload_hook: "",
+            target_shell_path: None,
+            init_dir: &init_dir,
+        };
+        NushellDialect.write_init_files(&ctx).unwrap();
+        let config_nu = init_dir.join("nu").join("config.nu");
+
+        let script = format!(
+            "source {config_nu:?}\ncd {symlinked_root:?}\n_devenv_shell_exit_on_cd_out\nprint SURVIVED\n"
+        );
+        let output = Command::new("nu")
+            .env("DEVENV_ROOT", &canonical_root)
+            .env("_DEVENV_HOOK_DIR", &canonical_root)
+            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+            .arg("-c")
+            .arg(&script)
+            .output()
+            .expect("failed to run nu rcfile");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("SURVIVED"),
+            "[nu] symlinked project root wrongly treated as cd-out.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            !canonical_root.join(".devenv/exit-dir").exists(),
+            "[nu] exit-dir should not have been written"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

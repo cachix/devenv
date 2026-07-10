@@ -207,8 +207,14 @@ bind \e\cr __devenv_reload_keybind_handler
 if set -q _DEVENV_HOOK_DIR
     set -e _DEVENV_HOOK_DIR
     function _devenv_shell_exit_on_cd_out --on-variable PWD
-        switch $PWD
-            case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
+        # `path resolve` (builtin, no `realpath` dependency): `$PWD`
+        # preserves symlinks a user navigated through (e.g. macOS's `/tmp`
+        # -> `/private/tmp`) while `$DEVENV_ROOT` is canonicalized, so
+        # comparing the raw strings can spuriously conclude the user left
+        # the project when they never did.
+        set -l resolved_root (path resolve $DEVENV_ROOT)
+        switch (path resolve $PWD)
+            case "$resolved_root" "$resolved_root/*"
             case '*'
                 printf '%s' $PWD > "$DEVENV_ROOT/.devenv/exit-dir"
                 exit

@@ -286,7 +286,13 @@ if $__devenv_enable_exit_on_cd_out {{
 }}
 
 def _devenv_shell_exit_on_cd_out [] {{
-    if not ($env.PWD == $env.DEVENV_ROOT or ($env.PWD | str starts-with ($env.DEVENV_ROOT + "/"))) {{
+    # `path expand` resolves symlinks: `$env.PWD` preserves symlinks a user
+    # navigated through (e.g. macOS's `/tmp` -> `/private/tmp`) while
+    # `$env.DEVENV_ROOT` is canonicalized, so comparing the raw strings can
+    # spuriously conclude the user left the project when they never did.
+    let resolved_pwd = ($env.PWD | path expand)
+    let resolved_root = ($env.DEVENV_ROOT | path expand)
+    if not ($resolved_pwd == $resolved_root or ($resolved_pwd | str starts-with ($resolved_root + "/"))) {{
         $env.PWD | save --force ($env.DEVENV_ROOT + "/.devenv/exit-dir")
         exit
     }}

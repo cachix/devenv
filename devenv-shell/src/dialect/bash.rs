@@ -82,15 +82,7 @@ fi
 # parent shell can follow. Install this after ~/.bashrc and terminal prompt
 # integration so their PROMPT_COMMAND setup cannot discard the handler.
 if [[ -n "${{__devenv_enable_exit_on_cd_out:-}}" ]]; then
-    __devenv_exit_on_cd_out() {{
-        case "$PWD" in
-            "$DEVENV_ROOT"|"$DEVENV_ROOT"/*) ;;
-            *)
-                printf '%s' "$PWD" > "$DEVENV_ROOT/.devenv/exit-dir"
-                exit
-                ;;
-        esac
-    }}
+    {exit_on_cd_out_snippet}
     PROMPT_COMMAND="__devenv_exit_on_cd_out${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
     unset __devenv_enable_exit_on_cd_out
 fi
@@ -104,6 +96,7 @@ set -o history
             env_diff_helpers = ctx.env_diff_helpers,
             env_script_path = ctx.env_script_path.to_string_lossy(),
             reload_hook = ctx.reload_hook,
+            exit_on_cd_out_snippet = super::exit_on_cd_out_snippet(),
         )
     }
 

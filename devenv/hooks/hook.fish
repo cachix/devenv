@@ -21,8 +21,14 @@ function _devenv_hook --on-variable PWD
     # `exit` when cd-ing outside the project so the parent shell can follow.
     if test -n "$DEVENV_ROOT"
         if set -q _devenv_hook_dir
-            switch $PWD
-                case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
+            # `path resolve` (builtin, no `realpath` dependency): `$PWD`
+            # preserves symlinks a user navigated through (e.g. macOS's
+            # `/tmp` -> `/private/tmp`) while `$DEVENV_ROOT` is canonicalized,
+            # so comparing the raw strings can spuriously conclude the user
+            # left the project when they never did.
+            set -l resolved_root (path resolve $DEVENV_ROOT)
+            switch (path resolve $PWD)
+                case "$resolved_root" "$resolved_root/*"
                 case '*'
                     printf '%s' $PWD > "$DEVENV_ROOT/.devenv/exit-dir"
                     exit

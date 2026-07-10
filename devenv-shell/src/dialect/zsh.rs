@@ -210,15 +210,7 @@ export PATH="$_DEVENV_PATH"
 # parent shell can follow. Install this after the user's zsh configuration so
 # their precmd hook setup cannot discard the handler.
 if [ -n "$__devenv_enable_exit_on_cd_out" ]; then
-    __devenv_exit_on_cd_out() {{
-        case "$PWD" in
-            "$DEVENV_ROOT"|"$DEVENV_ROOT"/*) ;;
-            *)
-                printf '%s' "$PWD" > "$DEVENV_ROOT/.devenv/exit-dir"
-                exit
-                ;;
-        esac
-    }}
+    {exit_on_cd_out_snippet}
     autoload -Uz add-zsh-hook
     add-zsh-hook precmd __devenv_exit_on_cd_out
     unset __devenv_enable_exit_on_cd_out
@@ -232,6 +224,7 @@ fi
 "#,
             prompt_prefix = prompt_prefix,
             reload_hook = reload_hook,
+            exit_on_cd_out_snippet = super::exit_on_cd_out_snippet(),
         );
 
         std::fs::write(zsh_dir.join(".zshenv"), zshenv_content)?;

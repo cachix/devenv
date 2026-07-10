@@ -17,6 +17,16 @@ if [[ -n "${_DEVENV_HOOK_DIR:-}" ]]; then
     unset _DEVENV_HOOK_DIR
 fi
 
+# Resolve symlinks with builtins only (no `realpath` dependency): `$PWD`
+# preserves symlinks a user navigated through (e.g. macOS's `/tmp` ->
+# `/private/tmp`) while `$DEVENV_ROOT` is canonicalized, so comparing the
+# raw strings can spuriously conclude the user left the project when they
+# never did. Falls back to the raw value if resolution fails (e.g. the
+# directory was removed out from under the shell).
+_devenv_resolve_path() {
+    (cd -P -- "$1" 2>/dev/null && pwd) || printf '%s' "$1"
+}
+
 _devenv_hook() {
     local previous_exit_status=$?
     # This shell never showed the user its own prompt before now (e.g. a
@@ -35,8 +45,10 @@ _devenv_hook() {
     # `exit` when cd-ing outside the project so the parent shell can follow.
     if [[ -n "${DEVENV_ROOT:-}" ]]; then
         if [[ -n "${_devenv_hook_dir:-}" ]]; then
-            case "$PWD" in
-                "${DEVENV_ROOT}"|"${DEVENV_ROOT}"/*) ;;
+            local resolved_root
+            resolved_root=$(_devenv_resolve_path "$DEVENV_ROOT")
+            case "$(_devenv_resolve_path "$PWD")" in
+                "$resolved_root"|"$resolved_root"/*) ;;
                 *)
                     printf '%s' "$PWD" > "${DEVENV_ROOT}/.devenv/exit-dir"
                     exit $previous_exit_status
