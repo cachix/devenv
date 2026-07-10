@@ -4,6 +4,8 @@ nav:
   - Guide:
     - Getting started: getting-started.md
     - Configuration: files-and-variables.md
+    - Tutorial: https://github.com/cachix/nixcon-2024-workshop
+    - Examples: examples.md
     - Convenience:
       - Ad-hoc environments: ad-hoc-developer-environments.md
     - Auto activation: auto-activation.md
@@ -36,8 +38,6 @@ nav:
     - Extending: extending.md
     - Guides: guides
     - Integrations: integrations
-    - Tutorial: https://github.com/cachix/nixcon-2024-workshop
-    - Examples: examples.md
     - Editor support: editor-support
   - Reference: reference
   - Recipes:
