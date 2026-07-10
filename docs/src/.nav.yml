@@ -8,7 +8,7 @@ nav:
     - Examples: examples.md
     - Convenience:
       - Ad-hoc environments: ad-hoc-developer-environments.md
-    - Auto activation: auto-activation.md
+      - Auto activation: auto-activation.md
     - Writing devenv.nix:
       - Basics: basics.md
       - Packages: packages.md
