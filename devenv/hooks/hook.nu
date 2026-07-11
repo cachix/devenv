@@ -46,7 +46,10 @@ def --env _devenv_hook [] {
     if $result.exit_code == 0 {
         let dir = ($result.stdout | str trim)
         if $dir != "" {
-            with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell } }
+            # `--shell nu`: without this, devenv falls back to `$SHELL` (the
+            # login shell), which is frequently stale and can disagree with
+            # the shell this hook was actually loaded into.
+            with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell --shell nu } }
             $env._DEVENV_HOOK_UNTRUSTED = ""
             let exit_dir_file = ($dir + "/.devenv/exit-dir")
             if ($exit_dir_file | path exists) {

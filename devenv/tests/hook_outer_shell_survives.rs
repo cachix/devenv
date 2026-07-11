@@ -9,6 +9,7 @@
 //! - `fish_follow_cd_out_preserves_history_for_cd_dash` — #2853
 //! - `{posix,fish}_first_activation_propagates_exit` / `{posix,fish}_later_activation_does_not_propagate_exit` — single exit/Ctrl-D closes a shell that never had a life of its own
 //! - `posix_activates_sibling_after_cd_out` — #2944
+//! - `{posix,nu}_activation_passes_explicit_shell_dialect` — hook must not rely on devenv's `$SHELL` fallback
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -507,6 +508,67 @@ fn posix_activates_sibling_after_cd_out() {
     }
 }
 
+/// A shimmed `devenv` that succeeds `hook-should-activate` for `root` and
+/// records the flags of any `shell` invocation, so tests can assert on
+/// exactly what the hook decided to pass.
+fn shell_argv_shim(root: &Path) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let calls = dir.path().join("calls");
+    let bin = dir.path().join("devenv");
+    fs::write(
+        &bin,
+        format!(
+            r#"#!/bin/sh
+case "$1" in
+  hook-should-activate)
+    printf '%s\n' {root:?}
+    ;;
+  shell)
+    shift
+    printf '%s\n' "$*" >> {calls:?}
+    ;;
+esac
+"#,
+            root = root.display().to_string(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+    (dir, calls)
+}
+
+#[test]
+fn posix_activation_passes_explicit_shell_dialect() {
+    // The hook must tell `devenv shell` explicitly which dialect to spawn
+    // rather than leaving it to devenv's own `$SHELL` fallback: `$SHELL` is
+    // the login shell and frequently disagrees with the shell this hook was
+    // actually loaded into (e.g. a zsh user whose `$SHELL` is still
+    // `/bin/bash`), which would silently activate the wrong dialect.
+    for (shell, src) in posix_shells() {
+        let tmp = fake_project();
+        let (_bin_dir, calls) = shell_argv_shim(tmp.path());
+        let script = format!(
+            "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+             export SHELL=/does/not/match/any/dialect\n\
+             {src}\n\
+             {po}\n\
+             cd {root:?}\n\
+             _devenv_hook\n",
+            po = posix_path_override(calls.parent().unwrap()),
+            root = tmp.path(),
+        );
+        let out = run(shell, &script);
+        let recorded = fs::read_to_string(&calls).unwrap_or_default();
+        assert!(
+            recorded.contains(&format!("--shell {shell}")),
+            "[{shell}] hook did not pass an explicit --shell flag to `devenv shell`.\n\
+             Recorded:\n{recorded}\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        );
+    }
+}
+
 // Nu's env_change.PWD hook only fires in interactive sessions, so nu tests
 // source the hook (which defines `_devenv_hook`) and call it directly.
 // Different enough syntactically from the posix shells that folding it into
@@ -628,5 +690,41 @@ fn nu_no_respawn_inside_devenv_shell() {
         recorded.is_empty(),
         "[nu] hook re-invoked devenv from inside a manually-entered shell.\n\
          Recorded:\n{recorded}",
+    );
+}
+
+#[test]
+fn nu_activation_passes_explicit_shell_dialect() {
+    // See posix_activation_passes_explicit_shell_dialect: the hook must not
+    // leave dialect selection to devenv's `$SHELL` fallback.
+    if !have("nu") {
+        return;
+    }
+    let tmp = fake_project();
+    let (_bin_dir, calls) = shell_argv_shim(tmp.path());
+    let hook_gen = Command::new(devenv_bin())
+        .args(["hook", "nu"])
+        .output()
+        .unwrap();
+    assert!(hook_gen.status.success(), "devenv hook nu failed");
+    let hook_path = tmp.path().join("hook.nu");
+    fs::write(&hook_path, &hook_gen.stdout).unwrap();
+
+    let script = format!(
+        "hide-env -i DEVENV_ROOT\nhide-env -i _DEVENV_HOOK_DIR\n\
+         $env.SHELL = \"/does/not/match/any/dialect\"\n\
+         $env.PATH = ($env.PATH | prepend \"{shim}\")\n\
+         source {hook_path:?}\ncd {root:?}\n_devenv_hook\n",
+        shim = calls.parent().unwrap().display(),
+        root = tmp.path(),
+    );
+    let out = Command::new("nu").arg("-c").arg(&script).output().unwrap();
+    let recorded = fs::read_to_string(&calls).unwrap_or_default();
+    assert!(
+        recorded.contains("--shell nu"),
+        "[nu] hook did not pass an explicit --shell flag to `devenv shell`.\n\
+         Recorded:\n{recorded}\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
     );
 }

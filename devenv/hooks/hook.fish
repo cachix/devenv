@@ -111,7 +111,10 @@ function _devenv_hook_activate
     if test -n "$DEVENV_ROOT"
         return
     end
-    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook devenv shell
+    # `--shell fish`: without this, devenv falls back to `$SHELL` (the login
+    # shell), which is frequently stale and can disagree with the shell this
+    # hook was actually loaded into.
+    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook devenv shell --shell fish
     # If the devenv shell exited due to cd outside the project, follow the user there
     set -l exit_dir_file "$project_dir/.devenv/exit-dir"
     if test -f "$exit_dir_file"
