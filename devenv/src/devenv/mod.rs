@@ -786,7 +786,7 @@ impl Devenv {
         // Determine target shell and dialect
         let dialect = create_dialect(&self.shell_settings.shell);
         let target_shell_path = if dialect.name() != "bash" {
-            Some(resolve_shell_path(dialect.name()))
+            resolve_shell_path(dialect.name())
         } else {
             None
         };
@@ -821,42 +821,32 @@ impl Devenv {
             let script_path = write_executable_script(&self.devenv_dotfile, &script);
             shell_cmd.arg(&script_path);
         } else {
-            // Interactive shell
-            let script_path = if target_shell_path.is_some() {
-                // Non-bash: write env script, generate bash wrapper that execs into target shell
-                let env_script_path = self.devenv_dotfile.join("shell-env.sh");
-                let mut env_content = shell_env;
-                env_content.push_str(&task_exports);
-                env_content.push_str(&task_messages);
-                std::fs::write(&env_script_path, &env_content)
-                    .into_diagnostic()
-                    .wrap_err("Failed to write env script")?;
+            // Interactive shell. Always go through dialect.rcfile_content()
+            // (same for bash as for zsh/fish/nu) so hook-dir/cd-out/reload
+            // handling isn't silently skipped for bash's non-TUI path.
+            let env_script_path = self.devenv_dotfile.join("shell-env.sh");
+            let mut env_content = shell_env;
+            env_content.push_str(&task_exports);
+            env_content.push_str(&task_messages);
+            std::fs::write(&env_script_path, &env_content)
+                .into_diagnostic()
+                .wrap_err("Failed to write env script")?;
 
-                let env_diff_helpers = dialect.env_diff_helpers();
-                let target_path_str = target_shell_path.as_deref().unwrap();
-
-                let rcfile_ctx = RcfileContext {
-                    env_script_path: &env_script_path,
-                    env_diff_helpers,
-                    reload_hook: "",
-                    target_shell_path: Some(target_path_str),
-                    init_dir: &self.devenv_dotfile,
-                };
-
-                let rcfile_content = dialect.rcfile_content(&rcfile_ctx);
-                dialect
-                    .write_init_files(&rcfile_ctx)
-                    .into_diagnostic()
-                    .wrap_err("Failed to write shell init files")?;
-
-                write_executable_script(&self.devenv_dotfile, &rcfile_content)
-            } else {
-                // Bash (default)
-                let mut script = bash_init_script(&shell_env);
-                script.push_str(&task_exports);
-                script.push_str(&task_messages);
-                write_executable_script(&self.devenv_dotfile, &script)
+            let rcfile_ctx = RcfileContext {
+                env_script_path: &env_script_path,
+                env_diff_helpers: dialect.env_diff_helpers(),
+                reload_hook: "",
+                target_shell_path: target_shell_path.as_deref(),
+                init_dir: &self.devenv_dotfile,
             };
+
+            let rcfile_content = dialect.rcfile_content(&rcfile_ctx);
+            dialect
+                .write_init_files(&rcfile_ctx)
+                .into_diagnostic()
+                .wrap_err("Failed to write shell init files")?;
+
+            let script_path = write_executable_script(&self.devenv_dotfile, &rcfile_content);
 
             let interactive_args = dialect.interactive_args();
             shell_cmd.args(&interactive_args.prefix);
@@ -864,8 +854,17 @@ impl Devenv {
             shell_cmd.args(&interactive_args.suffix);
         }
 
-        // Use target shell path for SHELL env var when available
-        let shell_for_env = target_shell_path.as_deref().unwrap_or(&bash);
+        // Use the target shell's resolved path for SHELL when we found one.
+        // For bash itself, `bash` is always a real resolved path. For other
+        // dialects that failed to resolve, leave SHELL untouched (None) so
+        // the caller's real $SHELL survives into enterShell (it runs before
+        // the rcfile's own not-found check) instead of being overwritten
+        // with a name we just failed to find.
+        let shell_for_env = if dialect.name() == "bash" {
+            Some(bash.as_str())
+        } else {
+            target_shell_path.as_deref()
+        };
         crate::shell_env::apply_shell_env(
             &mut shell_cmd,
             shell_for_env,
@@ -2248,13 +2247,19 @@ fn write_executable_script(dir: &Path, content: &str) -> PathBuf {
 ///
 /// If `$SHELL` basename matches the requested shell name, uses `$SHELL`.
 /// Otherwise falls back to looking up the shell in `$PATH` via `which`.
-pub fn resolve_shell_path(shell_name: &str) -> String {
+///
+/// Returns `None` when the shell can't be found anywhere, rather than a
+/// bare unresolved name: callers use this to decide whether to override
+/// `SHELL` in the child environment. Overriding it with a name we just
+/// failed to resolve would destroy the caller's real `$SHELL` before
+/// `enterShell` (which may itself branch on `$SHELL`) even runs.
+pub fn resolve_shell_path(shell_name: &str) -> Option<String> {
     // If $SHELL is an absolute path whose basename matches, use it directly
     if let Ok(shell_env) = std::env::var("SHELL") {
         let path = Path::new(&shell_env);
         if path.is_absolute() && path.file_name().and_then(|n| n.to_str()) == Some(shell_name) {
             trace!("resolve_shell_path: using $SHELL={}", shell_env);
-            return shell_env;
+            return Some(shell_env);
         }
     }
     // Otherwise resolve via PATH (handles both bare names like "zsh" and mismatches)
@@ -2262,14 +2267,14 @@ pub fn resolve_shell_path(shell_name: &str) -> String {
         Ok(p) => {
             let resolved = p.to_string_lossy().to_string();
             trace!("resolve_shell_path: found {} at {}", shell_name, resolved);
-            resolved
+            Some(resolved)
         }
         Err(_) => {
-            warn!(
-                "resolve_shell_path: could not find '{}' in PATH, using bare name",
+            trace!(
+                "resolve_shell_path: could not find '{}' in PATH",
                 shell_name
             );
-            shell_name.to_string()
+            None
         }
     }
 }

@@ -63,7 +63,7 @@ set -o history
 # environment may have added it after this process started)
 if [ ! -x "{target_shell}" ] && ! command -v "{target_shell}" >/dev/null 2>&1; then
     echo "devenv: error: shell '{target_shell}' not found" >&2
-    echo "devenv: add zsh to your devenv.nix packages or set SHELL to an absolute path" >&2
+    echo "devenv: add zsh to your devenv.nix packages, or set SHELL to zsh's absolute path" >&2
     exit 1
 fi
 exec "{target_shell}" -i
@@ -190,6 +190,16 @@ fi
 if [ -n "$_DEVENV_HOOK_DIR" ]; then
     unset _DEVENV_HOOK_DIR
     __devenv_enable_exit_on_cd_out=1
+fi
+
+# zsh doesn't preserve an inherited OLDPWD across a fresh start either, so
+# `cd -` has nothing to return to right after activation. `_DEVENV_PREV_PWD`
+# carries the hook shell's real previous directory; re-derive OLDPWD by
+# actually cd-ing there and back.
+if [ -n "$_DEVENV_PREV_PWD" ]; then
+    _devenv_target_pwd="$PWD"
+    cd "$_DEVENV_PREV_PWD" 2>/dev/null && cd "$_devenv_target_pwd"
+    unset _DEVENV_PREV_PWD _devenv_target_pwd
 fi
 
 if [ -n "$_DEVENV_REAL_ZDOTDIR" ]; then

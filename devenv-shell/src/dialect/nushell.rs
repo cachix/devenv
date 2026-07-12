@@ -77,12 +77,20 @@ export _DEVENV_PATH="$PATH"
 # Re-enable history before exec
 set -o history
 
+# Nu (unlike bash/zsh) honors a freshly-set OLDPWD as-is, so `_DEVENV_PREV_PWD`
+# (the hook shell's real previous directory) just needs re-exporting as
+# OLDPWD before exec — no cd-there-and-back trick needed for `cd -` to work.
+if [ -n "${{_DEVENV_PREV_PWD:-}}" ]; then
+    export OLDPWD="$_DEVENV_PREV_PWD"
+    unset _DEVENV_PREV_PWD
+fi
+
 # Exec into nushell with our custom config files.
 # Nushell inherits env vars from the parent process, so the devenv
 # environment carries over automatically.
 if [ ! -x "{target_shell}" ] && ! command -v "{target_shell}" >/dev/null 2>&1; then
     echo "devenv: error: shell '{target_shell}' not found" >&2
-    echo "devenv: add nushell to your devenv.nix packages or set SHELL to an absolute path" >&2
+    echo "devenv: add nushell to your devenv.nix packages, or set SHELL to nu's absolute path" >&2
     exit 1
 fi
 exec "{target_shell}" --config "{nu_config}" --env-config "{nu_env}"

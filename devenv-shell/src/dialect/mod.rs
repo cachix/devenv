@@ -183,6 +183,7 @@ pub struct RcfileContext<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     use std::process::Command;
 
     /// Regression test for https://github.com/cachix/devenv/issues/2919
