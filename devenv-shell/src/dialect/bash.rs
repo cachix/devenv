@@ -57,6 +57,16 @@ if [[ -n "${{_DEVENV_HOOK_DIR:-}}" ]]; then
     __devenv_enable_exit_on_cd_out=1
 fi
 
+# `OLDPWD` doesn't carry over from the hook shell (bash discards an
+# inherited OLDPWD unconditionally), so `cd -` has nothing to return to
+# right after activation. `_DEVENV_PREV_PWD` carries the hook shell's real
+# previous directory; re-derive OLDPWD by actually cd-ing there and back.
+if [[ -n "${{_DEVENV_PREV_PWD:-}}" ]]; then
+    _devenv_target_pwd="$PWD"
+    cd "$_DEVENV_PREV_PWD" 2>/dev/null && cd "$_devenv_target_pwd"
+    unset _DEVENV_PREV_PWD _devenv_target_pwd
+fi
+
 # Save PATH before ~/.bashrc potentially modifies it
 _DEVENV_PATH="$PATH"
 

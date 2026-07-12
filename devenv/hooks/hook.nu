@@ -49,7 +49,12 @@ def --env _devenv_hook [] {
             # `--shell nu`: without this, devenv falls back to `$SHELL` (the
             # login shell), which is frequently stale and can disagree with
             # the shell this hook was actually loaded into.
-            with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell --shell nu } }
+            #
+            # `_DEVENV_PREV_PWD`: nu's own `cd` already recorded where the
+            # user was before this activation in `$env.OLDPWD`. Pass it
+            # through so the spawned shell's `cd -` works immediately.
+            let prev_pwd = ($env | get -o OLDPWD | default "")
+            with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_PREV_PWD: $prev_pwd, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell --shell nu } }
             $env._DEVENV_HOOK_UNTRUSTED = ""
             let exit_dir_file = ($dir + "/.devenv/exit-dir")
             if ($exit_dir_file | path exists) {

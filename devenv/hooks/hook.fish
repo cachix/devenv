@@ -114,7 +114,26 @@ function _devenv_hook_activate
     # `--shell fish`: without this, devenv falls back to `$SHELL` (the login
     # shell), which is frequently stale and can disagree with the shell this
     # hook was actually loaded into.
-    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook devenv shell --shell fish
+    #
+    # `_DEVENV_PREV_PWD`: fish's own `cd` already recorded where the user was
+    # before this activation — but *which* stack holds it depends on
+    # direction. A forward cd (a plain `cd <dir>`, including this activation
+    # itself if it was reached that way) pushes onto `$dirprev`. But if this
+    # activation was triggered by `cd -`/`prevd` itself (re-entering the
+    # project by going *back* to it), fish's own `cd` pops that entry off
+    # `$dirprev` and pushes it onto `$dirnext` instead — reading `$dirprev`
+    # unconditionally would miss it entirely (or find a stale, older entry).
+    # `$__fish_cd_direction` (set by fish's own `cd`/`prevd`/`nextd`) says
+    # which stack actually holds the entry we want.
+    set -l _prev_pwd
+    if test "$__fish_cd_direction" = next
+        if set -q dirnext[1]
+            set _prev_pwd $dirnext[-1]
+        end
+    else if set -q dirprev[1]
+        set _prev_pwd $dirprev[-1]
+    end
+    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_PREV_PWD=$_prev_pwd _DEVENV_CALLER=hook devenv shell --shell fish
     # If the devenv shell exited due to cd outside the project, follow the user there
     set -l exit_dir_file "$project_dir/.devenv/exit-dir"
     if test -f "$exit_dir_file"

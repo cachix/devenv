@@ -507,6 +507,191 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    // `_DEVENV_PREV_PWD` regression tests: a freshly-activated shell's `cd -`
+    // must return to wherever the user was right before activation. Bash/zsh
+    // discard an inherited OLDPWD unconditionally (verified directly against
+    // a plain, non-devenv shell); fish's `cd -` uses `$dirprev`, a shell
+    // variable, not OLDPWD, so it never crosses a process boundary either
+    // way. Each dialect re-derives it from `_DEVENV_PREV_PWD` differently.
+
+    #[test]
+    fn bash_rcfile_seeds_oldpwd_from_prev_pwd() {
+        let tmp = unique_tmp_dir("bash-prevpwd");
+        let prev = tmp.join("prev");
+        std::fs::create_dir_all(&prev).unwrap();
+        let empty_home = tmp.join("home");
+        std::fs::create_dir_all(&empty_home).unwrap();
+        let env_script = tmp.join("env.sh");
+        std::fs::write(&env_script, "").unwrap();
+
+        let ctx = RcfileContext {
+            env_script_path: &env_script,
+            env_diff_helpers: BashDialect.env_diff_helpers(),
+            reload_hook: "",
+            target_shell_path: None,
+            init_dir: &tmp,
+        };
+        let rcfile_path = tmp.join("rcfile.sh");
+        std::fs::write(&rcfile_path, BashDialect.rcfile_content(&ctx)).unwrap();
+
+        let script = format!("source {rcfile_path:?}\necho OLDPWD=$OLDPWD\n");
+        let output = Command::new("bash")
+            .env("HOME", &empty_home)
+            .env("_DEVENV_PREV_PWD", &prev)
+            .current_dir(&tmp)
+            .arg("-c")
+            .arg(&script)
+            .output()
+            .expect("failed to run bash rcfile");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(&format!("OLDPWD={}", prev.display())),
+            "[bash] rcfile did not seed OLDPWD from _DEVENV_PREV_PWD.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn zsh_rcfile_seeds_oldpwd_from_prev_pwd() {
+        if Command::new("zsh").arg("--version").output().is_err() {
+            return;
+        }
+        let tmp = unique_tmp_dir("zsh-prevpwd");
+        let prev = tmp.join("prev");
+        std::fs::create_dir_all(&prev).unwrap();
+        let init_dir = tmp.join("init");
+        std::fs::create_dir_all(&init_dir).unwrap();
+        let empty_home = tmp.join("home");
+        std::fs::create_dir_all(&empty_home).unwrap();
+
+        let ctx = RcfileContext {
+            env_script_path: Path::new("/dev/null"),
+            env_diff_helpers: "",
+            reload_hook: "",
+            target_shell_path: None,
+            init_dir: &init_dir,
+        };
+        ZshDialect.write_init_files(&ctx).unwrap();
+        let zsh_dir = init_dir.join("zsh");
+
+        let output = Command::new("zsh")
+            .env("HOME", &empty_home)
+            .env("ZDOTDIR", &zsh_dir)
+            .env("_DEVENV_PREV_PWD", &prev)
+            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+            .current_dir(&tmp)
+            .arg("-i")
+            .arg("-c")
+            .arg("echo OLDPWD=$OLDPWD\n")
+            .output()
+            .expect("failed to run zsh rcfile");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(&format!("OLDPWD={}", prev.display())),
+            "[zsh] rcfile did not seed OLDPWD from _DEVENV_PREV_PWD.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn fish_rcfile_seeds_dirprev_from_prev_pwd() {
+        if Command::new("fish").arg("--version").output().is_err() {
+            return;
+        }
+        let tmp = unique_tmp_dir("fish-prevpwd");
+        let prev = tmp.join("prev");
+        std::fs::create_dir_all(&prev).unwrap();
+        let init_dir = tmp.join("init");
+        std::fs::create_dir_all(&init_dir).unwrap();
+
+        let ctx = RcfileContext {
+            env_script_path: Path::new("/dev/null"),
+            env_diff_helpers: "",
+            reload_hook: "",
+            target_shell_path: None,
+            init_dir: &init_dir,
+        };
+        FishDialect.write_init_files(&ctx).unwrap();
+        let devenv_fish = init_dir.join("devenv.fish");
+
+        let script = format!("source {devenv_fish:?}\ncd -\npwd\n");
+        let output = Command::new("fish")
+            .env("_DEVENV_PREV_PWD", &prev)
+            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+            .current_dir(&tmp)
+            .arg("-c")
+            .arg(&script)
+            .output()
+            .expect("failed to run fish rcfile");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.trim().ends_with(&prev.display().to_string()),
+            "[fish] rcfile did not seed dirprev from _DEVENV_PREV_PWD; `cd -` did not return there.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn nu_rcfile_seeds_oldpwd_from_prev_pwd() {
+        // Can't use real nu here: its interactive mode unconditionally
+        // refuses non-tty stdin (pipe or file alike), so it can't run
+        // headless in a test. Can't use a `/bin/sh` fake either: POSIX
+        // shells discard their own inherited OLDPWD before running anything
+        // (the exact behavior this fix works around), so a shell script
+        // would "fail" for the wrong reason. Perl does neither.
+        if Command::new("perl").arg("--version").output().is_err() {
+            return;
+        }
+        let tmp = unique_tmp_dir("nu-prevpwd");
+        let prev = tmp.join("prev");
+        std::fs::create_dir_all(&prev).unwrap();
+        let fake_nu = tmp.join("fake-nu");
+        std::fs::write(
+            &fake_nu,
+            "#!/usr/bin/perl\nprint \"OLDPWD=$ENV{OLDPWD}\\n\";\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake_nu, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let env_script = tmp.join("env.sh");
+        std::fs::write(&env_script, "").unwrap();
+        let init_dir = tmp.join("init");
+        std::fs::create_dir_all(&init_dir).unwrap();
+
+        let ctx = RcfileContext {
+            env_script_path: &env_script,
+            env_diff_helpers: NushellDialect.env_diff_helpers(),
+            reload_hook: "",
+            target_shell_path: Some(fake_nu.to_str().unwrap()),
+            init_dir: &init_dir,
+        };
+        let rcfile_path = tmp.join("rcfile.sh");
+        std::fs::write(&rcfile_path, NushellDialect.rcfile_content(&ctx)).unwrap();
+
+        let script = format!("source {rcfile_path:?}\n");
+        let output = Command::new("bash")
+            .env("_DEVENV_PREV_PWD", &prev)
+            .current_dir(&tmp)
+            .arg("-c")
+            .arg(&script)
+            .output()
+            .expect("failed to run nu rcfile");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(&format!("OLDPWD={}", prev.display())),
+            "[nu] rcfile did not re-export OLDPWD from _DEVENV_PREV_PWD before exec.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     /// A project directory reachable via a symlinked path (what `$PWD`
     /// preserves after a real `cd`) and its canonicalized form (what
     /// devenv's Rust side sets `DEVENV_ROOT` to). Creates the symlink itself

@@ -73,7 +73,10 @@ _devenv_hook() {
         # Cache PWD before launching so a SIGINT/failure inside devenv shell
         # doesn't leave us re-launching on every prompt redraw.
         _DEVENV_HOOK_PWD="$PWD"
-        (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" _DEVENV_CALLER=hook devenv shell --shell "$_devenv_hook_shell_dialect")
+        (
+            _devenv_prev_pwd="$OLDPWD"
+            cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" _DEVENV_PREV_PWD="$_devenv_prev_pwd" _DEVENV_CALLER=hook devenv shell --shell "$_devenv_hook_shell_dialect"
+        )
         local exit_dir_file="$project_dir/.devenv/exit-dir"
         if [[ -f "$exit_dir_file" ]]; then
             local target_dir
