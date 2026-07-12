@@ -84,6 +84,13 @@ _devenv_hook() {
             rm -f "$exit_dir_file"
             if [[ -d "$target_dir" ]]; then
                 cd "$target_dir"
+                # Clear rather than set to "$PWD": the very next call needs
+                # to actually re-check this new location (it could be a
+                # trusted sibling project), not treat it as already-known.
+                # Left stale at project_dir, re-entering that *same*
+                # project right after leaving it would coincidentally
+                # match $PWD again and silently skip reactivation.
+                _DEVENV_HOOK_PWD=""
             fi
         elif [[ -n "$is_first_prompt" ]]; then
             exit $previous_exit_status
