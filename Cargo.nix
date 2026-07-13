@@ -6755,6 +6755,12 @@ rec {
             packageId = "netstat2";
           }
           {
+            name = "nix";
+            packageId = "nix 0.31.3";
+            target = { target, features }: (target."unix" or false);
+            features = [ "fs" "process" "signal" "user" ];
+          }
+          {
             name = "nix-conf-parser";
             packageId = "nix-conf-parser";
           }
