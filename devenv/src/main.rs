@@ -1,3 +1,41 @@
+// [tier2] On the fully-static (musl) build, musl's mallocng returns freed
+// memory to the kernel aggressively, turning devenv's alloc-heavy startup into
+// hundreds of mmap/munmap syscalls (~8 ms). Route the global allocator to
+// mimalloc (linked via nix as libmimalloc.a, MI_OVERRIDE=OFF so only the mi_*
+// API is exposed). Gated on `--cfg use_mimalloc`, set only for the static build.
+#[cfg(use_mimalloc)]
+mod mimalloc_global {
+    use std::alloc::{GlobalAlloc, Layout};
+
+    unsafe extern "C" {
+        fn mi_malloc_aligned(size: usize, alignment: usize) -> *mut u8;
+        fn mi_zalloc_aligned(size: usize, alignment: usize) -> *mut u8;
+        fn mi_realloc_aligned(p: *mut u8, newsize: usize, alignment: usize) -> *mut u8;
+        fn mi_free(p: *mut u8);
+    }
+
+    pub struct MiMalloc;
+
+    unsafe impl GlobalAlloc for MiMalloc {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            unsafe { mi_malloc_aligned(layout.size(), layout.align()) }
+        }
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            unsafe { mi_zalloc_aligned(layout.size(), layout.align()) }
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+            unsafe { mi_free(ptr) }
+        }
+        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            unsafe { mi_realloc_aligned(ptr, new_size, layout.align()) }
+        }
+    }
+}
+
+#[cfg(use_mimalloc)]
+#[global_allocator]
+static GLOBAL: mimalloc_global::MiMalloc = mimalloc_global::MiMalloc;
+
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{

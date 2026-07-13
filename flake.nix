@@ -88,12 +88,71 @@
         let
           overlays = [
             inputs.rust-overlay.overlays.default
+            # Exposes `nixComponents2` (the component scope) so we can rebuild the
+            # Nix C/C++ libraries below. `overlays.default` only sets `nix`.
+            inputs.nix.overlays.internal
             (final: prev: {
               inherit (inputs.cachix.packages.${system}) cachix;
-              # Use nix-cli to skip building nix-manual, but keep libs for C bindings
-              nix = inputs.nix.packages.${system}.nix-cli // {
-                inherit (inputs.nix.packages.${system}.nix) libs;
-              };
+              # [static-link-spike] Build the Nix C++/C-API libraries with
+              # default_library=static so they link *into* the devenv binary
+              # instead of as ~14 shared objects. This removes the Nix cluster
+              # from the dynamic closure and the bulk of startup-time symbol
+              # resolution (do_lookup_x). External deps (boost, curl, …) stay
+              # dynamic — default_library only affects Nix's own meson libs.
+              nix =
+                # Under pkgsStatic (musl) the fork already builds the Nix libs
+                # static and handles LTO; just expose nix-cli + the C-API libs.
+                # Disable S3/AWS though: it's on by default, and its
+                # aws-c-* / aws-crt-cpp archives (CMake, no .pc) aren't on the
+                # final static link line, so libnixstore's aws_* references go
+                # unresolved. S3 doesn't affect startup; re-enable and link the
+                # aws-c-* stack once the startup win is confirmed.
+                # On glibc, rebuild them static ourselves (the Tier 1 override).
+                if prev.stdenv.hostPlatform.isStatic then
+                  let
+                    staticComponents = prev.nixComponents2.overrideScope (
+                      _finalScope: prevScope: {
+                        nix-store = prevScope.nix-store.override { withAWS = false; };
+                      }
+                    );
+                  in
+                  staticComponents.nix-cli
+                  // { libs = staticComponents.nix-everything.libs; }
+                else
+                  let
+                    staticComponents =
+                      (prev.nixComponents2.overrideScope (
+                        _finalScope: prevScope: {
+                          # TEMP for the startup measurement only: S3 doesn't affect
+                          # startup (static archives resolve at link time), and
+                          # aws-crt-cpp is a CMake dep with no .pc, so keeping S3
+                          # needs the aws-c-* stack linked explicitly. Re-enable S3
+                          # and link the aws libs once the startup win is confirmed.
+                          nix-store = prevScope.nix-store.override { withAWS = false; };
+                        }
+                      )).overrideAllMesonComponents (
+                        _finalAttrs: prevAttrs: {
+                          mesonFlags = (prevAttrs.mesonFlags or [ ]) ++ [
+                            (prev.lib.mesonOption "default_library" "static")
+                          ];
+                          # A static lib's generated .pc lists its buildInputs under
+                          # Requires.private; propagate them so downstream components'
+                          # pkg-config lookups (and the final devenv link) resolve the
+                          # transitive deps (libblake3, boost, …).
+                          propagatedBuildInputs =
+                            (prevAttrs.propagatedBuildInputs or [ ]) ++ (prevAttrs.buildInputs or [ ]);
+                          # The fork enables LTO for release builds (packaging/components.nix)
+                          # but already disables it for `isStatic`, knowing LTO+static breaks.
+                          # default_library=static on a glibc stdenv doesn't set isStatic, so
+                          # it slips past and GCC 15 ICEs building nix-expr. Append after the
+                          # fork's snippet so b_lto=false wins. LTO doesn't affect startup.
+                          preConfigure = (prevAttrs.preConfigure or "") + ''
+                            appendToVar mesonFlags "-Db_lto=false"
+                          '';
+                        }
+                      );
+                  in
+                  staticComponents.nix-cli // { libs = staticComponents.nix-everything.libs; };
               nixd = inputs.nixd.packages.${system}.nixd;
               crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
               libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" { optimize = "ReleaseSafe"; };
@@ -109,9 +168,40 @@
             rustc = rustToolchain;
             cargo = rustToolchain;
           };
+
+          # [tier2] Fully static (musl) build: every dep links into one binary,
+          # no dynamic Nix/external libs, to reach the startup floor and let the
+          # shell hook drop its caching.
+          pkgsStatic = pkgs.pkgsStatic;
+          rustToolchainStatic = pkgs.rust-bin.stable.latest.default.override {
+            targets = [ "x86_64-unknown-linux-musl" ];
+          };
+          # [tier2] libghostty-vt links libc++ for its vendored simdutf, which
+          # makes Zig build its bundled libc++ for the target. Ghostty's nix
+          # build sets `dontSetZigDefaultFlags` and passes no `-Dtarget`, so
+          # Zig builds for `native-native` — and building libc++ for the
+          # *native-detected* musl fails (libc++ <__locale> references ctype
+          # masks the detected musl doesn't expose). Passing an explicit
+          # `-Dtarget=<arch>-linux-musl` makes Zig use its own known-good musl
+          # config, so libc++ (and thus SIMD) builds cleanly. The simd C++ is
+          # compiled SIMDUTF_NO_LIBCXX/-fno-exceptions/-fno-rtti, so the static
+          # archive we link references no libc++ symbols at runtime.
+          libghosttyVtStatic = pkgsStatic.libghostty-vt.overrideAttrs (old: {
+            zigBuildFlags = old.zigBuildFlags ++ [
+              "-Dtarget=${pkgsStatic.stdenv.hostPlatform.parsed.cpu.name}-linux-musl"
+            ];
+          });
+          workspaceStatic = pkgsStatic.callPackage ./nix/workspace.nix {
+            inherit gitRev;
+            rustc = rustToolchainStatic;
+            cargo = rustToolchainStatic;
+            buildStatic = true;
+            libghostty-vt = libghosttyVtStatic;
+          };
         in
         {
           inherit (workspace.crates) devenv devenv-tasks;
+          devenv-static = workspaceStatic.crates.devenv;
           default = self.packages.${system}.devenv;
           crate2nix = pkgs.crate2nix;
         }
