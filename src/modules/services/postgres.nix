@@ -9,7 +9,10 @@ let
 
   # Port allocation
   basePort = cfg.port;
-  allocatedPort = config.processes.postgres.ports.main.value;
+  allocatedPort =
+    if cfg.listen_addresses == ""
+    then basePort
+    else config.processes.postgres.ports.main.value;
 
   q = lib.escapeShellArg;
 
@@ -448,7 +451,9 @@ in
       };
 
       processes.postgres = {
-        ports.main.allocate = basePort;
+        ports = lib.mkIf (cfg.listen_addresses != "") {
+          main.allocate = basePort;
+        };
         exec = "${startScript}/bin/start-postgres";
 
         ready = {
