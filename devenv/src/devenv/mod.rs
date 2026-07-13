@@ -2547,17 +2547,7 @@ impl Devenv {
             .await?
         {
             processes::ApiResponse::ProcessList { processes } => {
-                let mut output = String::new();
-                for p in &processes {
-                    output.push_str(&format!(
-                        "{:<30} {:<15} restarts: {}\n",
-                        p.name, p.phase, p.restart_count
-                    ));
-                }
-                if processes.is_empty() {
-                    output.push_str("No processes found.\n");
-                }
-                Ok(output)
+                Ok(format_process_list(&processes))
             }
             processes::ApiResponse::Error { message } => bail!("{}", message),
             other => bail!("Unexpected response: {:?}", other),
@@ -2809,6 +2799,25 @@ impl Devenv {
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
         self.get_dev_environment_inner(json).await
     }
+}
+
+fn format_process_list(processes: &[processes::ProcessInfo]) -> String {
+    if processes.is_empty() {
+        return "No processes found.\n".to_string();
+    }
+
+    let mut output = String::new();
+    for process in processes {
+        output.push_str(&format!(
+            "{:<30} {:<15} restarts: {}",
+            process.name, process.phase, process.restart_count
+        ));
+        if !process.ports.is_empty() {
+            output.push_str(&format!(" ports: {}", process.ports.join(", ")));
+        }
+        output.push('\n');
+    }
+    output
 }
 
 /// Run tasks. All output flows through the activity channel which the
@@ -3225,6 +3234,31 @@ fn resolve_secretspec_into(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn process_list_renders_ports() {
+        let output = format_process_list(&[processes::ProcessInfo {
+            name: "web".to_string(),
+            phase: processes::ProcessPhase::Ready,
+            restart_count: 1,
+            ports: vec!["http:8080".to_string(), "metrics:9090".to_string()],
+        }]);
+
+        assert!(output.contains("restarts: 1 ports: http:8080, metrics:9090\n"));
+    }
+
+    #[test]
+    fn process_list_omits_empty_ports() {
+        let output = format_process_list(&[processes::ProcessInfo {
+            name: "worker".to_string(),
+            phase: processes::ProcessPhase::Starting,
+            restart_count: 0,
+            ports: Vec::new(),
+        }]);
+
+        assert!(!output.contains("ports:"));
+        assert!(output.ends_with("restarts: 0\n"));
+    }
 
     fn process_task(name: &str, enable: bool) -> tasks::TaskConfig {
         tasks::TaskConfig {

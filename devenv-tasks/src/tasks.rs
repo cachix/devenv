@@ -121,10 +121,13 @@ impl TasksBuilder {
             ignore_process_deps: self.config.ignore_process_deps,
             task_index_by_name: HashMap::new(),
             start_with_deps_lock: Mutex::new(()),
+            scheduled_task_indices: Mutex::new(HashSet::new()),
+            outputs: Arc::new(Mutex::new(Outputs::new())),
         };
 
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
+        tasks.scheduled_task_indices = Mutex::new(tasks.tasks_order.iter().copied().collect());
         // schedule() narrows what runs (`tasks_order`) but keeps the full graph,
         // so this lookup covers every configured task. start_with_deps relies on
         // that: a process this run did not bring up can still be found and
@@ -178,6 +181,16 @@ pub struct Tasks {
     /// spawn duplicate dependency waiters whose launch-race loser records a
     /// false `Failed` launch outcome in the graph node.
     pub(crate) start_with_deps_lock: Mutex<()>,
+    /// Nodes that already have an execution driver. Seeded from the cold
+    /// schedule and extended when a dynamic process start discovers unseen
+    /// one-shot dependencies. `TaskStatus::Pending` cannot represent this:
+    /// both an unscheduled one-shot and a scheduled one-shot waiting on its
+    /// own dependencies are Pending.
+    pub(crate) scheduled_task_indices: Mutex<HashSet<NodeIndex>>,
+    /// Outputs and exported environment from one-shot tasks. Kept for the
+    /// scheduler lifetime so one-shots started dynamically share results with
+    /// the cold run and with later dynamic dependency closures.
+    pub(crate) outputs: Arc<Mutex<Outputs>>,
 }
 
 /// One dependency's evaluation, produced by `Tasks::eval_dep` and shared
@@ -744,6 +757,11 @@ impl Tasks {
                     }
                 }
             };
+            // A cold subset may have left one-shot predecessors outside
+            // `tasks_order`. Give those nodes an execution driver before this
+            // process starts waiting on them; otherwise their Pending status
+            // can never advance.
+            self.schedule_unseen_oneshot_dependencies(index).await;
             // The re-armed Waiting entry holds the config `launch_waiting` will
             // launch; `run_process` (below) only reads name/probe off its copy.
             self.process_manager.rearm_waiting(config.clone()).await;
@@ -869,6 +887,214 @@ impl Tasks {
             .edges_directed(index, petgraph::Direction::Incoming)
             .map(|edge| (self.graph[edge.source()].clone(), *edge.weight()))
             .collect()
+    }
+
+    /// Dependencies visible to the cold runner. Before the full graph was
+    /// retained, excluded nodes and their edges disappeared with the scheduled
+    /// subgraph; preserve that behavior for run modes such as `Single`.
+    fn collect_scheduled_deps(
+        &self,
+        index: NodeIndex,
+        scheduled: &HashSet<NodeIndex>,
+    ) -> Vec<(Arc<RwLock<TaskState>>, DependencyKind)> {
+        self.graph
+            .edges_directed(index, petgraph::Direction::Incoming)
+            .filter(|edge| scheduled.contains(&edge.source()))
+            .map(|edge| (self.graph[edge.source()].clone(), *edge.weight()))
+            .collect()
+    }
+
+    /// Start every previously unseen one-shot in `index`'s transitive
+    /// dependency closure. The cold scheduler already owns nodes in
+    /// `tasks_order`; dynamic starts claim the remaining nodes exactly once.
+    ///
+    /// Process dependencies are deliberately not launched here. They retain
+    /// the existing dynamic-start semantics: a stopped or not-started process
+    /// parks its dependents until the user explicitly starts it.
+    async fn schedule_unseen_oneshot_dependencies(&self, index: NodeIndex) {
+        let mut stack = vec![index];
+        let mut visited = HashSet::new();
+        let mut oneshots = Vec::new();
+
+        while let Some(node) = stack.pop() {
+            if !visited.insert(node) {
+                continue;
+            }
+            for edge in self
+                .graph
+                .edges_directed(node, petgraph::Direction::Incoming)
+            {
+                stack.push(edge.source());
+            }
+            if node != index && self.graph[node].read().await.task.r#type == TaskType::Oneshot {
+                oneshots.push(node);
+            }
+        }
+
+        let to_schedule = {
+            let mut scheduled = self.scheduled_task_indices.lock().await;
+            oneshots
+                .into_iter()
+                .filter(|node| scheduled.insert(*node))
+                .collect::<Vec<_>>()
+        };
+
+        for node in to_schedule {
+            let task_state = Arc::clone(&self.graph[node]);
+            if !matches!(task_state.read().await.status, TaskStatus::Pending) {
+                continue;
+            }
+
+            let deps = self.collect_deps(node);
+            let outputs = Arc::clone(&self.outputs);
+            let notify_finished = Arc::clone(&self.notify_finished);
+            let notify_ui = Arc::clone(&self.notify_ui);
+            let cache = Arc::new(self.cache.clone());
+            let shutdown = Arc::clone(&self.shutdown);
+            let process_manager = Arc::clone(&self.process_manager);
+            let refresh_task_cache = self.refresh_task_cache;
+            let shell_env = self.env.clone();
+            let task_activity_id = next_id();
+
+            tokio::spawn(async move {
+                Self::run_oneshot_task(
+                    task_state,
+                    deps,
+                    outputs,
+                    notify_finished,
+                    notify_ui,
+                    cache,
+                    shutdown,
+                    process_manager,
+                    task_activity_id,
+                    refresh_task_cache,
+                    shell_env,
+                )
+                .await;
+            });
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn run_oneshot_task(
+        task_state: Arc<RwLock<TaskState>>,
+        deps: Vec<(Arc<RwLock<TaskState>>, DependencyKind)>,
+        outputs: Arc<Mutex<Outputs>>,
+        notify_finished: Arc<Notify>,
+        notify_ui: Arc<Notify>,
+        cache: Arc<TaskCache>,
+        shutdown: Arc<tokio_shutdown::Shutdown>,
+        process_manager: Arc<NativeProcessManager>,
+        task_activity_id: u64,
+        refresh_task_cache: bool,
+        shell_env: HashMap<String, String>,
+    ) {
+        let (dep_cancelled, dep_failed) =
+            Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown).await;
+
+        if dep_cancelled || dep_failed {
+            let task_name = task_state.read().await.task.name.clone();
+            let task_activity =
+                devenv_activity::start!(Activity::task(&task_name).id(task_activity_id));
+            let completed = if dep_cancelled {
+                task_activity.cancel();
+                TaskCompleted::Cancelled(None)
+            } else {
+                task_activity.dependency_failed();
+                TaskCompleted::DependencyFailed
+            };
+            task_state.write().await.status = TaskStatus::Completed(completed);
+            notify_finished.notify_waiters();
+            notify_ui.notify_one();
+            return;
+        }
+
+        let now = Instant::now();
+        task_state.write().await.status = TaskStatus::Oneshot(OneshotStatus::Running(now));
+        notify_ui.notify_one();
+
+        let completed = {
+            let outputs = outputs.lock().await.clone();
+            match task_state
+                .read()
+                .await
+                .run(
+                    now,
+                    &outputs,
+                    &cache,
+                    shutdown.cancellation_token(),
+                    task_activity_id,
+                    refresh_task_cache,
+                    &shell_env,
+                )
+                .await
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    error!("Task failed with error: {}", e);
+                    TaskCompleted::Failed(
+                        now.elapsed(),
+                        TaskFailure {
+                            stdout: Vec::new(),
+                            stderr: Vec::new(),
+                            error: format!("Task failed: {e:#}"),
+                        },
+                    )
+                }
+            }
+        };
+
+        {
+            let mut task_state = task_state.write().await;
+            match &completed {
+                TaskCompleted::Success(_, Output(Some(output))) => {
+                    outputs
+                        .lock()
+                        .await
+                        .insert(task_state.task.name.clone(), output.clone());
+
+                    if let Some(output_value) = output.as_object() {
+                        let task_name = &task_state.task.name;
+                        if let Err(e) = cache
+                            .store_task_output(
+                                task_name,
+                                &serde_json::Value::Object(output_value.clone()),
+                            )
+                            .await
+                        {
+                            tracing::warn!("Failed to store task output for {}: {}", task_name, e);
+                        }
+                    }
+                }
+                TaskCompleted::Skipped(Skipped::Cached(Output(Some(output)))) => {
+                    outputs
+                        .lock()
+                        .await
+                        .insert(task_state.task.name.clone(), output.clone());
+
+                    if (task_state.task.status.is_some()
+                        || !task_state.task.exec_if_modified.is_empty())
+                        && let Some(output_value) = output.as_object()
+                    {
+                        let task_name = &task_state.task.name;
+                        if let Err(e) = cache
+                            .store_task_output(
+                                task_name,
+                                &serde_json::Value::Object(output_value.clone()),
+                            )
+                            .await
+                        {
+                            tracing::warn!("Failed to store task output for {}: {}", task_name, e);
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            task_state.status = TaskStatus::Completed(completed);
+        }
+        notify_finished.notify_waiters();
+        notify_ui.notify_one();
     }
 
     /// Evaluate one dependency edge. Shared verbatim between the dependency
@@ -1091,8 +1317,9 @@ impl Tasks {
 
         let total_tasks = self.tasks_order.len() as u64;
         let completed_tasks = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let scheduled: HashSet<NodeIndex> = self.tasks_order.iter().copied().collect();
 
-        let outputs = Arc::new(Mutex::new(Outputs::new()));
+        let outputs = Arc::clone(&self.outputs);
         let mut running_tasks = self.shutdown.join_set();
 
         // Pre-register all process tasks with the process manager so they
@@ -1188,7 +1415,7 @@ impl Tasks {
                     }
                 };
 
-                let deps = self.collect_deps(*index);
+                let deps = self.collect_scheduled_deps(*index, &scheduled);
 
                 let task_state_clone = Arc::clone(task_state);
                 let notify_finished_clone = Arc::clone(&self.notify_finished);
@@ -1312,7 +1539,7 @@ impl Tasks {
 
             // Oneshot task: spawn into background with dependency checking,
             // so independent tasks can run in parallel.
-            let deps = self.collect_deps(*index);
+            let deps = self.collect_scheduled_deps(*index, &scheduled);
 
             // TODO: consider Arc-ing self at this point
             let task_state_clone = Arc::clone(task_state);
@@ -1333,131 +1560,20 @@ impl Tasks {
                 let orchestration_activity_inner = Arc::clone(&orchestration_activity_clone);
 
                 async move {
-                    // Wait for dependencies in background
-                    let (dep_cancelled, dep_failed) = Self::wait_for_task_deps(
-                        &deps,
-                        &process_manager_clone,
-                        &notify_finished_clone,
-                        &shutdown_clone,
+                    Self::run_oneshot_task(
+                        task_state_clone,
+                        deps,
+                        outputs_clone,
+                        notify_finished_clone.clone(),
+                        notify_ui_clone.clone(),
+                        cache,
+                        shutdown_clone,
+                        process_manager_clone,
+                        task_activity_id,
+                        refresh_task_cache,
+                        shell_env,
                     )
                     .await;
-
-                    if dep_cancelled || dep_failed {
-                        Self::mark_task_skipped(
-                            &task_state_clone,
-                            task_activity_id,
-                            dep_cancelled,
-                            &completed_tasks_clone,
-                            total_tasks,
-                            &orchestration_activity_inner,
-                            &notify_finished_clone,
-                            &notify_ui_clone,
-                        )
-                        .await;
-                        return;
-                    }
-
-                    // Reset the timer
-                    let now = Instant::now();
-
-                    {
-                        let mut task_state = task_state_clone.write().await;
-                        task_state.status = TaskStatus::Oneshot(OneshotStatus::Running(now));
-                    };
-
-                    // Notify UI that task is starting
-                    notify_ui_clone.notify_one();
-                    let completed = {
-                        let outputs = outputs_clone.lock().await.clone();
-                        match task_state_clone
-                            .read()
-                            .await
-                            .run(
-                                now,
-                                &outputs,
-                                &cache,
-                                shutdown_clone.cancellation_token(),
-                                task_activity_id,
-                                refresh_task_cache,
-                                &shell_env,
-                            )
-                            .await
-                        {
-                            Ok(result) => result,
-                            Err(e) => {
-                                error!("Task failed with error: {}", e);
-                                TaskCompleted::Failed(
-                                    now.elapsed(),
-                                    TaskFailure {
-                                        stdout: Vec::new(),
-                                        stderr: Vec::new(),
-                                        error: format!("Task failed: {e:#}"),
-                                    },
-                                )
-                            }
-                        }
-                    };
-                    {
-                        let mut task_state = task_state_clone.write().await;
-                        match &completed {
-                            TaskCompleted::Success(_, Output(Some(output))) => {
-                                outputs_clone
-                                    .lock()
-                                    .await
-                                    // TODO: remove clone
-                                    .insert(task_state.task.name.clone(), output.clone());
-
-                                // Store the task output for all tasks to support future reuse
-                                if let Some(output_value) = output.as_object() {
-                                    let task_name = &task_state.task.name;
-                                    if let Err(e) = cache
-                                        .store_task_output(
-                                            task_name,
-                                            &serde_json::Value::Object(output_value.clone()),
-                                        )
-                                        .await
-                                    {
-                                        tracing::warn!(
-                                            "Failed to store task output for {}: {}",
-                                            task_name,
-                                            e
-                                        );
-                                    }
-                                }
-                            }
-                            TaskCompleted::Skipped(Skipped::Cached(Output(Some(output)))) => {
-                                outputs_clone
-                                    .lock()
-                                    .await
-                                    // TODO: fix clone
-                                    .insert(task_state.task.name.clone(), output.clone());
-
-                                // Store task output if we're having status or exec_if_modified
-                                if (task_state.task.status.is_some()
-                                    || !task_state.task.exec_if_modified.is_empty())
-                                    && let Some(output_value) = output.as_object()
-                                {
-                                    let task_name = &task_state.task.name;
-                                    if let Err(e) = cache
-                                        .store_task_output(
-                                            task_name,
-                                            &serde_json::Value::Object(output_value.clone()),
-                                        )
-                                        .await
-                                    {
-                                        tracing::warn!(
-                                            "Failed to store task output for {}: {}",
-                                            task_name,
-                                            e
-                                        );
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-
-                        task_state.status = TaskStatus::Completed(completed);
-                    }
 
                     Self::signal_task_done(
                         &completed_tasks_clone,
@@ -1532,7 +1648,7 @@ impl Tasks {
         self.notify_finished.notify_waiters();
         self.notify_ui.notify_one();
 
-        Arc::try_unwrap(outputs).unwrap().into_inner()
+        outputs.lock().await.clone()
     }
 }
 
@@ -1771,6 +1887,7 @@ pub fn compute_hierarchy_edges<N, E>(
 mod schedule_tests {
     use super::*;
     use crate::config::TaskConfig;
+    use std::os::unix::fs::PermissionsExt;
 
     /// Helper to build a minimal Tasks struct for testing schedule().
     /// Returns the TempDir alongside Tasks to keep the directory alive for the test.
@@ -1888,6 +2005,26 @@ mod schedule_tests {
         })
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for process {name} to reach {want:?}"))
+    }
+
+    async fn wait_task_completed(tasks: &Tasks, name: &str) {
+        let index = tasks.task_index_by_name[name];
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let notified = tasks.notify_finished.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                if matches!(
+                    tasks.graph[index].read().await.status,
+                    TaskStatus::Completed(_)
+                ) {
+                    return;
+                }
+                notified.await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for task {name} to complete"));
     }
 
     #[tokio::test]
@@ -2029,6 +2166,83 @@ mod schedule_tests {
         // Now bring gamma up; beta should follow automatically.
         let _ = tasks.start_with_deps(&["gamma".to_string()]).await;
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
+
+        let _ = tasks.process_manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn start_with_deps_runs_unseen_oneshot_dependency_closure() {
+        // Cold-start only alpha. Beta and both of its one-shot predecessors
+        // remain in the retained full graph but outside tasks_order.
+        let prepare = "devenv:tasks:prepare";
+        let setup = "devenv:tasks:setup";
+        let scripts = tempfile::tempdir().unwrap();
+        let prepare_script = scripts.path().join("prepare");
+        let setup_script = scripts.path().join("setup");
+        for script in [&prepare_script, &setup_script] {
+            std::fs::write(script, "#!/bin/sh\nexit 0\n").unwrap();
+            std::fs::set_permissions(script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let mut prepare_task = oneshot_task(prepare, vec![]);
+        prepare_task.command = Some(prepare_script.to_string_lossy().into_owned());
+        let mut setup_task = oneshot_task(setup, vec![prepare]);
+        setup_task.command = Some(setup_script.to_string_lossy().into_owned());
+        let mut beta = long_process_task("beta", vec![]);
+        beta.after = vec![setup.to_string()];
+
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![
+                long_process_task("alpha", vec![]),
+                prepare_task,
+                setup_task,
+                beta,
+            ],
+            vec![format!("{PROCESS_TASK_PREFIX}alpha")],
+            RunMode::Before,
+            false,
+        )
+        .await;
+        let tasks = Arc::new(tasks);
+        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
+        tasks
+            .process_manager()
+            .set_scheduler(Arc::downgrade(&scheduler));
+
+        let parent = Arc::new(devenv_activity::start!(
+            devenv_activity::Activity::operation("test").parent(None)
+        ));
+        let _ = tasks.run_with_parent_activity(parent).await;
+        wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
+
+        for name in [prepare, setup] {
+            let index = tasks.task_index_by_name[name];
+            assert!(
+                !tasks.tasks_order.contains(&index),
+                "{name} must be outside the cold schedule"
+            );
+            assert!(
+                matches!(tasks.graph[index].read().await.status, TaskStatus::Pending),
+                "{name} must start unscheduled"
+            );
+        }
+
+        let outcome = tasks.start_with_deps(&["beta".to_string()]).await;
+        assert_eq!(outcome.scheduled, vec!["beta".to_string()]);
+
+        for name in [prepare, setup] {
+            wait_task_completed(&tasks, name).await;
+            let index = tasks.task_index_by_name[name];
+            let status = tasks.graph[index].read().await.status.clone();
+            assert!(
+                matches!(&status, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                "{name} must run to completion before beta launches, got {status:?}"
+            );
+        }
+        wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
+        assert!(
+            tasks.process_manager.wait_settled().await,
+            "processes wait must settle after the dynamic closure completes"
+        );
 
         let _ = tasks.process_manager.stop_all().await;
     }
