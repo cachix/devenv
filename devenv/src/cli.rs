@@ -480,8 +480,7 @@ pub struct TracingCliArgs {
             When format is omitted, defaults to json.\n\
             Tracing is disabled by default.\n\n\
             [env: DEVENV_TRACE_TO=] (comma-separated)\n\
-            [env: DEVENV_TRACE_DEFAULT_TO=] (comma-separated, used only when no explicit tracing is configured)\n\
-            [env: DEVENV_TRACE_DISABLE=1] (disables DEVENV_TRACE_DEFAULT_TO)"
+            [env: DEVENV_TRACE_DEFAULT_TO=] (comma-separated, used only when no explicit tracing is configured; set to empty string to suppress)"
     )]
     pub trace_to: Vec<TraceOutputSpec>,
 
@@ -567,11 +566,6 @@ impl TracingCliArgs {
         Self::specs_from_env_var("DEVENV_TRACE_DEFAULT_TO", TracingArgsError::DefaultEnvParse)
     }
 
-    /// Returns true when default tracing should be suppressed.
-    fn default_tracing_disabled() -> bool {
-        env::var("DEVENV_TRACE_DISABLE").is_ok_and(|v| !v.is_empty() && v != "0")
-    }
-
     /// Merge all trace sources: `DEVENV_TRACE_TO` env var, `--trace-to` CLI flags,
     /// legacy `--trace-output`/`--trace-format`, and `DEVENV_TRACE_DEFAULT_TO`.
     ///
@@ -588,7 +582,7 @@ impl TracingCliArgs {
             specs.push(TraceOutputSpec::Render(self.trace_format, sink.clone()));
         }
 
-        if specs.is_empty() && !Self::default_tracing_disabled() {
+        if specs.is_empty() {
             specs = Self::default_specs_from_env()?;
         }
 
@@ -1123,20 +1117,27 @@ mod tests {
 
     struct EnvVarGuard {
         _lock: MutexGuard<'static, ()>,
-        saved: Vec<(&'static str, Option<String>)>,
+        saved: Vec<(String, Option<String>)>,
     }
 
     impl EnvVarGuard {
         fn new(vars: &[&'static str]) -> Self {
             let lock = ENV_LOCK.lock().unwrap();
-            let saved = vars.iter().map(|&var| (var, env::var(var).ok())).collect();
+            let saved = vars
+                .iter()
+                .map(|&var| (var.to_owned(), env::var(var).ok()))
+                .collect();
             for var in vars {
                 unsafe { env::remove_var(var) };
             }
             Self { _lock: lock, saved }
         }
 
-        fn set(&self, name: &str, value: &str) {
+        fn set(&mut self, name: &str, value: &str) {
+            // Record the current value before setting, so drop() can restore it.
+            if !self.saved.iter().any(|(k, _)| k == name) {
+                self.saved.push((name.to_owned(), env::var(name).ok()));
+            }
             unsafe { env::set_var(name, value) };
         }
     }
@@ -1154,11 +1155,7 @@ mod tests {
     }
 
     fn clean_trace_env() -> EnvVarGuard {
-        EnvVarGuard::new(&[
-            "DEVENV_TRACE_TO",
-            "DEVENV_TRACE_DEFAULT_TO",
-            "DEVENV_TRACE_DISABLE",
-        ])
+        EnvVarGuard::new(&["DEVENV_TRACE_TO", "DEVENV_TRACE_DEFAULT_TO"])
     }
 
     #[test]
@@ -1301,7 +1298,7 @@ mod tests {
 
     #[test]
     fn trace_default_applies_when_no_explicit_tracing_is_configured() {
-        let env = clean_trace_env();
+        let mut env = clean_trace_env();
         env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
 
         let args = TracingCliArgs {
@@ -1321,7 +1318,7 @@ mod tests {
 
     #[test]
     fn trace_default_supports_multiple_destinations() {
-        let env = clean_trace_env();
+        let mut env = clean_trace_env();
         env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr,otlp-grpc");
 
         let args = TracingCliArgs {
@@ -1343,7 +1340,7 @@ mod tests {
 
     #[test]
     fn trace_default_does_not_apply_when_trace_to_env_is_set() {
-        let env = clean_trace_env();
+        let mut env = clean_trace_env();
         env.set("DEVENV_TRACE_TO", "json:file:/tmp/explicit.json");
         env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
 
@@ -1364,7 +1361,7 @@ mod tests {
 
     #[test]
     fn trace_default_does_not_apply_when_cli_trace_to_is_set() {
-        let env = clean_trace_env();
+        let mut env = clean_trace_env();
         env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
 
         let args = TracingCliArgs {
@@ -1384,7 +1381,7 @@ mod tests {
 
     #[test]
     fn trace_default_does_not_apply_when_legacy_trace_output_is_set() {
-        let env = clean_trace_env();
+        let mut env = clean_trace_env();
         env.set("DEVENV_TRACE_DEFAULT_TO", "json:file:/tmp/default.json");
 
         let args = TracingCliArgs {
@@ -1403,10 +1400,11 @@ mod tests {
     }
 
     #[test]
-    fn trace_default_can_be_disabled() {
-        let env = clean_trace_env();
-        env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
-        env.set("DEVENV_TRACE_DISABLE", "1");
+    fn trace_default_can_be_suppressed_by_empty_value() {
+        let mut env = clean_trace_env();
+        // Setting DEVENV_TRACE_DEFAULT_TO to an empty string suppresses the default
+        // without needing a separate disable flag.
+        env.set("DEVENV_TRACE_DEFAULT_TO", "");
 
         let args = TracingCliArgs {
             trace_to: vec![],
@@ -1417,28 +1415,8 @@ mod tests {
     }
 
     #[test]
-    fn trace_default_disable_zero_is_ignored() {
-        let env = clean_trace_env();
-        env.set("DEVENV_TRACE_DEFAULT_TO", "pretty:stderr");
-        env.set("DEVENV_TRACE_DISABLE", "0");
-
-        let args = TracingCliArgs {
-            trace_to: vec![],
-            trace_output: None,
-            trace_format: TraceFormat::Json,
-        };
-        assert_eq!(
-            args.resolve().unwrap(),
-            vec![TraceOutputSpec::Render(
-                TraceFormat::Pretty,
-                TraceSink::Stderr
-            )]
-        );
-    }
-
-    #[test]
     fn trace_default_parse_errors_name_default_env_var() {
-        let env = clean_trace_env();
+        let mut env = clean_trace_env();
         env.set("DEVENV_TRACE_DEFAULT_TO", "json");
 
         let args = TracingCliArgs {
