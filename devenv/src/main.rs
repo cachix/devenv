@@ -28,7 +28,9 @@ use std::{
 };
 use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
-use tracing::{Instrument, info, info_span, instrument};
+use tracing::{info, instrument};
+
+const DEVENV_CALLER: &str = "_DEVENV_CALLER";
 
 fn main() {
     // Handle shell completion requests (COMPLETE=bash devenv)
@@ -46,6 +48,8 @@ fn main() {
 }
 
 fn main_inner() -> Result<()> {
+    let caller = Caller::from_env();
+
     // Retry loop: if the backend discovers secrets need interactive prompting,
     // we prompt the user and re-run the entire command with secrets now available.
     loop {
@@ -100,7 +104,7 @@ fn main_inner() -> Result<()> {
         let shutdown = Shutdown::new();
         let (ui, backend) = resolve(cli, shutdown.clone())?;
 
-        match run(ui, backend, shutdown) {
+        match run(ui, backend, shutdown, caller) {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
                 Ok(secrets_err) => {
                     // Only prompt interactively when stdin is a terminal;
@@ -141,104 +145,33 @@ struct BackendOptions {
 }
 
 #[derive(Clone, Copy)]
-struct TraceClassification {
-    span_name: &'static str,
-    execution_kind: &'static str,
-    trigger: &'static str,
-    command: &'static str,
+enum Caller {
+    Cli,
+    Direnv,
+    Hook,
 }
 
-impl TraceClassification {
-    fn for_command(command: &Commands) -> Self {
-        let command_name = command_trace_name(command);
-        if matches!(command, Commands::DirenvExport) {
-            return Self {
-                span_name: "devenv.auto-activation",
-                execution_kind: "auto_activation",
-                trigger: "direnv",
-                command: command_name,
-            };
-        }
+impl Caller {
+    fn from_env() -> Self {
+        let caller = env::var_os(DEVENV_CALLER);
+        // This runs before devenv starts any threads. Removing the one-shot
+        // marker prevents commands launched by an activated shell from
+        // inheriting the original caller.
+        unsafe { env::remove_var(DEVENV_CALLER) };
 
-        if matches!(command, Commands::Shell { .. }) && env::var_os("_DEVENV_HOOK_DIR").is_some() {
-            return Self {
-                span_name: "devenv.auto-activation",
-                execution_kind: "auto_activation",
-                trigger: "hook",
-                command: command_name,
-            };
-        }
-
-        Self {
-            span_name: "devenv",
-            execution_kind: "command",
-            trigger: "cli",
-            command: command_name,
+        match caller.as_deref().and_then(|value| value.to_str()) {
+            Some("direnv") => Self::Direnv,
+            Some("hook") => Self::Hook,
+            _ => Self::Cli,
         }
     }
 
-    fn span(&self) -> tracing::Span {
-        match self.span_name {
-            "devenv.auto-activation" => info_span!(
-                "devenv.auto-activation",
-                devenv.execution.kind = self.execution_kind,
-                devenv.trigger = self.trigger,
-                devenv.command = self.command,
-            ),
-            _ => info_span!(
-                "devenv",
-                devenv.execution.kind = self.execution_kind,
-                devenv.trigger = self.trigger,
-                devenv.command = self.command,
-            ),
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Cli => "cli",
+            Self::Direnv => "direnv",
+            Self::Hook => "hook",
         }
-    }
-
-    fn emit_event(&self) {
-        info!(
-            devenv.execution.kind = self.execution_kind,
-            devenv.trigger = self.trigger,
-            devenv.command = self.command,
-            "classified devenv execution"
-        );
-    }
-}
-
-fn command_trace_name(command: &Commands) -> &'static str {
-    match command {
-        Commands::Shell { .. } => "shell",
-        Commands::Test { .. } => "test",
-        Commands::Container { .. } => "container",
-        Commands::Generate => "generate",
-        Commands::Search { .. } => "search",
-        Commands::Gc {} => "gc",
-        Commands::Info {} => "info",
-        Commands::Inputs { .. } => "inputs",
-        Commands::Init { .. } => "init",
-        Commands::Repl {} => "repl",
-        Commands::Build { .. } => "build",
-        Commands::Eval { .. } => "eval",
-        Commands::Update { .. } => "update",
-        Commands::Up { .. } => "up",
-        Commands::Down {} => "down",
-        Commands::Processes { .. } => "processes",
-        Commands::Tasks { .. } => "tasks",
-        Commands::Changelogs {} => "changelogs",
-        Commands::Assemble => "assemble",
-        Commands::PrintDevEnv { .. } => "print-dev-env",
-        Commands::DirenvExport => "direnv-export",
-        Commands::GenerateJSONSchema => "generate-json-schema",
-        Commands::GenerateYamlOptionsDoc => "generate-yaml-options-doc",
-        Commands::PrintPaths => "print-paths",
-        Commands::Mcp { .. } => "mcp",
-        Commands::Lsp { .. } => "lsp",
-        Commands::Direnvrc => "direnvrc",
-        Commands::Version => "version",
-        Commands::Hook { .. } => "hook",
-        Commands::Allow => "allow",
-        Commands::Revoke => "revoke",
-        Commands::HookShouldActivate => "hook-should-activate",
-        Commands::DaemonProcesses { .. } => "daemon-processes",
     }
 }
 
@@ -644,7 +577,12 @@ fn handoff() -> (RenderSide, BackendSide) {
 /// 1. Common setup (activity, tracing, shutdown, channels)
 /// 2. Backend runs on a dedicated GC-registered thread
 /// 3. TUI runs on the main thread (if enabled), otherwise we just wait
-fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Result<()> {
+fn run(
+    ui: UiOptions,
+    backend: BackendOptions,
+    shutdown: Arc<Shutdown>,
+    caller: Caller,
+) -> Result<()> {
     let (renderer, _activity_guard) = Renderer::init(&ui);
 
     let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
@@ -686,7 +624,8 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
             build_gc_runtime().block_on(async {
                 shutdown_clone.install_signals().await;
 
-                let output = run_backend(backend, shutdown_clone.clone(), backend_side).await;
+                let output =
+                    run_backend(backend, shutdown_clone.clone(), backend_side, caller).await;
 
                 // Fallback for paths that didn't run cleanup themselves
                 // (PTY shell, REPL). No-op when run_backend already did it.
@@ -738,26 +677,20 @@ fn launch_debugger(devenv: devenv::Devenv, err: miette::Report) -> Result<()> {
         .map_err(|e| miette::miette!("REPL thread panicked: {}", panic_message(e)))?
 }
 
+/// Run the backend: construct Devenv and dispatch the command.
+#[instrument(
+    name = "devenv",
+    skip_all,
+    fields(
+        devenv.caller = caller.as_str(),
+        devenv.command = backend.command.as_str(),
+    )
+)]
 async fn run_backend(
     backend: BackendOptions,
     shutdown: Arc<Shutdown>,
     side: BackendSide,
-) -> Result<CommandResult> {
-    let trace_classification = TraceClassification::for_command(&backend.command);
-    let span = trace_classification.span();
-    async move {
-        trace_classification.emit_event();
-        run_backend_inner(backend, shutdown, side).await
-    }
-    .instrument(span)
-    .await
-}
-
-/// Run the backend: construct Devenv and dispatch the command.
-async fn run_backend_inner(
-    backend: BackendOptions,
-    shutdown: Arc<Shutdown>,
-    side: BackendSide,
+    caller: Caller,
 ) -> Result<CommandResult> {
     let BackendSide {
         backend_done_tx,

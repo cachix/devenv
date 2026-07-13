@@ -98,6 +98,7 @@ where
     layer.with_target("target");
     layer.serialize_extension::<SpanContext>("span_context");
     layer.with_event("fields");
+    layer.with_current_span("span");
     layer
 }
 

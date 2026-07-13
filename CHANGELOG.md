@@ -41,6 +41,7 @@
 
 ### Improvements
 
+- Traces now identify whether devenv was invoked by the CLI, direnv, or the native shell hook with a `devenv.caller` span attribute. Caller information is passed explicitly by integrations, so nested commands are not mistaken for automatic activation ([#2965](https://github.com/cachix/devenv/issues/2965)).
 - Reduced the size of the devenv binary's closure and container image by no longer bundling a debug build of libghostty-vt, which pulled Zig and LLVM (~1 GiB) into every installation.
 - Bumped secretspec to 0.13. When devenv resolves secrets, a provider outage (e.g. an unreachable vault) is now reported as a provider error instead of the secret appearing as missing.
 - Cachix now authenticates pulls and pushes without `CACHIX_AUTH_TOKEN` exported in the environment: when the variable is unset, devenv resolves the token from a `CACHIX_AUTH_TOKEN` secretspec secret, then from the auth token stored by the Cachix CLI (`cachix authtoken`) in `~/.config/cachix/cachix.dhall`. The resolved token is passed to the cachix push daemon as well. The secretspec secret name is configurable via `secretspec.cachix_auth_token` in `devenv.yaml` for backends whose policy (e.g. an OpenBao/Vault policy) only grants access to the token under a different name.

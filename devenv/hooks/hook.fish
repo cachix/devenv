@@ -48,7 +48,7 @@ end
 # Spawn devenv shell in $project_dir and follow the user if they cd'd out.
 function _devenv_hook_activate
     set -l project_dir $argv[1]
-    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir devenv shell
+    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook devenv shell
     # If the devenv shell exited due to cd outside the project, follow the user there
     set -l exit_dir_file "$project_dir/.devenv/exit-dir"
     if test -f "$exit_dir_file"

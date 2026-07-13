@@ -893,6 +893,46 @@ pub enum Commands {
     },
 }
 
+impl Commands {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Shell { .. } => "shell",
+            Self::Test { .. } => "test",
+            Self::Container { .. } => "container",
+            Self::Generate => "generate",
+            Self::Search { .. } => "search",
+            Self::Gc {} => "gc",
+            Self::Info {} => "info",
+            Self::Inputs { .. } => "inputs",
+            Self::Init { .. } => "init",
+            Self::Repl {} => "repl",
+            Self::Build { .. } => "build",
+            Self::Eval { .. } => "eval",
+            Self::Update { .. } => "update",
+            Self::Up { .. } => "up",
+            Self::Down {} => "down",
+            Self::Processes { .. } => "processes",
+            Self::Tasks { .. } => "tasks",
+            Self::Changelogs {} => "changelogs",
+            Self::Assemble => "assemble",
+            Self::PrintDevEnv { .. } => "print-dev-env",
+            Self::DirenvExport => "direnv-export",
+            Self::GenerateJSONSchema => "generate-json-schema",
+            Self::GenerateYamlOptionsDoc => "generate-yaml-options-doc",
+            Self::PrintPaths => "print-paths",
+            Self::Mcp { .. } => "mcp",
+            Self::Lsp { .. } => "lsp",
+            Self::Direnvrc => "direnvrc",
+            Self::Version => "version",
+            Self::Hook { .. } => "hook",
+            Self::Allow => "allow",
+            Self::Revoke => "revoke",
+            Self::HookShouldActivate => "hook-should-activate",
+            Self::DaemonProcesses { .. } => "daemon-processes",
+        }
+    }
+}
+
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
 pub enum HookShell {
     Bash,
