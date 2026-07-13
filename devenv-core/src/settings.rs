@@ -272,7 +272,12 @@ impl ShellSettings {
     ///
     /// Precedence: Options > Config > $SHELL > login shell > Default.
     pub fn resolve(options: ShellOptions, config: &Config) -> Self {
-        Self::resolve_with_env_and_login_shell(options, config, shell_name_from_env, login_shell_name)
+        Self::resolve_with_env_and_login_shell(
+            options,
+            config,
+            shell_name_from_env,
+            login_shell_name,
+        )
     }
 
     fn resolve_with_env_and_login_shell(
@@ -724,7 +729,12 @@ mod tests {
             ShellOptions::default(),
             &Config::default(),
             || Some("bash".to_string()), // env_shell replaces shell_name_from_env, which returns the basename
-            || Some(("zsh".to_string(), std::path::PathBuf::from("/run/current-system/sw/bin/zsh"))),
+            || {
+                Some((
+                    "zsh".to_string(),
+                    std::path::PathBuf::from("/run/current-system/sw/bin/zsh"),
+                ))
+            },
         );
 
         assert_eq!(settings.shell, "bash");
@@ -738,7 +748,12 @@ mod tests {
             ShellOptions::default(),
             &Config::default(),
             || Some("sh".to_string()), // basename only, as shell_name_from_env returns
-            || Some(("zsh".to_string(), std::path::PathBuf::from("/run/current-system/sw/bin/zsh"))),
+            || {
+                Some((
+                    "zsh".to_string(),
+                    std::path::PathBuf::from("/run/current-system/sw/bin/zsh"),
+                ))
+            },
         );
 
         assert_eq!(settings.shell, "zsh");
@@ -755,7 +770,12 @@ mod tests {
             ShellOptions::default(),
             &Config::default(),
             || None,
-            || Some(("zsh".to_string(), std::path::PathBuf::from("/run/current-system/sw/bin/zsh"))),
+            || {
+                Some((
+                    "zsh".to_string(),
+                    std::path::PathBuf::from("/run/current-system/sw/bin/zsh"),
+                ))
+            },
         );
 
         assert_eq!(settings.shell, "zsh");

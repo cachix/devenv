@@ -793,6 +793,7 @@ impl Devenv {
                 .shell_settings
                 .shell_path
                 .as_ref()
+                .filter(|p| p.exists())
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| resolve_shell_path(dialect.name()));
             Some(path)

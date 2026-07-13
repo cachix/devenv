@@ -35,6 +35,10 @@ pub struct DevenvShellBuilder {
     pub task_exports: BTreeMap<String, String>,
     pub task_messages: Vec<String>,
     pub shell: String,
+    /// Absolute path to the shell binary from the login-shell database
+    /// (`getpwuid`). When present and the path exists, used directly instead
+    /// of `resolve_shell_path` so stripped environments still find the shell.
+    pub shell_path: Option<PathBuf>,
     /// Directory to start the interactive shell in. Set when the project root
     /// was discovered in a parent directory; `None` uses the build context cwd.
     pub shell_cwd: Option<PathBuf>,
@@ -85,7 +89,15 @@ impl DevenvShellBuilder {
         tracing::trace!("Shell setting: {:?}", self.shell);
         let dialect = create_dialect(&self.shell);
         let target_shell_path = (dialect.name() != "bash").then(|| {
-            let path = resolve_shell_path(dialect.name());
+            // Prefer the absolute path from the login-shell database when it
+            // still exists on disk. Falls back to resolve_shell_path (which
+            // tries $SHELL then which) for all other sources.
+            let path = self
+                .shell_path
+                .as_ref()
+                .filter(|p| p.exists())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| resolve_shell_path(dialect.name()));
             tracing::trace!("Resolved {} shell path: {}", dialect.name(), path);
             path
         });
