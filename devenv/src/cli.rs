@@ -868,7 +868,7 @@ pub enum Commands {
 
     #[command(
         about = "Print shell hook for auto-activation on directory change.",
-        long_about = "Print shell hook for auto-activation on directory change.\n\nAdd to your shell config:\n\n  bash:    eval \"$(devenv hook bash)\"     # in ~/.bashrc\n  zsh:     eval \"$(devenv hook zsh)\"      # in ~/.zshrc\n  fish:    devenv hook fish | source       # in ~/.config/fish/config.fish\n  nushell: see devenv hook nu              # in config.nu"
+        long_about = "Print shell hook for auto-activation on directory change.\n\nfish and nushell load this automatically when devenv is installed via Nix.\nIf it doesn't load for you:\n\n  fish:    devenv hook fish | source       # in ~/.config/fish/config.fish\n  nushell: mkdir ($nu.default-config-dir | path join autoload); devenv hook nu | save --force ($nu.default-config-dir | path join autoload/devenv-hook.nu)\n\nBash and zsh have no equivalent, so always add this to your shell config:\n\n  bash:    eval \"$(devenv hook bash)\"     # in ~/.bashrc\n  zsh:     eval \"$(devenv hook zsh)\"      # in ~/.zshrc"
     )]
     Hook {
         #[arg(value_enum)]
