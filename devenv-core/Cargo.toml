@@ -10,7 +10,6 @@ snix = []
 [dependencies]
 devenv-activity.workspace = true
 nix-conf-parser.workspace = true
-nix.workspace = true
 pathdiff.workspace = true
 regex.workspace = true
 
@@ -37,3 +36,6 @@ xdg.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["user"] }
