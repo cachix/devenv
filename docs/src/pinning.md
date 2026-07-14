@@ -31,7 +31,7 @@ Use `?rev=` in the input URL for an exact commit:
 ```yaml title="devenv.yaml"
 inputs:
   nixpkgs-stable:
-    url: github:NixOS/nixpkgs?rev=ac62194c3917d5f474c1a844b6fd6da2db95077d
+    url: github:NixOS/nixpkgs/ac62194c3917d5f474c1a844b6fd6da2db95077d
 ```
 
 Use `?ref=` for a branch or tag (for example the NixOS 25.05 release branch):
