@@ -1,4 +1,4 @@
-cat > devenv.local.nix << EOF
+cat >devenv.local.nix <<EOF
 { pkgs, lib, ... }: {
   # ARM is not supported.
   languages.unison.enable = lib.mkForce (!(pkgs.stdenv.isLinux && pkgs.stdenv.isAarch64));
@@ -12,5 +12,7 @@ cat > devenv.local.nix << EOF
   languages.racket.enable = lib.mkForce (!pkgs.stdenv.isDarwin);
   # Swift broken on Linux with GCC 14 - https://github.com/NixOS/nixpkgs/pull/468796
   languages.swift.enable = lib.mkForce pkgs.stdenv.isDarwin;
+  # lobster is marked broken on macOS
+# languages.lobster.enable = lib.mkForce (!pkgs.stdenv.isDarwin);
 }
 EOF
