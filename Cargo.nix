@@ -7708,6 +7708,11 @@ rec {
             packageId = "libc";
           }
           {
+            name = "nix";
+            packageId = "nix 0.31.3";
+            features = [ "fs" "process" "signal" "poll" ];
+          }
+          {
             name = "serde";
             packageId = "serde";
             features = [ "derive" ];
@@ -7754,6 +7759,11 @@ rec {
             name = "insta";
             packageId = "insta";
             features = [ "filters" "json" ];
+          }
+          {
+            name = "nix";
+            packageId = "nix 0.31.3";
+            features = [ "fs" "process" "signal" "term" ];
           }
           {
             name = "proptest";
@@ -16590,7 +16600,7 @@ rec {
           "user" = [ "feature" ];
           "zerocopy" = [ "fs" "uio" ];
         };
-        resolvedDefaultFeatures = [ "default" "feature" "fs" "poll" "process" "signal" "user" ];
+        resolvedDefaultFeatures = [ "default" "feature" "fs" "poll" "process" "signal" "term" "user" ];
       };
       "nix-bindings-bindgen-raw" = rec {
         crateName = "nix-bindings-bindgen-raw";

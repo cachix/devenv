@@ -14,6 +14,7 @@ use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
+use std::thread::JoinHandle;
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
@@ -63,6 +64,87 @@ impl ExitFlag {
 
 /// Original terminal settings saved before TUI enters raw mode.
 static ORIGINAL_TERMIOS: OnceLock<libc::termios> = OnceLock::new();
+
+const TERMINAL_DISCONNECT_CHECK_INTERVAL: std::time::Duration =
+    std::time::Duration::from_millis(100);
+
+/// Watches the TUI's input descriptor for a terminal hangup without consuming
+/// any keyboard input. Some terminal hosts revoke the descriptor without
+/// delivering SIGHUP, leaving iocraft's event/render loops alive forever.
+struct TerminalDisconnectWatcher {
+    stop: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl Drop for TerminalDisconnectWatcher {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(handle) = self.handle.take() {
+            handle.thread().unpark();
+            let _ = handle.join();
+        }
+    }
+}
+
+fn poll_terminal(fd: std::os::fd::BorrowedFd<'_>) -> nix::poll::PollFlags {
+    use nix::poll::{PollFd, PollFlags, poll};
+
+    // In the reproducer, Darwin only reports the PTY master closing when
+    // POLLIN is requested. Polling readiness does not consume the input.
+    let mut poll_fd = [PollFd::new(fd, PollFlags::POLLIN)];
+    match poll(&mut poll_fd, 0u8) {
+        Ok(_) => poll_fd[0].revents().unwrap_or_else(PollFlags::empty),
+        Err(nix::errno::Errno::EINTR) => PollFlags::empty(),
+        Err(_) => PollFlags::POLLERR,
+    }
+}
+
+fn spawn_terminal_disconnect_watcher(
+    shutdown: Arc<Shutdown>,
+    exit_flag: ExitFlag,
+    render_shutdown: Arc<Notify>,
+) -> Option<TerminalDisconnectWatcher> {
+    use nix::poll::PollFlags;
+    use std::io::IsTerminal;
+    use std::os::fd::AsFd;
+
+    if !io::stdin().is_terminal() {
+        return None;
+    }
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let thread_stop = stop.clone();
+    let handle = std::thread::Builder::new()
+        .name("tui-terminal-watchdog".into())
+        .spawn(move || {
+            let stdin = io::stdin();
+            while !thread_stop.load(Ordering::Acquire) {
+                let events = poll_terminal(stdin.as_fd());
+                if events.intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL)
+                {
+                    debug!("terminal disconnected; requesting shutdown");
+                    // The renderer exits cooperatively: setting the flag and
+                    // waking the dedicated shutdown notify lets MainView call
+                    // `system.exit()` on its next render cycle. Cancelling the
+                    // backend alone is not enough because iocraft's event
+                    // stream may itself be readable forever after the host
+                    // revokes the terminal descriptors.
+                    exit_flag.set();
+                    render_shutdown.notify_waiters();
+                    shutdown.shutdown();
+                    break;
+                }
+
+                std::thread::park_timeout(TERMINAL_DISCONNECT_CHECK_INTERVAL);
+            }
+        })
+        .ok()?;
+
+    Some(TerminalDisconnectWatcher {
+        stop,
+        handle: Some(handle),
+    })
+}
 
 /// Configuration for the TUI application.
 ///
@@ -176,8 +258,12 @@ impl TuiApp {
         let render_shutdown = Arc::new(Notify::new());
         let shutdown = self.shutdown;
         let command_tx = self.command_tx;
-
         let exit_flag = ExitFlag::new();
+        let _terminal_watchdog = spawn_terminal_disconnect_watcher(
+            shutdown.clone(),
+            exit_flag.clone(),
+            render_shutdown.clone(),
+        );
 
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
@@ -917,5 +1003,25 @@ mod tests {
         let quit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'));
         assert!(handle_interrupt_prompt_key(&quit, &ui_state, &shutdown));
         assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn test_terminal_disconnect_is_detected_without_consuming_input() {
+        use nix::poll::PollFlags;
+        use std::io::{Read, Write};
+        use std::os::fd::AsFd;
+
+        let pty = nix::pty::openpty(None, None).unwrap();
+        let mut master = std::fs::File::from(pty.master);
+        let mut slave = std::fs::File::from(pty.slave);
+
+        master.write_all(b"x\n").unwrap();
+        assert!(poll_terminal(slave.as_fd()).contains(PollFlags::POLLIN));
+        let mut input = [0; 2];
+        slave.read_exact(&mut input).unwrap();
+        assert_eq!(&input, b"x\n");
+
+        drop(master);
+        assert!(poll_terminal(slave.as_fd()).intersects(PollFlags::POLLHUP));
     }
 }

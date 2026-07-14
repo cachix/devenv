@@ -27,6 +27,7 @@ tracing-subscriber.workspace = true
 
 # Terminal state management
 libc.workspace = true
+nix = { workspace = true, features = ["poll"] }
 
 # Error handling
 thiserror.workspace = true
@@ -59,6 +60,7 @@ url.workspace = true
 
 # Base64 encoding (for OSC 52 clipboard)
 base64.workspace = true
+
 [[bin]]
 name = "tui-replay"
 path = "src/bin/tui-replay.rs"
@@ -66,6 +68,7 @@ path = "src/bin/tui-replay.rs"
 [dev-dependencies]
 insta.workspace = true
 devenv-activity = { workspace = true, features = ["test-helpers"] }
+nix = { workspace = true, features = ["term"] }
 tokio = { workspace = true, features = ["test-util"] }
 proptest.workspace = true
 unicode-width = "0.1"
