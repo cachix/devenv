@@ -41,6 +41,7 @@
 
 ### Improvements
 
+- Traces now identify whether devenv was invoked by the CLI, direnv, or the native shell hook with a `devenv.caller` span attribute. Caller information is passed explicitly by integrations, so nested commands are not mistaken for automatic activation ([#2965](https://github.com/cachix/devenv/issues/2965)).
 - Reduced the size of the devenv closure and container image by ~550 MiB by linking nixd (used by `devenv lsp`) statically against LLVM, so the monolithic LLVM shared library is no longer bundled.
 - Reduced the size of the devenv binary's closure and container image by no longer bundling a debug build of libghostty-vt, which pulled Zig and LLVM (~1 GiB) into every installation.
 - Added `DEVENV_TRACE_DEFAULT_TO` for configuring default trace destinations that apply only when no explicit `--trace-to`, `DEVENV_TRACE_TO`, or legacy trace output is set. Set `DEVENV_TRACE_DEFAULT_TO=` (empty string) to suppress the default for a command or session ([#2963](https://github.com/cachix/devenv/issues/2963)).

@@ -31,7 +31,7 @@ def --env _devenv_hook [] {
     if $result.exit_code == 0 {
         let dir = ($result.stdout | str trim)
         if $dir != "" {
-            with-env { _DEVENV_HOOK_DIR: $dir } { do { cd $dir; ^devenv shell } }
+            with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell } }
             $env._DEVENV_HOOK_UNTRUSTED = ""
             let exit_dir_file = ($dir + "/.devenv/exit-dir")
             if ($exit_dir_file | path exists) {
