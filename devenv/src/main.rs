@@ -58,16 +58,13 @@ fn main_inner() -> Result<()> {
         // Handle commands that don't need config or runtime
         match &cli.command {
             Commands::Version => {
-                commands::version::run();
-                return Ok(());
+                return commands::version::run();
             }
             Commands::Direnvrc => {
-                commands::direnvrc::run();
-                return Ok(());
+                return commands::direnvrc::run();
             }
             Commands::Hook { shell } => {
-                commands::hook::print(shell);
-                return Ok(());
+                return commands::hook::print(shell);
             }
             Commands::Allow => {
                 return commands::hook::allow();

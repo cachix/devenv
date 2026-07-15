@@ -2,6 +2,7 @@
 //!
 //! Output should match `devenv --version`.
 
-pub fn run() {
+pub fn run() -> Result(()) {
     println!("devenv {}", env!("DEVENV_VERSION_STRING"));
+    Ok(())
 }
