@@ -19,3 +19,5 @@
 /languages.md /languages/ 301
 /supported-services/* /services/:splat 301
 /services.md /services/ 301
+/creating-files/#creating-files /creating-files/#declarative-files 301
+/creating-files/#creating-files-in-subdirectories /creating-files/#declarative-files-in-subdirectories 301
