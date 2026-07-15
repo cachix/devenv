@@ -54,7 +54,7 @@ in
 
     enterShell = ''
       ${lib.optionalString cfg.enable "export STARSHIP_CONFIG=${
-        if builtins.isPath cfg.path then cfg.path else toml.generate cfg.settings
+        if cfg.path != null then cfg.path else toml.generate "starship.toml" cfg.settings
       }"}
 
       # Identify the user's terminal to call the appropiate 'starship init' command
