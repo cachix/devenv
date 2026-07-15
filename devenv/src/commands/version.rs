@@ -2,7 +2,9 @@
 //!
 //! Output should match `devenv --version`.
 
-pub fn run() -> Result(()) {
+use miette::Result;
+
+pub fn run() -> Result<()> {
     println!("devenv {}", env!("DEVENV_VERSION_STRING"));
     Ok(())
 }
