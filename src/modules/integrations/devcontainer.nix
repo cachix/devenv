@@ -42,6 +42,14 @@ in
             A list of pre-installed VS Code extensions.
           '';
         };
+
+        options.customizations.zed.extensions = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = ''
+            A list of pre-installed Zed extensions.
+          '';
+        };
       };
 
       default = { };

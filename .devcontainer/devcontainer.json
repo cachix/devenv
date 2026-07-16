@@ -4,6 +4,11 @@
       "extensions": [
         "jnoortheen.nix-ide"
       ]
+    },
+    "zed": {
+      "extensions": [
+        "nix"
+      ]
     }
   },
   "image": "ghcr.io/cachix/devenv/devcontainer:latest",
