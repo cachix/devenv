@@ -641,6 +641,9 @@ exec '{bin_dir}/devenv' \
     if let Ok(tzdir) = env::var("TZDIR") {
         env.push(("TZDIR", tzdir));
     }
+    if let Ok(auth_sock) = env::var("SSH_AUTH_SOCK") {
+        env.push(("SSH_AUTH_SOCK", auth_sock));
+    }
     // Only pass through RUST_LOG if explicitly set in the parent environment.
     // Do not default it — setting RUST_LOG=info would suppress debug-level trace
     // output from devenv --verbose, breaking tests that grep trace logs.
