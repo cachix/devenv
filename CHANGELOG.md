@@ -39,8 +39,11 @@
 - Fixed `devenv gc` failing with "File devenv.nix does not exist" when run outside of a project. Garbage collection operates on the global devenv store and no longer requires a `devenv.nix` ([#2928](https://github.com/cachix/devenv/issues/2928)).
 - Fixed unfree package errors suggesting only generic Nix/NixOS configuration. They now point devenv users to `allow_unfree: true` or `nixpkgs.permitted_unfree_packages` in `devenv.yaml` ([#2850](https://github.com/cachix/devenv/issues/2850)).
 - Fixed `devenv shell` failing outright with a SQLite `disk I/O error` on filesystems that don't support shared-memory mmap (seen on virtiofs/9p VM mounts and similar). The eval cache and task cache databases now fall back to a plain rollback-journal mode on these filesystems instead of hard-crashing ([#2947](https://github.com/cachix/devenv/issues/2947)).
+- Fixed failure diagnostics being buried in evaluation output in non-TUI mode. A failing evaluation no longer replays potentially many parsed evaluation progress logs, such as `evaluating file …`, after the error, and `devenv-run-tests` now reports test failures after the diagnostic output instead of racing it.
 
 ### Improvements
+
+- Non-TUI console output is now buffered and flushed in batches, reducing write overhead during verbose evaluation.
 
 - Traces now identify whether devenv was invoked by the CLI, direnv, or the native shell hook with a `devenv.caller` span attribute. Caller information is passed explicitly by integrations, so nested commands are not mistaken for automatic activation ([#2965](https://github.com/cachix/devenv/issues/2965)).
 - Reduced the size of the devenv closure and container image by ~550 MiB by linking nixd (used by `devenv lsp`) statically against LLVM, so the monolithic LLVM shared library is no longer bundled.

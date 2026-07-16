@@ -14,8 +14,8 @@
 //! `&str` and `String` via `impl Into<String>`.
 
 use crate::events::{
-    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
-    Message, Operation, Process, ProcessStatus, Task, TaskInfo,
+    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate, Fetch,
+    FetchKind, Message, Operation, Process, ProcessStatus, Task, TaskInfo,
 };
 use crate::timestamp::Timestamp;
 
@@ -324,6 +324,14 @@ pub fn evaluate_log(id: u64, line: impl Into<String>) -> ActivityEvent {
     ActivityEvent::Evaluate(Evaluate::Log {
         id,
         line: line.into(),
+        timestamp: Timestamp::now(),
+    })
+}
+
+pub fn evaluate_op(id: u64, op: EvalOp) -> ActivityEvent {
+    ActivityEvent::Evaluate(Evaluate::Op {
+        id,
+        op,
         timestamp: Timestamp::now(),
     })
 }

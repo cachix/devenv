@@ -1,22 +1,15 @@
 //! Console output for activity events when the TUI is disabled.
 //!
-//! Every event is normalized into a call to [`ConsoleOutput::begin`],
-//! [`end`], [`log`], or [`message`]. Each of those funnels through
-//! [`ConsoleOutput::write`] — the sole writer of stderr and the only
-//! caller of [`ConsoleOutput::show_at`]. New event variants therefore cannot
-//! regress the verbosity contract: there is no other way to emit a line.
+//! Every line goes through [`ConsoleOutput::write`], which applies the
+//! verbosity filter before writing to stderr.
 //!
 //! All output goes to stderr. stdout is owned by the caller's command
 //! result (e.g. `devenv eval` JSON), so writing diagnostics there breaks
 //! pipelines like `devenv eval … | jq`.
 //!
-//! [`end`]: ConsoleOutput::end
-//! [`log`]: ConsoleOutput::log
-//! [`message`]: ConsoleOutput::message
-
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
-use std::io::{self, LineWriter, Write};
+use std::io::{self, BufWriter, Write};
 use std::time::Instant;
 
 /// Cap on per-entry suppressed log lines. Bounds memory for tasks that
@@ -89,8 +82,7 @@ pub struct ConsoleOutput {
     /// Display names of fetches we already announced, used to dedup duplicate
     /// Substitute/CopyPath pairs Nix emits for the same store path.
     active_fetch_names: HashSet<String>,
-    // `new()` wraps this in `LineWriter` so writes coalesce per line
-    // instead of re-locking stderr per fragment.
+    // `new()` wraps stderr in a `BufWriter` to batch bursts of events.
     stderr: Box<dyn Write + Send>,
 }
 
@@ -102,12 +94,11 @@ impl ConsoleOutput {
             entries: HashMap::new(),
             pending_tasks: HashMap::new(),
             active_fetch_names: HashSet::new(),
-            stderr: Box::new(LineWriter::new(io::stderr())),
+            stderr: Box::new(BufWriter::with_capacity(128 * 1024, io::stderr())),
         }
     }
 
-    /// Test-only: injects the writer, skipping `LineWriter` so tests can
-    /// read raw buffers.
+    /// Test-only writer injection.
     #[cfg(test)]
     fn with_writer(
         rx: mpsc::UnboundedReceiver<ActivityEvent>,
@@ -131,17 +122,19 @@ impl ConsoleOutput {
         loop {
             tokio::select! {
                 event = self.rx.recv() => match event {
-                    Some(event) => self.handle(event),
+                    Some(event) => {
+                        self.handle(event);
+                        self.drain_ready_and_flush();
+                    }
                     None => break,
                 },
                 _ = &mut backend_done => {
-                    while let Ok(event) = self.rx.try_recv() {
-                        self.handle(event);
-                    }
+                    self.drain_ready_and_flush();
                     break;
                 }
             }
         }
+        self.flush();
     }
 
     fn handle(&mut self, event: ActivityEvent) {
@@ -192,8 +185,9 @@ impl ConsoleOutput {
                 self.end(id, outcome)
             }
             ActivityEvent::Evaluate(Evaluate::Log { id, line, .. }) => self.log(id, &line, false),
-            ActivityEvent::Evaluate(Evaluate::Op { id, op, .. }) => {
-                self.log(id, &op.to_string(), false)
+            // Parsed eval operations are verbose output and aren't replayed.
+            ActivityEvent::Evaluate(Evaluate::Op { op, .. }) => {
+                self.write(Debug, format_args!("  {op}"));
             }
 
             // Tasks announce their full hierarchy before any start, so we
@@ -252,7 +246,9 @@ impl ConsoleOutput {
             }) => self.log(id, &line, is_error),
             ActivityEvent::Operation(Operation::Progress { .. }) => {}
 
-            ActivityEvent::Message(msg) => self.message(msg.level, &msg.text),
+            ActivityEvent::Message(msg) => {
+                self.message(msg.level, &msg.text, msg.details.as_deref())
+            }
             ActivityEvent::SetExpected(_) | ActivityEvent::Shell(_) => {}
         }
     }
@@ -324,22 +320,39 @@ impl ConsoleOutput {
         }
     }
 
-    fn message(&mut self, level: ActivityLevel, text: &str) {
+    fn message(&mut self, level: ActivityLevel, text: &str, details: Option<&str>) {
         let prefix = match level {
             ActivityLevel::Error => style("✖").red(),
             ActivityLevel::Warn => style("•").yellow(),
             _ => style("•").blue(),
         };
         self.write(level, format_args!("{prefix} {text}"));
+        if let Some(details) = details {
+            for line in details.split('\n') {
+                self.write(level, format_args!("  {line}"));
+            }
+        }
     }
 
-    /// **The single output gate.** Every byte this module emits goes through
-    /// here. The verbosity check lives nowhere else.
+    /// Apply the verbosity filter and write one line.
     fn write(&mut self, level: ActivityLevel, args: fmt::Arguments) {
         if !self.show_at(level) {
             return;
         }
         let _ = writeln!(self.stderr, "{args}");
+    }
+
+    /// Drain the current backlog, then flush so sparse output remains live
+    /// while bursts are written in batches.
+    fn drain_ready_and_flush(&mut self) {
+        while let Ok(event) = self.rx.try_recv() {
+            self.handle(event);
+        }
+        self.flush();
+    }
+
+    fn flush(&mut self) {
+        let _ = self.stderr.flush();
     }
 
     fn show_at(&self, level: ActivityLevel) -> bool {
@@ -377,7 +390,9 @@ pub fn install(verbosity: VerbosityLevel) -> ConsoleGuard {
         .spawn(move || {
             while let Some(event) = output.rx.blocking_recv() {
                 output.handle(event);
+                output.drain_ready_and_flush();
             }
+            output.flush();
         })
         .expect("spawn devenv-console thread");
     ConsoleGuard {
@@ -420,6 +435,55 @@ mod tests {
         }
 
         fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct FlushSpyState {
+        bytes: Vec<u8>,
+        flushes: usize,
+    }
+
+    #[derive(Clone)]
+    struct FlushSpy {
+        state: Arc<Mutex<FlushSpyState>>,
+        flushed: Arc<tokio::sync::Notify>,
+    }
+
+    impl FlushSpy {
+        fn new() -> Self {
+            Self {
+                state: Arc::new(Mutex::new(FlushSpyState::default())),
+                flushed: Arc::new(tokio::sync::Notify::new()),
+            }
+        }
+
+        fn contents(&self) -> String {
+            let bytes = self.state.lock().unwrap().bytes.clone();
+            console::strip_ansi_codes(&String::from_utf8_lossy(&bytes)).into_owned()
+        }
+
+        fn flush_count(&self) -> usize {
+            self.state.lock().unwrap().flushes
+        }
+
+        fn into_box(self) -> Box<dyn Write + Send> {
+            Box::new(SpyWriter(self))
+        }
+    }
+
+    struct SpyWriter(FlushSpy);
+
+    impl Write for SpyWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.state.lock().unwrap().bytes.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.0.state.lock().unwrap().flushes += 1;
+            self.0.flushed.notify_one();
             Ok(())
         }
     }
@@ -740,6 +804,91 @@ mod tests {
 
         let out = h.stderr.contents();
         assert!(out.is_empty(), "got:\n{out}");
+    }
+
+    #[test]
+    fn evaluation_error_is_not_buried_by_eval_ops() {
+        let mut h = Harness::new(VerbosityLevel::Normal);
+        h.dispatch(evaluate_start(1, "Evaluating shell", ActivityLevel::Info));
+        for source in ["default.nix", "module.nix", "shell.nix"] {
+            h.dispatch(evaluate_op(
+                1,
+                devenv_activity::EvalOp::EvaluatedFile {
+                    source: format!("/nix/store/abc-source/{source}").into(),
+                },
+            ));
+        }
+        let error = "error: undefined variable 'missing'";
+        let location = "at shell.nix:3:5";
+        let details =
+            format!("error:\n       … while evaluating\n         {location}\n\n       {error}");
+        h.dispatch(message_with_details(
+            2,
+            ActivityLevel::Error,
+            error,
+            Some(&details),
+            Some(1),
+        ));
+        h.dispatch(evaluate_complete(1, ActivityOutcome::Failed));
+
+        let out = h.stderr.contents();
+        assert!(
+            !out.contains("evaluating file"),
+            "eval ops must not be replayed on failure, got:\n{out}"
+        );
+        let summary = out.find(error).unwrap();
+        let location_pos = out.find(location).unwrap();
+        let diagnostic = out.rfind(error).unwrap();
+        let failure = out.find("✖ Evaluating shell").unwrap();
+        assert!(
+            summary < location_pos && location_pos < diagnostic && diagnostic < failure,
+            "got:\n{out}"
+        );
+        assert!(
+            out[diagnostic + error.len()..failure].trim().is_empty(),
+            "the evaluation error should remain next to the failure marker, got:\n{out}"
+        );
+    }
+
+    #[test]
+    fn eval_ops_stream_live_at_verbose() {
+        let mut h = Harness::new(VerbosityLevel::Verbose);
+        h.dispatch(evaluate_start(1, "Evaluating shell", ActivityLevel::Info));
+        h.dispatch(evaluate_op(
+            1,
+            devenv_activity::EvalOp::ReadFile {
+                source: "/etc/hosts".into(),
+            },
+        ));
+        h.dispatch(evaluate_complete(1, ActivityOutcome::Success));
+
+        let out = h.stderr.contents();
+        assert!(
+            out.contains("readFile: '/etc/hosts'"),
+            "eval ops should stream live at Verbose, got:\n{out}"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_handles_queued_events_and_flushes_on_shutdown() {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (done_tx, done_rx) = oneshot::channel();
+        let writer = FlushSpy::new();
+        let output =
+            ConsoleOutput::with_writer(rx, VerbosityLevel::Normal, writer.clone().into_box());
+        let task = tokio::spawn(output.run(done_rx));
+
+        let batch_flushed = writer.flushed.notified();
+        tx.send(message(ActivityLevel::Info, "queued event"))
+            .unwrap();
+        batch_flushed.await;
+        let flushes_before_shutdown = writer.flush_count();
+
+        done_tx.send(()).unwrap();
+        task.await.unwrap();
+
+        assert!(writer.contents().contains("queued event"));
+        assert!(writer.flush_count() > flushes_before_shutdown);
     }
 
     /// Buffer is capped; oldest lines evict so memory stays bounded
