@@ -3422,6 +3422,30 @@ list of string
 
 
 
+## devcontainer.settings.customizations.zed.extensions
+
+
+
+A list of pre-installed Zed extensions.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+
+
+
 ## devcontainer.settings.image
 
 
@@ -6025,8 +6049,6 @@ submodule
 
 ## git-hooks.hooks.biome.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -6048,6 +6070,8 @@ false
 
 
 ## git-hooks.hooks.biome.settings.binPath
+
+
 
 ` biome ` binary path.
 For example, if you want to use the ` biome ` binary from ` node_modules `, use ` "./node_modules/.bin/biome" `.
@@ -8298,8 +8322,6 @@ false
 
 ## git-hooks.hooks.isort.settings.flags
 
-
-
 Flags passed to isort. See all available [here](https://pycqa.github.io/isort/docs/configuration/options.html).
 
 
@@ -8321,6 +8343,8 @@ string
 
 
 ## git-hooks.hooks.isort.settings.profile
+
+
 
 Built-in profiles to allow easy interoperability with common projects and code styles.
 
