@@ -7023,8 +7023,8 @@ dependencies = [
 
 [[package]]
 name = "secretspec"
-version = "0.14.0"
-source = "git+https://github.com/cachix/secretspec?tag=v0.14.0#efe0440ff2ebd0d6c71fd67ab67cec6f39bf3343"
+version = "0.15.0"
+source = "git+https://github.com/cachix/secretspec?tag=v0.15.0#44c58c522a065a023f7457b7e0f0756e79979712"
 dependencies = [
  "aws-config",
  "aws-sdk-secretsmanager",
