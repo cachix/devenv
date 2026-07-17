@@ -3,7 +3,10 @@
 //!
 //! - `outer_shell_survives_cd_out` — #2805
 //! - `inner_shell_exits_on_cd_out` — hook-spawned shell must `exit` + write exit-dir
+//! - `hook_dir_marker_does_not_leak_to_child_shell` — #2861
 //! - `no_respawn_inside_devenv_shell` — follow-up to #2815
+//! - `fish_deferred_activation_skips_if_already_active` — direnv/devenv double-activation race
+//! - `fish_follow_cd_out_preserves_history_for_cd_dash` — #2853
 //! - `posix_activates_sibling_after_cd_out` — #2944
 
 use std::fs;
@@ -162,6 +165,34 @@ fn inner_shell_exits_on_cd_out() {
 }
 
 #[test]
+fn hook_dir_marker_does_not_leak_to_child_shell() {
+    // A new shell started from inside an active devenv shell (a new
+    // tmux/zellij pane, a manually started nested shell, ...) inherits
+    // `DEVENV_ROOT` and `_DEVENV_HOOK_DIR` via the process environment. If it
+    // also re-sources the hook (as any normal interactive rc file would), it
+    // must not conclude it is itself hook-spawned and `exit` on cd-out —
+    // nothing set up a parent to catch that exit, so doing so would just
+    // kill the pane/session (issue #2861).
+    for (shell, src, _) in shells() {
+        let tmp = fake_project();
+        let child_script = format!("{src}\ncd /\n_devenv_hook\necho SURVIVED\n");
+        let script = format!(
+            "export DEVENV_ROOT={root:?}\nexport _DEVENV_HOOK_DIR={root:?}\n\
+             {src}\n{shell} -c '{child_script}'\n",
+            root = tmp.path(),
+        );
+        let out = run(shell, &script);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains("SURVIVED"),
+            "[{shell}] a shell spawned from inside an active devenv shell inherited \
+             _DEVENV_HOOK_DIR and exited on cd-out.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
+        );
+    }
+}
+
+#[test]
 fn no_respawn_inside_devenv_shell() {
     for (shell, src, path_override) in shells() {
         let tmp = fake_project();
@@ -185,6 +216,110 @@ fn no_respawn_inside_devenv_shell() {
              Recorded:\n{recorded}",
         );
     }
+}
+
+#[test]
+fn fish_deferred_activation_skips_if_already_active() {
+    // Fish defers activation to the next prompt (see the comment on
+    // `_devenv_hook` in hook.fish) to avoid spawning inside a PWD event
+    // handler. In between the initial decision and that deferred prompt,
+    // something else (direnv loading a `.envrc` with `use devenv`, a
+    // manually entered devenv shell, ...) may have already activated an
+    // environment for this directory. `_devenv_hook_activate` must notice
+    // `DEVENV_ROOT` is now set and skip, rather than stacking a redundant
+    // devenv shell on top.
+    if !have("fish") {
+        return;
+    }
+    let tmp = fake_project();
+    let dir = tempfile::tempdir().unwrap();
+    let calls = dir.path().join("calls");
+    let shim_bin = dir.path().join("devenv");
+    fs::write(
+        &shim_bin,
+        format!(
+            r#"#!/bin/sh
+case "$1" in
+  hook-should-activate)
+    printf '%s\n' {root:?}
+    ;;
+  shell)
+    printf 'shell %s\n' "$PWD" >> {calls:?}
+    ;;
+esac
+"#,
+            root = tmp.path(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&shim_bin, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let bin = devenv_bin();
+    let script = format!(
+        // Explicitly erase: a `devenv shell` invoked to run this very test
+        // suite would otherwise leak `DEVENV_ROOT` into the spawned fish,
+        // masking the "not yet activated" starting state this test needs.
+        "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR\n\
+         {bin} hook fish | source\ncd {root:?}\n\
+         {po}\n\
+         _devenv_hook\n\
+         set -gx DEVENV_ROOT {root:?}\n\
+         _devenv_hook_prompt\n\
+         echo DONE\n",
+        po = fish_path_override(dir.path()),
+        root = tmp.path(),
+    );
+    let out = run("fish", &script);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("DONE"),
+        "fish hook hung or exited unexpectedly.\nstdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let recorded = fs::read_to_string(&calls).unwrap_or_default();
+    assert!(
+        recorded.is_empty(),
+        "fish spawned a redundant devenv shell after DEVENV_ROOT was set by \
+         something else (e.g. direnv) between the cd and the deferred prompt.\n\
+         Recorded:\n{recorded}",
+    );
+}
+
+#[test]
+fn fish_follow_cd_out_preserves_history_for_cd_dash() {
+    // #2853: after the hook-spawned shell exits on cd-out, `_devenv_hook_activate`
+    // follows the user to the target directory with `_devenv_builtin_cd_with_history`
+    // (a `builtin cd`, not `cd`), to avoid re-triggering a user-overridden `cd`
+    // (e.g. `zoxide init --cmd=cd`, which reported "infinite loop detected" on
+    // this internal cd — see the fish hook's own comment above the call site).
+    // Plain `builtin cd` bypasses fish's own directory-history bookkeeping too
+    // though, since that lives in fish's bundled `cd` *function*, not a
+    // PWD-change hook — so `cd -` right after silently skipped over the
+    // project directory instead of returning to it.
+    if !have("fish") {
+        return;
+    }
+    let project_dir = fake_project();
+    let other_dir = tempfile::tempdir().unwrap();
+
+    let bin = devenv_bin();
+    let script = format!(
+        "{bin} hook fish | source\n\
+         cd {project_dir:?}\n\
+         _devenv_builtin_cd_with_history {other_dir:?}\n\
+         cd -\n\
+         echo AFTER_CD_DASH=$PWD\n",
+        project_dir = project_dir.path(),
+        other_dir = other_dir.path(),
+    );
+    let out = run("fish", &script);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(&format!("AFTER_CD_DASH={}", project_dir.path().display())),
+        "fish `cd -` did not return to the project directory that \
+         `_devenv_builtin_cd_with_history` left.\nstdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
 }
 
 #[test]
@@ -287,6 +422,37 @@ fn nu_inner_shell_exits_on_cd_out() {
     );
     let exit_dir = fs::read_to_string(tmp.path().join(".devenv/exit-dir")).unwrap();
     assert_eq!(exit_dir, "/", "[nu] exit-dir should record cd target");
+}
+
+#[test]
+fn nu_hook_dir_marker_does_not_leak_to_child_shell() {
+    if !have("nu") {
+        return;
+    }
+    let tmp = fake_project();
+    let hook_path = tmp.path().join("hook.nu");
+    let hook_gen = Command::new(devenv_bin())
+        .args(["hook", "nu"])
+        .output()
+        .unwrap();
+    assert!(hook_gen.status.success(), "devenv hook nu failed");
+    fs::write(&hook_path, &hook_gen.stdout).unwrap();
+
+    let root = tmp.path();
+    let child_script = format!("source {hook_path:?}\ncd /\n_devenv_hook\nprint SURVIVED\n");
+    let script = format!(
+        "$env.DEVENV_ROOT = \"{root}\"\n$env._DEVENV_HOOK_DIR = \"{root}\"\n\
+         source {hook_path:?}\ncd {root:?}\n^nu -c '{child_script}'\n",
+        root = root.display(),
+    );
+    let out = Command::new("nu").arg("-c").arg(&script).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("SURVIVED"),
+        "[nu] a shell spawned from inside an active devenv shell inherited \
+         _DEVENV_HOOK_DIR and exited on cd-out.\nstdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
 }
 
 #[test]

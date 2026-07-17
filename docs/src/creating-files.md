@@ -1,4 +1,4 @@
-# Creating Files
+# Declarative files
 
 The `files` option allows you to declaratively create configuration files and scripts in your development environment. Files are automatically generated from structured data and symlinked into your project when entering the shell.
 
@@ -158,7 +158,7 @@ The `copyMode` attribute accepts:
 
 !!! tip "New in version 2.2"
 
-## Creating Files in Subdirectories
+## Declarative files in Subdirectories
 
 Files can be created in nested directories by specifying the path:
 

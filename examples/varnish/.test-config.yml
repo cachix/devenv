@@ -1,0 +1,4 @@
+# Varnish is poorly tested on macOS
+supported_systems:
+  - aarch64-linux
+  - x86_64-linux

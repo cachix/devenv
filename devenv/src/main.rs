@@ -30,6 +30,8 @@ use tempfile::TempDir;
 use tokio_shutdown::Shutdown;
 use tracing::{info, instrument};
 
+const DEVENV_CALLER: &str = "_DEVENV_CALLER";
+
 fn main() {
     // Handle shell completion requests (COMPLETE=bash devenv)
     // Use "devenv" as completer so scripts work after installation (not absolute path)
@@ -46,6 +48,8 @@ fn main() {
 }
 
 fn main_inner() -> Result<()> {
+    let caller = Caller::from_env();
+
     // Retry loop: if the backend discovers secrets need interactive prompting,
     // we prompt the user and re-run the entire command with secrets now available.
     loop {
@@ -54,16 +58,13 @@ fn main_inner() -> Result<()> {
         // Handle commands that don't need config or runtime
         match &cli.command {
             Commands::Version => {
-                commands::version::run();
-                return Ok(());
+                return commands::version::run();
             }
             Commands::Direnvrc => {
-                commands::direnvrc::run();
-                return Ok(());
+                return commands::direnvrc::run();
             }
             Commands::Hook { shell } => {
-                commands::hook::print(shell);
-                return Ok(());
+                return commands::hook::print(shell);
             }
             Commands::Allow => {
                 return commands::hook::allow();
@@ -100,7 +101,7 @@ fn main_inner() -> Result<()> {
         let shutdown = Shutdown::new();
         let (ui, backend) = resolve(cli, shutdown.clone())?;
 
-        match run(ui, backend, shutdown) {
+        match run(ui, backend, shutdown, caller) {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
                 Ok(secrets_err) => {
                     // Only prompt interactively when stdin is a terminal;
@@ -138,6 +139,37 @@ struct BackendOptions {
     strict_ports: bool,
     /// Kept alive for the duration of the backend run; `Drop` removes the dirs.
     test_dirs: TestDirs,
+}
+
+#[derive(Clone, Copy)]
+enum Caller {
+    Cli,
+    Direnv,
+    Hook,
+}
+
+impl Caller {
+    fn from_env() -> Self {
+        let caller = env::var_os(DEVENV_CALLER);
+        // This runs before devenv starts any threads. Removing the one-shot
+        // marker prevents commands launched by an activated shell from
+        // inheriting the original caller.
+        unsafe { env::remove_var(DEVENV_CALLER) };
+
+        match caller.as_deref().and_then(|value| value.to_str()) {
+            Some("direnv") => Self::Direnv,
+            Some("hook") => Self::Hook,
+            _ => Self::Cli,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Cli => "cli",
+            Self::Direnv => "direnv",
+            Self::Hook => "hook",
+        }
+    }
 }
 
 /// Temporary dotfile / state directories for `devenv test`.
@@ -542,7 +574,12 @@ fn handoff() -> (RenderSide, BackendSide) {
 /// 1. Common setup (activity, tracing, shutdown, channels)
 /// 2. Backend runs on a dedicated GC-registered thread
 /// 3. TUI runs on the main thread (if enabled), otherwise we just wait
-fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Result<()> {
+fn run(
+    ui: UiOptions,
+    backend: BackendOptions,
+    shutdown: Arc<Shutdown>,
+    caller: Caller,
+) -> Result<()> {
     let (renderer, _activity_guard) = Renderer::init(&ui);
 
     let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
@@ -584,7 +621,8 @@ fn run(ui: UiOptions, backend: BackendOptions, shutdown: Arc<Shutdown>) -> Resul
             build_gc_runtime().block_on(async {
                 shutdown_clone.install_signals().await;
 
-                let output = run_backend(backend, shutdown_clone.clone(), backend_side).await;
+                let output =
+                    run_backend(backend, shutdown_clone.clone(), backend_side, caller).await;
 
                 // Fallback for paths that didn't run cleanup themselves
                 // (PTY shell, REPL). No-op when run_backend already did it.
@@ -637,11 +675,19 @@ fn launch_debugger(devenv: devenv::Devenv, err: miette::Report) -> Result<()> {
 }
 
 /// Run the backend: construct Devenv and dispatch the command.
-#[instrument(name = "devenv", skip_all)]
+#[instrument(
+    name = "devenv",
+    skip_all,
+    fields(
+        devenv.caller = caller.as_str(),
+        devenv.command = backend.command.as_str(),
+    )
+)]
 async fn run_backend(
     backend: BackendOptions,
     shutdown: Arc<Shutdown>,
     side: BackendSide,
+    caller: Caller,
 ) -> Result<CommandResult> {
     let BackendSide {
         backend_done_tx,

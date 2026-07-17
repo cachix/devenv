@@ -1220,102 +1220,179 @@ impl Config {
         import: &str,
         git_root: Option<&Path>,
     ) -> Result<()> {
-        let canonical_import = import_path.canonicalize().ok();
-        let canonical_root = security_root.canonicalize().ok();
-
-        // Try to validate using canonical paths if both exist
-        if let (Some(import_canon), Some(root_canon)) = (&canonical_import, &canonical_root) {
-            if !import_canon.starts_with(root_canon) {
-                bail!(
-                    "Import path '{}' resolves outside the {} which is not allowed. Imports must stay within the {}.",
-                    import,
-                    if git_root.is_some() {
-                        "git repository"
-                    } else {
-                        "base directory"
-                    },
-                    if git_root.is_some() {
-                        "repository"
-                    } else {
-                        "project directory"
-                    }
-                );
-            }
-        } else if canonical_import.is_none()
-            && let Some(canonical_root) = canonical_root
-        {
-            // Import path doesn't exist, but root does.
-            // Canonicalize the parent directory to resolve symlinks
-            // (e.g. /tmp -> /run/user/...), falling back to lexical
-            // normalization only when the parent doesn't exist either.
-            let abs_import = if let Some(parent) = import_path.parent() {
-                if let Ok(canonical_parent) = parent.canonicalize() {
-                    canonical_parent.join(import_path.file_name().unwrap_or_default())
-                } else if import_path.is_absolute() {
-                    Self::normalize_path_components(import_path)
-                } else if let Ok(cwd) = std::env::current_dir() {
-                    Self::normalize_path_components(&cwd.join(import_path))
-                } else {
-                    return Ok(());
-                }
-            } else if import_path.is_absolute() {
-                Self::normalize_path_components(import_path)
-            } else {
+        let canonical_root = match security_root.canonicalize() {
+            Ok(root) => root,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                // The path will be validated when the security root exists.
                 return Ok(());
-            };
-
-            if !abs_import.starts_with(&canonical_root) {
-                bail!(
-                    "Import path '{}' resolves outside the {} which is not allowed. Imports must stay within the {}.",
-                    import,
-                    if git_root.is_some() {
-                        "git repository"
-                    } else {
-                        "base directory"
-                    },
-                    if git_root.is_some() {
-                        "repository"
-                    } else {
-                        "project directory"
-                    }
-                );
             }
+            Err(error) => {
+                return Err(error).into_diagnostic().wrap_err_with(|| {
+                    format!(
+                        "Failed to canonicalize security root {}",
+                        security_root.display()
+                    )
+                });
+            }
+        };
+
+        let abs_import = match import_path.canonicalize() {
+            Ok(import) => import,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ) =>
+            {
+                // Soft-canonicalize a missing import so the prefix comparison
+                // against the canonicalized root isn't defeated by a symlinked
+                // base path (e.g. /var -> /private/var on macOS).
+                // NotADirectory is a flavor of missing: input-style imports
+                // (e.g. `foo/bar` for input `foo`) may collide with a regular
+                // file named `foo` in the project root.
+                let import = if import_path.is_absolute() {
+                    import_path.to_path_buf()
+                } else {
+                    std::env::current_dir()
+                        .into_diagnostic()
+                        .wrap_err("Failed to get current directory")?
+                        .join(import_path)
+                };
+                Self::soft_canonicalize(&import)?
+            }
+            Err(error) => {
+                return Err(error).into_diagnostic().wrap_err_with(|| {
+                    format!(
+                        "Failed to canonicalize import path {}",
+                        import_path.display()
+                    )
+                });
+            }
+        };
+
+        if !abs_import.starts_with(&canonical_root) {
+            bail!(
+                "Import path '{}' resolves outside the {} which is not allowed. Imports must stay within the {}.",
+                import,
+                if git_root.is_some() {
+                    "git repository"
+                } else {
+                    "base directory"
+                },
+                if git_root.is_some() {
+                    "repository"
+                } else {
+                    "project directory"
+                }
+            );
         }
-        // If both paths don't exist or only root doesn't exist, skip validation
-        // The path will be validated when it's actually used
 
         Ok(())
     }
 
-    /// Normalizes a path by resolving `.` and `..` components without requiring the path to exist.
-    fn normalize_path_components(path: &Path) -> PathBuf {
-        let mut components = Vec::new();
+    /// Resolves an absolute path that may not exist. Existing components are
+    /// cheaply inspected for symlinks; after the first missing component, the
+    /// suffix is processed lexically without further filesystem access. If `..`
+    /// returns to the existing prefix, filesystem inspection resumes.
+    ///
+    /// Resolving symlinks before applying `..` is important: `link/..` means
+    /// "parent of the link target", which lexical normalization would get wrong.
+    fn soft_canonicalize(path: &Path) -> Result<PathBuf> {
+        let mut symlinks_followed = 0;
+        let (resolved, _) = Self::soft_canonicalize_inner(path, &mut symlinks_followed)?;
+        Ok(resolved)
+    }
+
+    /// Returns the resolved path and the number of unresolved trailing
+    /// components. Keeping the depth lets `missing/..` return to the known
+    /// existing prefix without making redundant filesystem calls.
+    fn soft_canonicalize_inner(
+        path: &Path,
+        symlinks_followed: &mut usize,
+    ) -> Result<(PathBuf, usize)> {
+        use std::path::Component;
+
+        const MAX_SYMLINKS: usize = 40;
+
+        let mut resolved = PathBuf::new();
+        let mut unresolved_depth: usize = 0;
 
         for component in path.components() {
             match component {
-                std::path::Component::ParentDir => {
-                    // Pop the last component if it's not a root component
-                    if let Some(last) = components.last() {
-                        match last {
-                            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
-                                // Don't pop root components
+                Component::Prefix(_) | Component::RootDir => resolved.push(component),
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    resolved.pop();
+                    unresolved_depth = unresolved_depth.saturating_sub(1);
+                }
+                Component::Normal(name) if unresolved_depth > 0 => {
+                    resolved.push(name);
+                    unresolved_depth += 1;
+                }
+                Component::Normal(name) => {
+                    let candidate = resolved.join(name);
+
+                    match std::fs::symlink_metadata(&candidate) {
+                        Ok(metadata) if metadata.file_type().is_symlink() => {
+                            *symlinks_followed += 1;
+                            if *symlinks_followed > MAX_SYMLINKS {
+                                bail!(
+                                    "Too many levels of symbolic links while resolving {}",
+                                    candidate.display()
+                                );
                             }
-                            _ => {
-                                components.pop();
-                            }
+
+                            // The metadata lookup already established that this
+                            // is a symlink. Reading and resolving its target
+                            // directly avoids a redundant full canonicalize.
+                            let target = match std::fs::read_link(&candidate) {
+                                Ok(target) => target,
+                                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                                    // The link disappeared between the metadata
+                                    // lookup and read_link; treat it as the first
+                                    // missing component.
+                                    resolved.push(name);
+                                    unresolved_depth = 1;
+                                    continue;
+                                }
+                                Err(error) => {
+                                    return Err(error).into_diagnostic().wrap_err_with(|| {
+                                        format!(
+                                            "Failed to read symbolic link {}",
+                                            candidate.display()
+                                        )
+                                    });
+                                }
+                            };
+                            let target = if target.is_absolute() {
+                                target
+                            } else {
+                                resolved.join(target)
+                            };
+                            (resolved, unresolved_depth) =
+                                Self::soft_canonicalize_inner(&target, symlinks_followed)?;
+                        }
+                        Ok(_) => resolved.push(name),
+                        Err(error)
+                            if matches!(
+                                error.kind(),
+                                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                            ) =>
+                        {
+                            resolved.push(name);
+                            unresolved_depth = 1;
+                        }
+                        Err(error) => {
+                            return Err(error).into_diagnostic().wrap_err_with(|| {
+                                format!("Failed to inspect path component {}", candidate.display())
+                            });
                         }
                     }
-                }
-                std::path::Component::CurDir => {
-                    // Skip current directory references
-                }
-                _ => {
-                    components.push(component);
                 }
             }
         }
 
-        components.iter().collect()
+        Ok((resolved, unresolved_depth))
     }
 
     /// Resolves an import path relative to base_path or git_root.
@@ -1997,6 +2074,224 @@ imports:
                 .any(|i| i == "./" || i == "." || i == "./."),
             "Base directory should not appear in final_imports, got: {:?}",
             config.imports
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn input_import_under_symlinked_root_is_not_rejected() {
+        // Regression test for input-style imports (e.g. "simple/examples/simple")
+        // when the project root is reached through a symlink. On macOS the system
+        // temp dir lives under the /var -> /private/var symlink: git reports the
+        // physical root while the base path stays logical. The import path does
+        // not exist on disk, so validation fell back to lexical normalization of
+        // the logical path and wrongly rejected the import as escaping the repo.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let real_root = temp_dir.path().join("real");
+        fs::create_dir(&real_root).expect("Failed to create real root");
+        let linked_root = temp_dir.path().join("link");
+        std::os::unix::fs::symlink(&real_root, &linked_root).expect("Failed to create symlink");
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&real_root)
+            .output()
+            .expect("Failed to git init");
+
+        fs::write(
+            real_root.join("devenv.yaml"),
+            r#"
+inputs:
+  simple:
+    url: github:cachix/devenv
+    flake: false
+imports:
+  - simple/examples/simple
+"#,
+        )
+        .expect("Failed to write config");
+
+        let config = Config::load_from(&linked_root)
+            .expect("Input-style import should not be rejected under a symlinked root");
+        assert!(
+            config.imports.iter().any(|i| i == "simple/examples/simple"),
+            "Input import should be preserved, got: {:?}",
+            config.imports
+        );
+    }
+
+    #[test]
+    fn input_import_colliding_with_regular_file_is_not_rejected() {
+        // Regression test for an input-style import (e.g. "foo/bar" for input
+        // `foo`) when a regular file named `foo` exists in the project root.
+        // Canonicalizing the import then fails with NotADirectory rather than
+        // NotFound, which must be treated as a missing path, not a hard error.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().join("project");
+        fs::create_dir(&root).expect("Failed to create project dir");
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&root)
+            .output()
+            .expect("Failed to git init");
+
+        fs::write(root.join("foo"), "").expect("Failed to create conflicting file");
+
+        fs::write(
+            root.join("devenv.yaml"),
+            r#"
+inputs:
+  foo:
+    url: github:cachix/devenv
+    flake: false
+imports:
+  - foo/bar
+"#,
+        )
+        .expect("Failed to write config");
+
+        let config = Config::load_from(&root)
+            .expect("Input-style import colliding with a regular file should not be rejected");
+        assert!(
+            config.imports.iter().any(|i| i == "foo/bar"),
+            "Input import should be preserved, got: {:?}",
+            config.imports
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nonexistent_import_escaping_via_symlink_and_dotdot_is_rejected() {
+        // `..` must be resolved against the real filesystem, not lexically:
+        // with `link -> <outside>`, the import `./link/../missing` resolves to
+        // a sibling of the symlink *target* (outside the repo), while lexical
+        // normalization would collapse it to `<repo>/missing` (inside).
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let outside = temp_dir.path().join("outside");
+        fs::create_dir(&outside).expect("Failed to create outside dir");
+        let repo = temp_dir.path().join("repo");
+        fs::create_dir(&repo).expect("Failed to create repo dir");
+        std::os::unix::fs::symlink(&outside, repo.join("link")).expect("Failed to create symlink");
+
+        let status = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .status()
+            .expect("Failed to run git init");
+        assert!(status.success(), "git init failed");
+
+        fs::write(
+            repo.join("devenv.yaml"),
+            r#"
+imports:
+  - ./link/../missing
+"#,
+        )
+        .expect("Failed to write config");
+
+        let err = Config::load_from(&repo)
+            .expect_err("Import escaping the repo through a symlink should be rejected");
+        assert!(
+            err.to_string().contains("resolves outside"),
+            "Expected path traversal error, got: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn soft_canonicalize_resolves_broken_symlink_target_before_dotdot() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let repo = temp_dir.path().join("repo");
+        let outside = temp_dir.path().join("outside");
+        fs::create_dir(&repo).expect("Failed to create repo dir");
+        fs::create_dir(&outside).expect("Failed to create outside dir");
+        std::os::unix::fs::symlink(outside.join("missing-target"), repo.join("link"))
+            .expect("Failed to create broken symlink");
+
+        let resolved = Config::soft_canonicalize(&repo.join("link/../missing"))
+            .expect("Broken symlink target should be soft-canonicalized");
+        assert_eq!(
+            resolved,
+            outside
+                .canonicalize()
+                .expect("Failed to canonicalize outside dir")
+                .join("missing")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn soft_canonicalize_rejects_symlink_loops() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let first = temp_dir.path().join("first");
+        let second = temp_dir.path().join("second");
+        std::os::unix::fs::symlink(&second, &first).expect("Failed to create first symlink");
+        std::os::unix::fs::symlink(&first, &second).expect("Failed to create second symlink");
+
+        let err = Config::soft_canonicalize(&first)
+            .expect_err("A symbolic link loop should not be resolved");
+        assert!(
+            err.to_string()
+                .contains("Too many levels of symbolic links"),
+            "Expected a symbolic link depth error, got: {err:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn soft_canonicalize_tolerates_missing_and_non_directory_components() {
+        // NotFound and NotADirectory both mean "the path doesn't exist as a
+        // directory tree" and start the lexical suffix; other errors (loops,
+        // permissions) still fail because containment can't be established.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir
+            .path()
+            .canonicalize()
+            .expect("Failed to canonicalize temp dir");
+
+        assert_eq!(
+            Config::soft_canonicalize(&root.join("missing/deeper"))
+                .expect("A missing suffix should be accepted"),
+            root.join("missing/deeper")
+        );
+
+        let file = root.join("file");
+        fs::write(&file, "").expect("Failed to create file");
+        assert_eq!(
+            Config::soft_canonicalize(&file.join("child"))
+                .expect("A non-directory component should be treated as missing"),
+            file.join("child")
+        );
+    }
+
+    #[test]
+    fn nonexistent_import_escaping_root_is_rejected() {
+        // A non-existent import that lexically escapes the git root must still
+        // be rejected by the fallback validation path.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path().join("project");
+        fs::create_dir(&root).expect("Failed to create project dir");
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&root)
+            .output()
+            .expect("Failed to git init");
+
+        fs::write(
+            root.join("devenv.yaml"),
+            r#"
+imports:
+  - ../outside/nonexistent
+"#,
+        )
+        .expect("Failed to write config");
+
+        let err = Config::load_from(&root).expect_err("Escaping import should be rejected");
+        assert!(
+            err.to_string().contains("resolves outside"),
+            "Expected path traversal error, got: {err}"
         );
     }
 

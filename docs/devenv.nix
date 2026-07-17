@@ -55,6 +55,16 @@
     exec = "${lib.getExe pkgs.tailwindcss} -m -i src/assets/extra.css -o src/assets/output.css";
   };
 
+  scripts."docs-sitemap" = {
+    description = "Generate a complete docs sitemap (pages + heading anchors) from the running docs server.";
+    exec = ''python3 "${config.git.root}/docs/gen/sitemap_with_anchors.py" "$@"'';
+  };
+
+  scripts."docs-sitemap-diff" = {
+    description = "Diff two docs sitemaps (old vs new) and propose _redirects entries.";
+    exec = ''python3 "${config.git.root}/docs/gen/sitemap_diff.py" "$@"'';
+  };
+
   tasks = {
     "devenv:compile-requirements" = {
       before = [ "devenv:python:virtualenv" ];

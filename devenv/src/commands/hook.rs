@@ -24,7 +24,7 @@ const HOOK_NU: &str = include_str!(concat!(env!("OUT_DIR"), "/hook.nu"));
 // ---- CLI entry points ----
 
 /// Print the shell hook script for `shell` to stdout.
-pub fn print(shell: &HookShell) {
+pub fn print(shell: &HookShell) -> Result<()> {
     let script = match shell {
         HookShell::Bash => HOOK_BASH,
         HookShell::Zsh => HOOK_ZSH,
@@ -40,6 +40,7 @@ pub fn print(shell: &HookShell) {
             std::process::exit(1);
         }
     }
+    Ok(())
 }
 
 /// Trust the current working directory for auto-activation.

@@ -14,7 +14,7 @@ You don't need to install Cachix client, devenv will handle binary caching for y
 
 After that you'll need to set `CACHIX_AUTH_TOKEN=XXX` with either [a personal auth token](https://app.cachix.org/personal-auth-tokens) or a per cache token (that you can create in cache settings).
 
-!!! tip "New in version 2.1.3"
+!!! tip "New in version 2.2"
 
     If `CACHIX_AUTH_TOKEN` is not set in the environment, devenv resolves the
     token from, in order:

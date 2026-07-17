@@ -3,40 +3,45 @@ nav:
   - Cloud: cloud.md
   - Guide:
     - Getting started: getting-started.md
-    - Files and variables: files-and-variables.md
-    - Ad-hoc environments: ad-hoc-developer-environments.md
-    - Auto activation: auto-activation.md
-    - Writing devenv.nix:
+    - Configuration: files-and-variables.md
+    - Tutorial: https://github.com/cachix/nixcon-2024-workshop
+    - Examples: examples.md
+    - Convenience:
+      - Ad-hoc environments: ad-hoc-developer-environments.md
+      - Auto activation: auto-activation.md
+      - Caching:
+        - Binary caching: binary-caching.md
+        - Garbage collection: garbage-collection.md
+    - Essentials:
       - Basics: basics.md
       - Packages: packages.md
-      - Scripts: scripts.md
-      - Creating Files: creating-files.md
-      - Tasks: tasks.md
       - Languages: languages
+      - Scripts: scripts.md
+      - Declarative files: creating-files.md
+      - Git hooks: git-hooks.md
+      - Tests: tests.md
+      - Pinning: pinning.md
+    - Processes & Services:
       - Processes:
         - Overview: processes.md
         - Supported process managers: supported-process-managers
       - Services: services
       - Containers: containers.md
-      - Binary caching: binary-caching.md
-      - Git hooks: git-hooks.md
-      - Tests: tests.md
+    - Advanced:
+      - Tasks: tasks.md
       - Profiles: profiles.md
       - Overlays: overlays.md
-      - Outputs: outputs.md
     - Writing devenv.yaml:
       - Inputs: inputs.md
+      - Outputs: outputs.md
       - Composing: composing-using-imports.md
     - Overview:
-      - Garbage collection: garbage-collection.md
       - REPL: repl.md
       - Language Server: lsp.md
       - MCP: mcp.md
     - Extending: extending.md
     - Guides: guides
     - Integrations: integrations
-    - Tutorial: https://github.com/cachix/nixcon-2024-workshop
-    - Examples: examples.md
     - Editor support: editor-support
   - Reference: reference
   - Recipes:

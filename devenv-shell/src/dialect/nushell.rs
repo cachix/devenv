@@ -276,8 +276,33 @@ $env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt? | default [] | app
         let config_nu_content = format!(
             r#"# devenv nushell config init
 
+# Remember whether this shell was spawned by the devenv hook, then remove the
+# exported marker immediately so it cannot leak into further descendants.
+# The PWD hook itself is installed after the user's config.nu below, so their
+# hook configuration cannot discard it.
+let __devenv_enable_exit_on_cd_out = ("_DEVENV_HOOK_DIR" in $env)
+if $__devenv_enable_exit_on_cd_out {{
+    hide-env -i _DEVENV_HOOK_DIR
+}}
+
+def _devenv_shell_exit_on_cd_out [] {{
+    if not ($env.PWD == $env.DEVENV_ROOT or ($env.PWD | str starts-with ($env.DEVENV_ROOT + "/"))) {{
+        $env.PWD | save --force ($env.DEVENV_ROOT + "/.devenv/exit-dir")
+        exit
+    }}
+}}
+
 # Source user's config.nu for their customizations (aliases, keybindings, etc.)
 {user_config_source}
+
+# A hook-spawned shell must exit when the user leaves the project so its
+# parent shell can follow. Install this after config.nu so the user's hook
+# configuration cannot discard it.
+if $__devenv_enable_exit_on_cd_out {{
+    $env.config = ($env.config | upsert hooks.env_change.PWD (
+        ($env.config | get -o hooks.env_change.PWD | default []) | append {{|| _devenv_shell_exit_on_cd_out }}
+    ))
+}}
 
 # Restore devenv PATH after user config may have modified it.
 # _DEVENV_PATH is a colon-separated string from bash; split into a list.

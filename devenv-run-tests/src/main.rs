@@ -1,4 +1,5 @@
 use clap::Parser;
+use devenv::activity::ActivityLevel;
 use devenv::{
     Config, Devenv, DevenvOptions, NixSettings, SecretOptions, SecretSettings, VerbosityLevel,
     activity as devenv_activity, console as devenv_console, tracing as devenv_tracing,
@@ -295,12 +296,15 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         }
 
         if exclude_set.is_match(name) {
-            eprintln!("Excluding {name}");
+            devenv_activity::message(ActivityLevel::Info, format!("Excluding {name}"));
             return false;
         }
 
         if test_info.config.should_skip_for_system(&current_system) {
-            eprintln!("Skipping {name} (unsupported system {current_system})");
+            devenv_activity::message(
+                ActivityLevel::Info,
+                format!("Skipping {name} (unsupported system {current_system})"),
+            );
             test_results.push(TestResult {
                 name: name.clone(),
                 status: TestStatus::Skipped,
@@ -313,11 +317,14 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
     let total_tests = test_infos.len();
     let num_skipped = test_results.len();
-    eprintln!(
-        "Running {} test{}, {} skipped",
-        total_tests,
-        if total_tests == 1 { "" } else { "s" },
-        num_skipped
+    devenv_activity::message(
+        ActivityLevel::Info,
+        format!(
+            "Running {} test{}, {} skipped",
+            total_tests,
+            if total_tests == 1 { "" } else { "s" },
+            num_skipped
+        ),
     );
 
     let mut current_test_num = 0;
@@ -329,11 +336,10 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         let path = &test_info.path;
         let test_config = &test_info.config;
 
-        eprintln!(
-            "\n[{}/{}] Starting: {}",
-            current_test_num, total_tests, dir_name
+        devenv_activity::message(
+            ActivityLevel::Info,
+            format!("[{current_test_num}/{total_tests}] Starting: {dir_name}"),
         );
-        eprintln!("{}", "-".repeat(50));
 
         // Determine whether to use a temporary directory
         let (devenv_root, devenv_dotfile, _tmpdir) = if test_config.use_tmp_dir {
@@ -386,14 +392,12 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         // Run .patch.sh if it exists (must run before loading config)
         let patch_script = PathBuf::from(".patch.sh");
         if patch_script.exists() {
-            eprintln!("    Running .patch.sh");
+            devenv_activity::message(ActivityLevel::Info, "Running .patch.sh");
             let _ = Command::new("bash")
                 .arg(&patch_script)
                 .status()
                 .into_diagnostic()?;
         }
-
-        eprintln!("  Running {dir_name}");
 
         // A script to run inside the shell before the test.
         let setup_script = ".setup.sh";
@@ -440,7 +444,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
             // Run .setup.sh if it exists
             if PathBuf::from(setup_script).exists() {
-                eprintln!("    Running {setup_script}");
+                devenv_activity::message(ActivityLevel::Info, format!("Running {setup_script}"));
                 let output = devenv
                     .run_in_shell(
                         format!("./{setup_script}"),
@@ -460,7 +464,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         } else {
             // Run .test.sh directly - it must exist when run_test_sh is false
             if PathBuf::from(".test.sh").exists() {
-                eprintln!("    Running .test.sh directly");
+                devenv_activity::message(ActivityLevel::Info, "Running .test.sh directly");
                 let output = Command::new("bash")
                     .arg(".test.sh")
                     .status()
@@ -480,20 +484,20 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             }
         };
 
-        eprintln!("{}", "-".repeat(50));
+        // Queue status through the activity pipeline to preserve diagnostic ordering.
         let test_status = if status.is_ok() {
-            eprintln!(
-                "✅ [{}/{}] Passed: {}",
-                current_test_num, total_tests, dir_name
+            devenv_activity::message(
+                ActivityLevel::Info,
+                format!("[{current_test_num}/{total_tests}] Passed: {dir_name}"),
             );
             TestStatus::Passed
         } else {
-            eprintln!(
-                "❌ [{}/{}] Failed: {}",
-                current_test_num, total_tests, dir_name
+            devenv_activity::message(
+                ActivityLevel::Error,
+                format!("[{current_test_num}/{total_tests}] Failed: {dir_name}"),
             );
             if let Err(error) = &status {
-                eprintln!("    Error: {error:?}");
+                devenv_activity::message(ActivityLevel::Error, format!("{error:?}"));
             }
             TestStatus::Failed
         };
@@ -641,6 +645,9 @@ exec '{bin_dir}/devenv' \
     if let Ok(tzdir) = env::var("TZDIR") {
         env.push(("TZDIR", tzdir));
     }
+    if let Ok(auth_sock) = env::var("SSH_AUTH_SOCK") {
+        env.push(("SSH_AUTH_SOCK", auth_sock));
+    }
     // Only pass through RUST_LOG if explicitly set in the parent environment.
     // Do not default it — setting RUST_LOG=info would suppress debug-level trace
     // output from devenv --verbose, breaking tests that grep trace logs.
@@ -678,22 +685,26 @@ async fn run_tests(args: &RunArgs) -> Result<()> {
     let mut num_failed = 0;
     let mut num_skipped = 0;
 
-    eprintln!();
-
     for result in &test_results {
         match &result.status {
             TestStatus::Passed => num_passed += 1,
             TestStatus::Failed => {
                 num_failed += 1;
-                eprintln!("{}: Failed", result.name);
+                devenv_activity::message(ActivityLevel::Error, format!("{}: Failed", result.name));
             }
             TestStatus::Skipped => num_skipped += 1,
         }
     }
 
     let num_ran = num_passed + num_failed;
-    eprintln!();
-    eprintln!("Ran {num_ran} tests, {num_failed} failed, {num_skipped} skipped.");
+    devenv_activity::message(
+        if num_failed > 0 {
+            ActivityLevel::Error
+        } else {
+            ActivityLevel::Info
+        },
+        format!("Ran {num_ran} tests, {num_failed} failed, {num_skipped} skipped."),
+    );
 
     if num_failed > 0 {
         Err(miette::miette!("Some tests failed"))

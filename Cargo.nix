@@ -24004,14 +24004,14 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.13.0";
+        version = "0.15.0";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "944a2c8b050079fe49d11e8c759007a16782079c";
-          sha256 = "1rs1a5lp1nnxsgyk9sxcywangnfr3r6y0yscv43a0xphvbl6pmrk";
+          rev = "44c58c522a065a023f7457b7e0f0756e79979712";
+          sha256 = "0rd1706zyi59893rzki0kw6wp8mfjcb1gik6h5pdwwjr95z6azc1";
         };
         dependencies = [
           {
@@ -24150,13 +24150,15 @@ rec {
           }
         ];
         features = {
+          "akv" = [ "dep:azure_core" "dep:azure_identity" "dep:azure_security_keyvault_secrets" ];
           "awssm" = [ "dep:aws-config" "dep:aws-sdk-secretsmanager" ];
           "bws" = [ "dep:bitwarden" "dep:rustls" ];
           "cli" = [ "dep:toml_edit" ];
-          "default" = [ "cli" "keyring" "gcsm" "awssm" "vault" "bws" ];
+          "default" = [ "cli" "keyring" "gcsm" "awssm" "vault" "bws" "akv" ];
           "gcsm" = [ "dep:google-cloud-secretmanager-v1" ];
           "keyring" = [ "dep:keyring" "dep:whoami" ];
           "vault" = [ "dep:reqwest" ];
+          "vendored-dbus" = [ "keyring?/vendored" ];
         };
         resolvedDefaultFeatures = [ "awssm" "cli" "gcsm" "keyring" "vault" ];
       };

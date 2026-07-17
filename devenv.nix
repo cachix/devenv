@@ -114,7 +114,10 @@ in
 
   devcontainer = {
     enable = true;
-    settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
+    settings.customizations = {
+      vscode.extensions = [ "jnoortheen.nix-ide" ];
+      zed.extensions = [ "nix" ];
+    };
   };
 
   difftastic.enable = true;

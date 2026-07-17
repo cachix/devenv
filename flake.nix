@@ -94,9 +94,9 @@
               nix = inputs.nix.packages.${system}.nix-cli // {
                 inherit (inputs.nix.packages.${system}.nix) libs;
               };
-              nixd = inputs.nixd.packages.${system}.nixd;
+              nixd = inputs.nixd.packages.${system}.nixd.override { llvmStatic = true; };
               crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
-              libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" { };
+              libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" { optimize = "ReleaseSafe"; };
             })
           ];
           pkgs = import nixpkgs { inherit overlays system; };

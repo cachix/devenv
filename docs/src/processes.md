@@ -31,7 +31,7 @@ To stop detached processes:
 $ devenv down
 ```
 
-!!! tip "New in devenv 2.1.3"
+!!! tip "New in devenv 2.2"
 
     `devenv down` is a shorthand for `devenv processes down`.
 

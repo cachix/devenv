@@ -129,7 +129,7 @@ use_devenv() {
   fi
 
   local env
-  if ! env=$("${devenv_cmd[@]}" direnv-export); then
+  if ! env=$(_DEVENV_CALLER=direnv "${devenv_cmd[@]}" direnv-export); then
     log_error "failed to build the devenv environment. see above."
     exit 0
   fi
