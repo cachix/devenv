@@ -224,7 +224,7 @@ other than the default `CACHIX_AUTH_TOKEN`.
 
 *Type:* `string` · *Default:* `CACHIX_AUTH_TOKEN`
 
-!!! tip "New in version 2.1.3"
+!!! tip "New in version 2.2"
 
 ## secretspec.enable
 
