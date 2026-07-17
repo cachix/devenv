@@ -1979,6 +1979,7 @@ dependencies = [
  "devenv-activity",
  "miette",
  "netstat2",
+ "nix 0.31.3",
  "nix-conf-parser",
  "num_enum",
  "pathdiff",

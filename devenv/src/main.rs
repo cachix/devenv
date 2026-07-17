@@ -721,6 +721,7 @@ async fn run_backend(
         let bash_path = devenv.get_bash_path().await?;
         let clean = devenv.shell_settings.clean.clone();
         let shell = devenv.shell_settings.shell.clone();
+        let shell_path = devenv.shell_settings.shell_path.clone();
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
@@ -735,6 +736,7 @@ async fn run_backend(
             bash_path,
             clean,
             shell,
+            shell_path,
             dotfile,
             task_exports,
             task_messages,
@@ -1136,6 +1138,7 @@ struct ReloadShellArgs {
     bash_path: String,
     clean: devenv_core::config::Clean,
     shell: String,
+    shell_path: Option<std::path::PathBuf>,
     dotfile: std::path::PathBuf,
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
@@ -1166,6 +1169,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         bash_path,
         clean,
         shell,
+        shell_path,
         dotfile,
         task_exports,
         task_messages,
@@ -1190,6 +1194,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         task_exports,
         task_messages,
         shell,
+        shell_path,
         shell_cwd,
     };
 

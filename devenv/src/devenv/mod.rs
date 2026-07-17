@@ -786,7 +786,17 @@ impl Devenv {
         // Determine target shell and dialect
         let dialect = create_dialect(&self.shell_settings.shell);
         let target_shell_path = if dialect.name() != "bash" {
-            Some(resolve_shell_path(dialect.name()))
+            // Prefer the absolute path from the login-shell database (populated when the shell
+            // was resolved via getpwuid). In stripped environments $SHELL and PATH may not
+            // contain the shell's Nix store path, so resolve_shell_path would fail.
+            let path = self
+                .shell_settings
+                .shell_path
+                .as_ref()
+                .filter(|p| p.exists())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| resolve_shell_path(dialect.name()));
+            Some(path)
         } else {
             None
         };
