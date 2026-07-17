@@ -48,6 +48,15 @@ __devenv_compute_diff "$_devenv_before_file"
 rm -f "$_devenv_before_file"
 unset _devenv_before_file
 
+# Remember whether this shell was spawned by the devenv hook, then unset the
+# exported marker immediately so it cannot leak into further descendants.
+# The cd-out handler itself is installed after user and terminal prompt setup
+# below, so their PROMPT_COMMAND configuration cannot overwrite it.
+if [[ -n "${{_DEVENV_HOOK_DIR:-}}" ]]; then
+    unset _DEVENV_HOOK_DIR
+    __devenv_enable_exit_on_cd_out=1
+fi
+
 # Save PATH before ~/.bashrc potentially modifies it
 _DEVENV_PATH="$PATH"
 
@@ -67,6 +76,23 @@ export PATH="$_DEVENV_PATH"
 # profile/bashrc.
 if [[ -n "${{GHOSTTY_RESOURCES_DIR:-}}" && -r "${{GHOSTTY_RESOURCES_DIR}}/shell-integration/bash/ghostty.bash" ]]; then
     source "${{GHOSTTY_RESOURCES_DIR}}/shell-integration/bash/ghostty.bash"
+fi
+
+# A hook-spawned shell must exit when the user leaves the project so its
+# parent shell can follow. Install this after ~/.bashrc and terminal prompt
+# integration so their PROMPT_COMMAND setup cannot discard the handler.
+if [[ -n "${{__devenv_enable_exit_on_cd_out:-}}" ]]; then
+    __devenv_exit_on_cd_out() {{
+        case "$PWD" in
+            "$DEVENV_ROOT"|"$DEVENV_ROOT"/*) ;;
+            *)
+                printf '%s' "$PWD" > "$DEVENV_ROOT/.devenv/exit-dir"
+                exit
+                ;;
+        esac
+    }}
+    PROMPT_COMMAND="__devenv_exit_on_cd_out${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
+    unset __devenv_enable_exit_on_cd_out
 fi
 
 # Hot-reload hook (PROMPT_COMMAND integration)

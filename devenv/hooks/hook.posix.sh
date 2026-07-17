@@ -3,15 +3,26 @@
 _DEVENV_HOOK_PWD=""
 _DEVENV_HOOK_UNTRUSTED=""
 
+# `_DEVENV_HOOK_DIR` marks the one shell process the hook itself spawned.
+# Capture it into a non-exported variable, then unset the exported copy so
+# it cannot leak into further descendants (a new tmux/zellij pane, a
+# manually started nested shell, ...) started from this shell later on —
+# those would otherwise inherit it, wrongly conclude they too are
+# hook-spawned, and `exit` on cd-out with nothing around to catch them.
+if [[ -n "${_DEVENV_HOOK_DIR:-}" ]]; then
+    _devenv_hook_dir="$_DEVENV_HOOK_DIR"
+    unset _DEVENV_HOOK_DIR
+fi
+
 _devenv_hook() {
     local previous_exit_status=$?
     [[ "$_DEVENV_HOOK_PWD" == "$PWD" ]] && return $previous_exit_status
 
     # `DEVENV_ROOT` set means a devenv shell is already active — hook does
-    # nothing. Hook-spawned shells (marked by `_DEVENV_HOOK_DIR`) additionally
+    # nothing. Hook-spawned shells (marked by `_devenv_hook_dir`) additionally
     # `exit` when cd-ing outside the project so the parent shell can follow.
     if [[ -n "${DEVENV_ROOT:-}" ]]; then
-        if [[ -n "${_DEVENV_HOOK_DIR:-}" ]]; then
+        if [[ -n "${_devenv_hook_dir:-}" ]]; then
             case "$PWD" in
                 "${DEVENV_ROOT}"|"${DEVENV_ROOT}"/*) ;;
                 *)
