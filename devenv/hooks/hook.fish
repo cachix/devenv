@@ -21,8 +21,14 @@ function _devenv_hook --on-variable PWD
     # `exit` when cd-ing outside the project so the parent shell can follow.
     if test -n "$DEVENV_ROOT"
         if set -q _devenv_hook_dir
-            switch $PWD
-                case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
+            # `path resolve` (builtin, no `realpath` dependency): `$PWD`
+            # preserves symlinks a user navigated through (e.g. macOS's
+            # `/tmp` -> `/private/tmp`) while `$DEVENV_ROOT` is canonicalized,
+            # so comparing the raw strings can spuriously conclude the user
+            # left the project when they never did.
+            set -l resolved_root (path resolve $DEVENV_ROOT)
+            switch (path resolve $PWD)
+                case "$resolved_root" "$resolved_root/*"
                 case '*'
                     printf '%s' $PWD > "$DEVENV_ROOT/.devenv/exit-dir"
                     exit
@@ -82,8 +88,20 @@ function _devenv_builtin_cd_with_history
 end
 
 # Spawn devenv shell in $project_dir and follow the user if they cd'd out.
+#
+# $argv[2] = "first" marks activation from _devenv_hook_init: this shell
+# never showed the user its own prompt before deciding to activate, so it
+# exists purely to host this one devenv session (e.g. a fresh terminal tab
+# opened straight into a trusted project). If the inner shell then exits
+# outright (not a cd-out — no exit-dir file), there is no prior state in
+# this outer shell worth preserving, so propagate the exit: one exit/Ctrl-D
+# closes the whole terminal, same as a plain shell or direnv would. Any
+# later activation (via _devenv_hook_prompt) necessarily happened after the
+# user already saw and used this shell at least once, so it never
+# propagates — they may want that shell back.
 function _devenv_hook_activate
     set -l project_dir $argv[1]
+    set -l activation_kind $argv[2]
     # The decision to activate was made on an earlier PWD change and only
     # acted on at this prompt (see the comment on _devenv_hook above). In
     # between, something else (direnv loading a `.envrc` with `use devenv`,
@@ -93,7 +111,29 @@ function _devenv_hook_activate
     if test -n "$DEVENV_ROOT"
         return
     end
-    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook devenv shell
+    # `--shell fish`: without this, devenv falls back to `$SHELL` (the login
+    # shell), which is frequently stale and can disagree with the shell this
+    # hook was actually loaded into.
+    #
+    # `_DEVENV_PREV_PWD`: fish's own `cd` already recorded where the user was
+    # before this activation — but *which* stack holds it depends on
+    # direction. A forward cd (a plain `cd <dir>`, including this activation
+    # itself if it was reached that way) pushes onto `$dirprev`. But if this
+    # activation was triggered by `cd -`/`prevd` itself (re-entering the
+    # project by going *back* to it), fish's own `cd` pops that entry off
+    # `$dirprev` and pushes it onto `$dirnext` instead — reading `$dirprev`
+    # unconditionally would miss it entirely (or find a stale, older entry).
+    # `$__fish_cd_direction` (set by fish's own `cd`/`prevd`/`nextd`) says
+    # which stack actually holds the entry we want.
+    set -l _prev_pwd
+    if test "$__fish_cd_direction" = next
+        if set -q dirnext[1]
+            set _prev_pwd $dirnext[-1]
+        end
+    else if set -q dirprev[1]
+        set _prev_pwd $dirprev[-1]
+    end
+    env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_PREV_PWD=$_prev_pwd _DEVENV_CALLER=hook devenv shell --shell fish
     # If the devenv shell exited due to cd outside the project, follow the user there
     set -l exit_dir_file "$project_dir/.devenv/exit-dir"
     if test -f "$exit_dir_file"
@@ -104,6 +144,8 @@ function _devenv_hook_activate
             # when the user overrides `cd` (e.g. `zoxide init --cmd=cd`).
             _devenv_builtin_cd_with_history "$target_dir"
         end
+    else if test "$activation_kind" = first
+        exit
     end
 end
 
@@ -137,6 +179,6 @@ function _devenv_hook_init --on-event fish_prompt
     if test -n "$_DEVENV_ACTIVATE_DIR"
         set -l project_dir $_DEVENV_ACTIVATE_DIR
         set -g _DEVENV_ACTIVATE_DIR ""
-        _devenv_hook_activate $project_dir
+        _devenv_hook_activate $project_dir first
     end
 end

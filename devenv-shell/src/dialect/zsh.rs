@@ -63,7 +63,7 @@ set -o history
 # environment may have added it after this process started)
 if [ ! -x "{target_shell}" ] && ! command -v "{target_shell}" >/dev/null 2>&1; then
     echo "devenv: error: shell '{target_shell}' not found" >&2
-    echo "devenv: add zsh to your devenv.nix packages or set SHELL to an absolute path" >&2
+    echo "devenv: add zsh to your devenv.nix packages, or set SHELL to zsh's absolute path" >&2
     exit 1
 fi
 exec "{target_shell}" -i
@@ -192,6 +192,16 @@ if [ -n "$_DEVENV_HOOK_DIR" ]; then
     __devenv_enable_exit_on_cd_out=1
 fi
 
+# zsh doesn't preserve an inherited OLDPWD across a fresh start either, so
+# `cd -` has nothing to return to right after activation. `_DEVENV_PREV_PWD`
+# carries the hook shell's real previous directory; re-derive OLDPWD by
+# actually cd-ing there and back.
+if [ -n "$_DEVENV_PREV_PWD" ]; then
+    _devenv_target_pwd="$PWD"
+    cd "$_DEVENV_PREV_PWD" 2>/dev/null && cd "$_devenv_target_pwd"
+    unset _DEVENV_PREV_PWD _devenv_target_pwd
+fi
+
 if [ -n "$_DEVENV_REAL_ZDOTDIR" ]; then
     ZDOTDIR="$_DEVENV_REAL_ZDOTDIR"
     unset _DEVENV_REAL_ZDOTDIR
@@ -210,15 +220,7 @@ export PATH="$_DEVENV_PATH"
 # parent shell can follow. Install this after the user's zsh configuration so
 # their precmd hook setup cannot discard the handler.
 if [ -n "$__devenv_enable_exit_on_cd_out" ]; then
-    __devenv_exit_on_cd_out() {{
-        case "$PWD" in
-            "$DEVENV_ROOT"|"$DEVENV_ROOT"/*) ;;
-            *)
-                printf '%s' "$PWD" > "$DEVENV_ROOT/.devenv/exit-dir"
-                exit
-                ;;
-        esac
-    }}
+    {exit_on_cd_out_snippet}
     autoload -Uz add-zsh-hook
     add-zsh-hook precmd __devenv_exit_on_cd_out
     unset __devenv_enable_exit_on_cd_out
@@ -232,6 +234,7 @@ fi
 "#,
             prompt_prefix = prompt_prefix,
             reload_hook = reload_hook,
+            exit_on_cd_out_snippet = super::exit_on_cd_out_snippet(),
         );
 
         std::fs::write(zsh_dir.join(".zshenv"), zshenv_content)?;

@@ -35,8 +35,15 @@ impl CommandEnv for devenv_reload::CommandBuilder {
 ///
 /// If `clean.enabled`, clears the env and re-sets only the kept vars from
 /// the current process.
-/// Always sets `SHELL` and `DEVENV_CMDLINE`.
-pub(crate) fn apply_shell_env(cmd: &mut impl CommandEnv, shell_path: &str, clean: &Clean) {
+///
+/// Sets `SHELL` only when `shell_path` is `Some` (a successfully resolved
+/// binary). `None` means the target shell couldn't be resolved; leaving
+/// `SHELL` untouched preserves the caller's real value for `enterShell`
+/// (which may itself branch on `$SHELL` and runs before the rcfile's own
+/// not-found check), instead of it seeing `SHELL` already overwritten with
+/// the name that failed to resolve in the first place.
+/// Always sets `DEVENV_CMDLINE`.
+pub(crate) fn apply_shell_env(cmd: &mut impl CommandEnv, shell_path: Option<&str>, clean: &Clean) {
     if clean.enabled {
         cmd.clear_env();
         for (k, v) in clean.kept_env_vars() {
@@ -44,7 +51,9 @@ pub(crate) fn apply_shell_env(cmd: &mut impl CommandEnv, shell_path: &str, clean
         }
     }
 
-    cmd.set_env("SHELL", shell_path);
+    if let Some(shell_path) = shell_path {
+        cmd.set_env("SHELL", shell_path);
+    }
     let cmdline = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
     cmd.set_env("DEVENV_CMDLINE", &cmdline);
 }

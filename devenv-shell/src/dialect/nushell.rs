@@ -77,12 +77,20 @@ export _DEVENV_PATH="$PATH"
 # Re-enable history before exec
 set -o history
 
+# Nu (unlike bash/zsh) honors a freshly-set OLDPWD as-is, so `_DEVENV_PREV_PWD`
+# (the hook shell's real previous directory) just needs re-exporting as
+# OLDPWD before exec — no cd-there-and-back trick needed for `cd -` to work.
+if [ -n "${{_DEVENV_PREV_PWD:-}}" ]; then
+    export OLDPWD="$_DEVENV_PREV_PWD"
+    unset _DEVENV_PREV_PWD
+fi
+
 # Exec into nushell with our custom config files.
 # Nushell inherits env vars from the parent process, so the devenv
 # environment carries over automatically.
 if [ ! -x "{target_shell}" ] && ! command -v "{target_shell}" >/dev/null 2>&1; then
     echo "devenv: error: shell '{target_shell}' not found" >&2
-    echo "devenv: add nushell to your devenv.nix packages or set SHELL to an absolute path" >&2
+    echo "devenv: add nushell to your devenv.nix packages, or set SHELL to nu's absolute path" >&2
     exit 1
 fi
 exec "{target_shell}" --config "{nu_config}" --env-config "{nu_env}"
@@ -286,7 +294,13 @@ if $__devenv_enable_exit_on_cd_out {{
 }}
 
 def _devenv_shell_exit_on_cd_out [] {{
-    if not ($env.PWD == $env.DEVENV_ROOT or ($env.PWD | str starts-with ($env.DEVENV_ROOT + "/"))) {{
+    # `path expand` resolves symlinks: `$env.PWD` preserves symlinks a user
+    # navigated through (e.g. macOS's `/tmp` -> `/private/tmp`) while
+    # `$env.DEVENV_ROOT` is canonicalized, so comparing the raw strings can
+    # spuriously conclude the user left the project when they never did.
+    let resolved_pwd = ($env.PWD | path expand)
+    let resolved_root = ($env.DEVENV_ROOT | path expand)
+    if not ($resolved_pwd == $resolved_root or ($resolved_pwd | str starts-with ($resolved_root + "/"))) {{
         $env.PWD | save --force ($env.DEVENV_ROOT + "/.devenv/exit-dir")
         exit
     }}

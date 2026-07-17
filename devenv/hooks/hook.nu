@@ -22,7 +22,14 @@ hide-env -i _DEVENV_HOOK_DIR
 def --env _devenv_hook [] {
     if ("DEVENV_ROOT" in $env) {
         if $_devenv_hook_dir {
-            if not ($env.PWD == $env.DEVENV_ROOT or ($env.PWD | str starts-with ($env.DEVENV_ROOT + "/"))) {
+            # `path expand` resolves symlinks: `$env.PWD` preserves symlinks
+            # a user navigated through (e.g. macOS's `/tmp` -> `/private/tmp`)
+            # while `$env.DEVENV_ROOT` is canonicalized, so comparing the raw
+            # strings can spuriously conclude the user left the project when
+            # they never did.
+            let resolved_pwd = ($env.PWD | path expand)
+            let resolved_root = ($env.DEVENV_ROOT | path expand)
+            if not ($resolved_pwd == $resolved_root or ($resolved_pwd | str starts-with ($resolved_root + "/"))) {
                 $env.PWD | save --force ($env.DEVENV_ROOT + "/.devenv/exit-dir")
                 exit
             }
@@ -39,7 +46,15 @@ def --env _devenv_hook [] {
     if $result.exit_code == 0 {
         let dir = ($result.stdout | str trim)
         if $dir != "" {
-            with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell } }
+            # `--shell nu`: without this, devenv falls back to `$SHELL` (the
+            # login shell), which is frequently stale and can disagree with
+            # the shell this hook was actually loaded into.
+            #
+            # `_DEVENV_PREV_PWD`: nu's own `cd` already recorded where the
+            # user was before this activation in `$env.OLDPWD`. Pass it
+            # through so the spawned shell's `cd -` works immediately.
+            let prev_pwd = ($env | get -o OLDPWD | default "")
+            with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_PREV_PWD: $prev_pwd, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell --shell nu } }
             $env._DEVENV_HOOK_UNTRUSTED = ""
             let exit_dir_file = ($dir + "/.devenv/exit-dir")
             if ($exit_dir_file | path exists) {

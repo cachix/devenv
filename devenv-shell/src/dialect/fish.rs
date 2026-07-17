@@ -49,7 +49,7 @@ export _DEVENV_PATH="$PATH"
 # environment may have added it after this process started)
 if [ ! -x "{target_shell}" ] && ! command -v "{target_shell}" >/dev/null 2>&1; then
     echo "devenv: error: shell '{target_shell}' not found" >&2
-    echo "devenv: add fish to your devenv.nix packages or set SHELL to an absolute path" >&2
+    echo "devenv: add fish to your devenv.nix packages, or set SHELL to fish's absolute path" >&2
     exit 1
 fi
 exec "{target_shell}" -i -C "source {init_dir}/devenv.fish"
@@ -204,11 +204,34 @@ bind \e\cr __devenv_reload_keybind_handler
 # cannot leak into further descendants (a new tmux/zellij pane, a
 # manually started nested shell, ...) which would otherwise wrongly conclude
 # they too are hook-spawned.
+
+# fish's own directory history (`$dirprev`, used by `cd -`/`prevd`) doesn't
+# carry over to a fresh shell either. `_DEVENV_PREV_PWD` carries the hook
+# shell's real previous directory; seed dirprev with it directly (same
+# bookkeeping as fish's own `cd` function — see MAX_DIR_HIST in
+# share/functions/cd.fish).
+if test -n "$_DEVENV_PREV_PWD"
+    set -l max_dir_hist 25
+    # No `set -q dirprev; or set -l dirprev` pre-declaration here (unlike
+    # `_devenv_builtin_cd_with_history`): this runs at file top level, not
+    # inside a function, so a stray `set -l` would shadow the real
+    # (global/universal) dirprev for the rest of the session.
+    set -q dirprev[$max_dir_hist]; and set -e dirprev[1]
+    set -U -q dirprev; and set -U -a dirprev $_DEVENV_PREV_PWD; or set -g -a dirprev $_DEVENV_PREV_PWD
+    set -e _DEVENV_PREV_PWD
+end
+
 if set -q _DEVENV_HOOK_DIR
     set -e _DEVENV_HOOK_DIR
     function _devenv_shell_exit_on_cd_out --on-variable PWD
-        switch $PWD
-            case "$DEVENV_ROOT" "$DEVENV_ROOT/*"
+        # `path resolve` (builtin, no `realpath` dependency): `$PWD`
+        # preserves symlinks a user navigated through (e.g. macOS's `/tmp`
+        # -> `/private/tmp`) while `$DEVENV_ROOT` is canonicalized, so
+        # comparing the raw strings can spuriously conclude the user left
+        # the project when they never did.
+        set -l resolved_root (path resolve $DEVENV_ROOT)
+        switch (path resolve $PWD)
+            case "$resolved_root" "$resolved_root/*"
             case '*'
                 printf '%s' $PWD > "$DEVENV_ROOT/.devenv/exit-dir"
                 exit

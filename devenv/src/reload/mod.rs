@@ -84,11 +84,13 @@ impl DevenvShellBuilder {
 
         tracing::trace!("Shell setting: {:?}", self.shell);
         let dialect = create_dialect(&self.shell);
-        let target_shell_path = (dialect.name() != "bash").then(|| {
+        let target_shell_path = if dialect.name() != "bash" {
             let path = resolve_shell_path(dialect.name());
-            tracing::trace!("Resolved {} shell path: {}", dialect.name(), path);
+            tracing::trace!("Resolved {} shell path: {:?}", dialect.name(), path);
             path
-        });
+        } else {
+            None
+        };
 
         let reload_hook = ctx
             .reload_file
@@ -124,7 +126,14 @@ impl DevenvShellBuilder {
         cmd_builder.cwd(self.shell_cwd.as_deref().unwrap_or(&ctx.cwd));
         set_reload_file_env(&mut cmd_builder, ctx);
 
-        let shell_for_env = target_shell_path.as_deref().unwrap_or(bash);
+        // See the analogous comment in devenv::prepare_shell: only override
+        // SHELL when we resolved a real path, otherwise leave the caller's
+        // own $SHELL intact for enterShell to see.
+        let shell_for_env = if dialect.name() == "bash" {
+            Some(bash.as_str())
+        } else {
+            target_shell_path.as_deref()
+        };
         crate::shell_env::apply_shell_env(&mut cmd_builder, shell_for_env, &self.clean);
 
         Ok(cmd_builder)
