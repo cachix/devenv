@@ -5,6 +5,7 @@
 , ...
 }:
 let
+  runtimeDir = import ./runtime-dir.nix;
   types = lib.types;
   # Returns a list of all the entries in a folder
   listEntries = path: map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
@@ -53,6 +54,38 @@ let
       ''
     else
       lib.trivial.showWarnings config.warnings;
+
+  currentUid =
+    let
+      uidFromEnv =
+        let
+          uid = builtins.getEnv "UID";
+          euid = builtins.getEnv "EUID";
+        in
+        if uid != "" then uid else euid;
+      user =
+        let
+          name = builtins.getEnv "USER";
+        in
+        if name != "" then name else builtins.getEnv "LOGNAME";
+      passwdEntries =
+        if builtins.pathExists "/etc/passwd"
+        then builtins.map (lib.splitString ":") (lib.splitString "\n" (builtins.readFile "/etc/passwd"))
+        else [ ];
+      passwdEntry = lib.findFirst
+        (fields: builtins.length fields >= 3 && builtins.elemAt fields 0 == user)
+        null
+        passwdEntries;
+      cfEncoding = builtins.match "0x([0-9A-Fa-f]+):.*" (builtins.getEnv "__CF_USER_TEXT_ENCODING");
+    in
+    if builtins.match "[0-9]+" uidFromEnv != null then
+      uidFromEnv
+    else if passwdEntry != null then
+      builtins.elemAt passwdEntry 2
+    else if cfEncoding != null then
+      toString (lib.fromHexString (builtins.elemAt cfEncoding 0))
+    else
+      throw "devenv could not determine the current uid; export UID when using flakes integration";
 in
 {
   options = {
@@ -255,21 +288,19 @@ in
         type = types.str;
         internal = true;
         # The path has to be
-        # - unique to each DEVENV_STATE to let multiple devenv environments coexist
+        # - unique to each project to let multiple devenv environments coexist
         # - deterministic so that it won't change constantly
         # - short so that unix domain sockets won't hit the path length limit
         # - free to create as an unprivileged user across OSes
-        default =
-          let
-            hashedRoot = builtins.hashString "sha256" config.devenv.state;
-            # same length as git's abbreviated commit hashes
-            shortHash = builtins.substring 0 7 hashedRoot;
-            # XDG_RUNTIME_DIR is the correct location for runtime files like sockets
-            # per the XDG Base Directory Specification
-            xdg = builtins.getEnv "XDG_RUNTIME_DIR";
-            base = if xdg != "" then xdg else config.devenv.tmpdir;
-          in
-          "${base}/devenv-${shortHash}";
+        # - independent of $TMPDIR, which differs between processes of the
+        #   same user (nix develop, sandboxes) and made process managers
+        #   mutually invisible
+        # This mirrors compute_runtime_dir in devenv-processes. The CLI passes
+        # its own value in, so this default only applies to flakes integration.
+        default = runtimeDir.resolve {
+          dotfile = config.devenv.dotfile;
+          uid = currentUid;
+        };
       };
 
       tmpdir = lib.mkOption {
@@ -381,7 +412,12 @@ in
       fi
       unset ${lib.concatStringsSep " " config.unsetEnvVars}
 
-      mkdir -p ${lib.escapeShellArg config.devenv.runtime}
+      # Validate before chmod or use: the fallback is in shared /tmp, where
+      # another user can precreate the predictable name as a symlink.
+      ${runtimeDir.prepare {
+        coreutils = pkgs.coreutils;
+        runtime = config.devenv.runtime;
+      }}
       ln -snf ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
     '';
 

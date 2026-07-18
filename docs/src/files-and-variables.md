@@ -62,9 +62,14 @@ Points to `$DEVENV_DOTFILE/state`.
 
 ### $DEVENV_RUNTIME
 
-Points to a temporary directory with a path that's unique to each `$DEVENV_ROOT`.
-It's used for storing sockets and other runtime files.
-Defaults to `$XDG_RUNTIME_DIR` and falls back to `$TMPDIR` and finally `/tmp`.
+Points to a directory for sockets and other runtime files, with a short path that's unique to each project.
+The base directory is `$XDG_RUNTIME_DIR`, falling back to `/run/user/<uid>` and finally `/tmp`.
+
+The path is deliberately independent of `$TMPDIR` so that every process of the same user computes the same location, regardless of its environment.
+If a `$DEVENV_RUNTIME` belonging to the same project is already set in the environment, for example inside an existing devenv shell, it is validated and reused.
+
+!!! tip "Changed in version 2.2"
+    `$TMPDIR` is no longer used as a fallback and an inherited `$DEVENV_RUNTIME` is honored, so commands invoked with different `$TMPDIR` values now manage the same processes.
 
 ### $DEVENV_PROFILE
 

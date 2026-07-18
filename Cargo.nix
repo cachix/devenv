@@ -6424,7 +6424,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "signal" ];
+            features = [ "fs" "process" "signal" "user" ];
           }
           {
             name = "once_cell";
@@ -6758,7 +6758,7 @@ rec {
             name = "nix";
             packageId = "nix 0.31.3";
             target = { target, features }: (target."unix" or false);
-            features = [ "fs" "process" "signal" "user" ];
+            features = [ "fs" "process" "signal" "user" "user" ];
           }
           {
             name = "nix-conf-parser";
@@ -7039,7 +7039,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "signal" ];
+            features = [ "fs" "process" "signal" "user" ];
           }
           {
             name = "nix-bindings-bindgen-raw";
@@ -7195,7 +7195,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "signal" ];
+            features = [ "fs" "process" "signal" "user" ];
           }
           {
             name = "portable-pty";
@@ -7583,7 +7583,7 @@ rec {
             name = "nix";
             packageId = "nix 0.31.3";
             target = { target, features }: (target."unix" or false);
-            features = [ "fs" "process" "signal" "user" "signal" ];
+            features = [ "fs" "process" "signal" "user" "user" "signal" ];
           }
           {
             name = "petgraph";
@@ -29297,7 +29297,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "signal" "signal" "process" ];
+            features = [ "fs" "process" "signal" "user" "signal" "process" ];
           }
           {
             name = "tokio";
