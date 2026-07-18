@@ -5,6 +5,7 @@
 , ...
 }:
 let
+  runtimeDir = import ./runtime-dir.nix;
   types = lib.types;
   # Returns a list of all the entries in a folder
   listEntries = path: map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
@@ -53,6 +54,38 @@ let
       ''
     else
       lib.trivial.showWarnings config.warnings;
+
+  currentUid =
+    let
+      uidFromEnv =
+        let
+          uid = builtins.getEnv "UID";
+          euid = builtins.getEnv "EUID";
+        in
+        if uid != "" then uid else euid;
+      user =
+        let
+          name = builtins.getEnv "USER";
+        in
+        if name != "" then name else builtins.getEnv "LOGNAME";
+      passwdEntries =
+        if builtins.pathExists "/etc/passwd"
+        then builtins.map (lib.splitString ":") (lib.splitString "\n" (builtins.readFile "/etc/passwd"))
+        else [ ];
+      passwdEntry = lib.findFirst
+        (fields: builtins.length fields >= 3 && builtins.elemAt fields 0 == user)
+        null
+        passwdEntries;
+      cfEncoding = builtins.match "0x([0-9A-Fa-f]+):.*" (builtins.getEnv "__CF_USER_TEXT_ENCODING");
+    in
+    if builtins.match "[0-9]+" uidFromEnv != null then
+      uidFromEnv
+    else if passwdEntry != null then
+      builtins.elemAt passwdEntry 2
+    else if cfEncoding != null then
+      toString (lib.fromHexString (builtins.elemAt cfEncoding 0))
+    else
+      throw "devenv could not determine the current uid; export UID when using flakes integration";
 in
 {
   options = {
@@ -264,26 +297,10 @@ in
         #   mutually invisible
         # This mirrors compute_runtime_dir in devenv-processes. The CLI passes
         # its own value in, so this default only applies to flakes integration.
-        default =
-          let
-            hashedDotfile = builtins.hashString "sha256" (toString config.devenv.dotfile);
-            # same length as git's abbreviated commit hashes
-            shortHash = builtins.substring 0 7 hashedDotfile;
-            # Reuse an inherited DEVENV_RUNTIME (e.g. when re-evaluating inside
-            # an existing shell) when it belongs to this project; a value
-            # inherited from a different project has a different hash and is
-            # ignored, which keeps nested devenvs isolated. The two accepted
-            # basename forms (devenv-<hash> and devenv-<uid>-<hash>) match the
-            # ones compute_runtime_dir produces.
-            inherited = builtins.getEnv "DEVENV_RUNTIME";
-            inheritedName = baseNameOf inherited;
-            inheritedMatches = builtins.match "devenv-([0-9]+-)?${shortHash}" inheritedName != null;
-            # XDG_RUNTIME_DIR is the correct location for runtime files like sockets
-            # per the XDG Base Directory Specification
-            xdg = builtins.getEnv "XDG_RUNTIME_DIR";
-            base = if xdg != "" then xdg else "/tmp";
-          in
-          if inheritedMatches then inherited else "${base}/devenv-${shortHash}";
+        default = runtimeDir.resolve {
+          dotfile = config.devenv.dotfile;
+          uid = currentUid;
+        };
       };
 
       tmpdir = lib.mkOption {
@@ -395,10 +412,12 @@ in
       fi
       unset ${lib.concatStringsSep " " config.unsetEnvVars}
 
-      mkdir -p -m 700 ${lib.escapeShellArg config.devenv.runtime}
-      # tighten directories created by older devenv versions with the default
-      # umask; the CLI does the same in ensure_runtime_dir
-      chmod 700 ${lib.escapeShellArg config.devenv.runtime} 2>/dev/null || true
+      # Validate before chmod or use: the fallback is in shared /tmp, where
+      # another user can precreate the predictable name as a symlink.
+      ${runtimeDir.prepare {
+        coreutils = pkgs.coreutils;
+        runtime = config.devenv.runtime;
+      }}
       ln -snf ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
     '';
 

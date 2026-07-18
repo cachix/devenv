@@ -30,14 +30,17 @@ pub const NATIVE_SOCKET_NAME: &str = "native.sock";
 ///    inherited from a different project (nested devenvs) has a different
 ///    hash and is rejected.
 /// 2. `$XDG_RUNTIME_DIR/devenv-<hash>` when the base is owned by the user.
-/// 3. `/run/user/<uid>/devenv-<hash>` when the directory exists, for setups
+/// 3. The legacy `$TMPDIR/devenv-<hash>` when a pre-upgrade native manager
+///    is still listening there.
+/// 4. `/run/user/<uid>/devenv-<hash>` when the directory exists, for setups
 ///    where pam created it but the variable was stripped from the env.
-/// 4. `/tmp/devenv-<uid>-<hash>`. The uid keeps users on a shared machine
+/// 5. `/tmp/devenv-<uid>-<hash>`. The uid keeps users on a shared machine
 ///    from colliding; [`ensure_runtime_dir`] guards against squatting.
 ///
-/// `$TMPDIR` is deliberately not consulted: it is the only base that
+/// `$TMPDIR` is deliberately not used as a fallback: it is the only base that
 /// legitimately differs between two processes of the same user, which made
-/// process managers mutually invisible (#1153, #1578, #2923).
+/// process managers mutually invisible (#1153, #1578, #2923). It is consulted
+/// only to reconnect to a native manager started by an older devenv.
 ///
 /// The flakes-integration default in `src/modules/top-level.nix` mirrors this
 /// logic; keep the two in sync.
@@ -85,12 +88,36 @@ fn compute_runtime_dir_impl(
         );
     }
 
+    if let Some(tmpdir) = get_env("TMPDIR").filter(|v| !v.is_empty()) {
+        let legacy = PathBuf::from(tmpdir).join(&plain);
+        if legacy_native_manager_exists(&legacy, euid) {
+            return legacy;
+        }
+    }
+
     let run_user = PathBuf::from(format!("/run/user/{euid}"));
     if base_is_usable(&run_user, euid) {
         return run_user.join(plain);
     }
 
     PathBuf::from("/tmp").join(with_uid)
+}
+
+/// Check for a pre-upgrade native manager in the old `$TMPDIR` location.
+///
+/// Merely finding the directory is not enough: old build artifacts must not
+/// make `$TMPDIR` influence new invocations. The manager's Unix socket is the
+/// rendezvous marker, and the containing directory must pass the same trust
+/// check as an inherited runtime directory.
+fn legacy_native_manager_exists(path: &Path, euid: u32) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+
+    if validate_owned_dir(path, euid) != Ok(true) {
+        return false;
+    }
+
+    std::fs::symlink_metadata(native_socket_path_in(path))
+        .is_ok_and(|meta| meta.file_type().is_socket())
 }
 
 /// Resolve an inherited `$DEVENV_RUNTIME` that belongs to this project (its
@@ -334,6 +361,29 @@ mod runtime_dir_tests {
         let default = compute(&[], euid());
         let overridden = compute(&[("TMPDIR", "/tmp/claude-501")], euid());
         assert_eq!(default, overridden);
+    }
+
+    #[test]
+    fn legacy_tmpdir_used_while_native_manager_socket_exists() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let legacy = tmpdir.path().join(format!("devenv-{}", dotfile_hash()));
+        let processes = legacy.join(PROCESSES_DIR);
+        fs::create_dir_all(&processes).unwrap();
+        let _listener =
+            std::os::unix::net::UnixListener::bind(processes.join(NATIVE_SOCKET_NAME)).unwrap();
+
+        let dir = compute(&[("TMPDIR", tmpdir.path().to_str().unwrap())], euid());
+        assert_eq!(dir, legacy);
+    }
+
+    #[test]
+    fn legacy_tmpdir_ignored_without_native_manager_socket() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let legacy = tmpdir.path().join(format!("devenv-{}", dotfile_hash()));
+        fs::create_dir(&legacy).unwrap();
+
+        let dir = compute(&[("TMPDIR", tmpdir.path().to_str().unwrap())], euid());
+        assert_ne!(dir, legacy);
     }
 
     #[test]
