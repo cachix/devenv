@@ -29,6 +29,8 @@ pub enum ShellCommand {
     },
     /// Reload was applied at the prompt. Update status line.
     ReloadApplied,
+    /// Number of processes currently running alongside the shell.
+    ProcessCount { running: usize },
     /// File watching paused/resumed.
     WatchingPaused { paused: bool },
     /// Print list of watched files.

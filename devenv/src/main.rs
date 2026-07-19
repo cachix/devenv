@@ -3,14 +3,14 @@ use clap_complete::CompleteEnv;
 use devenv::{
     CacheSettings, Devenv, InputOverrides, NixSettings, RunMode, SecretSettings, ShellSettings,
     VerbosityLevel,
-    activity::{ActivityGuard, ActivityLevel},
+    activity::{ActivityGuard, ActivityLevel, message},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
     },
     commands,
     config::{self, Config},
-    processes::ProcessCommand,
+    processes::{self, ProcessCommand},
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
     tracing as devenv_tracing,
     tui::{SessionIo, ShellSession, TuiHandoff},
@@ -75,8 +75,11 @@ fn main_inner() -> Result<()> {
             Commands::HookShouldActivate => {
                 return commands::hook::should_activate();
             }
-            Commands::DaemonProcesses { config_file } => {
-                return commands::daemon_processes::run(config_file);
+            Commands::DaemonProcesses {
+                config_file,
+                background,
+            } => {
+                return commands::daemon_processes::run(config_file, *background);
             }
             Commands::Init {
                 target,
@@ -714,6 +717,16 @@ async fn run_backend(
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd, args } = command {
+        // `start.enable = "shell"` processes start (as a detached daemon) when
+        // entering an interactive shell and stop on exit. Decide up front so we
+        // can enable port allocation before the dev-env eval below resolves
+        // process ports. Leave already-running processes alone.
+        let shell_start_names = devenv.shell_start_processes().await?;
+        let start_shell_procs = !shell_start_names.is_empty() && !devenv.processes_running().await;
+        if start_shell_procs {
+            devenv.enable_process_ports(config_strict_ports).await;
+        }
+
         // Pre-compute shell environment while we still own Devenv directly.
         // This must happen while TUI is active since get_dev_environment has #[activity].
         let dotfile = devenv.dotfile().to_path_buf();
@@ -724,6 +737,26 @@ async fn run_backend(
         let shell_path = devenv.shell_settings.shell_path.clone();
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
+
+        if start_shell_procs {
+            // The detached daemon spawns as the last step of this call, so a
+            // failure inside it can leave the daemon running. Tear it down on
+            // error rather than orphaning it: we bail out of shell entry here,
+            // dropping the user back to their outer shell with no session left
+            // to stop it. `down()` reconstructs the manager from the PID file.
+            if let Err(e) = devenv
+                .start_shell_processes(&shell_start_names, task_exports.clone())
+                .await
+            {
+                if let Err(down_err) = devenv.down().await {
+                    tracing::warn!(
+                        "failed to stop shell-owned process manager after a failed start: {}",
+                        down_err
+                    );
+                }
+                return Err(e);
+            }
+        }
 
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
@@ -756,6 +789,12 @@ async fn run_backend(
         });
         let devenv = tokio::task::block_in_place(|| owner_handle.join())
             .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
+        // The shell owns the daemon it spawned: tear it down on exit. Anything
+        // an attached `devenv up` started inside it is bound to the shell's
+        // lifetime and stops here too.
+        if start_shell_procs && let Err(e) = devenv.down().await {
+            tracing::warn!("failed to stop shell-owned process manager on exit: {}", e);
+        }
         return debugger_or_err(result, nix_debugger, devenv);
     }
 
@@ -870,6 +909,8 @@ async fn run_up_args(
         strict_ports,
         command_rx,
         daemon: up_args.detach,
+        // `devenv up -d` waits until processes have started before returning.
+        background: false,
     };
     run_up(devenv, up_args.processes, up_args.mode, options, verbosity).await
 }
@@ -885,7 +926,22 @@ async fn dispatch_command(
 ) -> Result<CommandResult> {
     match command {
         Commands::Shell { cmd, ref args } => {
-            // Non-PTY shell path (PTY is handled as early return in run_backend)
+            // Non-PTY shell path (PTY is handled as early return in run_backend).
+            // `start.enable = "interactive-shell"` processes only start for an
+            // interactive PTY shell, which this is not (`devenv shell -- cmd`, a
+            // piped/non-interactive shell, or `--no-reload`). Warn so they aren't
+            // silently skipped.
+            let shell_start_names = devenv.shell_start_processes().await?;
+            if !shell_start_names.is_empty() {
+                message(
+                    ActivityLevel::Warn,
+                    format!(
+                        "Not starting `start.enable = \"interactive-shell\"` process(es) [{}]: this is not an interactive `devenv shell`. Start them with `devenv up`.",
+                        shell_start_names.join(", ")
+                    ),
+                );
+            }
+
             // Messages are injected into the shell script by prepare_shell() via self.task_messages.
             devenv.run_enter_shell_tasks(None, verbosity).await?;
 
@@ -986,6 +1042,7 @@ async fn dispatch_command(
                     strict_ports: config_strict_ports,
                     command_rx,
                     daemon: detach,
+                    background: false,
                 };
                 run_up(
                     devenv,
@@ -1183,6 +1240,10 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
     // Status line emits escape codes; disable when output is captured.
     let is_interactive = cmd.is_none();
 
+    // Compute the process manager socket path before `dotfile` moves into the
+    // builder, so the status line poller can query it.
+    let process_socket_path = processes::native_socket_path(&dotfile);
+
     let builder = DevenvShellBuilder {
         devenv,
         cmd,
@@ -1200,6 +1261,14 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
 
     let (command_tx, command_rx) = tokio::sync::mpsc::channel(16);
     let (event_tx, event_rx) = tokio::sync::mpsc::channel(16);
+
+    // Feed the status line a live count of processes running alongside the
+    // shell (started via `start = "shell"` or an attached `devenv up`). Only
+    // meaningful while the interactive status line is shown.
+    let process_poll_handle = is_interactive.then(|| {
+        let command_tx = command_tx.clone();
+        tokio::spawn(poll_process_count(process_socket_path, command_tx))
+    });
 
     let coordinator_handle = tokio::spawn(async move {
         ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
@@ -1229,7 +1298,51 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
     coordinator_handle.abort();
     let _ = coordinator_handle.await;
 
+    if let Some(handle) = process_poll_handle {
+        handle.abort();
+    }
+
     session_result
+}
+
+/// Poll the native process manager and push the count of running processes to
+/// the shell session's status line. Sends only when the count changes to avoid
+/// redundant redraws, and exits quietly once the session closes the channel.
+async fn poll_process_count(
+    socket_path: PathBuf,
+    command_tx: tokio::sync::mpsc::Sender<devenv::reload::ShellCommand>,
+) {
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut last: Option<usize> = None;
+    loop {
+        interval.tick().await;
+        let running = count_running_processes(&socket_path).await;
+        if last == Some(running) {
+            continue;
+        }
+        last = Some(running);
+        if command_tx
+            .send(devenv::reload::ShellCommand::ProcessCount { running })
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
+}
+
+/// Count processes that are currently alive (starting or ready) according to
+/// the native process manager. Returns 0 when no manager is reachable.
+async fn count_running_processes(socket_path: &Path) -> usize {
+    use processes::{ApiRequest, ApiResponse, ProcessPhase};
+    match processes::NativeProcessManager::api_request(socket_path, &ApiRequest::List).await {
+        Ok(ApiResponse::ProcessList { processes }) => processes
+            .iter()
+            .filter(|p| matches!(p.phase, ProcessPhase::Starting | ProcessPhase::Ready))
+            .count(),
+        _ => 0,
+    }
 }
 
 /// Run the REPL with TUI handoff.

@@ -1,0 +1,5 @@
+---
+source: devenv-shell/tests/session_tests.rs
+expression: "rows[23]"
+---
+ 👁  devenv watching 2 files | 3 processes                      Ctrl-Alt-D pause

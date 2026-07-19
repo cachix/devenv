@@ -65,6 +65,9 @@
 - `devenv hook fish`/`devenv hook nu` are now loaded automatically by fish and nushell, via `share/fish/vendor_conf.d/devenv.fish` and `share/nushell/vendor/autoload/devenv.nu` respectively. Bash and zsh have no equivalent mechanism, so they still need manual configuration.
 - Bumped secretspec to 0.12, which adds a `[providers]` alias map in `secretspec.toml`, a key prefix for the AWS Secrets Manager provider, audit logging and access reasons for secret reads, and support for custom Bitwarden instances.
 - Added a `--include-envrc` flag to `devenv init` (also settable via `DEVENV_INCLUDE_ENVRC`) to scaffold a direnv `.envrc` file. By default `devenv init` no longer creates an `.envrc` ([#2859](https://github.com/cachix/devenv/pull/2859)).
+- `processes.<name>.start.enable` (and the new global `process.start` default) now accept `"interactive-shell"`: such processes start when you enter an interactive `devenv shell` and stop when you exit it, replacing the `devenv up -d && devenv shell` two-step plus double-exit (native process manager only) ([#2863](https://github.com/cachix/devenv/issues/2863)).
+- `devenv up` now attaches to an already-running process manager (started by `devenv up -d` or `devenv shell`) and starts the requested up-enabled processes over the control socket — honouring the positional process subset (e.g. `devenv up foo`) and `after`/`before` dependency ordering — instead of failing with "Processes already running" ([#2863](https://github.com/cachix/devenv/issues/2863)).
+- The `devenv shell` status line now shows how many processes are running alongside the shell (e.g. `watching 5 files | 3 processes`), updating live as processes start, become ready, or exit.
 
 ### Breaking Changes
 

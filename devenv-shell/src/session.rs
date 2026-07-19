@@ -704,8 +704,20 @@ impl ShellSession {
         handoff: Option<TuiHandoff>,
         io: SessionIo,
     ) -> Result<Option<u32>, SessionError> {
-        // Wait for the initial Spawn command
-        let (initial_cmd, _watch_files) = match command_rx.recv().await {
+        // Wait for the initial Spawn command. The process-count poller runs
+        // concurrently with the coordinator and can deliver ProcessCount
+        // updates before the (build-gated) Spawn arrives; absorb those here so
+        // they don't trip the "unexpected command" guard and abort shell entry.
+        let initial = loop {
+            match command_rx.recv().await {
+                Some(ShellCommand::ProcessCount { running }) => {
+                    self.status_line.state_mut().set_process_count(running);
+                }
+                other => break other,
+            }
+        };
+
+        let (initial_cmd, _watch_files) = match initial {
             Some(ShellCommand::Spawn {
                 command,
                 watch_files,
@@ -1323,6 +1335,10 @@ impl ShellSession {
 
             ShellCommand::ReloadApplied => {
                 self.status_line.state_mut().set_reloaded();
+            }
+
+            ShellCommand::ProcessCount { running } => {
+                self.status_line.state_mut().set_process_count(running);
             }
 
             ShellCommand::WatchedFiles { files } => {

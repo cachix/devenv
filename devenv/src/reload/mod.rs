@@ -7,7 +7,7 @@
 pub mod owner;
 
 // Re-export the generic reload engine so callers use a single `reload` namespace.
-pub use devenv_reload::{Config, ShellCoordinator};
+pub use devenv_reload::{Config, ShellCommand, ShellCoordinator};
 
 use crate::devenv::{format_shell_exports, resolve_shell_path};
 use devenv_core::config::Clean;

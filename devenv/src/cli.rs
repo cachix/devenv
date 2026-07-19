@@ -906,6 +906,11 @@ pub enum Commands {
     DaemonProcesses {
         /// Path to the serialized task config JSON file
         config_file: PathBuf,
+        /// Signal readiness (write the PID file) as soon as processes start
+        /// launching instead of waiting for them to become ready. Used by
+        /// `devenv shell` so entering a shell isn't blocked on process startup.
+        #[clap(long)]
+        background: bool,
     },
 }
 
