@@ -1,8 +1,6 @@
 # Tasks
 
-!!! tip "New in version 1.2"
-    
-    [Read more about tasks in the v1.2 release post](blog/posts/devenv-v1.2-tasks.md)
+[added-in:1.2]
 
 Tasks allow you to form dependencies between code, executed in parallel.
 
@@ -25,9 +23,7 @@ Succeeded         myapp:hello         9ms
 1 Succeeded                           10.14ms
 ```
 
-!!! tip "New in version 1.7"
-    
-    [Read more about enhanced tasks in the v1.7 release post](blog/posts/devenv-v1.7-cuda-support-enhanced-tasks-mcp-support.md)
+[added-in:1.7]
 
 You can also run all tasks in a namespace by providing just the namespace prefix:
 
@@ -290,9 +286,7 @@ Both flags can be combined. `--input-json` is applied first, then individual `--
 
 ## Processes as tasks
 
-!!! tip "New in version 1.4"
-    
-    [Read more about process-task integration in the v1.4 release post](blog/posts/devenv-v1.4-generating-nix-developer-environments-using-ai.md)
+[added-in:1.4]
 
 All processes defined in `processes` are automatically available as tasks with the `devenv:processes:` prefix. This allows you to:
 
@@ -360,7 +354,7 @@ This ensures that cleanup tasks like removing PID files or clearing caches are e
 
 ## Git Integration
 
-!!! tip "New in version 1.10"
+[added-in:1.10]
 
 Tasks can reference the git repository root path using `${config.git.root}`, which is particularly useful in monorepo environments:
 

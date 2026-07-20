@@ -12,7 +12,7 @@ Same as `devenv.nix`, but not meant to be committed into the Git repository so
 that developers can override some things for their local use case.
 
 ### devenv.local.yaml
-<small class="added-in">added in `1.10`</small>
+[added-in:1.10]
 
 Same as `devenv.yaml`, but not meant to be committed into the Git repository so
 that developers can override some things for their local use case.

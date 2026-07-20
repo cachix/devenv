@@ -1,8 +1,6 @@
 # Ad-hoc Developer Environments
 
-!!! tip "New in 1.6"
-    
-    [Read more about ad-hoc environments in the v1.6 release post](blog/posts/devenv-v1.6-extensible-ad-hoc-nix-environments.md)
+[added-in:1.6]
 
 Instead of creating and maintaining a `devenv.nix` file, you can create ad-hoc developer environments directly from the command line using the `--option` flag.
 

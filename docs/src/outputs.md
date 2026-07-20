@@ -1,8 +1,6 @@
 # Outputs
 
-!!! tip "New in version 1.1"
-    
-    [Read more about outputs in the v1.1 release post](blog/posts/devenv-v1.1-outputs.md)
+[added-in:1.1]
 
 Outputs allow you to define Nix derivations using the module system,
 exposing Nix packages or sets of packages to be consumed by other tools for installation/distribution.

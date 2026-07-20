@@ -52,18 +52,40 @@ body {
 }
 
 /*
-"Added in <version>" marker for reference entries (e.g. environment variables).
-Place `<small class="added-in">added in `X.Y`</small>` on its own line directly
-after a heading; the :has() rules pull it inline next to the heading text.
+"Added in <version>" marker for reference entries (e.g. environment variables,
+devenv.yaml options). Write the `[added-in:X.Y]` shorthand (expanded by
+hooks/added_in.py) on its own line directly after a heading.
+
+On reference pages, the hook moves markers into section headings (h2/h3) after
+Markdown rendering, which keeps the headings' normal margins and anchors. On
+other pages, markers stay below their heading and are slightly more prominent.
 */
-h3:has(+ p > small.added-in) {
-    display: inline-block;
-    margin: 0;
+:is(h2, h3) > small.added-in {
+    flex: 0 0 auto;
+    font-size: 0.64rem;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: lowercase;
 }
 
-h3 + p:has(> small.added-in) {
-    display: inline;
-    margin: 0 0 0 0.5rem;
+:is(h2, h3):has(> small.added-in) {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: baseline;
+    column-gap: 0.5rem;
+}
+
+:is(h1, h2, h3):has(+ p > small.added-in) {
+    margin-bottom: 0.4rem;
+}
+
+:is(h1, h2, h3) + p:has(> small.added-in) {
+    margin-top: 0;
+}
+
+:is(h1, h2, h3) + p > small.added-in {
+    font-size: 0.7rem;
+    font-weight: 500;
 }
 
 small.added-in {

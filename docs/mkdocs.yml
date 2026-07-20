@@ -81,6 +81,7 @@ exclude_docs: |
 
 hooks:
   - hooks/well_known.py
+  - hooks/added_in.py
 
 plugins:
   search: {}

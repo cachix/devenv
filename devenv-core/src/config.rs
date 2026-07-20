@@ -705,6 +705,11 @@ fn parse_description(input: &str) -> ParsedMeta {
 
 fn render_section(s: &OptionSection) -> String {
     let mut out = format!("## {}\n\n", s.path);
+    if let Some(version) = &s.added_in {
+        // The MkDocs hook moves this marker into reference headings after
+        // generating their IDs and TOC entries (see hooks/added_in.py).
+        out.push_str(&format!("[added-in:{}]\n\n", version));
+    }
     if !s.description.is_empty() {
         out.push_str(&s.description);
         out.push_str("\n\n");
@@ -714,11 +719,7 @@ fn render_section(s: &OptionSection) -> String {
         meta.push(format!("*Default:* {}", default));
     }
     out.push_str(&meta.join(" · "));
-    out.push('\n');
-    if let Some(version) = &s.added_in {
-        out.push_str(&format!("\n!!! tip \"New in version {}\"\n", version));
-    }
-    out.push('\n');
+    out.push_str("\n\n");
     out
 }
 

@@ -1,8 +1,6 @@
 # Overlays
 
-!!! tip "New in version 1.4.2"
-
-    [Read more about overlays in the v1.5 release post](blog/posts/devenv-v1.5-overlays-and-performance.md)
+[added-in:1.4.2]
 
 Overlays in devenv allow you to modify or extend the default package set (`pkgs`) that devenv uses. This is useful when you need to:
 
