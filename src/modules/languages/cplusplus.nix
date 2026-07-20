@@ -28,6 +28,12 @@ let
 
   dirPrefix = "${homeRoot}/${homeDirectory}/";
 
+  pnameFromStdenvCc =
+    if conan-flake != null then
+      (conan-flake.lib.pnameFromStdenvCc lib)
+    else
+      (lib.types.functionTo lib.types.str);
+
   conanSubmodule =
     if conan-flake != null then
       conan-flake.lib.submoduleWith lib
@@ -195,10 +201,10 @@ in
         conan = null; # cf. languages.cplusplus.conan.package
         cmake = null; # cf. languages.cplusplus.cmake.package
 
-        # By default, the "${cfg.conan.config.stdenv.cc.cc.pname}" entry is set to
+        # By default, the "${pnameFromStdenvCc cfg.conan.config.stdenv}" entry is set to
         # cfg.conan.config.stdenv.cc, that is, it would be equivalent to:
-        # "${cfg.conan.config.stdenv.cc.cc.pname}" = cfg.conan.config.stdenv.cc;
-        "${cfg.conan.config.stdenv.cc.cc.pname}" = null;
+        # "${pnameFromStdenvCc cfg.conan.config.stdenv}" = cfg.conan.config.stdenv.cc;
+        "${pnameFromStdenvCc cfg.conan.config.stdenv}" = null;
         # We will handle this with languages.cplusplus.package, cf. below:
       };
 
