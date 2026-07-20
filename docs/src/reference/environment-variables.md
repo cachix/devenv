@@ -28,9 +28,10 @@ devenv defines and respects the following environment variables:
 ### [`DEVENV_RUNTIME`](#devenv_runtime)
 <small class="added-in">added in `1.0`</small>
 
-**Read-only.** Points to a temporary directory with a path that's unique to each
-`$DEVENV_ROOT`, used for storing sockets and other runtime files.
-Defaults to `$XDG_RUNTIME_DIR` and falls back to `$TMPDIR` and finally `/tmp`.
+A short-lived, per-project directory for sockets and other runtime files (e.g. `$DEVENV_RUNTIME/postgres`), exported into the shell.
+Defaults to a short `devenv-<hash>` directory under `$XDG_RUNTIME_DIR` (then `$TMPDIR`, then `/tmp`).
+Set it to override the directory for a single project.
+To relocate runtime files while keeping projects separate, set [`XDG_RUNTIME_DIR`](#xdg_runtime_dir) instead.
 
 ### [`DEVENV_PROFILE`](#devenv_profile)
 <small class="added-in">added in `0.5`</small>

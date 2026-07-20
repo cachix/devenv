@@ -1,6 +1,7 @@
 //! On-disk layout for a devenv project.
 
-use miette::{miette, Result};
+use miette::{Result, miette};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -25,12 +26,11 @@ pub fn find_project_root(start: &Path) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Resolve devenv's per-user data directory ("devenv home").
+/// Resolve devenv's per-user data directory.
 ///
-/// Honors the `DEVENV_HOME` environment variable (an empty value is treated as
-/// unset), otherwise falls back to the XDG data home (`~/.local/share/devenv`,
-/// respecting `$XDG_DATA_HOME`). This is the single source of truth for where
-/// GC roots, the trust database, and cached Cachix keys live.
+/// Used to store GC roots, the trust database, and cached public keys.
+///
+/// Honors the `DEVENV_HOME` environment variable, otherwise falls back to `$XDG_DATA_HOME`.
 pub fn resolve_home() -> Result<PathBuf> {
     if let Some(home) = std::env::var_os("DEVENV_HOME").filter(|v| !v.is_empty()) {
         return Ok(PathBuf::from(home));
@@ -40,6 +40,31 @@ pub fn resolve_home() -> Result<PathBuf> {
         .ok_or_else(|| {
             miette!("Could not determine devenv data directory. Set DEVENV_HOME or HOME.")
         })
+}
+
+/// Resolve the per-project runtime directory that holds sockets and other
+/// short-lived runtime files.
+///
+/// The default is kept short to stay within the unix-domain-socket path length limit.
+///
+/// Honors the `DEVENV_RUNTIME` environment variable.
+/// Otherwise derives a short, deterministic `devenv-<hash>` path
+/// under `$XDG_RUNTIME_DIR` (falling back to `$TMPDIR`, then `/tmp`) that is
+/// unique to `devenv_dotfile`.
+pub fn resolve_runtime_dir(devenv_dotfile: &Path) -> PathBuf {
+    if let Some(runtime) = std::env::var_os("DEVENV_RUNTIME").filter(|v| !v.is_empty()) {
+        return PathBuf::from(runtime);
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
+    let hex = hex::encode(hasher.finalize());
+
+    let runtime_base = PathBuf::from(
+        std::env::var("XDG_RUNTIME_DIR")
+            .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())),
+    );
+    runtime_base.join(format!("devenv-{}", &hex[..7]))
 }
 
 #[cfg(test)]
@@ -106,5 +131,53 @@ mod tests {
 
         let expected = xdg::BaseDirectories::with_prefix("devenv").get_data_home();
         assert_eq!(resolve_home().ok(), expected);
+    }
+
+    /// Set/unset `DEVENV_RUNTIME` for a test. Safe because cargo nextest runs
+    /// each test in its own process, so there is no concurrent env access.
+    fn set_devenv_runtime(dir: &Path) {
+        unsafe { std::env::set_var("DEVENV_RUNTIME", dir) };
+    }
+
+    fn unset_devenv_runtime() {
+        unsafe { std::env::remove_var("DEVENV_RUNTIME") };
+    }
+
+    #[test]
+    fn resolve_runtime_dir_honors_env_override() {
+        let tmp = tempfile::tempdir().unwrap();
+        let runtime = tmp.path().join("custom-runtime");
+        set_devenv_runtime(&runtime);
+
+        assert_eq!(resolve_runtime_dir(Path::new("/any/.devenv")), runtime);
+
+        unset_devenv_runtime();
+    }
+
+    #[test]
+    fn resolve_runtime_dir_empty_env_falls_back_to_hash() {
+        // An empty DEVENV_RUNTIME is treated as unset.
+        set_devenv_runtime(Path::new(""));
+
+        let dir = resolve_runtime_dir(Path::new("/project/.devenv"));
+        let name = dir.file_name().unwrap().to_string_lossy();
+        assert!(
+            name.starts_with("devenv-"),
+            "unexpected runtime dir: {dir:?}"
+        );
+        assert_eq!(name.len(), "devenv-".len() + 7);
+
+        unset_devenv_runtime();
+    }
+
+    #[test]
+    fn resolve_runtime_dir_is_deterministic_per_dotfile() {
+        unset_devenv_runtime();
+
+        let a = resolve_runtime_dir(Path::new("/project/.devenv"));
+        let b = resolve_runtime_dir(Path::new("/project/.devenv"));
+        let c = resolve_runtime_dir(Path::new("/other/.devenv"));
+        assert_eq!(a, b);
+        assert_ne!(a, c);
     }
 }

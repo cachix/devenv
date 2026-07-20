@@ -8,16 +8,15 @@ description = "Native process management for devenv"
 [dependencies]
 async-trait.workspace = true
 devenv-activity.workspace = true
+devenv-core.workspace = true
 devenv-event-sources.workspace = true
 futures.workspace = true
 miette.workspace = true
 netstat2.workspace = true
 nix.workspace = true
 process-wrap.workspace = true
-hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 signal-hook.workspace = true
 signal-hook-tokio.workspace = true
 socket2.workspace = true

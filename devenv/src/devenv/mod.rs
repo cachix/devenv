@@ -325,9 +325,7 @@ impl Devenv {
         let devenv_tmp =
             PathBuf::from(std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
 
-        // Runtime directory for sockets - XDG_RUNTIME_DIR is the correct location
-        // per the XDG Base Directory Specification
-        let devenv_runtime = processes::compute_runtime_dir(&devenv_dotfile);
+        let devenv_runtime = devenv_core::paths::resolve_runtime_dir(&devenv_dotfile);
 
         // DEVENV_HOME is user-controllable, so surface a diagnostic rather than
         // panicking when it points somewhere unwritable or non-directory.
