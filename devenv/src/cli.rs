@@ -857,12 +857,6 @@ pub enum Commands {
     #[clap(hide = true)]
     DirenvExport,
 
-    #[clap(hide = true)]
-    GenerateJSONSchema,
-
-    #[clap(hide = true)]
-    GenerateYamlOptionsDoc,
-
     /// Print computed paths (dotfile, gc, etc.) for shell integration
     #[clap(hide = true)]
     PrintPaths,
@@ -933,8 +927,6 @@ impl Commands {
             Self::Assemble => "assemble",
             Self::PrintDevEnv { .. } => "print-dev-env",
             Self::DirenvExport => "direnv-export",
-            Self::GenerateJSONSchema => "generate-json-schema",
-            Self::GenerateYamlOptionsDoc => "generate-yaml-options-doc",
             Self::PrintPaths => "print-paths",
             Self::Mcp { .. } => "mcp",
             Self::Lsp { .. } => "lsp",

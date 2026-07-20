@@ -1,6 +1,6 @@
 use clap::Parser;
 use miette::Result;
-use xtask::{manpage, shell_completion};
+use xtask::{config_docs, manpage, shell_completion};
 
 #[derive(clap::Parser)]
 struct Cli {
@@ -10,7 +10,28 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Command {
-    GenerateManpages {
+    #[command(name = "generate-json-schema")]
+    JsonSchema {
+        #[clap(
+            long,
+            value_parser,
+            value_hint = clap::ValueHint::FilePath,
+            default_value_os_t = config_docs::default_json_schema_path()
+        )]
+        output: std::path::PathBuf,
+    },
+    #[command(name = "generate-yaml-options-doc")]
+    YamlOptionsDoc {
+        #[clap(
+            long,
+            value_parser,
+            value_hint = clap::ValueHint::FilePath,
+            default_value_os_t = config_docs::default_yaml_options_path()
+        )]
+        output: std::path::PathBuf,
+    },
+    #[command(name = "generate-manpages")]
+    Manpages {
         #[clap(
             long,
             value_parser,
@@ -19,7 +40,8 @@ enum Command {
         )]
         out_dir: std::path::PathBuf,
     },
-    GenerateShellCompletion {
+    #[command(name = "generate-shell-completion")]
+    ShellCompletion {
         #[clap(value_enum)]
         shell: clap_complete::Shell,
 
@@ -37,9 +59,9 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::GenerateManpages { out_dir } => manpage::generate(out_dir),
-        Command::GenerateShellCompletion { shell, out_dir } => {
-            shell_completion::generate(shell, out_dir)
-        }
+        Command::JsonSchema { output } => config_docs::generate_json_schema(output),
+        Command::YamlOptionsDoc { output } => config_docs::generate_yaml_options_doc(output),
+        Command::Manpages { out_dir } => manpage::generate(out_dir),
+        Command::ShellCompletion { shell, out_dir } => shell_completion::generate(shell, out_dir),
     }
 }

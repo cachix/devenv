@@ -10,3 +10,5 @@ clap_complete.workspace = true
 clap_mangen.workspace = true
 devenv.workspace = true
 miette.workspace = true
+schemars.workspace = true
+serde_json.workspace = true

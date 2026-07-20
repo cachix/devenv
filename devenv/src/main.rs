@@ -1,15 +1,14 @@
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
-    CacheSettings, Devenv, InputOverrides, NixSettings, RunMode, SecretSettings, ShellSettings,
-    VerbosityLevel,
+    CacheSettings, Config, Devenv, InputOverrides, NixSettings, RunMode, SecretSettings,
+    ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
     },
     commands,
-    config::{self, Config},
     processes::ProcessCommand,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
     tracing as devenv_tracing,
@@ -1083,18 +1082,6 @@ async fn dispatch_command(
             };
             output.push_str(&devenv::format_shell_exports(&task_exports));
             Ok(CommandResult::Print(output))
-        }
-        Commands::GenerateJSONSchema => {
-            config::write_json_schema()
-                .await
-                .wrap_err("Failed to generate JSON schema")?;
-            Ok(CommandResult::Done)
-        }
-        Commands::GenerateYamlOptionsDoc => {
-            config::write_yaml_options_doc()
-                .await
-                .wrap_err("Failed to generate yaml-options doc")?;
-            Ok(CommandResult::Done)
         }
         Commands::PrintPaths => {
             let paths = devenv.paths();

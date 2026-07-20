@@ -3,17 +3,35 @@
   "title": "Config",
   "type": "object",
   "properties": {
+    "require_version": {
+      "description": "Version requirement for the devenv CLI.\nSet to `true` to enforce that the CLI version matches the modules version\n(from the `devenv` input), or use a constraint string with operators\n(`>=`, `<=`, `>`, `<`, `=`, or a bare version for an exact match).\n\nAdded in 2.1.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequireVersion"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "inputs": {
+      "description": "Map of Nix inputs.\nSee [Inputs](../inputs.md).\n\nDefault: `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/Input"
       }
     },
-    "allowUnfree": {
-      "type": "boolean"
+    "allow_unfree": {
+      "type": "boolean",
+      "deprecated": true
     },
-    "allowBroken": {
-      "type": "boolean"
+    "allow_unsupported_system": {
+      "type": "boolean",
+      "deprecated": true
+    },
+    "allow_broken": {
+      "type": "boolean",
+      "deprecated": true
     },
     "nixpkgs": {
       "anyOf": [
@@ -26,16 +44,18 @@
       ]
     },
     "imports": {
+      "description": "A list of relative paths, absolute paths, or references to inputs to import `devenv.nix` and `devenv.yaml` files.\nSee [Composing using imports](../composing-using-imports.md).\n\nDefault: `[]`.",
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "permittedInsecurePackages": {
+    "permitted_insecure_packages": {
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "deprecated": true
     },
     "clean": {
       "anyOf": [
@@ -48,9 +68,11 @@
       ]
     },
     "impure": {
+      "description": "Relax the hermeticity of the environment.\n\nDefault: `false`.\n\nAdded in 1.0.",
       "type": "boolean"
     },
     "backend": {
+      "description": "Select the Nix backend used to evaluate `devenv.nix`.\n\nDefault: `nix`.",
       "$ref": "#/$defs/NixBackendType"
     },
     "secretspec": {
@@ -64,6 +86,28 @@
       ]
     },
     "profile": {
+      "description": "Default profile to activate.\nCan be overridden by `--profile` CLI flag.\nSee [Profiles](../profiles.md).\n\nAdded in 1.11.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reload": {
+      "description": "Enable auto-reload of the shell when files change.\nCan be overridden by `--reload` or `--no-reload` CLI flags.\n\nDefault: `true`.\n\nAdded in 2.0.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "strict_ports": {
+      "description": "Error if a port is already in use instead of auto-allocating the next available port.\nCan be overridden by `--strict-ports` or `--no-strict-ports` CLI flags.\n\nDefault: `false`.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "shell": {
+      "description": "Default interactive shell to use when entering the devenv environment.\nCan be overridden by the `--shell` CLI flag.\nFalls back to the `$SHELL` environment variable, then `bash`.\n\nSupported values: `bash`, `zsh`, `fish`, `nu`. Any other value falls back to `bash`.\n\nDefault: `$SHELL` or `bash`.\n\nAdded in 2.1.",
       "type": [
         "string",
         "null"
@@ -71,31 +115,49 @@
     }
   },
   "$defs": {
+    "RequireVersion": {
+      "description": "Version requirement for the devenv CLI.\n\n- `true`: CLI version must match the modules version (checked during Nix evaluation)\n- A constraint string like `\">=2.0.0\"`: checked before Nix evaluation",
+      "anyOf": [
+        {
+          "description": "When true, CLI version must match the modules version",
+          "type": "boolean"
+        },
+        {
+          "description": "Version constraint string (e.g., \">=2.0.0\", \"2.0.7\")",
+          "type": "string"
+        }
+      ]
+    },
     "Input": {
       "type": "object",
       "properties": {
         "url": {
+          "description": "URI specification of the input.\nSee [Supported URI formats](../inputs.md#supported-uri-formats).",
           "type": [
             "string",
             "null"
           ]
         },
         "flake": {
+          "description": "Does the input contain `flake.nix` or `devenv.nix`.\n\nDefault: `true`.",
           "type": "boolean"
         },
         "follows": {
+          "description": "Another input to \"inherit\" from by name.\nSee [Following inputs](../inputs.md#following-inputs).",
           "type": [
             "string",
             "null"
           ]
         },
         "inputs": {
+          "description": "Override nested inputs by name.\nSee [Following inputs](../inputs.md#following-inputs).\n\nOpaque.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/Input"
           }
         },
         "overlays": {
+          "description": "A list of overlays to include from the input.\nSee [Overlays](../overlays.md).\n\nDefault: `[]`.",
           "type": "array",
           "items": {
             "type": "string"
@@ -106,34 +168,79 @@
     "Nixpkgs": {
       "type": "object",
       "properties": {
-        "allowUnfree": {
+        "allow_unfree": {
+          "description": "Allow unfree packages.\n\nDefault: `false`.\n\nAdded in 1.7.",
           "type": "boolean"
         },
-        "allowBroken": {
+        "allow_unsupported_system": {
+          "description": "Allow packages that are not supported on the current system.\n\nDefault: `false`.\n\nAdded in 2.0.5.",
           "type": "boolean"
         },
-        "cudaSupport": {
+        "allow_broken": {
+          "description": "Allow packages marked as broken.\n\nDefault: `false`.\n\nAdded in 1.7.",
           "type": "boolean"
         },
-        "cudaCapabilities": {
+        "allow_non_source": {
+          "description": "Allow packages not built from source.\n\nDefault: `true` (nixpkgs default).",
+          "type": "boolean"
+        },
+        "cuda_support": {
+          "description": "Enable CUDA support for nixpkgs.\n\nDefault: `false`.\n\nAdded in 1.7.",
+          "type": "boolean"
+        },
+        "cuda_capabilities": {
+          "description": "Select CUDA capabilities for nixpkgs.\n\nDefault: `[]`.\n\nAdded in 1.7.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "permittedInsecurePackages": {
+        "rocm_support": {
+          "description": "Enable ROCm support for nixpkgs.\n\nDefault: `false`.\n\nAdded in 2.0.7.",
+          "type": "boolean"
+        },
+        "permitted_insecure_packages": {
+          "description": "A list of insecure permitted packages.\n\nDefault: `[]`.\n\nAdded in 1.7.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "permittedUnfreePackages": {
+        "permitted_unfree_packages": {
+          "description": "A list of unfree packages to allow by name.\n\nDefault: `[]`.\n\nAdded in 1.9.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "per-platform": {
+        "allowlisted_licenses": {
+          "description": "A list of license names to allow.\nUses nixpkgs license attribute names (e.g. `gpl3Only`, `mit`, `asl20`).\nSee [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).\n\nDefault: `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "writeOnly": true
+        },
+        "blocklisted_licenses": {
+          "description": "A list of license names to block.\nUses nixpkgs license attribute names (e.g. `unfree`, `bsl11`).\nSee [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).\n\nDefault: `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "writeOnly": true
+        },
+        "android_sdk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AndroidSdkConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "per_platform": {
+          "description": "Per-platform nixpkgs configuration.\nAccepts the same options as `nixpkgs`.\n\nOpaque.\n\nAdded in 1.7.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/NixpkgsConfig"
@@ -141,35 +248,88 @@
         }
       }
     },
+    "AndroidSdkConfig": {
+      "type": "object",
+      "properties": {
+        "accept_license": {
+          "description": "Accept the Android SDK license.\nCan also be set via the `NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1` environment variable.\n\nDefault: `false`.",
+          "type": "boolean"
+        }
+      }
+    },
     "NixpkgsConfig": {
       "type": "object",
       "properties": {
-        "allowUnfree": {
+        "allow_unfree": {
+          "description": "Allow unfree packages.\n\nDefault: `false`.\n\nAdded in 1.7.",
           "type": "boolean"
         },
-        "allowBroken": {
+        "allow_unsupported_system": {
+          "description": "Allow packages that are not supported on the current system.\n\nDefault: `false`.\n\nAdded in 2.0.5.",
           "type": "boolean"
         },
-        "cudaSupport": {
+        "allow_broken": {
+          "description": "Allow packages marked as broken.\n\nDefault: `false`.\n\nAdded in 1.7.",
           "type": "boolean"
         },
-        "cudaCapabilities": {
+        "allow_non_source": {
+          "description": "Allow packages not built from source.\n\nDefault: `true` (nixpkgs default).",
+          "type": "boolean"
+        },
+        "cuda_support": {
+          "description": "Enable CUDA support for nixpkgs.\n\nDefault: `false`.\n\nAdded in 1.7.",
+          "type": "boolean"
+        },
+        "cuda_capabilities": {
+          "description": "Select CUDA capabilities for nixpkgs.\n\nDefault: `[]`.\n\nAdded in 1.7.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "permittedInsecurePackages": {
+        "rocm_support": {
+          "description": "Enable ROCm support for nixpkgs.\n\nDefault: `false`.\n\nAdded in 2.0.7.",
+          "type": "boolean"
+        },
+        "permitted_insecure_packages": {
+          "description": "A list of insecure permitted packages.\n\nDefault: `[]`.\n\nAdded in 1.7.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "permittedUnfreePackages": {
+        "permitted_unfree_packages": {
+          "description": "A list of unfree packages to allow by name.\n\nDefault: `[]`.\n\nAdded in 1.9.",
           "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "allowlisted_licenses": {
+          "description": "A list of license names to allow.\nUses nixpkgs license attribute names (e.g. `gpl3Only`, `mit`, `asl20`).\nSee [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).\n\nDefault: `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "writeOnly": true
+        },
+        "blocklisted_licenses": {
+          "description": "A list of license names to block.\nUses nixpkgs license attribute names (e.g. `unfree`, `bsl11`).\nSee [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).\n\nDefault: `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "writeOnly": true
+        },
+        "android_sdk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AndroidSdkConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -177,9 +337,11 @@
       "type": "object",
       "properties": {
         "enabled": {
+          "description": "Clean the environment when entering the shell.\n\nDefault: `false`.\n\nAdded in 1.0.",
           "type": "boolean"
         },
         "keep": {
+          "description": "A list of environment variables to keep when cleaning the environment.\n\nDefault: `[]`.\n\nAdded in 1.0.",
           "type": "array",
           "items": {
             "type": "string"
@@ -201,21 +363,25 @@
       "type": "object",
       "properties": {
         "enable": {
+          "description": "Enable [secretspec integration](../integrations/secretspec.md).\n\nDefault: `false`.\n\nAdded in 1.8.",
           "type": "boolean"
         },
         "profile": {
+          "description": "Secretspec profile name to use.\n\nAdded in 1.8.",
           "type": [
             "string",
             "null"
           ]
         },
         "provider": {
+          "description": "Secretspec provider to use.\n\nAdded in 1.8.",
           "type": [
             "string",
             "null"
           ]
         },
         "cachix_auth_token": {
+          "description": "Require the Cachix auth token through SecretSpec when\n`CACHIX_AUTH_TOKEN` is not set in the environment.\n\nSet to `true` to use the built-in `CACHIX_AUTH_TOKEN` secret name,\n`false` to disable SecretSpec lookup, or a string to use a custom\nsecret name. No declaration in `secretspec.toml` is required.\n\nDefault: unset.\n\nAdded in 2.2.",
           "anyOf": [
             {
               "$ref": "#/$defs/CachixAuthToken"
@@ -228,6 +394,7 @@
       }
     },
     "CachixAuthToken": {
+      "description": "Configure the built-in SecretSpec requirement for the Cachix auth token.\n\n- `true`: require the default `CACHIX_AUTH_TOKEN` secret.\n- `false`: disable SecretSpec lookup for the Cachix auth token.\n- A string: require a secret with that name.",
       "anyOf": [
         {
           "type": "boolean"

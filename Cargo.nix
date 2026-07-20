@@ -36294,6 +36294,14 @@ rec {
             packageId = "miette";
             features = [ "fancy" ];
           }
+          {
+            name = "schemars";
+            packageId = "schemars 1.2.1";
+          }
+          {
+            name = "serde_json";
+            packageId = "serde_json";
+          }
         ];
 
       };

@@ -76,7 +76,7 @@ jobs:
           message: "Auto-generate supported languages example"
 
       - name: Generate JSON schema
-        run: devenv generate-json-schema
+        run: devenv shell -- cargo xtask generate-json-schema
 
       - uses: EndBug/add-and-commit@v10
         if: ${{ github.event_name == 'push' }}
@@ -86,7 +86,7 @@ jobs:
           message: "Auto generate docs/src/devenv.schema.json"
 
       - name: Generate devenv.yaml options reference
-        run: devenv shell -- cargo run -- generate-yaml-options-doc
+        run: devenv shell -- cargo xtask generate-yaml-options-doc
 
       - uses: EndBug/add-and-commit@v10
         if: ${{ github.event_name == 'push' }}

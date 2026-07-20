@@ -10110,6 +10110,8 @@ dependencies = [
  "clap_mangen",
  "devenv",
  "miette",
+ "schemars 1.2.1",
+ "serde_json",
 ]
 
 [[package]]
