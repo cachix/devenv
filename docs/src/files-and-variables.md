@@ -12,8 +12,7 @@ Same as `devenv.nix`, but not meant to be committed into the Git repository so
 that developers can override some things for their local use case.
 
 ### devenv.local.yaml
-
-!!! tip "New in version 1.10"
+<small class="added-in">added in `1.10`</small>
 
 Same as `devenv.yaml`, but not meant to be committed into the Git repository so
 that developers can override some things for their local use case.
@@ -48,30 +47,4 @@ to automatically activate the developer environment when you `cd` into it.
 
 ## Environment Variables
 
-### $DEVENV_ROOT
-
-Points to the root of the project where `devenv.nix` is located.
-
-### $DEVENV_DOTFILE
-
-Points to `$DEVENV_ROOT/.devenv`.
-
-### $DEVENV_STATE
-
-Points to `$DEVENV_DOTFILE/state`.
-
-### $DEVENV_RUNTIME
-
-Points to a temporary directory with a path that's unique to each `$DEVENV_ROOT`.
-It's used for storing sockets and other runtime files.
-Defaults to `$XDG_RUNTIME_DIR` and falls back to `$TMPDIR` and finally `/tmp`.
-
-### $DEVENV_PROFILE
-
-Points to the Nix store path that has final profile of packages/scripts provided by devenv.
-
-Useful for teaching other programs about `/bin`, `/etc`, `/var` folders.
-
-### $DEVENV_HOME
-
-Points to `~/.local/share/devenv` (following the XDG data directory convention). Stores GC roots and other persistent per user data.
+See the [environment variables reference](reference/environment-variables.md).

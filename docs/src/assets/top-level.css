@@ -50,3 +50,23 @@ body {
 .md-footer {
     display: block !important;
 }
+
+/*
+"Added in <version>" marker for reference entries (e.g. environment variables).
+Place `<small class="added-in">added in `X.Y`</small>` on its own line directly
+after a heading; the :has() rules pull it inline next to the heading text.
+*/
+h3:has(+ p > small.added-in) {
+    display: inline-block;
+    margin: 0;
+}
+
+h3 + p:has(> small.added-in) {
+    display: inline;
+    margin: 0 0 0 0.5rem;
+}
+
+small.added-in {
+    color: var(--md-default-fg-color--light);
+    white-space: nowrap;
+}

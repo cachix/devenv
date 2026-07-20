@@ -132,6 +132,7 @@ plugins:
       Reference:
         - reference/options.md
         - reference/yaml-options.md
+        - reference/environment-variables.md
 
 markdown_extensions:
   - tables
