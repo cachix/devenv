@@ -26,6 +26,38 @@ pub enum RequireVersion {
     Constraint(String),
 }
 
+/// Configure the built-in SecretSpec requirement for the Cachix auth token.
+///
+/// - `true`: require the default `CACHIX_AUTH_TOKEN` secret.
+/// - `false`: disable SecretSpec lookup for the Cachix auth token.
+/// - A string: require a secret with that name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, schematic::Schematic)]
+#[serde(untagged)]
+pub enum CachixAuthToken {
+    Enabled(bool),
+    Name(String),
+}
+
+impl CachixAuthToken {
+    /// The SecretSpec lookup name, if lookup is enabled.
+    pub fn secret_name(&self) -> Option<&str> {
+        match self {
+            Self::Enabled(true) => Some("CACHIX_AUTH_TOKEN"),
+            Self::Enabled(false) => None,
+            Self::Name(name) if !name.is_empty() => Some(name),
+            Self::Name(_) => None,
+        }
+    }
+
+    /// Whether a missing secret should trigger the built-in requirement.
+    pub fn is_required(&self) -> bool {
+        match self {
+            Self::Enabled(enabled) => *enabled,
+            Self::Name(name) => !name.is_empty(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, schematic::Schematic)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[serde(rename_all = "lowercase")]
@@ -419,19 +451,18 @@ pub struct SecretspecConfig {
     /// Added in 1.8.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub provider: Option<String>,
-    /// Name of the secretspec secret to read the Cachix auth token from
-    /// when `CACHIX_AUTH_TOKEN` is not set in the environment.
+    /// Require the Cachix auth token through SecretSpec when
+    /// `CACHIX_AUTH_TOKEN` is not set in the environment.
     ///
-    /// This is the secret name declared in `secretspec.toml`, not the
-    /// token value. Use this when your secretspec backend (e.g. an
-    /// OpenBao/Vault policy) only grants access to a secret under a name
-    /// other than the default `CACHIX_AUTH_TOKEN`.
+    /// Set to `true` to use the built-in `CACHIX_AUTH_TOKEN` secret name,
+    /// `false` to disable SecretSpec lookup, or a string to use a custom
+    /// secret name. No declaration in `secretspec.toml` is required.
     ///
-    /// Default: `CACHIX_AUTH_TOKEN`.
+    /// Default: unset.
     ///
-    /// Added in 2.1.3.
+    /// Added in 2.2.
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub cachix_auth_token: Option<String>,
+    pub cachix_auth_token: Option<CachixAuthToken>,
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105
@@ -2396,6 +2427,46 @@ imports:
         let parsed: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
         let rv: RequireVersion = serde_yaml::from_value(parsed["require_version"].clone()).unwrap();
         assert_eq!(rv, RequireVersion::Constraint(">=2.0.0".to_string()));
+    }
+
+    #[test]
+    fn cachix_auth_token_yaml_bool() {
+        let enabled: CachixAuthToken = serde_yaml::from_str("true").unwrap();
+        assert_eq!(enabled, CachixAuthToken::Enabled(true));
+        assert_eq!(enabled.secret_name(), Some("CACHIX_AUTH_TOKEN"));
+        assert!(enabled.is_required());
+
+        let disabled: CachixAuthToken = serde_yaml::from_str("false").unwrap();
+        assert_eq!(disabled, CachixAuthToken::Enabled(false));
+        assert_eq!(disabled.secret_name(), None);
+        assert!(!disabled.is_required());
+    }
+
+    #[test]
+    fn cachix_auth_token_yaml_string() {
+        let setting: CachixAuthToken = serde_yaml::from_str("MY_TEAM_CACHIX_TOKEN").unwrap();
+        assert_eq!(
+            setting,
+            CachixAuthToken::Name("MY_TEAM_CACHIX_TOKEN".to_string())
+        );
+        assert_eq!(setting.secret_name(), Some("MY_TEAM_CACHIX_TOKEN"));
+        assert!(setting.is_required());
+    }
+
+    #[test]
+    fn cachix_auth_token_loads_through_devenv_config() {
+        let enabled = load_yaml("secretspec:\n  enable: true\n  cachix_auth_token: true\n");
+        assert_eq!(
+            enabled.secretspec.unwrap().cachix_auth_token,
+            Some(CachixAuthToken::Enabled(true))
+        );
+
+        let named =
+            load_yaml("secretspec:\n  enable: true\n  cachix_auth_token: MY_TEAM_CACHIX_TOKEN\n");
+        assert_eq!(
+            named.secretspec.unwrap().cachix_auth_token,
+            Some(CachixAuthToken::Name("MY_TEAM_CACHIX_TOKEN".to_string()))
+        );
     }
 
     fn load_yaml(yaml: &str) -> Config {

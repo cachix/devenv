@@ -14,13 +14,29 @@ Sign up on [Cachix](https://cachix.org), create an organization and your first c
 
 You don't need to install Cachix client, devenv will handle binary caching for you.
 
-Declare a `CACHIX_AUTH_TOKEN` secret using [SecretSpec](integrations/secretspec.md).
-devenv automatically resolves the secret and uses it for both pulling from
-private caches and pushing, without exporting it into your environment.
+Create either [a personal auth token](https://app.cachix.org/personal-auth-tokens)
+or a per-cache token in the cache settings.
 
-The SecretSpec secret name defaults to `CACHIX_AUTH_TOKEN` and is overridable
-via [`secretspec.cachix_auth_token`](reference/yaml-options.md#secretspeccachix_auth_token)
-in `devenv.yaml`. Override it when your SecretSpec backend's policy
+Enable [SecretSpec](integrations/secretspec.md) with the system keyring as the
+provider, and enable devenv's built-in Cachix token requirement:
+
+```yaml title="devenv.yaml"
+secretspec:
+  enable: true
+  provider: keyring
+  cachix_auth_token: true
+```
+
+No `secretspec.toml` declaration is needed. Run `devenv shell`; on the first
+interactive run, devenv prompts for the token and saves it to the keyring.
+Subsequent runs resolve it automatically. Non-interactive invocations, such as
+direnv, cannot prompt, so run `devenv shell` once first.
+
+devenv uses the resolved secret for both pulling from private caches and
+pushing, without exporting it into your environment.
+
+Setting `secretspec.cachix_auth_token` to `true` uses the secret name
+`CACHIX_AUTH_TOKEN`. Set it to a string instead when your SecretSpec backend's policy
 (e.g. OpenBao/Vault) only grants access to the token under a different name:
 
 ```yaml title="devenv.yaml"
@@ -32,8 +48,8 @@ secretspec:
 
 ## Setup (legacy)
 
-Set `CACHIX_AUTH_TOKEN=XXX` with either [a personal auth token](https://app.cachix.org/personal-auth-tokens)
-or a per-cache token that you can create in the cache settings.
+Export [a personal auth token](https://app.cachix.org/personal-auth-tokens) or
+a per-cache token as `CACHIX_AUTH_TOKEN=XXX`.
 
 If `CACHIX_AUTH_TOKEN` is not set in the environment and SecretSpec does not
 provide it, devenv falls back to the auth token stored by the Cachix CLI

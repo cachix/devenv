@@ -14,12 +14,12 @@ use tokio::sync::OnceCell;
 use tracing::{debug, warn};
 
 /// Name of the environment variable holding the Cachix auth token, and
-/// the default secretspec secret name when no override is provided.
+/// the built-in SecretSpec secret name when that requirement is enabled.
 ///
 /// The env-read and the child-process env passed to the cachix push
 /// daemon both always use this exact name (that's what the cachix CLI
-/// reads). Only the secretspec lookup key is overridable, via the
-/// `secretspec.cachix_auth_token` option in `devenv.yaml`.
+/// reads). The SecretSpec requirement is enabled, disabled, or renamed via
+/// `secretspec.cachix_auth_token` in `devenv.yaml`.
 pub const CACHIX_AUTH_TOKEN_ENV: &str = "CACHIX_AUTH_TOKEN";
 
 /// Paths specific to Cachix operations

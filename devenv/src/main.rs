@@ -112,7 +112,11 @@ fn main_inner() -> Result<()> {
                     if !io::stdin().is_terminal() {
                         return Err(secrets_err.into());
                     }
-                    prompt_secrets(secrets_err.provider, secrets_err.profile)?;
+                    prompt_secrets(
+                        secrets_err.source,
+                        secrets_err.provider,
+                        secrets_err.profile,
+                    )?;
                     continue;
                 }
                 Err(err) => return Err(err),
@@ -1285,10 +1289,20 @@ fn build_gc_runtime() -> tokio::runtime::Runtime {
 }
 
 /// Prompt for missing secretspec secrets interactively.
-fn prompt_secrets(provider: Option<String>, profile: Option<String>) -> Result<()> {
-    let mut secrets = secretspec::Secrets::load()
-        .into_diagnostic()
-        .wrap_err("Failed to load secretspec")?;
+fn prompt_secrets(
+    source: devenv::SecretsPromptSource,
+    provider: Option<String>,
+    profile: Option<String>,
+) -> Result<()> {
+    let mut secrets = match source {
+        devenv::SecretsPromptSource::Project => secretspec::Secrets::load()
+            .into_diagnostic()
+            .wrap_err("Failed to load secretspec")?,
+        devenv::SecretsPromptSource::Cachix {
+            devenv_root,
+            secret_name,
+        } => devenv::load_cachix_secretspec(&devenv_root, &secret_name)?,
+    };
 
     if let Some(p) = &provider {
         secrets.set_provider(p);

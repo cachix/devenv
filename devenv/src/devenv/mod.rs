@@ -12,7 +12,7 @@ use devenv_core::{
     Backend, BuildOptions, Evaluator, VerbosityLevel,
     bootstrap_args::BootstrapArgs,
     cachix::{CACHIX_AUTH_TOKEN_ENV, CachixManager, CachixPaths},
-    config::{Input, NixBackendType, NixpkgsConfig},
+    config::{CachixAuthToken, Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_config::NixConfig,
     paths::DevenvPaths,
@@ -29,6 +29,8 @@ use secrecy::ExposeSecret;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::env;
+use std::io::Write as _;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
@@ -186,6 +188,15 @@ pub enum RunMode {
 
 /// Error indicating that secrets need to be prompted for interactively.
 /// This is used to signal the CLI to stop the TUI and prompt for secrets.
+#[derive(Debug)]
+pub enum SecretsPromptSource {
+    Project,
+    Cachix {
+        devenv_root: PathBuf,
+        secret_name: String,
+    },
+}
+
 #[derive(Debug, miette::Diagnostic)]
 #[diagnostic(
     code(devenv::secrets_need_prompting),
@@ -195,6 +206,7 @@ pub struct SecretsNeedPrompting {
     pub provider: Option<String>,
     pub profile: Option<String>,
     pub missing: Vec<String>,
+    pub source: SecretsPromptSource,
 }
 
 impl std::fmt::Display for SecretsNeedPrompting {
@@ -206,6 +218,59 @@ impl std::fmt::Display for SecretsNeedPrompting {
 impl std::error::Error for SecretsNeedPrompting {}
 
 pub type ResolvedSecrets = secretspec::Resolved<HashMap<String, String>>;
+
+const CACHIX_SECRETSPEC_PROFILE: &str = "default";
+
+/// Load devenv's built-in SecretSpec manifest for the Cachix auth token.
+///
+/// SecretSpec currently exposes file-based loading only. The manifest is
+/// materialized briefly in the project root so relative provider paths keep
+/// resolving against that root, then removed after SecretSpec has loaded it.
+pub fn load_cachix_secretspec(
+    devenv_root: &Path,
+    secret_name: &str,
+) -> Result<secretspec::Secrets> {
+    if !is_valid_secret_name(secret_name) {
+        bail!(
+            "Invalid secretspec.cachix_auth_token secret name '{secret_name}': \
+             use only letters, numbers, and underscores, and do not start with a number"
+        );
+    }
+
+    let manifest = format!(
+        r#"[project]
+name = "devenv-cachix"
+revision = "1.0"
+require_reason = false
+
+[profiles.{CACHIX_SECRETSPEC_PROFILE}]
+{secret_name} = {{ description = "Cachix authentication token", required = true }}
+"#
+    );
+    let mut file = tempfile::Builder::new()
+        .prefix(".devenv-cachix-secretspec-")
+        .suffix(".toml")
+        .tempfile_in(devenv_root)
+        .into_diagnostic()
+        .wrap_err("Failed to create the built-in Cachix SecretSpec manifest")?;
+    file.write_all(manifest.as_bytes())
+        .into_diagnostic()
+        .wrap_err("Failed to write the built-in Cachix SecretSpec manifest")?;
+
+    let mut secrets = secretspec::Secrets::load_from(file.path())
+        .into_diagnostic()
+        .wrap_err("Failed to load the built-in Cachix SecretSpec manifest")?;
+    secrets.set_profile(CACHIX_SECRETSPEC_PROFILE);
+    Ok(secrets)
+}
+
+fn is_valid_secret_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+}
 
 pub struct Devenv {
     pub inputs: BTreeMap<String, Input>,
@@ -422,16 +487,39 @@ impl Devenv {
         // can authenticate pulls (netrc) and pushes (daemon env) even when
         // `CACHIX_AUTH_TOKEN` isn't exported into the environment.
         //
-        // The lookup key defaults to `CACHIX_AUTH_TOKEN` and is overridable
-        // via `secretspec.cachix_auth_token` in devenv.yaml.
-        let cachix_auth_token_secret = secret_settings
+        // An omitted setting preserves the original opportunistic lookup from
+        // the project manifest. `false` disables that lookup. `true` or a
+        // string additionally makes the built-in secret required when the
+        // environment does not already provide the token.
+        let cachix_auth_token_setting = secret_settings
             .secretspec
             .as_ref()
-            .and_then(|c| c.cachix_auth_token.as_deref())
-            .unwrap_or(CACHIX_AUTH_TOKEN_ENV);
-        let cachix_auth_token = secretspec_cell
-            .get()
-            .and_then(|resolved| resolved.secrets.get(cachix_auth_token_secret).cloned());
+            .and_then(|config| config.cachix_auth_token.as_ref());
+        let cachix_auth_token_secret = match cachix_auth_token_setting {
+            Some(CachixAuthToken::Enabled(false)) => None,
+            Some(setting) => setting.secret_name(),
+            None => Some(CACHIX_AUTH_TOKEN_ENV),
+        };
+        let project_cachix_auth_token = cachix_auth_token_secret.and_then(|secret_name| {
+            secretspec_cell
+                .get()
+                .and_then(|resolved| resolved.secrets.get(secret_name).cloned())
+        });
+        let require_builtin_cachix_auth_token = secret_settings
+            .secretspec
+            .as_ref()
+            .is_some_and(|config| config.enable)
+            && cachix_auth_token_setting.is_some_and(CachixAuthToken::is_required);
+        let cachix_auth_token = if project_cachix_auth_token.is_some()
+            || env::var(CACHIX_AUTH_TOKEN_ENV).is_ok_and(|token| !token.is_empty())
+            || !require_builtin_cachix_auth_token
+        {
+            project_cachix_auth_token
+        } else {
+            let secret_name = cachix_auth_token_secret
+                .expect("a required Cachix auth token setting has a secret name");
+            resolve_builtin_cachix_auth_token(&devenv_root, &secret_settings, secret_name)?
+        };
         let cachix_paths = CachixPaths {
             trusted_keys: cachix_trusted_keys,
             netrc: devenv_dotfile.join("netrc"),
@@ -2631,6 +2719,7 @@ fn resolve_secretspec_into(
                 provider: provider.clone(),
                 profile: profile.clone(),
                 missing: e.missing_required,
+                source: SecretsPromptSource::Project,
             }
             .into());
         }
@@ -2651,9 +2740,122 @@ fn resolve_secretspec_into(
         .map_err(|_| miette!("Secretspec resolved already set"))
 }
 
+fn resolve_builtin_cachix_auth_token(
+    devenv_root: &Path,
+    secret_settings: &SecretSettings,
+    secret_name: &str,
+) -> Result<Option<String>> {
+    let mut secrets = load_cachix_secretspec(devenv_root, secret_name)?;
+    let provider = secret_settings
+        .secretspec
+        .as_ref()
+        .and_then(|config| config.provider.clone());
+
+    if let Some(provider) = &provider {
+        secrets.set_provider(provider);
+    }
+
+    let validated = match secrets.validate()? {
+        Ok(validated) => validated,
+        Err(error) => {
+            return Err(SecretsNeedPrompting {
+                provider,
+                profile: Some(CACHIX_SECRETSPEC_PROFILE.to_string()),
+                missing: error.missing_required,
+                source: SecretsPromptSource::Cachix {
+                    devenv_root: devenv_root.to_path_buf(),
+                    secret_name: secret_name.to_string(),
+                },
+            }
+            .into());
+        }
+    };
+
+    Ok(validated
+        .resolved
+        .secrets
+        .get(secret_name)
+        .map(|secret| secret.expose_secret().to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn built_in_cachix_manifest_requires_no_project_manifest() {
+        let root = tempfile::tempdir().expect("create project root");
+        let secrets = load_cachix_secretspec(root.path(), CACHIX_AUTH_TOKEN_ENV)
+            .expect("load built-in manifest");
+
+        assert!(
+            root.path()
+                .read_dir()
+                .expect("read project root")
+                .next()
+                .is_none()
+        );
+        drop(secrets);
+    }
+
+    #[test]
+    fn built_in_cachix_manifest_rejects_invalid_secret_name() {
+        let root = tempfile::tempdir().expect("create project root");
+        let error = match load_cachix_secretspec(root.path(), "not-a-valid-name") {
+            Ok(_) => panic!("invalid name must fail"),
+            Err(error) => error,
+        };
+
+        assert!(
+            error
+                .to_string()
+                .contains("Invalid secretspec.cachix_auth_token")
+        );
+    }
+
+    #[test]
+    fn built_in_cachix_secret_prompts_without_project_manifest() {
+        let root = tempfile::tempdir().expect("create project root");
+        let settings = SecretSettings {
+            secretspec: Some(devenv_core::config::SecretspecConfig {
+                enable: true,
+                provider: Some("dotenv:.env".to_string()),
+                cachix_auth_token: Some(CachixAuthToken::Enabled(true)),
+                ..Default::default()
+            }),
+        };
+
+        let error =
+            resolve_builtin_cachix_auth_token(root.path(), &settings, CACHIX_AUTH_TOKEN_ENV)
+                .expect_err("missing built-in token must request prompting");
+        let prompt = error
+            .downcast::<SecretsNeedPrompting>()
+            .expect("error should request SecretSpec prompting");
+
+        assert_eq!(prompt.missing, vec![CACHIX_AUTH_TOKEN_ENV]);
+        assert!(matches!(prompt.source, SecretsPromptSource::Cachix { .. }));
+    }
+
+    #[test]
+    fn built_in_cachix_secret_resolves_relative_provider_from_project_root() {
+        let root = tempfile::tempdir().expect("create project root");
+        std::fs::write(root.path().join(".env"), "CACHIX_AUTH_TOKEN=test-token\n")
+            .expect("write dotenv provider");
+        let settings = SecretSettings {
+            secretspec: Some(devenv_core::config::SecretspecConfig {
+                enable: true,
+                provider: Some("dotenv:.env".to_string()),
+                cachix_auth_token: Some(CachixAuthToken::Enabled(true)),
+                ..Default::default()
+            }),
+        };
+
+        let token =
+            resolve_builtin_cachix_auth_token(root.path(), &settings, CACHIX_AUTH_TOKEN_ENV)
+                .expect("resolve built-in token");
+
+        assert_eq!(token.as_deref(), Some("test-token"));
+    }
 
     #[test]
     fn test_print_tasks_tree_flat_hierarchy_sorted() {

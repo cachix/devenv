@@ -214,8 +214,28 @@
             "string",
             "null"
           ]
+        },
+        "cachix_auth_token": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CachixAuthToken"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
+    },
+    "CachixAuthToken": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ]
     }
   }
 }

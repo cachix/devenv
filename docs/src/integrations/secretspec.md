@@ -66,13 +66,21 @@ Then access in `devenv.nix`:
 }
 ```
 
-### Cachix auth token from a non-default secret name
+### Cachix auth token
 
-When [resolving the Cachix auth token from secretspec](../binary-caching.md), devenv looks
-up a secret named `CACHIX_AUTH_TOKEN` by default. If your provider's
-policy (e.g. an OpenBao/Vault policy) only grants you access to a
-secret under a different name, set `secretspec.cachix_auth_token` to
-that name:
+To make the Cachix auth token a built-in required secret, without declaring it
+in `secretspec.toml`, set `secretspec.cachix_auth_token` to `true`:
+
+```yaml title="devenv.yaml"
+secretspec:
+  enable: true
+  provider: keyring
+  cachix_auth_token: true
+```
+
+This uses the secret name `CACHIX_AUTH_TOKEN`. If your provider's policy (e.g.
+an OpenBao/Vault policy) only grants access to a secret under a different name,
+set the option to that name:
 
 ```yaml title="devenv.yaml"
 secretspec:
@@ -81,10 +89,10 @@ secretspec:
   cachix_auth_token: MY_TEAM_CACHIX_TOKEN
 ```
 
-The value is a *secret name* declared in `secretspec.toml`, not the
-token itself. Only the secretspec lookup is overridable: the
-environment variable and the cachix push daemon still use
-`CACHIX_AUTH_TOKEN` (that is what the Cachix CLI reads).
+The string is the secret name, not the token itself. Set the option to `false`
+or omit it to disable the built-in requirement. Only the SecretSpec lookup is
+renamed: the environment variable and the Cachix push daemon still use
+`CACHIX_AUTH_TOKEN`, which is what the Cachix CLI reads.
 
 ## Learn More
 
