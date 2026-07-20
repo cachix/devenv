@@ -30,15 +30,16 @@
 //!   terminal would immediately report its full height.
 //!
 //! Everything else passes through verbatim: content, styling, cursor moves,
-//! in-bounds scroll regions, and OSC/DCS strings.
+//! in-bounds scroll regions, and terminal string controls.
 //!
 //! The output is *boundary-clean*: `rewrite` never leaves `out` ending inside
-//! an escape sequence or a multi-byte UTF-8 character. CSI sequences, OSC/DCS
-//! strings, and partial codepoints split across reads are buffered and emitted
-//! only once complete, so the caller can safely interleave its own writes
-//! (status line, cursor moves) between `rewrite` calls. The only exception is
-//! a string sequence larger than [`MAX_STRING_LEN`], which is flushed in
-//! chunks to bound memory.
+//! an escape sequence or a multi-byte UTF-8 character. CSI sequences,
+//! OSC/DCS/APC/PM/SOS strings, and partial codepoints split across reads are
+//! buffered and emitted only once complete, so the caller can safely interleave
+//! its own writes (status line, cursor moves) between `rewrite` calls. A string
+//! sequence larger than [`MAX_STRING_LEN`] is flushed in chunks to bound
+//! memory; [`PassthroughFilter::can_interleave_host_output`] reports that case
+//! so the caller can defer host output until the string terminates.
 
 use crate::escape::{ALT_SCREEN_MODES, IN_BAND_RESIZE_MODE};
 use std::io::Write;
@@ -48,21 +49,27 @@ use std::io::Write;
 /// unboundedly.
 const MAX_CSI_LEN: usize = 64;
 
-/// OSC/DCS strings are buffered until their terminator so host writes are
+/// Terminal strings are buffered until their terminator so host writes are
 /// never injected mid-string; payloads beyond this size (huge OSC 52
-/// clipboards, sixel images) are flushed in chunks to bound memory, giving up
-/// the boundary guarantee only for those.
+/// clipboards, sixel or kitty images) are flushed in chunks to bound memory.
 const MAX_STRING_LEN: usize = 1 << 20;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum StringKind {
+    Osc,
+    Dcs,
+    Apc,
+    Pm,
+    Sos,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
     Ground,
     Esc,
     Csi,
-    Osc,
-    OscEsc,
-    Dcs,
-    DcsEsc,
+    String(StringKind),
+    StringEsc(StringKind),
 }
 
 /// Stateful rewriter for one shell session. Fed every PTY read (the session
@@ -74,9 +81,16 @@ pub struct PassthroughFilter {
     /// Bytes of the CSI sequence currently being accumulated (includes the
     /// leading `ESC [`).
     csi: Vec<u8>,
-    /// Bytes of the OSC/DCS string currently being accumulated (includes the
-    /// leading `ESC ]` / `ESC P`).
+    /// Bytes that precede a replacement escape after an unterminated string.
+    /// They are held until that replacement sequence is complete so output
+    /// never stops while the real terminal is still inside the old string.
+    pending_prefix: Vec<u8>,
+    /// Bytes of the terminal string currently being accumulated (includes its
+    /// `ESC` introducer).
     string_buf: Vec<u8>,
+    /// An oversized terminal string has already been partially emitted. Until
+    /// it terminates, host output would be interpreted as part of its payload.
+    host_output_blocked: bool,
     /// Partial UTF-8 codepoint held back until its continuation bytes arrive.
     utf8: [u8; 4],
     utf8_len: u8,
@@ -88,7 +102,9 @@ impl PassthroughFilter {
         Self {
             state: State::Ground,
             csi: Vec::new(),
+            pending_prefix: Vec::new(),
             string_buf: Vec::new(),
+            host_output_blocked: false,
             utf8: [0; 4],
             utf8_len: 0,
             utf8_need: 0,
@@ -173,38 +189,7 @@ impl PassthroughFilter {
                     }
                     continue;
                 }
-                State::Esc => match b {
-                    b'[' => {
-                        self.csi.clear();
-                        self.csi.extend_from_slice(b"\x1b[");
-                        self.state = State::Csi;
-                    }
-                    b']' => {
-                        self.string_buf.clear();
-                        self.string_buf.extend_from_slice(b"\x1b]");
-                        self.state = State::Osc;
-                    }
-                    b'P' => {
-                        self.string_buf.clear();
-                        self.string_buf.extend_from_slice(b"\x1bP");
-                        self.state = State::Dcs;
-                    }
-                    0x1b => {
-                        // Another ESC restarts; emit the one we held back.
-                        out.push(0x1b);
-                    }
-                    _ => {
-                        // Two-byte escape (e.g. ESC =, ESC >, ESC c): verbatim.
-                        out.push(0x1b);
-                        out.push(b);
-                        if b == b'c' {
-                            // RIS (full reset) clears the scroll margins;
-                            // re-assert the reserved region right after.
-                            push_scroll_region(content_rows, out);
-                        }
-                        self.state = State::Ground;
-                    }
-                },
+                State::Esc => self.handle_esc_byte(b, content_rows, out),
                 State::Csi => {
                     // Bulk-collect parameter and intermediate bytes.
                     let start = i;
@@ -213,9 +198,14 @@ impl PassthroughFilter {
                     }
                     self.csi.extend_from_slice(&data[start..i]);
                     if self.csi.len() > MAX_CSI_LEN {
-                        // Runaway length: emit verbatim and resync to ground.
+                        // Bound a runaway CSI without leaving the real terminal
+                        // inside it: emit the partial sequence followed by CAN,
+                        // which aborts the CSI and returns to ground.
+                        self.flush_pending_prefix(out);
                         out.extend_from_slice(&self.csi);
+                        out.push(0x18);
                         self.csi.clear();
+                        self.host_output_blocked = false;
                         self.state = State::Ground;
                         continue;
                     }
@@ -227,7 +217,8 @@ impl PassthroughFilter {
                     if (0x40..=0x7e).contains(&b) {
                         // Final byte: the CSI is complete.
                         self.csi.push(b);
-                        rewrite_csi(&self.csi, content_rows, out);
+                        self.finish_csi(content_rows, out);
+                        self.host_output_blocked = false;
                         self.csi.clear();
                         self.state = State::Ground;
                     } else if b == 0x1b {
@@ -239,7 +230,9 @@ impl PassthroughFilter {
                         // CAN/SUB abort the sequence; the buffered bytes are
                         // dropped (the terminal never executes them).
                         self.csi.clear();
+                        self.flush_pending_prefix(out);
                         out.push(b);
+                        self.host_output_blocked = false;
                         self.state = State::Ground;
                     } else if b < 0x20 {
                         // C0 controls inside a CSI are executed immediately
@@ -252,16 +245,23 @@ impl PassthroughFilter {
                         // Invalid byte: emit what we have verbatim and resync
                         // to ground.
                         self.csi.push(b);
+                        self.flush_pending_prefix(out);
                         out.extend_from_slice(&self.csi);
                         self.csi.clear();
                         self.state = State::Ground;
                     }
                     continue;
                 }
-                State::Osc => {
-                    // Bulk-buffer the payload up to the next BEL or ESC.
+                State::String(kind) => {
+                    // Bulk-buffer the payload up to the next terminator,
+                    // cancellation control, or ESC.
                     let start = i;
-                    while i < n && data[i] != 0x07 && data[i] != 0x1b {
+                    while i < n
+                        && data[i] != 0x1b
+                        && data[i] != 0x18
+                        && data[i] != 0x1a
+                        && !(kind == StringKind::Osc && data[i] == 0x07)
+                    {
                         i += 1;
                     }
                     self.string_buf.extend_from_slice(&data[start..i]);
@@ -269,43 +269,140 @@ impl PassthroughFilter {
                         self.spill_oversized_string(out);
                         break;
                     }
-                    self.string_buf.push(data[i]);
                     match data[i] {
-                        0x07 => self.flush_string(out), // BEL terminator
-                        _ => self.state = State::OscEsc,
+                        0x07 if kind == StringKind::Osc => {
+                            self.string_buf.push(0x07);
+                            self.flush_string(out);
+                        }
+                        0x18 | 0x1a => {
+                            // CAN/SUB abort a terminal string and execute as
+                            // controls, leaving the parser in ground.
+                            self.string_buf.push(data[i]);
+                            self.flush_string(out);
+                        }
+                        _ => {
+                            self.string_buf.push(0x1b);
+                            self.state = State::StringEsc(kind);
+                        }
                     }
                     i += 1;
                     continue;
                 }
-                State::OscEsc => {
-                    // ESC \ is the ST terminator; anything else aborted the
-                    // string (OSC payloads do not contain bare ESC). Either
-                    // way the buffered bytes are flushed verbatim.
+                State::StringEsc(_kind) if b == b'\\' => {
+                    // ST (ESC \) terminates every terminal string.
                     self.string_buf.push(b);
                     self.flush_string(out);
                 }
-                State::Dcs => {
-                    // Bulk-buffer the payload up to the next ESC.
-                    let start = i;
-                    while i < n && data[i] != 0x1b {
-                        i += 1;
-                    }
-                    self.string_buf.extend_from_slice(&data[start..i]);
-                    if i == n {
-                        self.spill_oversized_string(out);
-                        break;
-                    }
-                    self.string_buf.push(0x1b);
-                    self.state = State::DcsEsc;
-                    i += 1;
-                    continue;
-                }
-                State::DcsEsc => {
-                    self.string_buf.push(b);
-                    self.flush_string(out);
+                State::StringEsc(_kind) => {
+                    // A non-ST ESC aborts the old string and starts a new
+                    // escape sequence. Keep the old prefix buffered until the
+                    // replacement sequence is complete, otherwise host output
+                    // could land between the aborting ESC and its final byte.
+                    debug_assert_eq!(self.string_buf.last(), Some(&0x1b));
+                    self.string_buf.pop();
+                    self.pending_prefix.extend_from_slice(&self.string_buf);
+                    self.string_buf.clear();
+                    self.state = State::Esc;
+                    self.handle_esc_byte(b, content_rows, out);
                 }
             }
             i += 1;
+        }
+    }
+
+    /// Whether the caller may safely write its own escape sequences after the
+    /// latest output from this filter. This is false only after an oversized
+    /// terminal string had to be partially emitted before its terminator.
+    pub fn can_interleave_host_output(&self) -> bool {
+        !self.host_output_blocked
+    }
+
+    /// Cancel an oversized terminal string that has already been partially
+    /// emitted, returning whether the caller must write CAN (`0x18`) before
+    /// emitting host-controlled output.
+    ///
+    /// Fully buffered partial sequences have not reached the real terminal and
+    /// therefore do not need cancellation.
+    pub fn abort_for_host_output(&mut self) -> bool {
+        if !self.host_output_blocked {
+            return false;
+        }
+
+        self.state = State::Ground;
+        self.csi.clear();
+        self.pending_prefix.clear();
+        self.string_buf.clear();
+        self.host_output_blocked = false;
+        self.utf8_len = 0;
+        self.utf8_need = 0;
+        true
+    }
+
+    /// Handle the byte following an ESC. The ESC itself is implicit.
+    fn handle_esc_byte(&mut self, b: u8, content_rows: u16, out: &mut Vec<u8>) {
+        match b {
+            b'[' => {
+                self.csi.clear();
+                self.csi.extend_from_slice(b"\x1b[");
+                self.state = State::Csi;
+            }
+            b']' => self.start_string(StringKind::Osc, b']'),
+            b'P' => self.start_string(StringKind::Dcs, b'P'),
+            b'_' => self.start_string(StringKind::Apc, b'_'),
+            b'^' => self.start_string(StringKind::Pm, b'^'),
+            b'X' => self.start_string(StringKind::Sos, b'X'),
+            0x1b => {
+                // The newer ESC restarts the escape. Keep the older one with
+                // any pending prefix so the byte stream remains verbatim once
+                // a complete replacement sequence is available.
+                self.pending_prefix.push(0x1b);
+                self.state = State::Esc;
+            }
+            _ => {
+                // Two-byte escape (e.g. ESC =, ESC >, ESC c): verbatim.
+                self.flush_pending_prefix(out);
+                out.push(0x1b);
+                out.push(b);
+                if b == b'c' {
+                    // RIS (full reset) clears the scroll margins; re-assert
+                    // the reserved region right after.
+                    push_scroll_region(content_rows, out);
+                }
+                self.host_output_blocked = false;
+                self.state = State::Ground;
+            }
+        }
+    }
+
+    fn start_string(&mut self, kind: StringKind, introducer: u8) {
+        self.string_buf.clear();
+        self.string_buf.push(0x1b);
+        self.string_buf.push(introducer);
+        self.state = State::String(kind);
+    }
+
+    fn flush_pending_prefix(&mut self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.pending_prefix);
+        self.pending_prefix.clear();
+    }
+
+    fn finish_csi(&mut self, content_rows: u16, out: &mut Vec<u8>) {
+        if self.pending_prefix.is_empty() {
+            rewrite_csi(&self.csi, content_rows, out);
+            return;
+        }
+
+        // Recovery from an unterminated terminal string needs the replacement
+        // sequence's ESC to abort that string. If rewriting intentionally drops
+        // the CSI (for example a host-size query), emit CAN after the old prefix
+        // instead so the real terminal still returns to ground.
+        let mut rewritten = Vec::new();
+        rewrite_csi(&self.csi, content_rows, &mut rewritten);
+        self.flush_pending_prefix(out);
+        if rewritten.is_empty() {
+            out.push(0x18);
+        } else {
+            out.extend_from_slice(&rewritten);
         }
     }
 
@@ -325,10 +422,12 @@ impl PassthroughFilter {
         self.utf8_need = need;
     }
 
-    /// Emit the buffered OSC/DCS string and return to ground.
+    /// Emit the buffered terminal string and return to ground.
     fn flush_string(&mut self, out: &mut Vec<u8>) {
+        self.flush_pending_prefix(out);
         out.extend_from_slice(&self.string_buf);
         self.string_buf.clear();
+        self.host_output_blocked = false;
         self.state = State::Ground;
     }
 
@@ -337,8 +436,10 @@ impl PassthroughFilter {
     /// of the boundary guarantee for them.
     fn spill_oversized_string(&mut self, out: &mut Vec<u8>) {
         if self.string_buf.len() > MAX_STRING_LEN {
+            self.flush_pending_prefix(out);
             out.extend_from_slice(&self.string_buf);
             self.string_buf.clear();
+            self.host_output_blocked = true;
         }
     }
 }
@@ -718,6 +819,18 @@ mod tests {
     }
 
     #[test]
+    fn osc_aborted_by_csi_still_filters_replacement_sequence() {
+        let mut f = PassthroughFilter::new();
+        // ESC [ aborts the unterminated OSC and starts a CSI. The size query
+        // must still be stripped; CAN safely returns the real terminal to
+        // ground when the replacement CSI itself has no output.
+        assert_eq!(
+            run(&mut f, b"\x1b]0;title\x1b[18tafter", 24),
+            b"\x1b]0;title\x18after"
+        );
+    }
+
+    #[test]
     fn osc_split_across_reads_is_held_until_complete() {
         let mut f = PassthroughFilter::new();
         let mut out = Vec::new();
@@ -744,6 +857,70 @@ mod tests {
         assert_eq!(out, b"", "partial DCS must be withheld");
         f.rewrite(b"m\x1b\\", 24, &mut out);
         assert_eq!(out, b"\x1bP1$r0m\x1b\\");
+    }
+
+    #[test]
+    fn dcs_aborted_by_csi_still_clamps_replacement_sequence() {
+        let mut f = PassthroughFilter::new();
+        assert_eq!(
+            run(&mut f, b"\x1bPdata\x1b[999;1H", 24),
+            b"\x1bPdata\x1b[24;1H"
+        );
+    }
+
+    #[test]
+    fn apc_split_across_reads_is_held_until_complete() {
+        let mut f = PassthroughFilter::new();
+        let mut out = Vec::new();
+        // Kitty graphics uses APC (`ESC _ G ... ST`). Holding the complete
+        // command prevents status-line cursor writes from landing in payload.
+        f.rewrite(b"\x1b_Gf=100;AAAA", 24, &mut out);
+        assert!(out.is_empty(), "partial APC must be withheld");
+        assert!(f.can_interleave_host_output());
+        f.rewrite(b"BBBB\x1b\\after", 24, &mut out);
+        assert_eq!(out, b"\x1b_Gf=100;AAAABBBB\x1b\\after");
+    }
+
+    #[test]
+    fn pm_and_sos_strings_are_boundary_clean() {
+        for introducer in [b'^', b'X'] {
+            let mut f = PassthroughFilter::new();
+            let mut out = Vec::new();
+            f.rewrite(&[0x1b, introducer, b'a'], 24, &mut out);
+            assert!(out.is_empty());
+            f.rewrite(b"b\x1b\\", 24, &mut out);
+            assert_eq!(
+                out,
+                [vec![0x1b, introducer, b'a', b'b'], b"\x1b\\".to_vec()].concat()
+            );
+        }
+    }
+
+    #[test]
+    fn oversized_string_blocks_host_output_until_terminated() {
+        let mut f = PassthroughFilter::new();
+        let mut input = b"\x1b_G".to_vec();
+        input.resize(MAX_STRING_LEN + 1, b'A');
+        let out = run(&mut f, &input, 24);
+        assert!(!out.is_empty(), "oversized APC should spill");
+        assert!(!f.can_interleave_host_output());
+
+        let out = run(&mut f, b"\x1b\\", 24);
+        assert_eq!(out, b"\x1b\\");
+        assert!(f.can_interleave_host_output());
+    }
+
+    #[test]
+    fn oversized_string_can_be_cancelled_before_host_output() {
+        let mut f = PassthroughFilter::new();
+        let mut input = b"\x1b_G".to_vec();
+        input.resize(MAX_STRING_LEN + 1, b'A');
+        assert!(!run(&mut f, &input, 24).is_empty());
+
+        assert!(f.abort_for_host_output());
+        assert!(f.can_interleave_host_output());
+        assert!(!f.abort_for_host_output());
+        assert_eq!(run(&mut f, b"plain", 24), b"plain");
     }
 
     #[test]

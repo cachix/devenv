@@ -597,6 +597,10 @@ struct PassthroughState {
     out: Vec<u8>,
     /// Raw bytes fed this batch, for tracing.
     in_bytes: usize,
+    /// An oversized terminal string has reached the real terminal and has not
+    /// terminated yet. This is distinct from the filter's parse state because
+    /// filtered output from mediated batches is intentionally discarded.
+    host_sequence_open: bool,
 }
 
 impl PassthroughState {
@@ -606,8 +610,20 @@ impl PassthroughState {
             region_set: false,
             out: Vec::new(),
             in_bytes: 0,
+            host_sequence_open: false,
         }
     }
+}
+
+/// Return the real terminal to ground before host-controlled output if an
+/// oversized passthrough string has already been partially emitted.
+fn prepare_host_output(stdout: &mut impl Write, pt: &mut PassthroughState) -> io::Result<()> {
+    if pt.host_sequence_open {
+        let _ = pt.filter.abort_for_host_output();
+        stdout.write_all(&[0x18])?;
+        pt.host_sequence_open = false;
+    }
+    Ok(())
 }
 
 /// Release the passthrough scroll region if asserted. Resetting DECSTBM homes
@@ -619,6 +635,7 @@ fn release_passthrough_region(
     pt: &mut PassthroughState,
 ) -> io::Result<()> {
     if pt.region_set {
+        prepare_host_output(stdout, pt)?;
         queue!(stdout, ResetScrollRegion)?;
         renderer.write_cursor(stdout, vt)?;
         pt.region_set = false;
@@ -1099,7 +1116,7 @@ impl ShellSession {
     fn event_loop_inner(
         &mut self,
         pty: &Arc<Pty>,
-        vt: &mut Terminal<'static, '_>,
+        vt: &mut Terminal<'_, '_>,
         renderer: &mut Renderer,
         event_rx: std::sync::mpsc::Receiver<Event>,
         coordinator_tx: &tokio_mpsc::Sender<ShellEvent>,
@@ -1176,14 +1193,20 @@ impl ShellSession {
                                 }
                                 error_text.push_str("\r\n");
                                 feed_vt(vt, &error_text);
+                            } else {
+                                pty.write_all(&[0x0C])?;
+                                pty.flush()?;
+                            }
+                            if esc.synchronized_output {
+                                continue;
+                            }
+                            prepare_host_output(stdout, pt)?;
+                            if state.show_error {
                                 if renderer.row_offset > 0 {
                                     renderer.render(stdout, vt)?;
                                 } else {
                                     renderer.render_with_scroll(stdout, vt)?;
                                 }
-                            } else {
-                                pty.write_all(&[0x0C])?;
-                                pty.flush()?;
                             }
                             self.status_line
                                 .draw(stdout, self.size.cols, self.size.rows)?;
@@ -1291,6 +1314,7 @@ impl ShellSession {
                                     // dropping them would leave it stuck on
                                     // the alternate screen.
                                     stdout.write_all(&pt.out)?;
+                                    pt.host_sequence_open = !pt.filter.can_interleave_host_output();
                                     // The forwarded bytes drove the real
                                     // terminal directly; adopt the VT as the
                                     // renderer baseline instead of redrawing,
@@ -1346,6 +1370,7 @@ impl ShellSession {
                             pt.region_set = true;
                         }
                         stdout.write_all(&pt.out)?;
+                        pt.host_sequence_open = !pt.filter.can_interleave_host_output();
 
                         if !esc.in_alternate_screen {
                             // The app left the alt screen mid-batch. The raw
@@ -1374,6 +1399,17 @@ impl ShellSession {
                             "alt passthrough frame"
                         );
                     } else {
+                        // Respect an application-owned synchronized-output
+                        // frame that spans PTY reads. Rendering or drawing the
+                        // status line here would emit `?2026l` and close the
+                        // application's frame prematurely. The VT keeps
+                        // accumulating state; the batch that resets mode 2026
+                        // renders the complete frame.
+                        if esc.synchronized_output {
+                            stdout.flush()?;
+                            continue;
+                        }
+
                         // Begin synchronized output so the terminal buffers
                         // all writes atomically (mode 2026).
                         queue!(stdout, terminal::BeginSynchronizedUpdate)?;
@@ -1440,6 +1476,10 @@ impl ShellSession {
 
                 Event::Command(cmd) => {
                     self.handle_command(cmd, vt)?;
+                    if esc.synchronized_output {
+                        continue;
+                    }
+                    prepare_host_output(stdout, pt)?;
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                     if renderer.row_offset > 0 {
                         renderer.render(stdout, vt)?;
@@ -1489,6 +1529,7 @@ impl ShellSession {
                             tracing::warn!("failed to resize terminal: {e}");
                         }
                         renderer.discard_vt_scrollback(vt);
+                        prepare_host_output(stdout, pt)?;
                         if pt.region_set {
                             // Terminals reset DECSTBM on resize (and the old
                             // bounds are stale for the new size anyway):
@@ -1502,6 +1543,11 @@ impl ShellSession {
                                     bottom: pty_size.rows
                                 }
                             )?;
+                        }
+                        if esc.synchronized_output {
+                            renderer.write_cursor(stdout, vt)?;
+                            stdout.flush()?;
+                            continue;
                         }
                         renderer.render_full(stdout, vt)?;
                         if self.config.show_status_line && !esc.in_alternate_screen {
@@ -1612,7 +1658,14 @@ impl ShellSession {
         if !self.config.show_status_line {
             return Ok(());
         }
-        if pt.region_set && (esc.origin_mode || vt.is_cursor_pending_wrap().unwrap_or(false)) {
+        if esc.synchronized_output {
+            return Ok(());
+        }
+        if pt.region_set
+            && (esc.origin_mode
+                || vt.is_cursor_pending_wrap().unwrap_or(false)
+                || !pt.filter.can_interleave_host_output())
+        {
             return Ok(());
         }
         queue!(stdout, terminal::BeginSynchronizedUpdate)?;
