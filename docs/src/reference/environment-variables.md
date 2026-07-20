@@ -81,8 +81,13 @@ Enabled by default when the session is interactive.
 Enable tracing to one or more destinations, comma-separated (e.g.
 `pretty:stderr,json:file:/tmp/trace.json`).
 Mirrors the `--trace-to` flag; run `devenv --help` for the full syntax.
-`DEVENV_TRACE_DEFAULT_TO` sets a fallback used only when no tracing is otherwise
-configured.
+
+### [`DEVENV_TRACE_DEFAULT_TO`](#devenv_trace_default_to)
+<small class="added-in">added in `2.1`</small>
+
+A fallback tracing destination, applied only when no tracing is configured explicitly (neither `DEVENV_TRACE_TO` nor `--trace-to`).
+Uses the same comma-separated `[format:]destination` syntax as [`DEVENV_TRACE_TO`](#devenv_trace_to).
+Set it to an empty string to suppress an inherited default.
 
 ### [`DEVENV_INCLUDE_ENVRC`](#devenv_include_envrc)
 <small class="added-in">added in `2.1.3`</small>
