@@ -7,7 +7,7 @@ use libghostty_vt::terminal::{Point, PointCoordinate, Terminal};
 ///
 /// libghostty-vt's `max_scrollback` is byte-sized despite the doc string
 /// in its C header suggesting "lines" (see
-/// https://github.com/ghostty-org/ghostty/discussions/12587). 10 MB matches
+/// <https://github.com/ghostty-org/ghostty/discussions/12587>). 10 MB matches
 /// Ghostty's own `scrollback-limit` default and buys roughly 10k rows of
 /// scrollback at typical column widths.
 pub const DEFAULT_MAX_SCROLLBACK: usize = 10_000_000;
