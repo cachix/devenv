@@ -50,7 +50,6 @@ tracing-subscriber.workspace = true
 json-subscriber.workspace = true
 which.workspace = true
 whoami.workspace = true
-xdg.workspace = true
 similar.workspace = true
 once_cell.workspace = true
 shell-escape.workspace = true

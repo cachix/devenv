@@ -299,10 +299,7 @@ fn compute_profile_dir_suffix(profiles: &[String]) -> Option<String> {
 
 impl Devenv {
     pub async fn new(options: DevenvOptions) -> Result<Self> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv");
-        let devenv_home = xdg_dirs
-            .get_data_home()
-            .expect("Failed to get home directory");
+        let devenv_home = devenv_core::paths::resolve_home()?;
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
         let devenv_home_gc = devenv_home.join("gc");
 
@@ -332,12 +329,26 @@ impl Devenv {
         // per the XDG Base Directory Specification
         let devenv_runtime = processes::compute_runtime_dir(&devenv_dotfile);
 
-        xdg_dirs
-            .create_data_directory(Path::new("devenv"))
-            .expect("Failed to create DEVENV_HOME directory");
+        // DEVENV_HOME is user-controllable, so surface a diagnostic rather than
+        // panicking when it points somewhere unwritable or non-directory.
+        tokio::fs::create_dir_all(&devenv_home)
+            .await
+            .into_diagnostic()
+            .wrap_err_with(|| {
+                format!(
+                    "failed to create devenv home directory: {}",
+                    devenv_home.display()
+                )
+            })?;
         tokio::fs::create_dir_all(&devenv_home_gc)
             .await
-            .expect("Failed to create DEVENV_HOME_GC directory");
+            .into_diagnostic()
+            .wrap_err_with(|| {
+                format!(
+                    "failed to create devenv GC roots directory: {}",
+                    devenv_home_gc.display()
+                )
+            })?;
 
         // Create DevenvPaths struct
         let paths = DevenvPaths {

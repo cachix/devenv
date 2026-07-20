@@ -48,6 +48,8 @@
 
 ### Improvements
 
+- `DEVENV_HOME` now overrides where devenv stores all per-user data (GC roots, trust database, cached keys), not just the trust database.
+
 - Non-TUI console output is now buffered and flushed in batches, reducing write overhead during verbose evaluation.
 
 - Traces now identify whether devenv was invoked by the CLI, direnv, or the native shell hook with a `devenv.caller` span attribute. Caller information is passed explicitly by integrations, so nested commands are not mistaken for automatic activation ([#2965](https://github.com/cachix/devenv/issues/2965)).

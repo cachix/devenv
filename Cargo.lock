@@ -1926,7 +1926,6 @@ dependencies = [
  "valuable",
  "which 8.0.4",
  "whoami",
- "xdg",
 ]
 
 [[package]]

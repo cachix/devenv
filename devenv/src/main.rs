@@ -67,13 +67,16 @@ fn main_inner() -> Result<()> {
                 return commands::hook::print(shell);
             }
             Commands::Allow => {
-                return commands::hook::allow();
+                let home = devenv_core::paths::resolve_home()?;
+                return commands::hook::allow(&home);
             }
             Commands::Revoke => {
-                return commands::hook::revoke();
+                let home = devenv_core::paths::resolve_home()?;
+                return commands::hook::revoke(&home);
             }
             Commands::HookShouldActivate => {
-                return commands::hook::should_activate();
+                let home = devenv_core::paths::resolve_home()?;
+                return commands::hook::should_activate(&home);
             }
             Commands::DaemonProcesses { config_file } => {
                 return commands::daemon_processes::run(config_file);

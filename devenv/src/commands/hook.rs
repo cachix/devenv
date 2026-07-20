@@ -44,21 +44,21 @@ pub fn print(shell: &HookShell) -> Result<()> {
 }
 
 /// Trust the current working directory for auto-activation.
-pub fn allow() -> Result<()> {
-    allow_path(&env::current_dir().into_diagnostic()?)
+pub fn allow(home: &Path) -> Result<()> {
+    allow_path(home, &env::current_dir().into_diagnostic()?)
 }
 
 /// Revoke trust for the current working directory.
-pub fn revoke() -> Result<()> {
-    revoke_path(&env::current_dir().into_diagnostic()?)
+pub fn revoke(home: &Path) -> Result<()> {
+    revoke_path(home, &env::current_dir().into_diagnostic()?)
 }
 
 /// Check whether the shell hook should activate devenv in the current directory.
 ///
 /// Prints the project directory on stdout when activation is wanted, exits with
 /// code 2 when a project is found but not trusted, and is silent otherwise.
-pub fn should_activate() -> Result<()> {
-    match check_activation()? {
+pub fn should_activate(home: &Path) -> Result<()> {
+    match check_activation(home)? {
         ActivationCheck::Activate(dir) => println!("{dir}"),
         ActivationCheck::Skip => {}
         ActivationCheck::Untrusted => std::process::exit(2),
@@ -94,20 +94,13 @@ fn remove_path_entries(entries: &mut Vec<String>, abs_str: &str) {
 }
 
 // ---- Trust database ----
+//
+// The trust database lives at `<devenv-home>/allowed`. The devenv home is
+// resolved by the caller (see `devenv_core::paths::resolve_home`) and passed in,
+// so this module never reads `DEVENV_HOME` itself.
 
-fn devenv_home() -> Result<PathBuf> {
-    if let Ok(home) = env::var("DEVENV_HOME") {
-        return Ok(PathBuf::from(home));
-    }
-    xdg::BaseDirectories::with_prefix("devenv")
-        .get_data_home()
-        .ok_or_else(|| {
-            miette::miette!("Could not determine devenv data directory. Set DEVENV_HOME or HOME.")
-        })
-}
-
-fn trust_db_path() -> Result<PathBuf> {
-    Ok(devenv_home()?.join("allowed"))
+fn trust_db_path(home: &Path) -> PathBuf {
+    home.join("allowed")
 }
 
 fn read_trust_entries(db_path: &Path) -> Result<Vec<String>> {
@@ -134,20 +127,20 @@ fn write_trust_entries(db_path: &Path, entries: &[String]) -> Result<()> {
     fs::write(db_path, content).into_diagnostic()
 }
 
-fn is_trusted(abs_str: &str) -> Result<bool> {
-    let db_path = trust_db_path()?;
+fn is_trusted(home: &Path, abs_str: &str) -> Result<bool> {
+    let db_path = trust_db_path(home);
     let entries = read_trust_entries(&db_path)?;
     Ok(entries.iter().any(|e| entry_path(e) == abs_str))
 }
 
-fn allow_path(project_dir: &Path) -> Result<()> {
+fn allow_path(home: &Path, project_dir: &Path) -> Result<()> {
     let abs_str = canonical_str(project_dir)?;
 
     if !project_dir.join("devenv.nix").exists() {
         miette::bail!("No devenv.nix found in {abs_str}");
     }
 
-    let db_path = trust_db_path()?;
+    let db_path = trust_db_path(home);
     let mut entries = read_trust_entries(&db_path)?;
     remove_path_entries(&mut entries, &abs_str);
     entries.push(abs_str.clone());
@@ -157,8 +150,8 @@ fn allow_path(project_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn revoke_path(project_dir: &Path) -> Result<()> {
-    let db_path = trust_db_path()?;
+fn revoke_path(home: &Path, project_dir: &Path) -> Result<()> {
+    let db_path = trust_db_path(home);
     let abs_str = canonical_str(project_dir)?;
 
     let mut entries = read_trust_entries(&db_path)?;
@@ -199,7 +192,7 @@ enum ActivationCheck {
     Untrusted,
 }
 
-fn check_activation() -> Result<ActivationCheck> {
+fn check_activation(home: &Path) -> Result<ActivationCheck> {
     let cwd = env::current_dir().into_diagnostic()?;
 
     let project_dir = match find_project(&cwd) {
@@ -209,7 +202,7 @@ fn check_activation() -> Result<ActivationCheck> {
 
     let abs_str = canonical_str(&project_dir)?;
 
-    if !is_trusted(&abs_str)? {
+    if !is_trusted(home, &abs_str)? {
         eprintln!("devenv: {abs_str} is not allowed. Run 'devenv allow' to trust this directory.");
         return Ok(ActivationCheck::Untrusted);
     }
@@ -221,16 +214,6 @@ fn check_activation() -> Result<ActivationCheck> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-
-    /// Set `DEVENV_HOME` for a test. Safe because cargo nextest runs each test
-    /// in its own process, so there is no concurrent env access.
-    fn set_devenv_home(dir: &Path) {
-        unsafe { env::set_var("DEVENV_HOME", dir) };
-    }
-
-    fn unset_devenv_home() {
-        unsafe { env::remove_var("DEVENV_HOME") };
-    }
 
     #[test]
     fn test_entry_path_current_format() {
@@ -270,21 +253,18 @@ mod tests {
         fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
-        set_devenv_home(&devenv_home_dir);
 
-        allow_path(&project).unwrap();
+        allow_path(&devenv_home_dir, &project).unwrap();
 
         let db_path = devenv_home_dir.join("allowed");
         let content = fs::read_to_string(&db_path).unwrap();
         let canonical = canonical_str(&project).unwrap();
         assert!(content.contains(&canonical));
 
-        revoke_path(&project).unwrap();
+        revoke_path(&devenv_home_dir, &project).unwrap();
 
         let content = fs::read_to_string(&db_path).unwrap();
         assert!(!content.contains(&canonical));
-
-        unset_devenv_home();
     }
 
     #[test]
@@ -295,22 +275,19 @@ mod tests {
         fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
-        set_devenv_home(&devenv_home_dir);
 
         let abs_str = canonical_str(&project).unwrap();
 
         // Not trusted yet
-        assert!(!is_trusted(&abs_str).unwrap());
+        assert!(!is_trusted(&devenv_home_dir, &abs_str).unwrap());
 
         // Allow and verify
-        allow_path(&project).unwrap();
-        assert!(is_trusted(&abs_str).unwrap());
+        allow_path(&devenv_home_dir, &project).unwrap();
+        assert!(is_trusted(&devenv_home_dir, &abs_str).unwrap());
 
         // Changing devenv.nix should not invalidate trust
         fs::write(project.join("devenv.nix"), "{ pkgs, ... }: { }\n").unwrap();
-        assert!(is_trusted(&abs_str).unwrap());
-
-        unset_devenv_home();
+        assert!(is_trusted(&devenv_home_dir, &abs_str).unwrap());
     }
 
     #[test]
@@ -321,7 +298,6 @@ mod tests {
         fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
 
         let devenv_home_dir = dir.path().join("devenv-home");
-        set_devenv_home(&devenv_home_dir);
 
         let abs_str = canonical_str(&project).unwrap();
 
@@ -330,8 +306,6 @@ mod tests {
         let legacy_entry = format!("{}:{}\n", "a".repeat(64), abs_str);
         fs::write(devenv_home_dir.join("allowed"), legacy_entry).unwrap();
 
-        assert!(is_trusted(&abs_str).unwrap());
-
-        unset_devenv_home();
+        assert!(is_trusted(&devenv_home_dir, &abs_str).unwrap());
     }
 }

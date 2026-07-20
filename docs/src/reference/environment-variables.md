@@ -4,7 +4,8 @@ devenv defines and respects the following environment variables:
 
 - [devenv variables](#devenv-variables) are defined by devenv.
   The read-only ones are exported into the developer shell so you can reference them from scripts, [tasks](../tasks.md), and modules.
-  The configurable ones are read by the CLI to change its behavior, and each mirrors a command-line flag that takes precedence.
+  The configurable ones are read by the CLI to change its behavior.
+  Some may mirror and take precedence over a command-line flag.
 - [Externally defined variables](#externally-defined-variables) are standard, third-party variables that devenv respects but does not define.
 
 ## devenv variables
@@ -39,11 +40,13 @@ packages/scripts provided by devenv.
 Useful for teaching other programs about `/bin`, `/etc`, `/var` folders.
 
 ### [`DEVENV_HOME`](#devenv_home)
-<small class="added-in">added in `1.0`</small>
+<small class="added-in">added in `2.1.3`</small>
 
-devenv's per-user data directory, at `~/.local/share/devenv` (respecting
-`$XDG_DATA_HOME`).
-Stores GC roots, the trust database, and other persistent per-user data.
+devenv's per-user data directory.
+Stores GC roots, the trust database, cached keys, and other persistent per-user
+data.
+Defaults to `~/.local/share/devenv` (respecting `$XDG_DATA_HOME`).
+Set it to override where this data is stored.
 
 ### [`DEVENV_MAX_JOBS`](#devenv_max_jobs)
 <small class="added-in">added in `1.11`</small>
