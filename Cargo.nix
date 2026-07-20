@@ -6546,10 +6546,6 @@ rec {
             name = "whoami";
             packageId = "whoami";
           }
-          {
-            name = "xdg";
-            packageId = "xdg";
-          }
         ];
         devDependencies = [
           {
@@ -6746,6 +6742,10 @@ rec {
             packageId = "devenv-activity";
           }
           {
+            name = "hex";
+            packageId = "hex";
+          }
+          {
             name = "miette";
             packageId = "miette";
             features = [ "fancy" ];
@@ -6814,6 +6814,10 @@ rec {
           {
             name = "serde_yaml";
             packageId = "serde_yaml";
+          }
+          {
+            name = "sha2";
+            packageId = "sha2 0.11.0";
           }
           {
             name = "socket2";
@@ -7172,16 +7176,16 @@ rec {
             packageId = "devenv-activity";
           }
           {
+            name = "devenv-core";
+            packageId = "devenv-core";
+          }
+          {
             name = "devenv-event-sources";
             packageId = "devenv-event-sources";
           }
           {
             name = "futures";
             packageId = "futures";
-          }
-          {
-            name = "hex";
-            packageId = "hex";
           }
           {
             name = "miette";
@@ -7214,10 +7218,6 @@ rec {
           {
             name = "serde_json";
             packageId = "serde_json";
-          }
-          {
-            name = "sha2";
-            packageId = "sha2 0.11.0";
           }
           {
             name = "signal-hook";
