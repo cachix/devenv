@@ -374,6 +374,15 @@ in
             ]
           })
           export PATH="$PATH:$CARGO_INSTALL_ROOT/bin"
+        ''
+        # cargo resolves external subcommands (cargo clippy, cargo fmt, ...)
+        # from $CARGO_HOME/bin *before* $PATH by default, so ~/.cargo/bin's
+        # rustup proxies would shadow this environment's toolchain. Append
+        # $CARGO_HOME/bin to $PATH to flip that precedence (per the cargo
+        # docs) so devenv's toolchain wins, while keeping the shared cache,
+        # credentials and global config in ~/.cargo intact.
+        + ''
+          export PATH="$PATH:''${CARGO_HOME:-$HOME/.cargo}/bin"
         '';
 
         packages =
