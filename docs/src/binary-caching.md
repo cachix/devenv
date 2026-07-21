@@ -10,6 +10,8 @@ binary caches hosted by [Cachix](https://cachix.org).
 
 ## Setup with SecretSpec (recommended)
 
+!!! tip "New in version 2.2"
+
 Sign up on [Cachix](https://cachix.org), create an organization and your first cache.
 
 You don't need to install Cachix client, devenv will handle binary caching for you.

@@ -68,6 +68,8 @@ Then access in `devenv.nix`:
 
 ### Cachix auth token
 
+!!! tip "New in version 2.2"
+
 To make the Cachix auth token a built-in required secret, without declaring it
 in `secretspec.toml`, set `secretspec.cachix_auth_token` to `true`:
 
