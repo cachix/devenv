@@ -26,6 +26,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Perl" ];
     packages = with pkgs; [
       (perl.withPackages (p: (with builtins; map
         (pkg: p.${ replaceStrings [ "::" ] [ "" ] pkg })

@@ -35,6 +35,7 @@ in
 
   config = lib.mkMerge [
     {
+      gitnr.".gitignore".templates = [ "gh:C" ];
       changelogs = [
         {
           date = "2026-03-07";

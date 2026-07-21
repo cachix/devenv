@@ -49,6 +49,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Scala" ];
     packages =
       with pkgs;
       [

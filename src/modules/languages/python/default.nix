@@ -653,6 +653,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Python" ];
     languages.python.import = path: args:
       let
         # Load workspace using uv2nix

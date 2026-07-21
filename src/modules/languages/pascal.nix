@@ -13,6 +13,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:freepascal" ];
     packages = with pkgs; [
       fpc
     ] ++ lib.optional (cfg.lazarus.enable && pkgs.stdenv.isLinux) pkgs.lazarus;

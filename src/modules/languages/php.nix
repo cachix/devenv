@@ -152,6 +152,7 @@ let
       };
 
       config = {
+        gitnr.".gitignore".templates = [ "gh:Composer" ];
         socket = if poolOpts.listen == "" then "${runtimeDir}/${name}.sock" else poolOpts.listen;
         phpOptions = mkBefore cfg.fpm.phpOptions;
 

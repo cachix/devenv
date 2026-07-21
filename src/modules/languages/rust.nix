@@ -245,6 +245,7 @@ in
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
+      gitnr.".gitignore".templates = [ "gh:Rust" ];
       changelogs = [
         {
           date = "2026-03-08";

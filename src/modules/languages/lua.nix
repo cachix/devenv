@@ -26,6 +26,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "gh:Lua" ];
     packages = [
       cfg.package
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;

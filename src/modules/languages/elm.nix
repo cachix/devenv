@@ -20,6 +20,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:elm" ];
     packages = with pkgs; [
       elmPackages.elm
       elmPackages.elm-format

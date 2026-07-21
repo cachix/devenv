@@ -28,6 +28,7 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
+    gitnr.".gitignore".templates = [ "tt:idris" ];
     packages = [
       cfg.package
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
