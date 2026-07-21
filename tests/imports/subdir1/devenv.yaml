@@ -1,5 +1,10 @@
 allow_unfree: true
 
+# subdir4 has only a devenv.nix, no devenv.yaml: it must still be loaded
+# even though it is imported transitively rather than by the root project.
+imports:
+- ../subdir4
+
 inputs:
   flake-utils:
     url: github:numtide/flake-utils

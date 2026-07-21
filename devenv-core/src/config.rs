@@ -511,6 +511,7 @@ impl Config {
         // first, with the base loaded after them so base definitions take
         // precedence over imports.
         let mut imported_yamls = Vec::new();
+        let mut dir_only_imports = Vec::new();
         let mut visited = HashSet::new();
 
         if base_yaml.exists() {
@@ -548,6 +549,7 @@ impl Config {
             base_path,
             git_root.as_deref(),
             &mut imported_yamls,
+            &mut dir_only_imports,
             &mut visited,
             0,
         )?;
@@ -703,6 +705,17 @@ impl Config {
         for yaml_path in &imported_yamls {
             if let Some(import_dir) = yaml_path.parent()
                 && let Some(normalized) = Self::normalize_path(import_dir, base_path)
+                && seen.insert(normalized.clone())
+            {
+                final_imports.push(normalized);
+            }
+        }
+
+        // Add directories that were imported (at any depth) but have no
+        // devenv.yaml of their own. There's nothing to merge, but their
+        // devenv.nix should still be loaded.
+        for import_dir in &dir_only_imports {
+            if let Some(normalized) = Self::normalize_path(import_dir, base_path)
                 && seen.insert(normalized.clone())
             {
                 final_imports.push(normalized);
@@ -1074,6 +1087,9 @@ impl Config {
     /// * `base_path` - The base directory for resolving relative import paths
     /// * `git_root` - Optional git repository root for resolving absolute paths and security checks
     /// * `yaml_files` - Accumulator for collecting YAML file paths in load order
+    /// * `dir_only_imports` - Accumulator for imported directories that have no `devenv.yaml`
+    ///   of their own. There's nothing to merge or recurse into, but the directory still needs
+    ///   to end up in the final imports list so its `devenv.nix` gets loaded.
     /// * `visited` - Set of canonical paths already visited (prevents circular imports)
     /// * `depth` - Current recursion depth (prevents stack overflow)
     ///
@@ -1091,6 +1107,7 @@ impl Config {
         base_path: &Path,
         git_root: Option<&Path>,
         yaml_files: &mut Vec<PathBuf>,
+        dir_only_imports: &mut Vec<PathBuf>,
         visited: &mut HashSet<PathBuf>,
         depth: usize,
     ) -> Result<()> {
@@ -1151,9 +1168,27 @@ impl Config {
                         &import_path,
                         git_root,
                         yaml_files,
+                        dir_only_imports,
                         visited,
                         depth + 1,
                     )?;
+                } else {
+                    // No devenv.yaml here, so there's nothing to merge or recurse
+                    // into. Still preserve the directory itself, no matter how
+                    // deep the import chain is, so its devenv.nix gets loaded.
+                    let canonical_dir = import_path
+                        .canonicalize()
+                        .into_diagnostic()
+                        .wrap_err_with(|| {
+                            format!(
+                                "Failed to canonicalize import path: {}",
+                                import_path.display()
+                            )
+                        })?;
+
+                    if visited.insert(canonical_dir) {
+                        dir_only_imports.push(import_path.clone());
+                    }
                 }
             }
         }
@@ -1715,6 +1750,195 @@ imports:
                 .iter()
                 .any(|i| i == "./" || i == "." || i == "./."),
             "Base directory should not appear in final_imports, got: {:?}",
+            config.imports
+        );
+    }
+
+    #[test]
+    fn transitively_imported_dir_without_yaml_is_preserved() {
+        // A directory imported by a nested project (not the root project itself)
+        // that has no devenv.yaml of its own must still end up in the resolved
+        // imports list, so its devenv.nix gets loaded.
+        // Regression test: only directories imported directly by the root
+        // project's own `imports:` list survived without a devenv.yaml; anything
+        // imported transitively (through another project's devenv.yaml) was
+        // silently dropped.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path();
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(root)
+            .output()
+            .expect("Failed to git init");
+
+        // leaf has only a devenv.nix, no devenv.yaml
+        let leaf_dir = root.join("leaf");
+        fs::create_dir(&leaf_dir).expect("Failed to create leaf dir");
+        fs::write(leaf_dir.join("devenv.nix"), "{ }").expect("Failed to write leaf devenv.nix");
+
+        // mid imports leaf
+        let mid_dir = root.join("mid");
+        fs::create_dir(&mid_dir).expect("Failed to create mid dir");
+        fs::write(
+            mid_dir.join("devenv.yaml"),
+            r#"
+imports:
+  - ../leaf
+"#,
+        )
+        .expect("Failed to write mid config");
+
+        // root imports mid
+        fs::write(
+            root.join("devenv.yaml"),
+            r#"
+imports:
+  - ./mid
+"#,
+        )
+        .expect("Failed to write root config");
+
+        let config = Config::load_from(root).expect("Failed to load config");
+
+        assert!(
+            config.imports.iter().any(|i| i == "./leaf"),
+            "Transitively imported directory without its own devenv.yaml should still \
+             be preserved in the resolved imports list, got: {:?}",
+            config.imports
+        );
+    }
+
+    #[test]
+    fn directly_imported_dir_without_yaml_is_preserved() {
+        // A directory imported directly by the root project's own `imports:`
+        // list must be preserved even when it has no devenv.yaml of its own.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path();
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(root)
+            .output()
+            .expect("Failed to git init");
+
+        let leaf_dir = root.join("leaf");
+        fs::create_dir(&leaf_dir).expect("Failed to create leaf dir");
+        fs::write(leaf_dir.join("devenv.nix"), "{ }").expect("Failed to write leaf devenv.nix");
+
+        fs::write(
+            root.join("devenv.yaml"),
+            r#"
+imports:
+  - ./leaf
+"#,
+        )
+        .expect("Failed to write root config");
+
+        let config = Config::load_from(root).expect("Failed to load config");
+
+        assert!(
+            config.imports.iter().any(|i| i == "./leaf"),
+            "Directly imported directory without its own devenv.yaml should be \
+             preserved in the resolved imports list, got: {:?}",
+            config.imports
+        );
+    }
+
+    #[test]
+    fn dir_without_yaml_imported_directly_and_transitively_appears_once() {
+        // When the same devenv.yaml-less directory is imported both directly by
+        // the root project and transitively through another project, it must
+        // appear exactly once in the resolved imports list.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path();
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(root)
+            .output()
+            .expect("Failed to git init");
+
+        let leaf_dir = root.join("leaf");
+        fs::create_dir(&leaf_dir).expect("Failed to create leaf dir");
+        fs::write(leaf_dir.join("devenv.nix"), "{ }").expect("Failed to write leaf devenv.nix");
+
+        let mid_dir = root.join("mid");
+        fs::create_dir(&mid_dir).expect("Failed to create mid dir");
+        fs::write(
+            mid_dir.join("devenv.yaml"),
+            r#"
+imports:
+  - ../leaf
+"#,
+        )
+        .expect("Failed to write mid config");
+
+        fs::write(
+            root.join("devenv.yaml"),
+            r#"
+imports:
+  - ./leaf
+  - ./mid
+"#,
+        )
+        .expect("Failed to write root config");
+
+        let config = Config::load_from(root).expect("Failed to load config");
+
+        let leaf_count = config.imports.iter().filter(|i| *i == "./leaf").count();
+        assert_eq!(
+            leaf_count, 1,
+            "Directory imported both directly and transitively should appear \
+             exactly once, got: {:?}",
+            config.imports
+        );
+    }
+
+    #[test]
+    fn git_root_absolute_import_without_yaml_is_preserved() {
+        // A nested project can import via a git-root-relative absolute path
+        // (leading /). Such an import pointing at a directory without its own
+        // devenv.yaml must also be preserved and normalized.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path();
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(root)
+            .output()
+            .expect("Failed to git init");
+
+        let leaf_dir = root.join("leaf");
+        fs::create_dir(&leaf_dir).expect("Failed to create leaf dir");
+        fs::write(leaf_dir.join("devenv.nix"), "{ }").expect("Failed to write leaf devenv.nix");
+
+        let mid_dir = root.join("mid");
+        fs::create_dir(&mid_dir).expect("Failed to create mid dir");
+        fs::write(
+            mid_dir.join("devenv.yaml"),
+            r#"
+imports:
+  - /leaf
+"#,
+        )
+        .expect("Failed to write mid config");
+
+        fs::write(
+            root.join("devenv.yaml"),
+            r#"
+imports:
+  - ./mid
+"#,
+        )
+        .expect("Failed to write root config");
+
+        let config = Config::load_from(root).expect("Failed to load config");
+
+        assert!(
+            config.imports.iter().any(|i| i == "./leaf"),
+            "Git-root-relative import of a directory without its own devenv.yaml \
+             should be preserved in the resolved imports list, got: {:?}",
             config.imports
         );
     }
