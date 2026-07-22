@@ -49,6 +49,8 @@
 
 ### Improvements
 
+- `devenv shell` reload sessions now redraw only the terminal rows that changed instead of the whole screen every time output scrolls, reducing flicker and output bandwidth.
+  Resizing the terminal mid-session no longer risks dropping pending lines from scrollback.
 - `DEVENV_HOME` now overrides where devenv stores all per-user data (GC roots, trust database, cached keys), not just the trust database.
 - `DEVENV_RUNTIME` can now be set to override where a project stores its sockets and other runtime files. To relocate runtime files for all projects at once, prefer `XDG_RUNTIME_DIR`, which keeps each project's directory separate.
 

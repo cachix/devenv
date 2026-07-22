@@ -1,6 +1,6 @@
 {
-  "git+https://github.com/Uzaaft/libghostty-rs.git?rev=81b776c64fa96d8be0b243e0ebc383887c51eb38#libghostty-vt-sys@0.2.0": "14495x2hxgs6pc4r4f800vnzyzfl10xgk7930nsqvad3vjh03mhw",
-  "git+https://github.com/Uzaaft/libghostty-rs.git?rev=81b776c64fa96d8be0b243e0ebc383887c51eb38#libghostty-vt@0.2.0": "14495x2hxgs6pc4r4f800vnzyzfl10xgk7930nsqvad3vjh03mhw",
+  "git+https://github.com/Uzaaft/libghostty-rs.git?rev=46a9d2ac941ed600cf43c5e6299c8dfd1d3a1ef0#libghostty-vt-sys@0.2.1": "174p8h1jidygf0ilszvk15xwwi3r7b34d1ain30yiiq4n2k8b5cl",
+  "git+https://github.com/Uzaaft/libghostty-rs.git?rev=46a9d2ac941ed600cf43c5e6299c8dfd1d3a1ef0#libghostty-vt@0.2.1": "174p8h1jidygf0ilszvk15xwwi3r7b34d1ain30yiiq4n2k8b5cl",
   "git+https://github.com/cachix/crossterm?rev=91e3df5ccee39f142acefb9e99de1bf43c2fea67#crossterm@0.29.0": "0wn6n3znzv1jxw9ghl6qgsancd2myafs7kxpvn3lm3wsxhpvv76l",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-bindgen-raw@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-expr@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
