@@ -25,9 +25,10 @@ use crossterm::{
     style::ResetColor,
     terminal::{self, Clear, ClearType},
 };
-use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef};
+use libghostty_vt::render::{Dirty, RenderState, RowIterator};
+use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef, Screen, TrackedGridRef};
 use libghostty_vt::style::{Style, StyleColor, Underline};
-use libghostty_vt::terminal::{Options as TerminalOptions, Point, Terminal};
+use libghostty_vt::terminal::{Options as TerminalOptions, Point, PointSpace, Terminal};
 use portable_pty::PtySize;
 use std::fmt::Write as FmtWrite;
 use std::io::{self, IsTerminal, Read, Write};
@@ -189,17 +190,46 @@ fn dump_color(s: &mut String, color: &StyleColor, base: u8) {
     }
 }
 
-/// Feed text into VT and return the scroll count (lines that scrolled off the viewport).
-///
-/// Scroll count is the delta of `total_rows()`, which is exact as long as VT
-/// scrollback hasn't hit its `max_scrollback` cap. We keep VT scrollback well
-/// below the cap by wiping it via CSI 3J after every successful flush in
-/// `render_with_scroll`, so the delta stays accurate in practice.
-fn feed_vt(vt: &mut Terminal<'_, '_>, text: &str) -> usize {
-    let total_before = vt.total_rows().unwrap_or(0);
-    vt.vt_write(text.as_bytes());
-    let total_after = vt.total_rows().unwrap_or(0);
-    total_after.saturating_sub(total_before)
+/// Write a single VT row (SGR-formatted, from pre-fetched cells) to stdout.
+fn queue_row_from_cells(
+    stdout: &mut impl Write,
+    vt: &Terminal<'_, '_>,
+    point: Point,
+    cells: &[Cell],
+    line_buf: &mut String,
+) -> io::Result<()> {
+    line_buf.clear();
+    dump_row_from_cells(line_buf, vt, point, cells);
+    stdout.write_all(line_buf.as_bytes())?;
+    queue!(stdout, ResetColor)
+}
+
+/// Fetch a VT row's cells, and redraw it at `row_idx + offset` if they differ
+/// from the `prev_lines` baseline. Returns whether the row was drawn.
+fn draw_row_if_changed(
+    stdout: &mut impl Write,
+    vt: &Terminal<'_, '_>,
+    row_idx: usize,
+    offset: usize,
+    prev_lines: &mut Vec<Vec<Cell>>,
+    line_buf: &mut String,
+) -> io::Result<bool> {
+    let point = active_point(row_idx as u32);
+    let cells = cells_in_row(vt, point);
+    if row_idx < prev_lines.len() && cells == prev_lines[row_idx] {
+        return Ok(false);
+    }
+    queue!(
+        stdout,
+        cursor::MoveTo(0, (row_idx + offset) as u16),
+        Clear(ClearType::CurrentLine)
+    )?;
+    queue_row_from_cells(stdout, vt, point, &cells, line_buf)?;
+    if row_idx >= prev_lines.len() {
+        prev_lines.resize_with(row_idx + 1, Vec::new);
+    }
+    prev_lines[row_idx] = cells;
+    Ok(true)
 }
 
 #[derive(Debug, Default)]
@@ -286,7 +316,15 @@ impl VtInputFilter {
 /// Instead of passing raw PTY output to stdout (which conflicts with the status
 /// line's scroll region), this renderer mediates all terminal output through
 /// the VT state machine — similar to how tmux works.
-struct Renderer {
+fn primary_height_shrunk(
+    old_native_rows: u16,
+    new_native_rows: u16,
+    active: Option<Screen>,
+) -> bool {
+    new_native_rows < old_native_rows && active == Some(Screen::Primary)
+}
+
+struct Renderer<'a> {
     /// Previous frame for diffing — one line of cells per row.
     prev_lines: Vec<Vec<Cell>>,
     /// Previous cursor state.
@@ -299,17 +337,41 @@ struct Renderer {
     /// Number of usable content rows on the real terminal (excludes status line).
     /// Used to clip rendering so offset VT rows don't overwrite the status line.
     content_rows: u16,
-    /// Number of VT scrollback lines already pushed to native terminal scrollback.
-    /// Used to flush only new (unflushed) scrollback lines in `render_with_scroll`.
-    /// Reset to 0 after each flush.
-    scrollback_flushed: usize,
+    /// Tracked grid ref (ghostty pin) at the first VT row not yet flushed to
+    /// native terminal scrollback. Ghostty keeps it anchored to that row
+    /// across scrolling, history pruning, and resize reflow, so flush
+    /// accounting stays exact without wiping VT history.
+    /// `None` only if pin allocation or re-anchoring failed. In that case,
+    /// `flush_boundary_rows` keeps numeric accounting until a new pin can be
+    /// allocated.
+    flush_boundary: Option<TrackedGridRef>,
+    /// Numeric screen-row fallback for `flush_boundary`. This is only used
+    /// when a tracked reference cannot be allocated or re-anchored.
+    flush_boundary_rows: Option<usize>,
+    /// During a primary-screen height shrink, the first row moved from the
+    /// old viewport into history. Those rows already exist in the native
+    /// terminal, so they must not be emitted by the history flush.
+    resize_flush_end: Option<TrackedGridRef>,
+    /// Numeric fallback for `resize_flush_end` when its pin cannot be made.
+    resize_flush_end_rows: Option<usize>,
+    /// Viewport lines scrolled off since the last render; tells `render` that
+    /// row content shifted so per-row dirty flags alone can't be trusted.
+    pending_scroll: usize,
+    /// Ghostty render state for dirty tracking (which rows changed).
+    render_state: RenderState<'a>,
+    /// Reusable row iterator over `render_state` snapshots.
+    row_iter: RowIterator<'a>,
     /// Reusable buffer for SGR line rendering (avoids per-line allocation).
     line_buf: String,
 }
 
-impl Renderer {
-    fn new(content_rows: u16) -> Self {
-        Self {
+impl<'a> Renderer<'a> {
+    fn new(content_rows: u16, vt: &Terminal<'a, '_>) -> Result<Self, libghostty_vt::Error> {
+        let flush_boundary = vt.track_grid_ref(active_point(0)).ok();
+        if flush_boundary.is_none() {
+            tracing::warn!("failed to create flush boundary pin, falling back to history wipes");
+        }
+        Ok(Self {
             prev_lines: Vec::new(),
             prev_cursor: CursorState {
                 col: 0,
@@ -318,16 +380,63 @@ impl Renderer {
             },
             row_offset: 0,
             content_rows,
-            scrollback_flushed: 0,
+            flush_boundary,
+            flush_boundary_rows: None,
+            resize_flush_end: None,
+            resize_flush_end_rows: None,
+            pending_scroll: 0,
+            render_state: RenderState::new()?,
+            row_iter: RowIterator::new()?,
             line_buf: String::new(),
+        })
+    }
+
+    /// Feed text into the VT and return the scroll count (lines that scrolled
+    /// off the viewport), measured as growth of the unflushed region so it
+    /// stays exact even when ghostty prunes old history pages.
+    fn feed(&mut self, vt: &mut Terminal<'_, '_>, text: &str) -> usize {
+        self.normalize_fallback_boundary(vt.scrollback_rows().unwrap_or(0));
+        let before = self.unflushed(vt);
+        vt.vt_write(text.as_bytes());
+        let scrolled = self.unflushed(vt).saturating_sub(before);
+        self.pending_scroll += scrolled;
+        scrolled
+    }
+
+    /// Keep numeric fallback accounting valid when Ghostty prunes old history.
+    fn normalize_fallback_boundary(&mut self, scrollback: usize) {
+        if let Some(boundary) = &mut self.flush_boundary_rows {
+            *boundary = (*boundary).min(scrollback);
         }
     }
 
-    /// Discard any VT scrollback without emitting it to the native terminal
-    /// (e.g., after resize where the post-resize state is the new baseline).
-    fn discard_vt_scrollback(&mut self, vt: &mut Terminal<'_, '_>) {
-        vt.vt_write(b"\x1b[3J");
-        self.scrollback_flushed = 0;
+    /// Number of VT scrollback rows not yet flushed to the native terminal:
+    /// the distance from the flush boundary pin to the active area.
+    ///
+    /// Returns 0 on the alternate screen (it has no scrollback).
+    fn unflushed(&self, vt: &Terminal<'_, '_>) -> usize {
+        if vt.active_screen().ok() != Some(Screen::Primary) {
+            return 0;
+        }
+        let scrollback = vt.scrollback_rows().unwrap_or(0);
+        let boundary_y = self
+            .flush_boundary
+            .as_ref()
+            .and_then(|b| b.point(PointSpace::Screen).ok().flatten())
+            .map(|p| p.y as usize)
+            .or(self.flush_boundary_rows)
+            .unwrap_or(0);
+        let end = self
+            .resize_flush_end_rows
+            .or_else(|| {
+                self.resize_flush_end
+                    .as_ref()
+                    .and_then(|b| b.point(PointSpace::Screen).ok().flatten())
+                    .map(|p| p.y as usize)
+            })
+            .unwrap_or(scrollback)
+            .min(scrollback);
+        end.saturating_sub(boundary_y.min(end))
     }
 
     /// Number of VT rows that fit on-screen given the current offset.
@@ -369,42 +478,70 @@ impl Renderer {
         queue!(stdout, ResetColor)
     }
 
-    /// Write a row using pre-fetched cells (avoids re-iterating cells via FFI).
-    fn write_row_from_cells(
-        &mut self,
-        stdout: &mut impl Write,
-        vt: &Terminal<'_, '_>,
-        point: Point,
-        cells: &[Cell],
-    ) -> io::Result<()> {
-        self.line_buf.clear();
-        dump_row_from_cells(&mut self.line_buf, vt, point, cells);
-        stdout.write_all(self.line_buf.as_bytes())?;
-        queue!(stdout, ResetColor)
-    }
-
     /// Render changed VT lines to stdout. Skips lines that haven't changed
     /// and clips rows that would fall outside the visible area.
-    fn render(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
+    ///
+    /// Uses ghostty's render-state dirty tracking to skip clean rows without
+    /// fetching their cells. Dirty flags are only a skip-hint: rows they
+    /// mark dirty are still diffed against `prev_lines` before drawing, and
+    /// they are bypassed entirely (full fetch + diff) when the baseline is
+    /// incomplete, when content scrolled, or on the alternate screen.
+    fn render(&mut self, stdout: &mut impl Write, vt: &Terminal<'a, '_>) -> io::Result<()> {
         let offset = self.row_offset as usize;
         let max_row = self.visible_rows();
         let rows = vt.rows().unwrap_or(0) as usize;
-        for row_idx in 0..rows.min(max_row) {
-            let point = active_point(row_idx as u32);
-            let cells = cells_in_row(vt, point);
-            if row_idx < self.prev_lines.len() && cells == self.prev_lines[row_idx] {
-                continue;
+        let visible = rows.min(max_row);
+        let scrolled = self.pending_scroll > 0;
+        self.pending_scroll = 0;
+        // Scrolling shifts every row's content, and on the alternate screen
+        // scrolls may not mark rows dirty, so trust dirty flags only on a
+        // scroll-free primary-screen frame.
+        let trust_dirty = !scrolled && vt.active_screen().ok() == Some(Screen::Primary);
+
+        let Self {
+            render_state,
+            row_iter,
+            prev_lines,
+            line_buf,
+            ..
+        } = self;
+
+        // Dirty-tracking fast path; falls back to a full diff pass on any
+        // render-state failure.
+        let mut dirty_pass_done = false;
+        match render_state.update(vt) {
+            Ok(snapshot) => {
+                let clean = matches!(snapshot.dirty(), Ok(Dirty::Clean));
+                if trust_dirty && clean && prev_lines.len() >= visible {
+                    dirty_pass_done = true;
+                } else if let Ok(mut iteration) = row_iter.update(&snapshot) {
+                    let mut row_idx = 0usize;
+                    while let Some(row) = iteration.next() {
+                        if row_idx < visible {
+                            let must_fetch = !trust_dirty
+                                || row_idx >= prev_lines.len()
+                                || row.dirty().unwrap_or(true);
+                            if must_fetch {
+                                draw_row_if_changed(
+                                    stdout, vt, row_idx, offset, prev_lines, line_buf,
+                                )?;
+                            }
+                        }
+                        let _ = row.set_dirty(false);
+                        row_idx += 1;
+                    }
+                    dirty_pass_done = true;
+                }
+                let _ = snapshot.set_dirty(Dirty::Clean);
             }
-            queue!(
-                stdout,
-                cursor::MoveTo(0, (row_idx + offset) as u16),
-                Clear(ClearType::CurrentLine)
-            )?;
-            self.write_row_from_cells(stdout, vt, point, &cells)?;
-            if row_idx >= self.prev_lines.len() {
-                self.prev_lines.resize_with(row_idx + 1, Vec::new);
+            Err(e) => {
+                tracing::debug!(error = %e, "render state update failed");
             }
-            self.prev_lines[row_idx] = cells;
+        }
+        if !dirty_pass_done {
+            for row_idx in 0..visible {
+                draw_row_if_changed(stdout, vt, row_idx, offset, prev_lines, line_buf)?;
+            }
         }
         self.update_cursor(stdout, vt)
     }
@@ -419,15 +556,71 @@ impl Renderer {
     fn render_with_scroll(
         &mut self,
         stdout: &mut impl Write,
-        vt: &mut Terminal<'_, '_>,
+        vt: &mut Terminal<'a, '_>,
     ) -> io::Result<()> {
+        // Scrollback only exists on the primary screen; the flush boundary
+        // pin also lives there, so don't touch it while the alternate screen
+        // is active.
+        if vt.active_screen().ok() != Some(Screen::Primary) {
+            return self.render(stdout, vt);
+        }
         let vt_scrollback = vt.scrollback_rows().unwrap_or(0);
-        let unflushed = vt_scrollback.saturating_sub(self.scrollback_flushed);
+        self.normalize_fallback_boundary(vt_scrollback);
+        let boundary = self
+            .flush_boundary
+            .as_ref()
+            .and_then(|b| b.point(PointSpace::Screen).ok().flatten());
+        let start = boundary
+            .map(|p| p.y as usize)
+            .or(self.flush_boundary_rows)
+            .unwrap_or(0);
+        let resize_end = self
+            .resize_flush_end_rows
+            .or_else(|| {
+                self.resize_flush_end
+                    .as_ref()
+                    .and_then(|b| b.point(PointSpace::Screen).ok().flatten())
+                    .map(|p| p.y as usize)
+            })
+            .map(|y| y.min(vt_scrollback));
+        let end = resize_end.unwrap_or(vt_scrollback);
+        let mut flush_rows = end.saturating_sub(start.min(end));
 
-        if unflushed > 0 && self.content_rows > 0 {
+        // A tracked point in the middle of a row means the boundary was
+        // created by an older, unsafe reflow. Never emit that row wholesale:
+        // its prefix may already be in native scrollback. New boundaries are
+        // kept at logical-row starts below, so this is only a degraded case.
+        let boundary_unsafe = boundary.is_some_and(|p| p.x != 0)
+            || (flush_rows > 0
+                && vt
+                    .grid_ref(screen_point(start as u32))
+                    .and_then(|gr| gr.row())
+                    .and_then(|row| row.is_wrap_continuation())
+                    .unwrap_or(true));
+        if boundary_unsafe {
+            flush_rows = 0;
+        } else {
+            // Do not flush a partial soft-wrapped logical line. The native
+            // terminal cannot reflow text it has already received, so wait
+            // until the candidate prefix ends on a hard row.
+            while flush_rows > 0 {
+                let point = screen_point((start + flush_rows - 1) as u32);
+                let wrapped = vt
+                    .grid_ref(point)
+                    .and_then(|gr| gr.row())
+                    .and_then(|row| row.is_wrapped())
+                    .unwrap_or(true);
+                if !wrapped {
+                    break;
+                }
+                flush_rows -= 1;
+            }
+        }
+
+        let mut flushed_total = 0usize;
+        let mut incomplete = false;
+        if flush_rows > 0 && self.content_rows > 0 {
             let batch_size = self.content_rows as usize;
-
-            // Set scroll region to protect the status line row.
             queue!(
                 stdout,
                 SetScrollRegion {
@@ -436,17 +629,11 @@ impl Renderer {
                 }
             )?;
 
-            // Iterate scrollback lines starting from the first unflushed one.
-            // Uses Screen coordinates where y=0 is the oldest scrollback line.
-            let mut screen_y = self.scrollback_flushed;
-            let mut remaining = unflushed;
-
+            let mut screen_y = start;
+            let mut remaining = flush_rows;
             while remaining > 0 {
                 let count = remaining.min(batch_size);
                 let mut drawn = 0;
-
-                // Pre-clear destination rows so soft-wrapped continuation rows
-                // (which skip MoveTo+Clear below) land on clean rows.
                 for i in 0..count {
                     queue!(
                         stdout,
@@ -454,22 +641,15 @@ impl Renderer {
                         Clear(ClearType::CurrentLine)
                     )?;
                 }
-
-                // After a soft-wrapped row, skip MoveTo so the outer terminal's
-                // pending-wrap carries over instead of becoming a hard newline.
                 let mut prev_was_wrap_source = false;
-
                 for i in 0..count {
-                    if screen_y >= vt_scrollback {
-                        break;
-                    }
                     let row_point = screen_point(screen_y as u32);
-                    let row = vt.grid_ref(row_point).and_then(|gr| gr.row()).ok();
-                    let is_continuation = row
-                        .and_then(|r| r.is_wrap_continuation().ok())
-                        .unwrap_or(false);
-                    let is_wrap_source = row.and_then(|r| r.is_wrapped().ok()).unwrap_or(false);
-
+                    let Some(row) = vt.grid_ref(row_point).and_then(|gr| gr.row()).ok() else {
+                        incomplete = true;
+                        break;
+                    };
+                    let is_continuation = row.is_wrap_continuation().unwrap_or(true);
+                    let is_wrap_source = row.is_wrapped().unwrap_or(true);
                     if !(is_continuation && prev_was_wrap_source) {
                         queue!(stdout, cursor::MoveTo(0, i as u16))?;
                     }
@@ -478,40 +658,81 @@ impl Renderer {
                     drawn += 1;
                     prev_was_wrap_source = is_wrap_source;
                 }
-
                 if drawn > 0 {
-                    // Scroll drawn content into native scrollback.
                     queue!(stdout, cursor::MoveTo(0, self.content_rows - 1))?;
                     for _ in 0..drawn {
                         stdout.write_all(b"\n")?;
                     }
                 }
-
+                flushed_total += drawn;
                 remaining -= count;
-                if drawn < count {
+                if incomplete || drawn < count {
+                    incomplete = true;
                     break;
                 }
             }
-
             queue!(stdout, ResetScrollRegion)?;
+        }
 
-            // Wipe VT scrollback so it never approaches `max_scrollback` and
-            // triggers internal GC. The user-visible scrollback lives in the
-            // native terminal we just flushed to; VT scrollback is only an
-            // internal staging area for not-yet-flushed lines. CSI 3J
-            // (`EraseDisplay::scrollback`) preserves viewport, cursor, styles,
-            // and modes — it only frees the history pages. See
-            // `ghostty/src/terminal/Terminal.zig::eraseDisplay` and
-            // `Screen.zig::eraseHistory`.
-            vt.vt_write(b"\x1b[3J");
-            self.scrollback_flushed = 0;
-            self.prev_lines.clear();
+        let resize_flush = resize_end.is_some();
+        let successful_flush = !boundary_unsafe && !incomplete && flushed_total == flush_rows;
+        if successful_flush && (flushed_total > 0 || resize_flush) {
+            let has_remaining = !resize_flush && start + flushed_total < end;
+            // A resize endpoint excludes rows that the native terminal already
+            // received as part of its old viewport. For an ordinary flush,
+            // retain a boundary at the first still-pending logical row rather
+            // than jumping over a partial soft-wrapped line.
+            let anchor = if resize_flush || !has_remaining {
+                active_point(0)
+            } else {
+                screen_point((start + flushed_total) as u32)
+            };
+            let re_anchored = match &mut self.flush_boundary {
+                Some(b) => b.set(vt, anchor).is_ok(),
+                None => {
+                    self.flush_boundary = vt.track_grid_ref(anchor).ok();
+                    self.flush_boundary.is_some()
+                }
+            };
+            if re_anchored {
+                self.flush_boundary_rows = None;
+            } else {
+                // Preserve the emitted prefix when a deferred wrapped suffix
+                // remains. Dropping the boundary would make the next retry
+                // start at row zero and emit that prefix again. A numeric
+                // boundary is safe as a fallback: history pruning is handled
+                // by normalize_fallback_boundary before the next write/flush.
+                let fallback = if resize_flush {
+                    vt_scrollback
+                } else {
+                    start.saturating_add(flushed_total).min(vt_scrollback)
+                };
+                tracing::warn!(
+                    boundary = fallback,
+                    "failed to re-anchor flush boundary pin"
+                );
+                self.flush_boundary = None;
+                self.flush_boundary_rows = Some(fallback);
+            }
+            if resize_flush {
+                // The resize-generated suffix is already represented by the
+                // native terminal and must not become pending later.
+                self.resize_flush_end = None;
+                self.resize_flush_end_rows = None;
+            }
+
+            if incomplete || flushed_total >= self.prev_lines.len() {
+                self.prev_lines.clear();
+            } else {
+                self.prev_lines.drain(..flushed_total);
+            }
+            self.pending_scroll = self.pending_scroll.max(1);
         }
         self.render(stdout, vt)
     }
 
     /// Full redraw of all VT lines (after resize or initialization).
-    fn render_full(&mut self, stdout: &mut impl Write, vt: &Terminal<'_, '_>) -> io::Result<()> {
+    fn render_full(&mut self, stdout: &mut impl Write, vt: &Terminal<'a, '_>) -> io::Result<()> {
         self.invalidate();
         self.render(stdout, vt)
     }
@@ -950,7 +1171,7 @@ impl ShellSession {
             vt.vt_write(b"\x1b[2J\x1b[H");
 
             // Initialize the renderer and do a full initial draw
-            let mut renderer = Renderer::new(pty_size.rows);
+            let mut renderer = Renderer::new(pty_size.rows, &vt)?;
             if row_offset > 0 {
                 renderer.row_offset = row_offset;
                 renderer.sync(&vt);
@@ -993,11 +1214,11 @@ impl ShellSession {
 
     /// Main event loop handling stdin, PTY output, and coordinator commands.
     /// Returns the exit code from the PTY child process, if available.
-    fn event_loop(
+    fn event_loop<'a>(
         &mut self,
         pty: &Arc<Pty>,
-        vt: &mut Terminal<'_, '_>,
-        renderer: &mut Renderer,
+        vt: &mut Terminal<'a, '_>,
+        renderer: &mut Renderer<'a>,
         event_rx: std::sync::mpsc::Receiver<Event>,
         coordinator_tx: &tokio_mpsc::Sender<ShellEvent>,
         stdout: &mut Box<dyn Write + Send>,
@@ -1083,7 +1304,7 @@ impl ShellSession {
                                     error_text.push_str(&format!("  {}\r\n", line));
                                 }
                                 error_text.push_str("\r\n");
-                                feed_vt(vt, &error_text);
+                                renderer.feed(vt, &error_text);
                                 if renderer.row_offset > 0 {
                                     renderer.render(stdout, vt)?;
                                 } else {
@@ -1122,7 +1343,7 @@ impl ShellSession {
                     // Feed output into VT and track how many lines scrolled off
                     let filtered = vt_input_filter.filter(&data, &mut vt_input);
                     let text = utf8_acc.accumulate(filtered);
-                    let mut total_scroll = feed_vt(vt, &text);
+                    let mut total_scroll = renderer.feed(vt, &text);
 
                     // Batch: drain any additional pending PtyOutput events
                     while let Ok(event) = event_rx.try_recv() {
@@ -1139,7 +1360,7 @@ impl ShellSession {
                                 )?;
                                 let filtered = vt_input_filter.filter(&more, &mut vt_input);
                                 let text = utf8_acc.accumulate(filtered);
-                                total_scroll += feed_vt(vt, &text);
+                                total_scroll += renderer.feed(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
                                 escape_state_cleanup(&esc, stdout)?;
@@ -1153,7 +1374,7 @@ impl ShellSession {
                                 }
                             }
                             Event::Command(cmd) => {
-                                total_scroll += self.handle_command(cmd, vt)?;
+                                total_scroll += self.handle_command(cmd, vt, renderer)?;
                             }
                             Event::Resize => {
                                 resize_pending = true;
@@ -1225,7 +1446,7 @@ impl ShellSession {
                 }
 
                 Event::Command(cmd) => {
-                    self.handle_command(cmd, vt)?;
+                    self.handle_command(cmd, vt, renderer)?;
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                     if renderer.row_offset > 0 {
                         renderer.render(stdout, vt)?;
@@ -1241,11 +1462,28 @@ impl ShellSession {
                     if let Ok((cols, rows)) = terminal::size()
                         && (cols != self.size.cols || rows != self.size.rows)
                     {
+                        // On a primary-screen height reduction, Ghostty moves
+                        // the old viewport into its history. The native PTY
+                        // has already retained those same rows, so remember
+                        // the old active top as an upper flush endpoint before
+                        // mutating the VT grid.
+                        let old_native_rows = self.size.rows;
+                        let shrinking_primary =
+                            primary_height_shrunk(old_native_rows, rows, vt.active_screen().ok());
                         self.size = PtySize {
                             rows,
                             cols,
                             pixel_width: 0,
                             pixel_height: 0,
+                        };
+                        let resize_end = if shrinking_primary {
+                            let old_scrollback = vt.scrollback_rows().unwrap_or(0);
+                            (
+                                vt.track_grid_ref(active_point(0)).ok(),
+                                Some(old_scrollback),
+                            )
+                        } else {
+                            (None, None)
                         };
                         // Terminal resize ends the offset phase
                         renderer.row_offset = 0;
@@ -1268,9 +1506,15 @@ impl ShellSession {
                         }
                         if let Err(e) = vt.resize(pty_size.cols, pty_size.rows, 0, 0) {
                             tracing::warn!("failed to resize terminal: {e}");
+                        } else if shrinking_primary {
+                            renderer.resize_flush_end = resize_end.0;
+                            renderer.resize_flush_end_rows = resize_end.1;
                         }
-                        renderer.discard_vt_scrollback(vt);
-                        renderer.render_full(stdout, vt)?;
+                        // The resize reflowed VT history. Flush only the old
+                        // pending prefix; rows moved out of the old viewport
+                        // are already present in native scrollback.
+                        renderer.invalidate();
+                        renderer.render_with_scroll(stdout, vt)?;
                         if self.config.show_status_line && !esc.in_alternate_screen {
                             self.status_line.draw(stdout, cols, rows)?;
                         }
@@ -1302,6 +1546,7 @@ impl ShellSession {
         &mut self,
         cmd: ShellCommand,
         vt: &mut Terminal<'_, '_>,
+        renderer: &mut Renderer<'_>,
     ) -> Result<usize, SessionError> {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
@@ -1340,7 +1585,7 @@ impl ShellSession {
                 for file in &files {
                     text.push_str(&format!("  {}\r\n", file.display()));
                 }
-                return Ok(feed_vt(vt, &text));
+                return Ok(renderer.feed(vt, &text));
             }
 
             ShellCommand::Shutdown => {
@@ -1362,7 +1607,7 @@ impl ShellSession {
         &mut self,
         stdout: &mut impl Write,
         vt: &Terminal<'_, '_>,
-        renderer: &Renderer,
+        renderer: &Renderer<'_>,
     ) -> Result<(), SessionError> {
         if self.config.show_status_line {
             self.status_line
@@ -1401,7 +1646,406 @@ impl Default for ShellSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vt_utils::row_plain_text;
     use portable_pty::CommandBuilder;
+
+    const COLS: u16 = 20;
+    const ROWS: u16 = 5;
+
+    fn test_vt_with_size(
+        cols: u16,
+        rows: u16,
+        max_scrollback: usize,
+    ) -> Terminal<'static, 'static> {
+        Terminal::new(TerminalOptions {
+            cols,
+            rows,
+            max_scrollback,
+        })
+        .expect("terminal")
+    }
+
+    fn test_vt(max_scrollback: usize) -> Terminal<'static, 'static> {
+        test_vt_with_size(COLS, ROWS, max_scrollback)
+    }
+
+    fn test_renderer<'a>(vt: &Terminal<'a, '_>) -> Renderer<'a> {
+        Renderer::new(ROWS, vt).expect("renderer")
+    }
+
+    fn test_renderer_with_rows<'a>(rows: u16, vt: &Terminal<'a, '_>) -> Renderer<'a> {
+        Renderer::new(rows, vt).expect("renderer")
+    }
+
+    /// Replay renderer output into a fresh VT and return all non-empty lines
+    /// (scrollback + viewport), trimmed.
+    fn replayed_lines(bytes: &[u8]) -> Vec<String> {
+        replayed_lines_with_size(bytes, COLS, ROWS)
+    }
+
+    fn replayed_lines_with_size(bytes: &[u8], cols: u16, rows: u16) -> Vec<String> {
+        let mut check = test_vt_with_size(cols, rows, DEFAULT_MAX_SCROLLBACK);
+        check.vt_write(bytes);
+        let scrollback = check.scrollback_rows().unwrap_or(0);
+        let total = scrollback + rows as usize;
+        (0..total)
+            .map(|y| {
+                row_plain_text(&check, screen_point(y as u32))
+                    .trim_end()
+                    .to_string()
+            })
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    /// Replay renderer output into a fresh VT and return the active rows.
+    fn replayed_viewport(bytes: &[u8]) -> Vec<String> {
+        let mut check = test_vt(DEFAULT_MAX_SCROLLBACK);
+        check.vt_write(bytes);
+        (0..ROWS)
+            .map(|y| {
+                row_plain_text(&check, active_point(y as u32))
+                    .trim_end()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    fn viewport_lines(vt: &Terminal<'_, '_>) -> Vec<String> {
+        (0..ROWS)
+            .map(|y| {
+                row_plain_text(vt, active_point(y as u32))
+                    .trim_end()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn resize_shrink_uses_native_height_with_status_line() {
+        let session = ShellSession::new(SessionConfig {
+            show_status_line: true,
+            size: Some(PtySize {
+                cols: COLS,
+                rows: ROWS + 1,
+                pixel_width: 0,
+                pixel_height: 0,
+            }),
+        });
+        let old_native_rows = session.size.rows;
+        let old_content_rows = session.pty_size().rows;
+        let new_native_rows = old_native_rows - 1;
+
+        // The one-row native shrink only reaches the PTY's old content height
+        // because the status line consumed the other row. The resize endpoint
+        // must nevertheless be installed for this primary-screen change.
+        assert_eq!(old_content_rows, new_native_rows);
+        assert!(primary_height_shrunk(
+            old_native_rows,
+            new_native_rows,
+            Some(Screen::Primary)
+        ));
+    }
+
+    #[test]
+    fn numeric_fallback_boundary_keeps_flushed_prefix_accounted() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        for i in 0..8 {
+            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+        }
+        let scrollback = vt.scrollback_rows().unwrap();
+        assert!(scrollback > 2);
+
+        // Model a failed re-anchor after the first two rows were emitted.
+        // The remaining suffix must be the only region eligible for retry.
+        renderer.flush_boundary = None;
+        renderer.flush_boundary_rows = Some(2);
+        assert_eq!(renderer.unflushed(&vt), scrollback - 2);
+
+        // The fallback boundary must continue to advance after the suffix is
+        // emitted, rather than falling back to row zero.
+        renderer.flush_boundary_rows = Some(scrollback);
+        assert_eq!(renderer.unflushed(&vt), 0);
+    }
+
+    #[test]
+    fn renderer_flush_boundary_accounting() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        // Fill the viewport: nothing scrolled off yet.
+        for i in 0..ROWS as usize - 1 {
+            assert_eq!(renderer.feed(&mut vt, &format!("line{}\r\n", i)), 0);
+        }
+        assert_eq!(renderer.feed(&mut vt, "line4"), 0);
+        assert_eq!(renderer.unflushed(&vt), 0);
+
+        // Each further line scrolls exactly one row into history.
+        assert_eq!(renderer.feed(&mut vt, "\r\nline5"), 1);
+        assert_eq!(renderer.feed(&mut vt, "\r\nline6"), 1);
+        assert_eq!(renderer.unflushed(&vt), 2);
+
+        // A flush consumes the unflushed region and re-anchors the pin.
+        out.clear();
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+        assert_eq!(renderer.unflushed(&vt), 0);
+
+        // VT history is retained (no CSI 3J wipe), yet not re-flushed.
+        assert_eq!(vt.scrollback_rows().unwrap(), 2);
+        assert_eq!(renderer.feed(&mut vt, "\r\nline7"), 1);
+        assert_eq!(renderer.unflushed(&vt), 1);
+    }
+
+    #[test]
+    fn renderer_flush_is_incremental() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        for i in 0..8 {
+            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+        }
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+        for i in 8..12 {
+            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+        }
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+
+        // Every line appears exactly once: nothing lost, nothing re-flushed.
+        let lines = replayed_lines(&out);
+        for i in 0..12 {
+            let expected = format!("line{}", i);
+            assert_eq!(
+                lines.iter().filter(|l| **l == expected).count(),
+                1,
+                "expected exactly one '{}' in {:?}",
+                expected,
+                lines
+            );
+        }
+    }
+
+    #[test]
+    fn renderer_survives_history_pruning() {
+        // Tiny scrollback budget so ghostty prunes history pages between
+        // flushes. The old absolute-index accounting desyncs here; the pin
+        // must keep the flush sound (no panic, no duplicates).
+        let mut vt = test_vt(2_000);
+        let mut renderer = test_renderer(&vt);
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        for i in 0..300 {
+            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+        }
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+        assert_eq!(renderer.unflushed(&vt), 0);
+
+        let lines = replayed_lines(&out);
+        // The most recent lines must be present exactly once; older ones may
+        // have been pruned before the flush.
+        for i in 290..300 {
+            let expected = format!("line{}", i);
+            assert_eq!(
+                lines.iter().filter(|l| **l == expected).count(),
+                1,
+                "expected exactly one '{}' in flushed output",
+                expected
+            );
+        }
+
+        // Later flushes stay incremental.
+        renderer.feed(&mut vt, "after\r\n");
+        out.clear();
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+        let lines = replayed_lines(&out);
+        assert_eq!(lines.iter().filter(|l| **l == "after").count(), 1);
+        assert_eq!(lines.iter().filter(|l| **l == "line299").count(), 0);
+    }
+
+    #[test]
+    fn renderer_second_render_is_empty() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        renderer.feed(&mut vt, "hello\r\nworld");
+
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+        assert!(!out.is_empty());
+
+        // No VT changes: the clean-frame shortcut must emit nothing.
+        out.clear();
+        renderer.render(&mut out, &vt).unwrap();
+        assert!(
+            out.is_empty(),
+            "clean frame emitted {} bytes: {:?}",
+            out.len(),
+            String::from_utf8_lossy(&out)
+        );
+    }
+
+    #[test]
+    fn renderer_redraws_only_changed_row() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        for i in 0..ROWS as usize - 1 {
+            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+        }
+        renderer.feed(&mut vt, "line4");
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        // Overwrite a single character on row 0 (no scroll).
+        renderer.feed(&mut vt, "\x1b[1;1HX");
+        out.clear();
+        renderer.render(&mut out, &vt).unwrap();
+
+        // Only the changed row is cleared and redrawn.
+        let clears = out.windows(4).filter(|w| *w == b"\x1b[2K").count();
+        assert_eq!(
+            clears,
+            1,
+            "expected 1 row redraw, got {}: {:?}",
+            clears,
+            String::from_utf8_lossy(&out)
+        );
+        assert_eq!(replayed_viewport(&out)[0], "Xine0");
+    }
+
+    #[test]
+    fn renderer_region_scroll_stays_in_sync() {
+        // A DECSTBM region scroll moves rows without creating scrollback.
+        // The dirty-tracking fast path must still pick up every moved row.
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        for i in 0..ROWS as usize {
+            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+        }
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        // Scroll rows 2-4 up by one inside a region, then reset the region.
+        assert_eq!(renderer.feed(&mut vt, "\x1b[2;4r\x1b[4;1H\nnew\x1b[r"), 0);
+        renderer.render(&mut out, &vt).unwrap();
+
+        assert_eq!(replayed_viewport(&out), viewport_lines(&vt));
+    }
+
+    #[test]
+    fn renderer_height_shrink_without_pending_history_does_not_reflush() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        let mut out = Vec::new();
+        renderer.feed(&mut vt, "line0\r\nline1\r\nline2\r\nline3\r\nold-bottom");
+        renderer.render_full(&mut out, &vt).unwrap();
+        out.clear();
+        assert_eq!(renderer.unflushed(&vt), 0);
+
+        let old_scrollback = vt.scrollback_rows().unwrap();
+        let end = vt.track_grid_ref(active_point(0)).unwrap();
+        vt.resize(COLS, ROWS - 1, 0, 0).unwrap();
+        renderer.content_rows = ROWS - 1;
+        renderer.resize_flush_end = Some(end);
+        renderer.resize_flush_end_rows = Some(old_scrollback);
+        renderer.invalidate();
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+
+        let lines = replayed_lines_with_size(&out, COLS, ROWS - 1);
+        assert_eq!(
+            lines.iter().filter(|line| line.as_str() == "line0").count(),
+            0,
+            "resize output unexpectedly re-emitted dropped row: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn renderer_resize_does_not_reemit_soft_wrap_prefix() {
+        const OLD_COLS: u16 = 10;
+        const NEW_COLS: u16 = 16;
+        const TEST_ROWS: u16 = 5;
+
+        let mut vt = test_vt_with_size(OLD_COLS, TEST_ROWS, DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer_with_rows(TEST_ROWS, &vt);
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        renderer.feed(
+            &mut vt,
+            "abcdefghijABCDEFGHIJ\r\nline2\r\nline3\r\nline4\r\n",
+        );
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+
+        vt.resize(NEW_COLS, TEST_ROWS, 0, 0).unwrap();
+        renderer.invalidate();
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+        renderer.feed(&mut vt, "\r\nline5\r\nline6\r\nline7\r\nline8\r\n");
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+
+        let text = replayed_lines_with_size(&out, NEW_COLS, TEST_ROWS).join("\n");
+        assert_eq!(
+            text.matches("abcdefghij").count(),
+            1,
+            "re-emitted prefix: {text:?}"
+        );
+        assert_eq!(
+            text.matches("ABCDEF").count(),
+            1,
+            "lost continuation prefix: {text:?}"
+        );
+        assert_eq!(
+            text.matches("GHIJ").count(),
+            1,
+            "lost continuation suffix: {text:?}"
+        );
+    }
+
+    #[test]
+    fn renderer_resize_preserves_unflushed_scrollback() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        for i in 0..8 {
+            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+        }
+        assert!(renderer.unflushed(&vt) > 0);
+
+        // Resize with unflushed rows pending: history reflows, the pin
+        // follows, and the flush after resize emits the pending rows
+        // instead of discarding them. Capture the old viewport endpoint just
+        // as the session resize path does.
+        let old_scrollback = vt.scrollback_rows().unwrap();
+        let resize_end = vt.track_grid_ref(active_point(0)).unwrap();
+        vt.resize(COLS, ROWS - 1, 0, 0).unwrap();
+        renderer.content_rows = ROWS - 1;
+        renderer.resize_flush_end = Some(resize_end);
+        renderer.resize_flush_end_rows = Some(old_scrollback);
+        renderer.invalidate();
+        out.clear();
+        renderer.render_with_scroll(&mut out, &mut vt).unwrap();
+
+        let lines = replayed_lines_with_size(&out, COLS, ROWS - 1);
+        for i in 0..4 {
+            let expected = format!("line{}", i);
+            assert_eq!(
+                lines.iter().filter(|line| **line == expected).count(),
+                1,
+                "expected exactly one '{}' after resize, got {:?}",
+                expected,
+                lines
+            );
+        }
+        assert_eq!(
+            lines.iter().filter(|line| **line == "line4").count(),
+            0,
+            "old viewport row was re-flushed after resize: {lines:?}"
+        );
+    }
 
     fn filter_chunks(chunks: &[&[u8]]) -> Vec<u8> {
         let mut filter = VtInputFilter::new();

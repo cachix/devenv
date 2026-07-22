@@ -15078,13 +15078,13 @@ rec {
       };
       "libghostty-vt" = rec {
         crateName = "libghostty-vt";
-        version = "0.2.0";
+        version = "0.2.1";
         edition = "2024";
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/Uzaaft/libghostty-rs.git";
-          rev = "81b776c64fa96d8be0b243e0ebc383887c51eb38";
-          sha256 = "14495x2hxgs6pc4r4f800vnzyzfl10xgk7930nsqvad3vjh03mhw";
+          rev = "46a9d2ac941ed600cf43c5e6299c8dfd1d3a1ef0";
+          sha256 = "174p8h1jidygf0ilszvk15xwwi3r7b34d1ain30yiiq4n2k8b5cl";
         };
         libName = "libghostty_vt";
         dependencies = [
@@ -15120,15 +15120,15 @@ rec {
       };
       "libghostty-vt-sys" = rec {
         crateName = "libghostty-vt-sys";
-        version = "0.2.0";
+        version = "0.2.1";
         edition = "2024";
         links = "ghostty-vt";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/Uzaaft/libghostty-rs.git";
-          rev = "81b776c64fa96d8be0b243e0ebc383887c51eb38";
-          sha256 = "14495x2hxgs6pc4r4f800vnzyzfl10xgk7930nsqvad3vjh03mhw";
+          rev = "46a9d2ac941ed600cf43c5e6299c8dfd1d3a1ef0";
+          sha256 = "174p8h1jidygf0ilszvk15xwwi3r7b34d1ain30yiiq4n2k8b5cl";
         };
         libName = "libghostty_vt_sys";
         buildDependencies = [
