@@ -681,12 +681,14 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 }
                             }
                         }
-                        KeyCode::Down | KeyCode::Up => {
+                        KeyCode::Down | KeyCode::Char('j') | KeyCode::Up | KeyCode::Char('k') => {
                             if let Ok(model) = activity_model.read()
                                 && let Ok(mut ui) = ui_state.write()
                             {
                                 let selectable = model.get_selectable_activity_ids(&ui);
-                                ui.select_activity(&selectable, key_event.code == KeyCode::Down);
+                                let forward =
+                                    matches!(key_event.code, KeyCode::Down | KeyCode::Char('j'));
+                                ui.select_activity(&selectable, forward);
                                 if let Some(selected_id) = ui.selected_activity
                                     && *scroll_view_active.read()
                                 {
