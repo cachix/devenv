@@ -2162,21 +2162,31 @@ impl Devenv {
     /// Reserve ports already in use by a running native process manager so
     /// that Nix evaluation does not hand them out as fresh allocations.
     ///
-    /// Best-effort: failures are logged at debug level and do not propagate.
-    /// Inspects the native socket (not the PID file) because the socket is
-    /// created before processes reach readiness and the PID file is written.
+    /// Only seeds from a manager backed by a live PID file. A manager whose PID
+    /// file is gone is shutting down (or already dead): its socket can keep
+    /// answering for a window after the PID file is removed, and querying it
+    /// would seed stale allocations that a fresh `up` must not reuse. Seeding a
+    /// stale port made a second project reuse a port a first project already
+    /// held, crashing its process with "address already in use". Gating on the
+    /// PID file mirrors the liveness signal used by `up()`'s "already running"
+    /// guard.
+    ///
+    /// Best-effort: failures are logged at trace level and do not propagate.
     pub async fn reserve_running_ports(&self) {
-        let native_socket = self.native_socket_path();
-        if native_socket.exists() {
-            self.port_allocator.set_allow_in_use(false);
-        } else {
+        // A healthy native manager has both a live PID file and an answering
+        // socket. If the PID file is not alive, fall back to the generic
+        // running-processes check and do not seed from the socket.
+        let pid_status = processes::check_pid_file(&self.native_manager_pid_file()).await;
+        if !native_manager_seedable(pid_status.as_ref().ok()) {
             self.port_allocator
                 .set_allow_in_use(self.processes_running().await);
             return;
         }
 
+        self.port_allocator.set_allow_in_use(false);
+
         match processes::NativeProcessManager::api_request(
-            &native_socket,
+            &self.native_socket_path(),
             &processes::ApiRequest::Ports,
         )
         .await
@@ -2778,9 +2788,49 @@ fn resolve_builtin_cachix_auth_token(
         .map(|secret| secret.expose_secret().to_string()))
 }
 
+/// Whether a native process manager with the given PID-file status is healthy
+/// enough to seed port allocations from.
+///
+/// Only a live PID file qualifies. A missing, stale, or unreadable PID file
+/// (`None` when the check itself errored) means the manager is shutting down or
+/// already gone; its API socket can keep answering for a window after the PID
+/// file is removed. Seeding those stale allocations made a second project reuse
+/// a port the first still held, crashing its process with "address already in
+/// use". See `Devenv::reserve_running_ports`.
+fn native_manager_seedable(pid_status: Option<&processes::PidStatus>) -> bool {
+    matches!(pid_status, Some(processes::PidStatus::Running(_)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seeds_ports_only_from_a_live_native_manager() {
+        use processes::PidStatus;
+
+        let live = PidStatus::Running(Pid::from_raw(1));
+        assert!(
+            native_manager_seedable(Some(&live)),
+            "a manager with a live PID file must be seeded from"
+        );
+
+        // A manager whose PID file is gone or stale is shutting down: its socket
+        // may still answer with stale port allocations, so it must NOT be seeded
+        // from. This is the regression guard for the two-repos port collision.
+        assert!(
+            !native_manager_seedable(Some(&PidStatus::NotFound)),
+            "a missing PID file must not seed"
+        );
+        assert!(
+            !native_manager_seedable(Some(&PidStatus::StaleRemoved)),
+            "a stale PID file must not seed"
+        );
+        assert!(
+            !native_manager_seedable(None),
+            "an errored PID check must not seed"
+        );
+    }
 
     #[test]
     fn built_in_cachix_manifest_requires_no_project_manifest() {
