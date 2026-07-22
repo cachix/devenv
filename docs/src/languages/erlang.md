@@ -51,7 +51,7 @@ package
 *Default:*
 
 ```nix
-pkgs.erlang
+pkgs.beamPackages.erlang
 ```
 
 *Declared by:*
