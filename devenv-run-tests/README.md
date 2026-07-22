@@ -45,6 +45,7 @@ Outputs JSON metadata for all discovered tests (used by CI):
 ```bash
 devenv-run-tests generate-json [directories...]
 devenv-run-tests generate-json --all  # include tests unsupported on current system
+devenv-run-tests generate-json --system aarch64-darwin  # filter for a specific system
 ```
 
 ## Writing tests

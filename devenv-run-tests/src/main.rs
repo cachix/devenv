@@ -76,6 +76,13 @@ struct GenerateJsonArgs {
 
     #[clap(long, help = "Include all tests regardless of current system support")]
     all: bool,
+
+    #[clap(
+        long,
+        conflicts_with = "all",
+        help = "Filter tests for this system instead of the current system (e.g. aarch64-darwin)"
+    )]
+    system: Option<String>,
 }
 
 enum TestStatus {
@@ -717,8 +724,8 @@ async fn generate_json(args: &GenerateJsonArgs) -> Result<()> {
     let mut test_infos = discover_tests(&args.directories)?;
 
     if !args.all {
-        let current_system = get_current_system();
-        test_infos.retain(|info| !info.config.should_skip_for_system(&current_system));
+        let system = args.system.clone().unwrap_or_else(get_current_system);
+        test_infos.retain(|info| !info.config.should_skip_for_system(&system));
     }
 
     // Extract just the metadata for JSON output

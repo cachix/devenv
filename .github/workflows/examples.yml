@@ -69,18 +69,20 @@ jobs:
         id: set-examples
         env:
           ONLY: ${{ inputs.only }}
-        # Get test metadata filtered for current system
+          SYSTEM: ${{ inputs.system }}
+        # Get test metadata filtered for the target system
         run: |
           set -euxo pipefail
           if [ -n "$ONLY" ]; then
-            examples=$(devenv-run-tests generate-json examples | jq -c "[.[] | select(.name == \"$ONLY\")]")
+            examples=$(devenv-run-tests generate-json --system "$SYSTEM" examples | jq -c "[.[] | select(.name == \"$ONLY\")]")
           else
-            examples=$(devenv-run-tests generate-json examples)
+            examples=$(devenv-run-tests generate-json --system "$SYSTEM" examples)
           fi
           echo "examples=$examples" >> $GITHUB_OUTPUT
 
   examples:
     needs: [generate-examples]
+    if: ${{ needs.generate-examples.outputs.examples != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     name: ${{ matrix.example.name }} (${{ inputs.system }})
 
