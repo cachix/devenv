@@ -26,7 +26,7 @@ use crossterm::{
 use libghostty_vt::render::{CellIterator, Dirty, RenderState, RowIteration, RowIterator};
 use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef, Screen, TrackedGridRef};
 use libghostty_vt::style::{Style, StyleColor, Underline};
-use libghostty_vt::terminal::{Options as TerminalOptions, Point, PointSpace, Terminal};
+use libghostty_vt::terminal::{Mode, Options as TerminalOptions, Point, PointSpace, Terminal};
 use portable_pty::PtySize;
 use std::fmt::Write as FmtWrite;
 use std::io::{self, IsTerminal, Read, Write};
@@ -219,6 +219,11 @@ fn dump_row_from_render_state<'a>(
     grapheme_buf: &mut Vec<char>,
 ) -> Result<(), libghostty_vt::Error> {
     cells_buf.clear();
+    // Ghostty tracks whether a row contains any ref-counted styles. The flag
+    // may have false positives but no false negatives, so plain-text rows can
+    // skip one FFI query per cell without missing styled content. Background-
+    // only cells are stored in the content tag and remain handled below.
+    let row_styled = row.raw_row()?.is_styled()?;
     let default_style = Style::default();
     let mut cur_style = default_style;
     let mut blank_cells = 0usize;
@@ -231,12 +236,27 @@ fn dump_row_from_render_state<'a>(
             continue;
         }
 
-        let has_text = cell.has_text()?;
-        let has_styling = cell.has_styling()?;
-        let tag = cell.content_tag().ok();
+        let tag = cell.content_tag()?;
+        // Derive text presence from data that encoding needs anyway. This
+        // avoids a separate `has_text` FFI call for every cell.
+        let mut codepoint = None;
+        let mut grapheme_len = 0;
+        let has_text = match tag {
+            CellContentTag::Codepoint => {
+                let cp = cell.codepoint()?;
+                codepoint = Some(cp);
+                cp != 0
+            }
+            CellContentTag::CodepointGrapheme => {
+                grapheme_len = render_cell.graphemes_len()?;
+                grapheme_len > 0
+            }
+            CellContentTag::BgColorPalette | CellContentTag::BgColorRgb => false,
+        };
+        let has_styling = row_styled && cell.has_styling()?;
         let is_bg_only = matches!(
             tag,
-            Some(CellContentTag::BgColorPalette | CellContentTag::BgColorRgb)
+            CellContentTag::BgColorPalette | CellContentTag::BgColorRgb
         );
         if !has_text && !has_styling && !is_bg_only {
             blank_cells += 1;
@@ -248,28 +268,27 @@ fn dump_row_from_render_state<'a>(
         }
 
         let new_style = match tag {
-            Some(CellContentTag::Codepoint | CellContentTag::CodepointGrapheme) => {
+            CellContentTag::Codepoint | CellContentTag::CodepointGrapheme => {
                 if has_styling {
                     render_cell.style().unwrap_or(default_style)
                 } else {
                     default_style
                 }
             }
-            Some(CellContentTag::BgColorPalette) => {
+            CellContentTag::BgColorPalette => {
                 let mut style = default_style;
                 if let Ok(idx) = cell.bg_color_palette() {
                     style.bg_color = StyleColor::Palette(idx);
                 }
                 style
             }
-            Some(CellContentTag::BgColorRgb) => {
+            CellContentTag::BgColorRgb => {
                 let mut style = default_style;
                 if let Ok(rgb) = cell.bg_color_rgb() {
                     style.bg_color = StyleColor::Rgb(rgb);
                 }
                 style
             }
-            None => default_style,
         };
         if new_style != cur_style {
             if new_style == default_style {
@@ -281,13 +300,13 @@ fn dump_row_from_render_state<'a>(
         }
 
         match tag {
-            Some(CellContentTag::Codepoint) if has_text => {
-                if let Some(ch) = cell.codepoint().ok().and_then(char::from_u32) {
+            CellContentTag::Codepoint if has_text => {
+                if let Some(ch) = codepoint.and_then(char::from_u32) {
                     buf.push(ch);
                 }
             }
-            Some(CellContentTag::CodepointGrapheme) if has_text => {
-                grapheme_buf.resize(render_cell.graphemes_len()?, '\0');
+            CellContentTag::CodepointGrapheme if has_text => {
+                grapheme_buf.resize(grapheme_len, '\0');
                 render_cell.graphemes_buf(grapheme_buf)?;
                 buf.extend(grapheme_buf.iter().copied());
             }
@@ -503,6 +522,13 @@ fn primary_height_shrunk(
     new_native_rows < old_native_rows && active == Some(Screen::Primary)
 }
 
+/// Whether the PTY application has asked us to defer presentation with
+/// synchronized output (DEC mode 2026). While this is active, emitting our
+/// own end marker would prematurely expose an intermediate frame.
+fn synchronized_output_active(vt: &Terminal<'_, '_>) -> bool {
+    vt.mode(Mode::SYNC_OUTPUT).unwrap_or(false)
+}
+
 struct Renderer<'a> {
     /// Previous frame for diffing — one line of cells per row.
     prev_lines: Vec<Vec<Cell>>,
@@ -711,16 +737,29 @@ impl<'a> Renderer<'a> {
         let mut dirty_pass_done = false;
         match render_state.update(vt) {
             Ok(snapshot) => {
-                let clean = matches!(snapshot.dirty(), Ok(Dirty::Clean));
+                let dirty = snapshot.dirty().unwrap_or(Dirty::Full);
+                let clean = dirty == Dirty::Clean;
+                // Ghostty also reports Full when the viewport pin moves. Our
+                // scroll path has already rotated the native-output baseline,
+                // so retain its compare-before-encode path for those frames.
+                // Other global changes still require a forced row rebuild.
+                let force_full = dirty == Dirty::Full && !scrolled;
                 if trust_dirty && clean && baseline_valid {
                     dirty_pass_done = true;
                 } else if let Ok(mut iteration) = row_iter.update(&snapshot) {
                     let mut row_idx = 0usize;
                     while let Some(row) = iteration.next() {
                         if row_idx < visible {
-                            let must_fetch =
-                                !trust_dirty || !baseline_valid || row.dirty().unwrap_or(true);
+                            let must_fetch = force_full
+                                || !trust_dirty
+                                || !baseline_valid
+                                || row.dirty().unwrap_or(true);
                             if must_fetch {
+                                // A full dirty state represents global changes
+                                // (screen, viewport, dimensions, or terminal
+                                // state), so raw-cell equality is insufficient.
+                                // Ghostty's renderer rebuilds every row here.
+                                let row_baseline_valid = baseline_valid && !force_full;
                                 let drawn = draw_render_state_row_if_changed(
                                     stdout,
                                     row,
@@ -728,8 +767,8 @@ impl<'a> Renderer<'a> {
                                     compare_cell_iter,
                                     row_idx,
                                     offset,
-                                    baseline_valid,
-                                    !trust_dirty && baseline_valid,
+                                    row_baseline_valid,
+                                    !force_full && !trust_dirty && baseline_valid,
                                     prev_lines,
                                     cells_buf,
                                     grapheme_buf,
@@ -741,7 +780,7 @@ impl<'a> Renderer<'a> {
                                         vt,
                                         row_idx,
                                         offset,
-                                        baseline_valid,
+                                        row_baseline_valid,
                                         prev_lines,
                                         cells_buf,
                                         line_buf,
@@ -1481,7 +1520,7 @@ impl ShellSession {
                 match event_rx.recv_timeout(spinner_interval) {
                     Ok(event) => Some(event),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        if self.config.show_status_line {
+                        if self.config.show_status_line && !synchronized_output_active(vt) {
                             queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                             self.status_line
                                 .draw(stdout, self.size.cols, self.size.rows)?;
@@ -1498,7 +1537,7 @@ impl ShellSession {
                     Ok(event) => Some(event),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         self.status_line.state_mut().clear_reloaded();
-                        if self.config.show_status_line {
+                        if self.config.show_status_line && !synchronized_output_active(vt) {
                             queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                             self.status_line
                                 .draw(stdout, self.size.cols, self.size.rows)?;
@@ -1536,6 +1575,7 @@ impl ShellSession {
                         let state = self.status_line.state_mut();
                         if state.error.is_some() {
                             state.show_error = !state.show_error;
+                            let synchronized = synchronized_output_active(vt);
                             if state.show_error {
                                 let error = state.error.clone().unwrap();
                                 let mut error_text =
@@ -1545,19 +1585,23 @@ impl ShellSession {
                                 }
                                 error_text.push_str("\r\n");
                                 renderer.feed(vt, &error_text);
-                                if renderer.row_offset > 0 {
-                                    renderer.render(stdout, vt)?;
-                                } else {
-                                    renderer.render_with_scroll(stdout, vt)?;
+                                if !synchronized {
+                                    if renderer.row_offset > 0 {
+                                        renderer.render(stdout, vt)?;
+                                    } else {
+                                        renderer.render_with_scroll(stdout, vt)?;
+                                    }
                                 }
                             } else {
                                 pty.write_all(&[0x0C])?;
                                 pty.flush()?;
                             }
-                            self.status_line
-                                .draw(stdout, self.size.cols, self.size.rows)?;
-                            renderer.write_cursor(stdout, vt)?;
-                            stdout.flush()?;
+                            if !synchronized {
+                                self.status_line
+                                    .draw(stdout, self.size.cols, self.size.rows)?;
+                                renderer.write_cursor(stdout, vt)?;
+                                stdout.flush()?;
+                            }
                         }
                         continue;
                     }
@@ -1569,7 +1613,12 @@ impl ShellSession {
 
                 Event::PtyOutput(data) => {
                     let was_in_alt = esc.in_alternate_screen;
-                    esc.reset_batch();
+                    // Preserve deferred erase/scrollback flags across an
+                    // application-controlled synchronized-output window.
+                    // They are consumed when mode 2026 is released.
+                    if !synchronized_output_active(vt) {
+                        esc.reset_batch();
+                    }
                     escape_state_process(
                         &mut scanner,
                         &data,
@@ -1603,8 +1652,14 @@ impl ShellSession {
                                 total_scroll += renderer.feed(vt, &text);
                             }
                             Event::PtyExit(exit_code) => {
+                                let synchronized = synchronized_output_active(vt);
                                 escape_state_cleanup(&esc, stdout)?;
+                                if !synchronized {
+                                    queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+                                }
                                 renderer.render_with_scroll(stdout, vt)?;
+                                queue!(stdout, terminal::EndSynchronizedUpdate)?;
+                                stdout.flush()?;
                                 return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
@@ -1621,6 +1676,15 @@ impl ShellSession {
                                 break;
                             }
                         }
+                    }
+
+                    // Match Ghostty's renderer: do not snapshot or draw an
+                    // intermediate terminal state while the application owns
+                    // a synchronized-output window. Forwarded control
+                    // sequences still need to reach the native terminal.
+                    if synchronized_output_active(vt) {
+                        stdout.flush()?;
+                        continue;
                     }
 
                     // Begin synchronized output so the terminal buffers
@@ -1640,7 +1704,9 @@ impl ShellSession {
                         let visible_rows = renderer.visible_rows();
                         let cursor_row = vt.cursor_y().map(|r| r as usize).unwrap_or(0);
                         let cursor_excess = (cursor_row + 1).saturating_sub(visible_rows);
-                        let need = total_scroll.max(cursor_excess);
+                        // `pending_scroll` spans every batch deferred by mode
+                        // 2026, whereas `total_scroll` only covers this batch.
+                        let need = renderer.pending_scroll.max(total_scroll).max(cursor_excess);
 
                         let consumed = if esc.in_alternate_screen || esc.erase_display {
                             // Alternate screen or explicit screen clear (CSI 2J):
@@ -1679,14 +1745,26 @@ impl ShellSession {
                 }
 
                 Event::PtyExit(exit_code) => {
+                    let synchronized = synchronized_output_active(vt);
+                    if synchronized {
+                        // Present the final deferred frame before releasing
+                        // mode 2026, even if the child exits without doing so.
+                        renderer.render_with_scroll(stdout, vt)?;
+                    }
                     self.clear_status_row(stdout, esc.in_alternate_screen)?;
                     escape_state_cleanup(&esc, stdout)?;
+                    if synchronized {
+                        queue!(stdout, terminal::EndSynchronizedUpdate)?;
+                    }
                     stdout.flush()?;
                     return Ok(exit_code);
                 }
 
                 Event::Command(cmd) => {
                     self.handle_command(cmd, vt, renderer)?;
+                    if synchronized_output_active(vt) {
+                        continue;
+                    }
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
                     if renderer.row_offset > 0 {
                         renderer.render(stdout, vt)?;
@@ -1754,12 +1832,14 @@ impl ShellSession {
                         // pending prefix; rows moved out of the old viewport
                         // are already present in native scrollback.
                         renderer.invalidate();
-                        renderer.render_with_scroll(stdout, vt)?;
-                        if self.config.show_status_line && !esc.in_alternate_screen {
-                            self.status_line.draw(stdout, cols, rows)?;
+                        if !synchronized_output_active(vt) {
+                            renderer.render_with_scroll(stdout, vt)?;
+                            if self.config.show_status_line && !esc.in_alternate_screen {
+                                self.status_line.draw(stdout, cols, rows)?;
+                            }
+                            renderer.write_cursor(stdout, vt)?;
+                            stdout.flush()?;
                         }
-                        renderer.write_cursor(stdout, vt)?;
-                        stdout.flush()?;
                         if let Err(e) = coordinator_tx.try_send(ShellEvent::Resize {
                             cols: pty_size.cols,
                             rows: pty_size.rows,
@@ -1771,8 +1851,15 @@ impl ShellSession {
             }
         }
 
+        let synchronized = synchronized_output_active(vt);
+        if synchronized {
+            renderer.render_with_scroll(stdout, vt)?;
+        }
         self.clear_status_row(stdout, esc.in_alternate_screen)?;
         escape_state_cleanup(&esc, stdout)?;
+        if synchronized {
+            queue!(stdout, terminal::EndSynchronizedUpdate)?;
+        }
         stdout.flush()?;
         Ok(None)
     }
@@ -2126,6 +2213,36 @@ mod tests {
             out.len(),
             String::from_utf8_lossy(&out)
         );
+    }
+
+    #[test]
+    fn renderer_full_dirty_redraws_unchanged_rows() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        // Switching screens is globally dirty even when both screens contain
+        // identical blank cells. Raw-cell diffing must not suppress the full
+        // rebuild requested by Ghostty's render state.
+        renderer.feed(&mut vt, "\x1b[?1049h");
+        out.clear();
+        renderer.render(&mut out, &vt).unwrap();
+
+        let clears = out.windows(4).filter(|w| *w == b"\x1b[2K").count();
+        assert_eq!(clears, ROWS as usize);
+    }
+
+    #[test]
+    fn synchronized_output_mode_is_detected() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        assert!(!synchronized_output_active(&vt));
+
+        vt.vt_write(b"\x1b[?2026hintermediate");
+        assert!(synchronized_output_active(&vt));
+
+        vt.vt_write(b"\x1b[?2026lfinal");
+        assert!(!synchronized_output_active(&vt));
     }
 
     #[test]
