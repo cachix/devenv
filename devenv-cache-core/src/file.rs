@@ -2,6 +2,7 @@ use crate::error::{CacheError, CacheResult};
 use crate::time;
 use blake3::Hasher;
 use std::io;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use walkdir::WalkDir;
@@ -143,6 +144,22 @@ pub fn compute_file_hash<P: AsRef<Path>>(path: P) -> CacheResult<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
+/// Compute the content identity of a regular file copied into the Nix store.
+///
+/// Nix archives preserve the owner's executable bit in addition to file
+/// contents. Other permission bits are normalized and therefore intentionally
+/// ignored.
+pub fn compute_source_file_hash<P: AsRef<Path>>(path: P) -> CacheResult<String> {
+    let path = path.as_ref();
+    let content_hash = compute_file_hash(path)?;
+    let metadata = get_metadata(path)?;
+    let executable = metadata.permissions().mode() & 0o100 != 0;
+
+    Ok(compute_string_hash(&format!(
+        "file {content_hash} executable={executable}"
+    )))
+}
+
 /// Compute a hash of a directory's contents.
 ///
 /// Returns `Ok(None)` for an empty directory.
@@ -227,7 +244,7 @@ pub fn compute_directory_content_hash<P: AsRef<Path>>(path: P) -> CacheResult<St
                         .unwrap_or_default();
                     entries.push(format!("symlink {rel} -> {target}"));
                 } else {
-                    match compute_file_hash(entry.path()) {
+                    match compute_source_file_hash(entry.path()) {
                         Ok(hash) => entries.push(format!("file {rel} {hash}")),
                         Err(_) => entries.push(format!("file_error {rel}")),
                     }
@@ -254,6 +271,7 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
     #[test]
@@ -326,6 +344,42 @@ mod tests {
             compute_directory_content_hash(a.path()).unwrap(),
             compute_directory_content_hash(b.path()).unwrap(),
         );
+    }
+
+    #[test]
+    fn test_source_file_hash_detects_executable_bit_changes() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("script.sh");
+        std::fs::write(&file_path, b"#!/bin/sh\nexit 0\n").unwrap();
+
+        let mut permissions = std::fs::metadata(&file_path).unwrap().permissions();
+        permissions.set_mode(0o644);
+        std::fs::set_permissions(&file_path, permissions.clone()).unwrap();
+        let non_executable = compute_source_file_hash(&file_path).unwrap();
+
+        permissions.set_mode(0o744);
+        std::fs::set_permissions(&file_path, permissions).unwrap();
+        let executable = compute_source_file_hash(&file_path).unwrap();
+
+        assert_ne!(non_executable, executable);
+    }
+
+    #[test]
+    fn test_directory_content_hash_detects_executable_bit_changes() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("script.sh");
+        std::fs::write(&file_path, b"#!/bin/sh\nexit 0\n").unwrap();
+
+        let mut permissions = std::fs::metadata(&file_path).unwrap().permissions();
+        permissions.set_mode(0o644);
+        std::fs::set_permissions(&file_path, permissions.clone()).unwrap();
+        let non_executable = compute_directory_content_hash(temp_dir.path()).unwrap();
+
+        permissions.set_mode(0o744);
+        std::fs::set_permissions(&file_path, permissions).unwrap();
+        let executable = compute_directory_content_hash(temp_dir.path()).unwrap();
+
+        assert_ne!(non_executable, executable);
     }
 
     #[test]

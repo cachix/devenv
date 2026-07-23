@@ -19,5 +19,6 @@ pub mod time;
 pub use db::Database;
 pub use error::{CacheError, CacheResult};
 pub use file::{
-    TrackedFile, compute_directory_content_hash, compute_file_hash, compute_string_hash,
+    TrackedFile, compute_directory_content_hash, compute_file_hash, compute_source_file_hash,
+    compute_string_hash,
 };

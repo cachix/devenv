@@ -3,7 +3,7 @@
 //! This module provides core types for caching evaluation results
 //! when using the FFI backend instead of the CLI backend.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -130,75 +130,65 @@ impl OpObserver for InputTracker {
 ///
 /// This is the core conversion logic that:
 /// 1. Filters out irrelevant paths (nix store, excluded, non-absolute)
-/// 2. Creates `FileInputDesc` for file operations
-/// 3. Creates `EnvInputDesc` for environment variable access
+/// 2. Coalesces file operations by path, with copied-source tracking taking precedence
+/// 3. Creates `FileInputDesc` and `EnvInputDesc` values
 /// 4. Adds extra watch paths
-/// 5. Deduplicates the result
 pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConfig) -> Vec<Input> {
     let fallback_time = SystemTime::now();
-    let mut inputs: Vec<Input> = Vec::new();
+    let mut paths: BTreeMap<PathBuf, bool> = BTreeMap::new();
+    let mut env_names: BTreeSet<String> = BTreeSet::new();
 
     for op in ops {
-        // A directory must be hashed recursively over its contents when its whole
-        // tree ends up in the Nix store (`copied source`, tracked devenv paths).
-        // `readDir` and friends only observe the listing, so name-only hashing is
-        // sufficient and avoids spurious invalidation.
-        let recursive = matches!(op, EvalOp::CopiedSource { .. } | EvalOp::TrackedPath { .. });
-        match op {
+        let (source, recursive) = match op {
             EvalOp::ReadFile { source }
             | EvalOp::ReadDir { source }
             | EvalOp::PathExists { source }
-            | EvalOp::EvaluatedFile { source }
-            | EvalOp::TrackedPath { source }
-            | EvalOp::CopiedSource { source, .. } => {
-                // Skip nix store paths (immutable)
-                if source.starts_with("/nix/store") {
-                    continue;
-                }
-
-                // Skip non-absolute paths
-                if !source.is_absolute() {
-                    continue;
-                }
-
-                // Skip excluded paths
-                if config
-                    .excluded_paths
-                    .iter()
-                    .any(|excluded| source.starts_with(excluded))
-                {
-                    continue;
-                }
-
-                // Create file input descriptor
-                if let Ok(desc) = FileInputDesc::new(source, fallback_time, recursive) {
-                    inputs.push(Input::File(desc));
-                }
-            }
+            | EvalOp::EvaluatedFile { source } => (source, false),
+            EvalOp::TrackedPath { source } | EvalOp::CopiedSource { source, .. } => (source, true),
             EvalOp::GetEnv { name } => {
-                // Skip excluded env vars (already tracked elsewhere, e.g., via NixArgs)
-                if config.excluded_envs.contains(&name) {
-                    continue;
+                if !config.excluded_envs.contains(&name) {
+                    env_names.insert(name);
                 }
-                // Create env input descriptor
-                if let Ok(desc) = EnvInputDesc::new(name) {
-                    inputs.push(Input::Env(desc));
-                }
+                continue;
             }
+        };
+
+        if source.starts_with("/nix/store")
+            || !source.is_absolute()
+            || config
+                .excluded_paths
+                .iter()
+                .any(|excluded| source.starts_with(excluded))
+        {
+            continue;
         }
+
+        paths
+            .entry(source)
+            .and_modify(|existing| *existing |= recursive)
+            .or_insert(recursive);
     }
 
     // Add extra watch paths. These are meant to trigger re-evaluation on any
     // change, so watch directories recursively.
     for path in &config.extra_watch_paths {
-        if let Ok(desc) = FileInputDesc::new(path.clone(), fallback_time, true) {
-            inputs.push(Input::File(desc));
-        }
+        paths
+            .entry(path.clone())
+            .and_modify(|recursive| *recursive = true)
+            .or_insert(true);
     }
 
-    // Sort and deduplicate
-    inputs.sort();
-    inputs.dedup_by(Input::dedup);
+    let mut inputs = Vec::with_capacity(paths.len() + env_names.len());
+    inputs.extend(paths.into_iter().filter_map(|(path, recursive)| {
+        FileInputDesc::new(path, fallback_time, recursive)
+            .ok()
+            .map(Input::File)
+    }));
+    inputs.extend(
+        env_names
+            .into_iter()
+            .filter_map(|name| EnvInputDesc::new(name).ok().map(Input::Env)),
+    );
 
     inputs
 }
@@ -206,6 +196,7 @@ pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConf
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     // Note: EvalCacheKey tests require NixArgs which is complex to construct in unit tests.
     // Key determinism and differentiation are tested through integration tests.
@@ -316,5 +307,29 @@ mod tests {
         let inputs = ops_to_inputs(ops, &CachingConfig::default());
         assert_eq!(inputs.len(), 1);
         assert!(matches!(inputs[0], Input::Env(ref e) if e.name == "MY_VAR"));
+    }
+
+    #[test]
+    fn test_ops_to_inputs_coalesces_path_with_copied_source_precedence() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(temp_dir.path().join("source.txt"), b"source").unwrap();
+        let source = temp_dir.path().to_path_buf();
+        let ops = vec![
+            EvalOp::ReadDir {
+                source: source.clone(),
+            },
+            EvalOp::CopiedSource {
+                source: source.clone(),
+                target: PathBuf::from("/nix/store/example-source"),
+            },
+        ];
+
+        let inputs = ops_to_inputs(ops, &CachingConfig::default());
+
+        assert_eq!(inputs.len(), 1);
+        assert!(
+            matches!(&inputs[0], Input::File(desc) if desc.path == source && desc.recursive),
+            "a copied-source observation must subsume a weaker readDir observation"
+        );
     }
 }

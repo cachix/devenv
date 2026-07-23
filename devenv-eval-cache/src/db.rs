@@ -615,6 +615,43 @@ mod tests {
 
     use super::*;
     use sqlx::SqlitePool;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[tokio::test]
+    async fn test_recursive_tracking_migration_invalidates_existing_evals() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        MIGRATIONS.run_to(20260116000000, &pool).await.unwrap();
+
+        sqlx::query(
+            r#"
+            INSERT INTO cached_eval (key_hash, attr_name, input_hash, json_output)
+            VALUES ('old-key', 'old.attr', 'old-input', '{}')
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        MIGRATIONS.run(&pool).await.unwrap();
+
+        let cached_eval_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cached_eval")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(cached_eval_count, 0);
+
+        let recursive_column_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM pragma_table_info('file_input') WHERE name = 'recursive'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(recursive_column_count, 1);
+    }
 
     #[sqlx::test]
     async fn test_insert_and_retrieve_eval(pool: SqlitePool) {

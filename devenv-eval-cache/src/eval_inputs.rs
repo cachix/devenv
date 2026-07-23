@@ -3,7 +3,10 @@
 //! This module contains types that describe file and environment variable
 //! dependencies tracked during Nix evaluation for caching purposes.
 
-use devenv_cache_core::{compute_directory_content_hash, compute_file_hash, compute_string_hash};
+use devenv_cache_core::{
+    compute_directory_content_hash, compute_file_hash, compute_source_file_hash,
+    compute_string_hash,
+};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -54,6 +57,7 @@ impl Input {
                     || f.path == g.path
                         && f.content_hash == g.content_hash
                         && f.is_directory == g.is_directory
+                        && f.recursive == g.recursive
             }
             (Self::Env(f), Self::Env(g)) => f == g,
             _ => false,
@@ -66,12 +70,12 @@ impl Input {
 pub struct FileInputDesc {
     pub path: PathBuf,
     pub is_directory: bool,
-    /// Whether a directory must be hashed recursively over its contents.
+    /// Whether this path is copied into the Nix store.
     ///
-    /// `true` for sources copied into the Nix store (`copied source`, tracked
-    /// devenv paths), where a change to any nested file changes what ends up in
-    /// the store. `false` for directories that were only listed (`readDir`),
-    /// where only the set of immediate entry names matters. Ignored for files.
+    /// For directories, copied paths are hashed recursively over their contents.
+    /// For files, copied paths include the owner's executable bit in their hash.
+    /// `false` inputs retain the cheaper observation-specific hashing used by
+    /// operations such as `readFile` and `readDir`.
     pub recursive: bool,
     pub content_hash: Option<String>,
     pub modified_at: SystemTime,
@@ -109,6 +113,10 @@ impl FileInputDesc {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
             Some(hash_directory(&path, recursive)?)
+        } else if recursive {
+            compute_source_file_hash(&path)
+                .map_err(|e| std::io::Error::other(format!("Failed to hash source file: {e}")))
+                .ok()
         } else {
             compute_path_hash(&path, false).ok()
         };
@@ -234,6 +242,9 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
     if file.content_hash.is_none() {
         let new_hash = if metadata.is_dir() {
             hash_directory(&file.path, file.recursive)?
+        } else if file.recursive {
+            compute_source_file_hash(&file.path)
+                .map_err(|e| io::Error::other(format!("Failed to hash source file: {e}")))?
         } else {
             compute_path_hash(&file.path, false)?
         };
@@ -245,11 +256,9 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
 
     let mtime_unchanged = modified_at == file.modified_at;
 
-    // Fast path: for files and non-recursive directories, an unchanged mtime
-    // means the input is unchanged. Recursively-hashed directories cannot use
-    // this, because editing a file nested inside the directory does not bump the
-    // directory's own mtime.
-    let needs_rehash = file.is_directory && file.recursive;
+    // Copied paths cannot use the mtime fast path: nested edits do not update a
+    // directory's mtime, and chmod does not update a regular file's mtime.
+    let needs_rehash = file.recursive;
     if mtime_unchanged && !needs_rehash {
         return Ok(FileState::Unchanged);
     }
@@ -261,7 +270,12 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
         }
         hash_directory(&file.path, file.recursive)?
     } else {
-        compute_path_hash(&file.path, false)?
+        let hash = if file.recursive {
+            compute_source_file_hash(&file.path)
+        } else {
+            compute_file_hash(&file.path)
+        };
+        hash.map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))?
     };
 
     if Some(&new_hash) == file.content_hash.as_ref() {
@@ -343,6 +357,7 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
     fn create_file_row(temp_dir: &TempDir, content: &[u8]) -> FileInputDesc {
@@ -426,6 +441,7 @@ mod tests {
         let missing_row = FileInputDesc {
             path: file_path,
             is_directory: false,
+            recursive: false,
             content_hash: None,
             modified_at: mtime,
         };
@@ -448,6 +464,7 @@ mod tests {
         let missing_row = FileInputDesc {
             path: dir_path,
             is_directory: false,
+            recursive: false,
             content_hash: None,
             modified_at: mtime,
         };
@@ -464,6 +481,7 @@ mod tests {
         let missing_row = FileInputDesc {
             path: temp_dir.path().join("never-existed.txt"),
             is_directory: false,
+            recursive: false,
             content_hash: None,
             modified_at: UNIX_EPOCH,
         };
@@ -566,6 +584,26 @@ mod tests {
         assert!(
             matches!(check_file_state(&desc), Ok(FileState::Modified { .. })),
             "nested content change must invalidate a recursively-tracked directory"
+        );
+    }
+
+    #[test]
+    fn test_check_state_detects_executable_bit_change_for_copied_file() {
+        let temp_dir = TempDir::with_prefix("test_check_state_executable").unwrap();
+        let file_path = temp_dir.path().join("script.sh");
+        std::fs::write(&file_path, b"#!/bin/sh\nexit 0\n").unwrap();
+
+        let mut permissions = std::fs::metadata(&file_path).unwrap().permissions();
+        permissions.set_mode(0o644);
+        std::fs::set_permissions(&file_path, permissions.clone()).unwrap();
+        let desc = FileInputDesc::new(file_path.clone(), UNIX_EPOCH, true).unwrap();
+
+        permissions.set_mode(0o744);
+        std::fs::set_permissions(&file_path, permissions).unwrap();
+
+        assert!(
+            matches!(check_file_state(&desc), Ok(FileState::Modified { .. })),
+            "changing the executable bit must invalidate a copied file"
         );
     }
 
