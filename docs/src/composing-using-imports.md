@@ -29,4 +29,25 @@ For example, ``devenv up`` will start both the frontend and backend processes.
     Composing ``devenv.yaml`` files is now supported for local files (relative and absolute paths).
     Remote inputs are not yet supported for ``devenv.yaml`` imports.
 
+## Sharing configuration from another repository
+
+To keep your devenv configuration in a separate repository, for example when working on a team that doesn't use devenv, declare it as a `path:` input and import it:
+
+```yaml title="devenv.yaml"
+inputs:
+  shared-config:
+    url: path:../shared-config/
+    flake: false
+imports:
+- shared-config
+```
+
+The sibling `shared-config` repository only needs a `devenv.nix` file.
+Combine this with [profiles](profiles.md) to define one shared configuration that adapts to each project.
+
+!!! tip "New in version 2.2"
+
+    Changes to files in local `path:` inputs are picked up automatically.
+    Previously the evaluation cache held on to the old configuration until `.devenv` was deleted.
+
 See [devenv.yaml reference](reference/yaml-options.md#imports) for all supported import options.

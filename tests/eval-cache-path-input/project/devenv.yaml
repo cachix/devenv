@@ -1,0 +1,8 @@
+inputs:
+  config-repo:
+    url: path:../config-repo/
+    flake: false
+  metadata:
+    url: path:../metadata-flake/
+imports:
+  - config-repo

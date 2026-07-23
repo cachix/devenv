@@ -5,7 +5,7 @@
 
 use devenv_cache_core::{compute_file_hash, compute_string_hash};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// An input dependency tracked during evaluation.
@@ -97,16 +97,9 @@ impl FileInputDesc {
     pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
-            let mut paths: Vec<String> = std::fs::read_dir(&path)?
-                .filter_map(Result::ok)
-                .map(|entry| entry.path().to_string_lossy().to_string())
-                .collect();
-            paths.sort();
-            Some(compute_string_hash(&paths.join("\n")))
+            Some(compute_path_hash(&path, true)?)
         } else {
-            compute_file_hash(&path)
-                .map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))
-                .ok()
+            compute_path_hash(&path, false).ok()
         };
         let modified_at = truncate_to_seconds(
             path.metadata()
@@ -153,6 +146,23 @@ impl EnvInputDesc {
     }
 }
 
+/// Compute the content hash for a path.
+///
+/// Directories hash their immediate entry names; files hash their contents.
+fn compute_path_hash(path: &Path, is_directory: bool) -> io::Result<String> {
+    if is_directory {
+        let mut paths: Vec<String> = std::fs::read_dir(path)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().to_string_lossy().to_string())
+            .collect();
+        paths.sort();
+        Ok(compute_string_hash(&paths.join("\n")))
+    } else {
+        compute_file_hash(path)
+            .map_err(|e| io::Error::other(format!("Failed to compute file hash: {e}")))
+    }
+}
+
 /// Represents the various states of "modified" that we care about.
 #[derive(Debug)]
 pub enum FileState {
@@ -183,6 +193,20 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
     };
 
     let modified_at = metadata.modified().and_then(truncate_to_seconds)?;
+
+    // The path had no content hash when cached: it did not exist (its
+    // modified_at is a fallback snapshot timestamp, not a real mtime) or it
+    // could not be hashed. It is readable now, so treat it as modified. The
+    // mtime equality check below would mask a creation that happened in the
+    // same second as the snapshot.
+    if file.content_hash.is_none() {
+        let new_hash = compute_path_hash(&file.path, metadata.is_dir())?;
+        return Ok(FileState::Modified {
+            new_hash,
+            modified_at,
+        });
+    }
+
     if modified_at == file.modified_at {
         // File has not been modified
         return Ok(FileState::Unchanged);
@@ -194,15 +218,9 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
             return Ok(FileState::Removed);
         }
 
-        let mut paths: Vec<String> = std::fs::read_dir(&file.path)?
-            .filter_map(Result::ok)
-            .map(|entry| entry.path().to_string_lossy().to_string())
-            .collect();
-        paths.sort();
-        compute_string_hash(&paths.join("\n"))
+        compute_path_hash(&file.path, true)?
     } else {
-        compute_file_hash(&file.path)
-            .map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))?
+        compute_path_hash(&file.path, false)?
     };
 
     if Some(&new_hash) == file.content_hash.as_ref() {
@@ -344,6 +362,68 @@ mod tests {
         assert!(matches!(
             check_file_state(&file_row),
             Ok(FileState::Modified { .. })
+        ));
+    }
+
+    #[test]
+    fn test_created_file_with_colliding_mtime_is_modified() {
+        // A path that was missing when cached is tracked with a fallback
+        // timestamp instead of a real mtime. A file created in the same
+        // second as that timestamp must still be detected as modified.
+        let temp_dir = TempDir::with_prefix("test_created_file").unwrap();
+        let file_path = temp_dir.path().join("appeared.txt");
+        std::fs::write(&file_path, b"now I exist").unwrap();
+        let mtime = truncate_to_seconds(std::fs::metadata(&file_path).unwrap().modified().unwrap())
+            .unwrap();
+
+        let missing_row = FileInputDesc {
+            path: file_path,
+            is_directory: false,
+            content_hash: None,
+            modified_at: mtime,
+        };
+
+        assert!(matches!(
+            check_file_state(&missing_row),
+            Ok(FileState::Modified { .. })
+        ));
+    }
+
+    #[test]
+    fn test_created_directory_is_modified() {
+        // Same as above, but the path that appeared is a directory.
+        let temp_dir = TempDir::with_prefix("test_created_directory").unwrap();
+        let dir_path = temp_dir.path().join("appeared-dir");
+        std::fs::create_dir(&dir_path).unwrap();
+        let mtime =
+            truncate_to_seconds(std::fs::metadata(&dir_path).unwrap().modified().unwrap()).unwrap();
+
+        let missing_row = FileInputDesc {
+            path: dir_path,
+            is_directory: false,
+            content_hash: None,
+            modified_at: mtime,
+        };
+
+        assert!(matches!(
+            check_file_state(&missing_row),
+            Ok(FileState::Modified { .. })
+        ));
+    }
+
+    #[test]
+    fn test_still_missing_file_is_unchanged() {
+        let temp_dir = TempDir::with_prefix("test_still_missing").unwrap();
+        let missing_row = FileInputDesc {
+            path: temp_dir.path().join("never-existed.txt"),
+            is_directory: false,
+            content_hash: None,
+            modified_at: UNIX_EPOCH,
+        };
+
+        assert!(matches!(
+            check_file_state(&missing_row),
+            Ok(FileState::Unchanged)
         ));
     }
 
