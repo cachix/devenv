@@ -23,8 +23,8 @@ use crossterm::{
     Command, cursor, queue,
     terminal::{self, Clear, ClearType},
 };
-use libghostty_vt::render::{CellIterator, Dirty, RenderState, RowIteration, RowIterator};
-use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef, Screen, TrackedGridRef};
+use libghostty_vt::render::{CellIterator, Colors, Dirty, RenderState, RowIteration, RowIterator};
+use libghostty_vt::screen::{Cell, CellContentTag, CellWide, Screen, TrackedGridRef};
 use libghostty_vt::style::{Style, StyleColor, Underline};
 use libghostty_vt::terminal::{Mode, Options as TerminalOptions, Point, PointSpace, Terminal};
 use portable_pty::PtySize;
@@ -40,86 +40,6 @@ use tokio_util::sync::CancellationToken;
 const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
 const KEYBIND_LIST_WATCHED: [u8; 2] = [0x1b, 0x17]; // Ctrl-Alt-W
 const KEYBIND_TOGGLE_ERROR: [u8; 2] = [0x1b, 0x05]; // Ctrl-Alt-E
-
-fn dump_row_from_cells(buf: &mut String, vt: &Terminal<'_, '_>, point: Point, cells: &[Cell]) {
-    // TODO(libghostty-rs): Style::is_default() returns true for RGB-bg-only styles
-    // because StyleColor::Rgb is mistagged as NONE in the FFI From conversion.
-    // Compare via PartialEq against Style::default() until upstream is fixed.
-    let default_style = Style::default();
-    let mut cur_style = default_style;
-    let mut blank_cells: usize = 0;
-    for (x, cell) in cells.iter().enumerate() {
-        if matches!(
-            cell.wide().ok(),
-            Some(CellWide::SpacerTail | CellWide::SpacerHead)
-        ) {
-            continue;
-        }
-        let Ok(cell_ref) = vt.grid_ref(point_with_x(point, x as u16)) else {
-            continue;
-        };
-        let has_text = cell.has_text().unwrap_or(false);
-        let has_styling = cell.has_styling().unwrap_or(false);
-        let tag = cell.content_tag().ok();
-        let is_bg_only = matches!(
-            tag,
-            Some(CellContentTag::BgColorPalette | CellContentTag::BgColorRgb)
-        );
-        if !has_text && !has_styling && !is_bg_only {
-            blank_cells += 1;
-            continue;
-        }
-        if blank_cells > 0 {
-            for _ in 0..blank_cells {
-                buf.push(' ');
-            }
-            blank_cells = 0;
-        }
-        let new_style = cell_style(cell, &cell_ref, tag, has_styling, default_style);
-        if new_style != cur_style {
-            if new_style == default_style {
-                buf.push_str("\x1b[0m");
-            } else {
-                dump_style(buf, &new_style);
-            }
-            cur_style = new_style;
-        }
-        push_cell_text(buf, cell, &cell_ref);
-    }
-}
-
-fn cell_style(
-    cell: &Cell,
-    cell_ref: &GridRef<'_>,
-    tag: Option<CellContentTag>,
-    has_styling: bool,
-    default: Style,
-) -> Style {
-    match tag {
-        Some(CellContentTag::Codepoint | CellContentTag::CodepointGrapheme) => {
-            if has_styling {
-                cell_ref.style().unwrap_or(default)
-            } else {
-                default
-            }
-        }
-        Some(CellContentTag::BgColorPalette) => {
-            let mut s = default;
-            if let Ok(idx) = cell.bg_color_palette() {
-                s.bg_color = StyleColor::Palette(idx);
-            }
-            s
-        }
-        Some(CellContentTag::BgColorRgb) => {
-            let mut s = default;
-            if let Ok(rgb) = cell.bg_color_rgb() {
-                s.bg_color = StyleColor::Rgb(rgb);
-            }
-            s
-        }
-        None => default,
-    }
-}
 
 /// Fetch all cells in a VT row into a reusable buffer.
 fn cells_in_row_into(vt: &Terminal<'_, '_>, point: Point, cells: &mut Vec<Cell>) {
@@ -208,226 +128,585 @@ fn dump_extended_color(s: &mut String, color: &StyleColor) {
     }
 }
 
-/// Render a row from Ghostty's render-state snapshot. Unlike `GridRef`, the
-/// cell iterator is intended for render loops and provides style and grapheme
-/// data without resolving every cell against the terminal a second time.
-fn dump_row_from_render_state<'a>(
-    buf: &mut String,
-    row: &RowIteration<'a, '_>,
-    cell_iter: &mut CellIterator<'a>,
-    cells_buf: &mut Vec<Cell>,
-    grapheme_buf: &mut Vec<char>,
-) -> Result<(), libghostty_vt::Error> {
-    cells_buf.clear();
-    // Ghostty tracks whether a row contains any ref-counted styles. The flag
-    // may have false positives but no false negatives, so plain-text rows can
-    // skip one FFI query per cell without missing styled content. Background-
-    // only cells are stored in the content tag and remain handled below.
-    let row_styled = row.raw_row()?.is_styled()?;
-    let default_style = Style::default();
-    let mut cur_style = default_style;
-    let mut blank_cells = 0usize;
-    let mut cells = cell_iter.update(row)?;
+#[derive(Clone, Copy)]
+enum FramePlan {
+    Skip,
+    DirtyRows,
+    CompareRows,
+    Redraw,
+}
 
-    while let Some(render_cell) = cells.next() {
-        let cell = render_cell.raw_cell()?;
-        cells_buf.push(cell);
-        if matches!(cell.wide()?, CellWide::SpacerTail | CellWide::SpacerHead) {
-            continue;
-        }
+#[derive(Clone, Copy)]
+enum RowPlan {
+    /// Encode immediately. The entire frame must be rebuilt.
+    Redraw,
+    /// Encode, then compare raw cells. This favors ordinary dirty rows, where
+    /// nearly every candidate is expected to have changed.
+    EncodeAndCompare,
+    /// Compare raw cells before encoding. This favors viewport shifts, where
+    /// the host terminal has already moved most rows for us.
+    CompareThenEncode,
+}
 
-        let tag = cell.content_tag()?;
-        // Derive text presence from data that encoding needs anyway. This
-        // avoids a separate `has_text` FFI call for every cell.
-        let mut codepoint = None;
-        let mut grapheme_len = 0;
-        let has_text = match tag {
-            CellContentTag::Codepoint => {
-                let cp = cell.codepoint()?;
-                codepoint = Some(cp);
-                cp != 0
-            }
-            CellContentTag::CodepointGrapheme => {
-                grapheme_len = render_cell.graphemes_len()?;
-                grapheme_len > 0
-            }
-            CellContentTag::BgColorPalette | CellContentTag::BgColorRgb => false,
-        };
-        let has_styling = row_styled && cell.has_styling()?;
-        let is_bg_only = matches!(
-            tag,
-            CellContentTag::BgColorPalette | CellContentTag::BgColorRgb
-        );
-        if !has_text && !has_styling && !is_bg_only {
-            blank_cells += 1;
-            continue;
+impl FramePlan {
+    fn for_snapshot(
+        dirty: Dirty,
+        cache_valid: bool,
+        viewport_shifted: bool,
+        primary_screen: bool,
+        globals_changed: bool,
+    ) -> Self {
+        if !cache_valid {
+            return Self::Redraw;
         }
-        if blank_cells > 0 {
-            buf.extend(std::iter::repeat_n(' ', blank_cells));
-            blank_cells = 0;
-        }
-
-        let new_style = match tag {
-            CellContentTag::Codepoint | CellContentTag::CodepointGrapheme => {
-                if has_styling {
-                    render_cell.style().unwrap_or(default_style)
-                } else {
-                    default_style
-                }
-            }
-            CellContentTag::BgColorPalette => {
-                let mut style = default_style;
-                if let Ok(idx) = cell.bg_color_palette() {
-                    style.bg_color = StyleColor::Palette(idx);
-                }
-                style
-            }
-            CellContentTag::BgColorRgb => {
-                let mut style = default_style;
-                if let Ok(rgb) = cell.bg_color_rgb() {
-                    style.bg_color = StyleColor::Rgb(rgb);
-                }
-                style
-            }
-        };
-        if new_style != cur_style {
-            if new_style == default_style {
-                buf.push_str("\x1b[0m");
+        if dirty == Dirty::Full {
+            return if viewport_shifted && !globals_changed {
+                Self::CompareRows
             } else {
-                dump_style(buf, &new_style);
+                Self::Redraw
+            };
+        }
+        if viewport_shifted || !primary_screen {
+            return Self::CompareRows;
+        }
+        match dirty {
+            Dirty::Clean => Self::Skip,
+            Dirty::Partial => Self::DirtyRows,
+            Dirty::Full => unreachable!(),
+        }
+    }
+
+    fn row(self, dirty: bool) -> Option<RowPlan> {
+        match self {
+            Self::Skip => None,
+            Self::DirtyRows if dirty => Some(RowPlan::EncodeAndCompare),
+            Self::DirtyRows => None,
+            Self::CompareRows => Some(RowPlan::CompareThenEncode),
+            Self::Redraw => Some(RowPlan::Redraw),
+        }
+    }
+}
+
+struct FrameCache {
+    rows: Vec<Vec<Cell>>,
+    valid: bool,
+}
+
+impl FrameCache {
+    fn new(rows: usize, cols: usize) -> Self {
+        Self {
+            rows: (0..rows).map(|_| Vec::with_capacity(cols)).collect(),
+            valid: false,
+        }
+    }
+
+    fn covers(&self, visible_rows: usize) -> bool {
+        self.valid && self.rows.len() >= visible_rows
+    }
+
+    fn matches(&self, row_idx: usize, cells: &[Cell]) -> bool {
+        self.valid && self.rows.get(row_idx).is_some_and(|row| row == cells)
+    }
+
+    fn store(&mut self, row_idx: usize, cells: &mut Vec<Cell>) {
+        if row_idx >= self.rows.len() {
+            let capacity = cells.capacity();
+            self.rows
+                .resize_with(row_idx + 1, || Vec::with_capacity(capacity));
+        }
+        std::mem::swap(&mut self.rows[row_idx], cells);
+        cells.clear();
+    }
+
+    fn invalidate(&mut self) {
+        self.valid = false;
+    }
+
+    fn shift_left(&mut self, count: usize) {
+        if count >= self.rows.len() {
+            self.invalidate();
+            return;
+        }
+        self.rows.rotate_left(count);
+        let invalid_from = self.rows.len() - count;
+        for row in &mut self.rows[invalid_from..] {
+            row.clear();
+        }
+    }
+
+    fn sync(&mut self, vt: &Terminal<'_, '_>) {
+        let rows = vt.rows().unwrap_or(0) as usize;
+        let cols = vt.cols().unwrap_or(0) as usize;
+        self.rows.resize_with(rows, || Vec::with_capacity(cols));
+        self.rows.truncate(rows);
+        for (y, cells) in self.rows.iter_mut().enumerate() {
+            cells_in_row_into(vt, active_point(y as u32), cells);
+        }
+        self.valid = true;
+    }
+}
+
+struct RowEncoder {
+    cells: Vec<Cell>,
+    graphemes: Vec<char>,
+    text: String,
+}
+
+impl RowEncoder {
+    fn new(cols: usize) -> Self {
+        Self {
+            cells: Vec::with_capacity(cols),
+            graphemes: Vec::with_capacity(8),
+            text: String::with_capacity(cols * 4),
+        }
+    }
+
+    fn collect<'a>(
+        &mut self,
+        row: &RowIteration<'a, '_>,
+        cell_iter: &mut CellIterator<'a>,
+    ) -> Result<(), libghostty_vt::Error> {
+        self.cells.clear();
+        let mut cells = cell_iter.update(row)?;
+        while let Some(cell) = cells.next() {
+            self.cells.push(cell.raw_cell()?);
+        }
+        Ok(())
+    }
+
+    /// Encode a row from Ghostty's render snapshot into ANSI text.
+    ///
+    /// Ghostty retains row and cell storage between snapshots; this encoder
+    /// mirrors that design by retaining both its raw-cell and UTF-8 buffers.
+    fn encode_snapshot<'a>(
+        &mut self,
+        row: &RowIteration<'a, '_>,
+        cell_iter: &mut CellIterator<'a>,
+    ) -> Result<(), libghostty_vt::Error> {
+        self.cells.clear();
+        self.text.clear();
+
+        // This flag may have false positives, but never false negatives. It
+        // avoids a per-cell style query for the overwhelmingly common plain
+        // text row.
+        let row_styled = row.raw_row()?.is_styled()?;
+        let default_style = Style::default();
+        let mut current_style = default_style;
+        let mut pending_blanks = 0usize;
+        let mut cells = cell_iter.update(row)?;
+
+        while let Some(render_cell) = cells.next() {
+            let cell = render_cell.raw_cell()?;
+            self.cells.push(cell);
+            if matches!(cell.wide()?, CellWide::SpacerTail | CellWide::SpacerHead) {
+                continue;
             }
-            cur_style = new_style;
+
+            let tag = cell.content_tag()?;
+            let codepoint = match tag {
+                CellContentTag::Codepoint => Some(cell.codepoint()?),
+                _ => None,
+            };
+            let grapheme_len = match tag {
+                CellContentTag::CodepointGrapheme => render_cell.graphemes_len()?,
+                _ => 0,
+            };
+            let has_text = match tag {
+                CellContentTag::Codepoint => codepoint != Some(0),
+                CellContentTag::CodepointGrapheme => grapheme_len > 0,
+                CellContentTag::BgColorPalette | CellContentTag::BgColorRgb => false,
+            };
+            let has_style = row_styled && cell.has_styling()?;
+            let background_only = matches!(
+                tag,
+                CellContentTag::BgColorPalette | CellContentTag::BgColorRgb
+            );
+
+            if !has_text && !has_style && !background_only {
+                pending_blanks += 1;
+                continue;
+            }
+            self.text.extend(std::iter::repeat_n(' ', pending_blanks));
+            pending_blanks = 0;
+
+            let style = match tag {
+                CellContentTag::Codepoint | CellContentTag::CodepointGrapheme if has_style => {
+                    render_cell.style().unwrap_or(default_style)
+                }
+                CellContentTag::BgColorPalette => {
+                    let mut style = default_style;
+                    if let Ok(color) = cell.bg_color_palette() {
+                        style.bg_color = StyleColor::Palette(color);
+                    }
+                    style
+                }
+                CellContentTag::BgColorRgb => {
+                    let mut style = default_style;
+                    if let Ok(color) = cell.bg_color_rgb() {
+                        style.bg_color = StyleColor::Rgb(color);
+                    }
+                    style
+                }
+                _ => default_style,
+            };
+            if style != current_style {
+                if style == default_style {
+                    self.text.push_str("\x1b[0m");
+                } else {
+                    dump_style(&mut self.text, &style);
+                }
+                current_style = style;
+            }
+
+            match tag {
+                CellContentTag::Codepoint if has_text => {
+                    if let Some(ch) = codepoint.and_then(char::from_u32) {
+                        self.text.push(ch);
+                    }
+                }
+                CellContentTag::CodepointGrapheme if has_text => {
+                    self.graphemes.resize(grapheme_len, '\0');
+                    render_cell.graphemes_buf(&mut self.graphemes)?;
+                    self.text.extend(self.graphemes.iter().copied());
+                }
+                _ => self.text.push(' '),
+            }
+        }
+        self.text.push_str("\x1b[0m");
+        Ok(())
+    }
+
+    fn encode_terminal(&mut self, vt: &Terminal<'_, '_>, point: Point) {
+        cells_in_row_into(vt, point, &mut self.cells);
+        self.text.clear();
+
+        // TODO(libghostty-rs): Style::is_default() returns true for RGB
+        // background-only styles, so compare against the default value.
+        let default_style = Style::default();
+        let mut current_style = default_style;
+        let mut pending_blanks = 0usize;
+        for (x, cell) in self.cells.iter().enumerate() {
+            if matches!(
+                cell.wide().ok(),
+                Some(CellWide::SpacerTail | CellWide::SpacerHead)
+            ) {
+                continue;
+            }
+            let Ok(cell_ref) = vt.grid_ref(point_with_x(point, x as u16)) else {
+                continue;
+            };
+            let has_text = cell.has_text().unwrap_or(false);
+            let has_style = cell.has_styling().unwrap_or(false);
+            let tag = cell.content_tag().ok();
+            let background_only = matches!(
+                tag,
+                Some(CellContentTag::BgColorPalette | CellContentTag::BgColorRgb)
+            );
+            if !has_text && !has_style && !background_only {
+                pending_blanks += 1;
+                continue;
+            }
+            self.text.extend(std::iter::repeat_n(' ', pending_blanks));
+            pending_blanks = 0;
+
+            let style = match tag {
+                Some(CellContentTag::Codepoint | CellContentTag::CodepointGrapheme)
+                    if has_style =>
+                {
+                    cell_ref.style().unwrap_or(default_style)
+                }
+                Some(CellContentTag::BgColorPalette) => {
+                    let mut style = default_style;
+                    if let Ok(color) = cell.bg_color_palette() {
+                        style.bg_color = StyleColor::Palette(color);
+                    }
+                    style
+                }
+                Some(CellContentTag::BgColorRgb) => {
+                    let mut style = default_style;
+                    if let Ok(color) = cell.bg_color_rgb() {
+                        style.bg_color = StyleColor::Rgb(color);
+                    }
+                    style
+                }
+                _ => default_style,
+            };
+            if style != current_style {
+                if style == default_style {
+                    self.text.push_str("\x1b[0m");
+                } else {
+                    dump_style(&mut self.text, &style);
+                }
+                current_style = style;
+            }
+            push_cell_text(&mut self.text, cell, &cell_ref);
+        }
+        self.text.push_str("\x1b[0m");
+    }
+}
+
+enum RowRender {
+    Drawn,
+    Unchanged,
+    Unavailable,
+}
+
+struct FrameRenderer<'a> {
+    cache: FrameCache,
+    encoder: RowEncoder,
+    cells: CellIterator<'a>,
+    compare_cells: CellIterator<'a>,
+}
+
+impl<'a> FrameRenderer<'a> {
+    fn new(rows: usize, cols: usize) -> Result<Self, libghostty_vt::Error> {
+        Ok(Self {
+            cache: FrameCache::new(rows, cols),
+            encoder: RowEncoder::new(cols),
+            cells: CellIterator::new()?,
+            compare_cells: CellIterator::new()?,
+        })
+    }
+
+    fn render_snapshot_row(
+        &mut self,
+        stdout: &mut impl Write,
+        row: &RowIteration<'a, '_>,
+        row_idx: usize,
+        screen_row: u16,
+        plan: RowPlan,
+    ) -> io::Result<RowRender> {
+        if matches!(plan, RowPlan::CompareThenEncode) {
+            if self.encoder.collect(row, &mut self.compare_cells).is_err() {
+                return Ok(RowRender::Unavailable);
+            }
+            if self.cache.matches(row_idx, &self.encoder.cells) {
+                return Ok(RowRender::Unchanged);
+            }
         }
 
-        match tag {
-            CellContentTag::Codepoint if has_text => {
-                if let Some(ch) = codepoint.and_then(char::from_u32) {
-                    buf.push(ch);
+        if self.encoder.encode_snapshot(row, &mut self.cells).is_err() {
+            return Ok(RowRender::Unavailable);
+        }
+        if matches!(plan, RowPlan::EncodeAndCompare)
+            && self.cache.matches(row_idx, &self.encoder.cells)
+        {
+            return Ok(RowRender::Unchanged);
+        }
+
+        queue!(
+            stdout,
+            cursor::MoveTo(0, screen_row),
+            Clear(ClearType::CurrentLine)
+        )?;
+        stdout.write_all(self.encoder.text.as_bytes())?;
+        self.cache.store(row_idx, &mut self.encoder.cells);
+        Ok(RowRender::Drawn)
+    }
+
+    fn render_terminal_row(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        row_idx: usize,
+        screen_row: u16,
+        compare: bool,
+    ) -> io::Result<bool> {
+        let point = active_point(row_idx as u32);
+        cells_in_row_into(vt, point, &mut self.encoder.cells);
+        if compare && self.cache.matches(row_idx, &self.encoder.cells) {
+            return Ok(false);
+        }
+
+        // `encode_terminal` fetches the cells again. This is deliberately
+        // confined to the error fallback; the render-state path is the hot
+        // path and reads every cell only once.
+        self.encoder.encode_terminal(vt, point);
+        queue!(
+            stdout,
+            cursor::MoveTo(0, screen_row),
+            Clear(ClearType::CurrentLine)
+        )?;
+        stdout.write_all(self.encoder.text.as_bytes())?;
+        self.cache.store(row_idx, &mut self.encoder.cells);
+        Ok(true)
+    }
+
+    fn write_terminal_row(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+    ) -> io::Result<()> {
+        self.encoder.encode_terminal(vt, point);
+        stdout.write_all(self.encoder.text.as_bytes())
+    }
+
+    #[cfg(test)]
+    fn retained_capacities(&self) -> (usize, usize, usize) {
+        (
+            self.encoder.cells.capacity()
+                + self.cache.rows.iter().map(Vec::capacity).sum::<usize>(),
+            self.encoder.graphemes.capacity(),
+            self.encoder.text.capacity(),
+        )
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct FrameGlobals {
+    screen: Screen,
+    rows: u16,
+    cols: u16,
+    colors: Colors,
+}
+
+struct ViewportRenderer<'a> {
+    state: RenderState<'a>,
+    rows: RowIterator<'a>,
+    frame: FrameRenderer<'a>,
+    globals: Option<FrameGlobals>,
+}
+
+impl<'a> ViewportRenderer<'a> {
+    fn new(rows: usize, cols: usize) -> Result<Self, libghostty_vt::Error> {
+        Ok(Self {
+            state: RenderState::new()?,
+            rows: RowIterator::new()?,
+            frame: FrameRenderer::new(rows, cols)?,
+            globals: None,
+        })
+    }
+
+    fn render(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'a, '_>,
+        visible_rows: usize,
+        row_offset: u16,
+        viewport_shifted: bool,
+    ) -> io::Result<()> {
+        let cache_valid = self.frame.cache.covers(visible_rows);
+        let primary_screen = vt.active_screen().ok() == Some(Screen::Primary);
+        let mut completed_rows = 0usize;
+
+        match self.state.update(vt) {
+            Ok(snapshot) => {
+                let dirty = snapshot.dirty().unwrap_or(Dirty::Full);
+                // A viewport move makes Ghostty report a full frame even when
+                // the native scroll operation already shifted identical rows.
+                // Compare rows in that case, but preserve Ghostty's full-redraw
+                // contract when screen dimensions, palette, or default colors
+                // changed at the same time.
+                let refresh_globals = dirty == Dirty::Full || self.globals.is_none();
+                let next_globals = if refresh_globals {
+                    let values = (snapshot.rows(), snapshot.cols(), snapshot.colors());
+                    match values {
+                        (Ok(rows), Ok(cols), Ok(colors)) => Some(FrameGlobals {
+                            screen: vt.active_screen().unwrap_or(Screen::Primary),
+                            rows,
+                            cols,
+                            colors,
+                        }),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                let globals_changed = if refresh_globals {
+                    next_globals
+                        .as_ref()
+                        .is_none_or(|globals| self.globals.as_ref() != Some(globals))
+                } else {
+                    false
+                };
+                let plan = FramePlan::for_snapshot(
+                    dirty,
+                    cache_valid,
+                    viewport_shifted,
+                    primary_screen,
+                    globals_changed,
+                );
+                if matches!(plan, FramePlan::Skip) {
+                    completed_rows = visible_rows;
+                } else if let Ok(mut rows) = self.rows.update(&snapshot) {
+                    while let Some(row) = rows.next() {
+                        let row_idx = completed_rows;
+                        if row_idx < visible_rows {
+                            let row_dirty = row.dirty().unwrap_or(true);
+                            if let Some(row_plan) = plan.row(row_dirty) {
+                                let result = self.frame.render_snapshot_row(
+                                    stdout,
+                                    row,
+                                    row_idx,
+                                    row_idx as u16 + row_offset,
+                                    row_plan,
+                                )?;
+                                if matches!(result, RowRender::Unavailable) {
+                                    self.frame.render_terminal_row(
+                                        stdout,
+                                        vt,
+                                        row_idx,
+                                        row_idx as u16 + row_offset,
+                                        !matches!(plan, FramePlan::Redraw),
+                                    )?;
+                                }
+                            }
+                        }
+                        let _ = row.set_dirty(false);
+                        completed_rows += 1;
+                    }
+                }
+                let _ = snapshot.set_dirty(Dirty::Clean);
+                if refresh_globals {
+                    self.globals = next_globals;
                 }
             }
-            CellContentTag::CodepointGrapheme if has_text => {
-                grapheme_buf.resize(grapheme_len, '\0');
-                render_cell.graphemes_buf(grapheme_buf)?;
-                buf.extend(grapheme_buf.iter().copied());
+            Err(error) => {
+                tracing::debug!(%error, "render state update failed");
             }
-            _ => buf.push(' '),
         }
-    }
-    Ok(())
-}
 
-fn collect_render_state_cells<'a>(
-    row: &RowIteration<'a, '_>,
-    cell_iter: &mut CellIterator<'a>,
-    cells_buf: &mut Vec<Cell>,
-) -> Result<(), libghostty_vt::Error> {
-    cells_buf.clear();
-    let mut cells = cell_iter.update(row)?;
-    while let Some(cell) = cells.next() {
-        cells_buf.push(cell.raw_cell()?);
-    }
-    Ok(())
-}
-
-fn store_row_cells(prev_lines: &mut Vec<Vec<Cell>>, row_idx: usize, cells_buf: &mut Vec<Cell>) {
-    if row_idx >= prev_lines.len() {
-        let row_capacity = cells_buf.capacity();
-        prev_lines.resize_with(row_idx + 1, || Vec::with_capacity(row_capacity));
-    }
-    std::mem::swap(&mut prev_lines[row_idx], cells_buf);
-    cells_buf.clear();
-}
-
-/// Write a single VT row (SGR-formatted, from pre-fetched cells) to stdout.
-fn queue_row_from_cells(
-    stdout: &mut impl Write,
-    vt: &Terminal<'_, '_>,
-    point: Point,
-    cells: &[Cell],
-    line_buf: &mut String,
-) -> io::Result<()> {
-    line_buf.clear();
-    dump_row_from_cells(line_buf, vt, point, cells);
-    line_buf.push_str("\x1b[0m");
-    stdout.write_all(line_buf.as_bytes())?;
-    Ok(())
-}
-
-/// Fetch a VT row's cells, and redraw it at `row_idx + offset` if they differ
-/// from the `prev_lines` baseline. Returns whether the row was drawn.
-#[expect(clippy::too_many_arguments)]
-fn draw_row_if_changed(
-    stdout: &mut impl Write,
-    vt: &Terminal<'_, '_>,
-    row_idx: usize,
-    offset: usize,
-    baseline_valid: bool,
-    prev_lines: &mut Vec<Vec<Cell>>,
-    cells_buf: &mut Vec<Cell>,
-    line_buf: &mut String,
-) -> io::Result<bool> {
-    let point = active_point(row_idx as u32);
-    cells_in_row_into(vt, point, cells_buf);
-    if baseline_valid && row_idx < prev_lines.len() && *cells_buf == prev_lines[row_idx] {
-        return Ok(false);
-    }
-    queue!(
-        stdout,
-        cursor::MoveTo(0, (row_idx + offset) as u16),
-        Clear(ClearType::CurrentLine)
-    )?;
-    queue_row_from_cells(stdout, vt, point, cells_buf, line_buf)?;
-    store_row_cells(prev_lines, row_idx, cells_buf);
-    Ok(true)
-}
-
-/// Draw a viewport row from Ghostty's render-state snapshot. `None` means the
-/// snapshot iterator failed and the caller should use the GridRef fallback.
-#[expect(clippy::too_many_arguments)]
-fn draw_render_state_row_if_changed<'a>(
-    stdout: &mut impl Write,
-    row: &RowIteration<'a, '_>,
-    cell_iter: &mut CellIterator<'a>,
-    compare_cell_iter: &mut CellIterator<'a>,
-    row_idx: usize,
-    offset: usize,
-    baseline_valid: bool,
-    compare_first: bool,
-    prev_lines: &mut Vec<Vec<Cell>>,
-    cells_buf: &mut Vec<Cell>,
-    grapheme_buf: &mut Vec<char>,
-    line_buf: &mut String,
-) -> io::Result<Option<bool>> {
-    // Untrusted dirty flags (scrolling and alternate screens) can make every
-    // row a candidate. Compare raw cells first there so clean rows don't pay
-    // the higher cost of style and grapheme encoding. A separate iterator is
-    // required because a second update of the same cell iterator does not
-    // rewind the current row in all libghostty versions.
-    if compare_first {
-        if collect_render_state_cells(row, compare_cell_iter, cells_buf).is_err() {
-            return Ok(None);
+        if completed_rows < visible_rows {
+            for row_idx in completed_rows..visible_rows {
+                self.frame.render_terminal_row(
+                    stdout,
+                    vt,
+                    row_idx,
+                    row_idx as u16 + row_offset,
+                    cache_valid,
+                )?;
+            }
         }
-        if row_idx < prev_lines.len() && *cells_buf == prev_lines[row_idx] {
-            return Ok(Some(false));
-        }
+        self.frame.cache.valid = true;
+        Ok(())
     }
 
-    line_buf.clear();
-    if dump_row_from_render_state(line_buf, row, cell_iter, cells_buf, grapheme_buf).is_err() {
-        return Ok(None);
+    fn write_terminal_row(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+    ) -> io::Result<()> {
+        self.frame.write_terminal_row(stdout, vt, point)
     }
-    if baseline_valid && row_idx < prev_lines.len() && *cells_buf == prev_lines[row_idx] {
-        return Ok(Some(false));
+
+    fn invalidate(&mut self) {
+        self.frame.cache.invalidate();
     }
-    line_buf.push_str("\x1b[0m");
-    queue!(
-        stdout,
-        cursor::MoveTo(0, (row_idx + offset) as u16),
-        Clear(ClearType::CurrentLine)
-    )?;
-    stdout.write_all(line_buf.as_bytes())?;
-    store_row_cells(prev_lines, row_idx, cells_buf);
-    Ok(Some(true))
+
+    fn shift_cache(&mut self, rows: usize) {
+        self.frame.cache.shift_left(rows);
+    }
+
+    fn sync(&mut self, vt: &Terminal<'_, '_>) {
+        self.frame.cache.sync(vt);
+    }
+
+    #[cfg(test)]
+    fn retained_capacities(&self) -> (usize, usize, usize) {
+        self.frame.retained_capacities()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -530,11 +809,9 @@ fn synchronized_output_active(vt: &Terminal<'_, '_>) -> bool {
 }
 
 struct Renderer<'a> {
-    /// Previous frame for diffing — one line of cells per row.
-    prev_lines: Vec<Vec<Cell>>,
-    /// Whether every visible entry in `prev_lines` is a valid baseline.
-    /// Invalidating keeps the allocated row buffers available for reuse.
-    prev_lines_valid: bool,
+    /// Persistent Ghostty snapshot, row iterators, and native-terminal frame
+    /// cache. Kept separate from scrollback translation below.
+    viewport: ViewportRenderer<'a>,
     /// Previous cursor state.
     prev_cursor: CursorState,
     /// Row offset for the initial phase after TUI handoff.
@@ -565,20 +842,6 @@ struct Renderer<'a> {
     /// Viewport lines scrolled off since the last render; tells `render` that
     /// row content shifted so per-row dirty flags alone can't be trusted.
     pending_scroll: usize,
-    /// Ghostty render state for dirty tracking (which rows changed).
-    render_state: RenderState<'a>,
-    /// Reusable row iterator over `render_state` snapshots.
-    row_iter: RowIterator<'a>,
-    /// Reusable cell iterator over a render-state row.
-    cell_iter: CellIterator<'a>,
-    /// Independent iterator used for cheap compare-before-encode passes.
-    compare_cell_iter: CellIterator<'a>,
-    /// Reusable cell scratch space for allocation-free row comparisons.
-    cells_buf: Vec<Cell>,
-    /// Reusable scratch space for multi-codepoint grapheme clusters.
-    grapheme_buf: Vec<char>,
-    /// Reusable buffer for SGR line rendering (avoids per-line allocation).
-    line_buf: String,
 }
 
 impl<'a> Renderer<'a> {
@@ -590,8 +853,7 @@ impl<'a> Renderer<'a> {
         let cols = vt.cols().unwrap_or(0) as usize;
         let rows = vt.rows().unwrap_or(0) as usize;
         Ok(Self {
-            prev_lines: (0..rows).map(|_| Vec::with_capacity(cols)).collect(),
-            prev_lines_valid: false,
+            viewport: ViewportRenderer::new(rows, cols)?,
             prev_cursor: CursorState {
                 col: 0,
                 row: 0,
@@ -604,13 +866,6 @@ impl<'a> Renderer<'a> {
             resize_flush_end: None,
             resize_flush_end_rows: None,
             pending_scroll: 0,
-            render_state: RenderState::new()?,
-            row_iter: RowIterator::new()?,
-            cell_iter: CellIterator::new()?,
-            compare_cell_iter: CellIterator::new()?,
-            cells_buf: Vec::with_capacity(cols),
-            grapheme_buf: Vec::new(),
-            line_buf: String::with_capacity(cols * 4),
         })
     }
 
@@ -695,125 +950,25 @@ impl<'a> Renderer<'a> {
         vt: &Terminal<'_, '_>,
         point: Point,
     ) -> io::Result<()> {
-        cells_in_row_into(vt, point, &mut self.cells_buf);
-        queue_row_from_cells(stdout, vt, point, &self.cells_buf, &mut self.line_buf)
+        self.viewport.write_terminal_row(stdout, vt, point)
     }
 
     /// Render changed VT lines to stdout. Skips lines that haven't changed
     /// and clips rows that would fall outside the visible area.
     ///
     /// Uses ghostty's render-state dirty tracking to skip clean rows without
-    /// fetching their cells. Dirty flags are only a skip-hint: rows they
-    /// mark dirty are still diffed against `prev_lines` before drawing, and
-    /// they are bypassed entirely (full fetch + diff) when the baseline is
-    /// incomplete, when content scrolled, or on the alternate screen.
+    /// fetching their cells. Candidate rows are compared with the native
+    /// terminal baseline to suppress Ghostty's conservative page-level dirty
+    /// flags. After a viewport shift, comparison happens before ANSI encoding
+    /// because the host terminal has already moved most rows for us.
     fn render(&mut self, stdout: &mut impl Write, vt: &Terminal<'a, '_>) -> io::Result<()> {
-        let offset = self.row_offset as usize;
         let max_row = self.visible_rows();
         let rows = vt.rows().unwrap_or(0) as usize;
         let visible = rows.min(max_row);
-        let scrolled = self.pending_scroll > 0;
+        let viewport_shifted = self.pending_scroll > 0;
         self.pending_scroll = 0;
-        // Scrolling shifts every row's content, and on the alternate screen
-        // scrolls may not mark rows dirty, so trust dirty flags only on a
-        // scroll-free primary-screen frame.
-        let trust_dirty = !scrolled && vt.active_screen().ok() == Some(Screen::Primary);
-        let baseline_valid = self.prev_lines_valid && self.prev_lines.len() >= visible;
-
-        let Self {
-            render_state,
-            row_iter,
-            cell_iter,
-            compare_cell_iter,
-            prev_lines,
-            cells_buf,
-            grapheme_buf,
-            line_buf,
-            ..
-        } = self;
-
-        // Dirty-tracking fast path; falls back to a full diff pass on any
-        // render-state failure.
-        let mut dirty_pass_done = false;
-        match render_state.update(vt) {
-            Ok(snapshot) => {
-                let dirty = snapshot.dirty().unwrap_or(Dirty::Full);
-                let clean = dirty == Dirty::Clean;
-                // Ghostty also reports Full when the viewport pin moves. Our
-                // scroll path has already rotated the native-output baseline,
-                // so retain its compare-before-encode path for those frames.
-                // Other global changes still require a forced row rebuild.
-                let force_full = dirty == Dirty::Full && !scrolled;
-                if trust_dirty && clean && baseline_valid {
-                    dirty_pass_done = true;
-                } else if let Ok(mut iteration) = row_iter.update(&snapshot) {
-                    let mut row_idx = 0usize;
-                    while let Some(row) = iteration.next() {
-                        if row_idx < visible {
-                            let must_fetch = force_full
-                                || !trust_dirty
-                                || !baseline_valid
-                                || row.dirty().unwrap_or(true);
-                            if must_fetch {
-                                // A full dirty state represents global changes
-                                // (screen, viewport, dimensions, or terminal
-                                // state), so raw-cell equality is insufficient.
-                                // Ghostty's renderer rebuilds every row here.
-                                let row_baseline_valid = baseline_valid && !force_full;
-                                let drawn = draw_render_state_row_if_changed(
-                                    stdout,
-                                    row,
-                                    cell_iter,
-                                    compare_cell_iter,
-                                    row_idx,
-                                    offset,
-                                    row_baseline_valid,
-                                    !force_full && !trust_dirty && baseline_valid,
-                                    prev_lines,
-                                    cells_buf,
-                                    grapheme_buf,
-                                    line_buf,
-                                )?;
-                                if drawn.is_none() {
-                                    draw_row_if_changed(
-                                        stdout,
-                                        vt,
-                                        row_idx,
-                                        offset,
-                                        row_baseline_valid,
-                                        prev_lines,
-                                        cells_buf,
-                                        line_buf,
-                                    )?;
-                                }
-                            }
-                        }
-                        let _ = row.set_dirty(false);
-                        row_idx += 1;
-                    }
-                    dirty_pass_done = row_idx >= visible;
-                }
-                let _ = snapshot.set_dirty(Dirty::Clean);
-            }
-            Err(e) => {
-                tracing::debug!(error = %e, "render state update failed");
-            }
-        }
-        if !dirty_pass_done {
-            for row_idx in 0..visible {
-                draw_row_if_changed(
-                    stdout,
-                    vt,
-                    row_idx,
-                    offset,
-                    baseline_valid,
-                    prev_lines,
-                    cells_buf,
-                    line_buf,
-                )?;
-            }
-        }
-        self.prev_lines_valid = true;
+        self.viewport
+            .render(stdout, vt, visible, self.row_offset, viewport_shifted)?;
         self.update_cursor(stdout, vt)
     }
 
@@ -992,16 +1147,8 @@ impl<'a> Renderer<'a> {
                 self.resize_flush_end_rows = None;
             }
 
-            if incomplete || flushed_total >= self.prev_lines.len() {
-                self.prev_lines_valid = false;
-            } else {
-                // Rotate instead of draining so row allocations remain reusable.
-                self.prev_lines.rotate_left(flushed_total);
-                let invalid_from = self.prev_lines.len() - flushed_total;
-                for row in &mut self.prev_lines[invalid_from..] {
-                    row.clear();
-                }
-            }
+            // Rotate instead of draining so row allocations remain reusable.
+            self.viewport.shift_cache(flushed_total);
             self.pending_scroll = self.pending_scroll.max(1);
         }
         self.render(stdout, vt)
@@ -1047,22 +1194,14 @@ impl<'a> Renderer<'a> {
 
     /// Mark all lines as stale so the next render redraws everything.
     fn invalidate(&mut self) {
-        self.prev_lines_valid = false;
+        self.viewport.invalidate();
     }
 
-    /// Snapshot VT state into prev_lines without writing anything to stdout.
-    /// Used after TUI handoff to establish a baseline for diff rendering
-    /// while preserving existing terminal content.
+    /// Snapshot VT state without writing anything to stdout. Used after TUI
+    /// handoff to establish a native-terminal baseline while preserving the
+    /// existing content.
     fn sync(&mut self, vt: &Terminal<'_, '_>) {
-        let rows = vt.rows().unwrap_or(0) as usize;
-        let cols = vt.cols().unwrap_or(0) as usize;
-        self.prev_lines
-            .resize_with(rows, || Vec::with_capacity(cols));
-        self.prev_lines.truncate(rows);
-        for (y, cells) in self.prev_lines.iter_mut().enumerate() {
-            cells_in_row_into(vt, active_point(y as u32), cells);
-        }
-        self.prev_lines_valid = true;
+        self.viewport.sync(vt);
         self.prev_cursor = CursorState::from_terminal(vt);
     }
 }
@@ -2219,6 +2358,18 @@ mod tests {
     }
 
     #[test]
+    fn frame_plan_only_diffs_full_frames_caused_by_viewport_motion() {
+        assert!(matches!(
+            FramePlan::for_snapshot(Dirty::Full, true, true, true, false),
+            FramePlan::CompareRows
+        ));
+        assert!(matches!(
+            FramePlan::for_snapshot(Dirty::Full, true, true, true, true),
+            FramePlan::Redraw
+        ));
+    }
+
+    #[test]
     fn renderer_full_dirty_redraws_unchanged_rows() {
         let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
         let mut renderer = test_renderer(&vt);
@@ -2249,23 +2400,20 @@ mod tests {
     }
 
     #[test]
-    fn renderer_invalidation_reuses_cell_buffers() {
+    fn renderer_invalidation_reuses_render_buffers() {
         let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
         let mut renderer = test_renderer(&vt);
         renderer.feed(&mut vt, "line0\r\nline1\r\nline2\r\nline3\r\nline4");
 
         let mut out = Vec::new();
         renderer.render_full(&mut out, &vt).unwrap();
-        let cell_capacity = renderer.cells_buf.capacity()
-            + renderer.prev_lines.iter().map(Vec::capacity).sum::<usize>();
+        let capacities = renderer.viewport.retained_capacities();
 
         renderer.invalidate();
         out.clear();
         renderer.render(&mut out, &vt).unwrap();
 
-        let reused_capacity = renderer.cells_buf.capacity()
-            + renderer.prev_lines.iter().map(Vec::capacity).sum::<usize>();
-        assert_eq!(reused_capacity, cell_capacity);
+        assert_eq!(renderer.viewport.retained_capacities(), capacities);
     }
 
     #[test]
