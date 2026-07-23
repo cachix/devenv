@@ -200,7 +200,7 @@ in
                         // {
                           initial_delay_seconds = r.initial_delay;
                           period_seconds = r.period;
-                          timeout_seconds = r.timeout;
+                          timeout_seconds = r.probe_timeout;
                           inherit (r) success_threshold failure_threshold;
                         };
                     }

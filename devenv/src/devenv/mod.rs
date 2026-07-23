@@ -2021,12 +2021,46 @@ impl Devenv {
                 }
             }
         } else if self.processes_pid().exists() {
-            bail!("'devenv processes wait' is not yet supported for the process-compose backend")
+            let manager =
+                processes::ProcessComposeManager::new(PathBuf::new(), self.devenv_dotfile.clone());
+            let process_compose = self.process_compose_binary().await?;
+            let process_configs = self.process_configs().await?;
+            manager
+                .wait_for_ready(
+                    process_compose,
+                    self.devenv_runtime.join("pc.sock"),
+                    &process_configs,
+                    timeout,
+                )
+                .await
         } else {
             bail!(
                 "No process manager is running. Start processes first with `devenv processes start` or `devenv up -d`"
             )
         }
+    }
+
+    async fn process_compose_binary(&self) -> Result<PathBuf> {
+        let gc_root = self.devenv_dot_gc.join("process-compose-package");
+        let paths = self
+            .backend()
+            .build_devenv(
+                &["devenv.config.process.managers.process-compose.package"],
+                BuildOptions {
+                    gc_root: Some(gc_root),
+                },
+            )
+            .await?;
+        Ok(paths[0].as_path().join("bin/process-compose"))
+    }
+
+    async fn process_configs(&self) -> Result<HashMap<String, processes::ProcessConfig>> {
+        let processes_json = self
+            .backend
+            .eval_devenv(&["devenv.config.processes"])
+            .await?;
+        serde_json::from_str(&processes_json)
+            .map_err(|e| miette!("Failed to parse process config: {}", e))
     }
 
     /// Compute the native process manager socket path.
@@ -2052,6 +2086,30 @@ impl Devenv {
     }
 
     pub async fn processes_list(&self) -> Result<String> {
+        if !self.native_manager_pid_file().exists() && self.processes_pid().exists() {
+            let manager =
+                processes::ProcessComposeManager::new(PathBuf::new(), self.devenv_dotfile.clone());
+            let processes = manager
+                .list(
+                    self.process_compose_binary().await?,
+                    self.devenv_runtime.join("pc.sock"),
+                )
+                .await?;
+            let mut output = String::new();
+            for p in &processes {
+                output.push_str(&format!(
+                    "{:<30} {:<15} ready: {}\n",
+                    p.name,
+                    p.status,
+                    p.is_ready.as_deref().unwrap_or("-")
+                ));
+            }
+            if processes.is_empty() {
+                output.push_str("No processes found.\n");
+            }
+            return Ok(output);
+        }
+
         match self
             .native_api_request(&processes::ApiRequest::List)
             .await?
