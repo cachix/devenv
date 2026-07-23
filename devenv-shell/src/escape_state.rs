@@ -5,10 +5,13 @@
 //! kitty keyboard, etc.) so the host can reset them when the shell exits or
 //! when a hot-reload swaps PTYs.
 
-use crate::escape::{CLEANUP_MODES, DecModeEvent, EscapeScanner, SequenceEvent};
+use crate::escape::{
+    CLEANUP_MODES, DecModeEvent, EscapeScanner, SYNCHRONIZED_OUTPUT_MODE, SequenceEvent,
+};
 use crate::pty::Pty;
 use crate::terminal_commands::{
-    ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys, SetKeypadMode,
+    AUTOWRAP_MODE, ORIGIN_MODE, ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys, SetDecMode,
+    SetKeypadMode,
 };
 use crossterm::event::PopKeyboardEnhancementFlags;
 use crossterm::{Command, queue, terminal};
@@ -41,6 +44,17 @@ pub struct EscapeState {
     pub modify_other_keys: bool,
     /// Mode 2048 (in-band resize) is enabled by the PTY program.
     pub in_band_resize: bool,
+    /// Mode 2026 synchronized output is currently held open by the PTY
+    /// program. Host overlays must not close the application's frame.
+    pub synchronized_output: bool,
+    /// DECOM (mode 6, origin mode) is enabled by the PTY program. During
+    /// passthrough the raw stream carries it to the real terminal, where it
+    /// makes absolute host addressing region-relative.
+    pub origin_mode: bool,
+    /// DECAWM (mode 7, autowrap) was disabled by the PTY program. Wrap is on
+    /// by default, so cleanup must re-enable it if the program dies without
+    /// restoring it.
+    pub wraparound_disabled: bool,
 }
 
 impl EscapeState {
@@ -54,6 +68,9 @@ impl EscapeState {
             kitty_keyboard_depth: 0,
             modify_other_keys: false,
             in_band_resize: false,
+            synchronized_output: false,
+            origin_mode: false,
+            wraparound_disabled: false,
         }
     }
 
@@ -70,6 +87,24 @@ impl EscapeState {
             self.in_band_resize = true;
         } else if event.disables_in_band_resize() {
             self.in_band_resize = false;
+        }
+
+        if event.sets_mode(SYNCHRONIZED_OUTPUT_MODE) {
+            self.synchronized_output = true;
+        } else if event.resets_mode(SYNCHRONIZED_OUTPUT_MODE) {
+            self.synchronized_output = false;
+        }
+
+        if event.sets_mode(ORIGIN_MODE) {
+            self.origin_mode = true;
+        } else if event.resets_mode(ORIGIN_MODE) {
+            self.origin_mode = false;
+        }
+
+        if event.resets_mode(AUTOWRAP_MODE) {
+            self.wraparound_disabled = true;
+        } else if event.sets_mode(AUTOWRAP_MODE) {
+            self.wraparound_disabled = false;
         }
 
         if !event.has_forwarded_mode() {
@@ -116,6 +151,26 @@ impl EscapeState {
     pub fn apply_modify_other_keys(&mut self, enabled: bool) {
         self.modify_other_keys = enabled;
     }
+
+    /// Update tracked host state after DECSTR or RIS. These resets are
+    /// forwarded only by raw passthrough; the mediated path applies them in
+    /// the VT instead.
+    pub fn apply_terminal_reset(&mut self, hard: bool) {
+        if hard {
+            // RIS returns the terminal to its power-up state, including the
+            // primary screen and all modes tracked here.
+            *self = Self::new();
+            return;
+        }
+
+        // DECSTR resets origin mode, restores autowrap, selects the numeric
+        // keypad and normal cursor keys, and ends synchronized output.
+        self.origin_mode = false;
+        self.wraparound_disabled = false;
+        self.keypad_application_mode = false;
+        self.synchronized_output = false;
+        self.forwarded_dec_modes.remove(&1);
+    }
 }
 
 impl Default for EscapeState {
@@ -127,9 +182,8 @@ impl Default for EscapeState {
 /// Scan raw PTY output for escape sequences (DEC private mode and OSC queries),
 /// forward relevant ones to the real terminal, and update escape state.
 ///
-/// Pass `&mut std::io::sink()` for `stdout` to track state without forwarding
-/// any bytes (useful when the caller writes raw PTY bytes themselves and only
-/// needs the tracking side-effect).
+/// Pass `&mut std::io::sink()` for `stdout` to track state without duplicating
+/// sequences when the caller writes raw PTY bytes itself.
 pub fn process_escape_events(
     scanner: &mut EscapeScanner,
     data: &[u8],
@@ -188,6 +242,10 @@ pub fn process_escape_events(
                 pty.write_all(buf.as_bytes())?;
                 pty.flush()?;
             }
+            SequenceEvent::TerminalReset { hard, raw_bytes } => {
+                stdout.write_all(&raw_bytes)?;
+                esc.apply_terminal_reset(hard);
+            }
             SequenceEvent::KeypadMode { application } => {
                 queue!(stdout, SetKeypadMode { application })?;
                 esc.keypad_application_mode = application;
@@ -224,6 +282,21 @@ pub fn cleanup_forwarded_modes(esc: &EscapeState, stdout: &mut impl Write) -> io
         queue!(stdout, ResetModifyOtherKeys)?;
         needs_flush = true;
     }
+    if esc.synchronized_output {
+        queue!(stdout, ResetDecMode(SYNCHRONIZED_OUTPUT_MODE))?;
+        needs_flush = true;
+    }
+    // Modes the passthrough stream can carry to the real terminal raw and
+    // that alter it beyond the session: origin mode is off by default and
+    // autowrap on, so restore both if the program left them flipped.
+    if esc.origin_mode {
+        queue!(stdout, ResetDecMode(ORIGIN_MODE))?;
+        needs_flush = true;
+    }
+    if esc.wraparound_disabled {
+        queue!(stdout, SetDecMode(AUTOWRAP_MODE))?;
+        needs_flush = true;
+    }
     if needs_flush {
         stdout.flush()?;
     }
@@ -247,6 +320,12 @@ mod tests {
                 }
                 SequenceEvent::ModifyOtherKeys { enabled, .. } => {
                     esc.apply_modify_other_keys(*enabled);
+                }
+                SequenceEvent::TerminalReset { hard, .. } => {
+                    esc.apply_terminal_reset(*hard);
+                }
+                SequenceEvent::KeypadMode { application } => {
+                    esc.keypad_application_mode = *application;
                 }
                 _ => {}
             }
@@ -280,6 +359,53 @@ mod tests {
         let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1;2048h");
         assert!(esc.in_band_resize);
         assert!(!forwarded.is_empty(), "mode 1 should be forwarded");
+    }
+
+    #[test]
+    fn synchronized_output_is_tracked_across_reads() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2026h");
+        assert!(esc.synchronized_output);
+        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2026l");
+        assert!(!esc.synchronized_output);
+    }
+
+    #[test]
+    fn soft_reset_updates_passthrough_mode_state() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        scan_and_apply(
+            &mut scanner,
+            &mut esc,
+            b"\x1b[?1049h\x1b[?1;6;2026h\x1b[?7l\x1b=",
+        );
+        assert!(esc.in_alternate_screen);
+        assert!(esc.origin_mode);
+        assert!(esc.wraparound_disabled);
+        assert!(esc.synchronized_output);
+        assert!(esc.keypad_application_mode);
+        assert!(esc.forwarded_dec_modes.contains(&1));
+
+        scan_and_apply(&mut scanner, &mut esc, b"\x1b[!p");
+        assert!(esc.in_alternate_screen, "DECSTR does not leave alt screen");
+        assert!(!esc.origin_mode);
+        assert!(!esc.wraparound_disabled);
+        assert!(!esc.synchronized_output);
+        assert!(!esc.keypad_application_mode);
+        assert!(!esc.forwarded_dec_modes.contains(&1));
+    }
+
+    #[test]
+    fn hard_reset_clears_passthrough_mode_state() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1049h\x1b[?6;2026h\x1b[?7l");
+        scan_and_apply(&mut scanner, &mut esc, b"\x1bc");
+        assert!(!esc.in_alternate_screen);
+        assert!(!esc.origin_mode);
+        assert!(!esc.wraparound_disabled);
+        assert!(!esc.synchronized_output);
     }
 
     #[test]
@@ -352,7 +478,11 @@ mod tests {
     fn cleanup_resets_tracked_modes() {
         let mut scanner = EscapeScanner::new();
         let mut esc = EscapeState::new();
-        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1049h\x1b[?1000h\x1b[?2004h");
+        scan_and_apply(
+            &mut scanner,
+            &mut esc,
+            b"\x1b[?1049h\x1b[?1000h\x1b[?2004h\x1b[?2026h",
+        );
         assert!(esc.in_alternate_screen);
         assert!(esc.forwarded_dec_modes.contains(&1000));
         assert!(esc.forwarded_dec_modes.contains(&2004));
@@ -373,6 +503,11 @@ mod tests {
         assert!(
             out.contains("\x1b[?2004l"),
             "expected paste reset, got {:?}",
+            out
+        );
+        assert!(
+            out.contains("\x1b[?2026l"),
+            "expected synchronized-output reset, got {:?}",
             out
         );
     }

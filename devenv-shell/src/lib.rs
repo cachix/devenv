@@ -6,6 +6,7 @@
 pub mod dialect;
 pub mod escape;
 pub mod escape_state;
+mod passthrough;
 mod protocol;
 mod pty;
 mod session;
