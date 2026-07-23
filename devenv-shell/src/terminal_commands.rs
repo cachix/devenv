@@ -61,9 +61,21 @@ pub struct ResetDecMode(pub u16);
 /// DEC origin mode (mode 6).
 pub const ORIGIN_MODE: u16 = 6;
 
+/// DEC autowrap mode (mode 7).
+pub const AUTOWRAP_MODE: u16 = 7;
+
 impl Command for ResetDecMode {
     fn write_ansi(&self, f: &mut impl fmt::Write) -> fmt::Result {
         write!(f, "\x1b[?{}l", self.0)
+    }
+}
+
+/// Set a DEC private mode (CSI ? mode h).
+pub struct SetDecMode(pub u16);
+
+impl Command for SetDecMode {
+    fn write_ansi(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        write!(f, "\x1b[?{}h", self.0)
     }
 }
 

@@ -21,25 +21,35 @@ use osc::{OscParser, OscResult};
 const FORWARDED_MODES: &[u16] = &[
     1, // cursor key mode (DECCKM) — applications use smkx/rmkx to toggle
     9, // X10 mouse mode (legacy)
-    47, 1047, 1049, // alternate screen
-    1000, 1002, 1003, // mouse tracking
-    1005, 1006, 1015, 1016, // mouse encoding (including SGR pixels)
+    47,
+    1047,
+    1049, // alternate screen
+    1000,
+    1002,
+    1003, // mouse tracking
+    1005,
+    1006,
+    1015,
+    1016, // mouse encoding (including SGR pixels)
     2004, // bracketed paste
     1004, // focus events
-    2026, // synchronized output
+    SYNCHRONIZED_OUTPUT_MODE,
     2031, // color scheme reporting
 ];
 
 /// Modes that control alternate screen buffer.
-const ALT_SCREEN_MODES: &[u16] = &[47, 1047, 1049];
+pub(crate) const ALT_SCREEN_MODES: &[u16] = &[47, 1047, 1049];
 
 /// Mode 2048: in-band resize reports. Not forwarded to the real terminal
 /// because the PTY has fewer rows than the real terminal (status line).
-const IN_BAND_RESIZE_MODE: u16 = 2048;
+pub(crate) const IN_BAND_RESIZE_MODE: u16 = 2048;
+
+/// Mode 2026: synchronized output.
+pub(crate) const SYNCHRONIZED_OUTPUT_MODE: u16 = 2026;
 
 /// Modes that need explicit reset on session exit. Excludes alternate screen
-/// modes (handled via `LeaveAlternateScreen`) and synchronized output (mode
-/// 2026, managed per-frame by the renderer).
+/// modes (handled via `LeaveAlternateScreen`) and synchronized output (tracked
+/// separately so an unterminated application frame can be closed on exit).
 pub const CLEANUP_MODES: &[u16] = &[
     1, // cursor key mode (DECCKM)
     9, // X10 mouse mode
@@ -85,6 +95,16 @@ impl DecModeEvent {
     /// Whether this event disables in-band resize (mode 2048).
     pub fn disables_in_band_resize(&self) -> bool {
         matches!(self, DecModeEvent::Reset { modes, .. } if modes.contains(&IN_BAND_RESIZE_MODE))
+    }
+
+    /// Whether this event sets (enables) the given mode.
+    pub fn sets_mode(&self, mode: u16) -> bool {
+        matches!(self, DecModeEvent::Set { modes, .. } if modes.contains(&mode))
+    }
+
+    /// Whether this event resets (disables) the given mode.
+    pub fn resets_mode(&self, mode: u16) -> bool {
+        matches!(self, DecModeEvent::Reset { modes, .. } if modes.contains(&mode))
     }
 
     /// Raw bytes of the original sequence for forwarding.
@@ -149,6 +169,11 @@ pub enum SequenceEvent {
     /// CSI 18 t — program is querying text area size in characters.
     /// The session responds with PTY dimensions (not real terminal size).
     TextAreaSizeQuery,
+    /// DECSTR (`CSI ! p`) or RIS (`ESC c`) reset persistent terminal modes.
+    TerminalReset {
+        hard: bool,
+        raw_bytes: Vec<u8>,
+    },
 }
 
 /// Maximum number of CSI parameters to accumulate.
@@ -173,6 +198,8 @@ enum CsiClass {
     /// CSI 18 t — text area size query. Intercepted so we can respond
     /// with PTY dimensions instead of the real terminal size.
     TextAreaSizeQuery,
+    /// DECSTR soft terminal reset.
+    SoftReset,
     /// AVT handles it, no forwarding needed.
     Ignore,
 }
@@ -203,6 +230,9 @@ fn classify_csi(
         // size-reporting queries are not forwarded to the real terminal).
         ([], b't') if first == 18 => CsiClass::TextAreaSizeQuery,
         ([], b't') if matches!(first, 16 | 21) => CsiClass::Forward,
+
+        // DECSTR resets modes whose state the session mirrors onto the host.
+        ([b'!'], b'p') => CsiClass::SoftReset,
 
         // Erase — intercept for renderer coordination
         ([], b'J') if first == 2 => CsiClass::EraseDisplay,
@@ -394,7 +424,8 @@ impl EscapeScanner {
 
     /// Scan a chunk of raw PTY output, appending events to the provided Vec.
     ///
-    /// Unlike [`scan`], this avoids allocating a new Vec on every call.
+    /// Unlike the test-only `scan` convenience method, this avoids allocating
+    /// a new Vec on every call.
     /// The caller can reuse the Vec across invocations.
     pub fn scan_into(&mut self, data: &[u8], events: &mut Vec<SequenceEvent>) {
         for &byte in data {
@@ -430,6 +461,15 @@ impl EscapeScanner {
                             self.seq_bytes.clear();
                             events.push(SequenceEvent::KeypadMode {
                                 application: byte == b'=',
+                            });
+                            self.state = RouterState::Ground;
+                        }
+                        b'c' => {
+                            // RIS hard terminal reset.
+                            let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                            events.push(SequenceEvent::TerminalReset {
+                                hard: true,
+                                raw_bytes,
                             });
                             self.state = RouterState::Ground;
                         }
@@ -718,6 +758,13 @@ impl EscapeScanner {
             CsiClass::TextAreaSizeQuery => {
                 events.push(SequenceEvent::TextAreaSizeQuery);
             }
+            CsiClass::SoftReset => {
+                let raw_bytes = std::mem::take(&mut self.seq_bytes);
+                events.push(SequenceEvent::TerminalReset {
+                    hard: false,
+                    raw_bytes,
+                });
+            }
             CsiClass::Ignore => {}
         }
         self.state = RouterState::Ground;
@@ -911,6 +958,25 @@ mod tests {
             DecModeEvent::Set { modes, .. } => assert_eq!(modes, &[2026]),
             _ => panic!("expected Set"),
         }
+    }
+
+    #[test]
+    fn detects_soft_and_hard_terminal_resets() {
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[!p\x1bc");
+        assert_eq!(
+            events,
+            [
+                SequenceEvent::TerminalReset {
+                    hard: false,
+                    raw_bytes: b"\x1b[!p".to_vec(),
+                },
+                SequenceEvent::TerminalReset {
+                    hard: true,
+                    raw_bytes: b"\x1bc".to_vec(),
+                },
+            ]
+        );
     }
 
     #[test]
