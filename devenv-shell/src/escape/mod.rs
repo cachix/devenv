@@ -67,6 +67,56 @@ impl DecModeEvent {
         modes.iter().any(|m| FORWARDED_MODES.contains(m))
     }
 
+    /// Encode the allowed subset of this mode change for the real terminal.
+    ///
+    /// A DEC private-mode sequence can carry several parameters. Forwarding
+    /// its raw bytes when just one parameter is allowlisted would also apply
+    /// every other parameter to the real terminal. In particular, mode 2048
+    /// must remain local because the embedded PTY has one fewer row than the
+    /// physical terminal. Preserve raw bytes for the long-tested all-allowed
+    /// path; rebuild only mixed sequences so only supported modes reach stdout.
+    pub fn encode_forwarded_modes(&self, output: &mut Vec<u8>) {
+        self.encode_forwarded_modes_excluding(output, None);
+    }
+
+    /// Encode forwarded modes, excluding one mode that is owned by the
+    /// renderer. Used only for a synchronized-output reset: the physical
+    /// terminal must keep buffering until the renderer has presented the
+    /// virtual frame, while any companion mode changes retain their usual
+    /// immediate passthrough behavior.
+    pub fn encode_forwarded_modes_excluding(&self, output: &mut Vec<u8>, excluded: Option<u16>) {
+        let (modes, final_byte) = match self {
+            DecModeEvent::Set { modes, .. } => (modes, b'h'),
+            DecModeEvent::Reset { modes, .. } => (modes, b'l'),
+        };
+
+        output.clear();
+        if excluded.is_none() && modes.iter().all(|mode| FORWARDED_MODES.contains(mode)) {
+            output.extend_from_slice(self.raw_bytes());
+            return;
+        }
+
+        output.extend_from_slice(b"\x1b[?");
+
+        let mut first = true;
+        for &mode in modes {
+            if !FORWARDED_MODES.contains(&mode) || Some(mode) == excluded {
+                continue;
+            }
+            if !first {
+                output.push(b';');
+            }
+            append_decimal(output, mode);
+            first = false;
+        }
+
+        if first {
+            output.clear();
+        } else {
+            output.push(final_byte);
+        }
+    }
+
     /// Whether this event enters alternate screen.
     pub fn enters_alt_screen(&self) -> bool {
         matches!(self, DecModeEvent::Set { modes, .. } if modes.iter().any(|m| ALT_SCREEN_MODES.contains(m)))
@@ -87,6 +137,16 @@ impl DecModeEvent {
         matches!(self, DecModeEvent::Reset { modes, .. } if modes.contains(&IN_BAND_RESIZE_MODE))
     }
 
+    /// Whether this event starts a synchronized-output transaction.
+    pub fn enables_synchronized_output(&self) -> bool {
+        matches!(self, DecModeEvent::Set { modes, .. } if modes.contains(&2026))
+    }
+
+    /// Whether this event releases a synchronized-output transaction.
+    pub fn disables_synchronized_output(&self) -> bool {
+        matches!(self, DecModeEvent::Reset { modes, .. } if modes.contains(&2026))
+    }
+
     /// Raw bytes of the original sequence for forwarding.
     pub fn raw_bytes(&self) -> &[u8] {
         match self {
@@ -97,9 +157,47 @@ impl DecModeEvent {
     }
 }
 
+/// Append a `u16` as ASCII without allocating a temporary string.
+fn append_decimal(output: &mut Vec<u8>, value: u16) {
+    let mut digits = [0; 5];
+    let mut value = value;
+    let mut start = digits.len();
+
+    loop {
+        start -= 1;
+        digits[start] = b'0' + (value % 10) as u8;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+
+    output.extend_from_slice(&digits[start..]);
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OscEvent {
     pub raw_bytes: Vec<u8>,
+}
+
+/// A query whose reply must describe the virtual terminal, not the physical
+/// terminal that hosts the renderer.
+///
+/// The session routes only this narrow set through libghostty-vt's
+/// `on_pty_write` effect. Every other query keeps the long-established
+/// physical-terminal passthrough path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VirtualTerminalQuery {
+    /// ANSI DSR/CPR (`CSI 5 n` or `CSI 6 n`).
+    ///
+    /// The physical cursor often sits on the status row or a renderer-owned
+    /// row, so its report is not meaningful to the child PTY.
+    DeviceStatus,
+    /// DECRQM for mode 2048 (`CSI ? 2048 $ p`).
+    ///
+    /// This mode deliberately remains local because the child PTY has one
+    /// fewer row than the physical terminal.
+    InBandResizeMode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,6 +247,9 @@ pub enum SequenceEvent {
     /// CSI 18 t — program is querying text area size in characters.
     /// The session responds with PTY dimensions (not real terminal size).
     TextAreaSizeQuery,
+    /// Query handled by the virtual terminal's narrowly filtered reply hook.
+    /// It must not be written to the physical terminal.
+    VirtualTerminalQuery(VirtualTerminalQuery),
 }
 
 /// Maximum number of CSI parameters to accumulate.
@@ -173,6 +274,8 @@ enum CsiClass {
     /// CSI 18 t — text area size query. Intercepted so we can respond
     /// with PTY dimensions instead of the real terminal size.
     TextAreaSizeQuery,
+    /// Query that must be answered from the virtual terminal state.
+    VirtualTerminalQuery(VirtualTerminalQuery),
     /// AVT handles it, no forwarding needed.
     Ignore,
 }
@@ -188,16 +291,33 @@ fn classify_csi(
     let first = p.first().copied().unwrap_or(0);
 
     match (intermediates, final_byte) {
-        // Queries — forward to real terminal
+        // Queries whose answers describe the virtual terminal. The status
+        // line and differential renderer own the physical cursor, so a DSR
+        // or CPR from stdout would report the wrong location to the child.
+        // Limit this to well-formed single-parameter requests: malformed or
+        // extended requests retain main's physical passthrough behavior.
+        ([], b'n') if p.len() == 1 && matches!(first, 5 | 6) => {
+            CsiClass::VirtualTerminalQuery(VirtualTerminalQuery::DeviceStatus)
+        }
+        // Mode 2048 is intentionally not forwarded (the child has one fewer
+        // row). DECRQM must therefore report the VT's local state rather
+        // than asking the physical terminal about an unrelated mode.
+        ([b'?', b'$'], b'p') if p == [IN_BAND_RESIZE_MODE] => {
+            CsiClass::VirtualTerminalQuery(VirtualTerminalQuery::InBandResizeMode)
+        }
+
+        // Queries — forward to real terminal. These expose physical input,
+        // font, title, or capability state and deliberately preserve main's
+        // mature passthrough behavior.
         ([], b'c') if first == 0 => CsiClass::Forward, // DA1
         ([b'>'], b'c') => CsiClass::Forward,           // DA2
         ([b'='], b'c') => CsiClass::Forward,           // DA3
-        ([], b'n') if first == 5 || first == 6 => CsiClass::Forward, // DSR/CPR
-        ([b'?'], b'n') => CsiClass::Forward,           // DEC DSR (? 6 n, ? 996 n)
-        ([b'>'], b'q') => CsiClass::Forward,           // XTVERSION
-        ([b'?'], b'u') => CsiClass::Forward,           // Kitty KB query
-        ([b'?', b'$'], b'p') => CsiClass::Forward,     // DECRQM DEC mode
-        ([b'$'], b'p') => CsiClass::Forward,           // DECRQM ANSI mode
+        ([], b'n') if first == 5 || first == 6 => CsiClass::Forward,
+        ([b'?'], b'n') => CsiClass::Forward, // DEC DSR (? 6 n, ? 996 n)
+        ([b'>'], b'q') => CsiClass::Forward, // XTVERSION
+        ([b'?'], b'u') => CsiClass::Forward, // Kitty KB query
+        ([b'?', b'$'], b'p') => CsiClass::Forward, // DECRQM DEC mode
+        ([b'$'], b'p') => CsiClass::Forward, // DECRQM ANSI mode
 
         // XTWINOPS queries (see FORWARDED_MODES doc comment for why
         // size-reporting queries are not forwarded to the real terminal).
@@ -717,6 +837,9 @@ impl EscapeScanner {
             }
             CsiClass::TextAreaSizeQuery => {
                 events.push(SequenceEvent::TextAreaSizeQuery);
+            }
+            CsiClass::VirtualTerminalQuery(query) => {
+                events.push(SequenceEvent::VirtualTerminalQuery(query));
             }
             CsiClass::Ignore => {}
         }
@@ -1261,25 +1384,25 @@ mod tests {
     // -- Device Status Report (DSR/CPR) tests --
 
     #[test]
-    fn detects_cpr_request() {
+    fn routes_cpr_request_to_virtual_terminal() {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[6n");
         assert_eq!(events.len(), 1);
-        let SequenceEvent::ForwardCsi { ref raw_bytes } = events[0] else {
-            panic!("expected ForwardCsi, got {:?}", events[0]);
-        };
-        assert_eq!(raw_bytes, b"\x1b[6n");
+        assert_eq!(
+            events[0],
+            SequenceEvent::VirtualTerminalQuery(VirtualTerminalQuery::DeviceStatus)
+        );
     }
 
     #[test]
-    fn detects_dsr_request() {
+    fn routes_dsr_request_to_virtual_terminal() {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"\x1b[5n");
         assert_eq!(events.len(), 1);
-        let SequenceEvent::ForwardCsi { ref raw_bytes } = events[0] else {
-            panic!("expected ForwardCsi, got {:?}", events[0]);
-        };
-        assert_eq!(raw_bytes, b"\x1b[5n");
+        assert_eq!(
+            events[0],
+            SequenceEvent::VirtualTerminalQuery(VirtualTerminalQuery::DeviceStatus)
+        );
     }
 
     #[test]
@@ -1294,7 +1417,10 @@ mod tests {
 
         let events3 = scanner.scan(b"n");
         assert_eq!(events3.len(), 1);
-        assert!(matches!(events3[0], SequenceEvent::ForwardCsi { .. }));
+        assert_eq!(
+            events3[0],
+            SequenceEvent::VirtualTerminalQuery(VirtualTerminalQuery::DeviceStatus)
+        );
     }
 
     #[test]
@@ -1302,7 +1428,10 @@ mod tests {
         let mut scanner = EscapeScanner::new();
         let events = scanner.scan(b"hello\x1b[6nworld");
         assert_eq!(events.len(), 1);
-        assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+        assert_eq!(
+            events[0],
+            SequenceEvent::VirtualTerminalQuery(VirtualTerminalQuery::DeviceStatus)
+        );
     }
 
     // -- Keypad mode (DECKPAM/DECKPNM) tests --
@@ -1454,6 +1583,60 @@ mod tests {
         let events = scanner.scan(b"\x1b[4$p");
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], SequenceEvent::ForwardCsi { .. }));
+    }
+
+    #[test]
+    fn routes_only_virtual_geometry_queries_away_from_physical_terminal() {
+        let physical_queries = [
+            // Capability and input-protocol reports describe the physical
+            // terminal and keep main's pass-through behavior.
+            b"\x1b[c".as_slice(),
+            b"\x1b[>c",
+            b"\x1b[=c",
+            b"\x1b[?6n",
+            b"\x1b[?996n",
+            b"\x1b[>q",
+            b"\x1b[?u",
+            b"\x1b[?7$p",
+            // A malformed/multi-parameter DSR and DECRQM keep their legacy
+            // raw pass-through path rather than receiving a guessed reply.
+            b"\x1b[5;1n",
+            b"\x1b[?2048;7$p",
+            b"\x1b[16t",
+            b"\x1b[21t",
+        ];
+
+        for query in physical_queries {
+            let mut scanner = EscapeScanner::new();
+            let events = scanner.scan(query);
+            assert!(
+                matches!(events.as_slice(), [SequenceEvent::ForwardCsi { raw_bytes }] if raw_bytes == query),
+                "query {query:?} no longer preserves physical passthrough: {events:?}",
+            );
+        }
+
+        let mut scanner = EscapeScanner::new();
+        let events = scanner.scan(b"\x1b[5n\x1b[6n\x1b[?2048$p");
+        assert_eq!(
+            events,
+            [
+                SequenceEvent::VirtualTerminalQuery(VirtualTerminalQuery::DeviceStatus),
+                SequenceEvent::VirtualTerminalQuery(VirtualTerminalQuery::DeviceStatus),
+                SequenceEvent::VirtualTerminalQuery(VirtualTerminalQuery::InBandResizeMode),
+            ]
+        );
+    }
+
+    #[test]
+    fn in_band_resize_mode_query_survives_split_input() {
+        let mut scanner = EscapeScanner::new();
+        assert!(scanner.scan(b"\x1b[?2048$").is_empty());
+        assert_eq!(
+            scanner.scan(b"p"),
+            [SequenceEvent::VirtualTerminalQuery(
+                VirtualTerminalQuery::InBandResizeMode
+            )]
+        );
     }
 
     // -- Kitty keyboard protocol tests --

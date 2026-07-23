@@ -318,6 +318,183 @@ pub struct StatusLine {
     spinner_frame: usize,
     /// Last time the spinner frame was updated
     last_spinner_update: Instant,
+    /// ANSI for the last rendered status-line state. Most calls to `draw` are
+    /// caused by PTY output, not a status change, so retaining this avoids
+    /// rebuilding the iocraft element tree and canvas for those calls.
+    cached_content: Vec<u8>,
+    cached_state: Option<CachedRenderState>,
+    cached_width: u16,
+    cached_spinner_frame: Option<usize>,
+}
+
+/// The subset of [`StatusState`] that can affect the rendered status line.
+///
+/// This deliberately omits state that is hidden by a higher-priority status
+/// (for example, a watched-file count while paused). That keeps a cache hit
+/// cheap without changing the bytes written to the terminal. Changed paths are
+/// retained rather than hashed, so cache validity is exact rather than
+/// probabilistic.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum CachedRenderState {
+    Building {
+        changed_files: Vec<PathBuf>,
+        elapsed: Option<RenderedElapsed>,
+    },
+    ReloadReady {
+        build_duration: Option<std::time::Duration>,
+        watched_file_count: usize,
+    },
+    Reloaded {
+        build_duration: Option<std::time::Duration>,
+        watched_file_count: usize,
+    },
+    Failed {
+        build_duration: Option<std::time::Duration>,
+        watched_file_count: usize,
+        show_error: bool,
+    },
+    Paused,
+    Watching {
+        watched_file_count: usize,
+    },
+    Idle,
+}
+
+/// A non-allocating, conservative cache key for a displayed build duration.
+///
+/// The narrow guard around a decimal rounding boundary uses the full duration;
+/// everywhere else a 50 ms bucket is sufficient. This may occasionally redraw
+/// before the text changes, but it can never retain stale duration text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RenderedElapsed {
+    Deterministic,
+    Milliseconds(u128),
+    TenthsOfSecond(u128),
+    TenthsBoundary(u128),
+    WholeSeconds(u64),
+}
+
+impl CachedRenderState {
+    fn matches(&self, state: &StatusState, build_elapsed: Option<std::time::Duration>) -> bool {
+        match self {
+            Self::Building {
+                changed_files,
+                elapsed,
+            } => {
+                state.building
+                    && changed_files == &state.changed_files
+                    && *elapsed == rendered_elapsed(build_elapsed)
+            }
+            Self::ReloadReady {
+                build_duration,
+                watched_file_count,
+            } => {
+                !state.building
+                    && state.reload_ready
+                    && *build_duration == state.build_duration
+                    && *watched_file_count == state.watched_file_count
+            }
+            Self::Reloaded {
+                build_duration,
+                watched_file_count,
+            } => {
+                !state.building
+                    && !state.reload_ready
+                    && state.reloaded
+                    && *build_duration == state.build_duration
+                    && *watched_file_count == state.watched_file_count
+            }
+            Self::Failed {
+                build_duration,
+                watched_file_count,
+                show_error,
+            } => {
+                !state.building
+                    && !state.reload_ready
+                    && !state.reloaded
+                    && state.error.is_some()
+                    && *build_duration == state.build_duration
+                    && *watched_file_count == state.watched_file_count
+                    && *show_error == state.show_error
+            }
+            Self::Paused => {
+                !state.building
+                    && !state.reload_ready
+                    && !state.reloaded
+                    && state.error.is_none()
+                    && state.paused
+            }
+            Self::Watching { watched_file_count } => {
+                !state.building
+                    && !state.reload_ready
+                    && !state.reloaded
+                    && state.error.is_none()
+                    && !state.paused
+                    && *watched_file_count == state.watched_file_count
+                    && state.watched_file_count > 0
+            }
+            Self::Idle => !state.has_status(),
+        }
+    }
+
+    fn from_state(state: &StatusState, build_elapsed: Option<std::time::Duration>) -> Self {
+        if state.building {
+            Self::Building {
+                changed_files: state.changed_files.clone(),
+                elapsed: rendered_elapsed(build_elapsed),
+            }
+        } else if state.reload_ready {
+            Self::ReloadReady {
+                build_duration: state.build_duration,
+                watched_file_count: state.watched_file_count,
+            }
+        } else if state.reloaded {
+            Self::Reloaded {
+                build_duration: state.build_duration,
+                watched_file_count: state.watched_file_count,
+            }
+        } else if state.error.is_some() {
+            Self::Failed {
+                build_duration: state.build_duration,
+                watched_file_count: state.watched_file_count,
+                show_error: state.show_error,
+            }
+        } else if state.paused {
+            Self::Paused
+        } else if state.watched_file_count > 0 {
+            Self::Watching {
+                watched_file_count: state.watched_file_count,
+            }
+        } else {
+            Self::Idle
+        }
+    }
+}
+
+/// Return a non-allocating key matching [`format_duration_parts`].
+fn rendered_elapsed(elapsed: Option<std::time::Duration>) -> Option<RenderedElapsed> {
+    if cfg!(feature = "deterministic-tui") {
+        elapsed.map(|_| RenderedElapsed::Deterministic)
+    } else {
+        elapsed.map(|elapsed| {
+            let total_secs = elapsed.as_secs();
+            if total_secs < 1 {
+                RenderedElapsed::Milliseconds(elapsed.as_millis())
+            } else if total_secs < 60 {
+                let millis = elapsed.as_millis();
+                // A `f64` formatter's half-tenth boundary lies at 50 ms. The
+                // guard also covers its representational edge, while the rest
+                // of the range gets 50 ms cache buckets without allocations.
+                if (45..=55).contains(&(millis % 100)) {
+                    RenderedElapsed::TenthsBoundary(elapsed.as_nanos())
+                } else {
+                    RenderedElapsed::TenthsOfSecond(millis / 50)
+                }
+            } else {
+                RenderedElapsed::WholeSeconds(total_secs)
+            }
+        })
+    }
 }
 
 impl StatusLine {
@@ -328,6 +505,10 @@ impl StatusLine {
             enabled: true,
             spinner_frame: 0,
             last_spinner_update: Instant::now(),
+            cached_content: Vec::new(),
+            cached_state: None,
+            cached_width: 0,
+            cached_spinner_frame: None,
         }
     }
 
@@ -379,14 +560,31 @@ impl StatusLine {
         // Update spinner animation
         self.update_spinner();
 
-        // Build the status line content
-        let mut element = self.build_element(cols);
-        let canvas = element.render(Some(cols as usize));
-        let mut content = Vec::new();
-        canvas.write_ansi(&mut content)?;
-        // Truncate at first newline to keep only first line
-        if let Some(pos) = content.iter().position(|&b| b == b'\n') {
-            content.truncate(pos);
+        // Capture elapsed time once so the cache key and the iocraft tree use
+        // the exact same rendered value, even when a millisecond boundary is
+        // crossed while drawing.
+        let build_elapsed = self.state.build_start.map(|start| start.elapsed());
+        let spinner_frame = self.state.building.then_some(self.spinner_frame);
+        let cache_hit = self.cached_width == cols
+            && self.cached_spinner_frame == spinner_frame
+            && self
+                .cached_state
+                .as_ref()
+                .is_some_and(|cached| cached.matches(&self.state, build_elapsed));
+
+        if !cache_hit {
+            self.cached_content.clear();
+            let mut element = self.build_element_with_elapsed(cols, build_elapsed);
+            let canvas = element.render(Some(cols as usize));
+            canvas.write_ansi(&mut self.cached_content)?;
+            // Keep only the first line. The terminal row is cleared below,
+            // matching the previous behavior for wrapped canvas output.
+            if let Some(pos) = self.cached_content.iter().position(|&b| b == b'\n') {
+                self.cached_content.truncate(pos);
+            }
+            self.cached_width = cols;
+            self.cached_spinner_frame = spinner_frame;
+            self.cached_state = Some(CachedRenderState::from_state(&self.state, build_elapsed));
         }
 
         // Move to the last row, clear it, write content
@@ -395,7 +593,7 @@ impl StatusLine {
             cursor::MoveTo(0, total_rows - 1),
             Clear(ClearType::CurrentLine)
         )?;
-        stdout.write_all(&content)?;
+        stdout.write_all(&self.cached_content)?;
         queue!(stdout, ResetColor)?;
 
         Ok(())
@@ -403,16 +601,25 @@ impl StatusLine {
 
     /// Build the status line element.
     pub fn build_element(&self, width: u16) -> AnyElement<'static> {
+        self.build_element_with_elapsed(width, self.state.build_start.map(|start| start.elapsed()))
+    }
+
+    /// Build the status line element using a captured elapsed duration.
+    ///
+    /// `draw` supplies this so its cache key and element are based on one
+    /// instant. The public `build_element` retains its original behavior.
+    fn build_element_with_elapsed(
+        &self,
+        width: u16,
+        build_elapsed: Option<std::time::Duration>,
+    ) -> AnyElement<'static> {
         // Use short keybind notation for narrow terminals
         let use_short = width < 60;
 
         if self.state.building {
             // Building state: spinner + elapsed time + changed files
             let spinner = self.spinner_char().to_string();
-            let elapsed = self
-                .state
-                .build_start
-                .map(|s| format_duration_parts(s.elapsed()));
+            let elapsed = build_elapsed.map(format_duration_parts);
 
             // Changed files inline
             let files_max_len = (width as usize).saturating_sub(40);
@@ -674,5 +881,189 @@ mod tests {
 
         sl.state_mut().clear();
         assert!(!sl.state().has_status());
+    }
+
+    fn uncached_content(status_line: &StatusLine, width: u16) -> Vec<u8> {
+        let mut element = status_line.build_element(width);
+        let canvas = element.render(Some(width as usize));
+        let mut content = Vec::new();
+        canvas.write_ansi(&mut content).unwrap();
+        if let Some(pos) = content.iter().position(|&byte| byte == b'\n') {
+            content.truncate(pos);
+        }
+        content
+    }
+
+    fn draw_content(status_line: &mut StatusLine, width: u16) -> Vec<u8> {
+        let mut output = Vec::new();
+        status_line.draw(&mut output, width, 24).unwrap();
+        output
+    }
+
+    fn assert_draw_matches_fresh_render(status_line: &mut StatusLine, width: u16) {
+        let expected = uncached_content(status_line, width);
+        let output = draw_content(status_line, width);
+        assert_eq!(status_line.cached_content, expected);
+        if !expected.is_empty() {
+            assert!(
+                output
+                    .windows(expected.len())
+                    .any(|window| window == expected.as_slice())
+            );
+        }
+    }
+
+    #[test]
+    fn status_line_cache_reuses_identical_ansi_content() {
+        let mut status_line = StatusLine::new();
+        status_line.state_mut().set_paused(true);
+
+        let expected = uncached_content(&status_line, 80);
+        let first_output = draw_content(&mut status_line, 80);
+        assert_eq!(status_line.cached_content, expected);
+
+        let content_pointer = status_line.cached_content.as_ptr();
+        let state_pointer = status_line.cached_state.as_ref().unwrap() as *const _;
+        let second_output = draw_content(&mut status_line, 80);
+
+        assert_eq!(second_output, first_output);
+        assert_eq!(status_line.cached_content, expected);
+        assert_eq!(status_line.cached_content.as_ptr(), content_pointer);
+        assert_eq!(
+            status_line.cached_state.as_ref().unwrap() as *const _,
+            state_pointer
+        );
+    }
+
+    #[test]
+    fn status_line_cache_invalidates_for_state_width_and_spinner_changes() {
+        let mut status_line = StatusLine::new();
+        status_line.state_mut().set_paused(true);
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        let paused_content = status_line.cached_content.clone();
+
+        status_line.state_mut().set_paused(false);
+        status_line.state_mut().set_watched_file_count(2);
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        assert_ne!(status_line.cached_content, paused_content);
+        assert!(matches!(
+            status_line.cached_state,
+            Some(CachedRenderState::Watching {
+                watched_file_count: 2
+            })
+        ));
+
+        assert_draw_matches_fresh_render(&mut status_line, 40);
+        assert_eq!(status_line.cached_width, 40);
+        assert_ne!(status_line.cached_content, paused_content);
+
+        status_line
+            .state_mut()
+            .set_building(vec![PathBuf::from("devenv.nix")]);
+        status_line.spinner_frame = 0;
+        status_line.last_spinner_update = Instant::now();
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        let first_spinner_content = status_line.cached_content.clone();
+
+        status_line.spinner_frame = 1;
+        status_line.last_spinner_update = Instant::now();
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        assert_ne!(status_line.cached_content, first_spinner_content);
+        assert_eq!(status_line.cached_spinner_frame, Some(1));
+    }
+
+    #[test]
+    fn status_line_cache_matches_fresh_render_for_every_status_branch() {
+        let mut status_line = StatusLine::new();
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+
+        status_line.state_mut().set_watched_file_count(3);
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+
+        status_line.state_mut().set_paused(true);
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+
+        status_line.state_mut().set_paused(false);
+        status_line.state_mut().error = Some("first error".into());
+        status_line.state_mut().build_duration = Some(std::time::Duration::from_millis(250));
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        let failed_content = status_line.cached_content.clone();
+
+        // Error text is intentionally not rendered; only its presence and the
+        // expanded/collapsed action affect this branch.
+        status_line.state_mut().error = Some("a different error".into());
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        assert_eq!(status_line.cached_content, failed_content);
+
+        status_line.state_mut().show_error = true;
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+
+        status_line.state_mut().error = None;
+        status_line
+            .state_mut()
+            .set_reload_ready(vec![PathBuf::from("devenv.nix")]);
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+
+        status_line.state_mut().set_reloaded();
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+
+        status_line
+            .state_mut()
+            .set_building(vec![PathBuf::from("devenv.nix")]);
+        status_line.state_mut().build_start = Some(
+            Instant::now()
+                .checked_sub(std::time::Duration::from_millis(2_100))
+                .unwrap(),
+        );
+        status_line.last_spinner_update = Instant::now();
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+    }
+
+    #[test]
+    fn rendered_elapsed_uses_display_precision() {
+        let duration = |millis| Some(std::time::Duration::from_millis(millis));
+        assert_eq!(
+            rendered_elapsed(duration(999)),
+            rendered_elapsed(duration(999))
+        );
+
+        if !cfg!(feature = "deterministic-tui") {
+            assert_eq!(
+                format_duration_parts(duration(1_101).unwrap()),
+                format_duration_parts(duration(1_144).unwrap())
+            );
+            assert_eq!(
+                rendered_elapsed(duration(1_101)),
+                rendered_elapsed(duration(1_144))
+            );
+            assert_eq!(
+                format_duration_parts(duration(1_144).unwrap()),
+                format_duration_parts(duration(1_145).unwrap())
+            );
+            assert_ne!(
+                rendered_elapsed(duration(1_144)),
+                rendered_elapsed(duration(1_145))
+            );
+            assert_eq!(
+                format_duration_parts(duration(1_149).unwrap()),
+                format_duration_parts(duration(1_150).unwrap())
+            );
+            assert_ne!(
+                rendered_elapsed(duration(1_149)),
+                rendered_elapsed(duration(1_150))
+            );
+            assert_eq!(
+                rendered_elapsed(duration(60_001)),
+                rendered_elapsed(duration(60_999))
+            );
+            assert_eq!(
+                format_duration_parts(duration(60_001).unwrap()),
+                format_duration_parts(duration(60_999).unwrap())
+            );
+            assert_ne!(
+                rendered_elapsed(duration(1_149)),
+                rendered_elapsed(duration(1_200))
+            );
+        }
     }
 }

@@ -15,20 +15,25 @@ use crate::terminal::RawModeGuard;
 use crate::terminal_commands::{
     InBandResizeNotification, ORIGIN_MODE, ResetDecMode, ResetScrollRegion, SetScrollRegion,
 };
-use crate::utf8_accumulator::Utf8Accumulator;
 use crate::vt_utils::{
-    CursorState, DEFAULT_MAX_SCROLLBACK, active_point, point_with_x, push_cell_text, screen_point,
+    CursorState, DEFAULT_MAX_SCROLLBACK, active_point, point_with_x, screen_point,
 };
 use crossterm::{
     Command, cursor, queue,
     terminal::{self, Clear, ClearType},
 };
-use libghostty_vt::render::{CellIterator, Colors, Dirty, RenderState, RowIteration, RowIterator};
-use libghostty_vt::screen::{Cell, CellContentTag, CellWide, Screen, TrackedGridRef};
-use libghostty_vt::style::{Style, StyleColor, Underline};
+use libghostty_vt::fmt::{Format, Formatter, FormatterOptions};
+use libghostty_vt::render::{
+    CellIteration, CellIterator, Colors, Dirty, RenderState, RowIteration, RowIterator,
+};
+use libghostty_vt::screen::{CellContentTag, Screen, TrackedGridRef};
+use libghostty_vt::selection::Selection;
+use libghostty_vt::style::{PaletteIndex, RgbColor};
+#[cfg(test)]
+use libghostty_vt::style::{StyleColor, Underline};
 use libghostty_vt::terminal::{Mode, Options as TerminalOptions, Point, PointSpace, Terminal};
 use portable_pty::PtySize;
-use std::fmt::Write as FmtWrite;
+use std::cell::RefCell;
 use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,92 +46,27 @@ const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
 const KEYBIND_LIST_WATCHED: [u8; 2] = [0x1b, 0x17]; // Ctrl-Alt-W
 const KEYBIND_TOGGLE_ERROR: [u8; 2] = [0x1b, 0x05]; // Ctrl-Alt-E
 
-/// Fetch all cells in a VT row into a reusable buffer.
-fn cells_in_row_into(vt: &Terminal<'_, '_>, point: Point, cells: &mut Vec<Cell>) {
-    cells.clear();
-    let cols = vt.cols().unwrap_or(0);
-    cells.extend((0..cols).filter_map(|x| vt.grid_ref(point_with_x(point, x)).ok()?.cell().ok()));
-}
+/// PTY reads are deliberately bounded so a busy child cannot turn the event
+/// channel into an unbounded allocation queue. The reader blocks once all of
+/// these buffers are pending; the kernel PTY buffer then provides ordinary
+/// backpressure to the child without dropping or coalescing bytes.
+///
+/// Each buffer is sized to hold a full-screen repaint burst in one read where
+/// possible, reducing syscalls, event allocations, and fragmented renderer
+/// frames. Platforms whose PTY returns less per read simply fill less of it.
+///
+/// The count only needs to keep the reader off the kernel PTY buffer while the
+/// renderer works, so it stays low: `COUNT * BYTES` is committed up front and
+/// bounds how much unrendered output can queue up.
+const PTY_READ_BUFFER_BYTES: usize = 64 * 1024;
+const PTY_READ_BUFFER_COUNT: usize = 4;
 
-fn dump_style(s: &mut String, style: &Style) {
-    s.push_str("\x1b[0");
-    if style.fg_color != StyleColor::None {
-        s.push(';');
-        dump_color(s, &style.fg_color, 30);
-    }
-    if style.bg_color != StyleColor::None {
-        s.push(';');
-        dump_color(s, &style.bg_color, 40);
-    }
-    if style.underline_color != StyleColor::None {
-        s.push_str(";58");
-        dump_extended_color(s, &style.underline_color);
-    }
-    if style.bold {
-        s.push_str(";1");
-    }
-    if style.faint {
-        s.push_str(";2");
-    }
-    if style.italic {
-        s.push_str(";3");
-    }
-    match style.underline {
-        Underline::None => {}
-        Underline::Single => s.push_str(";4"),
-        Underline::Double => s.push_str(";4:2"),
-        Underline::Curly => s.push_str(";4:3"),
-        Underline::Dotted => s.push_str(";4:4"),
-        Underline::Dashed => s.push_str(";4:5"),
-        _ => {}
-    }
-    if style.blink {
-        s.push_str(";5");
-    }
-    if style.inverse {
-        s.push_str(";7");
-    }
-    if style.invisible {
-        s.push_str(";8");
-    }
-    if style.strikethrough {
-        s.push_str(";9");
-    }
-    if style.overline {
-        s.push_str(";53");
-    }
-    s.push('m');
-}
-
-fn dump_color(s: &mut String, color: &StyleColor, base: u8) {
-    match color {
-        StyleColor::Palette(p) if p.0 < 8 => {
-            let _ = write!(s, "{}", base + p.0);
-        }
-        StyleColor::Palette(p) if p.0 < 16 => {
-            let _ = write!(s, "{}", base + 52 + p.0);
-        }
-        StyleColor::Palette(p) => {
-            let _ = write!(s, "{};5;{}", base + 8, p.0);
-        }
-        StyleColor::Rgb(rgb) => {
-            let _ = write!(s, "{};2;{};{};{}", base + 8, rgb.r, rgb.g, rgb.b);
-        }
-        StyleColor::None => {}
-    }
-}
-
-fn dump_extended_color(s: &mut String, color: &StyleColor) {
-    match color {
-        StyleColor::Palette(p) => {
-            let _ = write!(s, ";5;{}", p.0);
-        }
-        StyleColor::Rgb(rgb) => {
-            let _ = write!(s, ";2;{};{};{}", rgb.r, rgb.g, rgb.b);
-        }
-        StyleColor::None => {}
-    }
-}
+/// A render pass consumes at most this much output (or this many events).
+/// This bounds the time spent parsing output before we present a frame and
+/// gives pending stdin, resize, and coordinator events a regular chance to
+/// run. A single PTY read may make a batch one read larger than the byte cap.
+const MAX_PTY_BATCH_BYTES: usize = 32 * 1024;
+const MAX_RENDER_BATCH_EVENTS: usize = 16;
 
 #[derive(Clone, Copy)]
 enum FramePlan {
@@ -140,12 +80,8 @@ enum FramePlan {
 enum RowPlan {
     /// Encode immediately. The entire frame must be rebuilt.
     Redraw,
-    /// Encode, then compare raw cells. This favors ordinary dirty rows, where
-    /// nearly every candidate is expected to have changed.
-    EncodeAndCompare,
-    /// Compare raw cells before encoding. This favors viewport shifts, where
-    /// the host terminal has already moved most rows for us.
-    CompareThenEncode,
+    /// Format a canonical VT row, then compare it with the host baseline.
+    Compare,
 }
 
 impl FramePlan {
@@ -179,23 +115,28 @@ impl FramePlan {
     fn row(self, dirty: bool) -> Option<RowPlan> {
         match self {
             Self::Skip => None,
-            Self::DirtyRows if dirty => Some(RowPlan::EncodeAndCompare),
+            Self::DirtyRows if dirty => Some(RowPlan::Compare),
             Self::DirtyRows => None,
-            Self::CompareRows => Some(RowPlan::CompareThenEncode),
+            Self::CompareRows => Some(RowPlan::Compare),
             Self::Redraw => Some(RowPlan::Redraw),
         }
     }
 }
 
 struct FrameCache {
-    rows: Vec<Vec<Cell>>,
+    // These are Ghostty's canonical VT bytes for each row, not raw cells.
+    // Comparing the presentation form makes viewport-shift cache reuse safe
+    // when a row's resolved style or formatter behavior changes.
+    rows: Vec<Vec<u8>>,
     valid: bool,
 }
 
 impl FrameCache {
-    fn new(rows: usize, cols: usize) -> Self {
+    fn new(rows: usize, encoded_row_capacity: usize) -> Self {
         Self {
-            rows: (0..rows).map(|_| Vec::with_capacity(cols)).collect(),
+            rows: (0..rows)
+                .map(|_| Vec::with_capacity(encoded_row_capacity))
+                .collect(),
             valid: false,
         }
     }
@@ -204,18 +145,22 @@ impl FrameCache {
         self.valid && self.rows.len() >= visible_rows
     }
 
-    fn matches(&self, row_idx: usize, cells: &[Cell]) -> bool {
-        self.valid && self.rows.get(row_idx).is_some_and(|row| row == cells)
+    fn matches(&self, row_idx: usize, bytes: &[u8]) -> bool {
+        self.valid && self.rows.get(row_idx).is_some_and(|row| row == bytes)
     }
 
-    fn store(&mut self, row_idx: usize, cells: &mut Vec<Cell>) {
+    fn store(&mut self, row_idx: usize, bytes: &mut Vec<u8>) {
         if row_idx >= self.rows.len() {
-            let capacity = cells.capacity();
+            let capacity = bytes.capacity();
             self.rows
                 .resize_with(row_idx + 1, || Vec::with_capacity(capacity));
         }
-        std::mem::swap(&mut self.rows[row_idx], cells);
-        cells.clear();
+        // Keep the formatter's high-water buffer. Swapping it with a cache
+        // slot would make the next row start from that slot's (often much
+        // smaller) capacity and repeatedly grow on styled frames.
+        let row = &mut self.rows[row_idx];
+        row.clear();
+        row.extend_from_slice(bytes);
     }
 
     fn invalidate(&mut self) {
@@ -233,215 +178,170 @@ impl FrameCache {
             row.clear();
         }
     }
-
-    fn sync(&mut self, vt: &Terminal<'_, '_>) {
-        let rows = vt.rows().unwrap_or(0) as usize;
-        let cols = vt.cols().unwrap_or(0) as usize;
-        self.rows.resize_with(rows, || Vec::with_capacity(cols));
-        self.rows.truncate(rows);
-        for (y, cells) in self.rows.iter_mut().enumerate() {
-            cells_in_row_into(vt, active_point(y as u32), cells);
-        }
-        self.valid = true;
-    }
 }
 
-struct RowEncoder {
-    cells: Vec<Cell>,
-    graphemes: Vec<char>,
-    text: String,
+/// Formats one complete terminal row through Ghostty's native VT formatter.
+///
+/// `RenderState` remains responsible for deciding *which* rows need work.
+/// Formatting the selected row in Ghostty avoids a Rust/C ABI crossing for
+/// every field of every cell and keeps its grapheme and style rules in one
+/// place.
+struct RowFormatter {
+    bytes: Vec<u8>,
 }
 
-impl RowEncoder {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CellBackground {
+    Palette(PaletteIndex),
+    Rgb(RgbColor),
+}
+
+impl RowFormatter {
     fn new(cols: usize) -> Self {
         Self {
-            cells: Vec::with_capacity(cols),
-            graphemes: Vec::with_capacity(8),
-            text: String::with_capacity(cols * 4),
+            // VT output can be substantially larger than text for styled
+            // rows. Start with a useful retained buffer and grow only when
+            // Ghostty tells us the exact required size.
+            bytes: vec![0; cols.saturating_mul(16).max(256)],
         }
     }
 
-    fn collect<'a>(
+    fn format_row(
         &mut self,
-        row: &RowIteration<'a, '_>,
-        cell_iter: &mut CellIterator<'a>,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+    ) -> Result<&[u8], libghostty_vt::Error> {
+        // `Formatter::format_buf` takes a slice, so restore the retained
+        // vector's full capacity after the prior row was truncated to its
+        // written length. This avoids a needless OutOfSpace/retry for a
+        // longer row following a short one.
+        self.bytes.resize(self.bytes.capacity(), 0);
+        let cols = vt.cols()?;
+        if cols == 0 {
+            self.bytes.clear();
+            return Ok(&self.bytes);
+        }
+
+        let start = vt.grid_ref(point)?;
+        let end = vt.grid_ref(point_with_x(point, cols - 1))?;
+        let selection = Selection::new(start, end, true);
+        // Unlike Terminal::format_selection_buf, the configurable formatter
+        // leaves all terminal/screen extras disabled by default. A row repaint
+        // must contain cell presentation only: palette, mode, cursor, and
+        // other global state are handled at the mux boundary.
+        let options = FormatterOptions::new()
+            .with_format(Format::Vt)
+            // Each row is positioned and cleared independently, matching
+            // the old encoder's omission of trailing default blanks. Ghostty
+            // also omits rows containing only background cells; the repaint
+            // path restores those below.
+            .with_unwrap(false)
+            .with_trim(true)
+            .with_selection(&selection);
+        let mut formatter = Formatter::new(vt, options)?;
+        loop {
+            match formatter.format_buf(&mut self.bytes) {
+                Ok(written) => {
+                    self.bytes.truncate(written);
+                    return Ok(&self.bytes);
+                }
+                Err(libghostty_vt::Error::OutOfSpace { .. }) => {
+                    // The low-level formatter's buffer API currently loses
+                    // the required length in its Rust error conversion. Query
+                    // it explicitly only on this cold growth path.
+                    let required = formatter.format_len()?;
+                    self.bytes.resize(required.max(self.bytes.len() * 2), 0);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    fn restore_snapshot_backgrounds(
+        &mut self,
+        cells: &mut CellIteration<'_, '_>,
     ) -> Result<(), libghostty_vt::Error> {
-        self.cells.clear();
-        let mut cells = cell_iter.update(row)?;
-        while let Some(cell) = cells.next() {
-            self.cells.push(cell.raw_cell()?);
+        // Formatter output is optimized for serialization and always trims a
+        // line with no text, even when EL/ECH left visible background-only
+        // cells. A terminal repaint cannot drop those cells. Use Ghostty's
+        // resolved render colors only for this otherwise-empty row.
+        self.restore_backgrounds(|| {
+            cells
+                .next()
+                .map(|cell| cell.bg_color().map(|color| color.map(CellBackground::Rgb)))
+        })
+    }
+
+    fn restore_terminal_backgrounds(
+        &mut self,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+    ) -> Result<(), libghostty_vt::Error> {
+        let mut col = 0;
+        let cols = vt.cols()?;
+        self.restore_backgrounds(|| {
+            if col >= cols {
+                return None;
+            }
+            let result = vt
+                .grid_ref(point_with_x(point, col))
+                .and_then(|cell_ref| cell_ref.cell())
+                .and_then(|cell| {
+                    let background = match cell.content_tag()? {
+                        CellContentTag::BgColorPalette => {
+                            Some(CellBackground::Palette(cell.bg_color_palette()?))
+                        }
+                        CellContentTag::BgColorRgb => {
+                            Some(CellBackground::Rgb(cell.bg_color_rgb()?))
+                        }
+                        CellContentTag::Codepoint | CellContentTag::CodepointGrapheme => None,
+                    };
+                    Ok(background)
+                });
+            col += 1;
+            Some(result)
+        })
+    }
+
+    fn restore_backgrounds(
+        &mut self,
+        mut next: impl FnMut() -> Option<Result<Option<CellBackground>, libghostty_vt::Error>>,
+    ) -> Result<(), libghostty_vt::Error> {
+        debug_assert!(self.bytes.is_empty());
+        let mut active = None;
+        let mut has_background = false;
+
+        while let Some(background) = next() {
+            let background = background?;
+            has_background |= background.is_some();
+            if background != active {
+                match background {
+                    Some(CellBackground::Palette(color)) => {
+                        write!(&mut self.bytes, "\x1b[48;5;{}m", color.0)
+                            .expect("writing to Vec cannot fail");
+                    }
+                    Some(CellBackground::Rgb(color)) => {
+                        write!(
+                            &mut self.bytes,
+                            "\x1b[48;2;{};{};{}m",
+                            color.r, color.g, color.b
+                        )
+                        .expect("writing to Vec cannot fail");
+                    }
+                    None => self.bytes.extend_from_slice(b"\x1b[49m"),
+                }
+                active = background;
+            }
+            self.bytes.push(b' ');
+        }
+
+        // An ordinary default blank row still relies on Clear(CurrentLine).
+        // Discard the speculative spaces so it retains the formatter's compact
+        // representation and does not become a hot-path write amplification.
+        if !has_background {
+            self.bytes.clear();
         }
         Ok(())
-    }
-
-    /// Encode a row from Ghostty's render snapshot into ANSI text.
-    ///
-    /// Ghostty retains row and cell storage between snapshots; this encoder
-    /// mirrors that design by retaining both its raw-cell and UTF-8 buffers.
-    fn encode_snapshot<'a>(
-        &mut self,
-        row: &RowIteration<'a, '_>,
-        cell_iter: &mut CellIterator<'a>,
-    ) -> Result<(), libghostty_vt::Error> {
-        self.cells.clear();
-        self.text.clear();
-
-        // This flag may have false positives, but never false negatives. It
-        // avoids a per-cell style query for the overwhelmingly common plain
-        // text row.
-        let row_styled = row.raw_row()?.is_styled()?;
-        let default_style = Style::default();
-        let mut current_style = default_style;
-        let mut pending_blanks = 0usize;
-        let mut cells = cell_iter.update(row)?;
-
-        while let Some(render_cell) = cells.next() {
-            let cell = render_cell.raw_cell()?;
-            self.cells.push(cell);
-            if matches!(cell.wide()?, CellWide::SpacerTail | CellWide::SpacerHead) {
-                continue;
-            }
-
-            let tag = cell.content_tag()?;
-            let codepoint = match tag {
-                CellContentTag::Codepoint => Some(cell.codepoint()?),
-                _ => None,
-            };
-            let grapheme_len = match tag {
-                CellContentTag::CodepointGrapheme => render_cell.graphemes_len()?,
-                _ => 0,
-            };
-            let has_text = match tag {
-                CellContentTag::Codepoint => codepoint != Some(0),
-                CellContentTag::CodepointGrapheme => grapheme_len > 0,
-                CellContentTag::BgColorPalette | CellContentTag::BgColorRgb => false,
-            };
-            let has_style = row_styled && cell.has_styling()?;
-            let background_only = matches!(
-                tag,
-                CellContentTag::BgColorPalette | CellContentTag::BgColorRgb
-            );
-
-            if !has_text && !has_style && !background_only {
-                pending_blanks += 1;
-                continue;
-            }
-            self.text.extend(std::iter::repeat_n(' ', pending_blanks));
-            pending_blanks = 0;
-
-            let style = match tag {
-                CellContentTag::Codepoint | CellContentTag::CodepointGrapheme if has_style => {
-                    render_cell.style().unwrap_or(default_style)
-                }
-                CellContentTag::BgColorPalette => {
-                    let mut style = default_style;
-                    if let Ok(color) = cell.bg_color_palette() {
-                        style.bg_color = StyleColor::Palette(color);
-                    }
-                    style
-                }
-                CellContentTag::BgColorRgb => {
-                    let mut style = default_style;
-                    if let Ok(color) = cell.bg_color_rgb() {
-                        style.bg_color = StyleColor::Rgb(color);
-                    }
-                    style
-                }
-                _ => default_style,
-            };
-            if style != current_style {
-                if style == default_style {
-                    self.text.push_str("\x1b[0m");
-                } else {
-                    dump_style(&mut self.text, &style);
-                }
-                current_style = style;
-            }
-
-            match tag {
-                CellContentTag::Codepoint if has_text => {
-                    if let Some(ch) = codepoint.and_then(char::from_u32) {
-                        self.text.push(ch);
-                    }
-                }
-                CellContentTag::CodepointGrapheme if has_text => {
-                    self.graphemes.resize(grapheme_len, '\0');
-                    render_cell.graphemes_buf(&mut self.graphemes)?;
-                    self.text.extend(self.graphemes.iter().copied());
-                }
-                _ => self.text.push(' '),
-            }
-        }
-        self.text.push_str("\x1b[0m");
-        Ok(())
-    }
-
-    fn encode_terminal(&mut self, vt: &Terminal<'_, '_>, point: Point) {
-        cells_in_row_into(vt, point, &mut self.cells);
-        self.text.clear();
-
-        // TODO(libghostty-rs): Style::is_default() returns true for RGB
-        // background-only styles, so compare against the default value.
-        let default_style = Style::default();
-        let mut current_style = default_style;
-        let mut pending_blanks = 0usize;
-        for (x, cell) in self.cells.iter().enumerate() {
-            if matches!(
-                cell.wide().ok(),
-                Some(CellWide::SpacerTail | CellWide::SpacerHead)
-            ) {
-                continue;
-            }
-            let Ok(cell_ref) = vt.grid_ref(point_with_x(point, x as u16)) else {
-                continue;
-            };
-            let has_text = cell.has_text().unwrap_or(false);
-            let has_style = cell.has_styling().unwrap_or(false);
-            let tag = cell.content_tag().ok();
-            let background_only = matches!(
-                tag,
-                Some(CellContentTag::BgColorPalette | CellContentTag::BgColorRgb)
-            );
-            if !has_text && !has_style && !background_only {
-                pending_blanks += 1;
-                continue;
-            }
-            self.text.extend(std::iter::repeat_n(' ', pending_blanks));
-            pending_blanks = 0;
-
-            let style = match tag {
-                Some(CellContentTag::Codepoint | CellContentTag::CodepointGrapheme)
-                    if has_style =>
-                {
-                    cell_ref.style().unwrap_or(default_style)
-                }
-                Some(CellContentTag::BgColorPalette) => {
-                    let mut style = default_style;
-                    if let Ok(color) = cell.bg_color_palette() {
-                        style.bg_color = StyleColor::Palette(color);
-                    }
-                    style
-                }
-                Some(CellContentTag::BgColorRgb) => {
-                    let mut style = default_style;
-                    if let Ok(color) = cell.bg_color_rgb() {
-                        style.bg_color = StyleColor::Rgb(color);
-                    }
-                    style
-                }
-                _ => default_style,
-            };
-            if style != current_style {
-                if style == default_style {
-                    self.text.push_str("\x1b[0m");
-                } else {
-                    dump_style(&mut self.text, &style);
-                }
-                current_style = style;
-            }
-            push_cell_text(&mut self.text, cell, &cell_ref);
-        }
-        self.text.push_str("\x1b[0m");
     }
 }
 
@@ -451,46 +351,27 @@ enum RowRender {
     Unavailable,
 }
 
-struct FrameRenderer<'a> {
+struct FrameRenderer {
     cache: FrameCache,
-    encoder: RowEncoder,
-    cells: CellIterator<'a>,
-    compare_cells: CellIterator<'a>,
+    formatter: RowFormatter,
 }
 
-impl<'a> FrameRenderer<'a> {
+impl FrameRenderer {
     fn new(rows: usize, cols: usize) -> Result<Self, libghostty_vt::Error> {
         Ok(Self {
-            cache: FrameCache::new(rows, cols),
-            encoder: RowEncoder::new(cols),
-            cells: CellIterator::new()?,
-            compare_cells: CellIterator::new()?,
+            cache: FrameCache::new(rows, cols.saturating_mul(16).max(256)),
+            formatter: RowFormatter::new(cols),
         })
     }
 
     fn render_snapshot_row(
         &mut self,
         stdout: &mut impl Write,
-        row: &RowIteration<'a, '_>,
         row_idx: usize,
         screen_row: u16,
         plan: RowPlan,
     ) -> io::Result<RowRender> {
-        if matches!(plan, RowPlan::CompareThenEncode) {
-            if self.encoder.collect(row, &mut self.compare_cells).is_err() {
-                return Ok(RowRender::Unavailable);
-            }
-            if self.cache.matches(row_idx, &self.encoder.cells) {
-                return Ok(RowRender::Unchanged);
-            }
-        }
-
-        if self.encoder.encode_snapshot(row, &mut self.cells).is_err() {
-            return Ok(RowRender::Unavailable);
-        }
-        if matches!(plan, RowPlan::EncodeAndCompare)
-            && self.cache.matches(row_idx, &self.encoder.cells)
-        {
+        if !matches!(plan, RowPlan::Redraw) && self.cache.matches(row_idx, &self.formatter.bytes) {
             return Ok(RowRender::Unchanged);
         }
 
@@ -499,8 +380,12 @@ impl<'a> FrameRenderer<'a> {
             cursor::MoveTo(0, screen_row),
             Clear(ClearType::CurrentLine)
         )?;
-        stdout.write_all(self.encoder.text.as_bytes())?;
-        self.cache.store(row_idx, &mut self.encoder.cells);
+        stdout.write_all(&self.formatter.bytes)?;
+        // The selection formatter omits a reset for a default/blank row.
+        // A row draw must nevertheless leave the physical terminal neutral
+        // because Clear does not alter SGR state.
+        stdout.write_all(b"\x1b[0m")?;
+        self.cache.store(row_idx, &mut self.formatter.bytes);
         Ok(RowRender::Drawn)
     }
 
@@ -512,23 +397,23 @@ impl<'a> FrameRenderer<'a> {
         screen_row: u16,
         compare: bool,
     ) -> io::Result<bool> {
-        let point = active_point(row_idx as u32);
-        cells_in_row_into(vt, point, &mut self.encoder.cells);
-        if compare && self.cache.matches(row_idx, &self.encoder.cells) {
+        if self
+            .format_terminal_row(vt, active_point(row_idx as u32))
+            .is_err()
+        {
             return Ok(false);
         }
-
-        // `encode_terminal` fetches the cells again. This is deliberately
-        // confined to the error fallback; the render-state path is the hot
-        // path and reads every cell only once.
-        self.encoder.encode_terminal(vt, point);
+        if compare && self.cache.matches(row_idx, &self.formatter.bytes) {
+            return Ok(false);
+        }
         queue!(
             stdout,
             cursor::MoveTo(0, screen_row),
             Clear(ClearType::CurrentLine)
         )?;
-        stdout.write_all(self.encoder.text.as_bytes())?;
-        self.cache.store(row_idx, &mut self.encoder.cells);
+        stdout.write_all(&self.formatter.bytes)?;
+        stdout.write_all(b"\x1b[0m")?;
+        self.cache.store(row_idx, &mut self.formatter.bytes);
         Ok(true)
     }
 
@@ -538,17 +423,68 @@ impl<'a> FrameRenderer<'a> {
         vt: &Terminal<'_, '_>,
         point: Point,
     ) -> io::Result<()> {
-        self.encoder.encode_terminal(vt, point);
-        stdout.write_all(self.encoder.text.as_bytes())
+        if self.format_terminal_row(vt, point).is_ok() {
+            stdout.write_all(&self.formatter.bytes)?;
+            stdout.write_all(b"\x1b[0m")?;
+        }
+        Ok(())
+    }
+
+    fn format_snapshot_row<'alloc>(
+        &mut self,
+        vt: &Terminal<'_, '_>,
+        row: &RowIteration<'alloc, '_>,
+        cells: &mut CellIterator<'alloc>,
+        row_idx: usize,
+    ) -> Result<(), libghostty_vt::Error> {
+        self.formatter
+            .format_row(vt, active_point(row_idx as u32))?;
+        if self.formatter.bytes.is_empty() {
+            let mut cells = cells.update(row)?;
+            self.formatter.restore_snapshot_backgrounds(&mut cells)?;
+        }
+        Ok(())
+    }
+
+    fn format_terminal_row(
+        &mut self,
+        vt: &Terminal<'_, '_>,
+        point: Point,
+    ) -> Result<(), libghostty_vt::Error> {
+        self.formatter.format_row(vt, point)?;
+        if self.formatter.bytes.is_empty() {
+            self.formatter.restore_terminal_backgrounds(vt, point)?;
+        }
+        Ok(())
+    }
+
+    fn sync(&mut self, vt: &Terminal<'_, '_>) {
+        let rows = vt.rows().unwrap_or(0) as usize;
+        let capacity = self.formatter.bytes.capacity();
+        self.cache
+            .rows
+            .resize_with(rows, || Vec::with_capacity(capacity));
+        self.cache.rows.truncate(rows);
+        for row_idx in 0..rows {
+            if self
+                .format_terminal_row(vt, active_point(row_idx as u32))
+                .is_err()
+            {
+                self.cache.invalidate();
+                return;
+            }
+            self.cache.store(row_idx, &mut self.formatter.bytes);
+        }
+        self.cache.valid = true;
     }
 
     #[cfg(test)]
     fn retained_capacities(&self) -> (usize, usize, usize) {
         (
-            self.encoder.cells.capacity()
+            self.formatter.bytes.capacity()
                 + self.cache.rows.iter().map(Vec::capacity).sum::<usize>(),
-            self.encoder.graphemes.capacity(),
-            self.encoder.text.capacity(),
+            0,
+            self.formatter.bytes.capacity(),
         )
     }
 }
@@ -564,7 +500,8 @@ struct FrameGlobals {
 struct ViewportRenderer<'a> {
     state: RenderState<'a>,
     rows: RowIterator<'a>,
-    frame: FrameRenderer<'a>,
+    cells: CellIterator<'a>,
+    frame: FrameRenderer,
     globals: Option<FrameGlobals>,
 }
 
@@ -573,6 +510,7 @@ impl<'a> ViewportRenderer<'a> {
         Ok(Self {
             state: RenderState::new()?,
             rows: RowIterator::new()?,
+            cells: CellIterator::new()?,
             frame: FrameRenderer::new(rows, cols)?,
             globals: None,
         })
@@ -635,13 +573,20 @@ impl<'a> ViewportRenderer<'a> {
                         if row_idx < visible_rows {
                             let row_dirty = row.dirty().unwrap_or(true);
                             if let Some(row_plan) = plan.row(row_dirty) {
-                                let result = self.frame.render_snapshot_row(
-                                    stdout,
-                                    row,
-                                    row_idx,
-                                    row_idx as u16 + row_offset,
-                                    row_plan,
-                                )?;
+                                let result = if self
+                                    .frame
+                                    .format_snapshot_row(vt, row, &mut self.cells, row_idx)
+                                    .is_ok()
+                                {
+                                    self.frame.render_snapshot_row(
+                                        stdout,
+                                        row_idx,
+                                        row_idx as u16 + row_offset,
+                                        row_plan,
+                                    )?
+                                } else {
+                                    RowRender::Unavailable
+                                };
                                 if matches!(result, RowRender::Unavailable) {
                                     self.frame.render_terminal_row(
                                         stdout,
@@ -700,7 +645,7 @@ impl<'a> ViewportRenderer<'a> {
     }
 
     fn sync(&mut self, vt: &Terminal<'_, '_>) {
-        self.frame.cache.sync(vt);
+        self.frame.sync(vt);
     }
 
     #[cfg(test)]
@@ -724,6 +669,25 @@ enum VtInputFilterState {
     TmuxTitleEsc,
 }
 
+/// Bytes that may be sent directly to Ghostty's persistent VT stream parser.
+///
+/// Ordinary PTY output never needs rewriting. Keeping that common path
+/// borrowed avoids copying every read merely to check for a tmux title
+/// sequence. The filtered variant borrows the caller's retained scratch
+/// buffer only when an escape sequence needs inspection or removal.
+enum FilteredVtInput<'a> {
+    Borrowed(&'a [u8]),
+    Filtered(&'a [u8]),
+}
+
+impl FilteredVtInput<'_> {
+    fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Borrowed(bytes) | Self::Filtered(bytes) => bytes,
+        }
+    }
+}
+
 impl VtInputFilter {
     fn new() -> Self {
         Self {
@@ -732,7 +696,14 @@ impl VtInputFilter {
         }
     }
 
-    fn filter<'a>(&mut self, data: &'a [u8], output: &'a mut Vec<u8>) -> &'a [u8] {
+    fn filter<'a>(&mut self, data: &'a [u8], output: &'a mut Vec<u8>) -> FilteredVtInput<'a> {
+        // The vast majority of PTY reads are ordinary output. Do not touch
+        // the scratch buffer or copy these bytes: Ghostty owns a persistent
+        // byte-stream parser and correctly preserves split UTF-8 sequences.
+        if matches!(self.state, VtInputFilterState::Ground) && !data.contains(&0x1b) {
+            return FilteredVtInput::Borrowed(data);
+        }
+
         output.clear();
 
         for &byte in data {
@@ -784,8 +755,82 @@ impl VtInputFilter {
             }
         }
 
-        output
+        FilteredVtInput::Filtered(output)
     }
+}
+
+/// Replies emitted synchronously by libghostty-vt while it processes raw PTY
+/// output. The callback is deliberately a deny-by-default capability: it only
+/// accepts responses that we know must describe the virtual terminal.
+///
+/// Installing `on_pty_write` enables libghostty-vt responses for several
+/// protocols (OSC colors, DA, XTVERSION, DECRQM, resize reports, …). Most of
+/// those remain coupled to the physical terminal in this mux, so allowing the
+/// callback to write them wholesale would duplicate or contradict the mature
+/// stdout passthrough path. See `VirtualTerminalQuery` in `escape` for the
+/// two queries we intentionally take ownership of.
+#[derive(Default)]
+struct VirtualPtyReplies {
+    bytes: Vec<u8>,
+}
+
+impl VirtualPtyReplies {
+    fn capture(&mut self, data: &[u8]) {
+        if is_virtual_terminal_reply(data) {
+            self.bytes.extend_from_slice(data);
+        }
+    }
+
+    fn flush_to_pty(&mut self, pty: &Pty) -> io::Result<()> {
+        if self.bytes.is_empty() {
+            return Ok(());
+        }
+        pty.write_all(&self.bytes)?;
+        pty.flush()?;
+        self.bytes.clear();
+        Ok(())
+    }
+}
+
+/// Whether a libghostty-vt `on_pty_write` callback payload can only be the
+/// answer to one of the virtual-owned queries. Keep this intentionally exact:
+/// accepting a merely similar CSI response would make an unrelated physical
+/// query leak back to the child PTY.
+fn is_virtual_terminal_reply(data: &[u8]) -> bool {
+    data == b"\x1b[0n" || is_cpr_reply(data) || is_in_band_resize_mode_report(data)
+}
+
+fn is_cpr_reply(data: &[u8]) -> bool {
+    let Some(body) = data
+        .strip_prefix(b"\x1b[")
+        .and_then(|body| body.strip_suffix(b"R"))
+    else {
+        return false;
+    };
+    let Some(separator) = body.iter().position(|&byte| byte == b';') else {
+        return false;
+    };
+    let (row, col_with_separator) = body.split_at(separator);
+    let col = &col_with_separator[1..];
+    is_ascii_decimal(row) && is_ascii_decimal(col)
+}
+
+fn is_in_band_resize_mode_report(data: &[u8]) -> bool {
+    let Some(state) = data
+        .strip_prefix(b"\x1b[?2048;")
+        .and_then(|body| body.strip_suffix(b"$y"))
+    else {
+        return false;
+    };
+    matches!(state, b"0" | b"1" | b"2" | b"3" | b"4")
+}
+
+fn is_ascii_decimal(bytes: &[u8]) -> bool {
+    !bytes.is_empty() && bytes.iter().all(u8::is_ascii_digit)
+}
+
+fn flush_virtual_pty_replies(replies: &RefCell<VirtualPtyReplies>, pty: &Pty) -> io::Result<()> {
+    replies.borrow_mut().flush_to_pty(pty)
 }
 
 /// Differential renderer that draws VT state to a bounded terminal region.
@@ -806,6 +851,32 @@ fn primary_height_shrunk(
 /// own end marker would prematurely expose an intermediate frame.
 fn synchronized_output_active(vt: &Terminal<'_, '_>) -> bool {
     vt.mode(Mode::SYNC_OUTPUT).unwrap_or(false)
+}
+
+/// Start a renderer-owned transaction unless the application has already
+/// opened mode 2026 and left its reset pending for this frame.
+fn begin_renderer_transaction(stdout: &mut impl Write, deferred_release: bool) -> io::Result<()> {
+    if !deferred_release {
+        queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+    }
+    Ok(())
+}
+
+/// End a renderer transaction. A pending application reset is the boundary
+/// when present: writing an additional Begin/End pair inside it can expose the
+/// final virtual frame before its status line and cursor are complete.
+fn finish_renderer_transaction(
+    stdout: &mut impl Write,
+    esc: &mut EscapeState,
+    transaction_open: bool,
+) -> io::Result<()> {
+    if !transaction_open {
+        return Ok(());
+    }
+    if !esc.flush_deferred_synchronized_output_reset(stdout)? {
+        queue!(stdout, terminal::EndSynchronizedUpdate)?;
+    }
+    Ok(())
 }
 
 struct Renderer<'a> {
@@ -869,13 +940,13 @@ impl<'a> Renderer<'a> {
         })
     }
 
-    /// Feed text into the VT and return the scroll count (lines that scrolled
+    /// Feed raw VT bytes into Ghostty and return the scroll count (lines that scrolled
     /// off the viewport), measured as growth of the unflushed region so it
     /// stays exact even when ghostty prunes old history pages.
-    fn feed(&mut self, vt: &mut Terminal<'_, '_>, text: &str) -> usize {
+    fn feed(&mut self, vt: &mut Terminal<'_, '_>, data: impl AsRef<[u8]>) -> usize {
         self.normalize_fallback_boundary(vt.scrollback_rows().unwrap_or(0));
         let before = self.unflushed(vt);
-        vt.vt_write(text.as_bytes());
+        vt.vt_write(data.as_ref());
         let scrolled = self.unflushed(vt).saturating_sub(before);
         self.pending_scroll += scrolled;
         scrolled
@@ -956,11 +1027,9 @@ impl<'a> Renderer<'a> {
     /// Render changed VT lines to stdout. Skips lines that haven't changed
     /// and clips rows that would fall outside the visible area.
     ///
-    /// Uses ghostty's render-state dirty tracking to skip clean rows without
-    /// fetching their cells. Candidate rows are compared with the native
-    /// terminal baseline to suppress Ghostty's conservative page-level dirty
-    /// flags. After a viewport shift, comparison happens before ANSI encoding
-    /// because the host terminal has already moved most rows for us.
+    /// Uses Ghostty's render-state dirty tracking to skip clean rows. Candidate
+    /// rows are compared in Ghostty's canonical VT form with the native
+    /// terminal baseline, suppressing conservative page-level dirty flags.
     fn render(&mut self, stdout: &mut impl Write, vt: &Terminal<'a, '_>) -> io::Result<()> {
         let max_row = self.visible_rows();
         let rows = vt.rows().unwrap_or(0) as usize;
@@ -1269,6 +1338,111 @@ enum Event {
     Resize,
 }
 
+/// Per-render draining limit for the shared event FIFO.
+///
+/// The initial PTY event is accounted before entering the drain loop. Events
+/// are only received while there is budget, so the next event remains in the
+/// channel for the next render pass; this keeps the channel's ordering exact.
+#[derive(Clone, Copy, Debug)]
+struct RenderBatchBudget {
+    event_count: usize,
+    pty_bytes: usize,
+}
+
+impl RenderBatchBudget {
+    fn for_initial_pty_output(bytes: usize) -> Self {
+        Self {
+            event_count: 1,
+            pty_bytes: bytes,
+        }
+    }
+
+    fn can_drain(&self) -> bool {
+        self.event_count < MAX_RENDER_BATCH_EVENTS && self.pty_bytes < MAX_PTY_BATCH_BYTES
+    }
+
+    fn record(&mut self, event: &Event) {
+        self.event_count += 1;
+        if let Event::PtyOutput(bytes) = event {
+            self.pty_bytes += bytes.len();
+        }
+    }
+
+    fn try_recv(&mut self, event_rx: &std::sync::mpsc::Receiver<Event>) -> Option<Event> {
+        if !self.can_drain() {
+            return None;
+        }
+        let event = event_rx.try_recv().ok()?;
+        self.record(&event);
+        Some(event)
+    }
+}
+
+fn return_pty_read_buffer(buffer_tx: &std::sync::mpsc::SyncSender<Vec<u8>>, mut buffer: Vec<u8>) {
+    buffer.clear();
+    // A normal PTY event came from this pool and therefore frees a slot here.
+    // Use a non-blocking return nevertheless: synthetic/future events must
+    // never stall the renderer, and shutdown simply drops the spare buffer.
+    let _ = buffer_tx.try_send(buffer);
+}
+
+/// Dependencies owned by the render thread's event loop. Keeping them
+/// together makes their ownership boundary explicit: only the receiver moves
+/// into the loop; terminal-facing state remains borrowed on that thread.
+struct EventLoopContext<'a> {
+    pty: &'a Arc<Pty>,
+    event_rx: std::sync::mpsc::Receiver<Event>,
+    coordinator_tx: &'a tokio_mpsc::Sender<ShellEvent>,
+    stdout: &'a mut Box<dyn Write + Send>,
+    virtual_pty_replies: &'a RefCell<VirtualPtyReplies>,
+    pty_buffer_return_tx: &'a std::sync::mpsc::SyncSender<Vec<u8>>,
+}
+
+/// The terminal-facing dependencies needed to dispatch one stdin event. This
+/// is shared by the top-level and batched paths so local keybindings never
+/// become ordinary child input merely because PTY output arrived first.
+struct StdinEventContext<'a, 'vt, 'cb> {
+    pty: &'a Arc<Pty>,
+    coordinator_tx: &'a tokio_mpsc::Sender<ShellEvent>,
+    stdout: &'a mut Box<dyn Write + Send>,
+    vt: &'a mut Terminal<'vt, 'cb>,
+    renderer: &'a mut Renderer<'vt>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StdinDisposition {
+    ForwardToPty,
+    TogglePause,
+    ListWatchedFiles,
+    ToggleError,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StdinPresentation {
+    /// The event arrived on its own, so preserve the established immediate
+    /// error-panel rendering behavior.
+    Immediate,
+    /// The event was drained behind PTY output; let the surrounding batch
+    /// present exactly one atomic frame instead.
+    Deferred,
+}
+
+fn classify_stdin(data: &[u8]) -> StdinDisposition {
+    if data == KEYBIND_TOGGLE_PAUSE {
+        StdinDisposition::TogglePause
+    } else if data == KEYBIND_LIST_WATCHED {
+        StdinDisposition::ListWatchedFiles
+    } else if data == KEYBIND_TOGGLE_ERROR {
+        StdinDisposition::ToggleError
+    } else {
+        StdinDisposition::ForwardToPty
+    }
+}
+
+fn present_stdin_error_immediately(presentation: StdinPresentation, synchronized: bool) -> bool {
+    presentation == StdinPresentation::Immediate && !synchronized
+}
+
 /// Interactive shell session with hot-reload support.
 ///
 /// Manages PTY lifecycle, terminal I/O, and status line rendering.
@@ -1466,6 +1640,18 @@ impl ShellSession {
         // Set up event channel
         let (event_tx_internal, event_rx_internal) = std::sync::mpsc::channel::<Event>();
 
+        // PTY output is the only high-volume source. Recycle a small fixed
+        // buffer set through the renderer so its queue is bounded without
+        // ever blocking async command forwarding on the shared event channel.
+        let (pty_buffer_return_tx, pty_buffer_rx) =
+            std::sync::mpsc::sync_channel::<Vec<u8>>(PTY_READ_BUFFER_COUNT);
+        for _ in 0..PTY_READ_BUFFER_COUNT {
+            pty_buffer_return_tx
+                .send(vec![0; PTY_READ_BUFFER_BYTES])
+                .expect("fresh PTY buffer pool has capacity");
+        }
+        let pty_buffer_return_tx_for_loop = pty_buffer_return_tx.clone();
+
         // On shutdown, kill the inner shell *and* inject a synthetic `PtyExit`:
         // if the child has already exited, `kill` returns ESRCH and on macOS
         // the PTY reader can stay blocked, so the event loop never sees the
@@ -1514,11 +1700,15 @@ impl ShellSession {
         std::thread::Builder::new()
             .name("session-pty".into())
             .spawn(move || {
-                // Keep a full-screen repaint burst in one PTY read where
-                // possible, reducing syscalls, event allocations, and
-                // fragmented renderer frames.
-                let mut buf = [0u8; 64 * 1024];
                 loop {
+                    // When all buffers are awaiting rendering, wait here
+                    // rather than allocating another event payload. Dropping
+                    // the renderer's return sender disconnects this receive
+                    // during session shutdown.
+                    let Ok(mut buf) = pty_buffer_rx.recv() else {
+                        break;
+                    };
+                    buf.resize(PTY_READ_BUFFER_BYTES, 0);
                     match pty_reader.read(&mut buf) {
                         Ok(0) => {
                             let exit_code =
@@ -1527,7 +1717,8 @@ impl ShellSession {
                             break;
                         }
                         Ok(n) => {
-                            if pty_tx.send(Event::PtyOutput(buf[..n].to_vec())).is_err() {
+                            buf.truncate(n);
+                            if pty_tx.send(Event::PtyOutput(buf)).is_err() {
                                 break;
                             }
                         }
@@ -1542,6 +1733,11 @@ impl ShellSession {
                 }
             })
             .expect("failed to spawn session-pty thread");
+
+        // The renderer keeps the sole return sender. Once it exits, the PTY
+        // reader wakes from `recv` and exits instead of waiting for a buffer
+        // that can no longer be returned.
+        drop(pty_buffer_return_tx);
 
         // Forward coordinator commands to internal event channel
         let cmd_tx = event_tx_internal.clone();
@@ -1575,11 +1771,19 @@ impl ShellSession {
         let coordinator_tx = event_tx.clone();
         let pty_for_thread = Arc::clone(&pty);
         let vt_handle = std::thread::spawn(move || -> Result<Option<u32>, SessionError> {
+            // libghostty-vt invokes effects synchronously from `vt_write`.
+            // This buffer therefore remains thread-local with the terminal;
+            // it is drained into the child PTY immediately after each feed.
+            let virtual_pty_replies = RefCell::new(VirtualPtyReplies::default());
             // Create the VT on this thread (Terminal is !Send)
             let mut vt = Terminal::new(TerminalOptions {
                 cols: pty_size.cols,
                 rows: pty_size.rows,
                 max_scrollback: DEFAULT_MAX_SCROLLBACK,
+            })?;
+            vt.on_pty_write({
+                let virtual_pty_replies = &virtual_pty_replies;
+                move |_term, data| virtual_pty_replies.borrow_mut().capture(data)
             })?;
 
             // Reset the VT after resize so any stale PTY output (the shell's
@@ -1607,12 +1811,16 @@ impl ShellSession {
             stdout.flush()?;
 
             self.event_loop(
-                &pty_for_thread,
                 &mut vt,
                 &mut renderer,
-                event_rx_internal,
-                &coordinator_tx,
-                &mut stdout,
+                EventLoopContext {
+                    pty: &pty_for_thread,
+                    event_rx: event_rx_internal,
+                    coordinator_tx: &coordinator_tx,
+                    stdout: &mut stdout,
+                    virtual_pty_replies: &virtual_pty_replies,
+                    pty_buffer_return_tx: &pty_buffer_return_tx_for_loop,
+                },
             )
         });
 
@@ -1637,17 +1845,21 @@ impl ShellSession {
     /// Returns the exit code from the PTY child process, if available.
     fn event_loop<'a>(
         &mut self,
-        pty: &Arc<Pty>,
         vt: &mut Terminal<'a, '_>,
         renderer: &mut Renderer<'a>,
-        event_rx: std::sync::mpsc::Receiver<Event>,
-        coordinator_tx: &tokio_mpsc::Sender<ShellEvent>,
-        stdout: &mut Box<dyn Write + Send>,
+        context: EventLoopContext<'_>,
     ) -> Result<Option<u32>, SessionError> {
+        let EventLoopContext {
+            pty,
+            event_rx,
+            coordinator_tx,
+            stdout,
+            virtual_pty_replies,
+            pty_buffer_return_tx,
+        } = context;
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
         let mut scanner = EscapeScanner::new();
         let mut vt_input_filter = VtInputFilter::new();
-        let mut utf8_acc = Utf8Accumulator::new();
         let mut esc = EscapeState::new();
         let mut resize_pending = false;
         let mut esc_events = Vec::new();
@@ -1701,59 +1913,21 @@ impl ShellSession {
 
             match event {
                 Event::Stdin(data) => {
-                    if data.as_slice() == KEYBIND_TOGGLE_PAUSE {
-                        if let Err(e) = coordinator_tx.try_send(ShellEvent::TogglePause) {
-                            tracing::trace!("failed to send TogglePause event: {e}");
-                        }
-                        continue;
-                    }
-                    if data.as_slice() == KEYBIND_LIST_WATCHED {
-                        if let Err(e) = coordinator_tx.try_send(ShellEvent::ListWatchedFiles) {
-                            tracing::trace!("failed to send ListWatchedFiles event: {e}");
-                        }
-                        continue;
-                    }
-                    if data.as_slice() == KEYBIND_TOGGLE_ERROR {
-                        let state = self.status_line.state_mut();
-                        if state.error.is_some() {
-                            state.show_error = !state.show_error;
-                            let synchronized = synchronized_output_active(vt);
-                            if state.show_error {
-                                let error = state.error.clone().unwrap();
-                                let mut error_text =
-                                    String::from("\r\n\x1b[1;31mBuild error:\x1b[0m\r\n");
-                                for line in error.lines() {
-                                    error_text.push_str(&format!("  {}\r\n", line));
-                                }
-                                error_text.push_str("\r\n");
-                                renderer.feed(vt, &error_text);
-                                if !synchronized {
-                                    if renderer.row_offset > 0 {
-                                        renderer.render(stdout, vt)?;
-                                    } else {
-                                        renderer.render_with_scroll(stdout, vt)?;
-                                    }
-                                }
-                            } else {
-                                pty.write_all(&[0x0C])?;
-                                pty.flush()?;
-                            }
-                            if !synchronized {
-                                self.status_line
-                                    .draw(stdout, self.size.cols, self.size.rows)?;
-                                renderer.write_cursor(stdout, vt)?;
-                                stdout.flush()?;
-                            }
-                        }
-                        continue;
-                    }
-                    if !&data.is_empty() {
-                        pty.write_all(&data)?;
-                        pty.flush()?;
-                    }
+                    self.dispatch_stdin_event(
+                        &data,
+                        StdinPresentation::Immediate,
+                        StdinEventContext {
+                            pty,
+                            coordinator_tx,
+                            stdout,
+                            vt,
+                            renderer,
+                        },
+                    )?;
                 }
 
                 Event::PtyOutput(data) => {
+                    let mut batch_budget = RenderBatchBudget::for_initial_pty_output(data.len());
                     let was_in_alt = esc.in_alternate_screen;
                     // Preserve deferred erase/scrollback flags across an
                     // application-controlled synchronized-output window.
@@ -1772,12 +1946,18 @@ impl ShellSession {
                     )?;
 
                     // Feed output into VT and track how many lines scrolled off
-                    let filtered = vt_input_filter.filter(&data, &mut vt_input);
-                    let text = utf8_acc.accumulate(filtered);
-                    let mut total_scroll = renderer.feed(vt, &text);
+                    let mut total_scroll = {
+                        let filtered = vt_input_filter.filter(&data, &mut vt_input);
+                        renderer.feed(vt, filtered.as_bytes())
+                    };
+                    flush_virtual_pty_replies(virtual_pty_replies, pty)?;
+                    return_pty_read_buffer(pty_buffer_return_tx, data);
 
-                    // Batch: drain any additional pending PtyOutput events
-                    while let Ok(event) = event_rx.try_recv() {
+                    // Bound this render batch so sustained PTY output cannot
+                    // starve presentation or leave the next control event
+                    // behind an unbounded drain. The FIFO remains intact:
+                    // once exhausted, the next event is not received yet.
+                    while let Some(event) = batch_budget.try_recv(&event_rx) {
                         match event {
                             Event::PtyOutput(more) => {
                                 escape_state_process(
@@ -1789,26 +1969,37 @@ impl ShellSession {
                                     self.pty_size(),
                                     &mut esc_events,
                                 )?;
-                                let filtered = vt_input_filter.filter(&more, &mut vt_input);
-                                let text = utf8_acc.accumulate(filtered);
-                                total_scroll += renderer.feed(vt, &text);
+                                total_scroll += {
+                                    let filtered = vt_input_filter.filter(&more, &mut vt_input);
+                                    renderer.feed(vt, filtered.as_bytes())
+                                };
+                                flush_virtual_pty_replies(virtual_pty_replies, pty)?;
+                                return_pty_read_buffer(pty_buffer_return_tx, more);
                             }
                             Event::PtyExit(exit_code) => {
                                 let synchronized = synchronized_output_active(vt);
+                                let deferred_release = esc.has_deferred_synchronized_output_reset();
                                 escape_state_cleanup(&esc, stdout)?;
-                                if !synchronized {
-                                    queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+                                if !synchronized && !deferred_release {
+                                    begin_renderer_transaction(stdout, false)?;
                                 }
                                 renderer.render_with_scroll(stdout, vt)?;
-                                queue!(stdout, terminal::EndSynchronizedUpdate)?;
+                                finish_renderer_transaction(stdout, &mut esc, true)?;
                                 stdout.flush()?;
                                 return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
-                                if !&stdin_data.is_empty() {
-                                    pty.write_all(&stdin_data)?;
-                                    pty.flush()?;
-                                }
+                                total_scroll += self.dispatch_stdin_event(
+                                    &stdin_data,
+                                    StdinPresentation::Deferred,
+                                    StdinEventContext {
+                                        pty,
+                                        coordinator_tx,
+                                        stdout,
+                                        vt,
+                                        renderer,
+                                    },
+                                )?;
                             }
                             Event::Command(cmd) => {
                                 total_scroll += self.handle_command(cmd, vt, renderer)?;
@@ -1829,9 +2020,15 @@ impl ShellSession {
                         continue;
                     }
 
+                    // The application has released its virtual mode-2026
+                    // transaction, but `EscapeState` intentionally kept the
+                    // physical reset pending. Render into that same physical
+                    // transaction, then make the reset the final byte.
+                    let deferred_release = esc.has_deferred_synchronized_output_reset();
+
                     // Begin synchronized output so the terminal buffers
                     // all writes atomically (mode 2026).
-                    queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+                    begin_renderer_transaction(stdout, deferred_release)?;
 
                     // Handle alternate screen transitions
                     if was_in_alt != esc.in_alternate_screen {
@@ -1881,13 +2078,16 @@ impl ShellSession {
                     }
                     renderer.write_cursor(stdout, vt)?;
 
-                    // End synchronized output and flush.
-                    queue!(stdout, terminal::EndSynchronizedUpdate)?;
+                    // End synchronized output and flush. For an
+                    // application-owned transaction, its original reset is
+                    // deliberately emitted only after the completed frame.
+                    finish_renderer_transaction(stdout, &mut esc, true)?;
                     stdout.flush()?;
                 }
 
                 Event::PtyExit(exit_code) => {
                     let synchronized = synchronized_output_active(vt);
+                    let deferred_release = esc.has_deferred_synchronized_output_reset();
                     if synchronized {
                         // Present the final deferred frame before releasing
                         // mode 2026, even if the child exits without doing so.
@@ -1895,9 +2095,11 @@ impl ShellSession {
                     }
                     self.clear_status_row(stdout, esc.in_alternate_screen)?;
                     escape_state_cleanup(&esc, stdout)?;
-                    if synchronized {
-                        queue!(stdout, terminal::EndSynchronizedUpdate)?;
-                    }
+                    finish_renderer_transaction(
+                        stdout,
+                        &mut esc,
+                        synchronized || deferred_release,
+                    )?;
                     stdout.flush()?;
                     return Ok(exit_code);
                 }
@@ -1994,16 +2196,82 @@ impl ShellSession {
         }
 
         let synchronized = synchronized_output_active(vt);
+        let deferred_release = esc.has_deferred_synchronized_output_reset();
         if synchronized {
             renderer.render_with_scroll(stdout, vt)?;
         }
         self.clear_status_row(stdout, esc.in_alternate_screen)?;
         escape_state_cleanup(&esc, stdout)?;
-        if synchronized {
-            queue!(stdout, terminal::EndSynchronizedUpdate)?;
-        }
+        finish_renderer_transaction(stdout, &mut esc, synchronized || deferred_release)?;
         stdout.flush()?;
         Ok(None)
+    }
+
+    fn dispatch_stdin_event(
+        &mut self,
+        data: &[u8],
+        presentation: StdinPresentation,
+        context: StdinEventContext<'_, '_, '_>,
+    ) -> Result<usize, SessionError> {
+        let StdinEventContext {
+            pty,
+            coordinator_tx,
+            stdout,
+            vt,
+            renderer,
+        } = context;
+        match classify_stdin(data) {
+            StdinDisposition::TogglePause => {
+                if let Err(e) = coordinator_tx.try_send(ShellEvent::TogglePause) {
+                    tracing::trace!("failed to send TogglePause event: {e}");
+                }
+            }
+            StdinDisposition::ListWatchedFiles => {
+                if let Err(e) = coordinator_tx.try_send(ShellEvent::ListWatchedFiles) {
+                    tracing::trace!("failed to send ListWatchedFiles event: {e}");
+                }
+            }
+            StdinDisposition::ToggleError => {
+                let state = self.status_line.state_mut();
+                if state.error.is_some() {
+                    state.show_error = !state.show_error;
+                    let synchronized = synchronized_output_active(vt);
+                    let mut scroll = 0;
+                    if state.show_error {
+                        let error = state.error.clone().unwrap();
+                        let mut error_text = String::from("\r\n\x1b[1;31mBuild error:\x1b[0m\r\n");
+                        for line in error.lines() {
+                            error_text.push_str(&format!("  {}\r\n", line));
+                        }
+                        error_text.push_str("\r\n");
+                        scroll = renderer.feed(vt, &error_text);
+                        if present_stdin_error_immediately(presentation, synchronized) {
+                            if renderer.row_offset > 0 {
+                                renderer.render(stdout, vt)?;
+                            } else {
+                                renderer.render_with_scroll(stdout, vt)?;
+                            }
+                        }
+                    } else {
+                        pty.write_all(&[0x0C])?;
+                        pty.flush()?;
+                    }
+                    if present_stdin_error_immediately(presentation, synchronized) {
+                        self.status_line
+                            .draw(stdout, self.size.cols, self.size.rows)?;
+                        renderer.write_cursor(stdout, vt)?;
+                        stdout.flush()?;
+                    }
+                    return Ok(scroll);
+                }
+            }
+            StdinDisposition::ForwardToPty if !data.is_empty() => {
+                pty.write_all(data)?;
+                pty.flush()?;
+            }
+            StdinDisposition::ForwardToPty => {}
+        }
+        Ok(0)
     }
 
     /// Handle a command from the coordinator.
@@ -2121,11 +2389,195 @@ mod tests {
     const COLS: u16 = 20;
     const ROWS: u16 = 5;
 
-    fn test_vt_with_size(
+    fn pty_output_byte(event: Event) -> u8 {
+        match event {
+            Event::PtyOutput(bytes) => *bytes.first().expect("non-empty PTY output"),
+            _ => panic!("expected PTY output event"),
+        }
+    }
+
+    #[test]
+    fn deferred_application_sync_reset_is_the_presentation_boundary() {
+        let mut esc = EscapeState::new();
+        let set = crate::escape::DecModeEvent::Set {
+            modes: vec![2026],
+            raw_bytes: b"\x1b[?2026h".to_vec(),
+        };
+        let reset = crate::escape::DecModeEvent::Reset {
+            modes: vec![2026],
+            raw_bytes: b"\x1b[?2026l".to_vec(),
+        };
+        let mut stdout = Vec::new();
+        stdout.extend_from_slice(esc.apply_dec_mode(&set));
+        assert!(esc.apply_dec_mode(&reset).is_empty());
+
+        // This helper is used after renderer/status/cursor output. It must
+        // not insert its own mode-2026 h/l pair inside the application's
+        // transaction.
+        stdout.extend_from_slice(b"<frame><status><cursor>");
+        finish_renderer_transaction(&mut stdout, &mut esc, true).unwrap();
+        assert_eq!(stdout, b"\x1b[?2026h<frame><status><cursor>\x1b[?2026l");
+    }
+
+    #[test]
+    fn render_batch_budget_caps_event_count_and_leaves_the_next_event_queued() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let output_count = MAX_RENDER_BATCH_EVENTS * 3;
+        for byte in 1..output_count as u8 {
+            tx.send(Event::PtyOutput(vec![byte])).unwrap();
+        }
+
+        // The first PTY event is the one that entered the outer event loop.
+        let mut budget = RenderBatchBudget::for_initial_pty_output(1);
+        let mut rendered = vec![0];
+        while let Some(event) = budget.try_recv(&rx) {
+            rendered.push(pty_output_byte(event));
+        }
+
+        // The initial event counts toward the event budget. No later PTY
+        // event has been read early, so it will start the following frame.
+        assert_eq!(
+            rendered,
+            (0..MAX_RENDER_BATCH_EVENTS as u8).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            pty_output_byte(rx.try_recv().unwrap()),
+            MAX_RENDER_BATCH_EVENTS as u8
+        );
+
+        // Everything after that boundary remains ordered and intact.
+        let remaining: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok())
+            .map(pty_output_byte)
+            .collect();
+        assert_eq!(
+            remaining,
+            ((MAX_RENDER_BATCH_EVENTS + 1) as u8..output_count as u8).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn render_batch_budget_caps_pty_bytes_before_reading_the_next_chunk() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let chunk_len = MAX_PTY_BATCH_BYTES / 8;
+        for byte in 1..10 {
+            tx.send(Event::PtyOutput(vec![byte; chunk_len])).unwrap();
+        }
+
+        let mut budget = RenderBatchBudget::for_initial_pty_output(chunk_len);
+        let mut rendered = vec![0];
+        while let Some(event) = budget.try_recv(&rx) {
+            rendered.push(pty_output_byte(event));
+        }
+
+        // Initial + seven queued chunks reaches exactly 32 KiB. The eighth
+        // queued chunk remains unread for the next render pass.
+        assert_eq!(rendered, (0..8).collect::<Vec<_>>());
+        assert_eq!(pty_output_byte(rx.try_recv().unwrap()), 8);
+    }
+
+    #[test]
+    fn render_batch_budget_keeps_interleaved_control_events_in_fifo_order() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(Event::PtyOutput(b"b".to_vec())).unwrap();
+        tx.send(Event::Stdin(b"input".to_vec())).unwrap();
+        tx.send(Event::Command(ShellCommand::ReloadApplied))
+            .unwrap();
+        tx.send(Event::Resize).unwrap();
+        tx.send(Event::PtyOutput(b"c".to_vec())).unwrap();
+
+        let mut budget = RenderBatchBudget::for_initial_pty_output(1);
+        assert_eq!(pty_output_byte(budget.try_recv(&rx).unwrap()), b'b');
+        assert!(matches!(budget.try_recv(&rx), Some(Event::Stdin(data)) if data == b"input"));
+        assert!(matches!(
+            budget.try_recv(&rx),
+            Some(Event::Command(ShellCommand::ReloadApplied))
+        ));
+
+        // This matches the event-loop branch: defer exactly one resize, then
+        // stop draining. The following PTY bytes are untouched and therefore
+        // cannot be dropped or reordered around the resize.
+        assert!(matches!(budget.try_recv(&rx), Some(Event::Resize)));
+        assert_eq!(pty_output_byte(rx.try_recv().unwrap()), b'c');
+    }
+
+    #[test]
+    fn batched_stdin_keybind_is_local_not_pty_input() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(Event::Stdin(KEYBIND_TOGGLE_PAUSE.to_vec()))
+            .unwrap();
+        tx.send(Event::PtyOutput(b"later".to_vec())).unwrap();
+
+        // Model the pending PTY output that opened a render batch, then the
+        // keybinding interleaved behind it in the shared FIFO.
+        let mut budget = RenderBatchBudget::for_initial_pty_output(b"first".len());
+        let event = budget.try_recv(&rx).unwrap();
+        let Event::Stdin(data) = event else {
+            panic!("expected the interleaved stdin event");
+        };
+
+        let mut pty_writes = Vec::new();
+        let mut shell_events = Vec::new();
+        match classify_stdin(&data) {
+            StdinDisposition::TogglePause => shell_events.push(ShellEvent::TogglePause),
+            StdinDisposition::ForwardToPty => pty_writes.extend_from_slice(&data),
+            other => panic!("unexpected keybinding disposition: {other:?}"),
+        }
+
+        assert!(pty_writes.is_empty());
+        assert!(matches!(shell_events.as_slice(), [ShellEvent::TogglePause]));
+        assert_eq!(pty_output_byte(rx.try_recv().unwrap()), b'l');
+    }
+
+    #[test]
+    fn batched_stdin_error_toggle_defers_presentation_to_the_pty_frame() {
+        assert!(present_stdin_error_immediately(
+            StdinPresentation::Immediate,
+            false
+        ));
+        assert!(!present_stdin_error_immediately(
+            StdinPresentation::Deferred,
+            false
+        ));
+        assert!(!present_stdin_error_immediately(
+            StdinPresentation::Immediate,
+            true
+        ));
+    }
+
+    #[test]
+    fn pty_read_buffer_pool_reuses_buffers_and_disconnects_cleanly() {
+        let (return_tx, return_rx) =
+            std::sync::mpsc::sync_channel::<Vec<u8>>(PTY_READ_BUFFER_COUNT);
+        for _ in 0..PTY_READ_BUFFER_COUNT {
+            return_tx.send(vec![0; PTY_READ_BUFFER_BYTES]).unwrap();
+        }
+
+        let mut leased: Vec<_> = (0..PTY_READ_BUFFER_COUNT)
+            .map(|_| return_rx.recv().unwrap())
+            .collect();
+        assert!(matches!(
+            return_rx.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
+        ));
+
+        let buffer = leased.pop().unwrap();
+        let pointer = buffer.as_ptr();
+        return_pty_read_buffer(&return_tx, buffer);
+        let recycled = return_rx.recv().unwrap();
+        assert_eq!(recycled.as_ptr(), pointer);
+        assert_eq!(recycled.capacity(), PTY_READ_BUFFER_BYTES);
+
+        drop(recycled);
+        drop(leased);
+        drop(return_tx);
+        assert!(matches!(return_rx.recv(), Err(std::sync::mpsc::RecvError)));
+    }
+
+    fn test_vt_with_size<'cb>(
         cols: u16,
         rows: u16,
         max_scrollback: usize,
-    ) -> Terminal<'static, 'static> {
+    ) -> Terminal<'static, 'cb> {
         Terminal::new(TerminalOptions {
             cols,
             rows,
@@ -2134,7 +2586,7 @@ mod tests {
         .expect("terminal")
     }
 
-    fn test_vt(max_scrollback: usize) -> Terminal<'static, 'static> {
+    fn test_vt<'cb>(max_scrollback: usize) -> Terminal<'static, 'cb> {
         test_vt_with_size(COLS, ROWS, max_scrollback)
     }
 
@@ -2221,7 +2673,7 @@ mod tests {
         let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
         let mut renderer = test_renderer(&vt);
         for i in 0..8 {
-            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+            renderer.feed(&mut vt, format!("line{}\r\n", i));
         }
         let scrollback = vt.scrollback_rows().unwrap();
         assert!(scrollback > 2);
@@ -2247,7 +2699,7 @@ mod tests {
 
         // Fill the viewport: nothing scrolled off yet.
         for i in 0..ROWS as usize - 1 {
-            assert_eq!(renderer.feed(&mut vt, &format!("line{}\r\n", i)), 0);
+            assert_eq!(renderer.feed(&mut vt, format!("line{}\r\n", i)), 0);
         }
         assert_eq!(renderer.feed(&mut vt, "line4"), 0);
         assert_eq!(renderer.unflushed(&vt), 0);
@@ -2276,11 +2728,11 @@ mod tests {
         renderer.render_full(&mut out, &vt).unwrap();
 
         for i in 0..8 {
-            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+            renderer.feed(&mut vt, format!("line{}\r\n", i));
         }
         renderer.render_with_scroll(&mut out, &mut vt).unwrap();
         for i in 8..12 {
-            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+            renderer.feed(&mut vt, format!("line{}\r\n", i));
         }
         renderer.render_with_scroll(&mut out, &mut vt).unwrap();
 
@@ -2309,7 +2761,7 @@ mod tests {
         renderer.render_full(&mut out, &vt).unwrap();
 
         for i in 0..300 {
-            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+            renderer.feed(&mut vt, format!("line{}\r\n", i));
         }
         renderer.render_with_scroll(&mut out, &mut vt).unwrap();
         assert_eq!(renderer.unflushed(&vt), 0);
@@ -2421,7 +2873,7 @@ mod tests {
         let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
         let mut renderer = test_renderer(&vt);
         for i in 0..ROWS as usize - 1 {
-            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+            renderer.feed(&mut vt, format!("line{}\r\n", i));
         }
         renderer.feed(&mut vt, "line4");
         let mut out = Vec::new();
@@ -2470,13 +2922,97 @@ mod tests {
     }
 
     #[test]
+    fn renderer_repaints_style_only_changes_with_native_row_formatting() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        let mut out = Vec::new();
+
+        renderer.feed(&mut vt, "A");
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        // The character itself is unchanged. The encoded-row cache must
+        // still observe Ghostty's native VT representation of the new style.
+        renderer.feed(&mut vt, "\x1b[1;1H\x1b[38;2;1;2;3mA\x1b[0m");
+        out.clear();
+        renderer.render(&mut out, &vt).unwrap();
+
+        assert_eq!(out.windows(4).filter(|w| *w == b"\x1b[2K").count(), 1);
+        let mut replay = test_vt(DEFAULT_MAX_SCROLLBACK);
+        replay.vt_write(&out);
+        assert_eq!(row_plain_text(&replay, active_point(0)).trim_end(), "A");
+        assert_eq!(
+            replay.grid_ref(active_point(0)).unwrap().style().unwrap(),
+            vt.grid_ref(active_point(0)).unwrap().style().unwrap()
+        );
+    }
+
+    #[test]
+    fn renderer_preserves_el_background_on_blank_rows() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+
+        // EL under a non-default background is how Neovim paints otherwise
+        // blank rows. Ghostty stores the erased suffix as background-only
+        // cells rather than styled spaces.
+        renderer.feed(&mut vt, "\x1b[48;2;1;2;3m\x1b[K\x1b[0m");
+        let first = active_point(0);
+        let last = point_with_x(first, COLS - 1);
+        // Inspect the raw content tag: GridRef::style() is default for an RGB
+        // background-only cell and was the reason the old test passed while
+        // checking the wrong thing.
+        for point in [first, last] {
+            let cell = vt.grid_ref(point).unwrap().cell().unwrap();
+            assert_eq!(cell.content_tag().unwrap(), CellContentTag::BgColorRgb);
+            assert_eq!(cell.bg_color_rgb().unwrap(), RgbColor { r: 1, g: 2, b: 3 });
+        }
+
+        let mut out = Vec::new();
+        renderer.render_full(&mut out, &vt).unwrap();
+
+        let mut replay = test_vt(DEFAULT_MAX_SCROLLBACK);
+        replay.vt_write(&out);
+        for point in [first, last] {
+            assert_eq!(
+                replay.grid_ref(point).unwrap().style().unwrap().bg_color,
+                StyleColor::Rgb(RgbColor { r: 1, g: 2, b: 3 })
+            );
+        }
+    }
+
+    #[test]
+    fn native_row_formatting_omits_terminal_metadata_for_blank_rows() {
+        let vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut formatter = RowFormatter::new(COLS as usize);
+
+        let row = formatter.format_row(&vt, active_point(0)).unwrap();
+
+        assert!(
+            row.len() < 32,
+            "blank row output was unbounded: {} bytes",
+            row.len()
+        );
+        assert!(
+            !row.windows(2).any(|window| window == b"\x1b]"),
+            "row formatter emitted OSC metadata: {row:?}"
+        );
+        assert!(
+            !row.windows(4).any(|window| window == b"\x1b]4;"),
+            "row formatter emitted palette entries: {row:?}"
+        );
+        assert!(
+            row.is_empty(),
+            "blank rows should rely on Clear(CurrentLine), got {row:?}"
+        );
+    }
+
+    #[test]
     fn renderer_region_scroll_stays_in_sync() {
         // A DECSTBM region scroll moves rows without creating scrollback.
         // The dirty-tracking fast path must still pick up every moved row.
         let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
         let mut renderer = test_renderer(&vt);
         for i in 0..ROWS as usize {
-            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+            renderer.feed(&mut vt, format!("line{}\r\n", i));
         }
         let mut out = Vec::new();
         renderer.render_full(&mut out, &vt).unwrap();
@@ -2564,7 +3100,7 @@ mod tests {
         renderer.render_full(&mut out, &vt).unwrap();
 
         for i in 0..8 {
-            renderer.feed(&mut vt, &format!("line{}\r\n", i));
+            renderer.feed(&mut vt, format!("line{}\r\n", i));
         }
         assert!(renderer.unflushed(&vt) > 0);
 
@@ -2607,10 +3143,56 @@ mod tests {
 
         for chunk in chunks {
             let filtered = filter.filter(chunk, &mut output);
-            combined.extend_from_slice(filtered);
+            combined.extend_from_slice(filtered.as_bytes());
         }
 
         combined
+    }
+
+    #[test]
+    fn vt_input_filter_borrows_ordinary_ground_output() {
+        let mut filter = VtInputFilter::new();
+        let mut output = Vec::new();
+        let input = b"ordinary PTY output";
+
+        let filtered = filter.filter(input, &mut output);
+        let FilteredVtInput::Borrowed(bytes) = filtered else {
+            panic!("ordinary ground output was unnecessarily copied");
+        };
+        assert_eq!(bytes.as_ptr(), input.as_ptr());
+        assert_eq!(bytes, input);
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn raw_pty_bytes_preserve_invalid_utf8_for_ghostty() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        let mut filter = VtInputFilter::new();
+        let mut output = Vec::new();
+
+        let filtered = filter.filter(b"a\xffb", &mut output);
+        renderer.feed(&mut vt, filtered.as_bytes());
+
+        // Ghostty's byte-stream parser, rather than a pre-parser String
+        // conversion, applies the terminal-standard replacement behavior.
+        assert_eq!(viewport_lines(&vt)[0], "a\u{fffd}b");
+    }
+
+    #[test]
+    fn raw_pty_bytes_preserve_split_utf8_for_ghostty() {
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        let mut renderer = test_renderer(&vt);
+        let mut filter = VtInputFilter::new();
+        let mut output = Vec::new();
+
+        let first = filter.filter(b"\xe2\x82", &mut output);
+        renderer.feed(&mut vt, first.as_bytes());
+        assert_eq!(viewport_lines(&vt)[0], "");
+
+        let second = filter.filter(b"\xac", &mut output);
+        renderer.feed(&mut vt, second.as_bytes());
+        assert_eq!(viewport_lines(&vt)[0], "€");
     }
 
     #[test]
@@ -2629,6 +3211,69 @@ mod tests {
     fn vt_input_filter_preserves_other_escape_sequences() {
         let filtered = filter_chunks(&[b"hello \x1b[31mred\x1b[0m"]);
         assert_eq!(filtered, b"hello \x1b[31mred\x1b[0m");
+    }
+
+    #[test]
+    fn virtual_pty_reply_filter_is_exact_and_deny_by_default() {
+        let cases = [
+            (b"\x1b[0n".as_slice(), true),
+            (b"\x1b[12;80R", true),
+            (b"\x1b[?2048;0$y", true),
+            (b"\x1b[?2048;1$y", true),
+            (b"\x1b[?2048;2$y", true),
+            (b"\x1b[?2048;3$y", true),
+            (b"\x1b[?2048;4$y", true),
+            // Responses from physical-owned queries must never reach the
+            // child through the virtual hook.
+            (b"\x1b[?7;1$y", false),
+            (b"\x1b[?2048;5$y", false),
+            (b"\x1b]10;rgb:0000/0000/0000\x1b\\", false),
+            (b"\x1bP>|libghostty\x1b\\", false),
+            (b"\x1b[48;23;80;0;0t", false),
+            (b"\x1b[;80R", false),
+        ];
+
+        for (reply, expected) in cases {
+            assert_eq!(
+                is_virtual_terminal_reply(reply),
+                expected,
+                "incorrect ownership for reply {reply:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn virtual_query_hook_handles_mixed_and_split_queries() {
+        let replies = RefCell::new(VirtualPtyReplies::default());
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        vt.on_pty_write({
+            let replies = &replies;
+            move |_term, data| replies.borrow_mut().capture(data)
+        })
+        .unwrap();
+
+        // The CPR request and mode query are split at arbitrary byte
+        // boundaries. `?7$p` and XTVERSION still invoke libghostty-vt's
+        // general callback, but the collector deliberately discards them so
+        // their established physical passthrough remains the sole response.
+        vt.vt_write(b"\x1b[3;4H\x1b[5n\x1b[");
+        vt.vt_write(b"6n\x1b[?2048$");
+        vt.vt_write(b"p\x1b[?7$p\x1b[>q");
+
+        assert_eq!(replies.borrow().bytes, b"\x1b[0n\x1b[3;4R\x1b[?2048;2$y");
+
+        // The virtual terminal's mode changes from the raw PTY stream, even
+        // though the corresponding mode transition is never sent to stdout.
+        replies.borrow_mut().bytes.clear();
+        vt.vt_write(b"\x1b[?2048h\x1b[?2048$p");
+        assert_eq!(replies.borrow().bytes, b"\x1b[?2048;1$y");
+
+        // Enabling the callback also makes Ghostty emit an in-band resize
+        // report from `resize`. The session sends its own PTY-sized report,
+        // so the generic hook must continue rejecting this duplicate.
+        replies.borrow_mut().bytes.clear();
+        vt.resize(COLS + 1, ROWS, 0, 0).unwrap();
+        assert!(replies.borrow().bytes.is_empty());
     }
 
     /// Regression test for devenv#2845: when the process-wide shutdown token is

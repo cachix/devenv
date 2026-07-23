@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn test_pty_error_display() {
-        let io_err = io::Error::new(io::ErrorKind::Other, "test");
+        let io_err = io::Error::other("test");
         let pty_err = PtyError::Io(io_err);
         let display = format!("{}", pty_err);
         assert!(display.contains("IO error"));
