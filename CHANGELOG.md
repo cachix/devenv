@@ -50,6 +50,7 @@
 
 ### Improvements
 
+- Reduced renderer fragmentation in `devenv shell` by reading PTY output in larger batches, lowering syscall and event-allocation overhead during full-screen repaint bursts.
 - `DEVENV_HOME` now overrides where devenv stores all per-user data (GC roots, trust database, cached keys), not just the trust database.
 - `DEVENV_RUNTIME` can now be set to override where a project stores its sockets and other runtime files. To relocate runtime files for all projects at once, prefer `XDG_RUNTIME_DIR`, which keeps each project's directory separate.
 

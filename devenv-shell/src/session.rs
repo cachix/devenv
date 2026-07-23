@@ -875,7 +875,10 @@ impl ShellSession {
         std::thread::Builder::new()
             .name("session-pty".into())
             .spawn(move || {
-                let mut buf = [0u8; 4096];
+                // Keep a full-screen repaint burst in one PTY read where
+                // possible, reducing syscalls, event allocations, and
+                // fragmented renderer frames.
+                let mut buf = [0u8; 64 * 1024];
                 loop {
                     match pty_reader.read(&mut buf) {
                         Ok(0) => {
