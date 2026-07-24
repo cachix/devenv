@@ -2,6 +2,7 @@ use crate::error::{CacheError, CacheResult};
 use crate::time;
 use blake3::Hasher;
 use std::io;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use walkdir::WalkDir;
@@ -143,6 +144,22 @@ pub fn compute_file_hash<P: AsRef<Path>>(path: P) -> CacheResult<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
+/// Compute the content identity of a regular file copied into the Nix store.
+///
+/// Nix archives preserve the owner's executable bit in addition to file
+/// contents. Other permission bits are normalized and therefore intentionally
+/// ignored.
+pub fn compute_source_file_hash<P: AsRef<Path>>(path: P) -> CacheResult<String> {
+    let path = path.as_ref();
+    let content_hash = compute_file_hash(path)?;
+    let metadata = get_metadata(path)?;
+    let executable = metadata.permissions().mode() & 0o100 != 0;
+
+    Ok(compute_string_hash(&format!(
+        "file {content_hash} executable={executable}"
+    )))
+}
+
 /// Compute a hash of a directory's contents.
 ///
 /// Returns `Ok(None)` for an empty directory.
@@ -192,6 +209,57 @@ pub fn compute_directory_hash<P: AsRef<Path>>(path: P) -> CacheResult<Option<Str
     Ok(Some(compute_string_hash(&entries.join("\n"))))
 }
 
+/// Compute a content-only hash of a directory's contents, recursively.
+///
+/// Unlike [`compute_directory_hash`], this ignores modification times, so
+/// touching a file without changing its contents does not change the hash. It
+/// also keys entries by their path relative to `path`, so the same tree hashes
+/// identically regardless of where it lives on disk. This mirrors how Nix
+/// hashes a source tree copied into the store, and is what the eval cache needs
+/// to detect edits to files nested inside a copied source directory.
+///
+/// Returns the hash of the empty string for an empty directory.
+pub fn compute_directory_content_hash<P: AsRef<Path>>(path: P) -> CacheResult<String> {
+    let path = path.as_ref();
+    let mut entries = Vec::new();
+
+    // Skip the root directory itself, sort by file name for consistent ordering
+    for entry in WalkDir::new(path).min_depth(1).sort_by_file_name() {
+        match entry {
+            Ok(entry) => {
+                let rel = entry
+                    .path()
+                    .strip_prefix(path)
+                    .unwrap_or_else(|_| entry.path())
+                    .to_string_lossy()
+                    .into_owned();
+                let file_type = entry.file_type();
+
+                if file_type.is_dir() {
+                    entries.push(format!("dir {rel}"));
+                } else if file_type.is_symlink() {
+                    // Record the link target, not its contents, matching Nix.
+                    let target = std::fs::read_link(entry.path())
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    entries.push(format!("symlink {rel} -> {target}"));
+                } else {
+                    match compute_source_file_hash(entry.path()) {
+                        Ok(hash) => entries.push(format!("file {rel} {hash}")),
+                        Err(_) => entries.push(format!("file_error {rel}")),
+                    }
+                }
+            }
+            Err(e) => {
+                // Include error entries as well to detect when errors change
+                entries.push(format!("error {e}"));
+            }
+        }
+    }
+
+    Ok(compute_string_hash(&entries.join("\n")))
+}
+
 /// Compute a hash of a string
 pub fn compute_string_hash(content: &str) -> String {
     let hash = blake3::hash(content.as_bytes());
@@ -203,6 +271,7 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
     #[test]
@@ -231,6 +300,86 @@ mod tests {
 
         let hash3 = compute_file_hash(&file_path).unwrap();
         assert_ne!(hash, hash3);
+    }
+
+    #[test]
+    fn test_directory_content_hash_detects_nested_changes() {
+        let temp_dir = TempDir::new().unwrap();
+        let nested = temp_dir.path().join("a").join("b");
+        std::fs::create_dir_all(&nested).unwrap();
+        let file_path = nested.join("c.txt");
+        std::fs::write(&file_path, b"hello").unwrap();
+
+        let hash = compute_directory_content_hash(temp_dir.path()).unwrap();
+        assert!(!hash.is_empty());
+
+        // Same contents hash identically.
+        assert_eq!(
+            hash,
+            compute_directory_content_hash(temp_dir.path()).unwrap()
+        );
+
+        // Editing a deeply nested file changes the hash, even though the
+        // directory listing is unchanged.
+        std::fs::write(&file_path, b"world").unwrap();
+        assert_ne!(
+            hash,
+            compute_directory_content_hash(temp_dir.path()).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_directory_content_hash_is_location_independent() {
+        // The same tree at two different locations hashes identically, because
+        // entries are keyed by their path relative to the root.
+        let make_tree = || {
+            let dir = TempDir::new().unwrap();
+            std::fs::create_dir(dir.path().join("src")).unwrap();
+            std::fs::write(dir.path().join("src").join("main.rs"), b"fn main() {}").unwrap();
+            dir
+        };
+        let a = make_tree();
+        let b = make_tree();
+        assert_eq!(
+            compute_directory_content_hash(a.path()).unwrap(),
+            compute_directory_content_hash(b.path()).unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_source_file_hash_detects_executable_bit_changes() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("script.sh");
+        std::fs::write(&file_path, b"#!/bin/sh\nexit 0\n").unwrap();
+
+        let mut permissions = std::fs::metadata(&file_path).unwrap().permissions();
+        permissions.set_mode(0o644);
+        std::fs::set_permissions(&file_path, permissions.clone()).unwrap();
+        let non_executable = compute_source_file_hash(&file_path).unwrap();
+
+        permissions.set_mode(0o744);
+        std::fs::set_permissions(&file_path, permissions).unwrap();
+        let executable = compute_source_file_hash(&file_path).unwrap();
+
+        assert_ne!(non_executable, executable);
+    }
+
+    #[test]
+    fn test_directory_content_hash_detects_executable_bit_changes() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("script.sh");
+        std::fs::write(&file_path, b"#!/bin/sh\nexit 0\n").unwrap();
+
+        let mut permissions = std::fs::metadata(&file_path).unwrap().permissions();
+        permissions.set_mode(0o644);
+        std::fs::set_permissions(&file_path, permissions.clone()).unwrap();
+        let non_executable = compute_directory_content_hash(temp_dir.path()).unwrap();
+
+        permissions.set_mode(0o744);
+        std::fs::set_permissions(&file_path, permissions).unwrap();
+        let executable = compute_directory_content_hash(temp_dir.path()).unwrap();
+
+        assert_ne!(non_executable, executable);
     }
 
     #[test]

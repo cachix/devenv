@@ -265,6 +265,17 @@ impl NixLogBridge {
                 fields,
                 ..
             } => {
+                // Some eval operations (e.g. a source copied into the store) are
+                // surfaced as structured activities rather than log messages.
+                // Activities are delivered regardless of verbosity, so record any
+                // input dependency they carry for cache invalidation.
+                if let Some(op) = EvalOp::from_activity(typ, &fields) {
+                    if let Ok(guard) = self.observers.lock() {
+                        for observer in guard.iter() {
+                            observer.record(op.clone());
+                        }
+                    }
+                }
                 self.handle_activity_start(id, typ, text, fields);
             }
             InternalLog::Stop { id } => {
@@ -678,6 +689,7 @@ pub fn activity_type_from_str(s: &str) -> ActivityType {
         "post-build-hook" => ActivityType::PostBuildHook,
         "build-waiting" => ActivityType::BuildWaiting,
         "fetch-tree" => ActivityType::FetchTree,
+        "eval-copy-source" => ActivityType::EvalCopySource,
         _ => ActivityType::Unknown,
     }
 }
@@ -882,6 +894,10 @@ mod tests {
             ActivityType::Substitute
         );
         assert_eq!(activity_type_from_str("copy-path"), ActivityType::CopyPath);
+        assert_eq!(
+            activity_type_from_str("eval-copy-source"),
+            ActivityType::EvalCopySource
+        );
         assert_eq!(
             activity_type_from_str("unknown-type"),
             ActivityType::Unknown

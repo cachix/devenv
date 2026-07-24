@@ -5,7 +5,7 @@
 //!
 //! Note: `EvalOp` is duplicated in `devenv_activity::EvalOp`.
 
-use crate::internal_log::InternalLog;
+use crate::internal_log::{ActivityType, Field, InternalLog};
 use regex::Regex;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
@@ -107,6 +107,31 @@ impl EvalOp {
             _ => None,
         }
     }
+
+    /// Extract an `EvalOp` from a structured Nix activity.
+    ///
+    /// Some operations are surfaced as structured activities rather than free-text
+    /// log messages. Unlike messages, activities are emitted regardless of the
+    /// configured verbosity, so this is the reliable way to observe them.
+    ///
+    /// `ActivityType::EvalCopySource` carries the source path in field 0 and the
+    /// destination store path in field 1.
+    pub fn from_activity(typ: ActivityType, fields: &[Field]) -> Option<Self> {
+        match typ {
+            ActivityType::EvalCopySource => {
+                let source = match fields.first() {
+                    Some(Field::String(s)) => PathBuf::from(s),
+                    _ => return None,
+                };
+                let target = match fields.get(1) {
+                    Some(Field::String(s)) => PathBuf::from(s),
+                    _ => return None,
+                };
+                Some(EvalOp::CopiedSource { source, target })
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Observer trait for receiving evaluation operations.
@@ -155,6 +180,39 @@ mod tests {
                 source: PathBuf::from("/path/to/source"),
                 target: PathBuf::from("/path/to/target"),
             })
+        );
+    }
+
+    #[test]
+    fn test_copied_source_from_activity() {
+        // Nix emits source copies as a structured `EvalCopySource` activity:
+        // field 0 = source path, field 1 = destination store path.
+        let fields = vec![
+            Field::String("/path/to/source".to_string()),
+            Field::String("/nix/store/abc-source".to_string()),
+        ];
+        let op = EvalOp::from_activity(ActivityType::EvalCopySource, &fields);
+        assert_eq!(
+            op,
+            Some(EvalOp::CopiedSource {
+                source: PathBuf::from("/path/to/source"),
+                target: PathBuf::from("/nix/store/abc-source"),
+            })
+        );
+    }
+
+    #[test]
+    fn test_from_activity_ignores_other_types() {
+        let fields = vec![Field::String("/some/path".to_string())];
+        assert_eq!(EvalOp::from_activity(ActivityType::Build, &fields), None);
+    }
+
+    #[test]
+    fn test_from_activity_requires_both_fields() {
+        let fields = vec![Field::String("/only/source".to_string())];
+        assert_eq!(
+            EvalOp::from_activity(ActivityType::EvalCopySource, &fields),
+            None
         );
     }
 

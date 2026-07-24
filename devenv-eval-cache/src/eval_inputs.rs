@@ -3,7 +3,10 @@
 //! This module contains types that describe file and environment variable
 //! dependencies tracked during Nix evaluation for caching purposes.
 
-use devenv_cache_core::{compute_file_hash, compute_string_hash};
+use devenv_cache_core::{
+    compute_directory_content_hash, compute_file_hash, compute_source_file_hash,
+    compute_string_hash,
+};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -54,6 +57,7 @@ impl Input {
                     || f.path == g.path
                         && f.content_hash == g.content_hash
                         && f.is_directory == g.is_directory
+                        && f.recursive == g.recursive
             }
             (Self::Env(f), Self::Env(g)) => f == g,
             _ => false,
@@ -66,6 +70,13 @@ impl Input {
 pub struct FileInputDesc {
     pub path: PathBuf,
     pub is_directory: bool,
+    /// Whether this path is copied into the Nix store.
+    ///
+    /// For directories, copied paths are hashed recursively over their contents.
+    /// For files, copied paths include the owner's executable bit in their hash.
+    /// `false` inputs retain the cheaper observation-specific hashing used by
+    /// operations such as `readFile` and `readDir`.
+    pub recursive: bool,
     pub content_hash: Option<String>,
     pub modified_at: SystemTime,
 }
@@ -94,10 +105,18 @@ impl FileInputDesc {
     /// the timestamp of when this function was called.
     ///
     /// All timestamps are truncated to second precision.
-    pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
+    pub fn new(
+        path: PathBuf,
+        fallback_system_time: SystemTime,
+        recursive: bool,
+    ) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
-            Some(compute_path_hash(&path, true)?)
+            Some(hash_directory(&path, recursive)?)
+        } else if recursive {
+            compute_source_file_hash(&path)
+                .map_err(|e| std::io::Error::other(format!("Failed to hash source file: {e}")))
+                .ok()
         } else {
             compute_path_hash(&path, false).ok()
         };
@@ -109,9 +128,31 @@ impl FileInputDesc {
         Ok(Self {
             path,
             is_directory,
+            recursive,
             content_hash,
             modified_at,
         })
+    }
+}
+
+/// Hash a directory's contents.
+///
+/// When `recursive` is set, the entire tree's file contents are hashed (used for
+/// sources copied into the Nix store). Otherwise only the sorted list of
+/// immediate entry names is hashed (used for `readDir`, where only the listing
+/// is observed during evaluation).
+fn hash_directory(path: &std::path::Path, recursive: bool) -> Result<String, io::Error> {
+    if recursive {
+        compute_directory_content_hash(path).map_err(|e| {
+            std::io::Error::other(format!("Failed to compute directory content hash: {e}"))
+        })
+    } else {
+        let mut paths: Vec<String> = std::fs::read_dir(path)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().to_string_lossy().to_string())
+            .collect();
+        paths.sort();
+        Ok(compute_string_hash(&paths.join("\n")))
     }
 }
 
@@ -193,39 +234,58 @@ pub fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
     };
 
     let modified_at = metadata.modified().and_then(truncate_to_seconds)?;
-
     // The path had no content hash when cached: it did not exist (its
     // modified_at is a fallback snapshot timestamp, not a real mtime) or it
     // could not be hashed. It is readable now, so treat it as modified. The
     // mtime equality check below would mask a creation that happened in the
     // same second as the snapshot.
     if file.content_hash.is_none() {
-        let new_hash = compute_path_hash(&file.path, metadata.is_dir())?;
+        let new_hash = if metadata.is_dir() {
+            hash_directory(&file.path, file.recursive)?
+        } else if file.recursive {
+            compute_source_file_hash(&file.path)
+                .map_err(|e| io::Error::other(format!("Failed to hash source file: {e}")))?
+        } else {
+            compute_path_hash(&file.path, false)?
+        };
         return Ok(FileState::Modified {
             new_hash,
             modified_at,
         });
     }
 
-    if modified_at == file.modified_at {
-        // File has not been modified
+    let mtime_unchanged = modified_at == file.modified_at;
+
+    // Copied paths cannot use the mtime fast path: nested edits do not update a
+    // directory's mtime, and chmod does not update a regular file's mtime.
+    let needs_rehash = file.recursive;
+    if mtime_unchanged && !needs_rehash {
         return Ok(FileState::Unchanged);
     }
 
-    // mtime has changed, check if content has changed
+    // Recompute the hash to see whether the content has actually changed.
     let new_hash = if file.is_directory {
         if !metadata.is_dir() {
             return Ok(FileState::Removed);
         }
-
-        compute_path_hash(&file.path, true)?
+        hash_directory(&file.path, file.recursive)?
     } else {
-        compute_path_hash(&file.path, false)?
+        let hash = if file.recursive {
+            compute_source_file_hash(&file.path)
+        } else {
+            compute_file_hash(&file.path)
+        };
+        hash.map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))?
     };
 
     if Some(&new_hash) == file.content_hash.as_ref() {
-        // File touched but hash unchanged
-        Ok(FileState::MetadataModified { modified_at })
+        if mtime_unchanged {
+            // Re-hashed a recursive directory and nothing changed.
+            Ok(FileState::Unchanged)
+        } else {
+            // Touched but hash unchanged.
+            Ok(FileState::MetadataModified { modified_at })
+        }
     } else {
         // Hash has changed, return new hash
         Ok(FileState::Modified {
@@ -297,6 +357,7 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
     fn create_file_row(temp_dir: &TempDir, content: &[u8]) -> FileInputDesc {
@@ -313,6 +374,7 @@ mod tests {
         FileInputDesc {
             path: file_path,
             is_directory: false,
+            recursive: false,
             content_hash,
             modified_at: truncated_modified_at,
         }
@@ -379,6 +441,7 @@ mod tests {
         let missing_row = FileInputDesc {
             path: file_path,
             is_directory: false,
+            recursive: false,
             content_hash: None,
             modified_at: mtime,
         };
@@ -401,6 +464,7 @@ mod tests {
         let missing_row = FileInputDesc {
             path: dir_path,
             is_directory: false,
+            recursive: false,
             content_hash: None,
             modified_at: mtime,
         };
@@ -417,6 +481,7 @@ mod tests {
         let missing_row = FileInputDesc {
             path: temp_dir.path().join("never-existed.txt"),
             is_directory: false,
+            recursive: false,
             content_hash: None,
             modified_at: UNIX_EPOCH,
         };
@@ -448,12 +513,14 @@ mod tests {
         let file1 = Input::File(FileInputDesc {
             path: path.clone(),
             is_directory: false,
+            recursive: false,
             content_hash: content_hash.clone(),
             modified_at: UNIX_EPOCH,
         });
         let file2 = Input::File(FileInputDesc {
             path: path.clone(),
             is_directory: false,
+            recursive: false,
             content_hash: content_hash.clone(),
             modified_at: UNIX_EPOCH + std::time::Duration::from_secs(1),
         });
@@ -463,6 +530,101 @@ mod tests {
         inputs.dedup_by(Input::dedup);
         assert!(inputs.len() == 1);
         assert_eq!(inputs[0], file2);
+    }
+
+    /// Reproduces https://github.com/cachix/devenv/issues/2886
+    ///
+    /// When Nix copies a source tree into the store (`EvalOp::CopiedSource`, e.g.
+    /// `languages.rust.import ./.`), the whole tree content is what ends up in the
+    /// store. The eval cache must therefore detect changes to file *contents*
+    /// nested inside the directory, not just the top-level entry names.
+    ///
+    /// Currently a directory's content hash is derived from the sorted list of its
+    /// immediate child names only, so editing a nested file leaves the hash
+    /// unchanged and `devenv build` returns a stale output path.
+    #[test]
+    fn test_directory_hash_changes_on_nested_content() {
+        let temp_dir = TempDir::with_prefix("test_directory_hash_nested").unwrap();
+        let src = temp_dir.path().join("src");
+        std::fs::create_dir(&src).unwrap();
+        let main_rs = src.join("main.rs");
+        std::fs::write(&main_rs, b"fn main() { println!(\"Hello, world!\"); }").unwrap();
+
+        let before = FileInputDesc::new(temp_dir.path().to_path_buf(), UNIX_EPOCH, true).unwrap();
+        assert!(before.is_directory);
+
+        // Change a nested file's content without adding/removing any entries, so
+        // the top-level directory listing stays identical.
+        std::fs::write(&main_rs, b"fn main() { println!(\"Goodbye, world!\"); }").unwrap();
+
+        let after = FileInputDesc::new(temp_dir.path().to_path_buf(), UNIX_EPOCH, true).unwrap();
+
+        assert_ne!(
+            before.content_hash, after.content_hash,
+            "directory content hash must change when a nested file's content changes"
+        );
+    }
+
+    /// `check_file_state` must report `Modified` when a file nested inside a
+    /// recursively-tracked directory changes content, even though editing a
+    /// nested file does not bump the top-level directory's mtime.
+    #[test]
+    fn test_check_state_detects_nested_content_change() {
+        let temp_dir = TempDir::with_prefix("test_check_state_nested").unwrap();
+        let src = temp_dir.path().join("src");
+        std::fs::create_dir(&src).unwrap();
+        let main_rs = src.join("main.rs");
+        std::fs::write(&main_rs, b"fn main() { println!(\"Hello, world!\"); }").unwrap();
+
+        let desc = FileInputDesc::new(temp_dir.path().to_path_buf(), UNIX_EPOCH, true).unwrap();
+
+        // Edit a nested file. The top-level directory's mtime is unaffected.
+        std::fs::write(&main_rs, b"fn main() { println!(\"Goodbye, world!\"); }").unwrap();
+
+        assert!(
+            matches!(check_file_state(&desc), Ok(FileState::Modified { .. })),
+            "nested content change must invalidate a recursively-tracked directory"
+        );
+    }
+
+    #[test]
+    fn test_check_state_detects_executable_bit_change_for_copied_file() {
+        let temp_dir = TempDir::with_prefix("test_check_state_executable").unwrap();
+        let file_path = temp_dir.path().join("script.sh");
+        std::fs::write(&file_path, b"#!/bin/sh\nexit 0\n").unwrap();
+
+        let mut permissions = std::fs::metadata(&file_path).unwrap().permissions();
+        permissions.set_mode(0o644);
+        std::fs::set_permissions(&file_path, permissions.clone()).unwrap();
+        let desc = FileInputDesc::new(file_path.clone(), UNIX_EPOCH, true).unwrap();
+
+        permissions.set_mode(0o744);
+        std::fs::set_permissions(&file_path, permissions).unwrap();
+
+        assert!(
+            matches!(check_file_state(&desc), Ok(FileState::Modified { .. })),
+            "changing the executable bit must invalidate a copied file"
+        );
+    }
+
+    /// A non-recursive directory (e.g. tracked via `readDir`) only depends on its
+    /// listing, so a nested content change must not invalidate it.
+    #[test]
+    fn test_check_state_ignores_nested_change_for_non_recursive_dir() {
+        let temp_dir = TempDir::with_prefix("test_check_state_non_recursive").unwrap();
+        let src = temp_dir.path().join("src");
+        std::fs::create_dir(&src).unwrap();
+        let main_rs = src.join("main.rs");
+        std::fs::write(&main_rs, b"fn main() { println!(\"Hello, world!\"); }").unwrap();
+
+        let desc = FileInputDesc::new(temp_dir.path().to_path_buf(), UNIX_EPOCH, false).unwrap();
+
+        std::fs::write(&main_rs, b"fn main() { println!(\"Goodbye, world!\"); }").unwrap();
+
+        assert!(
+            matches!(check_file_state(&desc), Ok(FileState::Unchanged)),
+            "nested content change must not invalidate a non-recursive directory"
+        );
     }
 
     #[test]

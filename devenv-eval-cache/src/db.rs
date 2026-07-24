@@ -22,6 +22,8 @@ pub struct FileInputRow {
     pub path: PathBuf,
     /// Whether the path is a directory
     pub is_directory: bool,
+    /// Whether a directory is hashed recursively over its contents
+    pub recursive: bool,
     /// The hash of the file's content
     pub content_hash: String,
     /// The last modified time of the file
@@ -34,12 +36,14 @@ impl sqlx::FromRow<'_, SqliteRow> for FileInputRow {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         let path: &[u8] = row.get("path");
         let is_directory: bool = row.get("is_directory");
+        let recursive: bool = row.get("recursive");
         let content_hash: String = row.get("content_hash");
         let modified_at: i64 = row.get("modified_at");
         let updated_at: i64 = row.get("updated_at");
         Ok(Self {
             path: PathBuf::from(OsStr::from_bytes(path)),
             is_directory,
+            recursive,
             content_hash,
             modified_at: time::system_time_from_unix_seconds(modified_at),
             updated_at: time::system_time_from_unix_seconds(updated_at),
@@ -71,6 +75,7 @@ impl From<FileInputRow> for FileInputDesc {
         Self {
             path: row.path,
             is_directory: row.is_directory,
+            recursive: row.recursive,
             content_hash: empty_to_none(row.content_hash),
             modified_at: row.modified_at,
         }
@@ -307,11 +312,12 @@ where
 
     // Reuse the same file_input table as command caching
     let insert_file_input = r#"
-        INSERT INTO file_input (path, is_directory, content_hash, modified_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO file_input (path, is_directory, recursive, content_hash, modified_at)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT (path) DO UPDATE
         SET content_hash = excluded.content_hash,
             is_directory = excluded.is_directory,
+            recursive = excluded.recursive,
             modified_at = excluded.modified_at,
             updated_at = ?
         RETURNING id
@@ -322,6 +328,7 @@ where
     for FileInputDesc {
         path,
         is_directory,
+        recursive,
         content_hash,
         modified_at,
     } in file_inputs
@@ -330,6 +337,7 @@ where
         let id: i64 = sqlx::query(insert_file_input)
             .bind(path.to_path_buf().into_os_string().as_bytes())
             .bind(is_directory)
+            .bind(recursive)
             .bind(content_hash.as_deref().unwrap_or(""))
             .bind(modified_at)
             .bind(now)
@@ -399,7 +407,7 @@ pub async fn get_files_by_eval_id(
 ) -> Result<Vec<FileInputRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
-            SELECT f.path, f.is_directory, f.content_hash, f.modified_at, f.updated_at
+            SELECT f.path, f.is_directory, f.recursive, f.content_hash, f.modified_at, f.updated_at
             FROM file_input f
             JOIN eval_input_path eip ON f.id = eip.file_input_id
             WHERE eip.cached_eval_id = ?
@@ -607,6 +615,43 @@ mod tests {
 
     use super::*;
     use sqlx::SqlitePool;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[tokio::test]
+    async fn test_recursive_tracking_migration_invalidates_existing_evals() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        MIGRATIONS.run_to(20260116000000, &pool).await.unwrap();
+
+        sqlx::query(
+            r#"
+            INSERT INTO cached_eval (key_hash, attr_name, input_hash, json_output)
+            VALUES ('old-key', 'old.attr', 'old-input', '{}')
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        MIGRATIONS.run(&pool).await.unwrap();
+
+        let cached_eval_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cached_eval")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(cached_eval_count, 0);
+
+        let recursive_column_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM pragma_table_info('file_input') WHERE name = 'recursive'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(recursive_column_count, 1);
+    }
 
     #[sqlx::test]
     async fn test_insert_and_retrieve_eval(pool: SqlitePool) {
@@ -618,6 +663,7 @@ mod tests {
             Input::File(FileInputDesc {
                 path: "/path/to/devenv.nix".into(),
                 is_directory: false,
+                recursive: false,
                 content_hash: Some("hash1".to_string()),
                 modified_at,
             }),
@@ -675,6 +721,7 @@ mod tests {
         let inputs1 = vec![Input::File(FileInputDesc {
             path: "/path/to/file1.nix".into(),
             is_directory: false,
+            recursive: false,
             content_hash: Some("old_hash".to_string()),
             modified_at,
         })];
@@ -696,6 +743,7 @@ mod tests {
         let inputs2 = vec![Input::File(FileInputDesc {
             path: "/path/to/file2.nix".into(),
             is_directory: false,
+            recursive: false,
             content_hash: Some("new_hash".to_string()),
             modified_at,
         })];
@@ -735,6 +783,7 @@ mod tests {
         let shared_file = Input::File(FileInputDesc {
             path: "/path/to/shared.nix".into(),
             is_directory: false,
+            recursive: false,
             content_hash: Some("shared_hash".to_string()),
             modified_at,
         });
@@ -772,6 +821,7 @@ mod tests {
         let inputs = vec![Input::File(FileInputDesc {
             path: "/path/to/a.nix".into(),
             is_directory: false,
+            recursive: false,
             content_hash: Some("h1".to_string()),
             modified_at,
         })];
