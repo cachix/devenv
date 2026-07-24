@@ -7,4 +7,7 @@ name = "python-uv-sync"
 version = "0.1.0"
 description = ""
 authors = [{ name = "Alex Launi", email = "dev@launi.me" }]
+# Without this, `uv sync` rewrites uv.lock's `requires-python` to the ambient
+# interpreter's minor version, so the committed lock drifts on every run.
+requires-python = ">=3.12"
 dependencies = ["requests"]
