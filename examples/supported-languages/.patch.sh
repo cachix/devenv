@@ -13,6 +13,6 @@ cat >devenv.local.nix <<EOF
   # Swift broken on Linux with GCC 14 - https://github.com/NixOS/nixpkgs/pull/468796
   languages.swift.enable = lib.mkForce pkgs.stdenv.isDarwin;
   # lobster is marked broken on macOS
-# languages.lobster.enable = lib.mkForce (!pkgs.stdenv.isDarwin);
+  languages.lobster.enable = lib.mkForce (!pkgs.stdenv.isDarwin);
 }
 EOF
