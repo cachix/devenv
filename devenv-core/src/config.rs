@@ -482,6 +482,19 @@ impl Config {
         Self::load_from("./")
     }
 
+    /// Like [`Config::load`], but additionally merges the configuration of an
+    /// out-of-tree source directory (a `path:` `--from` source).
+    ///
+    /// The source's `devenv.yaml` import graph merges at the lowest precedence
+    /// (the project's own configuration wins), and the source's inputs and
+    /// imports are rewritten to absolute `path:` form so they resolve from the
+    /// live source directory regardless of the project root. The source's
+    /// module (`devenv.nix`) is appended to `imports` as an absolute `path:`
+    /// import, so it must exist even when the source has no `devenv.yaml`.
+    pub fn load_with_source(source_dir: Option<&Path>) -> Result<Self> {
+        Self::load_from_with_source("./", source_dir)
+    }
+
     /// Loads configuration from a directory path, including all imported configurations.
     ///
     /// This method recursively loads the base `devenv.yaml` file and all configurations
@@ -501,6 +514,15 @@ impl Config {
     /// - Circular imports are detected (handled automatically)
     /// - Import depth exceeds the maximum limit
     pub fn load_from<P>(path: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        Self::load_from_with_source(path, None)
+    }
+
+    /// [`Config::load_from`] with an optional out-of-tree source directory;
+    /// see [`Config::load_with_source`] for the source merge semantics.
+    pub fn load_from_with_source<P>(path: P, source_dir: Option<&Path>) -> Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -543,6 +565,102 @@ impl Config {
         // Detect git repository root for import resolution
         let git_root = Self::detect_git_root(base_path);
 
+        // Out-of-tree source (`--from path:...`): collect its devenv.yaml
+        // graph, rooted and security-checked at the source directory. Its
+        // configs merge below everything local, and its imports re-emerge as
+        // absolute `path:` imports so modules load from the live source tree.
+        let mut source_yamls = Vec::new();
+        let mut source_dir_only_imports = Vec::new();
+        let mut source_module_imports = Vec::new();
+        // Canonical root of the out-of-tree source (`None` if it doesn't
+        // resolve). Reused to import the source module and to classify which
+        // inputs were defined by source-side configs.
+        let source_root_canon = source_dir.and_then(|d| d.canonicalize().ok());
+        if let Some(source_dir) = source_dir {
+            let source_git_root = Self::detect_git_root(source_dir);
+            let source_yaml = source_dir.join(YAML_CONFIG);
+            if source_yaml.exists() {
+                let canonical =
+                    source_yaml
+                        .canonicalize()
+                        .into_diagnostic()
+                        .wrap_err_with(|| {
+                            format!(
+                                "Failed to canonicalize source path: {}",
+                                source_yaml.display()
+                            )
+                        })?;
+                visited.insert(canonical);
+
+                let mut source_loader = ConfigLoader::<Config>::new();
+                source_loader
+                    .file_optional(&source_yaml)
+                    .into_diagnostic()
+                    .wrap_err_with(|| {
+                        format!(
+                            "Failed to load source configuration: {}",
+                            source_yaml.display()
+                        )
+                    })?;
+                let source_result = source_loader.load().into_diagnostic().wrap_err_with(|| {
+                    format!(
+                        "Failed to parse source configuration: {}",
+                        source_yaml.display()
+                    )
+                })?;
+
+                // The source's imports merge below the source's own yaml.
+                Self::collect_import_files(
+                    &source_result.config.imports,
+                    source_dir,
+                    source_git_root.as_deref(),
+                    &mut source_yamls,
+                    &mut source_dir_only_imports,
+                    &mut visited,
+                    0,
+                )?;
+                source_yamls.push(source_yaml);
+
+                // Imported directories without their own devenv.yaml still
+                // contribute a devenv.nix module.
+                for import_dir in &source_dir_only_imports {
+                    let resolved = import_dir
+                        .canonicalize()
+                        .unwrap_or_else(|_| import_dir.to_path_buf());
+                    source_module_imports.push(format!("path:{}", resolved.display()));
+                }
+
+                // Its file imports become absolute module imports, whether or
+                // not they carry a devenv.yaml (mirrors how base-config file
+                // imports pass through below).
+                for import in &source_result.config.imports {
+                    if Self::is_file_import(import) {
+                        let resolved = Self::resolve_import_path(
+                            import,
+                            source_dir,
+                            source_git_root.as_deref(),
+                        )?;
+                        let resolved = resolved.canonicalize().unwrap_or(resolved);
+                        source_module_imports.push(format!("path:{}", resolved.display()));
+                    }
+                }
+            }
+
+            // The source module itself (devenv.nix plus devenv.local.nix at
+            // eval time), imported live even when the source has no yaml.
+            let canonical = source_root_canon
+                .clone()
+                .unwrap_or_else(|| source_dir.to_path_buf());
+            source_module_imports.push(format!("path:{}", canonical.display()));
+
+            // The source's devenv.local.yaml applies as machine-local
+            // overrides of the source, still below the project's own configs.
+            let source_local = source_dir.join(YAML_LOCAL_CONFIG);
+            if source_local.exists() {
+                source_yamls.push(source_local);
+            }
+        }
+
         // Recursively collect imported yaml files (loaded first, lowest priority)
         Self::collect_import_files(
             &temp_result.config.imports,
@@ -554,9 +672,11 @@ impl Config {
             0,
         )?;
 
-        // Load imports first, then base last so base takes precedence.
-        let load_order = imported_yamls
+        // Load the source first, then imports, then base last so base takes
+        // precedence.
+        let load_order = source_yamls
             .iter()
+            .chain(imported_yamls.iter())
             .chain(base_yaml.exists().then_some(&base_yaml));
 
         // Load all configs and track which inputs come from which config file.
@@ -635,6 +755,15 @@ impl Config {
 
         let mut config = result.config;
 
+        // Emit a canonicalized `path:` URL for a resolved input path; `None`
+        // when canonicalization fails (the caller then leaves the URL as-is).
+        let canonical_url = |resolved: &Path, query_suffix: &str| -> Option<String> {
+            resolved
+                .canonicalize()
+                .ok()
+                .map(|c| format!("path:{}{}", c.display(), query_suffix))
+        };
+
         // Normalize relative URLs in inputs using the tracked source directories
         for (name, input) in config.inputs.iter_mut() {
             if let Some(url) = &input.url {
@@ -652,24 +781,41 @@ impl Config {
                     .split_once('?')
                     .map_or((full_path_str, ""), |(p, q)| (p, q));
 
+                let query_suffix = if query_params.is_empty() {
+                    String::new()
+                } else {
+                    format!("?{}", query_params)
+                };
+
                 // Check if this was an absolute path (starts with / after stripping path: prefix)
                 // path:///foo and path:/foo are both absolute paths
                 let was_absolute = path_str.starts_with('/');
 
                 // Use the tracked source directory for this input, or fall back to base_path
-                let source_dir = input_source_dirs
+                let input_dir = input_source_dirs
                     .get(name)
                     .map(|p| p.as_path())
                     .unwrap_or(base_path);
-                let resolved = source_dir.join(path_str);
+                let resolved = input_dir.join(path_str);
+
+                // Inputs defined by out-of-tree source configs resolve against
+                // the live source tree; emit them absolute so they stay valid
+                // from the project root (relative escapes also break under
+                // lazy-trees).
+                let from_source_side = source_root_canon.as_ref().is_some_and(|root| {
+                    input_dir
+                        .canonicalize()
+                        .is_ok_and(|dir| dir.starts_with(root))
+                });
+                if from_source_side {
+                    if let Some(url) = canonical_url(&resolved, &query_suffix) {
+                        input.url = Some(url);
+                    }
+                    // If canonicalization fails, leave the URL unchanged
+                    continue;
+                }
 
                 if let Some(rel_to_base) = Self::normalize_path(&resolved, base_path) {
-                    let query_suffix = if query_params.is_empty() {
-                        String::new()
-                    } else {
-                        format!("?{}", query_params)
-                    };
-
                     // If the original path was absolute and the result would escape the base
                     // directory (starts with ../), preserve the absolute path instead.
                     // This is necessary for lazy-trees mode in Nix, which can't access
@@ -677,9 +823,8 @@ impl Config {
                     let is_outside_base = rel_to_base.starts_with("../");
                     if was_absolute && is_outside_base {
                         // Preserve the absolute path - canonicalize it first
-                        if let Ok(canonical) = resolved.canonicalize() {
-                            let new_url = format!("path:{}{}", canonical.display(), query_suffix);
-                            input.url = Some(new_url);
+                        if let Some(url) = canonical_url(&resolved, &query_suffix) {
+                            input.url = Some(url);
                         }
                         // If canonicalization fails, leave the URL unchanged
                     } else {
@@ -700,6 +845,23 @@ impl Config {
         // Rebuild imports: normalize file imports we loaded, preserve everything else
         let mut final_imports = Vec::new();
         let mut seen = HashSet::new();
+
+        // Out-of-tree source: its yaml dirs and file imports enter as absolute
+        // `path:` imports so modules load from the live source tree.
+        for yaml_path in &source_yamls {
+            if let Some(dir) = yaml_path.parent() {
+                let dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+                let import = format!("path:{}", dir.display());
+                if seen.insert(import.clone()) {
+                    final_imports.push(import);
+                }
+            }
+        }
+        for import in source_module_imports {
+            if seen.insert(import.clone()) {
+                final_imports.push(import);
+            }
+        }
 
         // Add all loaded file imports (normalized).
         for yaml_path in &imported_yamls {
@@ -1714,6 +1876,155 @@ imports:
             Some("github:NixOS/nixpkgs/nixos-25.11".to_string()),
             "Base config's nixpkgs URL should take precedence over imported config's URL"
         );
+    }
+
+    #[test]
+    fn source_dir_config_merges_below_project() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path();
+
+        // Out-of-tree source defines two inputs.
+        let source = root.join("source");
+        fs::create_dir(&source).expect("Failed to create source dir");
+        fs::write(
+            source.join("devenv.yaml"),
+            r#"
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  extra:
+    url: github:owner/extra
+"#,
+        )
+        .expect("Failed to write source config");
+
+        // The project overrides nixpkgs.
+        let project = root.join("project");
+        fs::create_dir(&project).expect("Failed to create project dir");
+        fs::write(
+            project.join("devenv.yaml"),
+            r#"
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixos-25.11
+"#,
+        )
+        .expect("Failed to write project config");
+
+        let config = Config::load_from_with_source(&project, Some(source.as_path()))
+            .expect("Failed to load config");
+
+        assert_eq!(
+            config.inputs.get("nixpkgs").and_then(|i| i.url.clone()),
+            Some("github:NixOS/nixpkgs/nixos-25.11".to_string()),
+            "project config should override the source's inputs"
+        );
+        assert_eq!(
+            config.inputs.get("extra").and_then(|i| i.url.clone()),
+            Some("github:owner/extra".to_string()),
+            "source-only inputs should merge in"
+        );
+
+        // The source module is imported from its live absolute path.
+        let source_import = format!("path:{}", source.canonicalize().unwrap().display());
+        assert!(
+            config.imports.contains(&source_import),
+            "imports should include the source module: {:?}",
+            config.imports
+        );
+    }
+
+    #[test]
+    fn source_sibling_import_becomes_absolute() {
+        // A source profile importing a shared sibling module: both must load
+        // from live absolute paths, independent of the project root.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let envs = temp_dir.path();
+
+        // Sibling imports need a git root above them to pass security checks.
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(envs)
+            .output()
+            .expect("Failed to git init");
+
+        let common = envs.join("common");
+        fs::create_dir(&common).expect("Failed to create common dir");
+        fs::write(
+            common.join("devenv.yaml"),
+            r#"
+inputs:
+  shared-input:
+    url: github:owner/shared
+"#,
+        )
+        .expect("Failed to write common config");
+
+        let profile = envs.join("profile");
+        fs::create_dir(&profile).expect("Failed to create profile dir");
+        fs::write(profile.join("devenv.yaml"), "imports:\n  - ../common\n")
+            .expect("Failed to write profile config");
+
+        // The bound project lives elsewhere entirely and has no config.
+        let project_dir = tempfile::tempdir().expect("Failed to create project dir");
+
+        let config = Config::load_from_with_source(project_dir.path(), Some(profile.as_path()))
+            .expect("Failed to load config");
+
+        assert!(
+            config.inputs.contains_key("shared-input"),
+            "inputs from the source's imports should merge in"
+        );
+        let profile_import = format!("path:{}", profile.canonicalize().unwrap().display());
+        let common_import = format!("path:{}", common.canonicalize().unwrap().display());
+        assert!(
+            config.imports.contains(&profile_import),
+            "missing profile import: {:?}",
+            config.imports
+        );
+        assert!(
+            config.imports.contains(&common_import),
+            "missing common import: {:?}",
+            config.imports
+        );
+    }
+
+    #[test]
+    fn source_relative_input_becomes_absolute() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let source = temp_dir.path().join("source");
+        let dep = source.join("dep");
+        fs::create_dir_all(&dep).expect("Failed to create dep dir");
+        fs::write(
+            source.join("devenv.yaml"),
+            "inputs:\n  dep:\n    url: path:./dep\n",
+        )
+        .expect("Failed to write source config");
+
+        let project_dir = tempfile::tempdir().expect("Failed to create project dir");
+        let config = Config::load_from_with_source(project_dir.path(), Some(source.as_path()))
+            .expect("Failed to load config");
+
+        assert_eq!(
+            config.inputs.get("dep").and_then(|i| i.url.clone()),
+            Some(format!("path:{}", dep.canonicalize().unwrap().display())),
+            "relative source inputs should be rewritten to absolute path: URLs"
+        );
+    }
+
+    #[test]
+    fn source_without_yaml_adds_only_module_import() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let source = temp_dir.path().join("source");
+        fs::create_dir(&source).expect("Failed to create source dir");
+
+        let project_dir = tempfile::tempdir().expect("Failed to create project dir");
+        let config = Config::load_from_with_source(project_dir.path(), Some(source.as_path()))
+            .expect("Failed to load config");
+
+        let source_import = format!("path:{}", source.canonicalize().unwrap().display());
+        assert_eq!(config.imports, vec![source_import]);
+        assert!(config.inputs.is_empty());
     }
 
     #[test]

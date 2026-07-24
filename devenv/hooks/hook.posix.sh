@@ -1,6 +1,13 @@
 # devenv hook shared function for bash/zsh.
 
-_DEVENV_HOOK_PWD=""
+# The project dir we last auto-activated. Lets you `exit` a devenv shell back to
+# the parent shell without it immediately re-spawning; cleared once you cd
+# elsewhere. `devenv hook-should-activate` is cheap (static binary), so apart
+# from this guard the hook just runs it every prompt — no result caching, so
+# `devenv allow`/`revoke` take effect on the next prompt without a re-`cd`.
+_DEVENV_HOOK_ACTIVATED=""
+# Last directory reported as untrusted, so the "not allowed" hint is shown once
+# per entry rather than on every prompt.
 _DEVENV_HOOK_UNTRUSTED=""
 
 # `_DEVENV_HOOK_DIR` marks the one shell process the hook itself spawned.
@@ -16,7 +23,6 @@ fi
 
 _devenv_hook() {
     local previous_exit_status=$?
-    [[ "$_DEVENV_HOOK_PWD" == "$PWD" ]] && return $previous_exit_status
 
     # `DEVENV_ROOT` set means a devenv shell is already active — hook does
     # nothing. Hook-spawned shells (marked by `_devenv_hook_dir`) additionally
@@ -31,11 +37,16 @@ _devenv_hook() {
                     ;;
             esac
         fi
-        _DEVENV_HOOK_PWD="$PWD"
         return $previous_exit_status
     fi
 
-    # Suppress stderr when retrying the same untrusted PWD (message was already shown)
+    # Just exited the devenv shell for this dir — don't re-spawn until you leave.
+    if [[ "$_DEVENV_HOOK_ACTIVATED" == "$PWD" ]]; then
+        return $previous_exit_status
+    fi
+    _DEVENV_HOOK_ACTIVATED=""
+
+    # Suppress stderr when re-checking the same untrusted PWD (hint already shown).
     local project_dir exit_code
     if [[ "$_DEVENV_HOOK_UNTRUSTED" == "$PWD" ]]; then
         project_dir=$(devenv hook-should-activate 2>/dev/null)
@@ -46,9 +57,9 @@ _devenv_hook() {
 
     if [[ $exit_code -eq 0 && -n "$project_dir" ]]; then
         _DEVENV_HOOK_UNTRUSTED=""
-        # Cache PWD before launching so a SIGINT/failure inside devenv shell
-        # doesn't leave us re-launching on every prompt redraw.
-        _DEVENV_HOOK_PWD="$PWD"
+        # Mark activated before launching so exiting the shell (or a SIGINT/
+        # failure inside it) doesn't re-launch on the next prompt redraw.
+        _DEVENV_HOOK_ACTIVATED="$PWD"
         (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" _DEVENV_CALLER=hook devenv shell)
         local exit_dir_file="$project_dir/.devenv/exit-dir"
         if [[ -f "$exit_dir_file" ]]; then
@@ -60,11 +71,10 @@ _devenv_hook() {
             fi
         fi
     elif [[ $exit_code -eq 0 ]]; then
-        # No project; cache to avoid rechecking
-        _DEVENV_HOOK_PWD="$PWD"
+        # No project here.
         _DEVENV_HOOK_UNTRUSTED=""
     else
-        # Untrusted project; message already printed to stderr, suppress on retry
+        # Untrusted project; hint already printed to stderr, suppress on retry.
         _DEVENV_HOOK_UNTRUSTED="$PWD"
     fi
     return $previous_exit_status

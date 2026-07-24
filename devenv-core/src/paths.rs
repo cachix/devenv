@@ -67,6 +67,17 @@ pub fn resolve_runtime_dir(devenv_dotfile: &Path) -> PathBuf {
     runtime_base.join(format!("devenv-{}", &hex[..7]))
 }
 
+/// Resolve `path` against `base`: relative paths join onto `base`, absolute
+/// paths pass through unchanged. Does not canonicalize; callers decide their
+/// own canonicalization and error policy.
+pub fn resolve_against(path: &Path, base: &Path) -> PathBuf {
+    if path.is_relative() {
+        base.join(path)
+    } else {
+        path.to_path_buf()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,5 +190,18 @@ mod tests {
         let c = resolve_runtime_dir(Path::new("/other/.devenv"));
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn resolve_against_joins_relative_and_passes_absolute() {
+        let base = Path::new("/base");
+        assert_eq!(
+            resolve_against(Path::new("sub/dir"), base),
+            PathBuf::from("/base/sub/dir")
+        );
+        assert_eq!(
+            resolve_against(Path::new("/abs/dir"), base),
+            PathBuf::from("/abs/dir")
+        );
     }
 }
