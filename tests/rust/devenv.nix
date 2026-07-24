@@ -1,10 +1,18 @@
+{ config, lib, ... }:
+let
+  # The clang linker driver is only enabled by default on Linux, so the
+  # clang-specific assertions below only apply where the module turns it on.
+  clangLinker = config.languages.rust.clangLinker.enable;
+in
 {
   languages.rust.enable = true;
   enterTest = ''
-    if ! command -v clang >/dev/null; then
-      echo "clang linker driver is not available"
-      exit 1
-    fi
+    ${lib.optionalString clangLinker ''
+      if ! command -v clang >/dev/null; then
+        echo "clang linker driver is not available"
+        exit 1
+      fi
+    ''}
 
     workdir=$(mktemp -d)
     cargo new --bin "$workdir/linker-check" >/dev/null
@@ -21,14 +29,16 @@
     build_log="$workdir/build.log"
     ( cd "$workdir/linker-check" && cargo build -vv ) >"$build_log" 2>&1
 
-    if ! grep -q -- "-C linker=clang" "$build_log"; then
-      echo "cargo build did not pass the clang linker driver to rustc"
-      cat "$build_log"
-      exit 1
-    fi
+    ${lib.optionalString clangLinker ''
+      if ! grep -q -- "-C linker=clang" "$build_log"; then
+        echo "cargo build did not pass the clang linker driver to rustc"
+        cat "$build_log"
+        exit 1
+      fi
+    ''}
 
     if ! grep -q -- "--cfg devenv_custom_cfg" "$build_log"; then
-      echo "clang linker driver clobbered the project's [build] rustflags"
+      echo "the project's [build] rustflags were clobbered"
       cat "$build_log"
       exit 1
     fi
