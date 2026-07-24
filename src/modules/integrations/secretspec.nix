@@ -61,5 +61,15 @@ in
         '';
       }
     ];
+
+    env = lib.mkIf config.secretspec.enable (
+      lib.optionalAttrs (config.secretspec.profile != null)
+        {
+          SECRETSPEC_PROFILE = lib.mkDefault config.secretspec.profile;
+        }
+      // lib.optionalAttrs (config.secretspec.provider != null) {
+        SECRETSPEC_PROVIDER = lib.mkDefault config.secretspec.provider;
+      }
+    );
   };
 }

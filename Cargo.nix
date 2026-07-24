@@ -6313,6 +6313,11 @@ rec {
             path = "src/main.rs";
             requiredFeatures = [ ];
           }
+          {
+            name = "secretspec";
+            path = "src/bin/secretspec.rs";
+            requiredFeatures = [ ];
+          }
         ];
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv; };
         dependencies = [
@@ -24004,14 +24009,14 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.15.0";
+        version = "0.16.0";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "44c58c522a065a023f7457b7e0f0756e79979712";
-          sha256 = "0rd1706zyi59893rzki0kw6wp8mfjcb1gik6h5pdwwjr95z6azc1";
+          rev = "454546d7cca26f604eea8e8bf85673d7d01d400d";
+          sha256 = "1nmjsnxjq62fpysmq371q79x67m40s5il9m2hyxxlbvhs7y55gsc";
         };
         dependencies = [
           {
@@ -24154,8 +24159,9 @@ rec {
           "awssm" = [ "dep:aws-config" "dep:aws-sdk-secretsmanager" ];
           "bws" = [ "dep:bitwarden" "dep:rustls" ];
           "cli" = [ "dep:toml_edit" ];
-          "default" = [ "cli" "keyring" "gcsm" "awssm" "vault" "bws" "akv" ];
+          "default" = [ "cli" "keyring" "gcsm" "awssm" "vault" "bws" "akv" "infisical" ];
           "gcsm" = [ "dep:google-cloud-secretmanager-v1" ];
+          "infisical" = [ "dep:reqwest" "tokio/sync" ];
           "keyring" = [ "dep:keyring" "dep:whoami" ];
           "vault" = [ "dep:reqwest" ];
           "vendored-dbus" = [ "keyring?/vendored" ];
