@@ -7,6 +7,10 @@ license.workspace = true
 # Make `cargo run` default to the devenv CLI
 default-run = "devenv"
 
+[[bin]]
+name = "secretspec"
+path = "src/bin/secretspec.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

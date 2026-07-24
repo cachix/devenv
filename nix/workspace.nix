@@ -73,6 +73,7 @@ let
 
         cp $src/bin/devenv $out/bin/
         cp $devenvRunTests/bin/devenv-run-tests $out/bin/
+        cp $src/bin/secretspec $out/bin/
 
         wrapProgram $out/bin/devenv \
           --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \

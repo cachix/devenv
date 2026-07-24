@@ -6,6 +6,9 @@
 
   # Test that secrets are available in Nix
   enterShell = ''
+    test "$SECRETSPEC_PROFILE" = "test"
+    test "$SECRETSPEC_PROVIDER" = "dotenv"
+
     # Expected JSON structure based on .env values
     expected_json='{"TEST_API_KEY":"test-api-key-123","TEST_DATABASE_URL":"postgresql://test:test@localhost/testdb","TEST_OPTIONAL":"optional-value"}'
 

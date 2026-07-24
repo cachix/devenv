@@ -20,6 +20,12 @@ $ devenv shell
 $ secretspec run -- npm start
 ```
 
+The `secretspec` command is included with devenv, so no separate installation is
+needed. When the integration is enabled, devenv also exports the resolved profile
+and provider as `SECRETSPEC_PROFILE` and `SECRETSPEC_PROVIDER`. Consequently,
+`secretspec run` uses the same configuration that devenv used while evaluating
+`devenv.nix`.
+
 This approach:
 
 - Keeps secrets out of your shell environment
@@ -56,7 +62,9 @@ secretspec:
 
 CLI flags take precedence over `devenv.yaml` values.
 
-Then access in `devenv.nix`:
+The selected profile and provider apply both while evaluating `devenv.nix` and
+to `secretspec` commands run inside the development shell. You can access the
+resolved secrets in `devenv.nix`:
 
 ```nix title="devenv.nix"
 { config, ... }:
