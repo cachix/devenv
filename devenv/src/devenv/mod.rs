@@ -724,15 +724,19 @@ impl Devenv {
     }
 
     /// Build a `tasks::Config` with common fields filled in.
-    fn make_task_config(
+    ///
+    /// The bash path is resolved here rather than passed in: process tasks with
+    /// exec readiness probes spawn them via this binary, and an unset path makes
+    /// every probe fail to spawn, hanging any `@ready` dependency (#3030).
+    async fn make_task_config(
         &self,
         roots: Vec<String>,
         tasks: Vec<tasks::TaskConfig>,
         run_mode: devenv_tasks::RunMode,
         env: HashMap<String, String>,
-        bash: String,
     ) -> Result<tasks::Config> {
         let runtime_dir = self.process_runtime_dir()?.clone();
+        let bash = self.get_bash_path().await?;
         Ok(tasks::Config {
             roots,
             tasks,
@@ -1219,7 +1223,7 @@ impl Devenv {
             }
         }
 
-        let config = self.make_task_config(roots, tasks, run_mode, envs, String::new())?;
+        let config = self.make_task_config(roots, tasks, run_mode, envs).await?;
 
         if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
             use valuable::Valuable;
@@ -1743,8 +1747,9 @@ impl Devenv {
                 roots
             );
 
-            let bash = self.get_bash_path().await?;
-            let config = self.make_task_config(roots, task_configs, task_mode, envs, bash)?;
+            let config = self
+                .make_task_config(roots, task_configs, task_mode, envs)
+                .await?;
 
             if options.daemon {
                 // Spawn a separate daemon process via re-exec to avoid

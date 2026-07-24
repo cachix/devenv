@@ -1,0 +1,3 @@
+# Run outside the shell: the point of the test is the `devenv tasks run` path,
+# which builds its own task config.
+use_shell: false
