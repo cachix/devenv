@@ -7,6 +7,7 @@
 //! - `no_respawn_inside_devenv_shell` — follow-up to #2815
 //! - `fish_deferred_activation_skips_if_already_active` — direnv/devenv double-activation race
 //! - `fish_follow_cd_out_preserves_history_for_cd_dash` — #2853
+//! - `{posix,fish}_first_activation_propagates_exit` / `{posix,fish}_later_activation_does_not_propagate_exit` — single exit/Ctrl-D closes a shell that never had a life of its own
 //! - `posix_activates_sibling_after_cd_out` — #2944
 
 use std::fs;
@@ -318,6 +319,150 @@ fn fish_follow_cd_out_preserves_history_for_cd_dash() {
         stdout.contains(&format!("AFTER_CD_DASH={}", project_dir.path().display())),
         "fish `cd -` did not return to the project directory that \
          `_devenv_builtin_cd_with_history` left.\nstdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
+
+/// A shimmed `devenv` that only reports a project for `root`, and whose
+/// `shell` case does nothing (a plain exit — no exit-dir file written).
+fn plain_exit_shim(root: &Path) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("devenv");
+    fs::write(
+        &bin,
+        format!(
+            r#"#!/bin/sh
+case "$1" in
+  hook-should-activate)
+    case "$PWD" in
+      {root:?}|{root:?}/*) printf '%s\n' {root:?} ;;
+    esac
+    ;;
+  shell)
+    ;;
+esac
+"#,
+            root = root,
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+    (dir, bin)
+}
+
+#[test]
+fn posix_first_activation_propagates_exit() {
+    // The very first `_devenv_hook` call in a shell's lifetime runs before
+    // any prompt has ever been shown (PROMPT_COMMAND/precmd fire ahead of
+    // the first prompt too). If that call activates a project and the
+    // spawned devenv shell then exits outright (no cd-out), this outer
+    // shell never had a life of its own — propagate the exit so a single
+    // exit/Ctrl-D closes the whole terminal.
+    for (shell, src) in posix_shells() {
+        let tmp = fake_project();
+        let (_bin_dir, _bin) = plain_exit_shim(tmp.path());
+        let script = format!(
+            "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+             {src}\n{po}\ncd {root:?}\n\
+             _devenv_hook\n\
+             echo SHOULD_NOT_REACH\n",
+            po = posix_path_override(_bin_dir.path()),
+            root = tmp.path(),
+        );
+        let out = run(shell, &script);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            !stdout.contains("SHOULD_NOT_REACH"),
+            "[{shell}] first-activation exit did not propagate to the outer shell.\n\
+             stdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
+        );
+    }
+}
+
+#[test]
+fn posix_later_activation_does_not_propagate_exit() {
+    // A `_devenv_hook` call that only activates after an earlier call (in a
+    // different directory) already ran means the user saw and used this
+    // shell before the project was ever entered — never propagate exit,
+    // they may want that shell back.
+    for (shell, src) in posix_shells() {
+        let tmp = fake_project();
+        let outside = tempfile::tempdir().unwrap();
+        let (_bin_dir, _bin) = plain_exit_shim(tmp.path());
+        let script = format!(
+            "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+             {src}\n{po}\n\
+             cd {outside:?}\n_devenv_hook\n\
+             cd {root:?}\n_devenv_hook\n\
+             echo SURVIVED\n",
+            po = posix_path_override(_bin_dir.path()),
+            outside = outside.path(),
+            root = tmp.path(),
+        );
+        let out = run(shell, &script);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains("SURVIVED"),
+            "[{shell}] later activation wrongly propagated exit to the outer shell.\n\
+             stdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
+        );
+    }
+}
+
+#[test]
+fn fish_first_activation_propagates_exit() {
+    if !have("fish") {
+        return;
+    }
+    let tmp = fake_project();
+    let (bin_dir, _bin) = plain_exit_shim(tmp.path());
+    let bin = devenv_bin();
+    let script = format!(
+        "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR\n\
+         {bin} hook fish | source\n\
+         cd {root:?}\n\
+         {po}\n\
+         _devenv_hook_init\n\
+         echo SHOULD_NOT_REACH\n",
+        po = fish_path_override(bin_dir.path()),
+        root = tmp.path(),
+    );
+    let out = run("fish", &script);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.contains("SHOULD_NOT_REACH"),
+        "[fish] first-activation (_devenv_hook_init) exit did not propagate to the outer shell.\n\
+         stdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
+
+#[test]
+fn fish_later_activation_does_not_propagate_exit() {
+    if !have("fish") {
+        return;
+    }
+    let tmp = fake_project();
+    let (bin_dir, _bin) = plain_exit_shim(tmp.path());
+    let bin = devenv_bin();
+    let script = format!(
+        "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR\n\
+         {bin} hook fish | source\n\
+         {po}\n\
+         set -g _DEVENV_ACTIVATE_DIR {root:?}\n\
+         _devenv_hook_prompt\n\
+         echo SURVIVED\n",
+        po = fish_path_override(bin_dir.path()),
+        root = tmp.path(),
+    );
+    let out = run("fish", &script);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("SURVIVED"),
+        "[fish] later activation (_devenv_hook_prompt) wrongly propagated exit to the outer shell.\n\
+         stdout: {stdout}\nstderr: {}",
         String::from_utf8_lossy(&out.stderr),
     );
 }

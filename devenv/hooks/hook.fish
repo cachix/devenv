@@ -82,8 +82,20 @@ function _devenv_builtin_cd_with_history
 end
 
 # Spawn devenv shell in $project_dir and follow the user if they cd'd out.
+#
+# $argv[2] = "first" marks activation from _devenv_hook_init: this shell
+# never showed the user its own prompt before deciding to activate, so it
+# exists purely to host this one devenv session (e.g. a fresh terminal tab
+# opened straight into a trusted project). If the inner shell then exits
+# outright (not a cd-out — no exit-dir file), there is no prior state in
+# this outer shell worth preserving, so propagate the exit: one exit/Ctrl-D
+# closes the whole terminal, same as a plain shell or direnv would. Any
+# later activation (via _devenv_hook_prompt) necessarily happened after the
+# user already saw and used this shell at least once, so it never
+# propagates — they may want that shell back.
 function _devenv_hook_activate
     set -l project_dir $argv[1]
+    set -l activation_kind $argv[2]
     # The decision to activate was made on an earlier PWD change and only
     # acted on at this prompt (see the comment on _devenv_hook above). In
     # between, something else (direnv loading a `.envrc` with `use devenv`,
@@ -104,6 +116,8 @@ function _devenv_hook_activate
             # when the user overrides `cd` (e.g. `zoxide init --cmd=cd`).
             _devenv_builtin_cd_with_history "$target_dir"
         end
+    else if test "$activation_kind" = first
+        exit
     end
 end
 
@@ -137,6 +151,6 @@ function _devenv_hook_init --on-event fish_prompt
     if test -n "$_DEVENV_ACTIVATE_DIR"
         set -l project_dir $_DEVENV_ACTIVATE_DIR
         set -g _DEVENV_ACTIVATE_DIR ""
-        _devenv_hook_activate $project_dir
+        _devenv_hook_activate $project_dir first
     end
 end

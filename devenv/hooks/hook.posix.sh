@@ -2,6 +2,9 @@
 
 _DEVENV_HOOK_PWD=""
 _DEVENV_HOOK_UNTRUSTED=""
+# Set once; cleared on the first `_devenv_hook` call (which runs via
+# PROMPT_COMMAND/precmd before the shell's very first prompt is ever shown).
+_devenv_hook_first_prompt=1
 
 # `_DEVENV_HOOK_DIR` marks the one shell process the hook itself spawned.
 # Capture it into a non-exported variable, then unset the exported copy so
@@ -16,6 +19,15 @@ fi
 
 _devenv_hook() {
     local previous_exit_status=$?
+    # This shell never showed the user its own prompt before now (e.g. a
+    # fresh terminal opened straight into a trusted project) iff this is the
+    # first-ever call. If so and the devenv shell we're about to spawn later
+    # exits outright (not a cd-out), there is no prior state in this shell
+    # worth preserving — propagate the exit so one exit/Ctrl-D closes the
+    # whole terminal. Any later activation necessarily follows the user
+    # already having used this shell at least once, so it never propagates.
+    local is_first_prompt="${_devenv_hook_first_prompt:-}"
+    _devenv_hook_first_prompt=""
     [[ "$_DEVENV_HOOK_PWD" == "$PWD" ]] && return $previous_exit_status
 
     # `DEVENV_ROOT` set means a devenv shell is already active — hook does
@@ -58,6 +70,8 @@ _devenv_hook() {
             if [[ -d "$target_dir" ]]; then
                 cd "$target_dir"
             fi
+        elif [[ -n "$is_first_prompt" ]]; then
+            exit $previous_exit_status
         fi
     elif [[ $exit_code -eq 0 ]]; then
         # No project; cache to avoid rechecking
