@@ -57,14 +57,6 @@ devenv is a Rust CLI tool that creates fast, declarative, reproducible developer
 
 - **xtask/** - Build automation (manpage and shell completion generation).
 
-### Nix Modules
-
-Nix modules in `src/modules/` define the devenv configuration schema:
-- `languages/*.nix` - Language support (rust, python, go, etc.)
-- `services/*.nix` - Service definitions (postgres, redis, etc.)
-- `integrations/*.nix` - Tool integrations (git, starship, treefmt, etc.)
-- `process-managers/*.nix` - Process management (process-compose, overmind, etc.)
-
 ### Configuration Flow
 
 1. User creates `devenv.yaml` (inputs) and `devenv.nix` (configuration)
@@ -145,8 +137,6 @@ warn!(path = %p.display(), "failed to read file, falling back to default");
 
 ## Code Style
 
-- **Imports**: Group std lib, external crates, then internal
-- **Naming**: `snake_case` for functions/variables, `CamelCase` for types
 - **Error Handling**: Use `bail!()` not `panic!()`, propagate with `?`
 - **No unsafe**: Don't use `unsafe` code
 
