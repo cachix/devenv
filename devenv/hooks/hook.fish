@@ -66,6 +66,11 @@ function _devenv_hook_activate
             # `builtin cd`, not `cd`: avoids "zoxide: infinite loop detected"
             # when the user overrides `cd` (e.g. `zoxide init --cmd=cd`).
             _devenv_builtin_cd_with_history "$target_dir"
+            # We followed the user out, so the "don't re-spawn" guard in
+            # `_devenv_hook` no longer applies: it only exists for exiting the
+            # shell and staying put. Leaving it set to the project dir would
+            # silently skip activation the next time the user cd's back in.
+            set -g _DEVENV_HOOK_ACTIVATED ""
         end
     end
 end

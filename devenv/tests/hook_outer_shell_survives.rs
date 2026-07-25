@@ -8,6 +8,8 @@
 //! - `fish_deferred_activation_skips_if_already_active` — direnv/devenv double-activation race
 //! - `fish_follow_cd_out_preserves_history_for_cd_dash` — #2853
 //! - `posix_activates_sibling_after_cd_out` — #2944
+//! - `activates_again_after_returning_to_the_same_project` — stale
+//!   `_DEVENV_HOOK_ACTIVATED` after a follow-cd (`nu_` variant for nushell)
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -318,6 +320,113 @@ fn fish_follow_cd_out_preserves_history_for_cd_dash() {
         stdout.contains(&format!("AFTER_CD_DASH={}", project_dir.path().display())),
         "fish `cd -` did not return to the project directory that \
          `_devenv_builtin_cd_with_history` left.\nstdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
+
+/// A shimmed `devenv` whose `shell` records the call and reports that the user
+/// cd'd out to `target`, i.e. the hook-spawned shell left the project.
+fn cd_out_shim(project: &Path, target: &Path) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let calls = dir.path().join("calls");
+    let bin = dir.path().join("devenv");
+    fs::write(
+        &bin,
+        format!(
+            r#"#!/bin/sh
+set -eu
+case "$1" in
+  hook-should-activate)
+    if [ -d "$PWD/.devenv" ]; then
+      printf '%s\n' "$PWD"
+    fi
+    ;;
+  shell)
+    printf 'shell %s\n' "$PWD" >> {calls:?}
+    printf '%s' {target:?} > {project:?}/.devenv/exit-dir
+    ;;
+esac
+"#,
+            calls = calls,
+            project = project.display().to_string(),
+            target = target.display().to_string(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+    (dir, calls)
+}
+
+#[test]
+fn activates_again_after_returning_to_the_same_project() {
+    // Re-entering the project you were just followed out of must activate
+    // again. `_DEVENV_HOOK_ACTIVATED` suppresses a re-spawn only for the case
+    // where you `exit` the shell and stay put; once the hook has followed you
+    // out to `exit-dir` that guard has to be cleared, or cd-ing back in is
+    // silently ignored until you leave and return a second time.
+    let parent = tempfile::tempdir().unwrap();
+    let project = parent.path().join("project");
+
+    for (shell, src) in posix_shells() {
+        fs::create_dir_all(project.join(".devenv")).unwrap();
+        let (_bin_dir, calls) = cd_out_shim(&project, parent.path());
+        let script = format!(
+            "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+             {src}\n\
+             {po}\n\
+             cd {project:?}\n\
+             _devenv_hook\n\
+             cd {project:?}\n\
+             _devenv_hook\n",
+            po = posix_path_override(calls.parent().unwrap()),
+        );
+        let out = run(shell, &script);
+        let recorded = fs::read_to_string(&calls).unwrap_or_default();
+        assert_eq!(
+            recorded.lines().count(),
+            2,
+            "[{shell}] cd-ing back into the project after being followed out did \
+             not re-activate.\nRecorded:\n{recorded}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
+        );
+    }
+}
+
+#[test]
+fn nu_activates_again_after_returning_to_the_same_project() {
+    if !have("nu") {
+        return;
+    }
+    let parent = tempfile::tempdir().unwrap();
+    let project = parent.path().join("project");
+    fs::create_dir_all(project.join(".devenv")).unwrap();
+    let (_bin_dir, calls) = cd_out_shim(&project, parent.path());
+
+    let hook_dir = tempfile::tempdir().unwrap();
+    let hook_path = hook_dir.path().join("hook.nu");
+    let hook_gen = Command::new(devenv_bin())
+        .args(["hook", "nu"])
+        .output()
+        .unwrap();
+    assert!(hook_gen.status.success(), "devenv hook nu failed");
+    fs::write(&hook_path, &hook_gen.stdout).unwrap();
+
+    let script = format!(
+        "hide-env -i DEVENV_ROOT\nhide-env -i _DEVENV_HOOK_DIR\n\
+         source {hook:?}\n\
+         $env.PATH = ($env.PATH | prepend {bin_dir:?})\n\
+         cd {project:?}\n_devenv_hook\n\
+         cd {project:?}\n_devenv_hook\n",
+        hook = hook_path,
+        bin_dir = calls.parent().unwrap(),
+    );
+    let out = Command::new("nu").arg("-c").arg(&script).output().unwrap();
+    let recorded = fs::read_to_string(&calls).unwrap_or_default();
+    assert_eq!(
+        recorded.lines().count(),
+        2,
+        "[nu] cd-ing back into the project after being followed out did not \
+         re-activate.\nRecorded:\n{recorded}\nstderr: {}",
         String::from_utf8_lossy(&out.stderr),
     );
 }

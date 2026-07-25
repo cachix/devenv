@@ -73,6 +73,12 @@ def --env _devenv_hook [] {
                 rm -f $exit_dir_file
                 if ($target_dir | path exists) {
                     cd $target_dir
+                    # We followed the user out, so the "don't re-spawn" guard
+                    # above no longer applies: it only exists for exiting the
+                    # shell and staying put. Leaving it set to the project dir
+                    # would silently skip activation the next time the user
+                    # cd's back in.
+                    $env._DEVENV_HOOK_ACTIVATED = ""
                 }
             }
         } else {
