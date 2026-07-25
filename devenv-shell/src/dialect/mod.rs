@@ -474,14 +474,21 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             "[nu] hook-spawned rcfile did not exit on cd-out.\nstdout: {stdout}\nstderr: {}",
             String::from_utf8_lossy(&output.stderr),
         );
-        // A bare `exit` from inside a hook throws `ShellError::Exit`, which only
-        // the REPL top level handles: nushell reports it and the shell survives
-        // (issue #3033). Stopping the script early is not the same as leaving
-        // the shell, so assert the error is absent too.
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            !stderr.contains("Exit doesn't catch internally"),
-            "[nu] cd-out aborted with an uncaught `exit` instead of terminating the shell.\nstderr: {stderr}",
+        // Not reaching the end of the script is necessary but not sufficient: a
+        // bare `exit` from inside a hook throws `ShellError::Exit`, which only
+        // the REPL top level handles. Under `nu -c` that unwinds the script and
+        // exits 0, but a real interactive shell reports "Exit doesn't catch
+        // internally" and stays alive (#3033). Only actually terminating the
+        // process is faithful to what the parent hook waits for, so require
+        // death by signal — which `exit` can never produce.
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(
+            output.status.signal(),
+            Some(15),
+            "[nu] cd-out unwound the script instead of terminating the shell \
+             process (status: {:?}).\nstderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
         );
         let exit_dir = std::fs::read_to_string(root.join(".devenv/exit-dir")).unwrap();
         assert_eq!(exit_dir, "/", "exit-dir should record cd target");
