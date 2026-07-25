@@ -25,6 +25,7 @@
 - Fixed the TUI crashing with an arithmetic overflow when a download or task reported progress beyond its expected total.
 - Fixed the quit confirmation prompt overflowing past the right edge on terminals narrower than ~82 columns; the prompt now adapts to the available width.
 - Fixed the bottom navigation hint bar overflowing the right edge on standard ~80 column terminals when a process was selected; the hints are now more compact on narrower terminals.
+- Fixed devenv invocations with different `$TMPDIR` values resolving different runtime directories and therefore failing to find each other's process manager. Runtime directories now resolve from `$XDG_RUNTIME_DIR`, then `/tmp`; `$TMPDIR` is never used. A daemon still using its previous runtime path may need to be restarted once ([#2923](https://github.com/cachix/devenv/issues/2923)).
 - Fixed edits to local `path:` inputs (e.g. `url: path:../shared-config`) never taking effect: the evaluation cache served the old configuration until `.devenv` was deleted, and `devenv update` did not help. Files from local path inputs are now read directly from disk and tracked by the cache, so changes apply on the next command and direnv reloads when they change.
 - Fixed the evaluation cache missing a `devenv.local.nix` (or any other tracked file) created within the same second as the previous evaluation, which could happen in scripts that run devenv commands back to back.
 - Fixed editing `enterShell` while a `devenv shell` is running causing a parse error (e.g. `(eval):6: parse error near '\n'`) on reload under zsh and fish. The `enterShell` output was being mixed into the environment data the reload applies; it now goes to the terminal as it does on a fresh shell entry ([#2919](https://github.com/cachix/devenv/issues/2919)).
@@ -57,8 +58,6 @@
 
 - Reduced renderer fragmentation in `devenv shell` by reading PTY output in larger batches, lowering syscall and event-allocation overhead during full-screen repaint bursts.
 - `DEVENV_HOME` now overrides where devenv stores all per-user data (GC roots, trust database, cached keys), not just the trust database.
-- `DEVENV_RUNTIME` can now be set to override where a project stores its sockets and other runtime files. To relocate runtime files for all projects at once, prefer `XDG_RUNTIME_DIR`, which keeps each project's directory separate.
-
 - Non-TUI console output is now buffered and flushed in batches, reducing write overhead during verbose evaluation.
 
 - Traces now identify whether devenv was invoked by the CLI, direnv, or the native shell hook with a `devenv.caller` span attribute. Caller information is passed explicitly by integrations, so nested commands are not mistaken for automatic activation ([#2965](https://github.com/cachix/devenv/issues/2965)).

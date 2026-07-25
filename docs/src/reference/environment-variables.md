@@ -28,10 +28,14 @@ devenv defines and respects the following environment variables:
 ### [`DEVENV_RUNTIME`](#devenv_runtime)
 [added-in:1.0]
 
-A short-lived, per-project directory for sockets and other runtime files (e.g. `$DEVENV_RUNTIME/postgres`), exported into the shell.
-Defaults to a short `devenv-<hash>` directory under `$XDG_RUNTIME_DIR` (then `$TMPDIR`, then `/tmp`).
-Set it to override the directory for a single project.
-To relocate runtime files while keeping projects separate, set [`XDG_RUNTIME_DIR`](#xdg_runtime_dir) instead.
+**Read-only.** A short-lived, per-project directory for sockets and other runtime files (e.g. `$DEVENV_RUNTIME/postgres`), exported into the shell.
+The path is resolved in this order:
+
+1. A short `devenv-<hash>` directory under [`$XDG_RUNTIME_DIR`](#xdg_runtime_dir).
+2. `/tmp/devenv-<hash>`.
+
+`$TMPDIR` is deliberately not used, because it can differ between invocations that need to find the same process-manager socket.
+To relocate runtime files while keeping projects and profiles separate, set `$XDG_RUNTIME_DIR`.
 
 ### [`DEVENV_PROFILE`](#devenv_profile)
 [added-in:0.5]
@@ -117,7 +121,8 @@ Locates your shell rc files and serves as the base for the XDG default paths.
 
 ### [`XDG_RUNTIME_DIR`](#xdg_runtime_dir)
 
-Base directory for `$DEVENV_RUNTIME`. Falls back to `$TMPDIR`, then `/tmp`.
+Base directory for `$DEVENV_RUNTIME`.
+When unset, `$DEVENV_RUNTIME` falls back to `/tmp/devenv-<hash>`.
 
 ### [`XDG_DATA_HOME`](#xdg_data_home)
 
@@ -129,7 +134,8 @@ Locates shell rc files and the Cachix CLI configuration.
 
 ### [`TMPDIR`](#tmpdir)
 
-Base directory for build artifacts and a fallback for `$DEVENV_RUNTIME`.
+Base directory for build artifacts.
+It never affects `$DEVENV_RUNTIME`, so sandboxed commands with a different `$TMPDIR` still find the same running processes.
 
 ### [`CI`](#ci)
 
