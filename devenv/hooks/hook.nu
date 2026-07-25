@@ -32,7 +32,11 @@ def --env _devenv_hook [] {
         if $_devenv_hook_dir {
             if not ($env.PWD == $env.DEVENV_ROOT or ($env.PWD | str starts-with ($env.DEVENV_ROOT + "/"))) {
                 $env.PWD | save --force ($env.DEVENV_ROOT + "/.devenv/exit-dir")
-                exit
+                # `exit` throws ShellError::Exit, which is only handled at the
+                # REPL top level; from inside a hook nushell reports
+                # "Exit doesn't catch internally" and the shell survives.
+                # Signal ourselves instead so the process really terminates.
+                ^kill $nu.pid
             }
         }
         return
@@ -56,7 +60,13 @@ def --env _devenv_hook [] {
             $env._DEVENV_HOOK_UNTRUSTED = ""
             # Mark activated before launching so exiting the shell doesn't re-launch.
             $env._DEVENV_HOOK_ACTIVATED = $env.PWD
-            with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell } }
+            # `try`: a hook-spawned shell that leaves the project terminates
+            # itself with a signal, so `devenv shell` exits 128+SIGTERM. Without
+            # `try` nushell aborts the hook on that non-zero exit and never
+            # follows the user to `exit-dir` below.
+            try {
+                with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook" } { do { cd $dir; ^devenv shell } }
+            }
             let exit_dir_file = ($dir + "/.devenv/exit-dir")
             if ($exit_dir_file | path exists) {
                 let target_dir = (open $exit_dir_file | str trim)

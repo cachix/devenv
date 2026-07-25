@@ -288,7 +288,11 @@ if $__devenv_enable_exit_on_cd_out {{
 def _devenv_shell_exit_on_cd_out [] {{
     if not ($env.PWD == $env.DEVENV_ROOT or ($env.PWD | str starts-with ($env.DEVENV_ROOT + "/"))) {{
         $env.PWD | save --force ($env.DEVENV_ROOT + "/.devenv/exit-dir")
-        exit
+        # `exit` throws ShellError::Exit, which nushell only handles at the REPL
+        # top level; from inside a hook it reports "Exit doesn't catch
+        # internally" and the shell survives. Signal ourselves instead so the
+        # process really terminates and the parent hook can follow us.
+        ^kill $nu.pid
     }}
 }}
 

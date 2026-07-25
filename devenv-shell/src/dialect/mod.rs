@@ -474,6 +474,15 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             "[nu] hook-spawned rcfile did not exit on cd-out.\nstdout: {stdout}\nstderr: {}",
             String::from_utf8_lossy(&output.stderr),
         );
+        // A bare `exit` from inside a hook throws `ShellError::Exit`, which only
+        // the REPL top level handles: nushell reports it and the shell survives
+        // (issue #3033). Stopping the script early is not the same as leaving
+        // the shell, so assert the error is absent too.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("Exit doesn't catch internally"),
+            "[nu] cd-out aborted with an uncaught `exit` instead of terminating the shell.\nstderr: {stderr}",
+        );
         let exit_dir = std::fs::read_to_string(root.join(".devenv/exit-dir")).unwrap();
         assert_eq!(exit_dir, "/", "exit-dir should record cd target");
 
