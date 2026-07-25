@@ -41,6 +41,12 @@ pub struct EscapeState {
     pub modify_other_keys: bool,
     /// Mode 2048 (in-band resize) is enabled by the PTY program.
     pub in_band_resize: bool,
+    /// Reusable buffer for the allowlisted subset of a compound DEC mode
+    /// sequence forwarded to the physical terminal.
+    dec_mode_forward_buffer: Vec<u8>,
+    /// The application released mode 2026 in the virtual terminal, but the
+    /// physical reset is held until its deferred frame has been drawn.
+    deferred_synchronized_output_reset: Vec<u8>,
 }
 
 impl EscapeState {
@@ -54,6 +60,8 @@ impl EscapeState {
             kitty_keyboard_depth: 0,
             modify_other_keys: false,
             in_band_resize: false,
+            dec_mode_forward_buffer: Vec::new(),
+            deferred_synchronized_output_reset: Vec::new(),
         }
     }
 
@@ -64,8 +72,12 @@ impl EscapeState {
     }
 
     /// Apply a DEC mode event, updating tracked state.
-    /// Returns the raw bytes to forward to stdout (empty if mode isn't forwarded).
-    pub fn apply_dec_mode<'a>(&mut self, event: &'a DecModeEvent) -> &'a [u8] {
+    ///
+    /// Returns the original sequence when every mode is allowlisted, otherwise
+    /// a normalized sequence containing only allowlisted modes (or an empty
+    /// slice when none are allowed). The returned slice is reused by the next
+    /// DEC-mode event and must be written before that happens.
+    pub fn apply_dec_mode(&mut self, event: &DecModeEvent) -> &[u8] {
         if event.enables_in_band_resize() {
             self.in_band_resize = true;
         } else if event.disables_in_band_resize() {
@@ -97,7 +109,50 @@ impl EscapeState {
             }
         }
 
-        event.raw_bytes()
+        let defer_synchronized_output_reset = event.disables_synchronized_output();
+        event.encode_forwarded_modes_excluding(
+            &mut self.dec_mode_forward_buffer,
+            defer_synchronized_output_reset.then_some(2026),
+        );
+        if defer_synchronized_output_reset {
+            self.deferred_synchronized_output_reset.clear();
+            match event {
+                // Preserve main's exact passthrough bytes when the original
+                // sequence contains only mode 2026. Compound sequences must
+                // be split so companion modes can still be forwarded now.
+                DecModeEvent::Reset { modes, raw_bytes }
+                    if !modes.is_empty() && modes.iter().all(|mode| *mode == 2026) =>
+                {
+                    self.deferred_synchronized_output_reset
+                        .extend_from_slice(raw_bytes);
+                }
+                _ => self
+                    .deferred_synchronized_output_reset
+                    .extend_from_slice(b"\x1b[?2026l"),
+            }
+        }
+        &self.dec_mode_forward_buffer
+    }
+
+    /// Whether the physical mode-2026 reset must terminate the current
+    /// renderer transaction. It is intentionally not part of cleanup: it is
+    /// a presentation boundary, not persistent terminal state.
+    pub fn has_deferred_synchronized_output_reset(&self) -> bool {
+        !self.deferred_synchronized_output_reset.is_empty()
+    }
+
+    /// Emit the held physical mode-2026 reset after the renderer has written
+    /// the final virtual frame, status line, and cursor.
+    pub fn flush_deferred_synchronized_output_reset(
+        &mut self,
+        stdout: &mut impl Write,
+    ) -> io::Result<bool> {
+        if self.deferred_synchronized_output_reset.is_empty() {
+            return Ok(false);
+        }
+        stdout.write_all(&self.deferred_synchronized_output_reset)?;
+        self.deferred_synchronized_output_reset.clear();
+        Ok(true)
     }
 
     /// Apply a kitty keyboard push/pop/set event.
@@ -144,6 +199,13 @@ pub fn process_escape_events(
     for event in events_buf.drain(..) {
         match event {
             SequenceEvent::DecMode(event) => {
+                // A program can release then immediately re-enter mode 2026
+                // in one PTY batch. End the old physical transaction before
+                // forwarding the next entry, otherwise the deferred reset
+                // would incorrectly win and leave the terminal unsynced.
+                if event.enables_synchronized_output() {
+                    esc.flush_deferred_synchronized_output_reset(stdout)?;
+                }
                 let forward = esc.apply_dec_mode(&event);
                 if !forward.is_empty() {
                     stdout.write_all(forward)?;
@@ -188,6 +250,11 @@ pub fn process_escape_events(
                 pty.write_all(buf.as_bytes())?;
                 pty.flush()?;
             }
+            // The raw bytes still reach libghostty-vt, whose narrowly
+            // filtered `on_pty_write` effect responds from virtual state.
+            // Do not pass these through to stdout: the physical terminal
+            // includes the status row and can have a renderer-owned cursor.
+            SequenceEvent::VirtualTerminalQuery(_) => {}
             SequenceEvent::KeypadMode { application } => {
                 queue!(stdout, SetKeypadMode { application })?;
                 esc.keypad_application_mode = application;
@@ -279,7 +346,136 @@ mod tests {
         let mut esc = EscapeState::new();
         let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1;2048h");
         assert!(esc.in_band_resize);
-        assert!(!forwarded.is_empty(), "mode 1 should be forwarded");
+        assert_eq!(forwarded, b"\x1b[?1h");
+    }
+
+    #[test]
+    fn compound_mode_set_forwards_only_allowlisted_modes() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+
+        let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1000;2048;9999h");
+
+        assert_eq!(forwarded, b"\x1b[?1000h");
+        assert!(esc.in_band_resize);
+        assert_eq!(esc.forwarded_dec_modes, BTreeSet::from([1000]));
+    }
+
+    #[test]
+    fn all_allowlisted_compound_modes_preserve_raw_bytes_and_ordering() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        // Leading zeroes make this distinguishable from normalized output;
+        // preserving it keeps the established passthrough behavior intact.
+        let input = b"\x1b[?01000;1049h";
+
+        let forwarded = scan_and_apply(&mut scanner, &mut esc, input);
+
+        assert_eq!(forwarded, input);
+        assert!(esc.in_alternate_screen);
+        assert_eq!(esc.forwarded_dec_modes, BTreeSet::from([1000]));
+    }
+
+    #[test]
+    fn compound_mode_reset_forwards_only_allowlisted_modes_and_updates_state() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1000;2048;9999h");
+
+        let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?9999;1000;2048l");
+
+        assert_eq!(forwarded, b"\x1b[?1000l");
+        assert!(!esc.in_band_resize);
+        assert!(esc.forwarded_dec_modes.is_empty());
+    }
+
+    #[test]
+    fn synchronized_output_reset_is_deferred_until_after_the_rendered_frame() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        let mut stdout = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2026h");
+
+        // Keep the physical transaction open while the virtual VT accepts
+        // the reset and the renderer produces its final frame.
+        stdout.extend_from_slice(&scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2026l"));
+        assert!(esc.has_deferred_synchronized_output_reset());
+        stdout.extend_from_slice(b"<frame><status><cursor>");
+        assert!(
+            esc.flush_deferred_synchronized_output_reset(&mut stdout)
+                .unwrap()
+        );
+
+        assert_eq!(stdout, b"\x1b[?2026h<frame><status><cursor>\x1b[?2026l");
+        assert!(!esc.has_deferred_synchronized_output_reset());
+    }
+
+    #[test]
+    fn standalone_synchronized_output_reset_preserves_raw_bytes() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        let input = b"\x1b[?02026l";
+
+        assert!(scan_and_apply(&mut scanner, &mut esc, input).is_empty());
+        let mut stdout = Vec::new();
+        esc.flush_deferred_synchronized_output_reset(&mut stdout)
+            .unwrap();
+
+        assert_eq!(stdout, input);
+    }
+
+    #[test]
+    fn compound_synchronized_output_reset_defers_only_mode_2026() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        let mut stdout = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2026;1000h");
+
+        // Mouse tracking retains its established immediate reset; only the
+        // physical mode-2026 release follows the rendered frame.
+        stdout.extend_from_slice(&scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1000;2026l"));
+        assert!(esc.has_deferred_synchronized_output_reset());
+        stdout.extend_from_slice(b"<frame>");
+        esc.flush_deferred_synchronized_output_reset(&mut stdout)
+            .unwrap();
+
+        assert_eq!(stdout, b"\x1b[?2026;1000h\x1b[?1000l<frame>\x1b[?2026l");
+        assert!(esc.forwarded_dec_modes.is_empty());
+    }
+
+    #[test]
+    fn synchronized_output_release_then_reentry_closes_the_old_transaction_first() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        let mut stdout = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2026h");
+        stdout.extend_from_slice(&scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2026l"));
+
+        // `process_escape_events` applies this flush before forwarding a
+        // following mode-2026 set. This is the deliberate h/l/h coalescing
+        // policy: release the old physical transaction rather than allowing
+        // its deferred reset to undo the new one later.
+        esc.flush_deferred_synchronized_output_reset(&mut stdout)
+            .unwrap();
+        stdout.extend_from_slice(&scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2026h"));
+
+        assert_eq!(stdout, b"\x1b[?2026h\x1b[?2026l\x1b[?2026h");
+        assert!(!esc.has_deferred_synchronized_output_reset());
+    }
+
+    #[test]
+    fn compound_alt_screen_modes_are_normalized_and_tracked() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+
+        let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1049;2048;1000h");
+        assert_eq!(forwarded, b"\x1b[?1049;1000h");
+        assert!(esc.in_alternate_screen);
+        assert!(esc.in_band_resize);
+        assert_eq!(esc.forwarded_dec_modes, BTreeSet::from([1000]));
+
+        let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?2048;1049;1000l");
+        assert_eq!(forwarded, b"\x1b[?1049;1000l");
+        assert!(!esc.in_alternate_screen);
+        assert!(!esc.in_band_resize);
+        assert!(esc.forwarded_dec_modes.is_empty());
     }
 
     #[test]
@@ -375,5 +571,21 @@ mod tests {
             "expected paste reset, got {:?}",
             out
         );
+    }
+
+    #[test]
+    fn cleanup_ignores_disallowed_modes_from_compound_sequences() {
+        let mut scanner = EscapeScanner::new();
+        let mut esc = EscapeState::new();
+        let forwarded = scan_and_apply(&mut scanner, &mut esc, b"\x1b[?1049;1000;2048;9999h");
+        assert_eq!(forwarded, b"\x1b[?1049;1000h");
+
+        let mut buf = Vec::new();
+        cleanup_forwarded_modes(&esc, &mut buf).expect("cleanup should not fail");
+        let out = String::from_utf8_lossy(&buf);
+        assert!(out.contains("\x1b[?1049l"));
+        assert!(out.contains("\x1b[?1000l"));
+        assert!(!out.contains("2048"));
+        assert!(!out.contains("9999"));
     }
 }

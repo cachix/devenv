@@ -180,14 +180,29 @@ async fn test_stdin_forwarded_to_pty() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_ctrl_alt_d_toggle_pause() {
-    let (io, mut stdin_ours, _stdout_ours) = test_io();
+    let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, mut event_rx) = mpsc::channel(10);
 
     let session = test_session();
     let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
 
-    cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
+    cmd_tx
+        .send(spawn_cmd("printf 'READY\\n'; read unused"))
+        .await
+        .unwrap();
+
+    // Wait until the session's stdin reader and PTY event loop are running.
+    // A Unix stream has no record boundaries; writing before the reader is
+    // blocked made this test's two-byte local keybinding timing-dependent.
+    let ready = read_until(&mut stdout_ours, b"READY", Duration::from_secs(5));
+    assert!(
+        ready
+            .windows(b"READY".len())
+            .any(|window| window == b"READY"),
+        "session did not become ready: {:?}",
+        String::from_utf8_lossy(&ready)
+    );
 
     // Send Ctrl-Alt-D (ESC + Ctrl-D)
     stdin_ours.write_all(&[0x1b, 0x04]).unwrap();
@@ -270,7 +285,6 @@ fn render_all_lines(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String
 /// single `.snap` file works on Linux and macOS. On macOS the long form
 /// renders `Ctrl-Opt-E`/`Ctrl-Opt-D`; elsewhere it's `Ctrl-Alt-*`. The guard
 /// must be kept alive for the duration of the snapshot assertions.
-#[must_use]
 fn bind_keybind_filters() -> insta::internals::SettingsBindDropGuard {
     let mut settings = insta::Settings::clone_current();
     settings.add_filter(r"Ctrl-Opt-([A-Z])", "Ctrl-Alt-$1");
@@ -459,11 +473,20 @@ async fn test_overflow_status_line_protected() {
     let rows = render(&collected, 80, 24);
     insta::assert_snapshot!(rows[23]);
 
-    // Unblock the process so it can exit
+    // Keep consuming renderer output while the child exits. Stopping at the
+    // first DONE/status marker can fill the test socket while the renderer is
+    // presenting the remaining flood, preventing it from reading stdin.
+    let drain_stdout = tokio::task::spawn_blocking(move || {
+        let mut remaining = Vec::new();
+        let _ = stdout_ours.read_to_end(&mut remaining);
+    });
+
+    // Unblock the process so it can exit.
     let _ = stdin_ours.write_all(b"\n");
     drop(stdin_ours);
     drop(cmd_tx);
     let _ = handle.await;
+    let _ = drain_stdout.await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

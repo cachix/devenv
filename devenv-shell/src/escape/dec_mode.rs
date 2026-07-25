@@ -163,9 +163,8 @@ mod tests {
         let mut p = DecModeParser::new();
         let mut result = None;
         for &b in b"?1049;1006h" {
-            match p.feed(b) {
-                DecModeResult::Complete(action) => result = Some(action),
-                _ => {}
+            if let DecModeResult::Complete(action) = p.feed(b) {
+                result = Some(action);
             }
         }
         match result {
