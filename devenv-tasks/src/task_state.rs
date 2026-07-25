@@ -399,7 +399,12 @@ impl TaskState {
         merged_env.extend(self.task.env.clone());
         merged_env.extend(config.env.clone());
         config.env = merged_env;
-        config.bash = bash.to_string();
+        // Keep ProcessConfig's `bash` default when no path was resolved. Assigning
+        // an empty string makes every exec probe fail to spawn with ENOENT, which
+        // silently stalls `@ready` dependencies forever (#3030).
+        if !bash.is_empty() {
+            config.bash = bash.to_string();
+        }
 
         Ok(config)
     }
@@ -834,6 +839,45 @@ mod tests {
         let lines = vec![make_line("PATH", "/usr/bin:/bin")];
         let result = TaskState::parse_stdout_exports(&lines);
         assert_eq!(result, vec![("PATH".into(), "/usr/bin:/bin".into())]);
+    }
+
+    // -- build_process_config bash resolution tests --
+
+    fn process_task_state() -> TaskState {
+        TaskState::new(
+            TaskConfig {
+                name: "devenv:processes:demo".to_string(),
+                r#type: TaskType::Process,
+                command: Some("sleep infinity".to_string()),
+                ..Default::default()
+            },
+            VerbosityLevel::Normal,
+            None,
+        )
+    }
+
+    #[test]
+    fn build_process_config_uses_resolved_bash() {
+        let ts = process_task_state();
+        let config = ts
+            .build_process_config(
+                &std::collections::HashMap::new(),
+                "/nix/store/bash/bin/bash",
+            )
+            .unwrap();
+        assert_eq!(config.bash, "/nix/store/bash/bin/bash");
+    }
+
+    /// An empty bash path must not overwrite the default: exec probes spawn the
+    /// program named by this field, and `Command::new("")` fails with ENOENT on
+    /// every attempt, stalling `@ready` dependencies forever (#3030).
+    #[test]
+    fn build_process_config_keeps_default_bash_when_unresolved() {
+        let ts = process_task_state();
+        let config = ts
+            .build_process_config(&std::collections::HashMap::new(), "")
+            .unwrap();
+        assert_eq!(config.bash, "bash");
     }
 
     // -- proptest round-trip tests --

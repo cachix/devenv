@@ -86,13 +86,14 @@ impl Devenv {
             "copy_args": copy_args,
         }));
 
-        let config = self.make_task_config(
-            vec![task_name.to_string()],
-            task_configs,
-            devenv_tasks::RunMode::Single,
-            envs,
-            String::new(),
-        )?;
+        let config = self
+            .make_task_config(
+                vec![task_name.to_string()],
+                task_configs,
+                devenv_tasks::RunMode::Single,
+                envs,
+            )
+            .await?;
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
             .with_refresh_task_cache(self.cache_settings.refresh_task_cache)
