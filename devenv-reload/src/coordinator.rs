@@ -60,6 +60,8 @@ fn hash_directory_listing(path: &Path) -> std::io::Result<String> {
         .map_err(std::io::Error::other)
 }
 
+/// Reads and hashes the path, walking the whole tree for a directory —
+/// event-loop callers go through [`capture_watched_path_states`].
 fn capture_watched_path_state(path: &Path) -> WatchedPathState {
     let metadata = match std::fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -80,17 +82,24 @@ fn capture_watched_path_state(path: &Path) -> WatchedPathState {
     }
 }
 
-fn snapshot_watched_path_states(
+async fn capture_watched_path_states(paths: Vec<PathBuf>) -> HashMap<PathBuf, WatchedPathState> {
+    tokio::task::spawn_blocking(move || {
+        paths
+            .into_iter()
+            .map(|path| {
+                let state = capture_watched_path_state(&path);
+                (path, state)
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+async fn snapshot_watched_path_states(
     watcher_handle: &devenv_event_sources::WatcherHandle,
 ) -> HashMap<PathBuf, WatchedPathState> {
-    watcher_handle
-        .watched_paths()
-        .into_iter()
-        .map(|path| {
-            let state = capture_watched_path_state(&path);
-            (path, state)
-        })
-        .collect()
+    capture_watched_path_states(watcher_handle.watched_paths()).await
 }
 
 fn push_unique_path(paths: &mut Vec<PathBuf>, path: &Path) {
@@ -235,7 +244,7 @@ impl ShellCoordinator {
         // Track files that changed and triggered rebuilds
         let mut pending_changes: Vec<PathBuf> = Vec::new();
         // Track watched path state (kind + content hash) to detect real changes.
-        let mut path_states = snapshot_watched_path_states(&watcher_handle);
+        let mut path_states = snapshot_watched_path_states(&watcher_handle).await;
         // Track changes that arrive while a build is running.
         let mut deferred_changes: Vec<PathBuf> = Vec::new();
         // Track if reload is ready (waiting for user to apply)
@@ -273,7 +282,10 @@ impl ShellCoordinator {
                         tracing::trace!("File watching paused, ignoring change: {:?}", path);
                         continue;
                     }
-                    let new_state = capture_watched_path_state(&path);
+                    let new_state = capture_watched_path_states(vec![path.clone()])
+                        .await
+                        .remove(&path)
+                        .unwrap_or(WatchedPathState::Unreadable);
                     if let Some(old_state) = path_states.get(&path)
                         && *old_state == new_state
                     {
@@ -358,7 +370,7 @@ impl ShellCoordinator {
                 Event::ReloadBuildComplete { result, activity } => {
                     current_build = None;
 
-                    let before_rewatch = snapshot_watched_path_states(&watcher_handle);
+                    let before_rewatch = snapshot_watched_path_states(&watcher_handle).await;
 
                     // Refresh all inotify watches. Editors using atomic save
                     // (write temp + rename) replace the file inode, which
@@ -367,7 +379,7 @@ impl ShellCoordinator {
                     // are already watched, so we force a full refresh.
                     watcher_handle.rewatch_all().await;
 
-                    let after_rewatch = snapshot_watched_path_states(&watcher_handle);
+                    let after_rewatch = snapshot_watched_path_states(&watcher_handle).await;
                     let rewatch_drift_count = reconcile_post_rewatch_drift(
                         &before_rewatch,
                         &after_rewatch,
