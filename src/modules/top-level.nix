@@ -255,19 +255,23 @@ in
         type = types.str;
         internal = true;
         # The path has to be
-        # - unique to each DEVENV_STATE to let multiple devenv environments coexist
+        # - unique to each DEVENV_DOTFILE to let multiple devenv environments coexist
         # - deterministic so that it won't change constantly
         # - short so that unix domain sockets won't hit the path length limit
         # - free to create as an unprivileged user across OSes
         default =
           let
-            hashedRoot = builtins.hashString "sha256" config.devenv.state;
+            # Keep this in sync with resolve_runtime_dir in devenv-core. Profile
+            # dotfiles are distinct, so profiles retain separate runtime dirs.
+            hashedDotfile = builtins.hashString "sha256" config.devenv.dotfile;
             # same length as git's abbreviated commit hashes
-            shortHash = builtins.substring 0 7 hashedRoot;
+            shortHash = builtins.substring 0 7 hashedDotfile;
             # XDG_RUNTIME_DIR is the correct location for runtime files like sockets
             # per the XDG Base Directory Specification
             xdg = builtins.getEnv "XDG_RUNTIME_DIR";
-            base = if xdg != "" then xdg else config.devenv.tmpdir;
+            # TMPDIR may differ between invocations that need to rendezvous on
+            # the same process-manager socket.
+            base = if xdg != "" then xdg else "/tmp";
           in
           "${base}/devenv-${shortHash}";
       };
@@ -347,8 +351,7 @@ in
 
       # Override temp directories that stdenv set to NIX_BUILD_TOP.
       # Only reset those that still point to the Nix build dir; leave
-      # any user/CI-supplied value intact so child processes (e.g.
-      # `devenv processes wait`) compute the same runtime directory.
+      # any user/CI-supplied value intact.
       for var in TMP TMPDIR TEMP TEMPDIR; do
         if [ -n "''${!var-}" ] && [ "''${!var}" = "''${NIX_BUILD_TOP-}" ]; then
           export "$var"=${config.devenv.tmpdir}

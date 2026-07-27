@@ -2,6 +2,7 @@
 
 use miette::{Result, miette};
 use sha2::{Digest, Sha256};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -47,23 +48,26 @@ pub fn resolve_home() -> Result<PathBuf> {
 ///
 /// The default is kept short to stay within the unix-domain-socket path length limit.
 ///
-/// Honors the `DEVENV_RUNTIME` environment variable.
-/// Otherwise derives a short, deterministic `devenv-<hash>` path
-/// under `$XDG_RUNTIME_DIR` (falling back to `$TMPDIR`, then `/tmp`) that is
-/// unique to `devenv_dotfile`.
+/// Derives a short, deterministic `devenv-<hash>` path
+/// under `$XDG_RUNTIME_DIR` (falling back to `/tmp`) that is unique to
+/// `devenv_dotfile`. `$TMPDIR` is deliberately ignored because it may differ
+/// between invocations that need to rendezvous on the same runtime directory.
 pub fn resolve_runtime_dir(devenv_dotfile: &Path) -> PathBuf {
-    if let Some(runtime) = std::env::var_os("DEVENV_RUNTIME").filter(|v| !v.is_empty()) {
-        return PathBuf::from(runtime);
-    }
+    resolve_runtime_dir_with(devenv_dotfile, |name| std::env::var_os(name))
+}
 
+fn resolve_runtime_dir_with(
+    devenv_dotfile: &Path,
+    get_env: impl Fn(&str) -> Option<OsString>,
+) -> PathBuf {
     let mut hasher = Sha256::new();
     hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
     let hex = hex::encode(hasher.finalize());
 
-    let runtime_base = PathBuf::from(
-        std::env::var("XDG_RUNTIME_DIR")
-            .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())),
-    );
+    let runtime_base = get_env("XDG_RUNTIME_DIR")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/tmp"));
     runtime_base.join(format!("devenv-{}", &hex[..7]))
 }
 
@@ -144,52 +148,80 @@ mod tests {
         assert_eq!(resolve_home().ok(), expected);
     }
 
-    /// Set/unset `DEVENV_RUNTIME` for a test. Safe because cargo nextest runs
-    /// each test in its own process, so there is no concurrent env access.
-    fn set_devenv_runtime(dir: &Path) {
-        unsafe { std::env::set_var("DEVENV_RUNTIME", dir) };
-    }
-
-    fn unset_devenv_runtime() {
-        unsafe { std::env::remove_var("DEVENV_RUNTIME") };
+    fn resolve_runtime_dir_for_test(devenv_dotfile: &Path, vars: &[(&str, &str)]) -> PathBuf {
+        let vars = vars
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), OsString::from(value)))
+            .collect::<std::collections::HashMap<_, _>>();
+        resolve_runtime_dir_with(devenv_dotfile, |name| vars.get(name).cloned())
     }
 
     #[test]
-    fn resolve_runtime_dir_honors_env_override() {
-        let tmp = tempfile::tempdir().unwrap();
-        let runtime = tmp.path().join("custom-runtime");
-        set_devenv_runtime(&runtime);
+    fn resolve_runtime_dir_ignores_devenv_runtime() {
+        let dir = resolve_runtime_dir_for_test(
+            Path::new("/project/.devenv"),
+            &[
+                ("DEVENV_RUNTIME", "/tmp/custom-runtime"),
+                ("XDG_RUNTIME_DIR", "/run/user/1234"),
+            ],
+        );
+        assert_eq!(dir.parent(), Some(Path::new("/run/user/1234")));
+    }
 
-        assert_eq!(resolve_runtime_dir(Path::new("/any/.devenv")), runtime);
+    #[test]
+    fn resolve_runtime_dir_is_independent_of_tmpdir() {
+        let dotfile = Path::new("/project/.devenv");
+        let a = resolve_runtime_dir_for_test(dotfile, &[("TMPDIR", "/tmp/dvA")]);
+        let b = resolve_runtime_dir_for_test(dotfile, &[("TMPDIR", "/tmp/claude-501")]);
+        assert_eq!(a, b);
+        assert_eq!(a.parent(), Some(Path::new("/tmp")));
+    }
 
-        unset_devenv_runtime();
+    #[test]
+    fn resolve_runtime_dir_uses_xdg_runtime_dir() {
+        let dir = resolve_runtime_dir_for_test(
+            Path::new("/project/.devenv"),
+            &[("XDG_RUNTIME_DIR", "/run/user/1234")],
+        );
+        assert_eq!(dir.parent(), Some(Path::new("/run/user/1234")));
+    }
+
+    #[test]
+    fn resolve_runtime_dir_does_not_validate_xdg_runtime_dir() {
+        let dir = resolve_runtime_dir_for_test(
+            Path::new("/project/.devenv"),
+            &[("XDG_RUNTIME_DIR", "relative/runtime")],
+        );
+        assert_eq!(dir.parent(), Some(Path::new("relative/runtime")));
     }
 
     #[test]
     fn resolve_runtime_dir_empty_env_falls_back_to_hash() {
-        // An empty DEVENV_RUNTIME is treated as unset.
-        set_devenv_runtime(Path::new(""));
-
-        let dir = resolve_runtime_dir(Path::new("/project/.devenv"));
+        let dir =
+            resolve_runtime_dir_for_test(Path::new("/project/.devenv"), &[("XDG_RUNTIME_DIR", "")]);
         let name = dir.file_name().unwrap().to_string_lossy();
         assert!(
             name.starts_with("devenv-"),
             "unexpected runtime dir: {dir:?}"
         );
         assert_eq!(name.len(), "devenv-".len() + 7);
-
-        unset_devenv_runtime();
     }
 
     #[test]
     fn resolve_runtime_dir_is_deterministic_per_dotfile() {
-        unset_devenv_runtime();
-
-        let a = resolve_runtime_dir(Path::new("/project/.devenv"));
-        let b = resolve_runtime_dir(Path::new("/project/.devenv"));
-        let c = resolve_runtime_dir(Path::new("/other/.devenv"));
+        let a = resolve_runtime_dir_for_test(Path::new("/project/.devenv"), &[]);
+        let b = resolve_runtime_dir_for_test(Path::new("/project/.devenv"), &[]);
+        let c = resolve_runtime_dir_for_test(Path::new("/other/.devenv"), &[]);
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn resolve_runtime_dir_keeps_profiles_isolated() {
+        let base = resolve_runtime_dir_for_test(Path::new("/project/.devenv"), &[]);
+        let profile =
+            resolve_runtime_dir_for_test(Path::new("/project/.devenv/profiles/prod"), &[]);
+        assert_ne!(base, profile);
     }
 
     #[test]
