@@ -24009,14 +24009,14 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.16.0";
+        version = "0.17.0";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "454546d7cca26f604eea8e8bf85673d7d01d400d";
-          sha256 = "1nmjsnxjq62fpysmq371q79x67m40s5il9m2hyxxlbvhs7y55gsc";
+          rev = "a8794e46ec9664a0e1a3869cc3105d0853937e48";
+          sha256 = "1mvr7z4q4pzy2gixggzx7j2g2vgxs88rd1nxn7878ydgir5dghmk";
         };
         dependencies = [
           {
@@ -24146,7 +24146,7 @@ rec {
           {
             name = "uuid";
             packageId = "uuid";
-            features = [ "v4" ];
+            features = [ "serde" "v4" ];
           }
           {
             name = "whoami";
@@ -24155,14 +24155,17 @@ rec {
           }
         ];
         features = {
+          "age" = [ "dep:age" ];
           "akv" = [ "dep:azure_core" "dep:azure_identity" "dep:azure_security_keyvault_secrets" ];
           "awssm" = [ "dep:aws-config" "dep:aws-sdk-secretsmanager" ];
-          "bws" = [ "dep:bitwarden" "dep:rustls" ];
           "cli" = [ "dep:toml_edit" ];
-          "default" = [ "cli" "keyring" "gcsm" "awssm" "vault" "bws" "akv" "infisical" ];
+          "default" = [ "cli" "keyring" "kdbx" "gcsm" "awssm" "vault" "openbao" "bws" "akv" "infisical" "age" "scaleway" "sops" ];
           "gcsm" = [ "dep:google-cloud-secretmanager-v1" ];
           "infisical" = [ "dep:reqwest" "tokio/sync" ];
+          "kdbx" = [ "dep:keepass" ];
           "keyring" = [ "dep:keyring" "dep:whoami" ];
+          "openbao" = [ "dep:reqwest" ];
+          "scaleway" = [ "dep:reqwest" ];
           "vault" = [ "dep:reqwest" ];
           "vendored-dbus" = [ "keyring?/vendored" ];
         };
@@ -31784,6 +31787,12 @@ rec {
             target = { target, features }: (("wasm32" == target."arch" or null) && (("unknown" == target."os" or null) || ("none" == target."os" or null)) && (builtins.elem "atomics" targetFeatures));
           }
           {
+            name = "serde_core";
+            packageId = "serde_core";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
             name = "wasm-bindgen";
             packageId = "wasm-bindgen";
             optional = true;
@@ -31823,7 +31832,7 @@ rec {
           "v7" = [ "rng" ];
           "zerocopy" = [ "dep:zerocopy" ];
         };
-        resolvedDefaultFeatures = [ "default" "rng" "std" "v4" ];
+        resolvedDefaultFeatures = [ "default" "rng" "serde" "std" "v4" ];
       };
       "valuable" = rec {
         crateName = "valuable";
