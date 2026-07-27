@@ -2495,6 +2495,7 @@ version = "2.1.3"
 dependencies = [
  "clap",
  "devenv",
+ "devenv-nix-backend",
  "globset",
  "miette",
  "serde",

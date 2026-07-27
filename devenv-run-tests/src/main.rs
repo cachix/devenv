@@ -357,11 +357,12 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             let devenv_dotfile = tmpdir.path().join(".devenv");
 
             // Copy the contents of the test directory to the temporary directory
-            let copy_content_status = Command::new("cp")
+            let copy_content_status = tokio::process::Command::new("cp")
                 .arg("-r")
                 .arg(format!("{}/.", path.display()))
                 .arg(&devenv_root)
                 .status()
+                .await
                 .into_diagnostic()?;
             if !copy_content_status.success() {
                 return Err(miette::miette!("Failed to copy test directory"));
@@ -372,10 +373,11 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             // Initialize a git repository in the temporary directory if configured to do so.
             // This helps Nix Flakes and git-hooks find the root of the project.
             if test_config.git_init {
-                let git_init_status = Command::new("git")
+                let git_init_status = tokio::process::Command::new("git")
                     .arg("init")
                     .arg("--initial-branch=main")
                     .status()
+                    .await
                     .into_diagnostic()?;
                 if !git_init_status.success() {
                     return Err(miette::miette!("Failed to initialize the git repository"));
@@ -400,9 +402,10 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         let patch_script = PathBuf::from(".patch.sh");
         if patch_script.exists() {
             devenv_activity::message(ActivityLevel::Info, "Running .patch.sh");
-            let _ = Command::new("bash")
+            let _ = tokio::process::Command::new("bash")
                 .arg(&patch_script)
                 .status()
+                .await
                 .into_diagnostic()?;
         }
 
@@ -472,9 +475,10 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             // Run .test.sh directly - it must exist when run_test_sh is false
             if PathBuf::from(".test.sh").exists() {
                 devenv_activity::message(ActivityLevel::Info, "Running .test.sh directly");
-                let output = Command::new("bash")
+                let output = tokio::process::Command::new("bash")
                     .arg(".test.sh")
                     .status()
+                    .await
                     .into_diagnostic()?;
                 if output.success() {
                     Ok(())
@@ -522,8 +526,52 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
     Ok(test_results)
 }
 
-#[tokio::main]
-async fn main() -> Result<ExitCode> {
+fn main() -> Result<ExitCode> {
+    // Nix evaluation recurses deeply enough to overflow the default 8MB main
+    // thread stack, so the whole run happens on a thread sized for Nix.
+    let thread = std::thread::Builder::new()
+        .name("devenv-run-tests".into())
+        .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
+        .spawn(|| {
+            // `block_on` polls the (!Send) backend futures on this thread, so it
+            // needs GC registration just like the runtime's worker threads.
+            devenv_nix_backend::gc_register_current_thread()
+                .map_err(|e| miette::miette!("Failed to register thread with GC: {e}"))?;
+            build_gc_runtime()?.block_on(async_main())
+        })
+        .into_diagnostic()
+        .wrap_err("Failed to spawn devenv-run-tests thread")?;
+
+    thread.join().map_err(|payload| {
+        let message = payload
+            .downcast_ref::<&str>()
+            .map(ToString::to_string)
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| format!("{payload:?}"));
+        miette::miette!("devenv-run-tests thread panicked: {message}")
+    })?
+}
+
+/// Create a tokio runtime with worker threads registered with Boehm GC.
+///
+/// Nix uses Boehm GC with parallel marking. During stop-the-world collection,
+/// only registered threads are paused. This ensures all tokio worker threads
+/// are properly registered to avoid race conditions.
+fn build_gc_runtime() -> Result<tokio::runtime::Runtime> {
+    devenv_nix_backend::nix_init();
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_name("devenv-run-tests-worker")
+        .thread_stack_size(devenv_nix_backend::NIX_STACK_SIZE)
+        .on_thread_start(|| {
+            let _ = devenv_nix_backend::gc_register_current_thread();
+        })
+        .build()
+        .into_diagnostic()
+        .wrap_err("Failed to create tokio runtime")
+}
+
+async fn async_main() -> Result<ExitCode> {
     let _tracing_guard = devenv_tracing::init_tracing_default();
 
     // If DEVENV_RUN_TESTS is set, run the tests.
@@ -602,11 +650,14 @@ exec '{bin_dir}/devenv' \
         cwd = cwd.display(),
     );
 
-    fs::write(&devenv_wrapper_path, wrapper_content).into_diagnostic()?;
-    Command::new("chmod")
+    tokio::fs::write(&devenv_wrapper_path, wrapper_content)
+        .await
+        .into_diagnostic()?;
+    tokio::process::Command::new("chmod")
         .arg("+x")
         .arg(&devenv_wrapper_path)
         .status()
+        .await
         .into_diagnostic()?;
 
     let mut env = vec![

@@ -8633,6 +8633,10 @@ rec {
             packageId = "devenv";
           }
           {
+            name = "devenv-nix-backend";
+            packageId = "devenv-nix-backend";
+          }
+          {
             name = "globset";
             packageId = "globset";
           }
