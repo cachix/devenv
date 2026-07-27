@@ -653,7 +653,9 @@ fn run(
     // running process manager, so the Ctrl-C prompt offers detach vs stop.
     let attached = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-    // Backend on dedicated thread (own runtime with GC-registered workers)
+    // Backend on dedicated thread (own runtime with GC-registered workers).
+    // Eval futures are !Send and run on the block_on task, so the thread
+    // itself needs the Nix stack size too, not just the workers.
     let shutdown_clone = shutdown.clone();
     let attached_backend = attached.clone();
     let devenv_thread = std::thread::Builder::new()
@@ -1337,6 +1339,9 @@ fn current_thread_runtime(ctx: &str) -> Result<tokio::runtime::Runtime> {
 /// Nix uses Boehm GC with parallel marking. During stop-the-world collection,
 /// only registered threads are paused. This ensures all tokio worker threads
 /// are properly registered to avoid race conditions.
+///
+/// The blocking pool inherits `on_thread_start` and `thread_stack_size`,
+/// so `spawn_blocking` threads are registered and sized the same way.
 fn build_gc_runtime() -> tokio::runtime::Runtime {
     devenv_nix_backend::nix_init();
     tokio::runtime::Builder::new_multi_thread()
