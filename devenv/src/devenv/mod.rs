@@ -488,7 +488,8 @@ impl Devenv {
         util::write_file_with_lock(
             devenv_dotfile.join("imports.txt"),
             options.imports.join("\n"),
-        )?;
+        )
+        .await?;
         fs::create_dir_all(&devenv_runtime)
             .await
             .map_err(|e| miette::miette!("Failed to create {}: {}", devenv_runtime.display(), e))?;
@@ -2986,7 +2987,8 @@ impl Devenv {
                 .map(|path| path.to_string_lossy().into_owned())
                 .collect::<Vec<_>>()
                 .join("\n"),
-        )?;
+        )
+        .await?;
 
         Ok(DevEnv {
             output: env.bash_env,
