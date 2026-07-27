@@ -140,7 +140,8 @@ pub trait BuildPathCallback: Send + Sync {
 }
 
 use crate::cachix_protocol::{
-    ClientMessage, DaemonMessage, PushEvent, PushEventEnvelope, PushRequest,
+    ClientMessage, DaemonErrorMessage, DaemonExitStatus, DaemonMessage, DaemonReply, PushEvent,
+    PushEventEnvelope, PushRequest,
 };
 
 /// Low-level socket client for daemon communication
@@ -242,6 +243,15 @@ impl SocketClient {
 
 /// Lines of daemon stderr kept for error reporting.
 const STDERR_TAIL_LINES: usize = 20;
+
+/// Bound on the `ClientStop` handshake: connect, send, and receive the
+/// daemon's reply. The daemon answers as soon as it has drained, which has
+/// already happened by the time we stop, so this is normally milliseconds.
+const STOP_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// How long to wait for the daemon process to exit, both after a graceful
+/// stop acknowledgment and after SIGKILL.
+const DAEMON_EXIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Owned handle to a spawned cachix daemon process.
 /// Kills the process on drop.
@@ -362,33 +372,38 @@ impl DaemonProcess {
 
     /// Stop the daemon and drain its stderr, with bounded waits.
     ///
-    /// Asks the daemon to shut down via `ClientStop` first; SIGKILL after a
-    /// timeout.
+    /// Performs the graceful stop handshake (`ClientStop`, wait for
+    /// `DaemonExit`, disconnect) and waits for the process to exit; falls
+    /// back to SIGKILL when the daemon refuses or doesn't answer in time.
     pub async fn stop(mut self) -> Result<()> {
         if let Some(mut child) = self.child.take() {
             tracing::info!("Stopping cachix daemon");
 
             let exited =
-                match tokio::time::timeout(Duration::from_secs(1), request_stop(&self.socket_path))
+                match tokio::time::timeout(STOP_REQUEST_TIMEOUT, request_stop(&self.socket_path))
                     .await
                 {
-                    // Hold the stream open while waiting so the daemon's
-                    // `DaemonExit` reply doesn't hit a closed socket.
-                    Ok(Ok(_stream)) => {
-                        match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
-                            Ok(Ok(status)) => {
-                                tracing::debug!(%status, "daemon stopped gracefully");
-                                true
-                            }
-                            Ok(Err(e)) => {
-                                tracing::warn!("Failed to wait for daemon: {}", e);
-                                false
-                            }
-                            Err(_) => {
-                                tracing::debug!("daemon did not exit after ClientStop; killing");
-                                false
-                            }
+                    Ok(Ok(StopAck::Exit(status))) => {
+                        if status.exit_code == 0 {
+                            tracing::debug!("daemon acknowledged stop");
+                        } else {
+                            tracing::warn!(
+                                exit_code = status.exit_code,
+                                message = status.exit_message.as_deref().unwrap_or_default(),
+                                "daemon reported failures on shutdown"
+                            );
                         }
+                        Self::wait_for_exit(&mut child).await
+                    }
+                    Ok(Ok(StopAck::Disconnected)) => {
+                        tracing::debug!("daemon disconnected without a DaemonExit reply");
+                        Self::wait_for_exit(&mut child).await
+                    }
+                    Ok(Ok(StopAck::Refused(reason))) => {
+                        // The daemon will keep running (e.g. remote stop
+                        // disabled); don't wait for an exit that won't come.
+                        tracing::warn!(%reason, "daemon refused remote stop");
+                        false
                     }
                     Ok(Err(e)) => {
                         tracing::debug!(error = %e, "could not request graceful stop");
@@ -402,7 +417,7 @@ impl DaemonProcess {
 
             if !exited {
                 let _ = child.start_kill();
-                match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
+                match tokio::time::timeout(DAEMON_EXIT_TIMEOUT, child.wait()).await {
                     Ok(Ok(status)) => tracing::debug!(%status, "daemon stopped"),
                     Ok(Err(e)) => tracing::warn!("Failed to wait for daemon: {}", e),
                     Err(_) => tracing::warn!("Timeout waiting for daemon to stop"),
@@ -427,6 +442,25 @@ impl DaemonProcess {
         Ok(())
     }
 
+    /// Wait for the daemon process to exit after a graceful stop was
+    /// acknowledged. Returns `false` if it is still running at the deadline.
+    async fn wait_for_exit(child: &mut Child) -> bool {
+        match tokio::time::timeout(DAEMON_EXIT_TIMEOUT, child.wait()).await {
+            Ok(Ok(status)) => {
+                tracing::debug!(%status, "daemon stopped gracefully");
+                true
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Failed to wait for daemon: {}", e);
+                false
+            }
+            Err(_) => {
+                tracing::debug!("daemon did not exit after ClientStop; killing");
+                false
+            }
+        }
+    }
+
     /// Kill the daemon process immediately
     fn kill(&mut self) {
         if let Some(ref mut child) = self.child {
@@ -445,14 +479,55 @@ impl Drop for DaemonProcess {
     }
 }
 
-/// Send `ClientStop` on a fresh connection, returning the open stream so the
-/// caller can hold it while waiting for the daemon to exit.
-async fn request_stop(socket_path: &Path) -> std::io::Result<UnixStream> {
+/// Outcome of the graceful stop handshake.
+enum StopAck {
+    /// The daemon acknowledged with `DaemonExit` and is shutting down.
+    Exit(DaemonExitStatus),
+    /// The daemon rejected the stop request and will keep running.
+    Refused(String),
+    /// The connection closed without a `DaemonExit` reply.
+    Disconnected,
+}
+
+/// Perform the graceful stop handshake on a fresh connection.
+///
+/// Mirrors the reference client (`Cachix.Daemon.Client.stop`): send
+/// `ClientStop`, read replies until `DaemonExit`, an error, or EOF —
+/// skipping unrelated messages — then disconnect. Disconnecting promptly is
+/// load-bearing: after replying, the daemon waits up to 5s
+/// (`disconnectTimeoutUs` in `Cachix.Daemon`) for the stopping client to
+/// close its end before it exits.
+async fn request_stop(socket_path: &Path) -> std::io::Result<StopAck> {
     let msg = serde_json::to_string(&ClientMessage::ClientStop).map_err(std::io::Error::other)?;
     let mut stream = UnixStream::connect(socket_path).await?;
     stream.write_all(format!("{}\n", msg).as_bytes()).await?;
     stream.flush().await?;
-    Ok(stream)
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line).await? == 0 {
+            return Ok(StopAck::Disconnected);
+        }
+        let Ok(msg) = serde_json::from_str::<DaemonMessage>(&line) else {
+            tracing::warn!(line = %line.trim(), "unparseable daemon message during stop");
+            continue;
+        };
+        match DaemonReply::parse(&msg) {
+            DaemonReply::Exit(status) => return Ok(StopAck::Exit(status)),
+            DaemonReply::Error(DaemonErrorMessage::UnsupportedCommand(reason)) => {
+                return Ok(StopAck::Refused(reason));
+            }
+            DaemonReply::Error(DaemonErrorMessage::Unknown) => {
+                return Ok(StopAck::Refused("unknown daemon error".to_string()));
+            }
+            DaemonReply::Pong
+            | DaemonReply::PushEvent
+            | DaemonReply::DiagnosticsResult
+            | DaemonReply::Unknown => continue,
+        }
+    }
 }
 
 /// Combined daemon process and client.

@@ -15,6 +15,65 @@ pub struct DaemonMessage {
     pub contents: Value,
 }
 
+/// Daemon-to-client replies, parsed from a raw [`DaemonMessage`].
+///
+/// Mirrors `DaemonMessage` in `Cachix.Daemon.Protocol`. The push event
+/// stream keeps its dedicated parser ([`PushEvent`]); `PushEvent` here just
+/// marks the tag so control-connection readers can skip those messages.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DaemonReply {
+    Pong,
+    Exit(DaemonExitStatus),
+    Error(DaemonErrorMessage),
+    PushEvent,
+    DiagnosticsResult,
+    Unknown,
+}
+
+/// Exit status the daemon reports in its `DaemonExit` farewell message.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaemonExitStatus {
+    pub exit_code: i64,
+    #[serde(default)]
+    pub exit_message: Option<String>,
+}
+
+/// Error messages the daemon can send to the client.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DaemonErrorMessage {
+    /// The daemon rejected a command, e.g. `ClientStop` when remote stop is
+    /// disabled (`--no-remote-stop`).
+    UnsupportedCommand(String),
+    Unknown,
+}
+
+impl DaemonReply {
+    pub fn parse(msg: &DaemonMessage) -> DaemonReply {
+        match msg.tag.as_str() {
+            "DaemonPong" => DaemonReply::Pong,
+            "DaemonExit" => serde_json::from_value(msg.contents.clone())
+                .map(DaemonReply::Exit)
+                .unwrap_or(DaemonReply::Unknown),
+            "DaemonError" => DaemonReply::Error(DaemonErrorMessage::parse(&msg.contents)),
+            "DaemonPushEvent" => DaemonReply::PushEvent,
+            "DaemonDiagnosticsResult" => DaemonReply::DiagnosticsResult,
+            _ => DaemonReply::Unknown,
+        }
+    }
+}
+
+impl DaemonErrorMessage {
+    fn parse(contents: &Value) -> DaemonErrorMessage {
+        match contents.get("tag").and_then(Value::as_str) {
+            Some("UnsupportedCommand") => DaemonErrorMessage::UnsupportedCommand(scalar_string(
+                contents.get("contents").unwrap_or(&Value::Null),
+            )),
+            _ => DaemonErrorMessage::Unknown,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PushEventEnvelope {
     #[serde(rename = "eventTimestamp")]
@@ -333,5 +392,81 @@ mod tests {
         // `contents` key; pin the exact bytes so serde stays in step.
         let json = serde_json::to_string(&ClientMessage::ClientStop).unwrap();
         assert_eq!(json, r#"{"tag":"ClientStop"}"#);
+    }
+
+    fn parse_reply(json: serde_json::Value) -> DaemonReply {
+        let msg: DaemonMessage = serde_json::from_value(json).expect("DaemonMessage");
+        DaemonReply::parse(&msg)
+    }
+
+    #[test]
+    fn daemon_exit_clean() {
+        let reply = parse_reply(json!({
+            "tag": "DaemonExit",
+            "contents": { "exitCode": 0, "exitMessage": null },
+        }));
+        assert_eq!(
+            reply,
+            DaemonReply::Exit(DaemonExitStatus {
+                exit_code: 0,
+                exit_message: None,
+            })
+        );
+    }
+
+    #[test]
+    fn daemon_exit_with_message() {
+        let reply = parse_reply(json!({
+            "tag": "DaemonExit",
+            "contents": { "exitCode": 3, "exitMessage": "push failure" },
+        }));
+        assert_eq!(
+            reply,
+            DaemonReply::Exit(DaemonExitStatus {
+                exit_code: 3,
+                exit_message: Some("push failure".into()),
+            })
+        );
+    }
+
+    #[test]
+    fn daemon_error_unsupported_command() {
+        let reply = parse_reply(json!({
+            "tag": "DaemonError",
+            "contents": {
+                "tag": "UnsupportedCommand",
+                "contents": "Remote stop is disabled on this daemon",
+            },
+        }));
+        assert_eq!(
+            reply,
+            DaemonReply::Error(DaemonErrorMessage::UnsupportedCommand(
+                "Remote stop is disabled on this daemon".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn daemon_pong_no_contents() {
+        assert_eq!(
+            parse_reply(json!({ "tag": "DaemonPong" })),
+            DaemonReply::Pong
+        );
+    }
+
+    #[test]
+    fn daemon_reply_unknown_tag() {
+        assert_eq!(
+            parse_reply(json!({ "tag": "DaemonSomethingNew", "contents": [1, 2] })),
+            DaemonReply::Unknown
+        );
+    }
+
+    #[test]
+    fn daemon_exit_malformed_contents_yields_unknown() {
+        assert_eq!(
+            parse_reply(json!({ "tag": "DaemonExit", "contents": "nope" })),
+            DaemonReply::Unknown
+        );
     }
 }
