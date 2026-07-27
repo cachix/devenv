@@ -124,30 +124,26 @@ fn scalar_string(v: &Value) -> String {
     String::new()
 }
 
+/// Messages the client sends to the daemon.
+///
+/// Mirrors `ClientMessage` in `Cachix.Daemon.Protocol`. Serde's adjacent
+/// tagging matches Aeson's `TaggedObject` here: unit variants serialize as
+/// a bare `{"tag":...}` with no `contents` key.
 #[derive(Debug, Serialize)]
-pub struct ClientPushRequest {
-    pub tag: String,
-    pub contents: PushRequestContents,
+#[serde(tag = "tag", content = "contents")]
+pub enum ClientMessage {
+    ClientPushRequest(PushRequest),
+    /// Asks the daemon to shut down gracefully: it drains its push queue,
+    /// replies with `DaemonExit`, and exits. Honored when the daemon runs
+    /// with remote stop enabled (the default for `cachix daemon run`).
+    ClientStop,
 }
 
 #[derive(Debug, Serialize)]
-pub struct PushRequestContents {
-    #[serde(rename = "storePaths")]
+#[serde(rename_all = "camelCase")]
+pub struct PushRequest {
     pub store_paths: Vec<String>,
-    #[serde(rename = "subscribeToUpdates")]
     pub subscribe_to_updates: bool,
-}
-
-impl ClientPushRequest {
-    pub fn new(store_paths: Vec<String>, subscribe: bool) -> Self {
-        Self {
-            tag: "ClientPushRequest".to_string(),
-            contents: PushRequestContents {
-                store_paths,
-                subscribe_to_updates: subscribe,
-            },
-        }
-    }
 }
 
 #[cfg(test)]
@@ -319,12 +315,23 @@ mod tests {
 
     #[test]
     fn client_push_request_serializes_correctly() {
-        let req = ClientPushRequest::new(vec!["/nix/store/a".into(), "/nix/store/b".into()], true);
+        let req = ClientMessage::ClientPushRequest(PushRequest {
+            store_paths: vec!["/nix/store/a".into(), "/nix/store/b".into()],
+            subscribe_to_updates: true,
+        });
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
         assert_eq!(json["tag"], "ClientPushRequest");
         assert_eq!(json["contents"]["storePaths"][0], "/nix/store/a");
         assert_eq!(json["contents"]["storePaths"][1], "/nix/store/b");
         assert_eq!(json["contents"]["subscribeToUpdates"], true);
+    }
+
+    #[test]
+    fn client_stop_serializes_as_bare_tag() {
+        // Aeson's TaggedObject encodes nullary constructors without a
+        // `contents` key; pin the exact bytes so serde stays in step.
+        let json = serde_json::to_string(&ClientMessage::ClientStop).unwrap();
+        assert_eq!(json, r#"{"tag":"ClientStop"}"#);
     }
 }

@@ -13,13 +13,14 @@ use devenv_activity::{Activity, activity};
 use devenv_core::cachix::CACHIX_AUTH_TOKEN_ENV;
 use devenv_core::nix_log_bridge::extract_package_name;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
-use std::process::{Child, Stdio};
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
+use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, Notify};
 use uuid::Uuid;
 
@@ -138,7 +139,9 @@ pub trait BuildPathCallback: Send + Sync {
     async fn on_build_complete(&self, path: &str, success: bool) -> Result<()>;
 }
 
-use crate::cachix_protocol::{ClientPushRequest, DaemonMessage, PushEvent, PushEventEnvelope};
+use crate::cachix_protocol::{
+    ClientMessage, DaemonMessage, PushEvent, PushEventEnvelope, PushRequest,
+};
 
 /// Low-level socket client for daemon communication
 struct SocketClient {
@@ -174,7 +177,10 @@ impl SocketClient {
             return Ok(());
         }
 
-        let request = ClientPushRequest::new(paths, true);
+        let request = ClientMessage::ClientPushRequest(PushRequest {
+            store_paths: paths,
+            subscribe_to_updates: true,
+        });
         let json_str =
             serde_json::to_string(&request).context("Failed to serialize push request")?;
 
@@ -238,6 +244,8 @@ impl SocketClient {
 /// Kills the process on drop.
 pub struct DaemonProcess {
     child: Option<Child>,
+    /// Drains the daemon's stderr into `tracing`; ends at EOF.
+    stderr_task: Option<tokio::task::JoinHandle<()>>,
     socket_path: PathBuf,
 }
 
@@ -250,11 +258,12 @@ impl DaemonProcess {
 
         // Ensure parent directory exists for socket
         if let Some(parent) = config.socket_path.parent() {
-            std::fs::create_dir_all(parent)
+            tokio::fs::create_dir_all(parent)
+                .await
                 .context("Failed to create directory for daemon socket")?;
         }
 
-        let mut cmd = std::process::Command::new(&config.binary);
+        let mut cmd = Command::new(&config.binary);
         cmd.arg("daemon").arg("run");
         if config.dry_run {
             cmd.arg("--dry-run");
@@ -276,34 +285,27 @@ impl DaemonProcess {
             .spawn()
             .with_context(|| format!("Failed to spawn cachix daemon at {:?}", config.binary))?;
 
-        // Drain stderr in a background thread so daemon logs don't leak into the TUI.
-        if let Some(stderr) = child.stderr.take() {
-            std::thread::Builder::new()
-                .name("cachix-stderr".into())
-                .spawn(move || {
-                    use std::io::BufRead;
-                    let reader = std::io::BufReader::new(stderr);
-                    for line in reader.lines() {
-                        match line {
-                            Ok(line) => {
-                                tracing::debug!(target: "cachix_daemon", "{}", line);
-                            }
-                            Err(_) => break,
-                        }
-                    }
-                })
-                .expect("failed to spawn cachix-stderr thread");
-        }
+        // Drain stderr so daemon logs don't leak into the TUI.
+        let stderr_task = child.stderr.take().map(|stderr| {
+            tokio::spawn(async move {
+                let mut lines = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    tracing::debug!(target: "cachix_daemon", "{}", line);
+                }
+            })
+        });
 
-        let mut daemon = Self {
+        let daemon = Self {
             child: Some(child),
+            stderr_task,
             socket_path: config.socket_path.clone(),
         };
 
         // Wait for socket to become available
         if let Err(e) = daemon.wait_for_socket(Duration::from_secs(10)).await {
-            // Clean up on failure
-            daemon.kill();
+            // stop() rather than kill(): drains the remaining stderr, which
+            // holds the daemon's own account of why it never came up.
+            let _ = daemon.stop().await;
             return Err(e);
         }
 
@@ -335,42 +337,81 @@ impl DaemonProcess {
         &self.socket_path
     }
 
-    /// Stop the daemon gracefully.
+    /// Stop the daemon and drain its stderr, with bounded waits.
     ///
-    /// Waits for the process to exit, or kills it after timeout.
+    /// Asks the daemon to shut down via `ClientStop` first; SIGKILL after a
+    /// timeout.
     pub async fn stop(mut self) -> Result<()> {
         if let Some(mut child) = self.child.take() {
             tracing::info!("Stopping cachix daemon");
 
-            // Try graceful shutdown first - kill the process
-            // (In the future, could send ClientStop via socket)
-            let _ = child.kill();
-
-            // Wait for process to exit with timeout
-            let wait_result = tokio::time::timeout(Duration::from_secs(5), async {
-                loop {
-                    match child.try_wait() {
-                        Ok(Some(_)) => return Ok(()),
-                        Ok(None) => tokio::time::sleep(Duration::from_millis(100)).await,
-                        Err(e) => return Err(anyhow!("Failed to wait for daemon: {}", e)),
+            let exited =
+                match tokio::time::timeout(Duration::from_secs(1), request_stop(&self.socket_path))
+                    .await
+                {
+                    // Hold the stream open while waiting so the daemon's
+                    // `DaemonExit` reply doesn't hit a closed socket.
+                    Ok(Ok(_stream)) => {
+                        match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
+                            Ok(Ok(status)) => {
+                                tracing::debug!(%status, "daemon stopped gracefully");
+                                true
+                            }
+                            Ok(Err(e)) => {
+                                tracing::warn!("Failed to wait for daemon: {}", e);
+                                false
+                            }
+                            Err(_) => {
+                                tracing::debug!("daemon did not exit after ClientStop; killing");
+                                false
+                            }
+                        }
                     }
-                }
-            })
-            .await;
+                    Ok(Err(e)) => {
+                        tracing::debug!(error = %e, "could not request graceful stop");
+                        false
+                    }
+                    Err(_) => {
+                        tracing::debug!("timeout requesting graceful stop");
+                        false
+                    }
+                };
 
-            match wait_result {
-                Ok(Ok(())) => tracing::debug!("Daemon stopped"),
-                Ok(Err(e)) => tracing::warn!("Error stopping daemon: {}", e),
-                Err(_) => tracing::warn!("Timeout waiting for daemon to stop"),
+            if !exited {
+                let _ = child.start_kill();
+                match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
+                    Ok(Ok(status)) => tracing::debug!(%status, "daemon stopped"),
+                    Ok(Err(e)) => tracing::warn!("Failed to wait for daemon: {}", e),
+                    Err(_) => tracing::warn!("Timeout waiting for daemon to stop"),
+                }
             }
         }
+
+        if let Some(task) = self.stderr_task.take() {
+            // The pipe hits EOF once the daemon exits, so the drain task
+            // finishes on its own; bound the wait in case a grandchild
+            // inherited the write end and keeps it open.
+            let abort = task.abort_handle();
+            if tokio::time::timeout(Duration::from_secs(1), task)
+                .await
+                .is_err()
+            {
+                abort.abort();
+                tracing::debug!("Timeout draining daemon stderr");
+            }
+        }
+
         Ok(())
     }
 
     /// Kill the daemon process immediately
     fn kill(&mut self) {
         if let Some(ref mut child) = self.child {
-            let _ = child.kill();
+            // Signals only; the runtime's orphan queue reaps the process.
+            let _ = child.start_kill();
+        }
+        if let Some(task) = self.stderr_task.take() {
+            task.abort();
         }
     }
 }
@@ -379,6 +420,16 @@ impl Drop for DaemonProcess {
     fn drop(&mut self) {
         self.kill();
     }
+}
+
+/// Send `ClientStop` on a fresh connection, returning the open stream so the
+/// caller can hold it while waiting for the daemon to exit.
+async fn request_stop(socket_path: &Path) -> std::io::Result<UnixStream> {
+    let msg = serde_json::to_string(&ClientMessage::ClientStop).map_err(std::io::Error::other)?;
+    let mut stream = UnixStream::connect(socket_path).await?;
+    stream.write_all(format!("{}\n", msg).as_bytes()).await?;
+    stream.flush().await?;
+    Ok(stream)
 }
 
 /// Combined daemon process and client.
