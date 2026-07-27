@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv mcp` risking a stack-overflow crash while indexing packages and options in the background; the indexing now runs with the large stack Nix evaluation requires and is interrupted when the server exits instead of delaying shutdown.
 - Fixed SecretSpec providers such as SOPS being unavailable from the bundled CLI by enabling SecretSpec's default provider features.
 - Fixed the SecretSpec profile and provider selected in `devenv.yaml` only applying while evaluating `devenv.nix`. devenv now exports the resolved values as `SECRETSPEC_PROFILE` and `SECRETSPEC_PROVIDER` in the development shell, so `secretspec run` and other SecretSpec commands use the same configuration. The matching `secretspec` CLI is now included in the devenv package instead of requiring a separate installation. SecretSpec was bumped to 0.17.0.
 - Fixed the Nushell hook failing to deactivate the environment when `cd`-ing out of a project. Nushell's `exit` cannot terminate a shell from an environment-change hook: it reported "Exit doesn't catch internally" and left the hook-spawned shell running. The hook now terminates that shell so the parent hook can resume and follow `.devenv/exit-dir` ([#3033](https://github.com/cachix/devenv/issues/3033)).

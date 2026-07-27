@@ -499,67 +499,79 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
     let init_server = server.clone();
     let init_handle = std::thread::Builder::new()
         .name("mcp-cache-init".into())
+        .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
         .spawn(move || {
-            let rt =
-                tokio::runtime::Runtime::new().expect("Failed to create runtime for MCP cache");
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create runtime for MCP cache");
             rt.block_on(async move {
                 if let Err(e) = init_server.initialize().await {
                     warn!("Failed to initialize MCP cache: {}", e);
                 }
             });
         })
-        .expect("Failed to spawn MCP cache init thread");
+        .map_err(|e| miette!("Failed to spawn MCP cache init thread: {}", e))?;
 
-    match http_port {
-        Some(port) => {
-            info!("Starting MCP server in HTTP mode on port {}", port);
+    // Errors are held until the init thread is joined, so no path detaches it.
+    let serve_result: Result<()> = async {
+        match http_port {
+            Some(port) => {
+                info!("Starting MCP server in HTTP mode on port {}", port);
 
-            let service = StreamableHttpService::new(
-                move || Ok(server.clone()),
-                LocalSessionManager::default().into(),
-                Default::default(),
-            );
+                let service = StreamableHttpService::new(
+                    move || Ok(server.clone()),
+                    LocalSessionManager::default().into(),
+                    Default::default(),
+                );
 
-            let router = axum::Router::new().fallback_service(service);
-            let addr = format!("0.0.0.0:{}", port);
-            let tcp_listener = tokio::net::TcpListener::bind(&addr)
-                .await
-                .map_err(|e| miette!("Failed to bind to {}: {}", addr, e))?;
+                let router = axum::Router::new().fallback_service(service);
+                let addr = format!("0.0.0.0:{}", port);
+                let tcp_listener = tokio::net::TcpListener::bind(&addr)
+                    .await
+                    .map_err(|e| miette!("Failed to bind to {}: {}", addr, e))?;
 
-            info!("MCP server ready at http://{}/", addr);
+                info!("MCP server ready at http://{}/", addr);
 
-            // Show TUI progress for HTTP server
-            let _activity = devenv_activity::start!(
-                Activity::operation("Running MCP server")
-                    .detail(format!("http://0.0.0.0:{}/", port))
-            );
+                // Show TUI progress for HTTP server
+                let _activity = devenv_activity::start!(
+                    Activity::operation("Running MCP server")
+                        .detail(format!("http://0.0.0.0:{}/", port))
+                );
 
-            axum::serve(tcp_listener, router)
-                .with_graceful_shutdown(async {
-                    tokio::signal::ctrl_c().await.ok();
-                })
-                .await
-                .map_err(|e| miette!("HTTP server error: {}", e))?;
+                axum::serve(tcp_listener, router)
+                    .with_graceful_shutdown(async {
+                        tokio::signal::ctrl_c().await.ok();
+                    })
+                    .await
+                    .map_err(|e| miette!("HTTP server error: {}", e))?;
+            }
+            None => {
+                info!("Starting MCP server in stdio mode");
+
+                let service = server
+                    .serve(rmcp::transport::stdio())
+                    .await
+                    .map_err(|e| miette!("Failed to start MCP server: {}", e))?;
+
+                service
+                    .waiting()
+                    .await
+                    .map_err(|e| miette!("MCP server error: {}", e))?;
+            }
         }
-        None => {
-            info!("Starting MCP server in stdio mode");
-
-            let service = server
-                .serve(rmcp::transport::stdio())
-                .await
-                .map_err(|e| miette!("Failed to start MCP server: {}", e))?;
-
-            service
-                .waiting()
-                .await
-                .map_err(|e| miette!("MCP server error: {}", e))?;
-        }
+        Ok(())
     }
+    .await;
 
-    // Wait for the init thread to finish before exiting.
-    init_handle
-        .join()
-        .map_err(|e| miette!("MCP cache init thread panicked: {:?}", e))?;
+    devenv_nix_backend::trigger_interrupt();
+
+    let init_result = tokio::task::spawn_blocking(move || init_handle.join())
+        .await
+        .map_err(|e| miette!("Failed to join MCP cache init thread: {}", e))?;
+
+    serve_result?;
+    init_result.map_err(|e| miette!("MCP cache init thread panicked: {:?}", e))?;
 
     Ok(())
 }
