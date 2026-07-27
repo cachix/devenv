@@ -53,7 +53,7 @@ pub trait ActivityStart: Sized {
 
     /// Start the activity, creating a tracing span.
     ///
-    /// Prefer the [`start!`] macro which expands the span at the call site,
+    /// Prefer the [`crate::start!`] macro which expands the span at the call site,
     /// giving correct `code.file.path` / `code.module.name` metadata.
     /// This method exists for use inside other macros that already handle
     /// span creation (e.g. `activity!`, `#[instrument_activity]`).

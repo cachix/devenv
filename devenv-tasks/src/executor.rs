@@ -42,6 +42,12 @@ impl<'a> ExecutionContext<'a> {
 
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
+        // Cancellation signals the entire command tree with killpg(child_pid).
+        // Make the spawned command the leader of that process group so the
+        // signal reaches both the task script and any children it started.
+        #[cfg(unix)]
+        command.process_group(0);
+
         if let Some(cwd) = self.cwd {
             command.current_dir(cwd);
         }

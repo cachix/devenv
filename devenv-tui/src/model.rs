@@ -164,6 +164,10 @@ pub struct UiState {
     pub view_options: ViewOptions,
     pub terminal_size: TerminalSize,
     pub interrupt_prompt_active: bool,
+    /// When the interrupt prompt is open while attached to a running process
+    /// manager: the prompt offers detach (leave running) vs stop the manager,
+    /// rather than the in-process "keep running vs quit".
+    pub interrupt_prompt_attached: bool,
     pub view_mode: ViewMode,
 }
 
@@ -189,6 +193,7 @@ impl UiState {
             },
             terminal_size: TerminalSize { width, height },
             interrupt_prompt_active: false,
+            interrupt_prompt_attached: false,
             view_mode: ViewMode::Main,
         }
     }
@@ -198,16 +203,24 @@ impl UiState {
         self.terminal_size = TerminalSize { width, height };
     }
 
-    pub fn show_interrupt_prompt(&mut self) {
+    pub fn show_interrupt_prompt(&mut self, attached: bool) {
         self.interrupt_prompt_active = true;
+        self.interrupt_prompt_attached = attached;
     }
 
     pub fn clear_interrupt_prompt(&mut self) {
         self.interrupt_prompt_active = false;
+        self.interrupt_prompt_attached = false;
     }
 
     pub fn interrupt_prompt_active(&self) -> bool {
         self.interrupt_prompt_active
+    }
+
+    /// Whether the open interrupt prompt is the attached-mode (detach vs stop)
+    /// variant.
+    pub fn interrupt_prompt_attached(&self) -> bool {
+        self.interrupt_prompt_attached
     }
 
     /// Toggle the `hide_stopped_processes` filter.
@@ -1217,14 +1230,14 @@ impl ActivityModel {
         match (&activity.variant, &activity.state) {
             (
                 ActivityVariant::Process(ProcessActivity {
-                    status: ProcessStatus::Stopped,
+                    status: ProcessStatus::Stopped | ProcessStatus::Exited,
                     ..
                 }),
                 NixActivityState::Completed { success: false, .. },
             ) => false,
             (
                 ActivityVariant::Process(ProcessActivity {
-                    status: ProcessStatus::Stopped,
+                    status: ProcessStatus::Stopped | ProcessStatus::Exited,
                     ..
                 }),
                 _,
@@ -1304,8 +1317,15 @@ impl ActivityModel {
                     if proc.status.is_active() {
                         summary.running_processes += 1;
                         summary.total_processes += 1;
-                    } else if matches!(proc.status, ProcessStatus::Stopped) {
-                        if !matches!(state, NixActivityState::Completed { success: false, .. }) {
+                    } else if matches!(
+                        proc.status,
+                        ProcessStatus::Stopped | ProcessStatus::Exited | ProcessStatus::GaveUp
+                    ) {
+                        if proc.status.is_failed()
+                            || matches!(state, NixActivityState::Completed { success: false, .. })
+                        {
+                            summary.failed_processes += 1;
+                        } else {
                             summary.stopped_processes += 1;
                         }
                         summary.total_processes += 1;
@@ -1581,10 +1601,15 @@ pub struct ActivitySummary {
     pub completed_tasks: usize,
     pub failed_tasks: usize,
     pub running_processes: usize,
+    /// Explicitly stopped or exited processes that are eligible for the
+    /// hide-stopped filter.
     pub stopped_processes: usize,
-    /// Process activities the summary bar tracks: active plus stopped
-    /// (including failed-stopped). Excludes `NotStarted`, so a shell that
-    /// only has disabled-autostart processes renders nothing in the bar.
+    /// Terminal process failures (currently `GaveUp`, plus legacy failed
+    /// completions). These remain visible when stopped processes are hidden.
+    pub failed_processes: usize,
+    /// Process activities the summary bar tracks: active, stopped, and failed.
+    /// Excludes `NotStarted`, so a shell that only has disabled-autostart
+    /// processes renders nothing in the bar.
     /// `running_processes` is a live gauge (can go down); this is a
     /// snapshot count of tracked processes, not cumulative progress.
     pub total_processes: usize,
@@ -1644,7 +1669,7 @@ mod tests {
 
         assert!(!ui.interrupt_prompt_active());
 
-        ui.show_interrupt_prompt();
+        ui.show_interrupt_prompt(false);
         assert!(ui.interrupt_prompt_active());
 
         ui.clear_interrupt_prompt();
@@ -1789,5 +1814,71 @@ mod tests {
             2,
             "both clean stops are hidden under the Running processes parent"
         );
+    }
+
+    #[test]
+    fn process_phase_summary_and_filter_matrix_preserves_gave_up() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        let statuses = [
+            ProcessStatus::NotStarted,
+            ProcessStatus::Waiting,
+            ProcessStatus::Starting,
+            ProcessStatus::Running,
+            ProcessStatus::Ready,
+            ProcessStatus::Restarting,
+            ProcessStatus::Stopping,
+            ProcessStatus::Stopped,
+            ProcessStatus::Exited,
+            ProcessStatus::GaveUp,
+        ];
+        for (offset, status) in statuses.into_iter().enumerate() {
+            let id = offset as u64 + 1;
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: format!("{status:?}"),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+            model.apply_activity_event(ActivityEvent::Process(Process::Status {
+                id,
+                status,
+                timestamp: Timestamp::now(),
+            }));
+        }
+
+        let summary = model.calculate_summary();
+        assert_eq!(summary.running_processes, 6);
+        assert_eq!(summary.stopped_processes, 2);
+        assert_eq!(summary.failed_processes, 1);
+        assert_eq!(summary.total_processes, 9);
+
+        ui_state.hide_stopped_processes = true;
+        let visible: HashSet<_> = model
+            .get_display_activities(&ui_state)
+            .into_iter()
+            .map(|display| display.activity.name)
+            .collect();
+        assert!(!visible.contains("Stopped"));
+        assert!(!visible.contains("Exited"));
+        assert!(
+            visible.contains("GaveUp"),
+            "GaveUp is a failure, not an ordinary hidden stop"
+        );
+        assert!(visible.contains("NotStarted"));
     }
 }

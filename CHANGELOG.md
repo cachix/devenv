@@ -1,6 +1,6 @@
 # Changelog
 
-## X.Y.Z (unreleased)
+## 2.2 (unreleased)
 
 ### Bug Fixes
 
@@ -51,6 +51,17 @@
 - Fixed unfree package errors suggesting only generic Nix/NixOS configuration. They now point devenv users to `allow_unfree: true` or `nixpkgs.permitted_unfree_packages` in `devenv.yaml` ([#2850](https://github.com/cachix/devenv/issues/2850)).
 - Fixed `devenv shell` failing outright with a SQLite `disk I/O error` on filesystems that don't support shared-memory mmap (seen on virtiofs/9p VM mounts and similar). The eval cache and task cache databases now fall back to a plain rollback-journal mode on these filesystems instead of hard-crashing ([#2947](https://github.com/cachix/devenv/issues/2947)).
 - Fixed failure diagnostics being buried in evaluation output in non-TUI mode. A failing evaluation no longer replays potentially many parsed evaluation progress logs, such as `evaluating file …`, after the error, and `devenv-run-tests` now reports test failures after the diagnostic output instead of racing it.
+- Fixed lifecycle races in the native process manager: a process being relaunched could be started twice, leaving an orphaned copy that kept its port bound but no longer appeared in `devenv processes list`; a process whose dependency could not be satisfied vanished from the list instead of showing as stopped; and a relaunched process that had previously failed left its dependents permanently blocked on the stale failure.
+- Fixed `devenv processes wait` hanging forever when a process is waiting on a dependency that is stopped or not started.
+- Fixed `devenv up -d` silently scheduling processes into another terminal's foreground `devenv up` session; it now asks you to attach with plain `devenv up` or stop the session first.
+- Fixed `devenv up` attaching to a running process manager and then blocking, with no way to interrupt it, when run under an AI coding agent or with piped output. It now attaches only at an interactive terminal and otherwise reports that processes are already running.
+- Fixed `devenv processes wait` returning before a process was up when that process was waiting on a one-shot setup task (e.g. a migration) that was still running; a running setup task now counts as in progress.
+- Fixed detaching from a running native process manager completing the attached process activities in the client TUI even though the daemon-owned processes were still alive. Attached rows are now non-owning proxies, and self-exited and crash-loop-exhausted processes retain distinct `exited` and `gave up` states.
+- Fixed two concurrent cold `devenv up -d` invocations racing to spawn separate native managers for the same project, which could orphan the losing daemon and its children. Daemon startup is now serialized until one manager publishes its PID, after which the other invocation attaches normally.
+- Fixed dynamically discovered process dependency closures remaining pending forever when an unseen one-shot failed or shutdown cancelled it. Terminal failure and cancellation now propagate through the retained graph, and task cancellation reliably terminates the task's whole subprocess group.
+- Fixed a process that exited on its own and was then explicitly stopped still showing as exited (and counting as succeeded in run summaries) instead of stopped.
+- Fixed `devenv up` with no arguments not starting a process whose configuration omits `start.enable`, even though it defaults to enabled and `devenv up <name>` would start it.
+- Fixed a process that exits on its own (a crash, or a one-shot that runs to completion with no restart) continuing to show as `running` in the `devenv up` TUI after it had stopped; it now shows as exited, while an exhausted crash loop shows as failed.
 
 ### Improvements
 
@@ -78,6 +89,10 @@
 - `devenv --from <source> allow` now binds a directory to an out-of-tree source, so you can use a devenv without a local `devenv.nix`. Every subsequent `devenv` command in that directory then loads its configuration from `<source>` without repeating `--from`, and the shell hook auto-activates the environment on `cd` just as it does for a local project.
 - `--from path:<dir>` sources now load their full configuration: the source's `devenv.yaml` (inputs and imports, including sibling imports within its git repository) is merged, and its modules are imported from the live directory so edits apply immediately without re-fetching.
 - `devenv --from <source> --profile <name> allow` also persists the profiles, so every subsequent command in the bound directory activates them automatically; explicit `--profile` flags still take priority.
+- `devenv up` now attaches to an already-running process manager (started by `devenv up -d`) instead of failing with "Processes already running". It streams status, ports, and logs over the control socket, honours the positional process subset (e.g. `devenv up foo`) and `after`/`before` ordering, says when it has attached, and on Ctrl-C prompts to either detach (leave processes running) or stop the whole manager ([#971](https://github.com/cachix/devenv/issues/971)).
+- Added `devenv processes attach` to attach to running processes and stream their status, ports, and logs until Ctrl-C, leaving them running (native process manager only).
+- `devenv processes start <name>` and `devenv up <name>` now share the same dependency-aware launch path: `after`/`before` ordering is honoured, explicitly named processes always start (even with `processes.<name>.start.enable = false`), unknown names fail with guidance, and starting a subset registers the full process set so a later start of another process is accepted. When no manager is running, a named start cold-starts one in the background (same as `devenv up -d <name>`) ([#2930](https://github.com/cachix/devenv/issues/2930)).
+- Process port listings now include ports derived from `listen` readiness probes, not just explicitly declared ports, in both the TUI and `devenv processes list`.
 
 ### Breaking Changes
 

@@ -8,7 +8,7 @@ use devenv::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
     },
-    commands,
+    commands, is_ai_agent,
     processes::ProcessCommand,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
     tracing as devenv_tracing,
@@ -22,7 +22,7 @@ use std::{
     os, panic,
     path::{Path, PathBuf},
     process::{self, Command},
-    sync::{Arc, OnceLock},
+    sync::Arc,
     time::Duration,
 };
 use tempfile::TempDir;
@@ -528,6 +528,7 @@ impl Renderer {
         backend_done_rx: tokio::sync::oneshot::Receiver<()>,
         command_tx: tokio::sync::mpsc::Sender<ProcessCommand>,
         verbosity: VerbosityLevel,
+        attached: Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<u16> {
         match self {
             Renderer::Tui(activity_rx) => {
@@ -539,6 +540,7 @@ impl Renderer {
                 current_thread_runtime("TUI")?.block_on(async {
                     Ok(devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                         .with_command_sender(command_tx)
+                        .with_attached_flag(attached)
                         .filter_level(filter_level)
                         .run(backend_done_rx)
                         .await
@@ -647,8 +649,13 @@ fn run(
         command_tx,
     } = render_side;
 
+    // Shared with the TUI: the backend sets this true while attached to a
+    // running process manager, so the Ctrl-C prompt offers detach vs stop.
+    let attached = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
     // Backend on dedicated thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
+    let attached_backend = attached.clone();
     let devenv_thread = std::thread::Builder::new()
         .name("devenv".into())
         .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
@@ -656,8 +663,14 @@ fn run(
             build_gc_runtime().block_on(async {
                 shutdown_clone.install_signals().await;
 
-                let output =
-                    run_backend(backend, shutdown_clone.clone(), backend_side, caller).await;
+                let output = run_backend(
+                    backend,
+                    shutdown_clone.clone(),
+                    backend_side,
+                    caller,
+                    attached_backend,
+                )
+                .await;
 
                 // Fallback for paths that didn't run cleanup themselves
                 // (PTY shell, REPL). No-op when run_backend already did it.
@@ -669,7 +682,8 @@ fn run(
         .into_diagnostic()
         .wrap_err("Failed to spawn devenv thread")?;
 
-    let tui_render_height = renderer.drive(&shutdown, backend_done_rx, command_tx, verbosity)?;
+    let tui_render_height =
+        renderer.drive(&shutdown, backend_done_rx, command_tx, verbosity, attached)?;
 
     // Signal backend that terminal is available (with TUI render height for cursor positioning)
     let _ = terminal_ready_tx.send(tui_render_height);
@@ -723,6 +737,7 @@ async fn run_backend(
     shutdown: Arc<Shutdown>,
     side: BackendSide,
     caller: Caller,
+    attached: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<CommandResult> {
     let BackendSide {
         backend_done_tx,
@@ -745,7 +760,8 @@ async fn run_backend(
     // `backend_done_tx` is the renderer's stop signal: send at the right
     // point, or — on early return / panic — its drop closes the channel,
     // which the renderer also treats as "stop". No guard needed.
-    let devenv = Devenv::new(devenv_options).await?;
+    let mut devenv = Devenv::new(devenv_options).await?;
+    devenv.set_attach_indicator(attached);
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd, args } = command {
@@ -1034,7 +1050,37 @@ async fn dispatch_command(
             ProcessesCommand::Start {
                 name: Some(name), ..
             } => {
-                devenv.processes_start(&name).await?;
+                if devenv.native_manager_running().await || devenv.processes_pid().exists() {
+                    // A process-compose PID must also take the control-command
+                    // path: `processes_start` then reports that named starts
+                    // require the native manager. Treating it like "no manager"
+                    // would attempt a second cold `up -d` and disturb the
+                    // already-running process-compose session.
+                    devenv.processes_start(&name).await?;
+                    Ok(CommandResult::Done)
+                } else {
+                    // No manager yet: cold-start one in the background
+                    // launching only this process, exactly like
+                    // `devenv up -d <name>`.
+                    let options = devenv::ProcessOptions {
+                        detach: true,
+                        log_to_file: true,
+                        strict_ports: config_strict_ports,
+                        command_rx,
+                        daemon: true,
+                    };
+                    run_up(
+                        devenv,
+                        vec![name],
+                        devenv::tasks::RunMode::Before,
+                        options,
+                        verbosity,
+                    )
+                    .await
+                }
+            }
+            ProcessesCommand::Attach {} => {
+                devenv.attach(command_rx).await?;
                 Ok(CommandResult::Done)
             }
             ProcessesCommand::Down {} | ProcessesCommand::Stop { name: None } => {
@@ -1336,25 +1382,6 @@ fn prompt_secrets(
 }
 
 // Logging helpers
-
-/// Detect whether we are running inside an AI coding agent.
-///
-/// LLM tools typically allocate a PTY so is_terminal() returns true,
-/// but their verbose TUI output wastes tokens. We use the `detect-coding-agent`
-/// crate to recognize well-known AI agents (Claude Code, Cursor, Aider, ...) from
-/// their environment variables.
-///
-/// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
-/// even when running under a detected agent).
-fn is_ai_agent() -> bool {
-    static CACHED: OnceLock<bool> = OnceLock::new();
-    *CACHED.get_or_init(|| {
-        if env::var_os("DEVENV_NO_AI_AGENT").is_some() {
-            return false;
-        }
-        detect_coding_agent::is_agent()
-    })
-}
 
 /// Resolve `--quiet`/`--verbose` (with AI-agent auto-quiet) into a `VerbosityLevel`.
 fn resolve_verbosity(cli_options: &CliOptions) -> VerbosityLevel {

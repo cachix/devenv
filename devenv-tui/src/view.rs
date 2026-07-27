@@ -165,6 +165,7 @@ pub fn view(
             can_go_up,
             can_go_down,
             interrupt_prompt_active: ui_state.interrupt_prompt_active(),
+            interrupt_prompt_attached: ui_state.interrupt_prompt_attached(),
             hide_stopped_processes: ui_state.hide_stopped_processes,
         })) {
             SummaryView
@@ -696,6 +697,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 ProcessStatus::Stopping => "stopping".into(),
                 ProcessStatus::Stopped if *completed == Some(false) => "failed".into(),
                 ProcessStatus::Stopped => "stopped".into(),
+                ProcessStatus::Exited if *completed == Some(false) => "failed".into(),
+                ProcessStatus::Exited => "exited".into(),
+                ProcessStatus::GaveUp => "gave up (crash loop)".into(),
             };
 
             // Format ports: extract just the port numbers for brevity
@@ -747,7 +751,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // Show logs: always show LOG_VIEWPORT_SHOW_OUTPUT lines,
             // expand when selected, show more when failed
-            let process_failed = *completed == Some(false);
+            let process_failed = *completed == Some(false) || process_data.status.is_failed();
             if logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_depth(*depth)
@@ -943,6 +947,7 @@ struct SummaryViewContext {
     can_go_up: bool,
     can_go_down: bool,
     interrupt_prompt_active: bool,
+    interrupt_prompt_attached: bool,
     hide_stopped_processes: bool,
 }
 
@@ -963,6 +968,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         can_go_up,
         can_go_down,
         interrupt_prompt_active,
+        interrupt_prompt_attached,
         hide_stopped_processes,
     } = ctx;
     let selected = selected.as_ref();
@@ -970,9 +976,41 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let can_go_up = *can_go_up;
     let can_go_down = *can_go_down;
     let interrupt_prompt_active = *interrupt_prompt_active;
+    let interrupt_prompt_attached = *interrupt_prompt_attached;
     let hide_stopped_processes = *hide_stopped_processes;
 
     if interrupt_prompt_active {
+        if interrupt_prompt_attached {
+            // Attached to a running manager: Ctrl-C detaches (leaves processes
+            // running), `s` stops the whole manager, Esc keeps watching.
+            let prompt_text = if terminal_width < 60 {
+                "Detach?"
+            } else if terminal_width < 100 {
+                "Detach or stop the manager?"
+            } else {
+                "Detach or stop the process manager?"
+            };
+            let compact = terminal_width < 84;
+            return element!(View(
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                width: 100pct
+            ) {
+                View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    Text(content: prompt_text, color: Color::Yellow, weight: Weight::Bold)
+                }
+                View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
+                    Text(content: "Ctrl-C", color: COLOR_INTERACTIVE)
+                    Text(content: if compact { ":detach " } else { " detach • " })
+                    Text(content: "s", color: COLOR_INTERACTIVE)
+                    Text(content: if compact { ":stop " } else { " stop manager • " })
+                    Text(content: "Esc", color: COLOR_INTERACTIVE)
+                    Text(content: if compact { ":watch" } else { " keep watching" })
+                }
+            })
+            .into_any();
+        }
+
         // Pick prompt verbosity so the prompt plus the (non-shrinking) key hints
         // fit within the terminal width. The full hints occupy ~39 columns, so
         // the long prompt only fits comfortably on wide terminals.
@@ -1017,6 +1055,10 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let is_stoppable = matches!(
         selected,
         Some(a) if matches!(&a.variant, ActivityVariant::Process(p) if p.status.is_stoppable())
+    );
+    let is_restartable = matches!(
+        selected,
+        Some(a) if matches!(&a.variant, ActivityVariant::Process(p) if p.status.is_restartable())
     );
 
     // Determine display mode based on terminal width
@@ -1267,11 +1309,13 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                     help_children.push(element!(Text(content: " stop process • ")).into_any());
                 }
             }
-            help_children.push(element!(Text(content: if use_short_text { "^R" } else { "Ctrl-R" }, color: COLOR_INTERACTIVE)).into_any());
-            if use_short_text {
-                help_children.push(element!(Text(content: " restart ")).into_any());
-            } else {
-                help_children.push(element!(Text(content: " (re)start process • ")).into_any());
+            if is_restartable {
+                help_children.push(element!(Text(content: if use_short_text { "^R" } else { "Ctrl-R" }, color: COLOR_INTERACTIVE)).into_any());
+                if use_short_text {
+                    help_children.push(element!(Text(content: " restart ")).into_any());
+                } else {
+                    help_children.push(element!(Text(content: " (re)start process • ")).into_any());
+                }
             }
         }
         if show_hide_toggle {
@@ -1355,6 +1399,7 @@ mod tests {
             can_go_up: false,
             can_go_down: false,
             interrupt_prompt_active,
+            interrupt_prompt_attached: false,
             hide_stopped_processes,
         }
     }
@@ -1644,6 +1689,96 @@ mod tests {
         assert!(
             rendered.contains("1 process"),
             "running count should still surface: {rendered}"
+        );
+    }
+
+    #[test]
+    fn process_view_renders_every_status_label_and_gave_up_affordance() {
+        let mut model = ActivityModel::default();
+        let mut ui_state = UiState::new();
+        ui_state.set_terminal_size(160, 30);
+
+        model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
+            id: 100,
+            name: "Running processes".to_string(),
+            parent: None,
+            detail: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        for (offset, (name, status)) in [
+            ("not-started", ProcessStatus::NotStarted),
+            ("waiting", ProcessStatus::Waiting),
+            ("starting", ProcessStatus::Starting),
+            ("running", ProcessStatus::Running),
+            ("ready", ProcessStatus::Ready),
+            ("restarting", ProcessStatus::Restarting),
+            ("stopping", ProcessStatus::Stopping),
+            ("stopped", ProcessStatus::Stopped),
+            ("exited", ProcessStatus::Exited),
+            ("gave-up", ProcessStatus::GaveUp),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let id = offset as u64 + 1;
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: Some(100),
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+            model.apply_activity_event(ActivityEvent::Process(Process::Status {
+                id,
+                status,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        ui_state.selected_activity = Some(10);
+
+        let display_activities = model.get_display_activities(&ui_state);
+        let mut element: AnyElement<'static> = view(
+            &model,
+            &ui_state,
+            RenderContext::Normal,
+            Some(ScrollState {
+                handle: None,
+                display_activities,
+            }),
+            false,
+        )
+        .into();
+        let rendered = element.render(Some(160)).to_string();
+
+        for label in [
+            "auto start off",
+            "waiting",
+            "starting",
+            "running",
+            "ready",
+            "restarting",
+            "stopping",
+            "stopped",
+            "exited",
+            "gave up (crash loop)",
+        ] {
+            assert!(
+                rendered.contains(label),
+                "missing process label {label:?}: {rendered}"
+            );
+        }
+        assert!(
+            rendered.contains("(re)start process"),
+            "GaveUp must remain restartable: {rendered}"
+        );
+        assert!(
+            !rendered.contains("stop process"),
+            "GaveUp is terminal and must not offer stop: {rendered}"
         );
     }
 }

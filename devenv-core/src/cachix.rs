@@ -120,10 +120,10 @@ impl CachixManager {
     /// Get Nix settings (--option flags) needed for Cachix substituters
     ///
     /// Returns a HashMap where keys are Nix option names and values are the option values.
-    /// For example: "extra-substituters" => "https://cache1.cachix.org https://cache2.cachix.org"
+    /// For example: `"extra-substituters" => "https://cache1.cachix.org https://cache2.cachix.org"`
     ///
     /// Note: This returns substituters and keys but NOT netrc-file. The
-    /// netrc-file path is carried on [`StoreSettings`] (see
+    /// netrc-file path is carried on [`crate::StoreSettings`] (see
     /// [`CachixManager::store_settings`]) and applied to the Nix settings
     /// registry before the store opens.
     pub async fn get_nix_settings(
