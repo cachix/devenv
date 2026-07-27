@@ -20,6 +20,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
 use std::future::Future;
 use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::{debug, trace, warn};
@@ -619,7 +620,7 @@ impl CachedEval {
         inputs: Vec<Input>,
         eval_start: SystemTime,
     ) {
-        if any_input_modified_after(&inputs, eval_start) {
+        if any_input_modified_after(&inputs, eval_start).await {
             debug!(
                 key_hash = %key.key_hash,
                 attr_name = %key.attr_name,
@@ -726,16 +727,38 @@ impl CachedEval {
 /// Re-stats each file rather than reading the snapshot's `modified_at`, which
 /// is truncated to second precision; we want sub-second precision to catch
 /// fast writes within the same wall-clock second as eval start.
-fn any_input_modified_after(inputs: &[Input], threshold: SystemTime) -> bool {
-    inputs.iter().any(|input| {
-        let Input::File(desc) = input else {
-            return false;
-        };
-        match std::fs::metadata(&desc.path).and_then(|m| m.modified()) {
-            Ok(mtime) => mtime > threshold,
-            Err(_) => false,
-        }
+async fn any_input_modified_after(inputs: &[Input], threshold: SystemTime) -> bool {
+    let paths: Vec<PathBuf> = inputs
+        .iter()
+        .filter_map(|input| match input {
+            Input::File(desc) => Some(desc.path.clone()),
+            Input::Env(_) => None,
+        })
+        .collect();
+
+    if paths.is_empty() {
+        return false;
+    }
+
+    let result = tokio::task::spawn_blocking(move || {
+        paths.iter().any(
+            |path| match std::fs::metadata(path).and_then(|m| m.modified()) {
+                Ok(mtime) => mtime > threshold,
+                Err(_) => false,
+            },
+        )
     })
+    .await;
+
+    match result {
+        Ok(modified) => modified,
+        Err(e) => {
+            // Without the stats we can't rule out a mid-eval write, and skipping
+            // a store is cheaper than caching a stale result.
+            trace!(error = %e, "task join error");
+            true
+        }
+    }
 }
 
 // =============================================================================
@@ -1432,8 +1455,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_any_input_modified_after_detects_post_threshold_mtime() {
+    #[tokio::test]
+    async fn test_any_input_modified_after_detects_post_threshold_mtime() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("f.txt");
         std::fs::write(&file_path, "x").unwrap();
@@ -1450,11 +1473,11 @@ mod tests {
         let inputs = vec![Input::File(
             FileInputDesc::new(file_path, SystemTime::now(), false).unwrap(),
         )];
-        assert!(any_input_modified_after(&inputs, threshold));
+        assert!(any_input_modified_after(&inputs, threshold).await);
     }
 
-    #[test]
-    fn test_any_input_modified_after_ignores_pre_threshold_mtime() {
+    #[tokio::test]
+    async fn test_any_input_modified_after_ignores_pre_threshold_mtime() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("f.txt");
         std::fs::write(&file_path, "x").unwrap();
@@ -1470,7 +1493,7 @@ mod tests {
         let inputs = vec![Input::File(
             FileInputDesc::new(file_path, SystemTime::now(), false).unwrap(),
         )];
-        assert!(!any_input_modified_after(&inputs, SystemTime::now()));
+        assert!(!any_input_modified_after(&inputs, SystemTime::now()).await);
     }
 
     /// The persistent `InputTracker` should observe every op dispatched
