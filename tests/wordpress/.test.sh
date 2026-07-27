@@ -20,16 +20,17 @@ wait_for_processes
 # Verify database exists and the seeded wordpress user can connect
 mysql -h 127.0.0.1 -uwordpress -pwordpress wordpress -e 'SELECT 1'
 
-# Create a test PHP file
-cat > index.php << 'PHPEOF'
+# Create a test PHP file. PHP-FPM clears inherited environment variables, so
+# bake the dynamically allocated MySQL port into the generated script.
+cat > index.php << PHPEOF
 <?php
 // Test database connection
-$conn = new mysqli('127.0.0.1', 'wordpress', 'wordpress', 'wordpress');
-if ($conn->connect_error) {
+\$conn = new mysqli('127.0.0.1', 'wordpress', 'wordpress', 'wordpress', ${MYSQL_TCP_PORT});
+if (\$conn->connect_error) {
     http_response_code(500);
-    die("DB error: " . $conn->connect_error);
+    die("DB error: " . \$conn->connect_error);
 }
-$conn->close();
+\$conn->close();
 echo "OK";
 PHPEOF
 

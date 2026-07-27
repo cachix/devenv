@@ -4,13 +4,24 @@
 
 set -eux
 
-export DEVENV_RUNTIME="$PWD/.runtime"
 export DEVENV_NO_AI_AGENT=1
 
 PORT_ALPHA=18641
 PORT_BETA=18642
-PID_FILE="$DEVENV_RUNTIME/processes/native-manager.pid"
-SOCKET_FILE="$DEVENV_RUNTIME/processes/native.sock"
+
+runtime_hash() {
+  dotfile="$(pwd -P)/.devenv"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$dotfile" | sha256sum | cut -c1-7
+  else
+    printf '%s' "$dotfile" | shasum -a 256 | cut -c1-7
+  fi
+}
+
+RUNTIME_BASE="${XDG_RUNTIME_DIR:-/tmp}"
+PROCESS_RUNTIME_DIR="$RUNTIME_BASE/devenv-$(runtime_hash)/processes"
+PID_FILE="$PROCESS_RUNTIME_DIR/native-manager.pid"
+SOCKET_FILE="$PROCESS_RUNTIME_DIR/native.sock"
 
 reachable() {
   curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:$1/" 2>/dev/null
@@ -83,7 +94,7 @@ dump_failure_state() {
     echo "pid file: missing" >&2
   fi
   ps -o pid,ppid,stat,command -u "$(id -u)" | grep -E 'devenv|http.server' >&2 || true
-  for file in .runtime/processes/*.log .runtime/processes/logs/*; do
+  for file in "$PROCESS_RUNTIME_DIR"/*.log "$PROCESS_RUNTIME_DIR"/logs/*; do
     if [ -f "$file" ]; then
       echo "==> $file <==" >&2
       tail -n 80 "$file" >&2 || true

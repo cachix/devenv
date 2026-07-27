@@ -8,9 +8,19 @@
 
 set -ex
 
-export DEVENV_RUNTIME="$PWD/.runtime"
-
 PORT=18457
+
+runtime_hash() {
+  dotfile="$(pwd -P)/.devenv"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$dotfile" | sha256sum | cut -c1-7
+  else
+    printf '%s' "$dotfile" | shasum -a 256 | cut -c1-7
+  fi
+}
+
+RUNTIME_BASE="${XDG_RUNTIME_DIR:-/tmp}"
+PROCESS_RUNTIME_DIR="$RUNTIME_BASE/devenv-$(runtime_hash)/processes"
 
 wait_for_port() {
   for i in $(seq 1 30); do
@@ -57,7 +67,7 @@ cleanup() {
         cat "$file" >&2 || true
       fi
     done
-    for file in .runtime/processes/daemon.log .runtime/processes/logs/*; do
+    for file in "$PROCESS_RUNTIME_DIR"/daemon.log "$PROCESS_RUNTIME_DIR"/logs/*; do
       if [ -f "$file" ]; then
         echo "==> $file <==" >&2
         tail -n 80 "$file" >&2 || true
@@ -148,9 +158,9 @@ wait "$UP_TWO"
 devenv processes wait
 wait_for_port
 
-DAEMON_PID=$(sed -n '1p' "$DEVENV_RUNTIME/processes/native-manager.pid")
+DAEMON_PID=$(sed -n '1p' "$PROCESS_RUNTIME_DIR/native-manager.pid")
 kill -0 "$DAEMON_PID"
-DAEMON_PATTERN="daemon-processes $DEVENV_RUNTIME/processes/daemon-config.json"
+DAEMON_PATTERN="daemon-processes $PROCESS_RUNTIME_DIR/daemon-config.json"
 DAEMON_COUNT=$(
   ps -eo args= |
     grep -F "$DAEMON_PATTERN" |
