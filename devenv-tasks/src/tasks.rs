@@ -648,14 +648,15 @@ impl Tasks {
             ))
         ));
 
-        self.run_internal(orchestration_activity).await
+        self.run_internal(orchestration_activity, is_process_mode)
+            .await
     }
 
     /// Run with a caller-provided parent activity instead of creating a new top-level one.
     /// Used by `up()` Phase 4 to nest process execution under "Running processes".
     #[instrument(skip(self, parent_activity))]
     pub async fn run_with_parent_activity(&self, parent_activity: Arc<Activity>) -> Outputs {
-        self.run_internal(parent_activity).await
+        self.run_internal(parent_activity, true).await
     }
 
     /// Start a subset of already-built process tasks, honouring their
@@ -1294,7 +1295,11 @@ impl Tasks {
         }
     }
 
-    async fn run_internal(&self, orchestration_activity: Arc<Activity>) -> Outputs {
+    async fn run_internal(
+        &self,
+        orchestration_activity: Arc<Activity>,
+        register_unscheduled_processes: bool,
+    ) -> Outputs {
         // Assign activity IDs upfront for all tasks
         let mut task_ids: HashMap<NodeIndex, u64> = HashMap::new();
         for &index in &self.tasks_order {
@@ -1334,15 +1339,24 @@ impl Tasks {
         let outputs = Arc::clone(&self.outputs);
         let mut running_tasks = self.shutdown.join_set();
 
-        // Pre-register every configured process with the process manager, not
+        // Long-lived process runners pre-register every configured process, not
         // only the cold schedule. A subset start launches only its requested
         // closure, but the retained daemon must still list and later start the
         // other configured processes. Nodes outside `scheduled` are registered
         // as NotStarted; an explicit dynamic start re-arms them as Waiting.
+        //
+        // Ordinary task runners only register scheduled processes. In
+        // particular, the transient enterShell runner receives the full task
+        // graph but must not publish unrelated processes as auto-start-off
+        // before `devenv up` starts the real process runner.
         let mut process_configs: HashMap<NodeIndex, ProcessConfig> = HashMap::new();
         let mut has_process_tasks = false;
-        let all_indices: Vec<_> = self.graph.node_indices().collect();
-        for index in all_indices {
+        let process_indices: Vec<_> = if register_unscheduled_processes {
+            self.graph.node_indices().collect()
+        } else {
+            self.tasks_order.clone()
+        };
+        for index in process_indices {
             if self.shutdown.is_cancelled() {
                 break;
             }
@@ -2887,6 +2901,29 @@ mod schedule_tests {
         );
 
         let _ = tasks.process_manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn ordinary_task_run_does_not_register_unscheduled_processes() {
+        let enter_shell = "devenv:enterShell";
+        let docs = format!("{PROCESS_TASK_PREFIX}docs");
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                oneshot_task(enter_shell, vec![]),
+                process_task(&docs, vec![]),
+            ],
+            vec![enter_shell.to_string()],
+            false,
+        )
+        .await;
+
+        let _ = tasks.run(false).await;
+
+        assert_eq!(
+            tasks.process_manager.get_phase("docs").await,
+            None,
+            "an unscheduled process must not leak into a transient task runner"
+        );
     }
 
     #[tokio::test]
