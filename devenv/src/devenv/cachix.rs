@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use devenv_activity::{Activity, ActivityInstrument, ActivityLevel, activity, start};
+use devenv_activity::{Activity, ActivityInstrument, ActivityLevel, activity, message, start};
 use devenv_core::BuildOptions;
 use devenv_core::cachix::{CachixCacheInfo, CachixManager};
 use devenv_core::evaluator::Evaluator;
@@ -104,7 +104,13 @@ impl CachixIntegration {
             // whole command.
             match cachix_manager.store_settings(Some(&info)).await {
                 Ok(settings) => cnix.apply_store_settings(&settings),
-                Err(e) => warn!("cachix: failed to build store settings: {e}"),
+                Err(e) => {
+                    warn!("cachix: failed to build store settings: {e}");
+                    message(
+                        ActivityLevel::Warn,
+                        format!("Cachix caches unavailable as substituters: {e}"),
+                    );
+                }
             }
 
             Ok::<Option<String>, miette::Report>(push)
@@ -120,6 +126,10 @@ impl CachixIntegration {
             Ok(b) => b,
             Err(e) => {
                 warn!("cachix: failed to resolve cachix binary, push disabled: {e}");
+                message(
+                    ActivityLevel::Warn,
+                    format!("Cachix push to '{push_cache}' disabled: no cachix binary: {e}"),
+                );
                 return Ok(None);
             }
         };
@@ -144,6 +154,10 @@ impl CachixIntegration {
             Ok(d) => d,
             Err(e) => {
                 warn!("cachix: failed to spawn daemon, push disabled: {e}");
+                message(
+                    ActivityLevel::Warn,
+                    format!("Cachix push to '{push_cache}' disabled: {e}"),
+                );
                 return Ok(None);
             }
         };

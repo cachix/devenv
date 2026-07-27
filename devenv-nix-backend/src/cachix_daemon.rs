@@ -240,6 +240,9 @@ impl SocketClient {
     }
 }
 
+/// Lines of daemon stderr kept for error reporting.
+const STDERR_TAIL_LINES: usize = 20;
+
 /// Owned handle to a spawned cachix daemon process.
 /// Kills the process on drop.
 pub struct DaemonProcess {
@@ -285,12 +288,24 @@ impl DaemonProcess {
             .spawn()
             .with_context(|| format!("Failed to spawn cachix daemon at {:?}", config.binary))?;
 
-        // Drain stderr so daemon logs don't leak into the TUI.
+        // Drain stderr so daemon logs don't leak into the TUI. Keep a tail
+        // of it around: the drain logs at debug level, which default trace
+        // filters drop, and a startup failure needs the daemon's own account
+        // of the error.
+        let stderr_tail: Arc<std::sync::Mutex<VecDeque<String>>> =
+            Arc::new(std::sync::Mutex::new(VecDeque::new()));
         let stderr_task = child.stderr.take().map(|stderr| {
+            let tail = Arc::clone(&stderr_tail);
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
                     tracing::debug!(target: "cachix_daemon", "{}", line);
+                    if let Ok(mut buf) = tail.lock() {
+                        if buf.len() == STDERR_TAIL_LINES {
+                            buf.pop_front();
+                        }
+                        buf.push_back(line);
+                    }
                 }
             })
         });
@@ -306,7 +321,15 @@ impl DaemonProcess {
             // stop() rather than kill(): drains the remaining stderr, which
             // holds the daemon's own account of why it never came up.
             let _ = daemon.stop().await;
-            return Err(e);
+            let tail = stderr_tail
+                .lock()
+                .map(|buf| buf.iter().cloned().collect::<Vec<_>>().join("\n"))
+                .unwrap_or_default();
+            return Err(if tail.is_empty() {
+                e
+            } else {
+                anyhow!("{e}; daemon output:\n{tail}")
+            });
         }
 
         tracing::info!(socket = %config.socket_path.display(), "Daemon started");
