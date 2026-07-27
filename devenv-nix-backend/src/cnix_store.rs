@@ -1,6 +1,6 @@
 //! `Store` impl backed by the C-Nix FFI store handle.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use devenv_activity::activity;
@@ -28,6 +28,22 @@ impl CNixStore {
 // C-Nix daemon boundary. Mirrors the contract on `NixCBackend`.
 unsafe impl Send for CNixStore {}
 unsafe impl Sync for CNixStore {}
+
+/// Delete paths that aren't store paths (plain files or directories).
+///
+/// Offloaded because `remove_dir_all` recurses over the whole tree, which
+/// can stall a runtime thread for arbitrarily long on a large GC root.
+pub(crate) async fn remove_plain_paths(paths: Vec<PathBuf>) {
+    if paths.is_empty() {
+        return;
+    }
+    let _ = tokio::task::spawn_blocking(move || {
+        for path in paths {
+            let _ = std::fs::remove_file(&path).or_else(|_| std::fs::remove_dir_all(&path));
+        }
+    })
+    .await;
+}
 
 #[async_trait(?Send)]
 impl StoreTrait for CNixStore {
@@ -83,6 +99,7 @@ impl StoreTrait for CNixStore {
         match opts.paths {
             Some(paths) => {
                 let total = paths.len() as u64;
+                let mut plain_paths: Vec<PathBuf> = Vec::new();
                 let activity = activity!(INFO, operation, "Deleting store paths");
                 for (i, path) in paths.iter().enumerate() {
                     let path_str = path.as_str();
@@ -99,8 +116,7 @@ impl StoreTrait for CNixStore {
                             // Not a valid store path — treat it as a plain
                             // file or directory to clean up. Mirrors the
                             // pre-refactor behavior in NixCBackend::gc.
-                            let p = path.as_path();
-                            let _ = std::fs::remove_file(p).or_else(|_| std::fs::remove_dir_all(p));
+                            plain_paths.push(path.as_path().to_path_buf());
                             continue;
                         }
                     };
@@ -114,6 +130,7 @@ impl StoreTrait for CNixStore {
                         stats.bytes_freed += bytes;
                     }
                 }
+                remove_plain_paths(plain_paths).await;
                 activity.progress(total, total, None);
             }
             None => {

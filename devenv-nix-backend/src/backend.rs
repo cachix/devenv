@@ -69,7 +69,7 @@ use once_cell::sync::OnceCell;
 
 use crate::anyhow_ext::AnyhowToMiette;
 use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
-use crate::cnix_store::CNixStore;
+use crate::cnix_store::{CNixStore, remove_plain_paths};
 use crate::error::format_eval_error;
 use crate::umask_guard::UmaskGuard;
 
@@ -1036,6 +1036,7 @@ impl NixCBackend {
         let mut total_deleted = 0u64;
         let mut total_bytes_freed = 0u64;
         let total_paths = paths.len() as u64;
+        let mut plain_paths: Vec<PathBuf> = Vec::new();
 
         let activity = activity!(INFO, operation, "Deleting store paths");
 
@@ -1053,7 +1054,7 @@ impl NixCBackend {
             let store_path = match store.parse_store_path(path_str).to_miette() {
                 Ok(sp) => sp,
                 Err(_) => {
-                    let _ = std::fs::remove_file(path).or_else(|_| std::fs::remove_dir_all(path));
+                    plain_paths.push(path.clone());
                     continue;
                 }
             };
@@ -1066,6 +1067,10 @@ impl NixCBackend {
                 Err(_) => continue,
             }
         }
+
+        // The store handle is not `Send`; drop it before awaiting.
+        drop(store);
+        remove_plain_paths(plain_paths).await;
 
         activity.progress(total_paths, total_paths, None);
         Ok((total_deleted, total_bytes_freed))
