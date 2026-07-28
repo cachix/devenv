@@ -370,6 +370,8 @@ impl ActivityModel {
     /// loop is not woken needlessly.
     pub fn apply_activity_event(&mut self, event: ActivityEvent) -> bool {
         match event {
+            // Handled by the event processor before the model; nothing to render.
+            ActivityEvent::Control(_) => false,
             ActivityEvent::Build(build_event) => {
                 self.handle_build_event(build_event);
                 true

@@ -1375,12 +1375,9 @@ pub enum SessionError {
 /// When running with TUI, the shell session needs to coordinate
 /// terminal ownership with the TUI.
 pub struct TuiHandoff {
-    /// Signal the renderer to stop. Sending — or dropping — the sender is the
-    /// signal (a closed channel is a delivered "stop", which makes the
-    /// panic/early-return path safe without a guard).
-    pub backend_done: oneshot::Sender<()>,
     /// Wait for the renderer to release the terminal. The TUI's final render
-    /// height is carried but unused here.
+    /// height is carried but unused here. The renderer is told to stop via
+    /// `devenv_activity::render_done()`.
     pub terminal_ready_rx: oneshot::Receiver<u16>,
 }
 
@@ -1610,14 +1607,14 @@ impl ShellSession {
                 (command, watch_files)
             }
             Some(ShellCommand::Shutdown) | None => {
-                if let Some(h) = handoff {
-                    let _ = h.backend_done.send(());
+                if handoff.is_some() {
+                    devenv_activity::render_done();
                 }
                 return Ok(None);
             }
             Some(other) => {
-                if let Some(h) = handoff {
-                    let _ = h.backend_done.send(());
+                if handoff.is_some() {
+                    devenv_activity::render_done();
                 }
                 return Err(SessionError::UnexpectedCommand(format!("{:?}", other)));
             }
@@ -1632,8 +1629,8 @@ impl ShellSession {
         // TUI handoff. Wait for the renderer to release the terminal, but
         // yield to shutdown so a SIGHUP during this await can't hang us.
         if let Some(handoff) = handoff {
-            tracing::trace!("session: sending backend_done");
-            let _ = handoff.backend_done.send(());
+            tracing::trace!("session: signalling render_done");
+            devenv_activity::render_done();
 
             tracing::trace!("session: waiting for terminal_ready_rx");
             let cancelled = async {

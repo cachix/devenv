@@ -13,7 +13,6 @@ use std::{
     process::{Command, ExitCode, Stdio},
 };
 use tempfile::TempDir;
-use tokio::sync::oneshot;
 
 const ALL_SYSTEMS: &[&str] = &[
     "x86_64-linux",
@@ -582,16 +581,15 @@ async fn async_main() -> Result<ExitCode> {
         // process output surfaces to stderr. Without this, events go nowhere.
         let (activity_rx, handle) = devenv_activity::init();
         let activity_guard = handle.install();
-        let (done_tx, done_rx) = oneshot::channel::<()>();
         let console_task = tokio::spawn(async move {
             devenv_console::ConsoleOutput::new(activity_rx, VerbosityLevel::Normal)
-                .run(done_rx)
+                .run()
                 .await;
         });
 
         let result = execute_command(&args).await;
 
-        let _ = done_tx.send(());
+        devenv_activity::render_done();
         drop(activity_guard);
         let _ = console_task.await;
 

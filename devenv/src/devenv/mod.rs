@@ -374,10 +374,6 @@ pub struct Devenv {
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
 
-    // Set true while attached to an already-running process manager. Shared
-    // with the TUI so its Ctrl-C prompt offers detach vs stop the manager.
-    attach_indicator: Arc<std::sync::atomic::AtomicBool>,
-
     // Task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV) set by
     // run_enter_shell_tasks(). Injected into the bash script by prepare_shell()
     // so they take effect AFTER the Nix shell env is applied.
@@ -715,16 +711,9 @@ impl Devenv {
             port_allocator,
             native_process_manager: OnceCell::new(),
             shutdown: options.shutdown,
-            attach_indicator: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             task_exports: std::sync::Mutex::new(BTreeMap::new()),
             task_messages: std::sync::Mutex::new(Vec::new()),
         })
-    }
-
-    /// Share the TUI's attach-mode flag so the interrupt prompt reflects
-    /// whether this run is attached to an already-running process manager.
-    pub fn set_attach_indicator(&mut self, flag: Arc<std::sync::atomic::AtomicBool>) {
-        self.attach_indicator = flag;
     }
 
     pub fn processes_log(&self) -> PathBuf {
@@ -1123,8 +1112,7 @@ impl Devenv {
 
         // Tell the TUI we are attached so its Ctrl-C prompt offers detach vs
         // stop the manager instead of the in-process keep-running vs quit.
-        self.attach_indicator
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        devenv_activity::attached(true);
 
         // Announce the attach as a child of the processes operation so it shows
         // in the tree (a standalone message with no parent is not rendered).

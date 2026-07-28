@@ -8682,6 +8682,10 @@ rec {
             packageId = "crossterm";
           }
           {
+            name = "devenv-activity";
+            packageId = "devenv-activity";
+          }
+          {
             name = "iocraft";
             packageId = "iocraft";
             features = [ "unstable-output-streams" ];

@@ -213,19 +213,21 @@ async fn main() -> Result<()> {
     let (tx, rx) = mpsc::unbounded_channel();
     let shutdown = Shutdown::new();
 
-    // Signal TUI when replay is done (send, or drop on the other branches).
-    let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel::<()>();
-    let mut backend_done_tx = Some(backend_done_tx);
+    // Signal TUI when replay is done via an in-band control event.
+    let mut render_done_tx = Some(tx.clone());
+    let send_render_done =
+        |tx: tokio::sync::mpsc::UnboundedSender<devenv_activity::ActivityEvent>| {
+            let _ = tx.send(devenv_activity::ActivityEvent::Control(
+                devenv_activity::Control::RenderDone,
+            ));
+        };
 
     info!("Spawning TUI");
 
     let mut tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
         async move {
-            match devenv_tui::TuiApp::new(rx, shutdown)
-                .run(backend_done_rx)
-                .await
-            {
+            match devenv_tui::TuiApp::new(rx, shutdown).run().await {
                 Ok(_) => info!("TUI exited normally"),
                 Err(e) => warn!("TUI error: {e}"),
             }
@@ -255,9 +257,9 @@ async fn main() -> Result<()> {
 
             if args.hold {
                 // Hold the TUI open for input fuzzing: do NOT signal
-                // backend_done and keep `tx`/`backend_done_tx` alive. Wait for
-                // the TUI to exit on its own or for an interrupt (the fuzzer's
-                // timeout kills the process).
+                // render-done and keep `tx` alive. Wait for the TUI to exit
+                // on its own or for an interrupt (the fuzzer's timeout kills
+                // the process).
                 info!("Trace drained; holding TUI open (--hold). Ctrl+C to exit.");
                 tokio::select! {
                     _ = &mut tui_task => info!("TUI exited"),
@@ -268,8 +270,8 @@ async fn main() -> Result<()> {
                 }
             } else {
                 // Signal TUI that replay is done and let it drain and exit.
-                if let Some(tx) = backend_done_tx.take() {
-                    let _ = tx.send(());
+                if let Some(tx) = render_done_tx.take() {
+                    send_render_done(tx);
                 }
                 let _ = (&mut tui_task).await;
             }
@@ -281,8 +283,8 @@ async fn main() -> Result<()> {
             info!("Interrupted");
             shutdown.shutdown();
             // Signal TUI that we're done (after interrupt)
-            if let Some(tx) = backend_done_tx.take() {
-                let _ = tx.send(());
+            if let Some(tx) = render_done_tx.take() {
+                send_render_done(tx);
             }
         }
     }

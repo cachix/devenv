@@ -137,75 +137,30 @@ impl Shutdown {
     /// than the process.
     pub async fn install_signals(self: &Arc<Self>) {
         let shutdown = Arc::clone(self);
-        tokio::spawn(shutdown.signal_loop(None));
+        tokio::spawn(forward_signals(
+            move |signal| shutdown.handle_signal(signal),
+            None,
+        ));
     }
 
     /// Install signal handlers on a dedicated thread that lives for the rest
     /// of the process. Returns once the handlers are registered.
     pub fn install_signals_on_thread(self: &Arc<Self>) {
         let shutdown = Arc::clone(self);
-        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
-
-        std::thread::Builder::new()
-            .name("signal_handler".into())
-            .spawn(move || {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .expect("Failed to build signal runtime")
-                    .block_on(shutdown.signal_loop(Some(ready_tx)));
-            })
-            .expect("Failed to spawn signal thread");
-
-        let _ = ready_rx.recv();
+        spawn_signal_listener(move |signal| shutdown.handle_signal(signal));
     }
 
-    /// Translate SIGINT/SIGTERM/SIGHUP into shutdown requests. `ready` is
-    /// signalled once the listeners are registered.
-    async fn signal_loop(self: Arc<Self>, ready: Option<std::sync::mpsc::Sender<()>>) {
-        let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())
-            .expect("Failed to install SIGINT handler");
-        let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("Failed to install SIGTERM handler");
-        let mut sighup = signal::unix::signal(signal::unix::SignalKind::hangup())
-            .expect("Failed to install SIGHUP handler");
-
-        if let Some(ready) = ready {
-            let _ = ready.send(());
+    /// React to a received signal: the first triggers graceful shutdown, a
+    /// repeat (including after a TUI keyboard Ctrl-C) force-exits.
+    pub fn handle_signal(&self, signal: Signal) {
+        if self.last_signal.load(Ordering::Relaxed) != 0 {
+            info!("Received second signal, forcing exit...");
+            self.exit_process();
         }
 
-        loop {
-            let last_signal;
-
-            tokio::select! {
-                _ = sigint.recv() => {
-                    last_signal = Signal::SIGINT;
-                }
-                _ = sigterm.recv() => {
-                    last_signal = Signal::SIGTERM;
-                }
-                _ = sighup.recv() => {
-                    last_signal = Signal::SIGHUP;
-                }
-            }
-
-            // If a signal was already received (either from a previous real
-            // signal or set by the TUI keyboard handler), this is a repeated
-            // interrupt — force-exit immediately.
-            if self.last_signal.load(Ordering::Relaxed) != 0 {
-                info!("Received second signal, forcing exit...");
-                self.exit_process();
-            }
-
-            info!("Received {:?}, shutting down gracefully...", last_signal);
-
-            // Store the last signal received
-            self.last_signal
-                .store(last_signal as i32, Ordering::Relaxed);
-
-            // Trigger shutdown
-            self.shutdown();
-        }
+        info!("Received {:?}, shutting down gracefully...", signal);
+        self.last_signal.store(signal as i32, Ordering::Relaxed);
+        self.shutdown();
     }
 
     /// Wait for shutdown to be requested
@@ -298,6 +253,55 @@ impl Shutdown {
 
         // Unreachable: something went wrong
         std::process::exit(1);
+    }
+}
+
+/// Forward SIGINT/SIGTERM/SIGHUP to `notify` from a dedicated thread that
+/// lives for the rest of the process. Returns once the handlers are
+/// registered.
+pub fn spawn_signal_listener<F>(notify: F)
+where
+    F: FnMut(Signal) + Send + 'static,
+{
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+
+    std::thread::Builder::new()
+        .name("signal_handler".into())
+        .spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .expect("Failed to build signal runtime")
+                .block_on(forward_signals(notify, Some(ready_tx)));
+        })
+        .expect("Failed to spawn signal thread");
+
+    let _ = ready_rx.recv();
+}
+
+/// `ready` is signalled once the listeners are registered.
+async fn forward_signals<F>(mut notify: F, ready: Option<std::sync::mpsc::Sender<()>>)
+where
+    F: FnMut(Signal),
+{
+    let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())
+        .expect("Failed to install SIGINT handler");
+    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
+        .expect("Failed to install SIGTERM handler");
+    let mut sighup = signal::unix::signal(signal::unix::SignalKind::hangup())
+        .expect("Failed to install SIGHUP handler");
+
+    if let Some(ready) = ready {
+        let _ = ready.send(());
+    }
+
+    loop {
+        let signal = tokio::select! {
+            _ = sigint.recv() => Signal::SIGINT,
+            _ = sigterm.recv() => Signal::SIGTERM,
+            _ = sighup.recv() => Signal::SIGHUP,
+        };
+        notify(signal);
     }
 }
 

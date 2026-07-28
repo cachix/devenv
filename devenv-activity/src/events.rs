@@ -22,6 +22,18 @@ pub enum ActivityEvent {
     /// Aggregate expected counts announcement from Nix
     SetExpected(SetExpected),
     Shell(Shell),
+    Control(Control),
+}
+
+/// Frontend control events: not rendered, they steer the renderer itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Valuable)]
+#[serde(tag = "control", rename_all = "snake_case")]
+pub enum Control {
+    /// The render phase is over: stop rendering and release the terminal.
+    RenderDone,
+    /// The backend attached to (or detached from) a running process manager,
+    /// which changes what the TUI's Ctrl-C prompt offers.
+    Attached { attached: bool },
 }
 
 /// Expected count announcement for aggregate activity tracking.
@@ -895,5 +907,20 @@ mod tests {
 
         assert!(!ProcessStatus::Exited.is_failed());
         assert!(ProcessStatus::GaveUp.is_failed());
+    }
+}
+
+#[cfg(test)]
+mod size_tests {
+    /// Every build log line moves one of these through the activity channel;
+    /// growing it taxes the hottest path in the pipeline. Raising the bound
+    /// must be a deliberate decision, not a side effect of adding a field.
+    #[test]
+    fn activity_event_stays_small() {
+        assert!(
+            std::mem::size_of::<super::ActivityEvent>() <= 144,
+            "ActivityEvent grew to {} bytes (bound: 144)",
+            std::mem::size_of::<super::ActivityEvent>()
+        );
     }
 }

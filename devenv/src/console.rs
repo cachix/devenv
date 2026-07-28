@@ -48,10 +48,10 @@ impl BoundedLog {
 
 use console::style;
 use devenv_activity::{
-    ActivityEvent, ActivityGuard, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch,
-    FetchKind, Operation, Process, Task,
+    ActivityEvent, ActivityGuard, ActivityLevel, ActivityOutcome, Build, Command, Control,
+    Evaluate, Fetch, FetchKind, Operation, Process, Task,
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 use crate::tracing::HumanReadableDuration;
 use devenv_core::VerbosityLevel;
@@ -115,24 +115,15 @@ impl ConsoleOutput {
         }
     }
 
-    /// Process events until the backend signals stop (sent or sender dropped),
-    /// then drain any buffered events.
-    pub async fn run(mut self, backend_done: oneshot::Receiver<()>) {
-        let mut backend_done = backend_done;
-        loop {
-            tokio::select! {
-                event = self.rx.recv() => match event {
-                    Some(event) => {
-                        self.handle(event);
-                        self.drain_ready_and_flush();
-                    }
-                    None => break,
-                },
-                _ = &mut backend_done => {
-                    self.drain_ready_and_flush();
-                    break;
-                }
+    /// Process events until the stream signals stop (a `Control::RenderDone`
+    /// event or a closed channel), then flush any buffered output.
+    pub async fn run(mut self) {
+        while let Some(event) = self.rx.recv().await {
+            if matches!(event, ActivityEvent::Control(Control::RenderDone)) {
+                break;
             }
+            self.handle(event);
+            self.drain_ready_and_flush();
         }
         self.flush();
     }
@@ -249,7 +240,8 @@ impl ConsoleOutput {
             ActivityEvent::Message(msg) => {
                 self.message(msg.level, &msg.text, msg.details.as_deref())
             }
-            ActivityEvent::SetExpected(_) | ActivityEvent::Shell(_) => {}
+            ActivityEvent::SetExpected(_) | ActivityEvent::Shell(_) | ActivityEvent::Control(_) => {
+            }
         }
     }
 
@@ -872,11 +864,10 @@ mod tests {
     #[tokio::test]
     async fn run_handles_queued_events_and_flushes_on_shutdown() {
         let (tx, rx) = mpsc::unbounded_channel();
-        let (done_tx, done_rx) = oneshot::channel();
         let writer = FlushSpy::new();
         let output =
             ConsoleOutput::with_writer(rx, VerbosityLevel::Normal, writer.clone().into_box());
-        let task = tokio::spawn(output.run(done_rx));
+        let task = tokio::spawn(output.run());
 
         let batch_flushed = writer.flushed.notified();
         tx.send(message(ActivityLevel::Info, "queued event"))
@@ -884,7 +875,8 @@ mod tests {
         batch_flushed.await;
         let flushes_before_shutdown = writer.flush_count();
 
-        done_tx.send(()).unwrap();
+        tx.send(ActivityEvent::Control(Control::RenderDone))
+            .unwrap();
         task.await.unwrap();
 
         assert!(writer.contents().contains("queued event"));

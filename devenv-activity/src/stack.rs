@@ -99,6 +99,20 @@ pub(crate) fn get_current_stack() -> Vec<(u64, ActivityLevel)> {
         .unwrap_or_default()
 }
 
+/// Signal the frontend that the render phase is over: stop rendering and
+/// release the terminal.
+pub fn render_done() {
+    send_activity_event(ActivityEvent::Control(crate::events::Control::RenderDone));
+}
+
+/// Tell the frontend whether the backend is attached to a running process
+/// manager.
+pub fn attached(attached: bool) {
+    send_activity_event(ActivityEvent::Control(crate::events::Control::Attached {
+        attached,
+    }));
+}
+
 /// Emit a standalone message, associated with the current activity if one exists.
 pub fn message(level: ActivityLevel, text: impl Into<String>) {
     message_with_details(level, text, None)

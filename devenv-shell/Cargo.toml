@@ -8,6 +8,8 @@ repository.workspace = true
 description = "Shell and PTY management for devenv"
 
 [dependencies]
+devenv-activity.workspace = true
+
 # PTY management
 portable-pty.workspace = true
 

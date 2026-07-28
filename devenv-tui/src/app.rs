@@ -8,13 +8,13 @@ use crossterm::{
     style::{Color, ResetColor, SetForegroundColor},
     terminal,
 };
-use devenv_activity::{ActivityEvent, ActivityLevel};
+use devenv_activity::{ActivityEvent, ActivityLevel, Control};
 use devenv_processes::ProcessCommand;
 use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
-use tokio::sync::{Notify, mpsc, oneshot};
+use tokio::sync::{Notify, mpsc};
 use tokio_shutdown::Shutdown;
 use tracing::debug;
 
@@ -130,14 +130,6 @@ impl TuiApp {
         self
     }
 
-    /// Share the attach-mode flag with the backend. When set true (the backend
-    /// is attached to a running manager), the interrupt prompt offers detach vs
-    /// stop the manager instead of keep-running vs quit.
-    pub fn with_attached_flag(mut self, attached: Arc<AtomicBool>) -> Self {
-        self.config.attached = attached;
-        self
-    }
-
     /// Set the event batch size for processing activity events.
     pub fn batch_size(mut self, size: usize) -> Self {
         self.config.event_batch_size = size;
@@ -171,11 +163,10 @@ impl TuiApp {
 
     /// Run the TUI application until the backend completes.
     ///
-    /// `backend_done` resolves when the backend signals the render phase is
-    /// over — either by sending or by dropping the sender (a closed channel is
-    /// a delivered "stop"). The TUI drains remaining events and exits, then
-    /// returns the final render height for post-handoff cursor positioning.
-    pub async fn run(self, backend_done: oneshot::Receiver<()>) -> std::io::Result<u16> {
+    /// The activity stream carries its own stop signal: a
+    /// `Control::RenderDone` event (or the channel closing) ends rendering.
+    /// Returns the final render height for post-handoff cursor positioning.
+    pub async fn run(self) -> std::io::Result<u16> {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
@@ -194,86 +185,66 @@ impl TuiApp {
 
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
-        // When backend_done fires, it drains remaining events and signals shutdown
         let event_processor_handle = tokio::spawn({
             let activity_model = activity_model.clone();
             let notify = notify.clone();
             let model_version = model_version.clone();
             let render_shutdown = render_shutdown.clone();
             let exit_flag = exit_flag.clone();
-            let event_batch_size = config.event_batch_size;
+            let config = config.clone();
             let mut activity_rx = self.activity_rx;
             async move {
-                let mut batch = Vec::with_capacity(event_batch_size);
-                let mut backend_notified = backend_done;
+                let mut batch = Vec::with_capacity(config.event_batch_size);
+                let mut render_done = false;
 
-                loop {
-                    tokio::select! {
-                        event = activity_rx.recv() => {
-                            let Some(event) = event else {
-                                // Channel closed unexpectedly
-                                exit_flag.set();
-                                // Bump the version alongside the notify so the
-                                // render loop treats this as a real change (kept
-                                // in lockstep with the other notify sites).
-                                model_version.fetch_add(1, Ordering::Release);
-                                notify.notify_waiters();
-                                render_shutdown.notify_waiters();
-                                break;
-                            };
+                while !render_done {
+                    let Some(event) = activity_rx.recv().await else {
+                        // Channel closed: producer is gone, stop rendering
+                        break;
+                    };
 
-                            batch.push(event);
-                            while let Ok(event) = activity_rx.try_recv() {
-                                batch.push(event);
-                                if batch.len() >= event_batch_size {
-                                    break;
-                                }
-                            }
-
-                            let mut any_changed = false;
-                            if let Ok(mut m) = activity_model.write() {
-                                for event in batch.drain(..) {
-                                    any_changed |= m.apply_activity_event(event);
-                                }
-                            }
-
-                            // Only wake the render loop when the batch actually
-                            // changed the visible model; pure no-op events (e.g.
-                            // shell events, skipped .narinfo fetches) don't force
-                            // a layout-recomputing redraw.
-                            if any_changed {
-                                model_version.fetch_add(1, Ordering::Release);
-                                notify.notify_waiters();
-                            }
-                        }
-
-                        _ = &mut backend_notified => {
-                            // Backend signaled stop (sent or sender dropped) -
-                            // drain any remaining events
-                            while let Ok(event) = activity_rx.try_recv() {
-                                batch.push(event);
-                            }
-
-                            if !batch.is_empty()
-                                && let Ok(mut m) = activity_model.write()
-                            {
-                                for event in batch.drain(..) {
-                                    m.apply_activity_event(event);
-                                }
-                            }
-
-                            // Signal component to exit cooperatively. Set before
-                            // notify so the triggered re-render sees the flag.
-                            exit_flag.set();
-                            model_version.fetch_add(1, Ordering::Release);
-                            notify.notify_waiters();
-                            // Bypass render throttle so the exit flag is observed
-                            // on the next frame instead of after another throttle tick.
-                            render_shutdown.notify_waiters();
+                    batch.push(event);
+                    while let Ok(event) = activity_rx.try_recv() {
+                        batch.push(event);
+                        if batch.len() >= config.event_batch_size {
                             break;
                         }
                     }
+
+                    let mut any_changed = false;
+                    if let Ok(mut m) = activity_model.write() {
+                        for event in batch.drain(..) {
+                            match event {
+                                // Control events steer the renderer; they
+                                // never reach the model.
+                                ActivityEvent::Control(Control::RenderDone) => render_done = true,
+                                ActivityEvent::Control(Control::Attached { attached }) => {
+                                    config.attached.store(attached, Ordering::Relaxed);
+                                }
+                                event => any_changed |= m.apply_activity_event(event),
+                            }
+                        }
+                    }
+
+                    // Only wake the render loop when the batch actually
+                    // changed the visible model; pure no-op events (e.g.
+                    // shell events, skipped .narinfo fetches) don't force
+                    // a layout-recomputing redraw.
+                    if any_changed && !render_done {
+                        model_version.fetch_add(1, Ordering::Release);
+                        notify.notify_waiters();
+                    }
                 }
+
+                // Signal the component to exit cooperatively. Set before
+                // notify so the triggered re-render sees the flag; bump the
+                // version so the render loop treats it as a real change, and
+                // bypass the render throttle so the flag is observed on the
+                // next frame.
+                exit_flag.set();
+                model_version.fetch_add(1, Ordering::Release);
+                notify.notify_waiters();
+                render_shutdown.notify_waiters();
             }
         });
 
