@@ -1651,8 +1651,10 @@ mod tests {
 
     #[test]
     fn profile_field_serializes() {
-        let mut config = Config::default();
-        config.profile = Some("production".to_string());
+        let config = Config {
+            profile: Some("production".to_string()),
+            ..Default::default()
+        };
 
         let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
         assert!(yaml.contains("profile: production"));
@@ -1667,11 +1669,15 @@ mod tests {
 
     #[test]
     fn profile_field_respects_replace_merge_strategy() {
-        let mut config1 = Config::default();
-        config1.profile = Some("base".to_string());
+        let config1 = Config {
+            profile: Some("base".to_string()),
+            ..Default::default()
+        };
 
-        let mut config2 = Config::default();
-        config2.profile = Some("override".to_string());
+        let config2 = Config {
+            profile: Some("override".to_string()),
+            ..Default::default()
+        };
 
         // Simulating what schematic would do with replace merge strategy:
         // The second value should override the first
@@ -1687,8 +1693,10 @@ mod tests {
 
     #[test]
     fn strict_ports_field_serializes_as_snake_case() {
-        let mut config = Config::default();
-        config.strict_ports = Some(true);
+        let config = Config {
+            strict_ports: Some(true),
+            ..Default::default()
+        };
 
         let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
         assert!(yaml.contains("strict_ports: true"));
@@ -1703,11 +1711,15 @@ mod tests {
 
     #[test]
     fn strict_ports_field_respects_replace_merge_strategy() {
-        let mut config1 = Config::default();
-        config1.strict_ports = Some(false);
+        let config1 = Config {
+            strict_ports: Some(false),
+            ..Default::default()
+        };
 
-        let mut config2 = Config::default();
-        config2.strict_ports = Some(true);
+        let config2 = Config {
+            strict_ports: Some(true),
+            ..Default::default()
+        };
 
         let merged_strict_ports = config2.strict_ports.or(config1.strict_ports);
         assert_eq!(merged_strict_ports, Some(true));

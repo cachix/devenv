@@ -55,10 +55,10 @@ tokio::task_local! {
 /// Send an activity event to the registered channel and emit to tracing
 pub(crate) fn send_activity_event(event: ActivityEvent) {
     // Emit to tracing for file export - serialize via serde to respect rename attributes.
-    if tracing::enabled!(target: "devenv_activity::events", tracing::Level::TRACE) {
-        if let Ok(serde_value) = SerdeValue::from_serialize(&event) {
-            tracing::trace!(target: "devenv_activity::events", event = serde_value.as_value());
-        }
+    if tracing::enabled!(target: "devenv_activity::events", tracing::Level::TRACE)
+        && let Ok(serde_value) = SerdeValue::from_serialize(&event)
+    {
+        tracing::trace!(target: "devenv_activity::events", event = serde_value.as_value());
     }
 
     // Send to channel for TUI

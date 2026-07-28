@@ -269,11 +269,11 @@ impl NixLogBridge {
                 // surfaced as structured activities rather than log messages.
                 // Activities are delivered regardless of verbosity, so record any
                 // input dependency they carry for cache invalidation.
-                if let Some(op) = EvalOp::from_activity(typ, &fields) {
-                    if let Ok(guard) = self.observers.lock() {
-                        for observer in guard.iter() {
-                            observer.record(op.clone());
-                        }
+                if let Some(op) = EvalOp::from_activity(typ, &fields)
+                    && let Ok(guard) = self.observers.lock()
+                {
+                    for observer in guard.iter() {
+                        observer.record(op.clone());
                     }
                 }
                 self.handle_activity_start(id, typ, text, fields);

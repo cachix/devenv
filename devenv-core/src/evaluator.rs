@@ -57,18 +57,6 @@ pub fn eval_cache_key_args(
     format!("{nix_args_str}:port_allocation={port_allocation_enabled}:strict_ports={strict_ports}")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn eval_cache_key_args_includes_port_flags() {
-        let key = eval_cache_key_args("{ foo = 1; }", true, false);
-        assert!(key.contains("port_allocation=true"));
-        assert!(key.contains("strict_ports=false"));
-    }
-}
-
 /// "A thing that can talk to Nix."
 ///
 /// `eval` and `build` take attribute paths into the project's devenv
@@ -94,4 +82,16 @@ pub trait Evaluator: Send + Sync {
     /// backend type for evaluator-specific operations (lock updates,
     /// REPL, native dev-env, search). Implementors return `self`.
     fn as_any(&self) -> &dyn std::any::Any;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn eval_cache_key_args_includes_port_flags() {
+        let key = eval_cache_key_args("{ foo = 1; }", true, false);
+        assert!(key.contains("port_allocation=true"));
+        assert!(key.contains("strict_ports=false"));
+    }
 }

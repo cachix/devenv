@@ -105,11 +105,32 @@ fn convert_fields(
     fields
 }
 
-/// Create a callback that handles activity start events from FFI
-fn create_start_callback(
-    bridge: Arc<NixLogBridge>,
-) -> impl Fn(u64, &str, &str, &[i32], &[i64], &[Option<&str>], u64) + Clone + Send + Sync + 'static
+/// Shape of the FFI activity-start callback: `(id, description,
+/// activity_type, field_types, int_values, string_values, parent)`.
+trait StartCallback:
+    Fn(u64, &str, &str, &[i32], &[i64], &[Option<&str>], u64) + Clone + Send + Sync + 'static
 {
+}
+
+impl<T> StartCallback for T where
+    T: Fn(u64, &str, &str, &[i32], &[i64], &[Option<&str>], u64) + Clone + Send + Sync + 'static
+{
+}
+
+/// Shape of the FFI activity-result callback: `(id, result_type,
+/// field_types, int_values, string_values)`.
+trait ResultCallback:
+    Fn(u64, &str, &[i32], &[i64], &[Option<&str>]) + Clone + Send + Sync + 'static
+{
+}
+
+impl<T> ResultCallback for T where
+    T: Fn(u64, &str, &[i32], &[i64], &[Option<&str>]) + Clone + Send + Sync + 'static
+{
+}
+
+/// Create a callback that handles activity start events from FFI
+fn create_start_callback(bridge: Arc<NixLogBridge>) -> impl StartCallback {
     move |id: u64,
           description: &str,
           activity_type: &str,
@@ -142,9 +163,7 @@ fn create_stop_callback(bridge: Arc<NixLogBridge>) -> impl Fn(u64) + Clone + Sen
 }
 
 /// Create a callback that handles activity result/progress events from FFI
-fn create_result_callback(
-    bridge: Arc<NixLogBridge>,
-) -> impl Fn(u64, &str, &[i32], &[i64], &[Option<&str>]) + Clone + Send + Sync + 'static {
+fn create_result_callback(bridge: Arc<NixLogBridge>) -> impl ResultCallback {
     move |id: u64,
           result_type: &str,
           field_types: &[i32],
@@ -190,11 +209,9 @@ mod tests {
         nix_bindings_expr::eval_state::init().expect("Failed to initialize Nix");
         let _gc_registration = gc_register_my_thread();
 
-        // Create logger - this registers the activity callbacks
+        // Create logger - this registers the activity callbacks.
+        // The `expect` is the assertion: setup must not fail or panic.
         let _setup = setup_nix_logger().expect("Failed to setup logger");
-
-        // If we get here without panicking, the logger was set up correctly
-        assert!(true, "Logger setup should not panic");
     }
 
     #[test]

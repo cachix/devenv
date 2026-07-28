@@ -318,6 +318,12 @@ impl NixCBackend {
 
         let cnix_store = CNixStore::new(store);
 
+        // `EvalState` is neither `Send` nor `Sync`, but `NixCBackend` asserts
+        // both (see the `unsafe impl`s above) and shares this handle across
+        // threads, so the refcount has to stay atomic. `Rc` would race.
+        #[allow(clippy::arc_with_non_send_sync)]
+        let eval_state = Arc::new(Mutex::new(Some(eval_state)));
+
         let backend = Self {
             nix_settings,
             cache_settings,
@@ -331,7 +337,7 @@ impl NixCBackend {
             cached_devenv_value: Mutex::new(None),
             devenv_value_invalidated: Arc::new(AtomicBool::new(false)),
             caching_eval_state: OnceCell::new(),
-            eval_state: Arc::new(Mutex::new(Some(eval_state))),
+            eval_state,
             cnix_store,
             flake_settings,
             fetchers_settings,

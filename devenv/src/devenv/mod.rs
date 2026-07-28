@@ -2468,12 +2468,15 @@ impl Devenv {
             use nix::fcntl::{Flock, FlockArg};
 
             let runtime_dir = self.process_runtime_dir()?;
-            std::fs::create_dir_all(&runtime_dir)
+            std::fs::create_dir_all(runtime_dir)
                 .into_diagnostic()
                 .wrap_err("Failed to create process runtime directory")?;
             let lock_path = runtime_dir.join("native-start.lock");
             let lock_file = std::fs::OpenOptions::new()
                 .create(true)
+                // The file is only ever flocked, never written; keep whatever
+                // a previous run left in it.
+                .truncate(false)
                 .read(true)
                 .write(true)
                 .open(&lock_path)

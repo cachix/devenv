@@ -666,7 +666,7 @@ mod tests {
         // First check should consider it modified (initial run)
         assert!(
             cache
-                .check_modified_files(task_name, &[path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&path_str))
                 .await
                 .unwrap()
         );
@@ -677,7 +677,7 @@ mod tests {
         // File now in cache, unchanged
         assert!(
             !cache
-                .check_modified_files(task_name, &[path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&path_str))
                 .await
                 .unwrap()
         );
@@ -703,7 +703,7 @@ mod tests {
         // Check should detect the modification
         assert!(
             cache
-                .check_modified_files(task_name, &[path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&path_str))
                 .await
                 .unwrap()
         );
@@ -753,7 +753,7 @@ mod tests {
         // First check should consider files modified (initial run)
         assert!(
             cache
-                .check_modified_files(task_name, &[pattern.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&pattern))
                 .await
                 .unwrap()
         );
@@ -771,7 +771,7 @@ mod tests {
         // Second check should consider them unmodified
         assert!(
             !cache
-                .check_modified_files(task_name, &[pattern.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&pattern))
                 .await
                 .unwrap()
         );
@@ -789,7 +789,7 @@ mod tests {
         // Check should detect the modification
         assert!(
             cache
-                .check_modified_files(task_name, &[pattern.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&pattern))
                 .await
                 .unwrap()
         );
@@ -861,7 +861,7 @@ mod tests {
         // First check should consider it modified (initial run)
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -875,7 +875,7 @@ mod tests {
         // Second check should consider it unmodified
         assert!(
             !cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -895,7 +895,7 @@ mod tests {
         // Check should detect the directory modification
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -909,7 +909,7 @@ mod tests {
         // Second check should consider it unmodified
         assert!(
             !cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -928,7 +928,7 @@ mod tests {
         // Check should detect the directory modification
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -956,7 +956,7 @@ mod tests {
         // Check should detect the directory modification
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -982,7 +982,7 @@ mod tests {
         // Check should detect the directory modification
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -996,7 +996,7 @@ mod tests {
         // After update, it should be unmodified
         assert!(
             !cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -1012,7 +1012,7 @@ mod tests {
         // Check should detect the deep directory modification
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -1026,7 +1026,7 @@ mod tests {
         // After update, it should be unmodified
         assert!(
             !cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -1046,7 +1046,7 @@ mod tests {
         // Check should detect the deep file modification
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -1075,7 +1075,7 @@ mod tests {
         // Check should detect the deep file update
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -1092,7 +1092,7 @@ mod tests {
         // Check should detect the removal
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -1109,7 +1109,7 @@ mod tests {
         // Check should detect the directory removal
         assert!(
             cache
-                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&dir_path_str))
                 .await
                 .unwrap()
         );
@@ -1158,7 +1158,7 @@ mod tests {
 
         // Test: all .ts files without negation
         let pattern = format!("{}/**/*.ts", base.display());
-        let all_files = find_files_matching_patterns(&[pattern.clone()]);
+        let all_files = find_files_matching_patterns(std::slice::from_ref(&pattern));
         assert_eq!(all_files.len(), 4); // main.ts, util.ts, index.ts, test.ts (via **)
 
         // Test: exclude node_modules
@@ -1317,20 +1317,20 @@ mod tests {
         // First run: all files are new
         assert!(
             cache
-                .check_modified_files(task_name, &[pattern.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&pattern))
                 .await
                 .unwrap()
         );
 
         // Store state for all files
-        for path in find_files_matching_patterns(&[pattern.clone()]) {
+        for path in find_files_matching_patterns(std::slice::from_ref(&pattern)) {
             cache.update_file_state(task_name, &path).await.unwrap();
         }
 
         // Everything is up to date
         assert!(
             !cache
-                .check_modified_files(task_name, &[pattern.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&pattern))
                 .await
                 .unwrap()
         );
@@ -1342,13 +1342,13 @@ mod tests {
         // is no longer in the glob expansion
         assert!(
             !cache
-                .check_modified_files(task_name, &[pattern.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&pattern))
                 .await
                 .unwrap()
         );
 
         // has_removed_files detects that a previously tracked file is gone
-        let current_paths = find_files_matching_patterns(&[pattern.clone()]);
+        let current_paths = find_files_matching_patterns(std::slice::from_ref(&pattern));
         assert!(
             cache
                 .has_removed_files(task_name, &current_paths)
@@ -1376,7 +1376,7 @@ mod tests {
         // File is unchanged
         assert!(
             !cache
-                .check_modified_files(task_name, &[path_str.clone()])
+                .check_modified_files(task_name, std::slice::from_ref(&path_str))
                 .await
                 .unwrap()
         );

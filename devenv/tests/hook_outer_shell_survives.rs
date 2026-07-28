@@ -45,8 +45,12 @@ fn devenv_shim() -> (tempfile::TempDir, PathBuf) {
     (dir, calls)
 }
 
+/// Shell name, the hook snippet that activates devenv, and a builder for the
+/// shell's PATH-override line.
+type ShellCase = (&'static str, String, fn(&Path) -> String);
+
 /// bash, zsh, fish — sufficiently similar that one template covers all three.
-fn shells() -> Vec<(&'static str, String, fn(&Path) -> String)> {
+fn shells() -> Vec<ShellCase> {
     let bin = devenv_bin();
     [
         (

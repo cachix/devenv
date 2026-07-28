@@ -893,7 +893,7 @@ mod tests {
         h.dispatch(task_start(1));
         let overflow = MAX_SUPPRESSED_LINES + 50;
         for i in 0..overflow {
-            h.dispatch(task_log(1, &format!("line-{i}"), false));
+            h.dispatch(task_log(1, format!("line-{i}"), false));
         }
         h.dispatch(task_complete(1, ActivityOutcome::Failed));
 
