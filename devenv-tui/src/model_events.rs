@@ -24,11 +24,11 @@ impl UiEvent {
             UiEvent::KeyInput(key_code) => {
                 use KeyCode::*;
                 match key_code {
-                    Down => {
+                    Down | Char('j') => {
                         let selectable = activity_model.get_selectable_activity_ids(ui_state);
                         ui_state.select_activity(&selectable, true);
                     }
-                    Up => {
+                    Up | Char('k') => {
                         let selectable = activity_model.get_selectable_activity_ids(ui_state);
                         ui_state.select_activity(&selectable, false);
                     }
