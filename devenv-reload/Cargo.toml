@@ -10,6 +10,7 @@ description = "Shell session manager with hot-reload capability"
 [dependencies]
 devenv-activity.workspace = true
 devenv-event-sources.workspace = true
+devenv-mailbox.workspace = true
 devenv-shell.workspace = true
 portable-pty.workspace = true
 libghostty-vt.workspace = true

@@ -22,6 +22,7 @@ use crossterm::{
     Command, cursor, queue,
     terminal::{self, Clear, ClearType},
 };
+use devenv_mailbox::{FrontendCommand, FrontendEvent};
 use libghostty_vt::fmt::{Format, Formatter, FormatterOptions};
 use libghostty_vt::render::{
     CellIteration, CellIterator, Colors, Dirty, RenderState, RowIteration, RowIterator,
@@ -1524,7 +1525,7 @@ fn return_pty_read_buffer(buffer_tx: &std::sync::mpsc::SyncSender<Vec<u8>>, mut 
 struct EventLoopContext<'a> {
     pty: &'a Arc<Pty>,
     event_rx: std::sync::mpsc::Receiver<Event>,
-    coordinator_tx: &'a tokio_mpsc::Sender<ShellEvent>,
+    coordinator_tx: &'a tokio_mpsc::Sender<FrontendEvent>,
     stdout: &'a mut Box<dyn Write + Send>,
     virtual_pty_replies: &'a RefCell<VirtualPtyReplies>,
     pty_buffer_return_tx: &'a std::sync::mpsc::SyncSender<Vec<u8>>,
@@ -1535,7 +1536,7 @@ struct EventLoopContext<'a> {
 /// become ordinary child input merely because PTY output arrived first.
 struct StdinEventContext<'a, 'vt, 'cb> {
     pty: &'a Arc<Pty>,
-    coordinator_tx: &'a tokio_mpsc::Sender<ShellEvent>,
+    coordinator_tx: &'a tokio_mpsc::Sender<FrontendEvent>,
     stdout: &'a mut Box<dyn Write + Send>,
     vt: &'a mut Terminal<'vt, 'cb>,
     renderer: &'a mut Renderer<'vt>,
@@ -1639,26 +1640,37 @@ impl ShellSession {
     /// or the coordinator sends a shutdown command.
     ///
     /// # Arguments
-    /// * `command_rx` - Receives commands from coordinator
-    /// * `event_tx` - Sends events to coordinator
+    /// * `command_rx` - Receives commands from the frontend mailbox
+    /// * `event_tx` - Sends events to the frontend mailbox
     pub async fn run(
         mut self,
-        mut command_rx: tokio_mpsc::Receiver<ShellCommand>,
-        event_tx: tokio_mpsc::Sender<ShellEvent>,
+        mut command_rx: tokio_mpsc::Receiver<FrontendCommand>,
+        event_tx: tokio_mpsc::Sender<FrontendEvent>,
         io: SessionIo,
     ) -> Result<Option<u32>, SessionError> {
-        // Wait for the initial Spawn command
-        let (initial_cmd, _watch_files) = match command_rx.recv().await {
-            Some(ShellCommand::Spawn {
+        // Wait for the initial Spawn command. The renderer can hand terminal
+        // ownership over just before the backend fails, so cancellation must
+        // be observed even while the mailbox remains open without a Spawn.
+        let initial_command = match &self.shutdown_token {
+            Some(token) => {
+                tokio::select! {
+                    command = command_rx.recv() => command,
+                    _ = token.cancelled() => return Ok(None),
+                }
+            }
+            None => command_rx.recv().await,
+        };
+        let (initial_cmd, _watch_files) = match initial_command {
+            Some(FrontendCommand::Shell(ShellCommand::Spawn {
                 command,
                 watch_files,
-            }) => {
+            })) => {
                 self.status_line
                     .state_mut()
                     .set_watched_file_count(watch_files.len());
                 (command, watch_files)
             }
-            Some(ShellCommand::Shutdown) | None => {
+            Some(FrontendCommand::Shell(ShellCommand::Shutdown)) | None => {
                 return Ok(None);
             }
             Some(other) => {
@@ -1842,8 +1854,12 @@ impl ShellSession {
         // Forward coordinator commands to internal event channel
         let cmd_tx = event_tx_internal.clone();
         tokio::spawn(async move {
-            while let Some(cmd) = command_rx.recv().await {
-                if cmd_tx.send(Event::Command(cmd)).is_err() {
+            while let Some(command) = command_rx.recv().await {
+                let FrontendCommand::Shell(command) = command else {
+                    tracing::debug!(?command, "ignoring frontend command after shell takeover");
+                    continue;
+                };
+                if cmd_tx.send(Event::Command(command)).is_err() {
                     break;
                 }
             }
@@ -1929,7 +1945,10 @@ impl ShellSession {
         let _ = pty.kill();
 
         // Notify coordinator that shell exited
-        if let Err(e) = event_tx.try_send(ShellEvent::Exited { exit_code }) {
+        if let Err(e) = event_tx
+            .send(FrontendEvent::Shell(ShellEvent::Exited { exit_code }))
+            .await
+        {
             tracing::trace!("failed to send Exited event: {e}");
         }
 
@@ -2075,6 +2094,7 @@ impl ShellSession {
                             Event::PtyExit(exit_code) => {
                                 let synchronized = synchronized_output_active(vt);
                                 let deferred_release = esc.has_deferred_synchronized_output_reset();
+                                self.clear_status_row(stdout, esc.in_alternate_screen)?;
                                 escape_state_cleanup(&esc, stdout)?;
                                 if !synchronized && !deferred_release {
                                     begin_renderer_transaction(stdout, false)?;
@@ -2096,6 +2116,19 @@ impl ShellSession {
                                         renderer,
                                     },
                                 )?;
+                            }
+                            Event::Command(ShellCommand::Shutdown) => {
+                                let synchronized = synchronized_output_active(vt);
+                                let deferred_release = esc.has_deferred_synchronized_output_reset();
+                                self.clear_status_row(stdout, esc.in_alternate_screen)?;
+                                escape_state_cleanup(&esc, stdout)?;
+                                if !synchronized && !deferred_release {
+                                    begin_renderer_transaction(stdout, false)?;
+                                }
+                                renderer.render_with_scroll(stdout, vt)?;
+                                finish_renderer_transaction(stdout, &mut esc, true)?;
+                                stdout.flush()?;
+                                return Ok(None);
                             }
                             Event::Command(cmd) => {
                                 self.handle_command(cmd, vt, renderer)?;
@@ -2171,6 +2204,8 @@ impl ShellSession {
                     return Ok(exit_code);
                 }
 
+                Event::Command(ShellCommand::Shutdown) => break,
+
                 Event::Command(cmd) => {
                     self.handle_command(cmd, vt, renderer)?;
                     if synchronized_output_active(vt) {
@@ -2245,10 +2280,12 @@ impl ShellSession {
                             renderer.write_cursor(stdout, vt)?;
                             stdout.flush()?;
                         }
-                        if let Err(e) = coordinator_tx.try_send(ShellEvent::Resize {
-                            cols: pty_size.cols,
-                            rows: pty_size.rows,
-                        }) {
+                        if let Err(e) =
+                            coordinator_tx.try_send(FrontendEvent::Shell(ShellEvent::Resize {
+                                cols: pty_size.cols,
+                                rows: pty_size.rows,
+                            }))
+                        {
                             tracing::trace!("failed to send Resize event: {e}");
                         }
                     }
@@ -2283,12 +2320,16 @@ impl ShellSession {
         } = context;
         match classify_stdin(data) {
             StdinDisposition::TogglePause => {
-                if let Err(e) = coordinator_tx.try_send(ShellEvent::TogglePause) {
+                if let Err(e) =
+                    coordinator_tx.try_send(FrontendEvent::Shell(ShellEvent::TogglePause))
+                {
                     tracing::trace!("failed to send TogglePause event: {e}");
                 }
             }
             StdinDisposition::ListWatchedFiles => {
-                if let Err(e) = coordinator_tx.try_send(ShellEvent::ListWatchedFiles) {
+                if let Err(e) =
+                    coordinator_tx.try_send(FrontendEvent::Shell(ShellEvent::ListWatchedFiles))
+                {
                     tracing::trace!("failed to send ListWatchedFiles event: {e}");
                 }
             }
@@ -2379,9 +2420,7 @@ impl ShellSession {
                 renderer.feed(vt, &text)?;
             }
 
-            ShellCommand::Shutdown => {
-                // Will be handled by returning from event loop
-            }
+            ShellCommand::Shutdown => unreachable!("shutdown is handled by the event loop"),
 
             ShellCommand::Spawn { .. } => {
                 // Shouldn't receive Spawn after initial

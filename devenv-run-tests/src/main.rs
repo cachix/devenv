@@ -4,6 +4,7 @@ use devenv::{
     Config, Devenv, DevenvOptions, NixSettings, SecretOptions, SecretSettings, VerbosityLevel,
     activity as devenv_activity, console as devenv_console, tracing as devenv_tracing,
 };
+use devenv_mailbox::FrontendCommand;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
@@ -581,15 +582,16 @@ async fn async_main() -> Result<ExitCode> {
         // process output surfaces to stderr. Without this, events go nowhere.
         let (activity_rx, handle) = devenv_activity::init();
         let activity_guard = handle.install();
+        let (frontend_tx, frontend_rx) = tokio::sync::mpsc::channel(1);
         let console_task = tokio::spawn(async move {
-            devenv_console::ConsoleOutput::new(activity_rx, VerbosityLevel::Normal)
+            devenv_console::ConsoleOutput::new(activity_rx, frontend_rx, VerbosityLevel::Normal)
                 .run()
                 .await;
         });
 
         let result = execute_command(&args).await;
 
-        devenv_activity::exit_renderer();
+        let _ = frontend_tx.send(FrontendCommand::ExitRenderer).await;
         drop(activity_guard);
         let _ = console_task.await;
 

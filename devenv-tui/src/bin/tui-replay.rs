@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use devenv_activity::ActivityEvent;
+use devenv_mailbox::FrontendCommand;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -211,22 +212,23 @@ async fn main() -> Result<()> {
         .with_context(|| format!("Failed to open trace file: {}", args.trace_file.display()))?;
 
     let (tx, rx) = mpsc::unbounded_channel();
+    let (renderer_tx, renderer_rx) = mpsc::channel(1);
     let shutdown = Shutdown::new();
 
-    // Signal TUI when replay is done via an in-band control event.
-    let mut exit_tx = Some(tx.clone());
-    let send_exit = |tx: tokio::sync::mpsc::UnboundedSender<devenv_activity::ActivityEvent>| {
-        let _ = tx.send(devenv_activity::ActivityEvent::Control(
-            devenv_activity::Control::Exit,
-        ));
-    };
+    // Renderer lifecycle is deliberately separate from replayable activity
+    // data. This lets --loop replay every recorded activity and lets --hold
+    // keep the TUI alive after the data stream drains.
+    let mut exit_tx = Some(renderer_tx);
 
     info!("Spawning TUI");
 
     let mut tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
         async move {
-            match devenv_tui::TuiApp::new(rx, shutdown).run().await {
+            match devenv_tui::TuiApp::new(rx, renderer_rx, shutdown)
+                .run()
+                .await
+            {
                 Ok(_) => info!("TUI exited normally"),
                 Err(e) => warn!("TUI error: {e}"),
             }
@@ -270,7 +272,7 @@ async fn main() -> Result<()> {
             } else {
                 // Signal TUI that replay is done and let it drain and exit.
                 if let Some(tx) = exit_tx.take() {
-                    send_exit(tx);
+                    let _ = tx.send(FrontendCommand::ExitRenderer).await;
                 }
                 let _ = (&mut tui_task).await;
             }
@@ -283,10 +285,35 @@ async fn main() -> Result<()> {
             shutdown.shutdown();
             // Signal TUI that we're done (after interrupt)
             if let Some(tx) = exit_tx.take() {
-                send_exit(tx);
+                let _ = tx.send(FrontendCommand::ExitRenderer).await;
             }
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_renderer_control_is_not_replayed_as_activity() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        process_event(
+            &tx,
+            TraceEvent {
+                target: "devenv_activity::events".into(),
+                timestamp: Utc::now(),
+                fields: serde_json::json!({
+                    "event": {
+                        "activity_kind": "control",
+                        "control": "exit"
+                    }
+                }),
+            },
+        );
+
+        assert!(rx.try_recv().is_err());
+    }
 }

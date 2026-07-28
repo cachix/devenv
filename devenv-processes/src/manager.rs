@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use devenv_activity::{Activity, ProcessStatus, activity};
+use devenv_mailbox::{FrontendEvent, ProcessCommand};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
@@ -15,19 +16,6 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
-
-/// Commands that can be sent to control processes
-#[derive(Debug, Clone)]
-pub enum ProcessCommand {
-    /// Restart a running process, or start a stopped process
-    Restart(String),
-    /// Stop a running process but keep it visible and restartable
-    Stop(String),
-    /// Tear down the whole process manager (stop every process and shut the
-    /// daemon down). Sent from the TUI's attach-mode interrupt prompt; the
-    /// attached client services it by issuing a `down`.
-    StopManager,
-}
 
 /// Request sent by a client to the native manager API socket.
 ///
@@ -2667,11 +2655,13 @@ impl NativeProcessManager {
     /// This allows commands (e.g. Ctrl-R restart) to be handled while task
     /// execution is still in progress. The background task exits when the
     /// sender half of the channel is dropped.
-    pub fn start_command_listener(self: &Arc<Self>, mut rx: mpsc::Receiver<ProcessCommand>) {
+    pub fn start_command_listener(self: &Arc<Self>, mut rx: mpsc::Receiver<FrontendEvent>) {
         let pm = Arc::clone(self);
         tokio::spawn(async move {
-            while let Some(cmd) = rx.recv().await {
-                pm.handle_command(cmd).await;
+            while let Some(event) = rx.recv().await {
+                if let FrontendEvent::Process(command) = event {
+                    pm.handle_command(command).await;
+                }
             }
         });
     }
@@ -2682,7 +2672,7 @@ impl NativeProcessManager {
     pub async fn run_foreground(
         &self,
         cancellation_token: tokio_util::sync::CancellationToken,
-        mut command_rx: Option<mpsc::Receiver<ProcessCommand>>,
+        mut frontend_event_rx: Option<mpsc::Receiver<FrontendEvent>>,
     ) -> Result<()> {
         trace!(
             "run_foreground: ENTERED, token_cancelled={}",
@@ -2701,13 +2691,15 @@ impl NativeProcessManager {
                     trace!("run_foreground: stop_all completed");
                     break;
                 }
-                Some(cmd) = async {
-                    match command_rx.as_mut() {
+                Some(event) = async {
+                    match frontend_event_rx.as_mut() {
                         Some(rx) => rx.recv().await,
                         None => std::future::pending().await,
                     }
                 } => {
-                    self.handle_command(cmd).await;
+                    if let FrontendEvent::Process(command) = event {
+                        self.handle_command(command).await;
+                    }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
                     let is_empty = self.processes.read().await.is_empty();

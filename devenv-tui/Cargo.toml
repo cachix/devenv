@@ -42,8 +42,8 @@ serde_json.workspace = true
 # Activity system
 devenv-activity.workspace = true
 
-# Process control
-devenv-processes.workspace = true
+# Frontend/backend control protocol
+devenv-mailbox.workspace = true
 
 # Shell session management (provides ShellSession, protocol types)
 devenv-shell.workspace = true

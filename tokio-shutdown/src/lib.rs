@@ -10,19 +10,40 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicI32, Ordering};
 use tokio::signal;
-use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
+use tokio_util::task::task_tracker::TaskTrackerToken;
 use tracing::info;
+
+/// Outstanding cleanup work registered with [`Shutdown::cleanup_guard`].
+///
+/// Hold it for as long as the cleanup runs; the shutdown wait completes once
+/// every outstanding guard has been dropped.
+#[must_use = "hold this guard until its cleanup work has finished"]
+#[derive(Debug)]
+pub struct CleanupGuard {
+    /// Never read: dropping it is what deregisters the cleanup.
+    _token: TaskTrackerToken,
+}
 
 /// A graceful shutdown manager for tokio applications
 pub struct Shutdown {
     token: CancellationToken,
     last_signal: AtomicI32,
-    /// Optional receiver for cleanup completion signal
-    cleanup_complete: Mutex<Option<oneshot::Receiver<()>>>,
+    /// Registered cleanup tasks, tracked as guards rather than completion
+    /// signals so any number of components can register independently.
+    /// Registration and closure are synchronized so shutdown either tracks a
+    /// guard or rejects it before it can observe the tracker as empty.
+    cleanup: Mutex<CleanupTracker>,
     /// Hook called before force-exiting (e.g., to restore terminal state)
     pre_exit_hook: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+}
+
+#[derive(Debug)]
+struct CleanupTracker {
+    tracker: TaskTracker,
+    registration_open: bool,
 }
 
 impl std::fmt::Debug for Shutdown {
@@ -30,7 +51,7 @@ impl std::fmt::Debug for Shutdown {
         f.debug_struct("Shutdown")
             .field("token", &self.token)
             .field("last_signal", &self.last_signal)
-            .field("cleanup_complete", &"<Mutex>")
+            .field("cleanup", &self.cleanup)
             .finish()
     }
 }
@@ -41,7 +62,10 @@ impl Shutdown {
         Arc::new(Self {
             token: CancellationToken::new(),
             last_signal: AtomicI32::new(0),
-            cleanup_complete: Mutex::new(None),
+            cleanup: Mutex::new(CleanupTracker {
+                tracker: TaskTracker::new(),
+                registration_open: true,
+            }),
             pre_exit_hook: Mutex::new(None),
         })
     }
@@ -54,10 +78,21 @@ impl Shutdown {
         *self.pre_exit_hook.lock().unwrap() = Some(Box::new(hook));
     }
 
-    /// Set the cleanup completion receiver.
-    /// When shutdown completes, `wait_for_shutdown_complete()` will await this receiver.
-    pub fn set_cleanup_receiver(&self, rx: oneshot::Receiver<()>) {
-        *self.cleanup_complete.lock().unwrap() = Some(rx);
+    /// Register cleanup work that shutdown must wait for.
+    ///
+    /// `wait_for_shutdown_complete()` returns once every guard handed out here
+    /// has been dropped. Any number of components can register; with no
+    /// registrants the wait returns immediately.
+    ///
+    /// Once cleanup waiting begins, registration is closed and this returns
+    /// `None`. This makes a guard racing with shutdown unambiguous: it is
+    /// either tracked by the wait or explicitly rejected.
+    #[must_use = "hold the returned guard until cleanup is complete"]
+    pub fn cleanup_guard(&self) -> Option<CleanupGuard> {
+        let cleanup = self.cleanup.lock().unwrap();
+        cleanup.registration_open.then(|| CleanupGuard {
+            _token: cleanup.tracker.token(),
+        })
     }
 
     /// Run a task and trigger shutdown when it completes (Send futures only)
@@ -168,19 +203,21 @@ impl Shutdown {
         self.token.cancelled().await;
     }
 
-    /// Wait for shutdown to complete (cleanup task finished)
+    /// Wait for shutdown to complete (all registered cleanup finished)
     pub async fn wait_for_shutdown_complete(&self) {
-        let rx = self.cleanup_complete.lock().unwrap().take();
-        if let Some(rx) = rx {
-            // Ignore error (sender dropped means cleanup is done)
-            let _ = rx.await;
-        }
+        let cleanup = {
+            let mut cleanup = self.cleanup.lock().unwrap();
+            cleanup.registration_open = false;
+            cleanup.tracker.close();
+            cleanup.tracker.clone()
+        };
+        cleanup.wait().await;
     }
 
     /// Trigger shutdown and wait for cleanup to finish. Idempotent: safe
     /// to call multiple times — the second call is a no-op (the
-    /// cancellation token is already cancelled and the cleanup receiver
-    /// has been consumed).
+    /// cancellation token is already cancelled and every cleanup guard
+    /// has been dropped).
     pub async fn shutdown_and_wait(&self) {
         self.shutdown();
         self.wait_for_shutdown_complete().await;
@@ -421,6 +458,7 @@ where
 mod tests {
     use super::*;
     use std::time::Duration;
+    use tokio::sync::{Barrier, oneshot};
 
     // A signal arriving after some other runtime shut down must still be
     // observed — the process-global OS handlers outlive the listener task.
@@ -566,35 +604,150 @@ mod tests {
     #[tokio::test]
     async fn test_wait_for_shutdown_complete() {
         let shutdown = Shutdown::new();
+        let drained = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-        // Set up cleanup channel
-        let (cleanup_tx, cleanup_rx) = tokio::sync::oneshot::channel::<()>();
-        shutdown.set_cleanup_receiver(cleanup_rx);
-
-        // Spawn cleanup task that sends on completion
-        let shutdown_for_task = Arc::clone(&shutdown);
-        tokio::spawn(async move {
-            shutdown_for_task.cancellation_token().cancelled().await;
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            let _ = cleanup_tx.send(());
+        let guard = shutdown
+            .cleanup_guard()
+            .expect("cleanup registration should be open");
+        let cleanup = tokio::spawn({
+            let shutdown = Arc::clone(&shutdown);
+            let drained = drained.clone();
+            async move {
+                shutdown.cancellation_token().cancelled().await;
+                drained.store(true, std::sync::atomic::Ordering::SeqCst);
+                drop(guard);
+            }
         });
 
-        // Trigger shutdown
-        shutdown.shutdown();
+        tokio::time::timeout(Duration::from_secs(5), shutdown.shutdown_and_wait())
+            .await
+            .expect("cleanup did not finish");
 
-        // This should complete when cleanup sends
-        shutdown.wait_for_shutdown_complete().await;
+        assert!(
+            drained.load(std::sync::atomic::Ordering::SeqCst),
+            "wait returned before the cleanup guard was dropped"
+        );
         assert!(shutdown.is_cancelled());
+        cleanup.await.unwrap();
     }
 
     #[tokio::test]
-    async fn test_wait_for_shutdown_complete_no_receiver() {
+    async fn test_wait_for_shutdown_complete_no_registrants() {
         let shutdown = Shutdown::new();
 
-        // No cleanup receiver set - should return immediately
-        shutdown.shutdown();
-        shutdown.wait_for_shutdown_complete().await;
+        tokio::time::timeout(Duration::from_secs(5), shutdown.shutdown_and_wait())
+            .await
+            .expect("wait blocked with no cleanup registered");
         assert!(shutdown.is_cancelled());
+    }
+
+    // Virtual time: the elapsed timeout below asserts the wait stays pending
+    // while a guard is outstanding, without spending real time.
+    #[tokio::test(start_paused = true)]
+    async fn test_wait_for_shutdown_complete_waits_for_every_guard() {
+        let shutdown = Shutdown::new();
+        let first = shutdown
+            .cleanup_guard()
+            .expect("cleanup registration should be open");
+        let second = shutdown
+            .cleanup_guard()
+            .expect("cleanup registration should be open");
+
+        shutdown.shutdown();
+        drop(first);
+
+        assert!(
+            tokio::time::timeout(
+                Duration::from_secs(1),
+                shutdown.wait_for_shutdown_complete()
+            )
+            .await
+            .is_err(),
+            "wait completed while a cleanup guard was still outstanding"
+        );
+
+        drop(second);
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            shutdown.wait_for_shutdown_complete(),
+        )
+        .await
+        .expect("cleanup did not finish");
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_and_wait_is_idempotent() {
+        let shutdown = Shutdown::new();
+        drop(
+            shutdown
+                .cleanup_guard()
+                .expect("cleanup registration should be open"),
+        );
+
+        for _ in 0..3 {
+            tokio::time::timeout(Duration::from_secs(5), shutdown.shutdown_and_wait())
+                .await
+                .expect("repeated shutdown_and_wait blocked");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_guard_is_rejected_after_waiting_begins() {
+        let shutdown = Shutdown::new();
+
+        shutdown.shutdown_and_wait().await;
+
+        assert!(
+            shutdown.cleanup_guard().is_none(),
+            "cleanup registered after shutdown could not be waited for"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_guard_racing_shutdown_is_tracked_or_rejected() {
+        let shutdown = Shutdown::new();
+        let start = Arc::new(Barrier::new(3));
+        let (registered_tx, registered_rx) = oneshot::channel();
+        let (release_tx, release_rx) = oneshot::channel();
+
+        let registration = tokio::spawn({
+            let shutdown = Arc::clone(&shutdown);
+            let start = Arc::clone(&start);
+            async move {
+                start.wait().await;
+                match shutdown.cleanup_guard() {
+                    Some(guard) => {
+                        registered_tx.send(true).unwrap();
+                        release_rx.await.unwrap();
+                        drop(guard);
+                    }
+                    None => registered_tx.send(false).unwrap(),
+                }
+            }
+        });
+        let mut wait = tokio::spawn({
+            let shutdown = Arc::clone(&shutdown);
+            let start = Arc::clone(&start);
+            async move {
+                start.wait().await;
+                shutdown.shutdown_and_wait().await;
+            }
+        });
+
+        start.wait().await;
+
+        if registered_rx.await.unwrap() {
+            assert!(
+                tokio::time::timeout(Duration::from_millis(50), &mut wait)
+                    .await
+                    .is_err(),
+                "shutdown completed before its racing cleanup guard was released"
+            );
+            release_tx.send(()).unwrap();
+        }
+
+        wait.await.unwrap();
+        registration.await.unwrap();
     }
 
     #[tokio::test]

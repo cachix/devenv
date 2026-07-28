@@ -50,10 +50,11 @@ pub use config::{
     RestartConfig, RestartPolicy, SocketActivationConfig, WatchConfig, WatchdogConfig,
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
+pub use devenv_mailbox::ProcessCommand;
 pub use manager::{
     ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, ManagerMode,
-    NativeProcessManager, PortInfo, ProcessCommand, ProcessInfo, ProcessPhase, ProcessResources,
-    ProcessScheduler, ProcessState, StartOutcome,
+    NativeProcessManager, PortInfo, ProcessInfo, ProcessPhase, ProcessResources, ProcessScheduler,
+    ProcessState, StartOutcome,
 };
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;

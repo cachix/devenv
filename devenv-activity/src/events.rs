@@ -22,19 +22,6 @@ pub enum ActivityEvent {
     /// Aggregate expected counts announcement from Nix
     SetExpected(SetExpected),
     Shell(Shell),
-    Control(Control),
-}
-
-/// Frontend control events: not rendered, they steer the renderer itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Valuable)]
-#[serde(tag = "control", rename_all = "snake_case")]
-pub enum Control {
-    /// Exit the renderer and release the terminal.
-    #[serde(alias = "render_done")]
-    Exit,
-    /// The backend attached to (or detached from) a running process manager,
-    /// which changes what the TUI's Ctrl-C prompt offers.
-    Attached { attached: bool },
 }
 
 /// Expected count announcement for aggregate activity tracking.

@@ -11,6 +11,7 @@ description = "Shell and PTY management for devenv"
 
 # PTY management
 portable-pty.workspace = true
+devenv-mailbox.workspace = true
 
 # Terminal handling
 crossterm.workspace = true

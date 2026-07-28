@@ -10,6 +10,7 @@ async-trait.workspace = true
 devenv-activity.workspace = true
 devenv-core.workspace = true
 devenv-event-sources.workspace = true
+devenv-mailbox.workspace = true
 futures.workspace = true
 miette.workspace = true
 netstat2.workspace = true

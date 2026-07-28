@@ -10,7 +10,7 @@ use crate::app::{ExitFlag, handle_interrupt_prompt_key, request_interrupt_prompt
 use crate::model::{ActivityModel, UiState, ViewMode};
 use base64::Engine;
 use crossterm::event::MouseButton;
-use devenv_processes::ProcessCommand;
+use devenv_mailbox::FrontendEvent;
 use iocraft::prelude::*;
 use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
@@ -100,7 +100,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let model_version = hooks.use_context::<crate::app::ModelVersion>().0.clone();
     let render_shutdown = hooks.use_context::<crate::app::RenderShutdown>().0.clone();
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
-    let command_tx = hooks.use_context::<Option<mpsc::Sender<ProcessCommand>>>();
+    let command_tx = hooks.use_context::<Option<mpsc::Sender<FrontendEvent>>>();
     let (width, height) = hooks.use_terminal_size();
 
     // Component-local scroll state - updates are immediate, no model lock needed.
@@ -369,7 +369,7 @@ fn handle_key_event(
     key_event: KeyEvent,
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
-    command_tx: Option<&mpsc::Sender<ProcessCommand>>,
+    command_tx: Option<&mpsc::Sender<FrontendEvent>>,
     attached: bool,
     scroll_offset: &mut State<usize>,
     total_visual_rows: usize,

@@ -32,7 +32,7 @@ use devenv_core::settings::NixSettings;
 use devenv_nix_backend::NixCBackend;
 use devenv_nix_backend::cachix_daemon::{ConnectionParams, DaemonSpawnConfig, OwnedDaemon};
 use miette::{IntoDiagnostic, Result, WrapErr};
-use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, info, warn};
 
 /// Runtime cachix integration.
@@ -53,7 +53,7 @@ pub struct CachixIntegration {
     #[allow(dead_code)]
     pump: tokio::task::JoinHandle<()>,
     /// Shutdown finalizer task. Lives until the shutdown token fires,
-    /// then drains the daemon and signals
+    /// then drains the daemon and releases its cleanup guard, unblocking
     /// `shutdown.wait_for_shutdown_complete()`.
     #[allow(dead_code)]
     finalizer: tokio::task::JoinHandle<()>,
@@ -119,6 +119,14 @@ impl CachixIntegration {
         .await?;
 
         let Some(push_cache) = push else {
+            return Ok(None);
+        };
+
+        // Register before creating any push-side resources. If shutdown has
+        // already started waiting, new cleanup cannot be tracked and the
+        // daemon must not be started.
+        let Some(cleanup) = shutdown.cleanup_guard() else {
+            debug!("cachix: shutdown in progress, skipping push daemon");
             return Ok(None);
         };
 
@@ -193,9 +201,8 @@ impl CachixIntegration {
 
         cnix.add_realized_observer(Arc::new(MpscObserver { tx }));
 
-        // Shutdown finalizer: wait for cancellation, drain daemon, signal cleanup.
-        let (cleanup_tx, cleanup_rx) = oneshot::channel::<()>();
-        shutdown.set_cleanup_receiver(cleanup_rx);
+        // Shutdown finalizer: wait for cancellation, drain daemon, release the
+        // cleanup guard so shutdown can complete.
         let finalizer = {
             let daemon = daemon.clone();
             let token = shutdown.cancellation_token();
@@ -208,7 +215,7 @@ impl CachixIntegration {
                         warn!("cachix: error during daemon shutdown: {e}");
                     }
                 }
-                let _ = cleanup_tx.send(());
+                drop(cleanup);
             })
         };
 

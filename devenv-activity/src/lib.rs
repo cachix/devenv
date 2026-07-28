@@ -55,7 +55,7 @@ pub use tracing_subscriber::Registry;
 // Core types
 pub use activity::{Activity, ActivityRef, ActivityType};
 pub use events::{
-    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Control, EvalOp, Evaluate,
+    ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
     ExpectedCategory, Fetch, FetchKind, Message, Operation, Process, ProcessStatus, SetExpected,
     Task, TaskInfo,
 };
@@ -71,8 +71,8 @@ pub use builders::{
 pub use handle::{ActivityGuard, ActivityHandle, init};
 pub use serde_valuable::SerdeValue;
 pub use stack::{
-    append_eval_log, append_eval_op, attached, current_activity_id, current_activity_level,
-    emit_task_hierarchy, exit_renderer, log_to_task, message, message_with_details, set_expected,
+    append_eval_log, append_eval_op, current_activity_id, current_activity_level,
+    emit_task_hierarchy, log_to_task, message, message_with_details, set_expected,
 };
 
 // Traits

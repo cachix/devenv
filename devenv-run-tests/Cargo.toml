@@ -8,6 +8,7 @@ license.workspace = true
 clap.workspace = true
 devenv.workspace = true
 devenv-nix-backend.workspace = true
+devenv-mailbox.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 miette.workspace = true

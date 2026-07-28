@@ -162,6 +162,8 @@ pub struct UiState {
     pub hide_stopped_processes: bool,
     pub scroll: ScrollState,
     pub view_options: ViewOptions,
+    /// Size the last frame was laid out at. Seeded from the terminal in
+    /// [`UiState::new`], so it is usable before anything has been painted.
     pub terminal_size: TerminalSize,
     pub interrupt_prompt_active: bool,
     /// When the interrupt prompt is open while attached to a running process
@@ -169,6 +171,10 @@ pub struct UiState {
     /// rather than the in-process "keep running vs quit".
     pub interrupt_prompt_attached: bool,
     pub view_mode: ViewMode,
+    /// Height of the inline frame painted before entering the expanded view,
+    /// so returning to [`ViewMode::Main`] clears exactly what is still on
+    /// screen. Consumed by that clear.
+    pub pre_expand_height: Option<u16>,
 }
 
 impl UiState {
@@ -195,10 +201,11 @@ impl UiState {
             interrupt_prompt_active: false,
             interrupt_prompt_attached: false,
             view_mode: ViewMode::Main,
+            pre_expand_height: None,
         }
     }
 
-    /// Update terminal size (call on resize events).
+    /// Record the size the current frame is rendered at.
     pub fn set_terminal_size(&mut self, width: u16, height: u16) {
         self.terminal_size = TerminalSize { width, height };
     }
@@ -370,8 +377,6 @@ impl ActivityModel {
     /// loop is not woken needlessly.
     pub fn apply_activity_event(&mut self, event: ActivityEvent) -> bool {
         match event {
-            // Handled by the event processor before the model; nothing to render.
-            ActivityEvent::Control(_) => false,
             ActivityEvent::Build(build_event) => {
                 self.handle_build_event(build_event);
                 true

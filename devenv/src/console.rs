@@ -48,9 +48,10 @@ impl BoundedLog {
 
 use console::style;
 use devenv_activity::{
-    ActivityEvent, ActivityGuard, ActivityLevel, ActivityOutcome, Build, Command, Control,
-    Evaluate, Fetch, FetchKind, Operation, Process, Task,
+    ActivityEvent, ActivityGuard, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch,
+    FetchKind, Operation, Process, Task,
 };
+use devenv_mailbox::FrontendCommand;
 use tokio::sync::mpsc;
 
 use crate::tracing::HumanReadableDuration;
@@ -74,6 +75,7 @@ struct PendingTask {
 
 pub struct ConsoleOutput {
     rx: mpsc::UnboundedReceiver<ActivityEvent>,
+    frontend_rx: mpsc::Receiver<FrontendCommand>,
     verbosity: VerbosityLevel,
     entries: HashMap<u64, Entry>,
     /// Task names announced by `Task::Hierarchy` ahead of `Task::Start`. A task
@@ -87,9 +89,14 @@ pub struct ConsoleOutput {
 }
 
 impl ConsoleOutput {
-    pub fn new(rx: mpsc::UnboundedReceiver<ActivityEvent>, verbosity: VerbosityLevel) -> Self {
+    pub fn new(
+        rx: mpsc::UnboundedReceiver<ActivityEvent>,
+        frontend_rx: mpsc::Receiver<FrontendCommand>,
+        verbosity: VerbosityLevel,
+    ) -> Self {
         Self {
             rx,
+            frontend_rx,
             verbosity,
             entries: HashMap::new(),
             pending_tasks: HashMap::new(),
@@ -102,11 +109,13 @@ impl ConsoleOutput {
     #[cfg(test)]
     fn with_writer(
         rx: mpsc::UnboundedReceiver<ActivityEvent>,
+        frontend_rx: mpsc::Receiver<FrontendCommand>,
         verbosity: VerbosityLevel,
         stderr: Box<dyn Write + Send>,
     ) -> Self {
         Self {
             rx,
+            frontend_rx,
             verbosity,
             entries: HashMap::new(),
             pending_tasks: HashMap::new(),
@@ -115,17 +124,43 @@ impl ConsoleOutput {
         }
     }
 
-    /// Process events until the stream signals stop (a `Control::Exit`
-    /// event or a closed channel), then flush any buffered output.
-    pub async fn run(mut self) {
-        while let Some(event) = self.rx.recv().await {
-            if matches!(event, ActivityEvent::Control(Control::Exit)) {
-                break;
+    /// Process events until the activity producer closes or the frontend is
+    /// told to exit. Returns the command receiver for possible shell handoff.
+    pub async fn run(mut self) -> mpsc::Receiver<FrontendCommand> {
+        let mut exit_requested = false;
+
+        while !exit_requested {
+            tokio::select! {
+                event = self.rx.recv() => match event {
+                    Some(event) => {
+                        self.handle(event);
+                        self.drain_ready_and_flush();
+                    }
+                    None => break,
+                },
+                command = self.frontend_rx.recv() => match command {
+                    Some(FrontendCommand::ExitRenderer) => exit_requested = true,
+                    Some(FrontendCommand::SetAttached(_)) => {}
+                    // Shell commands follow ExitRenderer and remain queued for
+                    // the session that takes terminal ownership next.
+                    Some(FrontendCommand::Shell(_)) => {
+                        unreachable!("shell command received before renderer exit")
+                    }
+                    // The backend is gone and no further lifecycle command
+                    // can arrive. Drain queued activity below, then flush.
+                    None => exit_requested = true,
+                },
             }
+        }
+
+        // ExitRenderer is sent after activity producers quiesce. Flush the
+        // events already queued so console and TUI teardown agree.
+        while let Ok(event) = self.rx.try_recv() {
             self.handle(event);
             self.drain_ready_and_flush();
         }
         self.flush();
+        self.frontend_rx
     }
 
     fn handle(&mut self, event: ActivityEvent) {
@@ -240,8 +275,7 @@ impl ConsoleOutput {
             ActivityEvent::Message(msg) => {
                 self.message(msg.level, &msg.text, msg.details.as_deref())
             }
-            ActivityEvent::SetExpected(_) | ActivityEvent::Shell(_) | ActivityEvent::Control(_) => {
-            }
+            ActivityEvent::SetExpected(_) | ActivityEvent::Shell(_) => {}
         }
     }
 
@@ -376,7 +410,8 @@ impl Drop for ConsoleGuard {
 pub fn install(verbosity: VerbosityLevel) -> ConsoleGuard {
     let (rx, handle) = devenv_activity::init();
     let activity = handle.install();
-    let mut output = ConsoleOutput::new(rx, verbosity);
+    let (_frontend_tx, frontend_rx) = mpsc::channel(1);
+    let mut output = ConsoleOutput::new(rx, frontend_rx, verbosity);
     let thread = std::thread::Builder::new()
         .name("devenv-console".into())
         .spawn(move || {
@@ -398,6 +433,7 @@ mod tests {
     use super::*;
     use devenv_activity::test_helpers::*;
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     #[derive(Clone)]
     struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
@@ -488,8 +524,10 @@ mod tests {
     impl Harness {
         fn new(verbosity: VerbosityLevel) -> Self {
             let (_tx, rx) = mpsc::unbounded_channel::<ActivityEvent>();
+            let (_frontend_tx, frontend_rx) = mpsc::channel(1);
             let stderr = SharedBuffer::new();
-            let console = ConsoleOutput::with_writer(rx, verbosity, stderr.clone().into_box());
+            let console =
+                ConsoleOutput::with_writer(rx, frontend_rx, verbosity, stderr.clone().into_box());
             Self { console, stderr }
         }
 
@@ -864,9 +902,14 @@ mod tests {
     #[tokio::test]
     async fn run_handles_queued_events_and_flushes_on_shutdown() {
         let (tx, rx) = mpsc::unbounded_channel();
+        let (frontend_tx, frontend_rx) = mpsc::channel(1);
         let writer = FlushSpy::new();
-        let output =
-            ConsoleOutput::with_writer(rx, VerbosityLevel::Normal, writer.clone().into_box());
+        let output = ConsoleOutput::with_writer(
+            rx,
+            frontend_rx,
+            VerbosityLevel::Normal,
+            writer.clone().into_box(),
+        );
         let task = tokio::spawn(output.run());
 
         let batch_flushed = writer.flushed.notified();
@@ -875,11 +918,35 @@ mod tests {
         batch_flushed.await;
         let flushes_before_shutdown = writer.flush_count();
 
-        tx.send(ActivityEvent::Control(Control::Exit)).unwrap();
-        task.await.unwrap();
+        frontend_tx
+            .send(FrontendCommand::ExitRenderer)
+            .await
+            .unwrap();
+        let _frontend_rx = task.await.unwrap();
 
         assert!(writer.contents().contains("queued event"));
         assert!(writer.flush_count() > flushes_before_shutdown);
+    }
+
+    #[tokio::test]
+    async fn run_exits_when_frontend_mailbox_closes() {
+        let (_activity_tx, activity_rx) = mpsc::unbounded_channel();
+        let (frontend_tx, frontend_rx) = mpsc::channel(1);
+        let writer = FlushSpy::new();
+        let output = ConsoleOutput::with_writer(
+            activity_rx,
+            frontend_rx,
+            VerbosityLevel::Normal,
+            writer.into_box(),
+        );
+        let task = tokio::spawn(output.run());
+
+        drop(frontend_tx);
+
+        tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("console kept rendering after its backend mailbox closed")
+            .unwrap();
     }
 
     /// Buffer is capped; oldest lines evict so memory stays bounded

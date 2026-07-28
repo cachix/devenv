@@ -1,5 +1,6 @@
 #![cfg(feature = "test-pty")]
 
+use devenv_mailbox::{FrontendCommand, FrontendEvent, ProcessCommand};
 use devenv_shell::vt_utils::{DEFAULT_MAX_SCROLLBACK, active_point, row_plain_text, screen_point};
 use devenv_shell::{
     CommandBuilder, PtySize, SessionConfig, SessionIo, ShellCommand, ShellEvent, ShellSession,
@@ -10,6 +11,7 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 /// Create a SessionIo wired to UnixStream pairs for testing.
 /// Returns (io, stdin_write_end, stdout_read_end).
@@ -35,14 +37,18 @@ fn test_session() -> ShellSession {
     })
 }
 
-fn spawn_cmd(shell_line: &str) -> ShellCommand {
+fn spawn_cmd(shell_line: &str) -> FrontendCommand {
     let mut cmd = CommandBuilder::new("sh");
     cmd.arg("-c");
     cmd.arg(shell_line);
-    ShellCommand::Spawn {
+    FrontendCommand::Shell(ShellCommand::Spawn {
         command: cmd,
         watch_files: vec![],
-    }
+    })
+}
+
+fn shell(command: ShellCommand) -> FrontendCommand {
+    FrontendCommand::Shell(command)
 }
 
 /// Floods 30 numbered lines followed by a DONE marker, overflowing a 24-row terminal.
@@ -91,7 +97,7 @@ async fn test_spawn_and_exit() {
         tokio::select! {
             event = event_rx.recv() => {
                 match event {
-                    Some(ShellEvent::Exited { .. }) => break,
+                    Some(FrontendEvent::Shell(ShellEvent::Exited { .. })) => break,
                     None => panic!("event channel closed without Exited"),
                     _ => continue,
                 }
@@ -107,6 +113,37 @@ async fn test_spawn_and_exit() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_exit_event_waits_for_mailbox_capacity() {
+    let (io, _stdin_ours, _stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(1);
+    let (event_tx, mut event_rx) = mpsc::channel(1);
+
+    event_tx
+        .send(FrontendEvent::Process(ProcessCommand::StopManager))
+        .await
+        .unwrap();
+
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
+    cmd_tx.send(spawn_cmd("exit 7")).await.unwrap();
+
+    assert!(matches!(
+        event_rx.recv().await,
+        Some(FrontendEvent::Process(ProcessCommand::StopManager))
+    ));
+    assert!(matches!(
+        tokio::time::timeout(Duration::from_secs(5), event_rx.recv())
+            .await
+            .expect("timed out waiting for shell exit event"),
+        Some(FrontendEvent::Shell(ShellEvent::Exited {
+            exit_code: Some(7)
+        }))
+    ));
+
+    assert_eq!(handle.await.unwrap().unwrap(), Some(7));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_shutdown_before_spawn() {
     let (io, _stdin_ours, _stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
@@ -115,13 +152,74 @@ async fn test_shutdown_before_spawn() {
     let session = test_session();
     let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
-    cmd_tx.send(ShellCommand::Shutdown).await.unwrap();
+    cmd_tx.send(shell(ShellCommand::Shutdown)).await.unwrap();
 
     let result = tokio::time::timeout(Duration::from_secs(5), handle)
         .await
         .expect("timed out")
         .unwrap();
     assert!(result.is_ok());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_cancellation_before_spawn_does_not_wait_for_mailbox_close() {
+    let (io, _stdin_ours, _stdout_ours) = test_io();
+    let (_cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+    let shutdown = CancellationToken::new();
+
+    let session = test_session().with_shutdown_token(shutdown.clone());
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
+
+    shutdown.cancel();
+
+    let result = tokio::time::timeout(Duration::from_secs(5), handle)
+        .await
+        .expect("session ignored cancellation while waiting for Spawn")
+        .unwrap()
+        .expect("session returned an error during cancellation");
+    assert_eq!(result, None);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_frontend_command_before_spawn_is_rejected() {
+    let (io, _stdin_ours, _stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
+
+    cmd_tx.send(FrontendCommand::ExitRenderer).await.unwrap();
+
+    let result = tokio::time::timeout(Duration::from_secs(5), handle)
+        .await
+        .expect("timed out")
+        .unwrap();
+    assert!(matches!(
+        result,
+        Err(devenv_shell::SessionError::UnexpectedCommand(_))
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_shutdown_after_spawn() {
+    let (io, _stdin_ours, _stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
+
+    cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
+    cmd_tx.send(shell(ShellCommand::Shutdown)).await.unwrap();
+
+    let result = tokio::time::timeout(Duration::from_secs(5), handle)
+        .await
+        .expect("session ignored shutdown after spawning the PTY")
+        .unwrap()
+        .expect("session returned an error during shutdown");
+    assert_eq!(result, None);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -213,7 +311,7 @@ async fn test_ctrl_alt_d_toggle_pause() {
         tokio::select! {
             event = event_rx.recv() => {
                 match event {
-                    Some(ShellEvent::TogglePause) => break,
+                    Some(FrontendEvent::Shell(ShellEvent::TogglePause)) => break,
                     None => panic!("event channel closed without TogglePause"),
                     _ => continue,
                 }
@@ -305,9 +403,9 @@ async fn test_status_line_rendered_on_last_row() {
 
     // Tell the session about watched files — this triggers the "watching" status
     cmd_tx
-        .send(ShellCommand::WatchedFiles {
+        .send(shell(ShellCommand::WatchedFiles {
             files: vec!["a.nix".into(), "b.nix".into()],
-        })
+        }))
         .await
         .unwrap();
 
@@ -451,9 +549,9 @@ async fn test_overflow_status_line_protected() {
         .unwrap();
 
     cmd_tx
-        .send(ShellCommand::WatchedFiles {
+        .send(shell(ShellCommand::WatchedFiles {
             files: vec!["test.nix".into()],
-        })
+        }))
         .await
         .unwrap();
 
@@ -502,18 +600,18 @@ async fn test_build_lifecycle_status_line() {
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 
     cmd_tx
-        .send(ShellCommand::WatchedFiles {
+        .send(shell(ShellCommand::WatchedFiles {
             files: vec!["a.nix".into(), "b.nix".into()],
-        })
+        }))
         .await
         .unwrap();
     let mut all_bytes = read_until(&mut stdout_ours, b"watching", Duration::from_secs(5));
 
     // Building state
     cmd_tx
-        .send(ShellCommand::Building {
+        .send(shell(ShellCommand::Building {
             changed_files: vec![PathBuf::from("devenv.nix")],
-        })
+        }))
         .await
         .unwrap();
     all_bytes.extend(read_until(
@@ -526,9 +624,9 @@ async fn test_build_lifecycle_status_line() {
 
     // Reload ready state
     cmd_tx
-        .send(ShellCommand::ReloadReady {
+        .send(shell(ShellCommand::ReloadReady {
             changed_files: vec![PathBuf::from("devenv.nix")],
-        })
+        }))
         .await
         .unwrap();
     all_bytes.extend(read_until(
@@ -558,19 +656,19 @@ async fn test_build_failed_error_toggle() {
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 
     cmd_tx
-        .send(ShellCommand::WatchedFiles {
+        .send(shell(ShellCommand::WatchedFiles {
             files: vec!["a.nix".into()],
-        })
+        }))
         .await
         .unwrap();
     let mut all_bytes = read_until(&mut stdout_ours, b"watching", Duration::from_secs(5));
 
     // Build failed
     cmd_tx
-        .send(ShellCommand::BuildFailed {
+        .send(shell(ShellCommand::BuildFailed {
             changed_files: vec![PathBuf::from("devenv.nix")],
             error: "attribute 'foo' missing".to_string(),
-        })
+        }))
         .await
         .unwrap();
     all_bytes.extend(read_until(
@@ -615,16 +713,16 @@ async fn test_watching_paused_status_line() {
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 
     cmd_tx
-        .send(ShellCommand::WatchedFiles {
+        .send(shell(ShellCommand::WatchedFiles {
             files: vec!["a.nix".into()],
-        })
+        }))
         .await
         .unwrap();
     let mut all_bytes = read_until(&mut stdout_ours, b"watching", Duration::from_secs(5));
 
     // Pause watching
     cmd_tx
-        .send(ShellCommand::WatchingPaused { paused: true })
+        .send(shell(ShellCommand::WatchingPaused { paused: true }))
         .await
         .unwrap();
     all_bytes.extend(read_until(
@@ -637,7 +735,7 @@ async fn test_watching_paused_status_line() {
 
     // Resume watching
     cmd_tx
-        .send(ShellCommand::WatchingPaused { paused: false })
+        .send(shell(ShellCommand::WatchingPaused { paused: false }))
         .await
         .unwrap();
     all_bytes.extend(read_until(
@@ -666,13 +764,13 @@ async fn test_print_watched_files() {
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 
     cmd_tx
-        .send(ShellCommand::PrintWatchedFiles {
+        .send(shell(ShellCommand::PrintWatchedFiles {
             files: vec![
                 PathBuf::from("devenv.nix"),
                 PathBuf::from("devenv.yaml"),
                 PathBuf::from("shell.nix"),
             ],
-        })
+        }))
         .await
         .unwrap();
 

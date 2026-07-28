@@ -18,6 +18,7 @@ devenv-activity.workspace = true
 devenv-core = { workspace = true, features = ["clap"] }
 devenv-eval-cache.workspace = true
 devenv-processes.workspace = true
+devenv-mailbox.workspace = true
 devenv-tasks.workspace = true
 devenv-tui.workspace = true
 devenv-cache-core.workspace = true

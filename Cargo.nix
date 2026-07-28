@@ -113,6 +113,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "devenv-mailbox" = rec {
+      packageId = "devenv-mailbox";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "devenv-mailbox";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "devenv-nix-backend" = rec {
       packageId = "devenv-nix-backend";
       build = internal.buildRustCrateWithFeatures {
@@ -7647,6 +7657,10 @@ rec {
             packageId = "devenv-eval-cache";
           }
           {
+            name = "devenv-mailbox";
+            packageId = "devenv-mailbox";
+          }
+          {
             name = "devenv-nix-backend";
             packageId = "devenv-nix-backend";
           }
@@ -8281,6 +8295,20 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "macos-kqueue" "notify" ];
       };
+      "devenv-mailbox" = rec {
+        crateName = "devenv-mailbox";
+        version = "2.2.1";
+        edition = "2024";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-mailbox; };
+        libName = "devenv_mailbox";
+        dependencies = [
+          {
+            name = "portable-pty";
+            packageId = "portable-pty";
+          }
+        ];
+
+      };
       "devenv-nix-backend" = rec {
         crateName = "devenv-nix-backend";
         version = "2.2.1";
@@ -8469,6 +8497,10 @@ rec {
             packageId = "devenv-event-sources";
           }
           {
+            name = "devenv-mailbox";
+            packageId = "devenv-mailbox";
+          }
+          {
             name = "futures";
             packageId = "futures";
           }
@@ -8573,6 +8605,10 @@ rec {
             packageId = "devenv-event-sources";
           }
           {
+            name = "devenv-mailbox";
+            packageId = "devenv-mailbox";
+          }
+          {
             name = "devenv-shell";
             packageId = "devenv-shell";
           }
@@ -8633,6 +8669,10 @@ rec {
             packageId = "devenv";
           }
           {
+            name = "devenv-mailbox";
+            packageId = "devenv-mailbox";
+          }
+          {
             name = "devenv-nix-backend";
             packageId = "devenv-nix-backend";
           }
@@ -8682,8 +8722,8 @@ rec {
             packageId = "crossterm";
           }
           {
-            name = "devenv-activity";
-            packageId = "devenv-activity";
+            name = "devenv-mailbox";
+            packageId = "devenv-mailbox";
           }
           {
             name = "iocraft";
@@ -8990,8 +9030,8 @@ rec {
             packageId = "devenv-activity";
           }
           {
-            name = "devenv-processes";
-            packageId = "devenv-processes";
+            name = "devenv-mailbox";
+            packageId = "devenv-mailbox";
           }
           {
             name = "devenv-shell";
@@ -32402,7 +32442,7 @@ rec {
           {
             name = "tokio-util";
             packageId = "tokio-util";
-            features = [ "io" ];
+            features = [ "io" "rt" ];
           }
           {
             name = "tracing";
@@ -32524,6 +32564,11 @@ rec {
             packageId = "futures-sink";
           }
           {
+            name = "futures-util";
+            packageId = "futures-util";
+            optional = true;
+          }
+          {
             name = "pin-project-lite";
             packageId = "pin-project-lite";
           }
@@ -32555,7 +32600,7 @@ rec {
           "time" = [ "tokio/time" "slab" ];
           "tracing" = [ "dep:tracing" ];
         };
-        resolvedDefaultFeatures = [ "codec" "compat" "default" "futures-io" "io" "io-util" "net" ];
+        resolvedDefaultFeatures = [ "codec" "compat" "default" "futures-io" "futures-util" "io" "io-util" "net" "rt" ];
       };
       "toml 0.5.11" = rec {
         crateName = "toml";

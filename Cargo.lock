@@ -2249,6 +2249,7 @@ dependencies = [
  "devenv-cache-core",
  "devenv-core",
  "devenv-eval-cache",
+ "devenv-mailbox",
  "devenv-nix-backend",
  "devenv-nix-backend-macros",
  "devenv-processes",
@@ -2405,6 +2406,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "devenv-mailbox"
+version = "2.2.1"
+dependencies = [
+ "portable-pty",
+]
+
+[[package]]
 name = "devenv-nix-backend"
 version = "2.2.1"
 dependencies = [
@@ -2454,6 +2462,7 @@ dependencies = [
  "devenv-activity",
  "devenv-core",
  "devenv-event-sources",
+ "devenv-mailbox",
  "futures",
  "miette",
  "netstat2",
@@ -2480,6 +2489,7 @@ dependencies = [
  "devenv-activity",
  "devenv-cache-core",
  "devenv-event-sources",
+ "devenv-mailbox",
  "devenv-shell",
  "libghostty-vt",
  "portable-pty",
@@ -2495,6 +2505,7 @@ version = "2.2.1"
 dependencies = [
  "clap",
  "devenv",
+ "devenv-mailbox",
  "devenv-nix-backend",
  "globset",
  "miette",
@@ -2510,6 +2521,7 @@ name = "devenv-shell"
 version = "2.2.1"
 dependencies = [
  "crossterm",
+ "devenv-mailbox",
  "insta",
  "iocraft",
  "libc",
@@ -2584,7 +2596,7 @@ dependencies = [
  "clap",
  "crossterm",
  "devenv-activity",
- "devenv-processes",
+ "devenv-mailbox",
  "devenv-shell",
  "human-repr",
  "insta",
@@ -9509,6 +9521,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]

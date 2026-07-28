@@ -9,12 +9,12 @@ use devenv::{
         TraceOutputSpec,
     },
     commands, is_ai_agent,
-    processes::ProcessCommand,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
     terminal::{self, IsForegroundTerminal as _},
     tracing as devenv_tracing,
-    tui::{SessionIo, ShellCommand, ShellEvent, ShellSession},
+    tui::{SessionIo, ShellSession},
 };
+use devenv_mailbox::{FrontendCommand, FrontendEvent};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{
     collections::BTreeMap,
@@ -513,18 +513,15 @@ impl Renderer {
         }
     }
 
-    /// Drive the renderer to completion. The activity stream carries its own
-    /// stop signal (`Control::Exit`).
-    ///
-    /// Owns its own current-thread runtime. Only the TUI consumes
-    /// `command_tx` (process commands from the UI); the other sinks drop it
-    /// so the backend's receiver closes.
+    /// Drive the renderer to completion and return the backend-to-frontend
+    /// mailbox for an optional shell-session handoff.
     fn drive(
         self,
         shutdown: &Arc<Shutdown>,
-        command_tx: tokio_mpsc::Sender<ProcessCommand>,
+        frontend_rx: tokio_mpsc::Receiver<FrontendCommand>,
+        event_tx: tokio_mpsc::Sender<FrontendEvent>,
         verbosity: VerbosityLevel,
-    ) -> Result<()> {
+    ) -> Result<tokio_mpsc::Receiver<FrontendCommand>> {
         match self {
             Renderer::Tui(activity_rx) => {
                 let filter_level = if matches!(verbosity, VerbosityLevel::Verbose) {
@@ -532,27 +529,40 @@ impl Renderer {
                 } else {
                     ActivityLevel::Info
                 };
-                current_thread_runtime("TUI")?.block_on(async {
-                    let _ = devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
-                        .with_command_sender(command_tx)
-                        .filter_level(filter_level)
-                        .run()
-                        .await;
-                });
-                Ok(())
+                current_thread_runtime("TUI")?
+                    .block_on(async {
+                        devenv_tui::TuiApp::new(activity_rx, frontend_rx, shutdown.clone())
+                            .with_event_sender(event_tx)
+                            .filter_level(filter_level)
+                            .run()
+                            .await
+                    })
+                    .into_diagnostic()
+                    .wrap_err("TUI error")
             }
             Renderer::Console(activity_rx) => {
-                drop(command_tx);
-                current_thread_runtime("console")?.block_on(async {
-                    devenv::console::ConsoleOutput::new(activity_rx, verbosity)
+                drop(event_tx);
+                Ok(current_thread_runtime("console")?.block_on(async {
+                    devenv::console::ConsoleOutput::new(activity_rx, frontend_rx, verbosity)
                         .run()
-                        .await;
-                });
-                Ok(())
+                        .await
+                }))
             }
             Renderer::None => {
-                drop(command_tx);
-                Ok(())
+                drop(event_tx);
+                let mut frontend_rx = frontend_rx;
+                current_thread_runtime("frontend control")?.block_on(async {
+                    loop {
+                        match frontend_rx.recv().await {
+                            Some(FrontendCommand::ExitRenderer) | None => break,
+                            Some(FrontendCommand::SetAttached(_)) => {}
+                            Some(FrontendCommand::Shell(_)) => {
+                                unreachable!("shell command received before renderer exit")
+                            }
+                        }
+                    }
+                });
+                Ok(frontend_rx)
             }
         }
     }
@@ -581,7 +591,12 @@ impl Drop for ExitNotice {
 /// Apply signals and wait for both threads: the backend without a deadline,
 /// then the frontend with `grace` to drain. Returns whether the frontend
 /// exited.
-fn event_loop(events: &mpsc::Receiver<Event>, shutdown: &Shutdown, grace: Duration) -> bool {
+fn event_loop(
+    events: &mpsc::Receiver<Event>,
+    shutdown: &Shutdown,
+    frontend_tx: tokio_mpsc::Sender<FrontendCommand>,
+    grace: Duration,
+) -> bool {
     let mut frontend_exited = false;
 
     loop {
@@ -592,9 +607,20 @@ fn event_loop(events: &mpsc::Receiver<Event>, shutdown: &Shutdown, grace: Durati
         }
     }
 
+    // A normal backend path has already initiated shutdown, but a panic can
+    // bypass backend_thread_main's async cleanup tail. Cancellation is also
+    // how a ShellSession that already owns the terminal learns that its
+    // coordinator is gone.
+    shutdown.shutdown();
+
     // Backstop for a backend that died without telling the renderer to exit:
     // the frontend would otherwise render until the grace expires.
-    devenv_activity::exit_renderer();
+    let _ = frontend_tx.try_send(FrontendCommand::ExitRenderer);
+    // This is the root sender. Once the backend has exited there can be no
+    // more legitimate commands, so close the mailbox after the backstop. In
+    // particular, a shell handoff that never received Spawn must observe EOF
+    // instead of waiting for the frontend abandonment deadline.
+    drop(frontend_tx);
 
     let deadline = Instant::now() + grace;
     while !frontend_exited {
@@ -622,31 +648,15 @@ fn drain_signals(events: mpsc::Receiver<Event>, shutdown: Arc<Shutdown>) {
     });
 }
 
-/// Frontend half of the PTY shell wiring: after the renderer exits, the
-/// frontend thread runs the shell session on the terminal it just freed.
-struct SessionFrontend {
-    command_rx: tokio_mpsc::Receiver<ShellCommand>,
-    event_tx: tokio_mpsc::Sender<ShellEvent>,
-    /// Status line emits escape codes; disabled when output is captured
-    /// (non-interactive `devenv shell -- cmd`).
-    interactive: bool,
-}
-
-/// Backend half of the PTY shell wiring, handed to the reload coordinator.
-struct SessionBackend {
-    command_tx: tokio_mpsc::Sender<ShellCommand>,
-    event_rx: tokio_mpsc::Receiver<ShellEvent>,
-}
-
 fn backend_thread_main(
     options: BackendOptions,
     caller: Caller,
-    session: Option<SessionBackend>,
-    command_rx: tokio_mpsc::Receiver<ProcessCommand>,
+    frontend_tx: tokio_mpsc::Sender<FrontendCommand>,
+    event_rx: tokio_mpsc::Receiver<FrontendEvent>,
     shutdown: Arc<Shutdown>,
 ) -> Result<CommandResult> {
     build_gc_runtime().block_on(async {
-        let output = run_backend(options, shutdown.clone(), session, command_rx, caller).await;
+        let output = run_backend(options, shutdown.clone(), frontend_tx, event_rx, caller).await;
 
         // Fallback for paths that didn't run cleanup themselves
         // (PTY shell, REPL). No-op when run_backend already did it.
@@ -658,24 +668,25 @@ fn backend_thread_main(
 
 fn frontend_thread_main(
     renderer: Renderer,
-    session: Option<SessionFrontend>,
-    command_tx: tokio_mpsc::Sender<ProcessCommand>,
+    session_interactive: Option<bool>,
+    frontend_rx: tokio_mpsc::Receiver<FrontendCommand>,
+    event_tx: tokio_mpsc::Sender<FrontendEvent>,
     verbosity: VerbosityLevel,
     shutdown: Arc<Shutdown>,
 ) -> Result<()> {
-    renderer.drive(&shutdown, command_tx, verbosity)?;
+    let frontend_rx = renderer.drive(&shutdown, frontend_rx, event_tx.clone(), verbosity)?;
 
     // The renderer has exited and released the terminal. A PTY shell session
     // takes it over on this same thread, so terminal ownership never crosses
     // a thread boundary. Its exit code reaches the backend through the
     // session's event mailbox.
-    if let Some(session) = session {
+    if let Some(interactive) = session_interactive {
         current_thread_runtime("session")?
             .block_on(
                 ShellSession::with_defaults()
-                    .with_status_line(session.interactive)
+                    .with_status_line(interactive)
                     .with_shutdown_token(shutdown.cancellation_token())
-                    .run(session.command_rx, session.event_tx, SessionIo::default()),
+                    .run(frontend_rx, event_tx, SessionIo::default()),
             )
             .into_diagnostic()
             .wrap_err("Shell session error")?;
@@ -700,7 +711,6 @@ fn run(
         tracing::info!("using project root {}", root.display());
     }
 
-    let verbosity = ui.verbosity;
     // TUI terminal setup: save state before raw mode, install restore hooks
     // for panics and force-exit (second Ctrl+C)
     if tui {
@@ -724,28 +734,14 @@ fn run(
         }
     });
 
-    // TUI→backend process commands (restart/stop from the process view);
-    // everything backend→frontend rides the ambient activity stream.
-    let (command_tx, command_rx) = tokio_mpsc::channel(16);
-
-    // PTY shell wiring, when the command calls for a terminal session.
-    let (frontend_session, backend_session) = match &backend_options.command {
-        Commands::Shell { cmd, .. } if backend_options.use_pty => {
-            let (shell_command_tx, shell_command_rx) = tokio_mpsc::channel(16);
-            let (shell_event_tx, shell_event_rx) = tokio_mpsc::channel(16);
-            (
-                Some(SessionFrontend {
-                    command_rx: shell_command_rx,
-                    event_tx: shell_event_tx,
-                    interactive: cmd.is_none(),
-                }),
-                Some(SessionBackend {
-                    command_tx: shell_command_tx,
-                    event_rx: shell_event_rx,
-                }),
-            )
-        }
-        _ => (None, None),
+    // One typed mailbox in each direction spans the complete frontend/backend
+    // boundary. The frontend retains command-receiver ownership across the
+    // renderer -> PTY shell transition.
+    let (frontend_tx, frontend_rx) = tokio_mpsc::channel(16);
+    let (event_tx, event_rx) = tokio_mpsc::channel(16);
+    let session_interactive = match &backend_options.command {
+        Commands::Shell { cmd, .. } if backend_options.use_pty => Some(cmd.is_none()),
+        _ => None,
     };
 
     // Eval futures are !Send and run on the block_on task, so the thread
@@ -753,6 +749,7 @@ fn run(
     let backend_thread = {
         let events_tx = events_tx.clone();
         let shutdown = shutdown.clone();
+        let backend_frontend_tx = frontend_tx.clone();
         std::thread::Builder::new()
             .name("devenv".into())
             .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
@@ -761,8 +758,8 @@ fn run(
                 backend_thread_main(
                     backend_options,
                     caller,
-                    backend_session,
-                    command_rx,
+                    backend_frontend_tx,
+                    event_rx,
                     shutdown,
                 )
             })
@@ -778,13 +775,20 @@ fn run(
             .name("frontend".into())
             .spawn(move || {
                 let _notice = ExitNotice(events_tx, Event::FrontendExited);
-                frontend_thread_main(renderer, frontend_session, command_tx, verbosity, shutdown)
+                frontend_thread_main(
+                    renderer,
+                    session_interactive,
+                    frontend_rx,
+                    event_tx,
+                    verbosity,
+                    shutdown,
+                )
             })
             .into_diagnostic()
             .wrap_err("Failed to spawn frontend thread")?
     };
 
-    let frontend_exited = event_loop(&events_rx, &shutdown, FRONTEND_DRAIN_GRACE);
+    let frontend_exited = event_loop(&events_rx, &shutdown, frontend_tx, FRONTEND_DRAIN_GRACE);
     drain_signals(events_rx, shutdown.clone());
 
     let frontend_result = if frontend_exited {
@@ -843,11 +847,11 @@ fn launch_repl_thread(devenv: devenv::Devenv) -> Result<()> {
 async fn run_backend(
     backend: BackendOptions,
     shutdown: Arc<Shutdown>,
-    session: Option<SessionBackend>,
-    command_rx: tokio_mpsc::Receiver<ProcessCommand>,
+    frontend_tx: tokio_mpsc::Sender<FrontendCommand>,
+    event_rx: tokio_mpsc::Receiver<FrontendEvent>,
     caller: Caller,
 ) -> Result<CommandResult> {
-    let command_rx = Some(command_rx);
+    let mut event_rx = Some(event_rx);
 
     let BackendOptions {
         devenv: devenv_options,
@@ -863,8 +867,7 @@ async fn run_backend(
     let devenv = Devenv::new(devenv_options).await?;
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
-    if use_pty && let Commands::Shell { cmd: None, args } = command
-    {
+    if use_pty && let Commands::Shell { cmd: None, args } = command {
         // Pre-compute shell environment while we still own Devenv directly.
         // This must happen while TUI is active since get_dev_environment has #[activity].
         let dotfile = devenv.dotfile().to_path_buf();
@@ -875,11 +878,6 @@ async fn run_backend(
         let shell_path = devenv.shell_settings.shell_path.clone();
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
-
-        let SessionBackend {
-            command_tx,
-            event_rx,
-        } = session.ok_or_else(|| miette::miette!("missing session wiring for PTY shell"))?;
 
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
@@ -895,8 +893,10 @@ async fn run_backend(
             task_exports,
             task_messages,
             shell_cwd,
-            command_tx,
-            event_rx,
+            frontend_tx,
+            event_rx: event_rx
+                .take()
+                .expect("frontend event receiver is available for PTY shell"),
         })
         .await
         .map(|exit_code| {
@@ -920,7 +920,7 @@ async fn run_backend(
     if let Commands::Repl {} = command {
         let prepared = devenv.prepare_repl().await;
         shutdown.shutdown_and_wait().await;
-        devenv_activity::exit_renderer();
+        let _ = frontend_tx.send(FrontendCommand::ExitRenderer).await;
         return match prepared {
             Ok(()) => Ok(CommandResult::Repl(Box::new(devenv))),
             Err(err) => debugger_or_err(Err(err), nix_debugger, devenv),
@@ -928,8 +928,15 @@ async fn run_backend(
     }
 
     // All other commands
-    let result =
-        dispatch_command(&devenv, command, verbosity, command_rx, config_strict_ports).await;
+    let result = dispatch_command(
+        &devenv,
+        command,
+        verbosity,
+        event_rx,
+        frontend_tx.clone(),
+        config_strict_ports,
+    )
+    .await;
 
     // Drain cleanup (e.g. cachix push finalization) while the TUI is
     // still rendering, so its activity stays visible to the user.
@@ -938,7 +945,7 @@ async fn run_backend(
     // Signal the renderer to stop, after the drain, so its activity stayed
     // visible. Done before the debugger check so the TUI releases the
     // terminal before the debugger takes it.
-    devenv_activity::exit_renderer();
+    let _ = frontend_tx.send(FrontendCommand::ExitRenderer).await;
 
     debugger_or_err(result, nix_debugger, devenv)
 }
@@ -1023,14 +1030,16 @@ async fn run_up(
 fn process_options(
     mode: ProcessMode,
     strict_ports: bool,
-    command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+    frontend_event_rx: Option<tokio_mpsc::Receiver<FrontendEvent>>,
+    frontend_command_tx: tokio_mpsc::Sender<FrontendCommand>,
 ) -> devenv::ProcessOptions {
     let detached = mode == ProcessMode::Detached;
     devenv::ProcessOptions {
         mode,
         log_to_file: detached,
         strict_ports,
-        command_rx,
+        frontend_event_rx,
+        frontend_command_tx: Some(frontend_command_tx),
         daemon: detached,
     }
 }
@@ -1040,7 +1049,8 @@ async fn run_up_args(
     devenv: &Devenv,
     up_args: devenv::cli::UpArgs,
     config_strict_ports: bool,
-    command_rx: Option<tokio_mpsc::Receiver<ProcessCommand>>,
+    frontend_event_rx: Option<tokio_mpsc::Receiver<FrontendEvent>>,
+    frontend_command_tx: tokio_mpsc::Sender<FrontendCommand>,
     verbosity: VerbosityLevel,
 ) -> Result<CommandResult> {
     let strict_ports = devenv_core::settings::flag(up_args.strict_ports, up_args.no_strict_ports)
@@ -1050,7 +1060,7 @@ async fn run_up_args(
     } else {
         ProcessMode::Foreground
     };
-    let options = process_options(mode, strict_ports, command_rx);
+    let options = process_options(mode, strict_ports, frontend_event_rx, frontend_command_tx);
     run_up(devenv, up_args.processes, up_args.mode, options, verbosity).await
 }
 
@@ -1060,7 +1070,8 @@ async fn dispatch_command(
     devenv: &Devenv,
     command: Commands,
     verbosity: VerbosityLevel,
-    command_rx: Option<tokio_mpsc::Receiver<ProcessCommand>>,
+    frontend_event_rx: Option<tokio_mpsc::Receiver<FrontendEvent>>,
+    frontend_command_tx: tokio_mpsc::Sender<FrontendCommand>,
     config_strict_ports: bool,
 ) -> Result<CommandResult> {
     match command {
@@ -1149,7 +1160,15 @@ async fn dispatch_command(
             .await?
             .map_or(CommandResult::Done, CommandResult::Print)),
         Commands::Up { up_args } => {
-            run_up_args(devenv, up_args, config_strict_ports, command_rx, verbosity).await
+            run_up_args(
+                devenv,
+                up_args,
+                config_strict_ports,
+                frontend_event_rx,
+                frontend_command_tx,
+                verbosity,
+            )
+            .await
         }
         Commands::Down {} => {
             devenv.down().await?;
@@ -1157,7 +1176,15 @@ async fn dispatch_command(
         }
         Commands::Processes { command } => match command {
             ProcessesCommand::Up { up_args } => {
-                run_up_args(devenv, up_args, config_strict_ports, command_rx, verbosity).await
+                run_up_args(
+                    devenv,
+                    up_args,
+                    config_strict_ports,
+                    frontend_event_rx,
+                    frontend_command_tx,
+                    verbosity,
+                )
+                .await
             }
             ProcessesCommand::Start { name: None, detach } => {
                 let mode = if detach {
@@ -1165,7 +1192,12 @@ async fn dispatch_command(
                 } else {
                     ProcessMode::Foreground
                 };
-                let options = process_options(mode, config_strict_ports, command_rx);
+                let options = process_options(
+                    mode,
+                    config_strict_ports,
+                    frontend_event_rx,
+                    frontend_command_tx,
+                );
                 run_up(
                     devenv,
                     vec![],
@@ -1187,8 +1219,12 @@ async fn dispatch_command(
                     devenv.processes_start(&name).await?;
                     Ok(CommandResult::Done)
                 } else {
-                    let options =
-                        process_options(ProcessMode::Detached, config_strict_ports, command_rx);
+                    let options = process_options(
+                        ProcessMode::Detached,
+                        config_strict_ports,
+                        frontend_event_rx,
+                        frontend_command_tx,
+                    );
                     run_up(
                         devenv,
                         vec![name],
@@ -1200,7 +1236,9 @@ async fn dispatch_command(
                 }
             }
             ProcessesCommand::Attach {} => {
-                devenv.attach(command_rx).await?;
+                devenv
+                    .attach(frontend_event_rx, Some(frontend_command_tx))
+                    .await?;
                 Ok(CommandResult::Done)
             }
             ProcessesCommand::Down {} | ProcessesCommand::Stop { name: None } => {
@@ -1330,8 +1368,8 @@ struct ReloadShellArgs {
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
     shell_cwd: Option<PathBuf>,
-    command_tx: tokio_mpsc::Sender<ShellCommand>,
-    event_rx: tokio_mpsc::Receiver<ShellEvent>,
+    frontend_tx: tokio_mpsc::Sender<FrontendCommand>,
+    event_rx: tokio_mpsc::Receiver<FrontendEvent>,
 }
 
 /// Run the reload coordinator for a PTY shell session.
@@ -1358,7 +1396,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         task_exports,
         task_messages,
         shell_cwd,
-        command_tx,
+        frontend_tx,
         event_rx,
     } = args;
 
@@ -1380,7 +1418,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell_cwd,
     };
 
-    ShellCoordinator::run(reload_config, builder, command_tx, event_rx)
+    ShellCoordinator::run(reload_config, builder, frontend_tx, event_rx)
         .await
         .into_diagnostic()
         .wrap_err("Shell coordinator error")
@@ -1504,30 +1542,74 @@ mod tests {
     use super::*;
 
     #[test]
+    fn renderer_none_hands_shell_command_off_after_exit() {
+        let shutdown = Shutdown::new();
+        let (frontend_tx, frontend_rx) = tokio_mpsc::channel(2);
+        let (event_tx, _event_rx) = tokio_mpsc::channel(1);
+        frontend_tx
+            .blocking_send(FrontendCommand::ExitRenderer)
+            .unwrap();
+        frontend_tx
+            .blocking_send(FrontendCommand::Shell(
+                devenv_mailbox::ShellCommand::Shutdown,
+            ))
+            .unwrap();
+
+        let mut frontend_rx = Renderer::None
+            .drive(&shutdown, frontend_rx, event_tx, VerbosityLevel::Normal)
+            .unwrap();
+
+        assert!(matches!(
+            frontend_rx.blocking_recv(),
+            Some(FrontendCommand::Shell(
+                devenv_mailbox::ShellCommand::Shutdown
+            ))
+        ));
+    }
+
+    #[test]
     fn event_loop_completes_when_both_exit() {
         let (tx, rx) = mpsc::channel();
+        let (frontend_tx, mut frontend_rx) = tokio_mpsc::channel(1);
         let shutdown = Shutdown::new();
         drop(ExitNotice(tx.clone(), Event::FrontendExited));
         drop(ExitNotice(tx.clone(), Event::BackendExited));
 
-        assert!(event_loop(&rx, &shutdown, Duration::from_secs(5)));
+        assert!(event_loop(
+            &rx,
+            &shutdown,
+            frontend_tx,
+            Duration::from_secs(5)
+        ));
+        assert!(shutdown.is_cancelled());
+        assert!(matches!(
+            frontend_rx.blocking_recv(),
+            Some(FrontendCommand::ExitRenderer)
+        ));
+        assert!(frontend_rx.blocking_recv().is_none());
     }
 
     #[test]
     fn event_loop_abandons_wedged_frontend() {
         let (tx, rx) = mpsc::channel();
+        let (frontend_tx, _frontend_rx) = tokio_mpsc::channel(1);
         let shutdown = Shutdown::new();
         let _wedged = ExitNotice(tx.clone(), Event::FrontendExited);
         drop(ExitNotice(tx.clone(), Event::BackendExited));
 
-        assert!(!event_loop(&rx, &shutdown, Duration::from_millis(50)));
+        assert!(!event_loop(
+            &rx,
+            &shutdown,
+            frontend_tx,
+            Duration::from_millis(50)
+        ));
+        assert!(shutdown.is_cancelled());
     }
 
     #[test]
     fn event_loop_sees_exit_of_panicking_thread() {
-        panic::set_hook(Box::new(|_| {}));
-
         let (tx, rx) = mpsc::channel();
+        let (frontend_tx, _frontend_rx) = tokio_mpsc::channel(1);
         let shutdown = Shutdown::new();
         let notice = ExitNotice(tx.clone(), Event::FrontendExited);
         let thread = std::thread::spawn(move || {
@@ -1536,7 +1618,13 @@ mod tests {
         });
         drop(ExitNotice(tx.clone(), Event::BackendExited));
 
-        assert!(event_loop(&rx, &shutdown, Duration::from_secs(5)));
+        assert!(event_loop(
+            &rx,
+            &shutdown,
+            frontend_tx,
+            Duration::from_secs(5)
+        ));
+        assert!(shutdown.is_cancelled());
         assert!(thread.join().is_err());
     }
 }

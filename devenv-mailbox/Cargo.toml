@@ -1,0 +1,12 @@
+[package]
+name = "devenv-mailbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = false
+description = "Typed in-process mailbox messages for devenv components"
+
+[dependencies]
+portable-pty.workspace = true

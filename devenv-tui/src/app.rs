@@ -8,8 +8,8 @@ use crossterm::{
     style::{Color, ResetColor, SetForegroundColor},
     terminal,
 };
-use devenv_activity::{ActivityEvent, ActivityLevel, Control};
-use devenv_processes::ProcessCommand;
+use devenv_activity::{ActivityEvent, ActivityLevel};
+use devenv_mailbox::{FrontendCommand, FrontendEvent, ProcessCommand};
 use iocraft::prelude::*;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -106,27 +106,30 @@ impl Default for TuiConfig {
 pub struct TuiApp {
     config: TuiConfig,
     activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
+    frontend_rx: mpsc::Receiver<FrontendCommand>,
     shutdown: Arc<Shutdown>,
-    command_tx: Option<mpsc::Sender<ProcessCommand>>,
+    event_tx: Option<mpsc::Sender<FrontendEvent>>,
 }
 
 impl TuiApp {
     /// Create a new TUI application with required dependencies.
     pub fn new(
         activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
+        frontend_rx: mpsc::Receiver<FrontendCommand>,
         shutdown: Arc<Shutdown>,
     ) -> Self {
         Self {
             config: TuiConfig::default(),
             activity_rx,
+            frontend_rx,
             shutdown,
-            command_tx: None,
+            event_tx: None,
         }
     }
 
-    /// Set the command sender for process control commands.
-    pub fn with_command_sender(mut self, tx: mpsc::Sender<ProcessCommand>) -> Self {
-        self.command_tx = Some(tx);
+    /// Set the event sender for frontend input and process-control commands.
+    pub fn with_event_sender(mut self, tx: mpsc::Sender<FrontendEvent>) -> Self {
+        self.event_tx = Some(tx);
         self
     }
 
@@ -161,11 +164,11 @@ impl TuiApp {
         self
     }
 
-    /// Run the TUI application until the backend completes.
-    ///
-    /// The activity stream carries its own stop signal: a
-    /// `Control::Exit` event (or the channel closing) ends rendering.
-    pub async fn run(self) -> std::io::Result<()> {
+    /// Run the TUI application until its activity producer closes or it
+    /// receives [`FrontendCommand::ExitRenderer`]. Returns the command receiver so
+    /// the frontend can hand it to the shell session after releasing the
+    /// terminal.
+    pub async fn run(self) -> std::io::Result<mpsc::Receiver<FrontendCommand>> {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
@@ -178,7 +181,7 @@ impl TuiApp {
         // the next throttle tick (which can lose intermediate notifies).
         let render_shutdown = Arc::new(Notify::new());
         let shutdown = self.shutdown;
-        let command_tx = self.command_tx;
+        let event_tx = self.event_tx;
 
         let exit_flag = ExitFlag::new();
 
@@ -192,46 +195,68 @@ impl TuiApp {
             let exit_flag = exit_flag.clone();
             let config = config.clone();
             let mut activity_rx = self.activity_rx;
+            let mut frontend_rx = self.frontend_rx;
             async move {
-                let mut batch = Vec::with_capacity(config.event_batch_size);
+                let batch_size = config.event_batch_size.max(1);
+                let mut batch = Vec::with_capacity(batch_size);
                 let mut exit_requested = false;
 
                 while !exit_requested {
-                    let Some(event) = activity_rx.recv().await else {
-                        // Channel closed: producer is gone, stop rendering
-                        break;
-                    };
-
-                    batch.push(event);
-                    while let Ok(event) = activity_rx.try_recv() {
-                        batch.push(event);
-                        if batch.len() >= config.event_batch_size {
-                            break;
-                        }
+                    tokio::select! {
+                        event = activity_rx.recv() => match event {
+                            Some(event) => batch.push(event),
+                            // Channel closed: producer is gone, stop rendering.
+                            None => exit_requested = true,
+                        },
+                        command = frontend_rx.recv() => match command {
+                            Some(FrontendCommand::ExitRenderer) => exit_requested = true,
+                            Some(FrontendCommand::SetAttached(attached)) => {
+                                config.attached.store(attached, Ordering::Relaxed);
+                            }
+                            // Shell commands arrive after ExitRenderer and are
+                            // therefore left queued for ShellSession. Seeing
+                            // one here violates the mailbox ordering contract.
+                            Some(FrontendCommand::Shell(_)) => {
+                                unreachable!("shell command received before renderer exit")
+                            }
+                            // The backend is gone and no further lifecycle
+                            // command can arrive. Drain queued activity below,
+                            // then release the terminal.
+                            None => exit_requested = true,
+                        },
                     }
 
-                    let mut any_changed = false;
-                    if let Ok(mut m) = activity_model.write() {
-                        for event in batch.drain(..) {
-                            match event {
-                                // Control events steer the renderer; they
-                                // never reach the model.
-                                ActivityEvent::Control(Control::Exit) => exit_requested = true,
-                                ActivityEvent::Control(Control::Attached { attached }) => {
-                                    config.attached.store(attached, Ordering::Relaxed);
-                                }
-                                event => any_changed |= m.apply_activity_event(event),
+                    // Exit is ordered after the backend quiesces activity
+                    // producers. Drain all events already in the queue so the
+                    // final render includes their completions, while retaining
+                    // the normal bounded batch size for a busy backend.
+                    loop {
+                        while batch.len() < batch_size {
+                            let Ok(event) = activity_rx.try_recv() else {
+                                break;
+                            };
+                            batch.push(event);
+                        }
+
+                        let mut any_changed = false;
+                        if let Ok(mut m) = activity_model.write() {
+                            for event in batch.drain(..) {
+                                any_changed |= m.apply_activity_event(event);
                             }
                         }
-                    }
 
-                    // Only wake the render loop when the batch actually
-                    // changed the visible model; pure no-op events (e.g.
-                    // shell events, skipped .narinfo fetches) don't force
-                    // a layout-recomputing redraw.
-                    if any_changed && !exit_requested {
-                        model_version.fetch_add(1, Ordering::Release);
-                        notify.notify_waiters();
+                        // Only wake the render loop when the batch actually
+                        // changed the visible model; pure no-op events (e.g.
+                        // shell events, skipped .narinfo fetches) don't force
+                        // a layout-recomputing redraw.
+                        if any_changed && !exit_requested {
+                            model_version.fetch_add(1, Ordering::Release);
+                            notify.notify_waiters();
+                        }
+
+                        if !exit_requested || activity_rx.is_empty() {
+                            break;
+                        }
                     }
                 }
 
@@ -244,11 +269,9 @@ impl TuiApp {
                 model_version.fetch_add(1, Ordering::Release);
                 notify.notify_waiters();
                 render_shutdown.notify_waiters();
+                frontend_rx
             }
         });
-
-        // Track height to clear when returning from expanded view
-        let mut pre_expand_height: u16 = 0;
 
         // UiState is separate from ActivityModel to avoid lock contention.
         // The event processor only writes to ActivityModel, never UiState.
@@ -269,8 +292,7 @@ impl TuiApp {
                 render_shutdown.clone(),
                 shutdown.clone(),
                 config.clone(),
-                command_tx.clone(),
-                &mut pre_expand_height,
+                event_tx.clone(),
                 exit_flag.clone(),
             )
             .await;
@@ -293,7 +315,9 @@ impl TuiApp {
 
         // Wait for event processor to finish draining events before final render.
         // This ensures all activity completion events are processed and visible.
-        let _ = event_processor_handle.await;
+        let renderer_rx = event_processor_handle
+            .await
+            .map_err(std::io::Error::other)?;
 
         // Final render pass to ensure all drained events are displayed.
         // Clear previous inline render, then render final state.
@@ -304,12 +328,15 @@ impl TuiApp {
 
                 // Measure the last inline render's height so we clear the right
                 // number of lines. Rendered once here at cleanup, not every frame.
+                // Measured at the width that frame was painted at: a resize since
+                // then would make the current width clear the wrong line count.
+                let painted_width = ui.terminal_size.width;
                 let mut measure = element! {
-                    View(width: terminal_width) {
+                    View(width: painted_width) {
                         #(vec![view(&model_guard, &ui, RenderContext::Normal, None, false).into()])
                     }
                 };
-                let lines_to_clear = measure.render(Some(terminal_width as usize)).height() as u16;
+                let lines_to_clear = measure.render(Some(painted_width as usize)).height() as u16;
 
                 if lines_to_clear > 0 {
                     let mut stderr = io::stderr();
@@ -392,16 +419,16 @@ impl TuiApp {
             }
         }
 
-        Ok(())
+        Ok(renderer_rx)
     }
 }
 
 pub(crate) fn request_interrupt_prompt(
-    command_tx: Option<&mpsc::Sender<ProcessCommand>>,
+    event_tx: Option<&mpsc::Sender<FrontendEvent>>,
     ui_state: &Arc<RwLock<UiState>>,
     attached: bool,
 ) -> bool {
-    if command_tx.is_none() {
+    if event_tx.is_none() {
         return false;
     }
 
@@ -417,7 +444,7 @@ pub(crate) fn handle_interrupt_prompt_key(
     key_event: &KeyEvent,
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
-    command_tx: Option<&mpsc::Sender<ProcessCommand>>,
+    event_tx: Option<&mpsc::Sender<FrontendEvent>>,
 ) -> bool {
     let (prompt_active, attached) = ui_state
         .read()
@@ -436,8 +463,8 @@ pub(crate) fn handle_interrupt_prompt_key(
         }
         // s: stop the whole process manager (attach mode only).
         KeyCode::Char('s') if attached => {
-            if let Some(tx) = command_tx {
-                let _ = tx.try_send(ProcessCommand::StopManager);
+            if let Some(tx) = event_tx {
+                let _ = tx.try_send(FrontendEvent::Process(ProcessCommand::StopManager));
             }
             if let Ok(mut ui) = ui_state.write() {
                 ui.clear_interrupt_prompt();
@@ -596,14 +623,14 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     }
 
     // Get optional command sender for process control
-    let command_tx = hooks.use_context::<Option<mpsc::Sender<ProcessCommand>>>();
+    let event_tx = hooks.use_context::<Option<mpsc::Sender<FrontendEvent>>>();
 
     // Handle keyboard events - only UI state updates, no activity model writes
     hooks.use_terminal_events({
         let activity_model = activity_model.clone();
         let ui_state = ui_state.clone();
         let shutdown = shutdown.clone();
-        let command_tx = command_tx.clone();
+        let event_tx = event_tx.clone();
         let notify = notify.clone();
         let attached_flag = config.attached.clone();
         let mut scroll_handle = scroll_handle;
@@ -614,18 +641,14 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 && key_event.kind != KeyEventKind::Release
             {
                 debug!("Key event: {:?}", key_event);
-                if !handle_interrupt_prompt_key(
-                    &key_event,
-                    &ui_state,
-                    &shutdown,
-                    command_tx.as_ref(),
-                ) {
+                if !handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown, event_tx.as_ref())
+                {
                     match key_event.code {
                         KeyCode::Char('c')
                             if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
                             if !request_interrupt_prompt(
-                                command_tx.as_ref(),
+                                event_tx.as_ref(),
                                 &ui_state,
                                 attached_flag.load(Ordering::Relaxed),
                             ) {
@@ -636,7 +659,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
                             // Restart selected process
-                            if let Some(tx) = command_tx.as_ref()
+                            if let Some(tx) = event_tx.as_ref()
                                 && let Ok(ui) = ui_state.read()
                                 && let Some(activity_id) = ui.selected_activity
                                 && let Ok(model) = activity_model.read()
@@ -647,14 +670,16 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                         if proc.status.is_restartable()
                                 )
                             {
-                                let _ = tx.try_send(ProcessCommand::Restart(activity.name.clone()));
+                                let _ = tx.try_send(FrontendEvent::Process(
+                                    ProcessCommand::Restart(activity.name.clone()),
+                                ));
                             }
                         }
                         KeyCode::Char('x')
                             if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
                             // Stop selected process (only if active)
-                            if let Some(tx) = command_tx.as_ref()
+                            if let Some(tx) = event_tx.as_ref()
                                 && let Ok(ui) = ui_state.read()
                                 && let Some(activity_id) = ui.selected_activity
                                 && let Ok(model) = activity_model.read()
@@ -663,7 +688,9 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                     activity.variant
                                 && proc.status.is_stoppable()
                             {
-                                let _ = tx.try_send(ProcessCommand::Stop(activity.name.clone()));
+                                let _ = tx.try_send(FrontendEvent::Process(ProcessCommand::Stop(
+                                    activity.name.clone(),
+                                )));
                             }
                         }
                         KeyCode::Char('e')
@@ -801,8 +828,7 @@ async fn run_view(
     render_shutdown: Arc<Notify>,
     shutdown: Arc<Shutdown>,
     config: Arc<TuiConfig>,
-    command_tx: Option<mpsc::Sender<ProcessCommand>>,
-    pre_expand_height: &mut u16,
+    event_tx: Option<mpsc::Sender<FrontendEvent>>,
     exit_flag: ExitFlag,
 ) -> std::io::Result<()> {
     // Copy view_mode in a block to ensure the guard is dropped before any await
@@ -813,14 +839,17 @@ async fn run_view(
 
     match view_mode {
         ViewMode::Main => {
-            if *pre_expand_height > 0 {
+            // Consume in its own statement so the guard drops before any await
+            let pre_expand_height = ui_state.write().unwrap().pre_expand_height.take();
+            if let Some(height) = pre_expand_height
+                && height > 0
+            {
                 let mut stderr = io::stderr();
                 let _ = execute!(
                     stderr,
-                    cursor::MoveToPreviousLine(*pre_expand_height),
+                    cursor::MoveToPreviousLine(height),
                     terminal::Clear(terminal::ClearType::FromCursorDown)
                 );
-                *pre_expand_height = 0;
             }
 
             let mut element = element! {
@@ -831,7 +860,7 @@ async fn run_view(
                                 ContextProvider(value: Context::owned(RenderShutdown(render_shutdown.clone()))) {
                                     ContextProvider(value: Context::owned(activity_model.clone())) {
                                         ContextProvider(value: Context::owned(ui_state.clone())) {
-                                            ContextProvider(value: Context::owned(command_tx.clone())) {
+                                            ContextProvider(value: Context::owned(event_tx.clone())) {
                                                 ContextProvider(value: Context::owned(exit_flag.clone())) {
                                                     MainView
                                                 }
@@ -854,10 +883,12 @@ async fn run_view(
         ViewMode::ExpandedLogs { activity_id } => {
             // Calculate height before switching to expanded view
             // Use a block to ensure guards are dropped before await
-            *pre_expand_height = {
+            let height = {
                 let ui = ui_state.read().unwrap();
                 let model = activity_model.read().unwrap();
-                let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
+                // The width the frame being cleared was painted at, like the
+                // cleanup pass in `TuiApp::run`.
+                let terminal_width = ui.terminal_size.width;
                 let mut normal_view = element! {
                     View(width: terminal_width) {
                         #(vec![view(&model, &ui, RenderContext::Normal, None, shutdown.is_cancelled()).into()])
@@ -865,6 +896,7 @@ async fn run_view(
                 };
                 normal_view.render(Some(terminal_width as usize)).height() as u16
             };
+            ui_state.write().unwrap().pre_expand_height = Some(height);
 
             let mut element = element! {
                 ContextProvider(value: Context::owned(config.clone())) {
@@ -874,7 +906,7 @@ async fn run_view(
                                 ContextProvider(value: Context::owned(RenderShutdown(render_shutdown.clone()))) {
                                     ContextProvider(value: Context::owned(activity_model.clone())) {
                                         ContextProvider(value: Context::owned(ui_state.clone())) {
-                                            ContextProvider(value: Context::owned(command_tx.clone())) {
+                                            ContextProvider(value: Context::owned(event_tx.clone())) {
                                                 ContextProvider(value: Context::owned(exit_flag.clone())) {
                                                     ContextProvider(value: Context::owned(activity_id)) {
                                                         ExpandedLogView
@@ -949,7 +981,10 @@ mod tests {
             &shutdown,
             Some(&tx)
         ));
-        assert!(matches!(rx.try_recv(), Ok(ProcessCommand::StopManager)));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(FrontendEvent::Process(ProcessCommand::StopManager))
+        ));
         assert!(!shutdown.is_cancelled());
         assert!(!ui_state.read().unwrap().interrupt_prompt_active());
 

@@ -7,6 +7,7 @@ use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use devenv_activity::Activity;
 use devenv_event_sources::{FileWatcher, FileWatcherConfig};
+use devenv_mailbox::{FrontendCommand, FrontendEvent};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::path::PathBuf;
@@ -37,9 +38,7 @@ enum Event {
     },
     /// Reload file was deleted (user applied the reload)
     ReloadFileDeleted,
-    Tui(ShellEvent),
-    /// The session dropped its event sender without reporting an exit.
-    TuiDisconnected,
+    Shell(ShellEvent),
 }
 
 /// Shell coordinator for TUI mode.
@@ -161,8 +160,8 @@ impl ShellCoordinator {
     pub async fn run<B: ShellBuilder + 'static>(
         config: Config,
         builder: B,
-        command_tx: mpsc::Sender<ShellCommand>,
-        mut event_rx: mpsc::Receiver<ShellEvent>,
+        command_tx: mpsc::Sender<FrontendCommand>,
+        mut event_rx: mpsc::Receiver<FrontendEvent>,
     ) -> Result<Option<u32>, CoordinatorError> {
         let builder = Arc::new(builder);
         let cwd = std::env::current_dir()?;
@@ -203,12 +202,19 @@ impl ShellCoordinator {
             })?
             .map_err(CoordinatorError::Build)?;
 
-        // Send initial spawn command to TUI
+        // The build phase is over: release the terminal renderer before
+        // queueing the shell command. The frontend consumes ExitRenderer and
+        // hands this same receiver to ShellSession, leaving Spawn queued.
         command_tx
-            .send(ShellCommand::Spawn {
+            .send(FrontendCommand::ExitRenderer)
+            .await
+            .map_err(|_| CoordinatorError::ChannelClosed)?;
+
+        command_tx
+            .send(FrontendCommand::Shell(ShellCommand::Spawn {
                 command: cmd,
                 watch_files,
-            })
+            }))
             .await
             .map_err(|_| CoordinatorError::ChannelClosed)?;
 
@@ -216,37 +222,15 @@ impl ShellCoordinator {
         let watched = watcher_handle.watched_paths();
         if !watched.is_empty() {
             let _ = command_tx
-                .send(ShellCommand::WatchedFiles { files: watched })
+                .send(FrontendCommand::Shell(ShellCommand::WatchedFiles {
+                    files: watched,
+                }))
                 .await;
         }
 
-        // The build phase is over: tell the renderer to exit so the frontend
-        // can hand the terminal to the shell session.
-        devenv_activity::exit_renderer();
-
+        // Carries build completions from the tasks spawned by
+        // `launch_reload_build`; the other sources are selected on directly.
         let (event_tx, mut internal_rx) = mpsc::channel::<Event>(100);
-
-        // Forward file watcher events
-        let watch_tx = event_tx.clone();
-        let watcher_task = tokio::spawn(async move {
-            while let Some(event) = watcher.recv().await {
-                if watch_tx.send(Event::FileChange(event.path)).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        // Forward session events. The session dropping its sender is a
-        // termination signal too, so the loop below never outlives it.
-        let tui_tx = event_tx.clone();
-        let tui_forwarder_task = tokio::spawn(async move {
-            while let Some(event) = event_rx.recv().await {
-                if tui_tx.send(Event::Tui(event)).await.is_err() {
-                    return;
-                }
-            }
-            let _ = tui_tx.send(Event::TuiDisconnected).await;
-        });
 
         // Track the currently running build task for cancellation
         let mut current_build: Option<tokio::task::AbortHandle> = None;
@@ -262,18 +246,41 @@ impl ShellCoordinator {
         let mut reload_ready = false;
         // Track if file watching is paused
         let mut paused = false;
+        // A dead watcher stops file-change handling but not the session.
+        let mut watcher_alive = true;
         // Interval for checking if reload file was deleted (user applied reload)
         let mut reload_check_interval =
             tokio::time::interval(std::time::Duration::from_millis(100));
         reload_check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
-            // Use select! to handle both events and reload file checks
+            // All sources are cancel-safe, so a losing arm resumes untouched
+            // on the next iteration.
             let event = tokio::select! {
                 event = internal_rx.recv() => {
                     match event {
                         Some(e) => e,
                         None => break,
+                    }
+                }
+                event = event_rx.recv() => {
+                    match event {
+                        Some(FrontendEvent::Shell(e)) => Event::Shell(e),
+                        // Process controls belong to the renderer phase. A
+                        // queued input racing the renderer handoff is stale.
+                        Some(FrontendEvent::Process(_)) => continue,
+                        // The session dropped its sender without reporting an
+                        // exit, so this loop must not outlive it.
+                        None => break,
+                    }
+                }
+                change = watcher.recv(), if watcher_alive => {
+                    match change {
+                        Some(change) => Event::FileChange(change.path),
+                        None => {
+                            watcher_alive = false;
+                            continue;
+                        }
                     }
                 }
                 _ = reload_check_interval.tick(), if reload_ready => {
@@ -348,9 +355,9 @@ impl ShellCoordinator {
                         })
                         .collect();
                     let _ = command_tx
-                        .send(ShellCommand::Building {
+                        .send(FrontendCommand::Shell(ShellCommand::Building {
                             changed_files: relative_files.clone(),
-                        })
+                        }))
                         .await;
 
                     // Create activity for tracking the reload in the TUI
@@ -431,7 +438,7 @@ impl ShellCoordinator {
                     // Activity completes on drop (success by default, or failed if marked)
                     drop(activity);
 
-                    if command_tx.send(cmd).await.is_err() {
+                    if command_tx.send(FrontendCommand::Shell(cmd)).await.is_err() {
                         // TUI disconnected
                         break;
                     }
@@ -457,9 +464,9 @@ impl ShellCoordinator {
                         })
                         .collect();
                     let _ = command_tx
-                        .send(ShellCommand::Building {
+                        .send(FrontendCommand::Shell(ShellCommand::Building {
                             changed_files: relative_files.clone(),
-                        })
+                        }))
                         .await;
 
                     let files_display: Vec<String> = relative_files
@@ -489,42 +496,45 @@ impl ShellCoordinator {
                 Event::ReloadFileDeleted => {
                     // User applied the reload (pressed keybind), clear status line
                     reload_ready = false;
-                    if command_tx.send(ShellCommand::ReloadApplied).await.is_err() {
+                    if command_tx
+                        .send(FrontendCommand::Shell(ShellCommand::ReloadApplied))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
 
-                Event::Tui(ShellEvent::Exited { exit_code }) => {
+                Event::Shell(ShellEvent::Exited { exit_code }) => {
                     // Shell exited, we're done
                     shell_exit_code = exit_code;
                     break;
                 }
 
-                Event::TuiDisconnected => {
-                    // Session is gone without a normal exit
-                    break;
-                }
-
-                Event::Tui(ShellEvent::Resize { .. }) => {
+                Event::Shell(ShellEvent::Resize { .. }) => {
                     // Resize is handled by TUI directly on the PTY
                     // We might use this for future features
                 }
 
-                Event::Tui(ShellEvent::TogglePause) => {
+                Event::Shell(ShellEvent::TogglePause) => {
                     paused = !paused;
                     tracing::debug!(
                         "File watching {}",
                         if paused { "paused" } else { "resumed" }
                     );
                     let _ = command_tx
-                        .send(ShellCommand::WatchingPaused { paused })
+                        .send(FrontendCommand::Shell(ShellCommand::WatchingPaused {
+                            paused,
+                        }))
                         .await;
                 }
 
-                Event::Tui(ShellEvent::ListWatchedFiles) => {
+                Event::Shell(ShellEvent::ListWatchedFiles) => {
                     let files = watcher_handle.watched_paths();
                     let _ = command_tx
-                        .send(ShellCommand::PrintWatchedFiles { files })
+                        .send(FrontendCommand::Shell(ShellCommand::PrintWatchedFiles {
+                            files,
+                        }))
                         .await;
                 }
             }
@@ -536,12 +546,10 @@ impl ShellCoordinator {
             builder.interrupt();
         }
 
-        // Abort forwarder tasks to prevent panics during runtime shutdown
-        watcher_task.abort();
-        tui_forwarder_task.abort();
-
         // Send shutdown command
-        let _ = command_tx.send(ShellCommand::Shutdown).await;
+        let _ = command_tx
+            .send(FrontendCommand::Shell(ShellCommand::Shutdown))
+            .await;
 
         Ok(shell_exit_code)
     }
