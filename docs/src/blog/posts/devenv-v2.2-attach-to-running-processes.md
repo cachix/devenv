@@ -1,8 +1,7 @@
 ---
-date: 2026-07-02
+date: 2026-07-28
 authors:
   - domenkozar
-draft: true
 ---
 
 # devenv 2.2: attach to running processes and persistent out-of-tree environments
