@@ -129,52 +129,82 @@ impl Shutdown {
         self.token.cancel();
     }
 
-    /// Install signal handlers for graceful shutdown
+    /// Install signal handlers for graceful shutdown.
+    ///
+    /// The listener dies with the calling runtime while the process-global OS
+    /// handlers remain, swallowing all later signals. Use
+    /// [`Self::install_signals_on_thread`] if the runtime is shorter-lived
+    /// than the process.
     pub async fn install_signals(self: &Arc<Self>) {
         let shutdown = Arc::clone(self);
+        tokio::spawn(shutdown.signal_loop(None));
+    }
 
-        tokio::spawn(async move {
-            let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())
-                .expect("Failed to install SIGINT handler");
-            let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
-                .expect("Failed to install SIGTERM handler");
-            let mut sighup = signal::unix::signal(signal::unix::SignalKind::hangup())
-                .expect("Failed to install SIGHUP handler");
+    /// Install signal handlers on a dedicated thread that lives for the rest
+    /// of the process. Returns once the handlers are registered.
+    pub fn install_signals_on_thread(self: &Arc<Self>) {
+        let shutdown = Arc::clone(self);
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
 
-            loop {
-                let last_signal;
+        std::thread::Builder::new()
+            .name("signal_handler".into())
+            .spawn(move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .build()
+                    .expect("Failed to build signal runtime")
+                    .block_on(shutdown.signal_loop(Some(ready_tx)));
+            })
+            .expect("Failed to spawn signal thread");
 
-                tokio::select! {
-                    _ = sigint.recv() => {
-                        last_signal = Signal::SIGINT;
-                    }
-                    _ = sigterm.recv() => {
-                        last_signal = Signal::SIGTERM;
-                    }
-                    _ = sighup.recv() => {
-                        last_signal = Signal::SIGHUP;
-                    }
+        let _ = ready_rx.recv();
+    }
+
+    /// Translate SIGINT/SIGTERM/SIGHUP into shutdown requests. `ready` is
+    /// signalled once the listeners are registered.
+    async fn signal_loop(self: Arc<Self>, ready: Option<std::sync::mpsc::Sender<()>>) {
+        let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())
+            .expect("Failed to install SIGINT handler");
+        let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler");
+        let mut sighup = signal::unix::signal(signal::unix::SignalKind::hangup())
+            .expect("Failed to install SIGHUP handler");
+
+        if let Some(ready) = ready {
+            let _ = ready.send(());
+        }
+
+        loop {
+            let last_signal;
+
+            tokio::select! {
+                _ = sigint.recv() => {
+                    last_signal = Signal::SIGINT;
                 }
-
-                // If a signal was already received (either from a previous real
-                // signal or set by the TUI keyboard handler), this is a repeated
-                // interrupt — force-exit immediately.
-                if shutdown.last_signal.load(Ordering::Relaxed) != 0 {
-                    info!("Received second signal, forcing exit...");
-                    shutdown.exit_process();
+                _ = sigterm.recv() => {
+                    last_signal = Signal::SIGTERM;
                 }
-
-                info!("Received {:?}, shutting down gracefully...", last_signal);
-
-                // Store the last signal received
-                shutdown
-                    .last_signal
-                    .store(last_signal as i32, Ordering::Relaxed);
-
-                // Trigger shutdown
-                shutdown.shutdown();
+                _ = sighup.recv() => {
+                    last_signal = Signal::SIGHUP;
+                }
             }
-        });
+
+            // If a signal was already received (either from a previous real
+            // signal or set by the TUI keyboard handler), this is a repeated
+            // interrupt — force-exit immediately.
+            if self.last_signal.load(Ordering::Relaxed) != 0 {
+                info!("Received second signal, forcing exit...");
+                self.exit_process();
+            }
+
+            info!("Received {:?}, shutting down gracefully...", last_signal);
+
+            // Store the last signal received
+            self.last_signal.store(last_signal as i32, Ordering::Relaxed);
+
+            // Trigger shutdown
+            self.shutdown();
+        }
     }
 
     /// Wait for shutdown to be requested
@@ -386,6 +416,36 @@ where
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    // A signal arriving after some other runtime shut down must still be
+    // observed — the process-global OS handlers outlive the listener task.
+    #[test]
+    fn test_install_signals_on_thread_survives_runtime_drop() {
+        let shutdown = Shutdown::new();
+        shutdown.install_signals_on_thread();
+
+        // A runtime that comes and goes before the signal arrives.
+        {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {});
+        }
+
+        nix_signal::kill(unistd::getpid(), Signal::SIGHUP).unwrap();
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), shutdown.wait_for_shutdown())
+                .await
+                .expect("signal was not observed after runtime drop");
+        });
+        assert_eq!(shutdown.last_signal(), Some(Signal::SIGHUP));
+    }
 
     #[tokio::test]
     async fn test_shutdown_when_done() {

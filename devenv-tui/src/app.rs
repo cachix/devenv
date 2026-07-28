@@ -291,7 +291,7 @@ impl TuiApp {
         // always completes its current frame before returning. This prevents
         // the cursor position race that occurs when cancelling mid-frame.
         loop {
-            let _ = run_view(
+            let view_result = run_view(
                 activity_model.clone(),
                 ui_state.clone(),
                 notify.clone(),
@@ -308,7 +308,15 @@ impl TuiApp {
             // run_view returned either because:
             // - The backend is done (exit_flag is set)
             // - The user switched view modes (e.g. pressed 'e' for expanded)
+            // - The terminal errored (e.g. the tty was revoked)
             if exit_flag.is_set() {
+                break;
+            }
+
+            if let Err(e) = view_result {
+                // A dead terminal fails without suspending; re-entering would
+                // busy-loop and starve the event processor.
+                tracing::warn!(error = %e, "terminal render failed, stopping TUI");
                 break;
             }
         }

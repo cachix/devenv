@@ -653,6 +653,8 @@ fn run(
     // running process manager, so the Ctrl-C prompt offers detach vs stop.
     let attached = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
+    shutdown.install_signals_on_thread();
+
     // Backend on dedicated thread (own runtime with GC-registered workers).
     // Eval futures are !Send and run on the block_on task, so the thread
     // itself needs the Nix stack size too, not just the workers.
@@ -663,8 +665,6 @@ fn run(
         .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
         .spawn(move || {
             build_gc_runtime().block_on(async {
-                shutdown_clone.install_signals().await;
-
                 let output = run_backend(
                     backend,
                     shutdown_clone.clone(),
