@@ -30,10 +30,11 @@ pub struct EscapeState {
     pub forwarded_dec_modes: BTreeSet<u16>,
     /// Keypad is in application mode (DECKPAM, `ESC =`).
     pub keypad_application_mode: bool,
-    /// Set when CSI 2 J is seen — signals the caller to consume `row_offset`.
+    /// Set when CSI 2 J is seen — the program cleared the screen and expects
+    /// to own the full visible area.
     pub erase_display: bool,
     /// Set when CSI 3 J is seen — deferred so the caller can emit it *after*
-    /// `scroll_region` pushes old TUI content into scrollback.
+    /// any pre-existing content has been scrolled into scrollback.
     pub clear_scrollback: bool,
     /// Kitty keyboard protocol stack depth.
     pub kitty_keyboard_depth: u32,

@@ -35,7 +35,7 @@ pub use status_line::{
 };
 
 // Main session
-pub use session::{SessionConfig, SessionError, SessionIo, ShellSession, TuiHandoff};
+pub use session::{SessionConfig, SessionError, SessionIo, ShellSession};
 
 // Re-export for convenience
 pub use portable_pty::{CommandBuilder, PtySize};

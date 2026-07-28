@@ -115,11 +115,11 @@ impl ConsoleOutput {
         }
     }
 
-    /// Process events until the stream signals stop (a `Control::RenderDone`
+    /// Process events until the stream signals stop (a `Control::Exit`
     /// event or a closed channel), then flush any buffered output.
     pub async fn run(mut self) {
         while let Some(event) = self.rx.recv().await {
-            if matches!(event, ActivityEvent::Control(Control::RenderDone)) {
+            if matches!(event, ActivityEvent::Control(Control::Exit)) {
                 break;
             }
             self.handle(event);
@@ -875,8 +875,7 @@ mod tests {
         batch_flushed.await;
         let flushes_before_shutdown = writer.flush_count();
 
-        tx.send(ActivityEvent::Control(Control::RenderDone))
-            .unwrap();
+        tx.send(ActivityEvent::Control(Control::Exit)).unwrap();
         task.await.unwrap();
 
         assert!(writer.contents().contains("queued event"));

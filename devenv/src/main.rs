@@ -13,7 +13,7 @@ use devenv::{
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
     terminal::{self, IsForegroundTerminal as _},
     tracing as devenv_tracing,
-    tui::{SessionIo, ShellSession, TuiHandoff},
+    tui::{SessionIo, ShellCommand, ShellEvent, ShellSession},
 };
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{
@@ -27,7 +27,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tempfile::TempDir;
-use tokio::sync::{mpsc as tokio_mpsc, oneshot};
+use tokio::sync::mpsc as tokio_mpsc;
 use tokio_shutdown::Shutdown;
 use tracing::{info, instrument};
 
@@ -121,6 +121,7 @@ fn main_inner() -> Result<()> {
                 Err(err) => return Err(err),
             },
             Ok(CommandResult::Debugger(devenv, err)) => return launch_debugger(*devenv, err),
+            Ok(CommandResult::Repl(devenv)) => return launch_repl_thread(*devenv),
             Ok(cmd_result) => return cmd_result.exec(),
         }
     }
@@ -513,18 +514,17 @@ impl Renderer {
     }
 
     /// Drive the renderer to completion. The activity stream carries its own
-    /// stop signal (`Control::RenderDone`).
+    /// stop signal (`Control::Exit`).
     ///
-    /// Owns its own current-thread runtime. Returns the TUI render height (0
-    /// when there is no TUI) so the backend can position its cursor. Only the
-    /// TUI consumes `command_tx` (process commands from the UI); the other
-    /// sinks drop it so the backend's receiver closes.
+    /// Owns its own current-thread runtime. Only the TUI consumes
+    /// `command_tx` (process commands from the UI); the other sinks drop it
+    /// so the backend's receiver closes.
     fn drive(
         self,
         shutdown: &Arc<Shutdown>,
         command_tx: tokio_mpsc::Sender<ProcessCommand>,
         verbosity: VerbosityLevel,
-    ) -> Result<u16> {
+    ) -> Result<()> {
         match self {
             Renderer::Tui(activity_rx) => {
                 let filter_level = if matches!(verbosity, VerbosityLevel::Verbose) {
@@ -533,13 +533,13 @@ impl Renderer {
                     ActivityLevel::Info
                 };
                 current_thread_runtime("TUI")?.block_on(async {
-                    Ok(devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
+                    let _ = devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
                         .with_command_sender(command_tx)
                         .filter_level(filter_level)
                         .run()
-                        .await
-                        .unwrap_or(0))
-                })
+                        .await;
+                });
+                Ok(())
             }
             Renderer::Console(activity_rx) => {
                 drop(command_tx);
@@ -548,11 +548,11 @@ impl Renderer {
                         .run()
                         .await;
                 });
-                Ok(0)
+                Ok(())
             }
             Renderer::None => {
                 drop(command_tx);
-                Ok(0)
+                Ok(())
             }
         }
     }
@@ -592,9 +592,9 @@ fn event_loop(events: &mpsc::Receiver<Event>, shutdown: &Shutdown, grace: Durati
         }
     }
 
-    // Backstop for a backend that died without signalling render-done: the
-    // frontend would otherwise render until the grace expires.
-    devenv_activity::render_done();
+    // Backstop for a backend that died without telling the renderer to exit:
+    // the frontend would otherwise render until the grace expires.
+    devenv_activity::exit_renderer();
 
     let deadline = Instant::now() + grace;
     while !frontend_exited {
@@ -622,23 +622,31 @@ fn drain_signals(events: mpsc::Receiver<Event>, shutdown: Arc<Shutdown>) {
     });
 }
 
-/// Body of the backend thread: run the command on a GC-registered runtime.
+/// Frontend half of the PTY shell wiring: after the renderer exits, the
+/// frontend thread runs the shell session on the terminal it just freed.
+struct SessionFrontend {
+    command_rx: tokio_mpsc::Receiver<ShellCommand>,
+    event_tx: tokio_mpsc::Sender<ShellEvent>,
+    /// Status line emits escape codes; disabled when output is captured
+    /// (non-interactive `devenv shell -- cmd`).
+    interactive: bool,
+}
+
+/// Backend half of the PTY shell wiring, handed to the reload coordinator.
+struct SessionBackend {
+    command_tx: tokio_mpsc::Sender<ShellCommand>,
+    event_rx: tokio_mpsc::Receiver<ShellEvent>,
+}
+
 fn backend_thread_main(
     options: BackendOptions,
     caller: Caller,
-    terminal_ready_rx: oneshot::Receiver<u16>,
+    session: Option<SessionBackend>,
     command_rx: tokio_mpsc::Receiver<ProcessCommand>,
     shutdown: Arc<Shutdown>,
 ) -> Result<CommandResult> {
     build_gc_runtime().block_on(async {
-        let output = run_backend(
-            options,
-            shutdown.clone(),
-            terminal_ready_rx,
-            command_rx,
-            caller,
-        )
-        .await;
+        let output = run_backend(options, shutdown.clone(), session, command_rx, caller).await;
 
         // Fallback for paths that didn't run cleanup themselves
         // (PTY shell, REPL). No-op when run_backend already did it.
@@ -648,23 +656,35 @@ fn backend_thread_main(
     })
 }
 
-/// Body of the frontend thread: drive the renderer, then hand the terminal
-/// to the backend (with the TUI render height for cursor positioning).
 fn frontend_thread_main(
     renderer: Renderer,
-    terminal_ready_tx: oneshot::Sender<u16>,
+    session: Option<SessionFrontend>,
     command_tx: tokio_mpsc::Sender<ProcessCommand>,
     verbosity: VerbosityLevel,
     shutdown: Arc<Shutdown>,
 ) -> Result<()> {
-    let height = renderer.drive(&shutdown, command_tx, verbosity)?;
-    let _ = terminal_ready_tx.send(height);
+    renderer.drive(&shutdown, command_tx, verbosity)?;
+
+    // The renderer has exited and released the terminal. A PTY shell session
+    // takes it over on this same thread, so terminal ownership never crosses
+    // a thread boundary. Its exit code reaches the backend through the
+    // session's event mailbox.
+    if let Some(session) = session {
+        current_thread_runtime("session")?
+            .block_on(
+                ShellSession::with_defaults()
+                    .with_status_line(session.interactive)
+                    .with_shutdown_token(shutdown.cancellation_token())
+                    .run(session.command_rx, session.event_tx, SessionIo::default()),
+            )
+            .into_diagnostic()
+            .wrap_err("Shell session error")?;
+    }
     Ok(())
 }
 
-/// Single entry point for all command execution: run the command to
-/// completion and return its result. Process replacement (exec, debugger)
-/// is the caller's job, after every guard here has dropped.
+/// Single entry point for all command execution. Process replacement
+/// (exec, debugger) is the caller's job, after every guard here has dropped.
 fn run(
     ui: UiOptions,
     backend_options: BackendOptions,
@@ -695,14 +715,6 @@ fn run(
         shutdown.set_pre_exit_hook(devenv_tui::app::restore_terminal);
     }
 
-    // The only explicit frontend→backend wiring: the one-shot terminal
-    // handoff and the TUI's process commands. Everything backend→frontend
-    // rides the ambient activity stream.
-    let (terminal_ready_tx, terminal_ready_rx) = oneshot::channel();
-    let (command_tx, command_rx) = tokio_mpsc::channel(16);
-
-    // Supervision, not frontend/backend wiring: signals and child-thread
-    // exits, multiplexed for this thread's event loop.
     let (events_tx, events_rx) = mpsc::channel();
 
     tokio_shutdown::spawn_signal_listener({
@@ -711,6 +723,30 @@ fn run(
             let _ = events_tx.send(Event::Signal(signal));
         }
     });
+
+    // TUI→backend process commands (restart/stop from the process view);
+    // everything backend→frontend rides the ambient activity stream.
+    let (command_tx, command_rx) = tokio_mpsc::channel(16);
+
+    // PTY shell wiring, when the command calls for a terminal session.
+    let (frontend_session, backend_session) = match &backend_options.command {
+        Commands::Shell { cmd, .. } if backend_options.use_pty => {
+            let (shell_command_tx, shell_command_rx) = tokio_mpsc::channel(16);
+            let (shell_event_tx, shell_event_rx) = tokio_mpsc::channel(16);
+            (
+                Some(SessionFrontend {
+                    command_rx: shell_command_rx,
+                    event_tx: shell_event_tx,
+                    interactive: cmd.is_none(),
+                }),
+                Some(SessionBackend {
+                    command_tx: shell_command_tx,
+                    event_rx: shell_event_rx,
+                }),
+            )
+        }
+        _ => (None, None),
+    };
 
     // Eval futures are !Send and run on the block_on task, so the thread
     // itself needs the Nix stack size too, not just the GC-registered workers.
@@ -725,7 +761,7 @@ fn run(
                 backend_thread_main(
                     backend_options,
                     caller,
-                    terminal_ready_rx,
+                    backend_session,
                     command_rx,
                     shutdown,
                 )
@@ -742,7 +778,7 @@ fn run(
             .name("frontend".into())
             .spawn(move || {
                 let _notice = ExitNotice(events_tx, Event::FrontendExited);
-                frontend_thread_main(renderer, terminal_ready_tx, command_tx, verbosity, shutdown)
+                frontend_thread_main(renderer, frontend_session, command_tx, verbosity, shutdown)
             })
             .into_diagnostic()
             .wrap_err("Failed to spawn frontend thread")?
@@ -771,18 +807,23 @@ fn run(
     backend_result
 }
 
-/// Print the error and launch the Nix debugger REPL on a fresh GC-registered thread.
+/// Print the error and launch the Nix debugger REPL.
 fn launch_debugger(devenv: devenv::Devenv, err: miette::Report) -> Result<()> {
     eprintln!("{err:?}");
+    // Skip prepare_repl() — the debugger already has eval context from
+    // the failed command, and re-evaluating would likely fail again,
+    // preventing debugger_is_pending() from being checked in launch_repl().
+    launch_repl_thread(devenv)
+}
+
+/// Launch the interactive REPL on a fresh GC-registered thread. Callers have
+/// already evaluated (or tried to), and `run()` has torn down the renderer,
+/// so the terminal is free.
+fn launch_repl_thread(devenv: devenv::Devenv) -> Result<()> {
     let handle = std::thread::Builder::new()
         .name("repl".into())
         .stack_size(devenv_nix_backend::NIX_STACK_SIZE)
-        .spawn(move || {
-            // Skip prepare_repl() — the debugger already has eval context from
-            // the failed command, and re-evaluating would likely fail again,
-            // preventing debugger_is_pending() from being checked in launch_repl().
-            build_gc_runtime().block_on(async { devenv.launch_repl().await })
-        })
+        .spawn(move || build_gc_runtime().block_on(async { devenv.launch_repl().await }))
         .into_diagnostic()
         .wrap_err("Failed to spawn REPL thread")?;
     handle
@@ -802,7 +843,7 @@ fn launch_debugger(devenv: devenv::Devenv, err: miette::Report) -> Result<()> {
 async fn run_backend(
     backend: BackendOptions,
     shutdown: Arc<Shutdown>,
-    terminal_ready_rx: oneshot::Receiver<u16>,
+    session: Option<SessionBackend>,
     command_rx: tokio_mpsc::Receiver<ProcessCommand>,
     caller: Caller,
 ) -> Result<CommandResult> {
@@ -835,12 +876,16 @@ async fn run_backend(
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
+        let SessionBackend {
+            command_tx,
+            event_rx,
+        } = session.ok_or_else(|| miette::miette!("missing session wiring for PTY shell"))?;
+
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
             devenv: client,
             cmd: None,
             args,
-            terminal_ready_rx,
             initial_env_script,
             bash_path,
             clean,
@@ -849,13 +894,14 @@ async fn run_backend(
             dotfile,
             task_exports,
             task_messages,
-            shutdown: shutdown.clone(),
             shell_cwd,
+            command_tx,
+            event_rx,
         })
         .await
         .map(|exit_code| {
-            // On signalled shutdown the watcher injects `PtyExit(None)`;
-            // recover `128 + sig` so callers see e.g. SIGHUP as 129.
+            // On signalled shutdown the session reports no exit code; recover
+            // `128 + sig` so callers see e.g. SIGHUP as 129.
             let resolved =
                 exit_code.or_else(|| shutdown.last_signal().map(|sig| (128 + sig as i32) as u32));
             match resolved {
@@ -868,10 +914,17 @@ async fn run_backend(
         return debugger_or_err(result, nix_debugger, devenv);
     }
 
-    // REPL: run assembly with TUI active, then hand off terminal for interactive REPL
+    // REPL: assemble and evaluate under the renderer, then carry `Devenv` out
+    // and launch the interactive REPL after `run()` has torn everything down
+    // (same pattern as the debugger).
     if let Commands::Repl {} = command {
-        let result = run_repl(&devenv, terminal_ready_rx).await;
-        return debugger_or_err(result, nix_debugger, devenv);
+        let prepared = devenv.prepare_repl().await;
+        shutdown.shutdown_and_wait().await;
+        devenv_activity::exit_renderer();
+        return match prepared {
+            Ok(()) => Ok(CommandResult::Repl(Box::new(devenv))),
+            Err(err) => debugger_or_err(Err(err), nix_debugger, devenv),
+        };
     }
 
     // All other commands
@@ -885,7 +938,7 @@ async fn run_backend(
     // Signal the renderer to stop, after the drain, so its activity stayed
     // visible. Done before the debugger check so the TUI releases the
     // terminal before the debugger takes it.
-    devenv_activity::render_done();
+    devenv_activity::exit_renderer();
 
     debugger_or_err(result, nix_debugger, devenv)
 }
@@ -920,6 +973,10 @@ enum CommandResult {
     /// the owned `Devenv`. Handled by the caller after TUI teardown, never
     /// reaches `exec()`.
     Debugger(Box<devenv::Devenv>, miette::Report),
+    /// `devenv repl`, already prepared: launch the interactive REPL with the
+    /// owned `Devenv`. Handled by the caller after TUI teardown, never
+    /// reaches `exec()`.
+    Repl(Box<devenv::Devenv>),
 }
 
 impl CommandResult {
@@ -942,8 +999,8 @@ impl CommandResult {
             CommandResult::ExitCode(code) => {
                 process::exit(code);
             }
-            CommandResult::Debugger(..) => {
-                unreachable!("Debugger is handled in run() before exec()")
+            CommandResult::Debugger(..) | CommandResult::Repl(..) => {
+                unreachable!("REPL launch is handled in main_inner() before exec()")
             }
         }
     }
@@ -1264,7 +1321,6 @@ struct ReloadShellArgs {
     devenv: devenv::reload::DevenvClient,
     cmd: Option<String>,
     args: Vec<String>,
-    terminal_ready_rx: oneshot::Receiver<u16>,
     initial_env_script: String,
     bash_path: String,
     clean: devenv_core::config::Clean,
@@ -1273,27 +1329,26 @@ struct ReloadShellArgs {
     dotfile: std::path::PathBuf,
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
-    shutdown: Arc<Shutdown>,
     shell_cwd: Option<PathBuf>,
+    command_tx: tokio_mpsc::Sender<ShellCommand>,
+    event_rx: tokio_mpsc::Receiver<ShellEvent>,
 }
 
-/// Run shell with hot-reload.
+/// Run the reload coordinator for a PTY shell session.
 ///
-/// `ShellCoordinator` handles file watching and build coordination;
-/// `ShellSession` owns the PTY and terminal I/O. enterShell tasks have
-/// already been executed by the caller (so they can run in parallel via the
-/// DAG task system before the PTY starts).
+/// `ShellCoordinator` builds the initial shell command, tells the renderer to
+/// exit once the build phase is over, and rebuilds on file changes.
+/// `ShellSession` — driven by the frontend thread, which owns the terminal —
+/// receives the commands and reports events back; its exit ends the
+/// coordinator. enterShell tasks have already been executed by the caller (so
+/// they can run in parallel via the DAG task system before the PTY starts).
 ///
-/// Terminal handoff: `ShellSession` signals the renderer to stop via
-/// `devenv_activity::render_done()` after the initial build, then
-/// `terminal_ready_rx` waits for the renderer to release the terminal before
-/// `ShellSession` takes it.
+/// Returns the shell's exit code as reported over the event mailbox.
 async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
     let ReloadShellArgs {
         devenv,
         cmd,
         args,
-        terminal_ready_rx,
         initial_env_script,
         bash_path,
         clean,
@@ -1302,15 +1357,13 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         dotfile,
         task_exports,
         task_messages,
-        shutdown,
         shell_cwd,
+        command_tx,
+        event_rx,
     } = args;
 
     // Watch files come from the eval cache during the first build.
     let reload_config = ReloadConfig::new(vec![]);
-
-    // Status line emits escape codes; disable when output is captured.
-    let is_interactive = cmd.is_none();
 
     let builder = DevenvShellBuilder {
         devenv,
@@ -1327,56 +1380,10 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell_cwd,
     };
 
-    let (command_tx, command_rx) = tokio_mpsc::channel(16);
-    let (event_tx, event_rx) = tokio_mpsc::channel(16);
-
-    let coordinator_handle = tokio::spawn(async move {
-        ShellCoordinator::run(reload_config, builder, command_tx, event_rx).await
-    });
-
-    let handoff = Some(TuiHandoff { terminal_ready_rx });
-
-    let shell_session = ShellSession::with_defaults()
-        .with_status_line(is_interactive)
-        .with_shutdown_token(shutdown.cancellation_token());
-    let session_result = shell_session
-        .run(command_rx, event_tx, handoff, SessionIo::default())
+    ShellCoordinator::run(reload_config, builder, command_tx, event_rx)
         .await
         .into_diagnostic()
-        .wrap_err("Shell session error");
-
-    // Cancel any in-flight Nix eval so the build's `spawn_blocking` task
-    // releases the builder before we abort the coordinator.
-    devenv_nix_backend::trigger_interrupt();
-
-    // The coordinator's file-watcher task keeps the internal channel sender
-    // alive, so awaiting it would hang. Abort drops the builder (and the
-    // `DevenvClient` it holds), letting the owner thread join.
-    coordinator_handle.abort();
-    let _ = coordinator_handle.await;
-
-    session_result
-}
-
-/// Run the REPL with TUI handoff.
-///
-/// Performs assembly and Nix evaluation while TUI is active (showing progress),
-/// then signals the TUI to release the terminal before launching the interactive REPL.
-async fn run_repl(
-    devenv: &Devenv,
-    terminal_ready_rx: oneshot::Receiver<u16>,
-) -> Result<CommandResult> {
-    // Phase 1: Assemble and evaluate with TUI active (shows progress)
-    devenv.prepare_repl().await?;
-
-    // Phase 2: signal the renderer to stop, then wait for terminal release
-    devenv_activity::render_done();
-    let _ = terminal_ready_rx.await;
-
-    // Phase 3: Terminal is ours — launch the interactive REPL
-    devenv.launch_repl().await?;
-
-    Ok(CommandResult::Done)
+        .wrap_err("Shell coordinator error")
 }
 
 /// Build a single-threaded tokio runtime for a UI renderer.

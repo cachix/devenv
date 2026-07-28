@@ -81,7 +81,7 @@ async fn test_spawn_and_exit() {
     let (event_tx, mut event_rx) = mpsc::channel(10);
 
     let session = test_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd("exit 0")).await.unwrap();
 
@@ -113,7 +113,7 @@ async fn test_shutdown_before_spawn() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = test_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(ShellCommand::Shutdown).await.unwrap();
 
@@ -131,7 +131,7 @@ async fn test_pty_output_to_stdout() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = test_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx
         .send(spawn_cmd("echo MARKER_OUTPUT; exit 0"))
@@ -157,7 +157,7 @@ async fn test_stdin_forwarded_to_pty() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = test_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     // Spawn head -1 which reads one line, prints it, and exits
     cmd_tx.send(spawn_cmd("head -1")).await.unwrap();
@@ -185,7 +185,7 @@ async fn test_ctrl_alt_d_toggle_pause() {
     let (event_tx, mut event_rx) = mpsc::channel(10);
 
     let session = test_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx
         .send(spawn_cmd("printf 'READY\\n'; read unused"))
@@ -299,7 +299,7 @@ async fn test_status_line_rendered_on_last_row() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = status_line_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 
@@ -331,7 +331,7 @@ async fn test_overflow_preserved_in_scrollback() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = test_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd(FLOOD_CMD)).await.unwrap();
 
@@ -363,7 +363,7 @@ async fn test_wrapped_line_preserved_in_scrollback() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = test_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     // Print a 100-char single-token line (wraps once at col 80), then push it
     // off the 24-row viewport so it lands in native scrollback.
@@ -412,7 +412,7 @@ async fn test_overflow_viewport_shows_tail() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = test_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd(FLOOD_CMD)).await.unwrap();
 
@@ -439,7 +439,7 @@ async fn test_overflow_status_line_protected() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = status_line_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     // Flood 30 lines then keep the process alive so the status line isn't
     // cleared by the PtyExit handler.
@@ -497,7 +497,7 @@ async fn test_build_lifecycle_status_line() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = status_line_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 
@@ -553,7 +553,7 @@ async fn test_build_failed_error_toggle() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = status_line_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 
@@ -610,7 +610,7 @@ async fn test_watching_paused_status_line() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = status_line_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 
@@ -661,7 +661,7 @@ async fn test_print_watched_files() {
     let (event_tx, _event_rx) = mpsc::channel(10);
 
     let session = status_line_session();
-    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, None, io).await });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
 

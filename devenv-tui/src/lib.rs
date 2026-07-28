@@ -24,7 +24,7 @@ pub use model_events::UiEvent;
 
 // Re-export shell session types from devenv-shell
 pub use devenv_shell::{
-    SessionConfig, SessionError, SessionIo, ShellCommand, ShellEvent, ShellSession, TuiHandoff,
+    SessionConfig, SessionError, SessionIo, ShellCommand, ShellEvent, ShellSession,
 };
 
 /// Idle heartbeat: when nothing in the model has changed, the loop still emits

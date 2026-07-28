@@ -164,9 +164,8 @@ impl TuiApp {
     /// Run the TUI application until the backend completes.
     ///
     /// The activity stream carries its own stop signal: a
-    /// `Control::RenderDone` event (or the channel closing) ends rendering.
-    /// Returns the final render height for post-handoff cursor positioning.
-    pub async fn run(self) -> std::io::Result<u16> {
+    /// `Control::Exit` event (or the channel closing) ends rendering.
+    pub async fn run(self) -> std::io::Result<()> {
         let config = Arc::new(self.config);
         let activity_model = Arc::new(RwLock::new(ActivityModel::with_config(config.clone())));
         let notify = Arc::new(Notify::new());
@@ -195,9 +194,9 @@ impl TuiApp {
             let mut activity_rx = self.activity_rx;
             async move {
                 let mut batch = Vec::with_capacity(config.event_batch_size);
-                let mut render_done = false;
+                let mut exit_requested = false;
 
-                while !render_done {
+                while !exit_requested {
                     let Some(event) = activity_rx.recv().await else {
                         // Channel closed: producer is gone, stop rendering
                         break;
@@ -217,7 +216,7 @@ impl TuiApp {
                             match event {
                                 // Control events steer the renderer; they
                                 // never reach the model.
-                                ActivityEvent::Control(Control::RenderDone) => render_done = true,
+                                ActivityEvent::Control(Control::Exit) => exit_requested = true,
                                 ActivityEvent::Control(Control::Attached { attached }) => {
                                     config.attached.store(attached, Ordering::Relaxed);
                                 }
@@ -230,7 +229,7 @@ impl TuiApp {
                     // changed the visible model; pure no-op events (e.g.
                     // shell events, skipped .narinfo fetches) don't force
                     // a layout-recomputing redraw.
-                    if any_changed && !render_done {
+                    if any_changed && !exit_requested {
                         model_version.fetch_add(1, Ordering::Release);
                         notify.notify_waiters();
                     }
@@ -298,7 +297,6 @@ impl TuiApp {
 
         // Final render pass to ensure all drained events are displayed.
         // Clear previous inline render, then render final state.
-        let mut final_render_height: u16 = 0;
         {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
@@ -350,7 +348,6 @@ impl TuiApp {
                         }
                     };
                     let canvas = element.render(Some(terminal_width as usize));
-                    final_render_height = canvas.height() as u16;
                     let _ = canvas.write_ansi(io::stderr());
 
                     // Print full error messages in red (not truncated by TUI width)
@@ -360,15 +357,12 @@ impl TuiApp {
                     if has_errors {
                         let mut stderr = io::stderr();
                         eprintln!();
-                        final_render_height += 1; // for the empty line
 
                         // Print standalone error messages (no parent activity)
                         for (text, details) in standalone_errors {
                             let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
                             eprintln!("{}", text);
-                            final_render_height += 1;
                             if let Some(details) = details {
-                                final_render_height += details.lines().count() as u16;
                                 eprintln!("{}", details);
                             }
                             let _ = execute!(stderr, ResetColor);
@@ -378,9 +372,7 @@ impl TuiApp {
                         for (text, details) in activity_errors {
                             let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
                             eprintln!("{}", text);
-                            final_render_height += 1;
                             if let Some(details) = details {
-                                final_render_height += details.lines().count() as u16;
                                 eprintln!("{}", details);
                             }
                             let _ = execute!(stderr, ResetColor);
@@ -390,10 +382,8 @@ impl TuiApp {
                         for (name, lines) in failed_build_errors {
                             let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
                             eprintln!("Build error: {}", name);
-                            final_render_height += 1;
                             for line in lines {
                                 eprintln!("  {}", line);
-                                final_render_height += 1;
                             }
                             let _ = execute!(stderr, ResetColor);
                         }
@@ -402,7 +392,7 @@ impl TuiApp {
             }
         }
 
-        Ok(final_render_height)
+        Ok(())
     }
 }
 

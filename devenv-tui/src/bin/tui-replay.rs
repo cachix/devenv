@@ -214,13 +214,12 @@ async fn main() -> Result<()> {
     let shutdown = Shutdown::new();
 
     // Signal TUI when replay is done via an in-band control event.
-    let mut render_done_tx = Some(tx.clone());
-    let send_render_done =
-        |tx: tokio::sync::mpsc::UnboundedSender<devenv_activity::ActivityEvent>| {
-            let _ = tx.send(devenv_activity::ActivityEvent::Control(
-                devenv_activity::Control::RenderDone,
-            ));
-        };
+    let mut exit_tx = Some(tx.clone());
+    let send_exit = |tx: tokio::sync::mpsc::UnboundedSender<devenv_activity::ActivityEvent>| {
+        let _ = tx.send(devenv_activity::ActivityEvent::Control(
+            devenv_activity::Control::Exit,
+        ));
+    };
 
     info!("Spawning TUI");
 
@@ -257,7 +256,7 @@ async fn main() -> Result<()> {
 
             if args.hold {
                 // Hold the TUI open for input fuzzing: do NOT signal
-                // render-done and keep `tx` alive. Wait for the TUI to exit
+                // exit and keep `tx` alive. Wait for the TUI to exit
                 // on its own or for an interrupt (the fuzzer's timeout kills
                 // the process).
                 info!("Trace drained; holding TUI open (--hold). Ctrl+C to exit.");
@@ -270,8 +269,8 @@ async fn main() -> Result<()> {
                 }
             } else {
                 // Signal TUI that replay is done and let it drain and exit.
-                if let Some(tx) = render_done_tx.take() {
-                    send_render_done(tx);
+                if let Some(tx) = exit_tx.take() {
+                    send_exit(tx);
                 }
                 let _ = (&mut tui_task).await;
             }
@@ -283,8 +282,8 @@ async fn main() -> Result<()> {
             info!("Interrupted");
             shutdown.shutdown();
             // Signal TUI that we're done (after interrupt)
-            if let Some(tx) = render_done_tx.take() {
-                send_render_done(tx);
+            if let Some(tx) = exit_tx.take() {
+                send_exit(tx);
             }
         }
     }

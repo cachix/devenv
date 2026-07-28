@@ -72,7 +72,7 @@ pub use handle::{ActivityGuard, ActivityHandle, init};
 pub use serde_valuable::SerdeValue;
 pub use stack::{
     append_eval_log, append_eval_op, attached, current_activity_id, current_activity_level,
-    emit_task_hierarchy, log_to_task, message, message_with_details, render_done, set_expected,
+    emit_task_hierarchy, exit_renderer, log_to_task, message, message_with_details, set_expected,
 };
 
 // Traits

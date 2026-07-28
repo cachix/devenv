@@ -589,7 +589,7 @@ async fn async_main() -> Result<ExitCode> {
 
         let result = execute_command(&args).await;
 
-        devenv_activity::render_done();
+        devenv_activity::exit_renderer();
         drop(activity_guard);
         let _ = console_task.await;
 

@@ -29,8 +29,9 @@ pub enum ActivityEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Valuable)]
 #[serde(tag = "control", rename_all = "snake_case")]
 pub enum Control {
-    /// The render phase is over: stop rendering and release the terminal.
-    RenderDone,
+    /// Exit the renderer and release the terminal.
+    #[serde(alias = "render_done")]
+    Exit,
     /// The backend attached to (or detached from) a running process manager,
     /// which changes what the TUI's Ctrl-C prompt offers.
     Attached { attached: bool },

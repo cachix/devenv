@@ -38,6 +38,8 @@ enum Event {
     /// Reload file was deleted (user applied the reload)
     ReloadFileDeleted,
     Tui(ShellEvent),
+    /// The session dropped its event sender without reporting an exit.
+    TuiDisconnected,
 }
 
 /// Shell coordinator for TUI mode.
@@ -153,14 +155,15 @@ fn launch_reload_build<B: ShellBuilder + 'static>(
 impl ShellCoordinator {
     /// Run the shell coordinator.
     ///
-    /// Sends commands to TUI for PTY spawning/swapping.
-    /// Receives events from TUI (exit, resize).
+    /// Sends commands to the session for PTY spawning/swapping and receives
+    /// its events (exit, resize). Returns when the session exits or
+    /// disconnects, with the shell's exit code if it reported one.
     pub async fn run<B: ShellBuilder + 'static>(
         config: Config,
         builder: B,
         command_tx: mpsc::Sender<ShellCommand>,
         mut event_rx: mpsc::Receiver<ShellEvent>,
-    ) -> Result<(), CoordinatorError> {
+    ) -> Result<Option<u32>, CoordinatorError> {
         let builder = Arc::new(builder);
         let cwd = std::env::current_dir()?;
 
@@ -217,6 +220,10 @@ impl ShellCoordinator {
                 .await;
         }
 
+        // The build phase is over: tell the renderer to exit so the frontend
+        // can hand the terminal to the shell session.
+        devenv_activity::exit_renderer();
+
         let (event_tx, mut internal_rx) = mpsc::channel::<Event>(100);
 
         // Forward file watcher events
@@ -229,18 +236,22 @@ impl ShellCoordinator {
             }
         });
 
-        // Forward TUI events
+        // Forward session events. The session dropping its sender is a
+        // termination signal too, so the loop below never outlives it.
         let tui_tx = event_tx.clone();
         let tui_forwarder_task = tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
                 if tui_tx.send(Event::Tui(event)).await.is_err() {
-                    break;
+                    return;
                 }
             }
+            let _ = tui_tx.send(Event::TuiDisconnected).await;
         });
 
         // Track the currently running build task for cancellation
         let mut current_build: Option<tokio::task::AbortHandle> = None;
+        // The shell's exit code, once the session reports it
+        let mut shell_exit_code: Option<u32> = None;
         // Track files that changed and triggered rebuilds
         let mut pending_changes: Vec<PathBuf> = Vec::new();
         // Track watched path state (kind + content hash) to detect real changes.
@@ -483,8 +494,14 @@ impl ShellCoordinator {
                     }
                 }
 
-                Event::Tui(ShellEvent::Exited { .. }) => {
+                Event::Tui(ShellEvent::Exited { exit_code }) => {
                     // Shell exited, we're done
+                    shell_exit_code = exit_code;
+                    break;
+                }
+
+                Event::TuiDisconnected => {
+                    // Session is gone without a normal exit
                     break;
                 }
 
@@ -526,7 +543,7 @@ impl ShellCoordinator {
         // Send shutdown command
         let _ = command_tx.send(ShellCommand::Shutdown).await;
 
-        Ok(())
+        Ok(shell_exit_code)
     }
 }
 

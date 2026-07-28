@@ -41,7 +41,7 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{mpsc as tokio_mpsc, oneshot};
+use tokio::sync::mpsc as tokio_mpsc;
 use tokio_util::sync::CancellationToken;
 
 /// Keybind byte sequences (ESC + Ctrl key).
@@ -888,10 +888,10 @@ struct Renderer<'a> {
     viewport: ViewportRenderer<'a>,
     /// Previous cursor state.
     prev_cursor: CursorState,
-    /// Row offset for the initial phase after TUI handoff.
-    /// When > 0, VT row N maps to real terminal row (N + 1 + row_offset)
-    /// instead of (N + 1). Gradually consumed as VT content scrolls,
-    /// or reset to 0 immediately on terminal resize or alternate screen.
+    /// Rows of pre-existing terminal content the session started below.
+    /// While > 0, VT row N maps to real terminal row (N + 1 + row_offset);
+    /// `make_room` scrolls that content into native scrollback as the shell
+    /// needs the space. Never read or written outside this impl.
     row_offset: u16,
     /// Number of usable content rows on the real terminal (excludes status line).
     /// Used to clip rendering so offset VT rows don't overwrite the status line.
@@ -1089,7 +1089,7 @@ impl<'a> Renderer<'a> {
         Ok(pending + scrollback.saturating_sub(cursor))
     }
 
-    /// Number of VT rows that fit on-screen given the current offset.
+    /// Number of VT rows that fit on-screen below the takeover offset.
     fn visible_rows(&self) -> usize {
         (self.content_rows as usize).saturating_sub(self.row_offset as usize)
     }
@@ -1347,12 +1347,77 @@ impl<'a> Renderer<'a> {
         self.viewport.invalidate();
     }
 
-    /// Snapshot VT state without writing anything to stdout. Used after TUI
-    /// handoff to establish a native-terminal baseline while preserving the
-    /// existing content.
-    fn sync(&mut self, vt: &Terminal<'_, '_>) {
-        self.viewport.sync(vt);
-        self.prev_cursor = CursorState::from_terminal(vt);
+    /// Start rendering on a terminal that may already have content above the
+    /// cursor. With `offset > 0` that content stays on screen: the VT maps
+    /// below it (snapshotting the native baseline so nothing repaints over
+    /// it) and `make_room` scrolls it away only as the shell needs the
+    /// space. With `offset == 0` the screen is ours; draw everything.
+    fn init_takeover(
+        &mut self,
+        offset: u16,
+        stdout: &mut impl Write,
+        vt: &Terminal<'a, '_>,
+    ) -> io::Result<()> {
+        if offset > 0 {
+            self.row_offset = offset;
+            self.viewport.sync(vt);
+            self.prev_cursor = CursorState::from_terminal(vt);
+            Ok(())
+        } else {
+            self.render_full(stdout, vt)
+        }
+    }
+
+    /// While pre-existing content sits above the takeover offset, scroll it
+    /// into native scrollback as the shell needs the space: when the VT
+    /// scrolled, when the cursor would land below the visible area, or all
+    /// at once on alternate screen / explicit clear (CSI 2J).
+    fn make_room(
+        &mut self,
+        stdout: &mut impl Write,
+        vt: &Terminal<'_, '_>,
+        esc: &EscapeState,
+    ) -> io::Result<()> {
+        if self.row_offset == 0 {
+            return Ok(());
+        }
+        let cursor_row = vt.cursor_y().map(|r| r as usize).unwrap_or(0);
+        let cursor_excess = (cursor_row + 1).saturating_sub(self.visible_rows());
+        // `pending_scroll` spans every batch deferred by mode 2026; `feed`
+        // accumulates it and only a presented render resets it.
+        let need = self.pending_scroll.max(cursor_excess);
+        let consumed = if esc.in_alternate_screen || esc.erase_display {
+            // Alternate screen or explicit screen clear (CSI 2J): the shell
+            // takes the full visible area.
+            self.row_offset as usize
+        } else {
+            need.min(self.row_offset as usize)
+        };
+        if consumed > 0 {
+            Self::scroll_region(stdout, self.content_rows, consumed)?;
+            self.row_offset -= consumed as u16;
+            self.invalidate();
+        }
+        Ok(())
+    }
+
+    /// Present the current VT state: scroll-flush the primary screen when the
+    /// full area is ours, plain redraw while on the alternate screen or still
+    /// rendering below pre-existing terminal content.
+    fn present(&mut self, stdout: &mut impl Write, vt: &mut Terminal<'a, '_>) -> io::Result<()> {
+        let primary = vt.active_screen().ok() == Some(Screen::Primary);
+        if !primary || self.row_offset > 0 {
+            self.render(stdout, vt)
+        } else {
+            self.render_with_scroll(stdout, vt)
+        }
+    }
+
+    /// Terminal resize: the takeover phase ends (the terminal reflowed the
+    /// old content itself) and the content area gets its new height.
+    fn resized(&mut self, content_rows: u16) {
+        self.row_offset = 0;
+        self.content_rows = content_rows;
     }
 }
 
@@ -1368,17 +1433,6 @@ pub enum SessionError {
     ChannelClosed,
     #[error("unexpected command: expected Spawn, got {0}")]
     UnexpectedCommand(String),
-}
-
-/// Configuration for TUI handoff.
-///
-/// When running with TUI, the shell session needs to coordinate
-/// terminal ownership with the TUI.
-pub struct TuiHandoff {
-    /// Wait for the renderer to release the terminal. The TUI's final render
-    /// height is carried but unused here. The renderer is told to stop via
-    /// `devenv_activity::render_done()`.
-    pub terminal_ready_rx: oneshot::Receiver<u16>,
 }
 
 /// Shell session configuration.
@@ -1587,12 +1641,10 @@ impl ShellSession {
     /// # Arguments
     /// * `command_rx` - Receives commands from coordinator
     /// * `event_tx` - Sends events to coordinator
-    /// * `handoff` - Optional TUI handoff configuration
     pub async fn run(
         mut self,
         mut command_rx: tokio_mpsc::Receiver<ShellCommand>,
         event_tx: tokio_mpsc::Sender<ShellEvent>,
-        handoff: Option<TuiHandoff>,
         io: SessionIo,
     ) -> Result<Option<u32>, SessionError> {
         // Wait for the initial Spawn command
@@ -1607,15 +1659,9 @@ impl ShellSession {
                 (command, watch_files)
             }
             Some(ShellCommand::Shutdown) | None => {
-                if handoff.is_some() {
-                    devenv_activity::render_done();
-                }
                 return Ok(None);
             }
             Some(other) => {
-                if handoff.is_some() {
-                    devenv_activity::render_done();
-                }
                 return Err(SessionError::UnexpectedCommand(format!("{:?}", other)));
             }
         };
@@ -1625,31 +1671,6 @@ impl ShellSession {
         let pty_size = self.pty_size();
 
         let pty = Arc::new(Pty::spawn(initial_cmd, pty_size)?);
-
-        // TUI handoff. Wait for the renderer to release the terminal, but
-        // yield to shutdown so a SIGHUP during this await can't hang us.
-        if let Some(handoff) = handoff {
-            tracing::trace!("session: signalling render_done");
-            devenv_activity::render_done();
-
-            tracing::trace!("session: waiting for terminal_ready_rx");
-            let cancelled = async {
-                match &self.shutdown_token {
-                    Some(t) => t.cancelled().await,
-                    None => std::future::pending::<()>().await,
-                }
-            };
-            tokio::select! {
-                _ = handoff.terminal_ready_rx => {
-                    tracing::trace!("session: terminal_ready_rx received");
-                }
-                _ = cancelled => {
-                    tracing::debug!("session: shutdown during handoff, aborting");
-                    let _ = pty.kill();
-                    return Ok(None);
-                }
-            }
-        }
 
         // Enter raw mode
         tracing::trace!("session: entering raw mode");
@@ -1661,12 +1682,13 @@ impl ShellSession {
         let mut stdout: Box<dyn Write + Send> = Box::new(io::BufWriter::new(stdout_raw));
         let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
 
-        // Query cursor position FIRST before any terminal resets.
-        // This tells us where TUI left the cursor after its final render.
-        // Skip when stdin is injected (not a real terminal) — the response comes
-        // via stdin, so this would hang if stdin is not a TTY.
-        // crossterm::cursor::position() handles the DSR query, parsing, and has a
-        // built-in 2s timeout for environments that don't respond (Docker, CI).
+        // Ask the terminal where its cursor is — everything above it (build
+        // summary, prior output) stays on screen, and the renderer starts
+        // below. Done FIRST, before any terminal resets. Skip when stdin is
+        // injected (not a real terminal) — the DSR response comes via stdin,
+        // so this would hang if stdin is not a TTY. crossterm handles the
+        // query, parsing, and a built-in 2s timeout for environments that
+        // don't respond (Docker, CI).
         let cursor_row = if !injected_stdin && io::stdin().is_terminal() {
             match crossterm::cursor::position() {
                 Ok((_col, row)) => row + 1, // crossterm returns 0-based, we need 1-based
@@ -1678,11 +1700,12 @@ impl ShellSession {
         } else {
             1
         };
-        tracing::trace!("session: cursor position after TUI: row {}", cursor_row);
+        tracing::trace!("session: cursor position at takeover: row {}", cursor_row);
 
-        // TUI renderers may leave a non-default scroll region/origin mode.
+        // Renderers may leave a non-default scroll region/origin mode.
         // Reset both before we start cursor-addressed rendering, otherwise
-        // the first shell draw can land in the wrong area and overlap TUI output.
+        // the first shell draw can land in the wrong area and overlap
+        // existing output.
         queue!(stdout, ResetScrollRegion, ResetDecMode(ORIGIN_MODE))?;
         stdout.flush()?;
 
@@ -1709,9 +1732,8 @@ impl ShellSession {
         // Both PTY and VT stay at full terminal size so that:
         // - Programs see the real dimensions (no unnecessary pager invocations)
         // - Alternate screen save/restore works correctly (same buffer size)
-        // The renderer clips output to the visible area below cursor_row
-        // and gradually consumes offset as the cursor moves down.
-        let row_offset = cursor_row.saturating_sub(1);
+        // The renderer alone knows how to draw around the existing content.
+        let takeover_offset = cursor_row.saturating_sub(1);
         let pty_size = self.pty_size();
         let _ = pty.resize(pty_size);
 
@@ -1873,14 +1895,9 @@ impl ShellSession {
             }
             vt.vt_write(b"\x1b[2J\x1b[H");
 
-            // Initialize the renderer and do a full initial draw
+            // Initialize the renderer; content above the takeover row stays.
             let mut renderer = Renderer::new(pty_size.rows, &vt)?;
-            if row_offset > 0 {
-                renderer.row_offset = row_offset;
-                renderer.sync(&vt);
-            } else {
-                renderer.render_full(&mut stdout, &vt)?;
-            }
+            renderer.init_takeover(takeover_offset, &mut stdout, &vt)?;
             if self.config.show_status_line {
                 self.status_line
                     .draw(&mut stdout, self.size.cols, self.size.rows)?;
@@ -2023,11 +2040,12 @@ impl ShellSession {
                         &mut esc_events,
                     )?;
 
-                    // Feed output into VT and track how many lines scrolled off
-                    let mut total_scroll = {
+                    // Feed output into VT; `feed` tracks scrolled-off lines
+                    // in the renderer's own `pending_scroll`.
+                    {
                         let filtered = vt_input_filter.filter(&data, &mut vt_input);
-                        renderer.feed(vt, filtered.as_bytes())?
-                    };
+                        renderer.feed(vt, filtered.as_bytes())?;
+                    }
                     flush_virtual_pty_replies(virtual_pty_replies, pty)?;
                     return_pty_read_buffer(pty_buffer_return_tx, data);
 
@@ -2047,10 +2065,10 @@ impl ShellSession {
                                     self.pty_size(),
                                     &mut esc_events,
                                 )?;
-                                total_scroll += {
+                                {
                                     let filtered = vt_input_filter.filter(&more, &mut vt_input);
-                                    renderer.feed(vt, filtered.as_bytes())?
-                                };
+                                    renderer.feed(vt, filtered.as_bytes())?;
+                                }
                                 flush_virtual_pty_replies(virtual_pty_replies, pty)?;
                                 return_pty_read_buffer(pty_buffer_return_tx, more);
                             }
@@ -2067,7 +2085,7 @@ impl ShellSession {
                                 return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
-                                total_scroll += self.dispatch_stdin_event(
+                                self.dispatch_stdin_event(
                                     &stdin_data,
                                     StdinPresentation::Deferred,
                                     StdinEventContext {
@@ -2080,7 +2098,7 @@ impl ShellSession {
                                 )?;
                             }
                             Event::Command(cmd) => {
-                                total_scroll += self.handle_command(cmd, vt, renderer)?;
+                                self.handle_command(cmd, vt, renderer)?;
                             }
                             Event::Resize => {
                                 resize_pending = true;
@@ -2113,42 +2131,13 @@ impl ShellSession {
                         renderer.invalidate();
                     }
 
-                    // Consume offset if needed: when cursor would land
-                    // off-screen or VT scrolled, push old TUI content
-                    // into native scrollback to make room.
-                    if renderer.row_offset > 0 {
-                        let content_rows = renderer.content_rows;
-                        let visible_rows = renderer.visible_rows();
-                        let cursor_row = vt.cursor_y().map(|r| r as usize).unwrap_or(0);
-                        let cursor_excess = (cursor_row + 1).saturating_sub(visible_rows);
-                        // `pending_scroll` spans every batch deferred by mode
-                        // 2026, whereas `total_scroll` only covers this batch.
-                        let need = renderer.pending_scroll.max(total_scroll).max(cursor_excess);
-
-                        let consumed = if esc.in_alternate_screen || esc.erase_display {
-                            // Alternate screen or explicit screen clear (CSI 2J):
-                            // consume the entire offset so the shell owns the
-                            // full visible area.
-                            renderer.row_offset as usize
-                        } else {
-                            need.min(renderer.row_offset as usize)
-                        };
-                        if consumed > 0 {
-                            Renderer::scroll_region(stdout, content_rows, consumed)?;
-                            renderer.row_offset -= consumed as u16;
-                            renderer.invalidate();
-                        }
-                    }
+                    renderer.make_room(stdout, vt, &esc)?;
 
                     if esc.clear_scrollback {
                         queue!(stdout, Clear(ClearType::Purge))?;
                     }
 
-                    if esc.in_alternate_screen || renderer.row_offset > 0 {
-                        renderer.render(stdout, vt)?;
-                    } else {
-                        renderer.render_with_scroll(stdout, vt)?;
-                    }
+                    renderer.present(stdout, vt)?;
 
                     if self.config.show_status_line {
                         self.status_line
@@ -2188,11 +2177,7 @@ impl ShellSession {
                         continue;
                     }
                     queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                    if renderer.row_offset > 0 {
-                        renderer.render(stdout, vt)?;
-                    } else {
-                        renderer.render_with_scroll(stdout, vt)?;
-                    }
+                    renderer.present(stdout, vt)?;
                     self.draw_status_and_cursor(stdout, vt, renderer)?;
                     queue!(stdout, terminal::EndSynchronizedUpdate)?;
                     stdout.flush()?;
@@ -2222,10 +2207,8 @@ impl ShellSession {
                         } else {
                             None
                         };
-                        // Terminal resize ends the offset phase
-                        renderer.row_offset = 0;
                         let pty_size = self.pty_size();
-                        renderer.content_rows = pty_size.rows;
+                        renderer.resized(pty_size.rows);
                         let _ = pty.resize(pty_size);
                         // Send a mode 2048 in-band resize notification
                         // through the PTY, but only if the program has
@@ -2290,7 +2273,7 @@ impl ShellSession {
         data: &[u8],
         presentation: StdinPresentation,
         context: StdinEventContext<'_, '_, '_>,
-    ) -> Result<usize, SessionError> {
+    ) -> Result<(), SessionError> {
         let StdinEventContext {
             pty,
             coordinator_tx,
@@ -2314,7 +2297,6 @@ impl ShellSession {
                 if state.error.is_some() {
                     state.show_error = !state.show_error;
                     let synchronized = synchronized_output_active(vt);
-                    let mut scroll = 0;
                     if state.show_error {
                         let error = state.error.clone().unwrap();
                         let mut error_text = String::from("\r\n\x1b[1;31mBuild error:\x1b[0m\r\n");
@@ -2322,13 +2304,9 @@ impl ShellSession {
                             error_text.push_str(&format!("  {}\r\n", line));
                         }
                         error_text.push_str("\r\n");
-                        scroll = renderer.feed(vt, &error_text)?;
+                        renderer.feed(vt, &error_text)?;
                         if present_stdin_error_immediately(presentation, synchronized) {
-                            if renderer.row_offset > 0 {
-                                renderer.render(stdout, vt)?;
-                            } else {
-                                renderer.render_with_scroll(stdout, vt)?;
-                            }
+                            renderer.present(stdout, vt)?;
                         }
                     } else {
                         pty.write_all(&[0x0C])?;
@@ -2340,7 +2318,6 @@ impl ShellSession {
                         renderer.write_cursor(stdout, vt)?;
                         stdout.flush()?;
                     }
-                    return Ok(scroll);
                 }
             }
             StdinDisposition::ForwardToPty if !data.is_empty() => {
@@ -2349,20 +2326,19 @@ impl ShellSession {
             }
             StdinDisposition::ForwardToPty => {}
         }
-        Ok(0)
+        Ok(())
     }
 
     /// Handle a command from the coordinator.
     ///
     /// Updates state and, for some commands (e.g. `PrintWatchedFiles`), feeds
-    /// text into the VT. Does not write to stdout. Returns the scroll count
-    /// so the caller can fold it into its render pass.
+    /// text into the VT. Does not write to stdout.
     fn handle_command(
         &mut self,
         cmd: ShellCommand,
         vt: &mut Terminal<'_, '_>,
         renderer: &mut Renderer<'_>,
-    ) -> Result<usize, SessionError> {
+    ) -> Result<(), SessionError> {
         match cmd {
             ShellCommand::ReloadReady { changed_files } => {
                 self.status_line.state_mut().set_reload_ready(changed_files);
@@ -2400,7 +2376,7 @@ impl ShellSession {
                 for file in &files {
                     text.push_str(&format!("  {}\r\n", file.display()));
                 }
-                return Ok(renderer.feed(vt, &text)?);
+                renderer.feed(vt, &text)?;
             }
 
             ShellCommand::Shutdown => {
@@ -2412,7 +2388,7 @@ impl ShellSession {
             }
         }
 
-        Ok(0)
+        Ok(())
     }
 
     /// Draw status line and reposition cursor.
