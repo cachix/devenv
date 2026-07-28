@@ -3,12 +3,15 @@
 //! This module handles fetching and configuring Cachix substituters and trusted keys
 //! for Nix operations, including authentication token management and API integration.
 
-use miette::{IntoDiagnostic, Result, WrapErr};
+use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use nix_conf_parser::NixConf;
 use serde::{Deserialize, Deserializer};
 use std::collections::BTreeMap;
 use std::env;
+use std::io::ErrorKind;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::OnceCell;
 use tracing::{debug, warn};
@@ -26,6 +29,10 @@ pub const CACHIX_AUTH_TOKEN_ENV: &str = "CACHIX_AUTH_TOKEN";
 #[derive(Debug, Clone)]
 pub struct CachixPaths {
     pub trusted_keys: PathBuf,
+    /// Where the managed netrc is written. It merges the project's Cachix
+    /// credentials with whatever Nix already had configured, so callers
+    /// should pick a path that is private to this process and outside the
+    /// project tree.
     pub netrc: PathBuf,
     /// Optional custom daemon socket path (for testing)
     pub daemon_socket: Option<PathBuf>,
@@ -35,6 +42,10 @@ pub struct CachixPaths {
 pub struct CachixManager {
     pub paths: CachixPaths,
     netrc_path: Arc<OnceCell<String>>,
+    /// Set after the generated Cachix entries have been written. The netrc
+    /// path is initialized earlier, before the Nix store opens, so the
+    /// backend can preserve credentials from Nix's existing netrc first.
+    netrc_populated: Arc<OnceCell<()>>,
     /// Auth token supplied out of band (e.g. resolved from secretspec),
     /// used when `CACHIX_AUTH_TOKEN` is absent from the environment.
     auth_token_override: Option<String>,
@@ -54,6 +65,7 @@ impl CachixManager {
         Self {
             paths,
             netrc_path: Arc::new(OnceCell::new()),
+            netrc_populated: Arc::new(OnceCell::new()),
             auth_token_override,
             resolved_token: OnceLock::new(),
         }
@@ -97,21 +109,37 @@ impl CachixManager {
         token
     }
 
-    /// Ensure netrc file is created and populated with cache credentials
+    /// Ensure the managed netrc file exists and return its path.
     ///
-    /// This should be called after we know which caches to configure.
-    /// It creates the netrc file with authentication for the given caches.
+    /// This happens before the Nix store opens. The backend can then copy
+    /// credentials from Nix's existing `netrc-file` into this file before
+    /// switching the process-global setting to it.
+    async fn ensure_netrc_path(&self) -> Result<&String> {
+        self.netrc_path
+            .get_or_try_init(|| async {
+                let netrc_path = self.paths.netrc.clone();
+                write_netrc_file(&netrc_path, &[])?;
+                Ok(netrc_path.to_string_lossy().to_string())
+            })
+            .await
+    }
+
+    /// Ensure netrc file is created and populated with cache credentials.
+    ///
+    /// The backend may already have seeded the file with credentials from
+    /// Nix's previously configured netrc. Generated entries are written
+    /// first so the explicitly resolved Cachix token wins for project caches,
+    /// while credentials for unrelated global substituters remain available.
     pub async fn ensure_netrc_file(&self, pull_caches: &[String]) -> Result<()> {
         if let Some(auth_token) = self.resolve_auth_token() {
-            // Only create if we haven't already
-            if self.netrc_path.get().is_none() {
-                let netrc_path = self.paths.netrc.clone();
-                self.create_netrc_file(&netrc_path, pull_caches, &auth_token)
+            let netrc_path = PathBuf::from(self.ensure_netrc_path().await?);
+            if !pull_caches.is_empty() {
+                self.netrc_populated
+                    .get_or_try_init(|| async {
+                        self.create_netrc_file(&netrc_path, pull_caches, &auth_token)
+                            .await
+                    })
                     .await?;
-
-                // Cache that we've created it
-                let netrc_path_str = netrc_path.to_string_lossy().to_string();
-                let _ = self.netrc_path.set(netrc_path_str);
             }
         }
         Ok(())
@@ -169,39 +197,26 @@ impl CachixManager {
         pull_caches: &[String],
         auth_token: &str,
     ) -> Result<()> {
-        let mut netrc_content = String::new();
+        let existing_content = match std::fs::read(netrc_path) {
+            Ok(content) => content,
+            Err(e) if e.kind() == ErrorKind::NotFound => Vec::new(),
+            Err(e) => {
+                return Err(e).into_diagnostic().wrap_err_with(|| {
+                    format!("Failed to read netrc file at {}", netrc_path.display())
+                });
+            }
+        };
+        let mut netrc_content = Vec::new();
 
         for cache in pull_caches {
-            netrc_content.push_str(&format!(
-                "machine {cache}.cachix.org\nlogin token\npassword {auth_token}\n\n",
-            ));
+            netrc_content.extend_from_slice(
+                format!("machine {cache}.cachix.org\nlogin token\npassword {auth_token}\n\n")
+                    .as_bytes(),
+            );
         }
+        append_netrc_content(&mut netrc_content, &existing_content);
 
-        // Create netrc file with restrictive permissions (600)
-        {
-            use tokio::io::AsyncWriteExt;
-
-            let mut file = tokio::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .mode(0o600)
-                .open(netrc_path)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| {
-                    format!("Failed to create netrc file at {}", netrc_path.display())
-                })?;
-
-            file.write_all(netrc_content.as_bytes())
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| {
-                    format!("Failed to write netrc content to {}", netrc_path.display())
-                })?;
-        }
-
-        Ok(())
+        write_netrc_file(netrc_path, &netrc_content)
     }
 
     /// Produce the resolved `StoreSettings` derived from this manager's
@@ -231,18 +246,25 @@ impl CachixManager {
             }
         }
 
-        // Advertise the netrc path whenever a token is resolvable, even
-        // before the file is written. This lets `netrc-file` be applied to
-        // the Nix settings registry *before the store opens* and performs
-        // any authenticated fetch (e.g. a private cache's `nix-cache-info`
-        // probe). The file content is created later by `ensure_netrc_file`,
-        // before the first substituter request. Without this, the netrc
-        // path is only known after cachix config is evaluated — too late,
-        // and private-cache requests go out unauthenticated (HTTP 401).
+        // Initialize and advertise the managed netrc whenever a token is
+        // resolvable. The backend preserves credentials from Nix's current
+        // netrc in this file before it changes the global `netrc-file`
+        // setting and opens the store. Project Cachix entries are added later,
+        // once their names have been evaluated.
         if let Some(path) = self.netrc_path.get() {
             settings.netrc_path = Some(PathBuf::from(path));
         } else if self.resolve_auth_token().is_some() {
-            settings.netrc_path = Some(self.paths.netrc.clone());
+            // A netrc we cannot write costs authentication, not the cache
+            // itself: leaving `netrc_path` unset degrades to unauthenticated
+            // pulls, whereas failing here would take the substituters
+            // resolved above down with it.
+            match self.ensure_netrc_file(&[]).await {
+                Ok(()) => settings.netrc_path = self.netrc_path.get().map(PathBuf::from),
+                Err(e) => warn!(
+                    error = %e,
+                    "cachix: failed to prepare the netrc, private caches may fail to authenticate"
+                ),
+            }
         }
 
         Ok(settings)
@@ -264,6 +286,201 @@ impl CachixManager {
 impl Drop for CachixManager {
     fn drop(&mut self) {
         self.cleanup_netrc();
+    }
+}
+
+/// Outcome of seeding devenv's managed netrc from Nix's existing one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetrcPreservation {
+    /// There was nothing to preserve: the source is the managed netrc
+    /// itself, or it is missing or empty.
+    NothingToPreserve,
+    /// The source's credentials are now in the managed netrc.
+    Preserved,
+    /// The source exists but could not be read, so its credentials are
+    /// missing from the managed netrc.
+    SourceUnreadable,
+}
+
+/// Preserve credentials from Nix's existing netrc in devenv's managed
+/// netrc. Existing managed entries come first and therefore retain
+/// precedence when both files contain credentials for the same machine.
+///
+/// A missing source file is treated like an empty netrc, matching Nix's
+/// behavior for its default `netrc-file` path. An unreadable one is
+/// reported back rather than failing the run, so the caller can decide
+/// whether switching Nix over to the managed netrc is still a good trade.
+pub fn preserve_netrc_file(source_path: &Path, netrc_path: &Path) -> Result<NetrcPreservation> {
+    let same_file = source_path == netrc_path
+        || match (source_path.canonicalize(), netrc_path.canonicalize()) {
+            (Ok(source), Ok(netrc)) => source == netrc,
+            _ => false,
+        };
+    if same_file {
+        return Ok(NetrcPreservation::NothingToPreserve);
+    }
+
+    let source_content = match std::fs::read(source_path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            return Ok(NetrcPreservation::NothingToPreserve);
+        }
+        Err(e) => {
+            // The source is whatever Nix currently has configured as
+            // `netrc-file`, commonly a root-owned 0600 /etc/nix/netrc on a
+            // multi-user install. Not being able to read it costs us those
+            // credentials; it is not a reason to abort the run.
+            warn!(
+                path = %source_path.display(),
+                error = %e,
+                "failed to read the existing netrc, its credentials will not be preserved"
+            );
+            return Ok(NetrcPreservation::SourceUnreadable);
+        }
+    };
+    if source_content.is_empty() {
+        return Ok(NetrcPreservation::NothingToPreserve);
+    }
+
+    let mut netrc_content = match std::fs::read(netrc_path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == ErrorKind::NotFound => Vec::new(),
+        Err(e) => {
+            return Err(e).into_diagnostic().wrap_err_with(|| {
+                format!("Failed to read managed netrc at {}", netrc_path.display())
+            });
+        }
+    };
+    append_netrc_content(&mut netrc_content, &source_content);
+    write_netrc_file(netrc_path, &netrc_content)?;
+
+    Ok(NetrcPreservation::Preserved)
+}
+
+fn append_netrc_content(content: &mut Vec<u8>, appended: &[u8]) {
+    if appended.is_empty() {
+        return;
+    }
+    if !content.is_empty() && !content.ends_with(b"\n") {
+        content.push(b'\n');
+    }
+    content.extend_from_slice(appended);
+}
+
+/// Distinguishes the scratch files of concurrent writers within a process.
+/// Across processes the netrc file name already carries the pid.
+static NETRC_TMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// Replace the netrc at `netrc_path` with `content`, readable only by its
+/// owner.
+///
+/// Nix reads the netrc lazily, once per HTTP request, and this path is
+/// already installed as `netrc-file` while fetches are in flight, so
+/// rewriting it in place would let a request observe an empty or truncated
+/// file and fall back to unauthenticated. Writing a scratch file and
+/// renaming it over the target keeps every read seeing one whole netrc or
+/// the other. The scratch file is created with `O_EXCL`, which refuses to
+/// follow a symlink planted at its name, and `rename` replaces a symlink at
+/// the target instead of writing through it -- both matter because the
+/// runtime directory sits on a predictable path.
+fn write_netrc_file(netrc_path: &Path, content: &[u8]) -> Result<()> {
+    let file_name = netrc_path
+        .file_name()
+        .ok_or_else(|| miette!("netrc path {} has no file name", netrc_path.display()))?;
+    let tmp_path = netrc_path.with_file_name(format!(
+        "{}.{}.{}.tmp",
+        file_name.to_string_lossy(),
+        std::process::id(),
+        NETRC_TMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+
+    let mut file = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&tmp_path)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to create netrc file at {}", tmp_path.display()))?;
+
+    let written = std::io::Write::write_all(&mut file, content)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to write netrc content to {}", tmp_path.display()));
+    drop(file);
+
+    let result = written.and_then(|()| {
+        std::fs::rename(&tmp_path, netrc_path)
+            .into_diagnostic()
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to move the netrc into place at {}",
+                    netrc_path.display()
+                )
+            })
+    });
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+    result
+}
+
+/// Prefix of the per-process managed netrc file names.
+const NETRC_PREFIX: &str = "netrc.";
+
+/// Name of the managed netrc for `process_id` inside `runtime_dir`.
+///
+/// The file is per-process because concurrent devenv invocations in one
+/// project would otherwise overwrite and delete each other's netrc while
+/// the other's Nix is still reading it.
+pub fn managed_netrc_path(runtime_dir: &Path, process_id: u32) -> PathBuf {
+    runtime_dir.join(format!("{NETRC_PREFIX}{process_id}"))
+}
+
+/// Remove managed netrc files in `runtime_dir` belonging to devenv
+/// processes that have since exited.
+///
+/// [`CachixManager`] removes its own on drop, but a SIGKILL or an aborting
+/// panic leaves behind a file holding the Cachix auth token and a copy of
+/// Nix's global netrc, and nothing else ever revisits the runtime directory.
+pub fn reap_stale_netrc_files(runtime_dir: &Path) {
+    reap_stale_netrc_files_with(runtime_dir, |pid| {
+        // ESRCH means no such process; EPERM means it exists but belongs to
+        // someone else. Anything other than "definitely gone" keeps the file.
+        !matches!(
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None),
+            Err(nix::errno::Errno::ESRCH)
+        )
+    });
+}
+
+fn reap_stale_netrc_files_with(runtime_dir: &Path, is_alive: impl Fn(i32) -> bool) {
+    let entries = match std::fs::read_dir(runtime_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            debug!(
+                path = %runtime_dir.display(),
+                error = %e,
+                "could not list the runtime directory to reap stale netrc files"
+            );
+            return;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name
+            .to_str()
+            .and_then(|name| name.strip_prefix(NETRC_PREFIX))
+            .and_then(|pid| pid.parse::<i32>().ok())
+        else {
+            continue;
+        };
+        if is_alive(pid) {
+            continue;
+        }
+        match std::fs::remove_file(entry.path()) {
+            Ok(()) => debug!(pid, "removed a netrc left behind by an exited devenv"),
+            Err(e) => debug!(pid, error = %e, "failed to remove a stale netrc"),
+        }
     }
 }
 
@@ -413,6 +630,7 @@ pub fn detect_missing_caches(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt as _;
 
     /// The exact record-literal shape `cachix authtoken` writes: the
     /// value sits on its own line and `binaryCaches` follows.
@@ -473,5 +691,253 @@ mod tests {
     fn returns_none_on_invalid_dhall() {
         let config = r#"{ authToken = "unterminated"#;
         assert_eq!(parse_dhall_auth_token(config), None);
+    }
+
+    #[test]
+    fn preserves_existing_netrc_after_managed_entries() {
+        let root = tempfile::tempdir().unwrap();
+        let existing_path = root.path().join("existing-netrc");
+        let managed_path = root.path().join("managed-netrc");
+        std::fs::write(
+            &existing_path,
+            "machine global-private.cachix.org\nlogin token\npassword global-token\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &managed_path,
+            "machine project.cachix.org\nlogin token\npassword project-token\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&managed_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        assert_eq!(
+            preserve_netrc_file(&existing_path, &managed_path).unwrap(),
+            NetrcPreservation::Preserved
+        );
+
+        assert_eq!(
+            std::fs::read_to_string(&managed_path).unwrap(),
+            "\
+machine project.cachix.org
+login token
+password project-token
+machine global-private.cachix.org
+login token
+password global-token
+"
+        );
+        assert_eq!(
+            std::fs::metadata(&managed_path)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+
+    #[test]
+    fn preserving_missing_or_same_netrc_is_a_noop() {
+        let root = tempfile::tempdir().unwrap();
+        let managed_path = root.path().join("managed-netrc");
+        let content = "machine project.cachix.org\nlogin token\npassword project-token\n";
+        std::fs::write(&managed_path, content).unwrap();
+
+        for source in [root.path().join("missing-netrc"), managed_path.clone()] {
+            assert_eq!(
+                preserve_netrc_file(&source, &managed_path).unwrap(),
+                NetrcPreservation::NothingToPreserve
+            );
+        }
+
+        assert_eq!(std::fs::read_to_string(&managed_path).unwrap(), content);
+    }
+
+    /// Nix commonly points `netrc-file` at a root-owned 0600 `/etc/nix/netrc`
+    /// that an unprivileged devenv cannot read. That must degrade to "no
+    /// credentials preserved", never fail the run, and it has to be
+    /// distinguishable from having nothing to preserve: the caller keeps Nix
+    /// on its own netrc rather than trading those credentials away. A
+    /// directory stands in for the unreadable source so the test does not
+    /// depend on the uid it runs as.
+    #[test]
+    fn preserving_an_unreadable_netrc_is_reported_not_fatal() {
+        let root = tempfile::tempdir().unwrap();
+        let managed_path = root.path().join("managed-netrc");
+        let content = "machine project.cachix.org\nlogin token\npassword project-token\n";
+        std::fs::write(&managed_path, content).unwrap();
+        let unreadable_path = root.path().join("unreadable-netrc");
+        std::fs::create_dir(&unreadable_path).unwrap();
+
+        assert_eq!(
+            preserve_netrc_file(&unreadable_path, &managed_path).unwrap(),
+            NetrcPreservation::SourceUnreadable
+        );
+
+        assert_eq!(std::fs::read_to_string(&managed_path).unwrap(), content);
+    }
+
+    /// The runtime directory holding the managed netrc sits on a path other
+    /// local users can predict, so a symlink can be waiting at the netrc's
+    /// name. Writing through it would hand them the Cachix auth token and
+    /// every credential copied out of Nix's global netrc.
+    #[test]
+    fn writing_the_netrc_replaces_a_planted_symlink() {
+        let root = tempfile::tempdir().unwrap();
+        let attacker_path = root.path().join("attacker-owned");
+        std::fs::write(&attacker_path, "").unwrap();
+        let managed_path = root.path().join("netrc.1");
+        std::os::unix::fs::symlink(&attacker_path, &managed_path).unwrap();
+
+        write_netrc_file(&managed_path, b"machine project.cachix.org\n").unwrap();
+
+        assert_eq!(std::fs::read_to_string(&attacker_path).unwrap(), "");
+        assert!(
+            !std::fs::symlink_metadata(&managed_path)
+                .unwrap()
+                .is_symlink()
+        );
+        assert_eq!(
+            std::fs::read_to_string(&managed_path).unwrap(),
+            "machine project.cachix.org\n"
+        );
+    }
+
+    /// Nix rereads the netrc per request while devenv is rewriting it, so
+    /// the file is replaced whole rather than truncated and refilled, and
+    /// the scratch file it goes through does not outlive the write.
+    #[test]
+    fn writing_the_netrc_leaves_no_scratch_file_behind() {
+        let root = tempfile::tempdir().unwrap();
+        let managed_path = root.path().join("netrc.1");
+
+        write_netrc_file(&managed_path, b"first\n").unwrap();
+        write_netrc_file(&managed_path, b"second\n").unwrap();
+
+        assert_eq!(std::fs::read_to_string(&managed_path).unwrap(), "second\n");
+        let leftovers: Vec<_> = std::fs::read_dir(root.path())
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name())
+            .filter(|name| name != "netrc.1")
+            .collect();
+        assert!(leftovers.is_empty(), "left behind {leftovers:?}");
+    }
+
+    #[test]
+    fn reaps_only_netrc_files_of_exited_processes() {
+        let root = tempfile::tempdir().unwrap();
+        for name in ["netrc.11", "netrc.22", "netrc.notapid", "pc.sock"] {
+            std::fs::write(root.path().join(name), "").unwrap();
+        }
+
+        reap_stale_netrc_files_with(root.path(), |pid| pid == 11);
+
+        let mut remaining: Vec<_> = std::fs::read_dir(root.path())
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        remaining.sort();
+        assert_eq!(remaining, ["netrc.11", "netrc.notapid", "pc.sock"]);
+    }
+
+    /// A netrc devenv cannot write costs authentication, not the cache: the
+    /// substituters and trusted keys still have to reach the caller, which
+    /// applies them as a unit with the netrc path.
+    #[tokio::test]
+    async fn store_settings_keeps_substituters_when_the_netrc_cannot_be_written() {
+        let root = tempfile::tempdir().unwrap();
+        let manager = CachixManager::new(
+            CachixPaths {
+                trusted_keys: root.path().join("trusted-keys.json"),
+                // A netrc inside a directory that does not exist.
+                netrc: root.path().join("missing-dir/netrc.1"),
+                daemon_socket: None,
+            },
+            Some("project-token".to_string()),
+        );
+        let info = CachixCacheInfo {
+            caches: Cachix {
+                pull: vec!["project".to_string()],
+                push: None,
+            },
+            known_keys: BTreeMap::from([("project".to_string(), "project-key".to_string())]),
+        };
+
+        let settings = manager.store_settings(Some(&info)).await.unwrap();
+
+        assert_eq!(settings.netrc_path, None);
+        assert_eq!(
+            settings.extra_substituters,
+            ["https://project.cachix.org".to_string()]
+        );
+        assert_eq!(
+            settings.extra_trusted_public_keys,
+            ["project-key".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn managed_netrc_keeps_global_credentials_when_project_caches_are_added() {
+        let root = tempfile::tempdir().unwrap();
+        let existing_path = root.path().join("existing-netrc");
+        let managed_path = root.path().join("managed-netrc");
+        std::fs::write(
+            &existing_path,
+            "machine global-private.cachix.org\nlogin token\npassword global-token\n",
+        )
+        .unwrap();
+
+        let manager = CachixManager::new(
+            CachixPaths {
+                trusted_keys: root.path().join("trusted-keys.json"),
+                netrc: managed_path.clone(),
+                daemon_socket: None,
+            },
+            Some("project-token".to_string()),
+        );
+        let resolved_token = manager.resolve_auth_token().unwrap();
+
+        let initial = manager.store_settings(None).await.unwrap();
+        assert_eq!(initial.netrc_path.as_deref(), Some(managed_path.as_path()));
+        assert_eq!(std::fs::read(&managed_path).unwrap(), b"");
+
+        preserve_netrc_file(&existing_path, &managed_path).unwrap();
+
+        let info = CachixCacheInfo {
+            caches: Cachix {
+                pull: vec!["project".to_string()],
+                push: None,
+            },
+            known_keys: BTreeMap::new(),
+        };
+        manager.store_settings(Some(&info)).await.unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&managed_path).unwrap(),
+            format!(
+                "\
+machine project.cachix.org
+login token
+password {resolved_token}
+
+machine global-private.cachix.org
+login token
+password global-token
+"
+            )
+        );
+        assert_eq!(
+            std::fs::metadata(&managed_path)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+
+        drop(manager);
+        assert!(!managed_path.exists());
     }
 }

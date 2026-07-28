@@ -30,13 +30,14 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use async_trait::async_trait;
 use cstr::cstr;
 use devenv_activity::{Activity, ActivityInstrument, activity, instrument_activity};
 use devenv_cache_core::compute_string_hash;
 use devenv_core::bootstrap_args::BootstrapArgs;
+use devenv_core::cachix::{NetrcPreservation, preserve_netrc_file};
 use devenv_core::config::NixpkgsConfig;
 use devenv_core::evaluator::eval_cache_key_args;
 use devenv_core::evaluator::{
@@ -92,12 +93,11 @@ pub fn init_nix(
         .to_miette()
         .wrap_err("Failed to enable experimental features")?;
     apply_nix_settings(nix_settings)?;
-    if let Some(netrc) = &store_settings.netrc_path
-        && let Some(s) = netrc.to_str()
-    {
-        settings::set("netrc-file", s)
-            .to_miette()
-            .wrap_err("Failed to set netrc-file")?;
+    // Best effort, as in `apply_store_settings`: without netrc, private
+    // substituters fall back to unauthenticated requests, which beats
+    // refusing to start at all.
+    if let Err(e) = apply_netrc_setting(store_settings) {
+        tracing::warn!("Failed to set netrc-file: {}", e);
     }
     Ok(gc_registration)
 }
@@ -1157,10 +1157,7 @@ impl NixCBackend {
         // inside the C call nest under the current TUI activity.
         let _eval_guard =
             devenv_activity::current_activity_id().map(|id| self.nix_log_bridge.begin_eval(id));
-        if let Some(netrc) = &store_settings.netrc_path
-            && let Some(s) = netrc.to_str()
-            && let Err(e) = settings::set("netrc-file", s).to_miette()
-        {
+        if let Err(e) = apply_netrc_setting(store_settings) {
             tracing::warn!("Failed to set netrc-file: {}", e);
         }
         apply_substituters_and_keys(self.cnix_store.inner(), store_settings);
@@ -1610,6 +1607,70 @@ pub fn apply_substituters_and_keys(store: &Store, store_settings: &StoreSettings
         if let Err(e) = store.add_trusted_public_keys(&keys).to_miette() {
             tracing::warn!("Failed to add trusted public keys: {}", e);
         }
+    }
+}
+
+/// Whether the managed netrc has already been seeded this process, and how
+/// that went. See [`apply_netrc_setting`].
+static NETRC_PRESERVATION: OnceLock<NetrcPreservation> = OnceLock::new();
+
+/// Switch Nix to devenv's managed netrc without dropping credentials for
+/// substituters already configured in nix.conf. The managed file is created
+/// by `CachixManager` before store initialization, then seeded from the
+/// currently effective Nix `netrc-file` before the global setting changes.
+fn apply_netrc_setting(store_settings: &StoreSettings) -> Result<()> {
+    let Some(netrc) = &store_settings.netrc_path else {
+        return Ok(());
+    };
+    let Some(netrc_str) = netrc.to_str() else {
+        return Ok(());
+    };
+
+    // Seeding has to happen exactly once. This runs again from
+    // `apply_store_settings`, where `preserve_netrc_file` normally
+    // short-circuits because `netrc-file` already names the managed file --
+    // but only if the `settings::set` below succeeded, and its failure is
+    // warn-only in `init_nix`. Without this guard the retry would append a
+    // second copy of every global credential.
+    let preservation = match NETRC_PRESERVATION.get() {
+        Some(preservation) => *preservation,
+        None => {
+            let existing_netrc = settings::get("netrc-file")
+                .to_miette()
+                .wrap_err("Failed to read the existing netrc-file setting")?;
+            let preservation = if existing_netrc.is_empty() {
+                NetrcPreservation::NothingToPreserve
+            } else {
+                preserve_netrc_file(Path::new(&existing_netrc), netrc)?
+            };
+            let _ = NETRC_PRESERVATION.set(preservation);
+            preservation
+        }
+    };
+
+    // Nix holds one netrc at a time. When the credentials in the current one
+    // could not be copied across, pointing Nix at ours trades them away, so
+    // wait until ours has entries of its own to offer in return: an empty
+    // managed netrc would only turn authenticated fetches into 401s.
+    if preservation == NetrcPreservation::SourceUnreadable && netrc_is_empty(netrc) {
+        tracing::warn!(
+            "Keeping the existing netrc-file: its credentials could not be read, \
+             and devenv has none of its own to add yet"
+        );
+        return Ok(());
+    }
+
+    settings::set("netrc-file", netrc_str)
+        .to_miette()
+        .wrap_err("Failed to set netrc-file")?;
+    Ok(())
+}
+
+fn netrc_is_empty(netrc: &Path) -> bool {
+    match std::fs::metadata(netrc) {
+        Ok(metadata) => metadata.len() == 0,
+        // A netrc we cannot even stat has nothing to offer Nix either.
+        Err(_) => true,
     }
 }
 

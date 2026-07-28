@@ -392,6 +392,15 @@ fn compute_profile_dir_suffix(profiles: &[String]) -> Option<String> {
     }
 }
 
+fn cachix_netrc_path(runtime_dir: &Path, process_id: u32) -> Result<PathBuf> {
+    std::path::absolute(devenv_core::cachix::managed_netrc_path(
+        runtime_dir,
+        process_id,
+    ))
+    .into_diagnostic()
+    .wrap_err("Failed to resolve the Cachix netrc path")
+}
+
 impl Devenv {
     pub async fn new(options: DevenvOptions) -> Result<Self> {
         let devenv_home = devenv_core::paths::resolve_home()?;
@@ -490,9 +499,10 @@ impl Devenv {
             options.imports.join("\n"),
         )
         .await?;
-        fs::create_dir_all(&devenv_runtime)
-            .await
-            .map_err(|e| miette::miette!("Failed to create {}: {}", devenv_runtime.display(), e))?;
+        devenv_core::paths::create_runtime_dir(&devenv_runtime)?;
+        // A managed netrc holds the Cachix auth token, and outlives any
+        // devenv that was killed before it could clean up after itself.
+        devenv_core::cachix::reap_stale_netrc_files(&devenv_runtime);
 
         if cache_settings.eval_cache {
             eval_cache_pool
@@ -553,15 +563,28 @@ impl Devenv {
         };
         let cachix_paths = CachixPaths {
             trusted_keys: cachix_trusted_keys,
-            netrc: devenv_dotfile.join("netrc"),
+            // The managed netrc ends up holding credentials copied out of
+            // Nix's global netrc, so keep it in the runtime directory rather
+            // than the project tree, and make it per-process: concurrent
+            // devenv invocations in one project would otherwise truncate and
+            // delete each other's file while Nix is still reading it.
+            // Nix requires `netrc-file` to be absolute, while an explicitly
+            // configured XDG_RUNTIME_DIR may be relative.
+            netrc: cachix_netrc_path(&devenv_runtime, std::process::id())?,
             daemon_socket: None,
         };
         let cachix_manager = Arc::new(CachixManager::new(cachix_paths, cachix_auth_token));
 
-        let store_settings = cachix_manager
-            .store_settings(None)
-            .await
-            .unwrap_or_default();
+        let store_settings = match cachix_manager.store_settings(None).await {
+            Ok(settings) => settings,
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "failed to prepare the cachix netrc, private caches may fail to authenticate"
+                );
+                Default::default()
+            }
+        };
 
         let backend = match nix_settings.backend {
             NixBackendType::Nix => {
@@ -3521,6 +3544,14 @@ fn native_manager_seedable(pid_status: Option<&processes::PidStatus>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cachix_netrc_path_is_absolute_for_relative_runtime_dir() {
+        let path = cachix_netrc_path(Path::new("relative/runtime"), 123).unwrap();
+
+        assert!(path.is_absolute());
+        assert!(path.ends_with("relative/runtime/netrc.123"));
+    }
 
     #[test]
     fn process_list_renders_ports() {
