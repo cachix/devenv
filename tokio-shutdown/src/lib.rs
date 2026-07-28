@@ -200,7 +200,8 @@ impl Shutdown {
             info!("Received {:?}, shutting down gracefully...", last_signal);
 
             // Store the last signal received
-            self.last_signal.store(last_signal as i32, Ordering::Relaxed);
+            self.last_signal
+                .store(last_signal as i32, Ordering::Relaxed);
 
             // Trigger shutdown
             self.shutdown();
