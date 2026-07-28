@@ -141,6 +141,7 @@ pub struct Activity {
     activity_type: ActivityType,
     level: ActivityLevel,
     outcome: Arc<std::sync::Mutex<ActivityOutcome>>,
+    complete_on_drop: bool,
 }
 
 impl Activity {
@@ -157,6 +158,7 @@ impl Activity {
             activity_type,
             level,
             outcome: Arc::new(std::sync::Mutex::new(ActivityOutcome::Success)),
+            complete_on_drop: true,
         }
     }
 
@@ -443,6 +445,17 @@ impl Activity {
             outcome: self.outcome.clone(),
         }
     }
+
+    /// Convert this owning activity into a non-owning reference.
+    ///
+    /// This is used when mirroring an activity owned by another process. The
+    /// local guard relinquishes completion ownership before it is dropped, so
+    /// disconnecting the observer cannot emit a synthetic `Complete` event.
+    pub fn into_ref(mut self) -> ActivityRef {
+        let activity_ref = self.ref_handle();
+        self.complete_on_drop = false;
+        activity_ref
+    }
 }
 
 /// Non-owning handle to an activity.
@@ -537,6 +550,10 @@ impl Deref for Activity {
 
 impl Drop for Activity {
     fn drop(&mut self) {
+        if !self.complete_on_drop {
+            return;
+        }
+
         let outcome = self
             .outcome
             .lock()
@@ -549,5 +566,96 @@ impl Drop for Activity {
         }
 
         send_activity_event(make_complete_event(self.id, self.activity_type, outcome));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::{ActivityEvent, Process};
+
+    fn process_complete_id(event: &ActivityEvent) -> Option<u64> {
+        match event {
+            ActivityEvent::Process(Process::Complete { id, .. }) => Some(*id),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn owning_and_proxy_activity_lifecycles_are_distinct() {
+        // This one test owns the process-global activity sender for its full
+        // duration. Keeping the lifecycle cases together prevents these
+        // assertions from racing one another.
+        let (mut rx, handle) = crate::init();
+        let _guard = handle.install();
+
+        let owner = crate::start!(Activity::process("owner"));
+        let owner_id = owner.id();
+        drop(owner);
+        let owner_events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        assert_eq!(
+            owner_events
+                .iter()
+                .filter(|event| process_complete_id(event) == Some(owner_id))
+                .count(),
+            1,
+            "dropping an owning activity must emit exactly one completion"
+        );
+
+        let owner = crate::start!(Activity::process("borrowed"));
+        let borrowed_id = owner.id();
+        let borrowed = owner.ref_handle();
+        borrowed.log("still observable");
+        borrowed.set_status(ProcessStatus::Ready);
+        drop(borrowed);
+        let borrowed_events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        assert!(
+            borrowed_events
+                .iter()
+                .all(|event| process_complete_id(event) != Some(borrowed_id)),
+            "dropping an ActivityRef must not complete its owner"
+        );
+        drop(owner);
+        assert!(
+            std::iter::from_fn(|| rx.try_recv().ok())
+                .any(|event| process_complete_id(&event) == Some(borrowed_id)),
+            "the owning guard must retain completion ownership"
+        );
+
+        let proxy = crate::start!(Activity::process("proxy")).into_ref();
+        let proxy_id = proxy.id;
+        proxy.fail();
+        proxy.set_status(ProcessStatus::Stopped);
+        proxy.reset();
+        proxy.set_status(ProcessStatus::Running);
+        proxy.log("live after terminal status");
+        drop(proxy);
+
+        let proxy_events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        assert!(
+            proxy_events
+                .iter()
+                .all(|event| process_complete_id(event) != Some(proxy_id)),
+            "converting an owner into a proxy must relinquish completion ownership"
+        );
+        assert!(
+            proxy_events.iter().any(|event| matches!(
+                event,
+                ActivityEvent::Process(Process::Status {
+                    id,
+                    status: ProcessStatus::Running,
+                    ..
+                }) if *id == proxy_id
+            )),
+            "a proxy must accept status updates after a terminal status"
+        );
+        assert!(
+            proxy_events.iter().any(|event| matches!(
+                event,
+                ActivityEvent::Process(Process::Log { id, line, .. })
+                    if *id == proxy_id && line == "live after terminal status"
+            )),
+            "proxy log updates must remain observable"
+        );
     }
 }

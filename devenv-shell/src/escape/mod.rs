@@ -514,7 +514,7 @@ impl EscapeScanner {
 
     /// Scan a chunk of raw PTY output, appending events to the provided Vec.
     ///
-    /// Unlike [`scan`], this avoids allocating a new Vec on every call.
+    /// Unlike `scan`, this avoids allocating a new Vec on every call.
     /// The caller can reuse the Vec across invocations.
     pub fn scan_into(&mut self, data: &[u8], events: &mut Vec<SequenceEvent>) {
         for &byte in data {

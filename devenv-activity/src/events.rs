@@ -389,8 +389,13 @@ pub enum ProcessStatus {
     Restarting,
     /// Graceful shutdown in progress (SIGTERM sent, waiting for exit and port release).
     Stopping,
-    /// Exited.
+    /// Explicitly stopped by the user or manager.
     Stopped,
+    /// Exited without another restart being scheduled.
+    Exited,
+    /// Exhausted its restart budget after repeated failures.
+    #[serde(rename = "gave_up")]
+    GaveUp,
 }
 
 impl ProcessStatus {
@@ -413,6 +418,16 @@ impl ProcessStatus {
             self,
             Self::Starting | Self::Running | Self::Ready | Self::Restarting
         )
+    }
+
+    /// Whether the process can be (re)started by the user.
+    pub fn is_restartable(&self) -> bool {
+        !matches!(self, Self::Waiting | Self::Stopping)
+    }
+
+    /// Whether the status is itself a terminal failure.
+    pub fn is_failed(&self) -> bool {
+        matches!(self, Self::GaveUp)
     }
 }
 
@@ -864,5 +879,21 @@ mod tests {
         assert!(ProcessStatus::Restarting.is_stoppable());
         assert!(!ProcessStatus::Stopping.is_stoppable());
         assert!(!ProcessStatus::Stopped.is_stoppable());
+        assert!(!ProcessStatus::Exited.is_stoppable());
+        assert!(!ProcessStatus::GaveUp.is_stoppable());
+
+        assert!(ProcessStatus::NotStarted.is_restartable());
+        assert!(!ProcessStatus::Waiting.is_restartable());
+        assert!(ProcessStatus::Starting.is_restartable());
+        assert!(ProcessStatus::Running.is_restartable());
+        assert!(ProcessStatus::Ready.is_restartable());
+        assert!(ProcessStatus::Restarting.is_restartable());
+        assert!(!ProcessStatus::Stopping.is_restartable());
+        assert!(ProcessStatus::Stopped.is_restartable());
+        assert!(ProcessStatus::Exited.is_restartable());
+        assert!(ProcessStatus::GaveUp.is_restartable());
+
+        assert!(!ProcessStatus::Exited.is_failed());
+        assert!(ProcessStatus::GaveUp.is_failed());
     }
 }

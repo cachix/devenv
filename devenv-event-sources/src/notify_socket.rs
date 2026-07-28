@@ -24,7 +24,7 @@ pub enum NotifyMessage {
     Watchdog,
     /// Process signals explicit failure (WATCHDOG=trigger)
     WatchdogTrigger,
-    /// Process requests more startup time (EXTEND_TIMEOUT_USEC=<n>)
+    /// Process requests more startup time (`EXTEND_TIMEOUT_USEC=<n>`)
     ExtendTimeout { usec: u64 },
     /// Human-readable status message (STATUS=...)
     Status(String),

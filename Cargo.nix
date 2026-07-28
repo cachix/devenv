@@ -8827,6 +8827,10 @@ rec {
         libName = "devenv_tasks";
         dependencies = [
           {
+            name = "async-trait";
+            packageId = "async-trait";
+          }
+          {
             name = "base64";
             packageId = "base64";
           }

@@ -31,7 +31,7 @@ pub enum NixMessageKind {
 
 /// Represents Nix's JSON structured log format (--log-format=internal-json).
 ///
-/// See https://github.com/NixOS/nix/blob/a1cc362d9d249b95e4c9ad403f1e6e26ca302413/src/libutil/logging.cc#L173
+/// See <https://github.com/NixOS/nix/blob/a1cc362d9d249b95e4c9ad403f1e6e26ca302413/src/libutil/logging.cc#L173>.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "action")]
 pub enum InternalLog {
@@ -93,7 +93,7 @@ impl InternalLog {
     }
 }
 
-/// See https://github.com/NixOS/nix/blob/322d2c767f2a3f8ef2ac3d1ba46c19caf9a1ffce/src/libutil/error.hh#L33-L42
+/// See <https://github.com/NixOS/nix/blob/322d2c767f2a3f8ef2ac3d1ba46c19caf9a1ffce/src/libutil/error.hh#L33-L42>.
 #[derive(
     Copy, Clone, Debug, Default, Deserialize_repr, TryFromPrimitive, PartialEq, Eq, PartialOrd, Ord,
 )]
@@ -125,7 +125,7 @@ impl TryFrom<i32> for Verbosity {
     }
 }
 
-/// See https://github.com/NixOS/nix/blob/a5959aa12170fc75cafc9e2416fae9aa67f91e6b/src/libutil/logging.hh#L11-L26
+/// See <https://github.com/NixOS/nix/blob/a5959aa12170fc75cafc9e2416fae9aa67f91e6b/src/libutil/logging.hh#L11-L26>.
 #[derive(
     Copy, Clone, Debug, Deserialize_repr, TryFromPrimitive, PartialEq, Eq, PartialOrd, Ord,
 )]
@@ -146,7 +146,7 @@ pub enum ActivityType {
     BuildWaiting = 111,
     FetchTree = 112,
     /// A local source path was copied into the store during evaluation.
-    /// Fields: [0] = source path, [1] = destination store path.
+    /// Fields: `[0]` = source path, `[1]` = destination store path.
     EvalCopySource = 113,
 }
 
@@ -165,7 +165,7 @@ impl TryFrom<i32> for ActivityType {
     }
 }
 
-/// See https://github.com/NixOS/nix/blob/a5959aa12170fc75cafc9e2416fae9aa67f91e6b/src/libutil/logging.hh#L28-L38
+/// See <https://github.com/NixOS/nix/blob/a5959aa12170fc75cafc9e2416fae9aa67f91e6b/src/libutil/logging.hh#L28-L38>.
 #[derive(
     Copy, Clone, Debug, Deserialize_repr, TryFromPrimitive, PartialEq, Eq, PartialOrd, Ord,
 )]

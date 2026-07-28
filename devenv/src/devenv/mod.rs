@@ -30,6 +30,7 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
+use std::io::IsTerminal;
 use std::io::Write as _;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -42,6 +43,31 @@ use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::OnceCell;
 use tracing::{Instrument, debug, debug_span, info, info_span, instrument, trace, warn};
+
+/// Trailing guidance shown when the running manager doesn't recognise a process
+/// name because it was started under a different configuration.
+const RESTART_FOR_CONFIG_GUIDANCE: &str =
+    "Restart it with `devenv processes down` and `devenv up -d` to pick up configuration changes";
+
+/// Detect whether we are running inside an AI coding agent.
+///
+/// LLM tools typically allocate a PTY so `is_terminal()` returns true, but their
+/// verbose TUI output wastes tokens and a streaming attach view would hang them.
+/// We use the `detect-coding-agent` crate to recognize well-known AI agents
+/// (Claude Code, Cursor, Aider, ...) from their environment variables.
+///
+/// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
+/// even when running under a detected agent). The result is cached for the
+/// process lifetime.
+pub fn is_ai_agent() -> bool {
+    static CACHED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        if std::env::var_os("DEVENV_NO_AI_AGENT").is_some() {
+            return false;
+        }
+        detect_coding_agent::is_agent()
+    })
+}
 
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
     include_str!("../../direnvrc").replace(
@@ -330,6 +356,10 @@ pub struct Devenv {
 
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
+
+    // Set true while attached to an already-running process manager. Shared
+    // with the TUI so its Ctrl-C prompt offers detach vs stop the manager.
+    attach_indicator: Arc<std::sync::atomic::AtomicBool>,
 
     // Task-exported env vars (e.g., PATH with venv/bin, VIRTUAL_ENV) set by
     // run_enter_shell_tasks(). Injected into the bash script by prepare_shell()
@@ -644,9 +674,16 @@ impl Devenv {
             port_allocator,
             native_process_manager: OnceCell::new(),
             shutdown: options.shutdown,
+            attach_indicator: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             task_exports: std::sync::Mutex::new(BTreeMap::new()),
             task_messages: std::sync::Mutex::new(Vec::new()),
         })
+    }
+
+    /// Share the TUI's attach-mode flag so the interrupt prompt reflects
+    /// whether this run is attached to an already-running process manager.
+    pub fn set_attach_indicator(&mut self, flag: Arc<std::sync::atomic::AtomicBool>) {
+        self.attach_indicator = flag;
     }
 
     pub fn processes_log(&self) -> PathBuf {
@@ -754,6 +791,495 @@ impl Devenv {
         self.process_runtime_dir()
             .map(|dir| dir.join("native-manager.pid"))
             .unwrap_or_else(|_| self.devenv_dotfile.join("native-manager.pid"))
+    }
+
+    /// Whether a native process manager is currently running for this project.
+    /// Used to decide between talking to it over the socket and cold-starting
+    /// one; callers must tolerate the manager appearing or vanishing between
+    /// this check and the follow-up action (both paths fail or attach safely).
+    pub async fn native_manager_running(&self) -> bool {
+        matches!(
+            processes::check_pid_file(&self.native_manager_pid_file()).await,
+            Ok(processes::PidStatus::Running(_))
+        )
+    }
+
+    /// Whether an interactive foreground `devenv up` should attach to an
+    /// already-running process manager (vs. failing fast). Attaching streams a
+    /// live view until the user detaches with Ctrl-C, which only makes sense
+    /// at an interactive terminal — scripts, CI, piped output, and AI agents
+    /// would otherwise block forever. Pure so the truth table is unit-testable;
+    /// the call site supplies the real tty/CI/AI-agent values.
+    fn should_attach_to_running_manager(
+        stdin_is_tty: bool,
+        stderr_is_tty: bool,
+        is_ci: bool,
+        is_ai_agent: bool,
+    ) -> bool {
+        // AI agents (and other PTY-allocating wrappers) report ttys but would
+        // hang on the streaming attach view, so they are excluded alongside
+        // CI and non-tty stdin/stderr.
+        stdin_is_tty && stderr_is_tty && !is_ci && !is_ai_agent
+    }
+
+    /// Names of processes that `devenv up` should start: process tasks whose
+    /// `start.enable` is true; only an explicit `start.enable = false` is
+    /// excluded. A missing `process` config counts as enabled — matching
+    /// `StartConfig::default()`, `build_process_config`, and
+    /// `resolve_launch_processes` (`is_none_or`), so the default launch set
+    /// here agrees with the cold-start and named paths.
+    fn up_enabled_process_names(task_configs: &[tasks::TaskConfig]) -> Vec<String> {
+        task_configs
+            .iter()
+            .filter_map(|t| {
+                let name = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)?;
+                let enabled = t.process.as_ref().is_none_or(|p| p.start.enable);
+                enabled.then(|| name.to_string())
+            })
+            .collect()
+    }
+
+    /// Process task roots for a cold native-manager start. A bare `up` (empty
+    /// `requested`) keeps every process task as a root so disabled processes are
+    /// still registered as not-started. An explicit subset uses only the
+    /// requested names as roots; `RunMode::Before` then pulls just their
+    /// prerequisites instead of scheduling unrelated process dependency chains.
+    /// Narrowing the roots only limits what *runs*: the scheduler keeps every
+    /// configured process in its task graph, so a later `devenv processes start
+    /// <other>` or a plain `devenv up` still resolves them rather than rejecting
+    /// them as unknown.
+    fn process_roots_for_launch(
+        task_configs: &[tasks::TaskConfig],
+        requested: &[String],
+    ) -> Vec<String> {
+        let requested_set: HashSet<&str> = requested.iter().map(String::as_str).collect();
+
+        task_configs
+            .iter()
+            .filter_map(|t| {
+                let name = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX)?;
+                (requested_set.is_empty() || requested_set.contains(name)).then(|| t.name.clone())
+            })
+            .collect()
+    }
+
+    /// Single decision point for which processes `devenv up` launches:
+    /// explicitly named processes always start, even with `start.enable =
+    /// false` (their configs are force-enabled here so the cold start, the
+    /// spawned daemon, and the attach path all agree — the daemon side
+    /// re-asserts the same rule in `Tasks::start_with_deps`); with no names,
+    /// the up-enabled default set is used and `start.enable = false`
+    /// processes are excluded (cold start still registers them so they
+    /// appear as not started).
+    ///
+    /// With names, the launch set is the named processes plus the
+    /// configured-enabled processes in their dependency closure (a cold
+    /// `devenv up api` still brings up the database `api` needs), and every
+    /// other process is force-disabled so it cannot launch merely because it
+    /// exists in the config. The cold-start roots are selected separately by
+    /// `process_roots_for_launch`, so explicit subset starts do not schedule
+    /// unrelated process dependency chains.
+    /// Bails when a requested name is not in the configuration.
+    fn resolve_launch_processes(
+        task_configs: &mut [tasks::TaskConfig],
+        requested: &[String],
+    ) -> Result<Vec<String>> {
+        if requested.is_empty() {
+            return Ok(Self::up_enabled_process_names(task_configs));
+        }
+
+        // Keep the caller's order while ensuring a repeated CLI argument can
+        // never become a second scheduler root or a duplicate outcome entry.
+        let mut seen = HashSet::new();
+        let requested: Vec<String> = requested
+            .iter()
+            .filter(|name| seen.insert(name.as_str()))
+            .cloned()
+            .collect();
+
+        // Validate explicit `devenv up <name>` requests against the
+        // configuration so a typo fails loudly here — before any cold start,
+        // daemon spawn, or attach.
+        let known: HashSet<&str> = task_configs
+            .iter()
+            .filter_map(|t| t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX))
+            .collect();
+        let unknown: Vec<&str> = requested
+            .iter()
+            .map(String::as_str)
+            .filter(|n| !known.contains(n))
+            .collect();
+        if !unknown.is_empty() {
+            bail!(
+                "Process(es) not found in configuration: {}",
+                unknown.join(", ")
+            );
+        }
+
+        // Dependency closure of the requested processes, traversing `after`
+        // edges and reversed `before` edges through tasks of every type
+        // (a process may depend on a oneshot that depends on a process).
+        // `@kind` suffixes are stripped: the closure asks "which tasks does
+        // this launch need", not how readiness is judged.
+        let dep_name = |dep: &str| -> String {
+            dep.rsplit_once('@')
+                .map(|(name, _)| name)
+                .unwrap_or(dep)
+                .to_string()
+        };
+        let mut edges: HashMap<String, Vec<String>> = HashMap::new();
+        for t in task_configs.iter() {
+            edges
+                .entry(t.name.clone())
+                .or_default()
+                .extend(t.after.iter().map(|d| dep_name(d)));
+            for b in &t.before {
+                edges.entry(dep_name(b)).or_default().push(t.name.clone());
+            }
+        }
+        let mut needed: HashSet<String> = HashSet::new();
+        let mut queue: Vec<String> = requested
+            .iter()
+            .map(|p| format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, p))
+            .collect();
+        while let Some(name) = queue.pop() {
+            if !needed.insert(name.clone()) {
+                continue;
+            }
+            if let Some(deps) = edges.get(&name) {
+                queue.extend(deps.iter().cloned());
+            }
+        }
+
+        for t in task_configs.iter_mut() {
+            let Some(name) = t.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX) else {
+                continue;
+            };
+            let requested_here = requested.iter().any(|r| r == name);
+            // Default `StartConfig.enable` is true and `build_process_config`
+            // falls back to the default config, so the `None` shape counts as
+            // enabled.
+            let configured_enabled = t.process.as_ref().is_none_or(|p| p.start.enable);
+            let enable = requested_here || (needed.contains(&t.name) && configured_enabled);
+            t.process.get_or_insert_with(Default::default).start.enable = enable;
+        }
+
+        Ok(requested)
+    }
+
+    /// Map a manager process phase to the TUI's process status.
+    fn phase_to_process_status(phase: processes::ProcessPhase) -> devenv_activity::ProcessStatus {
+        use devenv_activity::ProcessStatus as S;
+        use processes::ProcessPhase as P;
+        match phase {
+            P::NotStarted => S::NotStarted,
+            P::Stopped => S::Stopped,
+            P::Waiting => S::Waiting,
+            P::Starting => S::Starting,
+            P::Ready => S::Ready,
+            P::Exited => S::Exited,
+            P::GaveUp => S::GaveUp,
+        }
+    }
+
+    /// Attach to a running native manager and ask its scheduler to bring the
+    /// given processes up. `names` must already be resolved through
+    /// `resolve_launch_processes`.
+    ///
+    /// Dependency ordering and readiness-waiting are delegated to the daemon's
+    /// own task scheduler over the control socket (`ApiRequest::Start`): it owns
+    /// the live task graph, so `after`/`before` ordering, already-running
+    /// dependencies, and out-of-subset dependencies are all resolved exactly
+    /// like the cold-start path — the CLI no longer re-derives them.
+    ///
+    /// The reply is truthful: it reports per name whether the daemon scheduled
+    /// it, skipped it (already running or pending), did not know it (the
+    /// manager was started with a different configuration), or failed to
+    /// schedule it. Unknown and failed names bail; so does a reply where
+    /// nothing was scheduled or skipped, so `devenv up` exits nonzero when it
+    /// acted on nothing.
+    async fn attach_start_up_processes(&self, names: &[String]) -> Result<()> {
+        // The daemon answers `Start` only after the full before-process task
+        // DAG and process launches complete, which is legitimately unbounded
+        // user work, so only the connect/send phase is bounded; the reply is
+        // raced against Ctrl-C so the first interrupt is never dead.
+        let token = self.shutdown.cancellation_token();
+        let start_request = processes::ApiRequest::Start {
+            names: names.to_vec(),
+        };
+        let response = Self::await_start_response_or_interrupt(
+            token.cancelled(),
+            self.native_api_request_bounded_connect(
+                &start_request,
+                std::time::Duration::from_secs(10),
+            ),
+        )
+        .await?;
+        match response {
+            processes::ApiResponse::Start { outcome } => {
+                if !outcome.unknown.is_empty() {
+                    bail!(
+                        "Process(es) not known to the running process manager (it was started with a different configuration): {}. {}",
+                        outcome.unknown.join(", "),
+                        RESTART_FOR_CONFIG_GUIDANCE
+                    );
+                }
+                if !outcome.failed.is_empty() {
+                    bail!(
+                        "Failed to schedule process(es): {}",
+                        outcome.failed.join(", ")
+                    );
+                }
+                if !outcome.scheduled.is_empty() {
+                    message(
+                        ActivityLevel::Info,
+                        format!("Scheduled: {}", outcome.scheduled.join(", ")),
+                    );
+                }
+                // "or waiting": a skipped name may be parked Waiting on an
+                // unmet dependency rather than actually running.
+                if !outcome.skipped.is_empty() {
+                    message(
+                        ActivityLevel::Info,
+                        format!("Already running or waiting: {}", outcome.skipped.join(", ")),
+                    );
+                }
+                if outcome.scheduled.is_empty() && outcome.skipped.is_empty() {
+                    bail!("No processes were started");
+                }
+            }
+            // Legacy reply of an older daemon: bare success without a
+            // classification to report.
+            processes::ApiResponse::Ok => {
+                message(ActivityLevel::Info, "attached to running process manager");
+            }
+            processes::ApiResponse::Error { message: msg } => {
+                Self::bail_if_stale_daemon(&msg)?;
+                bail!("Failed to start processes on running manager: {}", msg)
+            }
+            other => bail!("Unexpected response to start request: {:?}", other),
+        }
+
+        Ok(())
+    }
+
+    /// Race a potentially long Start reply against client interruption. The
+    /// response future owns only the client socket: dropping it disconnects
+    /// the caller, while the daemon's per-connection task and scheduler-owned
+    /// work continue independently.
+    async fn await_start_response_or_interrupt<I, F>(
+        interrupt: I,
+        response: F,
+    ) -> Result<processes::ApiResponse>
+    where
+        I: std::future::Future<Output = ()>,
+        F: std::future::Future<Output = Result<processes::ApiResponse>>,
+    {
+        tokio::select! {
+            _ = interrupt => bail!("interrupted"),
+            result = response => result,
+        }
+    }
+
+    /// Foreground view while attached to a running daemon: consume one
+    /// streaming `Attach` connection and mirror process state, ports, and logs
+    /// into the activity system under `parent`. Ctrl-C detaches cleanly
+    /// (processes keep running); a stream EOF or error means the daemon went
+    /// away and is an error. TUI restart/stop keybindings arrive on
+    /// `command_rx` and are forwarded to the daemon as one-shot requests.
+    async fn run_attached_foreground(
+        &self,
+        parent: &Activity,
+        mut command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
+    ) -> Result<()> {
+        let mut stream =
+            processes::NativeProcessManager::attach_stream(&self.native_socket_path()).await?;
+        let token = self.shutdown.cancellation_token();
+        let parent_id = parent.id();
+        let mut procs: HashMap<String, devenv_activity::ActivityRef> = HashMap::new();
+
+        // Tell the TUI we are attached so its Ctrl-C prompt offers detach vs
+        // stop the manager instead of the in-process keep-running vs quit.
+        self.attach_indicator
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+
+        // Announce the attach as a child of the processes operation so it shows
+        // in the tree (a standalone message with no parent is not rendered).
+        async {
+            message(
+                ActivityLevel::Info,
+                "Attached to the running process manager — Ctrl-C to detach or stop it",
+            );
+        }
+        .in_activity(parent)
+        .await;
+
+        let detached = || message(ActivityLevel::Info, "detached, processes left running");
+
+        fn upsert(
+            procs: &mut HashMap<String, devenv_activity::ActivityRef>,
+            parent_id: u64,
+            info: &processes::ProcessInfo,
+        ) {
+            let activity = procs.entry(info.name.clone()).or_insert_with(|| {
+                devenv_activity::start!(
+                    Activity::process(&info.name)
+                        .parent(Some(parent_id))
+                        .ports(info.ports.clone())
+                )
+                .into_ref()
+            });
+            activity.set_status(Devenv::phase_to_process_status(info.phase));
+        }
+
+        loop {
+            tokio::select! {
+                _ = token.cancelled() => {
+                    detached();
+                    return Ok(());
+                }
+                cmd = async {
+                    match command_rx.as_mut() {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    match cmd {
+                        // Stop the whole manager (chosen from the attach-mode
+                        // Ctrl-C prompt): tear the daemon down and exit.
+                        Some(processes::ProcessCommand::StopManager) => {
+                            message(ActivityLevel::Info, "stopping the process manager");
+                            match self.down().await {
+                                Ok(()) => {
+                                    message(ActivityLevel::Info, "process manager stopped");
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    message(
+                                        ActivityLevel::Error,
+                                        format!("failed to stop the process manager: {e}"),
+                                    );
+                                    return Err(e);
+                                }
+                            }
+                        }
+                        Some(cmd) => {
+                            let request = match cmd {
+                                processes::ProcessCommand::Restart(name) => {
+                                    processes::ApiRequest::Restart { name }
+                                }
+                                processes::ProcessCommand::Stop(name) => {
+                                    processes::ApiRequest::Stop { name }
+                                }
+                                // Handled above.
+                                processes::ProcessCommand::StopManager => unreachable!(),
+                            };
+                            // Ctrl-C must not be dead while the one-shot is in
+                            // flight: race the request against the token. The
+                            // bound must exceed the daemon's own worst case for
+                            // stop/restart (5s SIGTERM grace + 15s port release).
+                            tokio::select! {
+                                _ = token.cancelled() => {
+                                    detached();
+                                    return Ok(());
+                                }
+                                result = self.native_api_request_timeout(
+                                    &request,
+                                    std::time::Duration::from_secs(30),
+                                ) => match result {
+                                    Ok(processes::ApiResponse::Ok) => {}
+                                    Ok(processes::ApiResponse::Error { message: m }) => {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("process command failed: {m}"),
+                                        );
+                                    }
+                                    Ok(other) => {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("unexpected response: {other:?}"),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("process command failed: {e}"),
+                                        );
+                                    }
+                                },
+                            }
+                        }
+                        // Channel closed (TUI gone): a closed channel returns
+                        // None forever, so disable the arm and keep streaming.
+                        None => command_rx = None,
+                    }
+                }
+                ev = stream.next() => match ev {
+                    Some(Ok(processes::AttachEvent::Snapshot { processes })) => {
+                        for info in &processes {
+                            upsert(&mut procs, parent_id, info);
+                        }
+                    }
+                    Some(Ok(processes::AttachEvent::Status { info })) => {
+                        upsert(&mut procs, parent_id, &info);
+                    }
+                    Some(Ok(processes::AttachEvent::Log { name, stream: log_stream, line })) => {
+                        if let Some(activity) = procs.get(&name) {
+                            match log_stream {
+                                processes::LogStream::Stdout => activity.log(line),
+                                processes::LogStream::Stderr => activity.error(line),
+                            }
+                        }
+                    }
+                    Some(Err(e)) => {
+                        // A Ctrl-C racing the stream teardown is a deliberate
+                        // detach, not a daemon failure.
+                        if token.is_cancelled() {
+                            detached();
+                            return Ok(());
+                        }
+                        Self::bail_if_stale_daemon(&e.to_string())?;
+                        message(ActivityLevel::Error, "lost connection to the process manager");
+                        return Err(e.wrap_err("attach stream failed"));
+                    }
+                    None => {
+                        if token.is_cancelled() {
+                            detached();
+                            return Ok(());
+                        }
+                        message(
+                            ActivityLevel::Error,
+                            "the process manager went away (stopped or crashed)",
+                        );
+                        bail!("process manager connection closed");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Attach to an already-running process manager and stream a live view of
+    /// its processes (status, ports, logs) until the user detaches with Ctrl-C,
+    /// leaving the manager and its processes running. Unlike `devenv up`, this
+    /// does not start any processes. Fails when no manager is running.
+    pub async fn attach(
+        &self,
+        command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
+    ) -> Result<()> {
+        let pid_file = self.native_manager_pid_file();
+        let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await
+        else {
+            if self.processes_pid().exists() {
+                bail!(
+                    "`devenv processes attach` is only supported by the native process manager; \
+                     the configured process-compose session was left running"
+                );
+            }
+            bail!("No processes running. Start them with: devenv up -d");
+        };
+        info!(%pid, "attached to running process manager");
+        let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
+        self.run_attached_foreground(&parent, command_rx).await
     }
 
     /// Get the path to the .devenv/state directory
@@ -1720,22 +2246,15 @@ impl Devenv {
         if impl_result == "native" {
             info!("Using native process manager with task-based dependency ordering");
 
-            let task_configs = match preloaded_tasks {
+            let mut task_configs = match preloaded_tasks {
                 Some(t) => t,
                 None => self.load_tasks().await?,
             };
-            let roots: Vec<String> = if processes.is_empty() {
-                task_configs
-                    .iter()
-                    .filter(|t| t.name.starts_with(devenv_tasks::PROCESS_TASK_PREFIX))
-                    .map(|t| t.name.clone())
-                    .collect()
-            } else {
-                processes
-                    .iter()
-                    .map(|p| format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, p))
-                    .collect()
-            };
+            // Decide once which processes this `up` launches (and force-enable
+            // explicitly named ones); the resolved set feeds the cold start,
+            // the daemon config, and the attach paths alike.
+            let launch_names = Self::resolve_launch_processes(&mut task_configs, &processes)?;
+            let roots = Self::process_roots_for_launch(&task_configs, &processes);
 
             if roots.is_empty() {
                 bail!("No process tasks found to run");
@@ -1754,28 +2273,79 @@ impl Devenv {
             if options.daemon {
                 // Spawn a separate daemon process via re-exec to avoid
                 // fork-safety issues in this multithreaded process.
-                return self.spawn_daemon_processes(config).await;
+                return self.spawn_daemon_processes(config, &launch_names).await;
             }
 
-            // Check if a daemon is already running. Without this guard a
-            // foreground `devenv up` would overwrite the daemon's PID file
-            // and socket, and its Drop would delete them — orphaning the
-            // daemon and its child processes.
+            // If a manager is already running (e.g. started by `devenv up -d`),
+            // attach to it over the control socket and start the up-enabled
+            // processes instead of starting a second manager (which would
+            // clobber the daemon's PID file/socket and orphan it).
             let pid_file = self.native_manager_pid_file();
             if let Ok(processes::PidStatus::Running(pid)) =
                 processes::check_pid_file(&pid_file).await
             {
-                bail!(
-                    "Processes already running with PID {}. Stop them first with: devenv processes down",
-                    pid
+                // Two callers must not attach. A detached caller (e.g. `devenv
+                // test`) can't run an isolated process set over a manager it
+                // doesn't own, and its later teardown would stop that foreign
+                // daemon. And attaching streams a live view until you detach
+                // with Ctrl-C, which only makes sense at an interactive
+                // terminal — scripts, CI, and piped output would otherwise block
+                // forever. Both fail fast like a fresh foreground start that
+                // finds a manager already running; interactive foreground
+                // `devenv up` is the only intended attacher on this path.
+                let interactive = Self::should_attach_to_running_manager(
+                    std::io::stdin().is_terminal(),
+                    std::io::stderr().is_terminal(),
+                    std::env::var_os("CI").is_some(),
+                    is_ai_agent(),
                 );
+                if options.detach || !interactive {
+                    bail!(
+                        "Processes already running with PID {}. Stop them first with: devenv processes down",
+                        pid
+                    );
+                }
+                // Interactive foreground `devenv up`: attach and stream status
+                // until the user detaches (Ctrl-C), leaving the manager running.
+                // run_attached_foreground announces the attach in the tree.
+                self.attach_start_up_processes(&launch_names).await?;
+                info!(names = ?launch_names, "attached to running process manager");
+                // Reuse the already-open "Running processes" operation as the
+                // parent so the TUI shows a single process tree, and hand the
+                // TUI's restart/stop channel to the attach loop.
+                self.run_attached_foreground(&phase4, options.command_rx.take())
+                    .await?;
+                return Ok(RunMode::Detached);
             }
 
-            let tasks_runner =
+            let tasks_runner = Arc::new(
                 tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
                     .build()
                     .await
-                    .map_err(|e| miette!("Failed to build task runner: {}", e))?;
+                    .map_err(|e| miette!("Failed to build task runner: {}", e))?,
+            );
+
+            // Answer `devenv up` attach requests against this manager: a
+            // second `devenv up` finds our PID file and attaches over the
+            // control socket; the per-connection API task serves `Start` through
+            // this scheduler. Registered before the run, matching the daemon,
+            // so a `Start` arriving mid-startup is answered (classifying
+            // against the pre-registered Waiting entries) instead of
+            // rejected. The coerced `Arc<dyn _>` shares its refcount with
+            // `tasks_runner`, so the manager's `Weak` stays upgradable as
+            // long as the runner lives.
+            let scheduler: Arc<dyn processes::ProcessScheduler> = tasks_runner.clone();
+            tasks_runner
+                .process_manager()
+                .set_scheduler(Arc::downgrade(&scheduler));
+            // This in-process manager (interactive foreground `up`, or a
+            // detached owner like `devenv test`) is owned by a live devenv
+            // process: mark it Foreground so a `devenv up -d` from another
+            // terminal refuses to schedule into it. Set before the run so a
+            // `Mode` query during startup is answered correctly.
+            tasks_runner
+                .process_manager()
+                .set_mode(processes::ManagerMode::Foreground);
 
             // Start command processing before task execution so that
             // Ctrl-R works even while tasks are still running (e.g. when
@@ -1879,15 +2449,72 @@ impl Devenv {
     /// Instead of fork (which is unsafe in multithreaded programs), this
     /// re-execs the current binary with a hidden `daemon-processes` subcommand.
     /// The daemon runs in a new session (`setsid`) so it survives the parent.
-    async fn spawn_daemon_processes(&self, config: tasks::Config) -> Result<RunMode> {
+    async fn spawn_daemon_processes(
+        &self,
+        config: tasks::Config,
+        launch_names: &[String],
+    ) -> Result<RunMode> {
         let pid_file = self.native_manager_pid_file();
 
-        // Check if already running
-        if let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await {
-            bail!(
-                "Processes already running with PID {}. Stop them first with: devenv processes down",
-                pid
-            );
+        // Serialize the check-and-spawn sequence across concurrent CLI
+        // processes. Without this lock, two cold `up -d` callers can both see
+        // no PID file, spawn daemons, and race to own the same socket/PID
+        // paths, orphaning the loser and its children. The lock is held until
+        // the winning daemon publishes its PID; the next caller then follows
+        // the normal attach path below.
+        #[cfg(unix)]
+        let _startup_lock = {
+            use nix::fcntl::{Flock, FlockArg};
+
+            let runtime_dir = self.process_runtime_dir()?;
+            std::fs::create_dir_all(&runtime_dir)
+                .into_diagnostic()
+                .wrap_err("Failed to create process runtime directory")?;
+            let lock_path = runtime_dir.join("native-start.lock");
+            let lock_file = std::fs::OpenOptions::new()
+                .create(true)
+                .read(true)
+                .write(true)
+                .open(&lock_path)
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!("Failed to open daemon startup lock {}", lock_path.display())
+                })?;
+            Flock::lock(lock_file, FlockArg::LockExclusive).map_err(|(_, e)| {
+                miette!(
+                    "Failed to acquire daemon startup lock {}: {}",
+                    lock_path.display(),
+                    e
+                )
+            })?
+        };
+
+        // If a manager is already running, attach to it and start the requested
+        // processes rather than spawning a second daemon.
+        if matches!(
+            processes::check_pid_file(&pid_file).await,
+            Ok(processes::PidStatus::Running(_))
+        ) {
+            // A foreground `devenv up` session in another terminal owns its
+            // processes: scheduling into it from here would silently mutate a
+            // session the user is watching, and its exit would tear the
+            // processes down anyway. The running manager answers its own mode
+            // over the control socket, so a live foreground session is always
+            // detected. `None` (an older daemon that predates the `Mode`
+            // request) is treated as a daemon and attached, preserving the
+            // previous behavior.
+            if matches!(
+                processes::NativeProcessManager::query_manager_mode(&self.native_socket_path())
+                    .await,
+                Some(processes::ManagerMode::Foreground)
+            ) {
+                bail!(
+                    "Processes are already running in a foreground `devenv up` session. Attach with plain `devenv up`, or stop it first with `devenv processes down`"
+                );
+            }
+            self.attach_start_up_processes(launch_names).await?;
+            info!(names = ?launch_names, "attached to running process manager");
+            return Ok(RunMode::Detached);
         }
 
         // Serialize the task config for the daemon
@@ -1994,9 +2621,7 @@ impl Devenv {
                 self.devenv_dotfile.clone(),
             ))
         } else {
-            bail!(
-                "No process manager is running. Start processes first with `devenv processes start` or `devenv up -d`"
-            )
+            bail!("No process manager is running. Start processes first with `devenv up -d`")
         };
 
         manager.stop().await
@@ -2028,9 +2653,7 @@ impl Devenv {
         } else if self.processes_pid().exists() {
             bail!("'devenv processes wait' is not yet supported for the process-compose backend")
         } else {
-            bail!(
-                "No process manager is running. Start processes first with `devenv processes start` or `devenv up -d`"
-            )
+            bail!("No process manager is running. Start processes first with `devenv up -d`")
         }
     }
 
@@ -2039,20 +2662,72 @@ impl Devenv {
         processes::native_socket_path(&self.devenv_dotfile)
     }
 
+    /// Bail with upgrade guidance when the daemon predates this request type.
+    /// "unknown variant" covers requests the old daemon has no arm for;
+    /// "missing field" covers a reshaped variant it knows under the same tag
+    /// (e.g. the old single-name `start` receiving the new `names` list).
+    fn bail_if_stale_daemon(message: &str) -> Result<()> {
+        if Self::is_stale_daemon_protocol_error(message) {
+            bail!(
+                "the running process manager was started by an older devenv; \
+                 restart it with `devenv processes down` then `devenv up -d`"
+            );
+        }
+        Ok(())
+    }
+
+    fn is_stale_daemon_protocol_error(message: &str) -> bool {
+        message.contains("unknown variant") || message.contains("missing field")
+    }
+
+    /// One-shot request with a failure-bound timeout; a wedged daemon (accepts
+    /// connections but never replies) must not hang the attach session. Not
+    /// for `Wait`, which blocks legitimately.
+    async fn native_api_request_timeout(
+        &self,
+        request: &processes::ApiRequest,
+        timeout: std::time::Duration,
+    ) -> Result<processes::ApiResponse> {
+        tokio::time::timeout(timeout, self.native_api_request(request))
+            .await
+            .map_err(|_| miette!("process manager did not respond in time"))?
+    }
+
+    /// One-shot request whose reply takes as long as the work it triggers
+    /// (the daemon answers `Start` only after the full task DAG and process
+    /// launches complete): bound only the connect/send phase, callers race
+    /// the unbounded reply against Ctrl-C.
+    async fn native_api_request_bounded_connect(
+        &self,
+        request: &processes::ApiRequest,
+        connect_timeout: std::time::Duration,
+    ) -> Result<processes::ApiResponse> {
+        let socket_path = self.require_native_manager()?;
+        processes::NativeProcessManager::api_request_bounded_connect(
+            &socket_path,
+            request,
+            connect_timeout,
+        )
+        .await
+    }
+
     /// Send an API request to the running native process manager and return the response.
     async fn native_api_request(
         &self,
         request: &processes::ApiRequest,
     ) -> Result<processes::ApiResponse> {
+        let socket_path = self.require_native_manager()?;
+        processes::NativeProcessManager::api_request(&socket_path, request).await
+    }
+
+    /// Resolve the native manager socket, failing when no native manager runs.
+    fn require_native_manager(&self) -> Result<std::path::PathBuf> {
         if self.native_manager_pid_file().exists() {
-            let socket_path = self.native_socket_path();
-            processes::NativeProcessManager::api_request(&socket_path, request).await
+            Ok(self.native_socket_path())
         } else if self.processes_pid().exists() {
             bail!("This subcommand is only supported with the native process manager")
         } else {
-            bail!(
-                "No process manager is running. Start processes first with `devenv processes start` or `devenv up -d`"
-            )
+            bail!("No process manager is running. Start processes first with `devenv up -d`")
         }
     }
 
@@ -2062,17 +2737,7 @@ impl Devenv {
             .await?
         {
             processes::ApiResponse::ProcessList { processes } => {
-                let mut output = String::new();
-                for p in &processes {
-                    output.push_str(&format!(
-                        "{:<30} {:<15} restarts: {}\n",
-                        p.name, p.phase, p.restart_count
-                    ));
-                }
-                if processes.is_empty() {
-                    output.push_str("No processes found.\n");
-                }
-                Ok(output)
+                Ok(format_process_list(&processes))
             }
             processes::ApiResponse::Error { message } => bail!("{}", message),
             other => bail!("Unexpected response: {:?}", other),
@@ -2150,11 +2815,37 @@ impl Devenv {
         .await
     }
 
+    /// Start one process on the running manager through its scheduler, so
+    /// `after`/`before` dependencies are honoured like any other launch. The
+    /// reply is truthful: already running is an error (matching the historic
+    /// `processes start` strictness), unknown names get config-skew guidance.
     pub async fn processes_start(&self, name: &str) -> Result<()> {
-        self.expect_ok_response(&processes::ApiRequest::Start {
-            name: name.to_string(),
-        })
-        .await
+        let request = processes::ApiRequest::Start {
+            names: vec![name.to_string()],
+        };
+        match self.native_api_request(&request).await? {
+            processes::ApiResponse::Start { outcome } => {
+                if outcome.scheduled.contains(&name.to_string()) {
+                    return Ok(());
+                }
+                if outcome.skipped.contains(&name.to_string()) {
+                    bail!("Process '{}' is already running or waiting", name);
+                }
+                if outcome.unknown.contains(&name.to_string()) {
+                    bail!(
+                        "Process '{}' is not known to the running process manager (it was started with a different configuration). {}",
+                        name,
+                        RESTART_FOR_CONFIG_GUIDANCE
+                    );
+                }
+                bail!("Failed to start process '{}'", name);
+            }
+            processes::ApiResponse::Error { message: msg } => {
+                Self::bail_if_stale_daemon(&msg)?;
+                bail!("{}", msg)
+            }
+            other => bail!("Unexpected response: {:?}", other),
+        }
     }
 
     pub async fn processes_stop(&self, name: &str) -> Result<()> {
@@ -2308,6 +2999,25 @@ impl Devenv {
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
         self.get_dev_environment_inner(json).await
     }
+}
+
+fn format_process_list(processes: &[processes::ProcessInfo]) -> String {
+    if processes.is_empty() {
+        return "No processes found.\n".to_string();
+    }
+
+    let mut output = String::new();
+    for process in processes {
+        output.push_str(&format!(
+            "{:<30} {:<15} restarts: {}",
+            process.name, process.phase, process.restart_count
+        ));
+        if !process.ports.is_empty() {
+            output.push_str(&format!(" ports: {}", process.ports.join(", ")));
+        }
+        output.push('\n');
+    }
+    output
 }
 
 /// Run tasks. All output flows through the activity channel which the
@@ -2811,6 +3521,58 @@ mod tests {
     use super::*;
 
     #[test]
+    fn process_list_renders_ports() {
+        let output = format_process_list(&[processes::ProcessInfo {
+            name: "web".to_string(),
+            phase: processes::ProcessPhase::Ready,
+            restart_count: 1,
+            ports: vec!["http:8080".to_string(), "metrics:9090".to_string()],
+        }]);
+
+        assert!(output.contains("restarts: 1 ports: http:8080, metrics:9090\n"));
+    }
+
+    #[test]
+    fn process_list_omits_empty_ports() {
+        let output = format_process_list(&[processes::ProcessInfo {
+            name: "worker".to_string(),
+            phase: processes::ProcessPhase::Starting,
+            restart_count: 0,
+            ports: Vec::new(),
+        }]);
+
+        assert!(!output.contains("ports:"));
+        assert!(output.ends_with("restarts: 0\n"));
+    }
+
+    fn process_task(name: &str, enable: bool) -> tasks::TaskConfig {
+        tasks::TaskConfig {
+            name: format!("{}{}", devenv_tasks::PROCESS_TASK_PREFIX, name),
+            process: Some(processes::ProcessConfig {
+                start: processes::config::StartConfig { enable },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_up_enabled_process_names() {
+        let configs = vec![
+            process_task("alpha", true),
+            process_task("beta", false),
+            tasks::TaskConfig {
+                name: "devenv:not-a-process".to_string(),
+                ..Default::default()
+            },
+        ];
+        assert_eq!(
+            Devenv::up_enabled_process_names(&configs),
+            vec!["alpha".to_string()]
+        );
+    }
+
+    #[test]
     fn seeds_ports_only_from_a_live_native_manager() {
         use processes::PidStatus;
 
@@ -2910,6 +3672,257 @@ mod tests {
                 .expect("resolve built-in token");
 
         assert_eq!(token.as_deref(), Some("test-token"));
+    }
+
+    #[test]
+    fn up_enabled_process_names_treats_missing_config_as_enabled() {
+        // Regression: a process task with `process: None` defaults to
+        // `start.enable = true` (StartConfig::default and
+        // build_process_config both treat the missing config as enabled), and
+        // `resolve_launch_processes` agrees via `is_none_or`. The default-set
+        // helper must too, or a bare `devenv up` attaching to a running
+        // manager silently drops such a process from the launch set while a
+        // cold start would have launched it.
+        let configs = vec![
+            process_task("alpha", true),
+            tasks::TaskConfig {
+                name: format!("{}gamma", devenv_tasks::PROCESS_TASK_PREFIX),
+                process: None,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(
+            Devenv::up_enabled_process_names(&configs),
+            vec!["alpha".to_string(), "gamma".to_string()],
+            "a process with no explicit `process` config defaults to enabled"
+        );
+    }
+
+    #[test]
+    fn should_attach_to_running_manager_truth_table() {
+        for stdin_is_tty in [false, true] {
+            for stderr_is_tty in [false, true] {
+                for is_ci in [false, true] {
+                    for is_ai_agent in [false, true] {
+                        let expected = stdin_is_tty && stderr_is_tty && !is_ci && !is_ai_agent;
+                        assert_eq!(
+                            Devenv::should_attach_to_running_manager(
+                                stdin_is_tty,
+                                stderr_is_tty,
+                                is_ci,
+                                is_ai_agent,
+                            ),
+                            expected,
+                            "stdin_tty={stdin_is_tty}, stderr_tty={stderr_is_tty}, \
+                             ci={is_ci}, ai_agent={is_ai_agent}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn resolve_launch_processes_defaults_to_up_enabled() {
+        let mut configs = vec![process_task("alpha", true), process_task("beta", false)];
+        let names = Devenv::resolve_launch_processes(&mut configs, &[]).unwrap();
+        assert_eq!(names, vec!["alpha".to_string()]);
+        // No names requested: the disabled process stays disabled.
+        assert!(!configs[1].process.as_ref().unwrap().start.enable);
+    }
+
+    #[test]
+    fn resolve_launch_processes_force_enables_explicit_names() {
+        let mut configs = vec![
+            process_task("alpha", true),
+            process_task("beta", false),
+            tasks::TaskConfig {
+                name: format!("{}gamma", devenv_tasks::PROCESS_TASK_PREFIX),
+                process: None,
+                ..Default::default()
+            },
+        ];
+        let names = Devenv::resolve_launch_processes(
+            &mut configs,
+            &["beta".to_string(), "gamma".to_string()],
+        )
+        .unwrap();
+        assert_eq!(names, vec!["beta".to_string(), "gamma".to_string()]);
+        // Explicitly requested processes are force-enabled, including a
+        // missing process config (None) which is materialized as enabled.
+        assert!(configs[1].process.as_ref().unwrap().start.enable);
+        assert!(configs[2].process.as_ref().unwrap().start.enable);
+        // Unrequested processes outside the dependency closure are parked if
+        // they enter the scheduled graph later, but explicit subset roots do
+        // not schedule them merely because they exist.
+        assert!(!configs[0].process.as_ref().unwrap().start.enable);
+    }
+
+    #[test]
+    fn process_roots_for_launch_keeps_bare_up_full_set() {
+        let configs = vec![
+            process_task("alpha", true),
+            process_task("beta", false),
+            tasks::TaskConfig {
+                name: "devenv:not-a-process".to_string(),
+                ..Default::default()
+            },
+        ];
+        assert_eq!(
+            Devenv::process_roots_for_launch(&configs, &[]),
+            vec![
+                format!("{}alpha", devenv_tasks::PROCESS_TASK_PREFIX),
+                format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX),
+            ],
+            "bare up keeps all process roots so disabled processes register as not-started"
+        );
+    }
+
+    #[test]
+    fn process_roots_for_launch_limits_explicit_subset_roots() {
+        let mut configs = vec![
+            process_task("alpha", true),
+            process_task("beta", true),
+            process_task("gamma", true),
+        ];
+        configs[1].after = vec![format!("{}gamma", devenv_tasks::PROCESS_TASK_PREFIX)];
+
+        let requested = vec!["beta".to_string()];
+        let launch_names = Devenv::resolve_launch_processes(&mut configs, &requested).unwrap();
+
+        assert_eq!(
+            launch_names,
+            vec!["beta".to_string()],
+            "resolved launch names remain the user-requested roots"
+        );
+        assert_eq!(
+            Devenv::process_roots_for_launch(&configs, &requested),
+            vec![format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX)],
+            "RunMode::Before will pull beta's prerequisites without making alpha a root"
+        );
+    }
+
+    #[test]
+    fn resolve_launch_processes_enables_dependency_closure() {
+        // beta -> migrate (oneshot) -> gamma(enabled); beta -> delta(disabled);
+        // epsilon declares itself `before` beta. alpha is unrelated.
+        let mut configs = vec![
+            process_task("alpha", true),
+            process_task("beta", true),
+            process_task("gamma", true),
+            process_task("delta", false),
+            process_task("epsilon", true),
+            tasks::TaskConfig {
+                name: "devenv:migrate".to_string(),
+                after: vec![format!("{}gamma@ready", devenv_tasks::PROCESS_TASK_PREFIX)],
+                ..Default::default()
+            },
+        ];
+        configs[1].after = vec![
+            "devenv:migrate".to_string(),
+            format!("{}delta@started", devenv_tasks::PROCESS_TASK_PREFIX),
+        ];
+        configs[4].before = vec![format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX)];
+
+        Devenv::resolve_launch_processes(&mut configs, &["beta".to_string()]).unwrap();
+
+        let enable = |i: usize| configs[i].process.as_ref().unwrap().start.enable;
+        // gamma is reached through the oneshot and keeps its configured
+        // enable; epsilon is a reversed `before` dependency.
+        assert!(enable(1), "requested beta launches");
+        assert!(enable(2), "gamma launches via the oneshot dependency");
+        assert!(enable(4), "epsilon launches via its before edge");
+        // delta is in the closure but configured disabled: stays parked
+        // (beta waits on it, matching the attach semantics).
+        assert!(!enable(3), "disabled dependency stays parked");
+        // alpha is enabled in config but unrelated: parked.
+        assert!(!enable(0), "unrelated process stays parked");
+    }
+
+    #[test]
+    fn resolve_launch_processes_rejects_unknown_names() {
+        let mut configs = vec![process_task("alpha", true)];
+        let err = Devenv::resolve_launch_processes(&mut configs, &["nosuch".to_string()])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("not found in configuration"), "{err}");
+        assert!(err.contains("nosuch"), "{err}");
+    }
+
+    #[test]
+    fn resolve_launch_processes_deduplicates_names_in_first_seen_order() {
+        let mut configs = vec![
+            process_task("alpha", true),
+            process_task("beta", true),
+            process_task("gamma", true),
+        ];
+        let names = Devenv::resolve_launch_processes(
+            &mut configs,
+            &[
+                "beta".to_string(),
+                "alpha".to_string(),
+                "beta".to_string(),
+                "gamma".to_string(),
+                "alpha".to_string(),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(names, ["beta", "alpha", "gamma"]);
+    }
+
+    #[test]
+    fn complete_process_phase_mapping_preserves_terminal_states() {
+        use devenv_activity::ProcessStatus as S;
+        use processes::ProcessPhase as P;
+
+        for (phase, expected) in [
+            (P::NotStarted, S::NotStarted),
+            (P::Stopped, S::Stopped),
+            (P::Waiting, S::Waiting),
+            (P::Starting, S::Starting),
+            (P::Ready, S::Ready),
+            (P::Exited, S::Exited),
+            (P::GaveUp, S::GaveUp),
+        ] {
+            assert_eq!(Devenv::phase_to_process_status(phase), expected);
+        }
+        assert_ne!(
+            Devenv::phase_to_process_status(P::Exited),
+            Devenv::phase_to_process_status(P::GaveUp)
+        );
+    }
+
+    #[test]
+    fn stale_daemon_guidance_only_matches_protocol_skew() {
+        assert!(Devenv::is_stale_daemon_protocol_error(
+            "invalid request: unknown variant `attach`"
+        ));
+        assert!(Devenv::is_stale_daemon_protocol_error(
+            "invalid request: missing field `names`"
+        ));
+        assert!(!Devenv::is_stale_daemon_protocol_error(
+            "process failed to launch"
+        ));
+        assert!(!Devenv::is_stale_daemon_protocol_error(
+            "manager is shutting down"
+        ));
+    }
+
+    /// R05 client half: Ctrl-C wins over an indefinitely pending Start reply,
+    /// so the CLI does not wait for daemon-owned work to finish.
+    #[tokio::test]
+    async fn pending_start_response_exits_promptly_on_interrupt() {
+        let pending = std::future::pending::<Result<processes::ApiResponse>>();
+
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            Devenv::await_start_response_or_interrupt(std::future::ready(()), pending),
+        )
+        .await
+        .expect("interrupted Start client did not exit promptly")
+        .expect_err("interrupted Start client unexpectedly succeeded");
+        assert!(error.to_string().contains("interrupted"), "{error}");
     }
 
     #[test]

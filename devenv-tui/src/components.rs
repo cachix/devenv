@@ -5,8 +5,10 @@ use devenv_activity::ProcessStatus;
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
 use std::collections::VecDeque;
+#[cfg(not(feature = "deterministic-tui"))]
 use std::sync::Arc;
 use std::time::Duration;
+#[cfg(not(feature = "deterministic-tui"))]
 use tokio::sync::Notify;
 
 // Import shared UI constants from devenv-shell
@@ -106,6 +108,9 @@ pub fn process_status_dot(
         ProcessStatus::Stopping => (DOT_HALF, COLOR_HIERARCHY, true),
         ProcessStatus::Stopped if completed == Some(false) => (XMARK, COLOR_FAILED, false),
         ProcessStatus::Stopped => (DOT_RING, COLOR_HIERARCHY, false),
+        ProcessStatus::Exited if completed == Some(false) => (XMARK, COLOR_FAILED, false),
+        ProcessStatus::Exited => (DOT_RING, COLOR_HIERARCHY, false),
+        ProcessStatus::GaveUp => (XMARK, COLOR_FAILED, false),
     }
 }
 
@@ -240,7 +245,7 @@ impl HierarchyPrefixComponent {
         Self { depth }
     }
 
-    /// Renders the hierarchy prefix: [indent][branch]
+    /// Renders the hierarchy prefix: `[indent][branch]`
     /// The indent aligns with parent's content (after their status indicator).
     pub fn render(&self) -> Vec<AnyElement<'static>> {
         if self.depth == 0 {
@@ -951,6 +956,45 @@ pub type BuildLogsComponent<'a> = ExpandedContentComponent<'a>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn process_status_dot_covers_every_lifecycle_phase() {
+        for (status, expected) in [
+            (
+                ProcessStatus::NotStarted,
+                (DOT_INERT, COLOR_HIERARCHY, false),
+            ),
+            (ProcessStatus::Waiting, (DOT_RING, COLOR_TRANSIENT, true)),
+            (ProcessStatus::Starting, (DOT_HALF, COLOR_TRANSIENT, true)),
+            (
+                ProcessStatus::Running,
+                (DOT_RUNNING, COLOR_COMPLETED, false),
+            ),
+            (ProcessStatus::Ready, (DOT_READY, COLOR_COMPLETED, false)),
+            (ProcessStatus::Restarting, (DOT_HALF, COLOR_TRANSIENT, true)),
+            (ProcessStatus::Stopping, (DOT_HALF, COLOR_HIERARCHY, true)),
+            (ProcessStatus::Stopped, (DOT_RING, COLOR_HIERARCHY, false)),
+            (ProcessStatus::Exited, (DOT_RING, COLOR_HIERARCHY, false)),
+            (ProcessStatus::GaveUp, (XMARK, COLOR_FAILED, false)),
+        ] {
+            assert_eq!(
+                process_status_dot(&status, None, false),
+                expected,
+                "{status:?}"
+            );
+        }
+
+        assert_eq!(
+            process_status_dot(&ProcessStatus::Ready, None, true),
+            (DOT_HALF, COLOR_HIERARCHY, true),
+            "global shutdown overrides every active phase"
+        );
+        assert_eq!(
+            process_status_dot(&ProcessStatus::GaveUp, None, true),
+            (XMARK, COLOR_FAILED, false),
+            "GaveUp remains a stable failure during global shutdown"
+        );
+    }
 
     // For depth=0, action="", elapsed="1.0s":
     // base_width = padding(2) + spinner(2) + action(0+1) + name_margin(1) + elapsed(4) = 10

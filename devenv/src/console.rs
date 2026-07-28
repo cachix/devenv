@@ -1,6 +1,6 @@
 //! Console output for activity events when the TUI is disabled.
 //!
-//! Every line goes through [`ConsoleOutput::write`], which applies the
+//! Every line goes through `ConsoleOutput::write`, which applies the
 //! verbosity filter before writing to stderr.
 //!
 //! All output goes to stderr. stdout is owned by the caller's command

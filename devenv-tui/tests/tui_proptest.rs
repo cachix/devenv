@@ -95,6 +95,8 @@ fn proc_status_val() -> impl Strategy<Value = ProcessStatus> {
         Just(ProcessStatus::Restarting),
         Just(ProcessStatus::Stopping),
         Just(ProcessStatus::Stopped),
+        Just(ProcessStatus::Exited),
+        Just(ProcessStatus::GaveUp),
     ]
 }
 
@@ -299,7 +301,7 @@ fn apply_op(model: &mut ActivityModel, ui: &mut UiState, op: Op) {
             ui.selected_activity = None;
             ui.view_mode = ViewMode::Main;
         }
-        Op::ShowInterrupt => ui.show_interrupt_prompt(),
+        Op::ShowInterrupt => ui.show_interrupt_prompt(false),
         Op::ClearInterrupt => ui.clear_interrupt_prompt(),
         Op::Resize(w, h) => ui.set_terminal_size(w, h),
     }
@@ -480,7 +482,7 @@ fn interrupt_prompt_fits_usable_widths() {
     for w in 40u16..=200 {
         let mut ui = UiState::new();
         ui.set_terminal_size(w, 24);
-        ui.show_interrupt_prompt();
+        ui.show_interrupt_prompt(false);
         let out = render(&model, &ui);
         let widest = max_line_width(&out);
         assert!(
@@ -533,7 +535,7 @@ fn renders_at_degenerate_sizes_without_panic() {
         let mut element: AnyElement = view(&model, &ui, RenderContext::Normal, None, false).into();
         let _ = element.render(Some(w.max(1) as usize)).to_string();
 
-        ui.show_interrupt_prompt();
+        ui.show_interrupt_prompt(false);
         let mut element: AnyElement = view(&model, &ui, RenderContext::Final, None, true).into();
         let _ = element.render(Some(w.max(1) as usize)).to_string();
     }

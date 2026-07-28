@@ -65,7 +65,7 @@ impl RedrawSink for State<u64> {
 /// - an explicit `notify` wake with no version change — e.g. a keypress that
 ///   mutated `ui_state`, which iocraft cannot observe on its own and which would
 ///   otherwise not repaint until the heartbeat (#2915), and
-/// - a slow [`IDLE_HEARTBEAT_MS`] heartbeat (so elapsed-time displays advance).
+/// - a slow `IDLE_HEARTBEAT_MS` heartbeat (so elapsed-time displays advance).
 ///
 /// This is the fix for the high idle-CPU behaviour (#2915): previously the loop
 /// redrew on every safety-net timeout (~`max_fps` times/sec) regardless of

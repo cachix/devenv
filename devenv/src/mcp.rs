@@ -439,14 +439,16 @@ impl DevenvMcpServer {
         .await
     }
 
-    #[tool(description = "Start a process that has auto start disabled")]
+    #[tool(
+        description = "Start a process, honoring its dependencies (works for processes with auto start disabled)"
+    )]
     async fn start_process(&self, params: Parameters<ProcessNameRequest>) -> String {
         use devenv_processes::ApiRequest;
         self.process_request_json(
             &ApiRequest::Start {
-                name: params.0.name,
+                names: vec![params.0.name],
             },
-            ok_response,
+            start_response,
         )
         .await
     }
@@ -464,10 +466,24 @@ impl DevenvMcpServer {
     }
 }
 
-/// Shared success extractor for process action responses (restart, start, stop).
+/// Shared success extractor for process action responses (restart, stop).
 fn ok_response(resp: devenv_processes::ApiResponse) -> Option<Value> {
     match resp {
         devenv_processes::ApiResponse::Ok => Some(serde_json::json!({"status": "ok"})),
+        _ => None,
+    }
+}
+
+/// Success extractor for the scheduler-driven start: surface the truthful
+/// per-name classification instead of a bare ok.
+fn start_response(resp: devenv_processes::ApiResponse) -> Option<Value> {
+    match resp {
+        devenv_processes::ApiResponse::Start { outcome } => Some(serde_json::json!({
+            "scheduled": outcome.scheduled,
+            "skipped": outcome.skipped,
+            "unknown": outcome.unknown,
+            "failed": outcome.failed,
+        })),
         _ => None,
     }
 }

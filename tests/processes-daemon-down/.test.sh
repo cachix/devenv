@@ -10,6 +10,18 @@ set -ex
 
 PORT=18457
 
+runtime_hash() {
+  dotfile="$(pwd -P)/.devenv"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$dotfile" | sha256sum | cut -c1-7
+  else
+    printf '%s' "$dotfile" | shasum -a 256 | cut -c1-7
+  fi
+}
+
+RUNTIME_BASE="${XDG_RUNTIME_DIR:-/tmp}"
+PROCESS_RUNTIME_DIR="$RUNTIME_BASE/devenv-$(runtime_hash)/processes"
+
 wait_for_port() {
   for i in $(seq 1 30); do
     if curl -s -o /dev/null http://127.0.0.1:$PORT/ 2>/dev/null; then
@@ -34,6 +46,40 @@ wait_for_port_free() {
   return 1
 }
 
+wait_for_pid_exit() {
+  for _ in $(seq 1 30); do
+    if ! kill -0 "$1" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+cleanup() {
+  status=$?
+  trap - EXIT INT TERM
+  if [ "$status" -ne 0 ]; then
+    ps -o pid,ppid,stat,command -u "$(id -u)" | grep -E 'devenv|http.server' >&2 || true
+    for file in concurrent-1.txt concurrent-2.txt; do
+      if [ -f "$file" ]; then
+        echo "==> $file <==" >&2
+        cat "$file" >&2 || true
+      fi
+    done
+    for file in "$PROCESS_RUNTIME_DIR"/daemon.log "$PROCESS_RUNTIME_DIR"/logs/*; do
+      if [ -f "$file" ]; then
+        echo "==> $file <==" >&2
+        tail -n 80 "$file" >&2 || true
+      fi
+    done
+  fi
+  devenv processes down >/dev/null 2>&1 || true
+  wait_for_port_free || status=1
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
+
 # === Test 1: up -d then down cleans up ===
 echo "--- Test 1: basic up -d / down ---"
 devenv up -d
@@ -43,27 +89,36 @@ devenv processes down
 wait_for_port_free || { echo "FAIL: port still bound after down"; exit 1; }
 echo "PASS: basic up -d / down"
 
-# === Test 2: foreground up rejects when daemon running ===
-echo "--- Test 2: foreground up rejects when daemon running ---"
+# === Test 2: up -d attaches when a daemon is already running ===
+echo "--- Test 2: up -d attaches when a daemon is already running ---"
 devenv up -d
 devenv processes wait
 wait_for_port
 
-# Try foreground up — should fail with "already running"
-# Use timeout so we don't wait for crash-looping processes if the guard is missing.
-if timeout 10 devenv up --no-tui 2>&1; then
-  echo "FAIL: foreground up should have been rejected"
+# A second `up -d` must attach to the running daemon (start up-enabled processes
+# over the control socket) without erroring and without clobbering the daemon's
+# PID file / socket.
+devenv up -d
+devenv processes wait
+
+# Daemon should still be healthy and stoppable with a single `down`.
+curl -s -o /dev/null http://127.0.0.1:$PORT/ || { echo "FAIL: daemon died after attaching up"; devenv processes down || true; exit 1; }
+
+# A non-interactive foreground `up` (no -d) against a running daemon must fail
+# fast, not attach and block forever. Assert on the message: a hang killed by
+# the timeout also exits non-zero, so the exit code alone can't tell a clean
+# reject from a hang.
+timeout 15 devenv up --no-tui >up_out.txt 2>&1 || true
+grep -q "Processes already running" up_out.txt || {
+  echo "FAIL: non-interactive foreground up should fail fast when a daemon is running"
+  cat up_out.txt
   devenv processes down || true
   exit 1
-fi
-echo "Foreground up correctly rejected"
+}
 
-# Daemon should still be healthy
-curl -s -o /dev/null http://127.0.0.1:$PORT/ || { echo "FAIL: daemon died"; exit 1; }
 devenv processes down
-sleep 1
-port_free || { echo "FAIL: port still bound"; exit 1; }
-echo "PASS: foreground up rejects when daemon running"
+wait_for_port_free || { echo "FAIL: port still bound after down"; exit 1; }
+echo "PASS: up -d attaches when daemon running"
 
 # === Test 3: up -d / down / restart ===
 echo "--- Test 3: restart after down ---"
@@ -91,5 +146,36 @@ wait_for_port_free || true
 devenv processes down 2>&1 || true
 port_free || { echo "FAIL: port bound after double down"; exit 1; }
 echo "PASS: double down"
+
+# === Test 5: concurrent cold daemon starts have one owner ===
+echo "--- Test 5: concurrent daemon startup ---"
+devenv up -d >concurrent-1.txt 2>&1 &
+UP_ONE=$!
+devenv up -d >concurrent-2.txt 2>&1 &
+UP_TWO=$!
+wait "$UP_ONE"
+wait "$UP_TWO"
+devenv processes wait
+wait_for_port
+
+DAEMON_PID=$(sed -n '1p' "$PROCESS_RUNTIME_DIR/native-manager.pid")
+kill -0 "$DAEMON_PID"
+DAEMON_PATTERN="daemon-processes $PROCESS_RUNTIME_DIR/daemon-config.json"
+DAEMON_COUNT=$(
+  ps -eo args= |
+    grep -F "$DAEMON_PATTERN" |
+    grep -v grep |
+    wc -l
+)
+test "$DAEMON_COUNT" -eq 1 || {
+  echo "FAIL: expected one native daemon, found $DAEMON_COUNT"
+  cat concurrent-1.txt concurrent-2.txt
+  exit 1
+}
+
+devenv processes down
+wait_for_port_free || { echo "FAIL: port bound after concurrent start cleanup"; exit 1; }
+wait_for_pid_exit "$DAEMON_PID" || { echo "FAIL: concurrent-start daemon survived down"; exit 1; }
+echo "PASS: concurrent daemon startup"
 
 echo "All daemon-down tests passed!"
