@@ -5,6 +5,8 @@ let
 
   parseProcessDep = import ../lib/parse-process-dep.nix { inherit lib; };
 
+  hasProcesses = config.processes != { };
+
   # Compute depends_on entries from `before` lists across all processes.
   # If process A says before = ["devenv:processes:B"], then B depends_on A.
   beforeDepsMap =
@@ -108,14 +110,25 @@ in
   };
 
   config = lib.mkMerge [
-    (lib.mkIf (config.process.manager.implementation == "process-compose") {
-      env = {
-        PC_CONFIG_FILES = toString cfg.configFile;
-        PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
-      };
-    })
-
     (lib.mkIf cfg.enable {
+      env = {
+        PC_CONFIG_FILES = if hasProcesses then toString cfg.configFile else null;
+        PC_SOCKET_PATH = if hasProcesses && cfg.unixSocket.enable then cfg.unixSocket.path else null;
+      };
+
+      changelogs = [
+        {
+          date = "2026-07-29";
+          title = "`PC_CONFIG_FILES` and `PC_SOCKET_PATH` are only set when processes are defined";
+          when = !hasProcesses;
+          description = ''
+            A shell without any `processes` no longer exports `PC_CONFIG_FILES` and `PC_SOCKET_PATH`.
+
+            Running your own `process-compose` from such a shell now picks up its own config instead of devenv's.
+          '';
+        }
+      ];
+
       process.manager.args = {
         "config" = cfg.configFile;
         "disable-dotenv" = true;
