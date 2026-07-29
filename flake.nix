@@ -85,16 +85,13 @@
       packages = forAllSystems (
         system:
         let
-          patchedNix = import ./nix/patched-nix.nix {
-            nix = inputs.nix.packages.${system}.nix;
-          };
           overlays = [
             inputs.rust-overlay.overlays.default
             (final: prev: {
               inherit (inputs.cachix.packages.${system}) cachix;
               # Use nix-cli to skip building nix-manual, but keep libs for C bindings
               nix = inputs.nix.packages.${system}.nix-cli // {
-                inherit (patchedNix) libs;
+                inherit (inputs.nix.packages.${system}.nix) libs;
               };
               nixd = inputs.nixd.packages.${system}.nixd.override { llvmStatic = true; };
               crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
