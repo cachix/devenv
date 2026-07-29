@@ -1,5 +1,5 @@
 ---
-title: "devenv.yaml"
+title: devenv.yaml
 ---
 
 <!-- This file is auto-generated from devenv-core/src/config.rs doc comments. Do not edit. -->
@@ -29,7 +29,7 @@ A list of environment variables to keep when cleaning the environment.
 ## imports
 
 A list of relative paths, absolute paths, or references to inputs to import `devenv.nix` and `devenv.yaml` files.
-See [Composing using imports](/composing-using-imports/).
+See [Composing using imports](../composing-using-imports.md).
 
 *Type:* `list of string` · *Default:* `[]`
 
@@ -44,7 +44,7 @@ Relax the hermeticity of the environment.
 ## inputs
 
 Map of Nix inputs.
-See [Inputs](/inputs/).
+See [Inputs](../inputs.md).
 
 *Type:* `attribute set of input` · *Default:* `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`
 
@@ -57,28 +57,28 @@ Does the input contain `flake.nix` or `devenv.nix`.
 ## inputs.\<name\>.follows
 
 Another input to "inherit" from by name.
-See [Following inputs](/inputs/#following-inputs).
+See [Following inputs](../inputs.md#following-inputs).
 
 *Type:* `string`
 
 ## inputs.\<name\>.inputs
 
 Override nested inputs by name.
-See [Following inputs](/inputs/#following-inputs).
+See [Following inputs](../inputs.md#following-inputs).
 
 *Type:* `attribute set of input`
 
 ## inputs.\<name\>.overlays
 
 A list of overlays to include from the input.
-See [Overlays](/overlays/).
+See [Overlays](../overlays.md).
 
 *Type:* `list of string` · *Default:* `[]`
 
 ## inputs.\<name\>.url
 
 URI specification of the input.
-See [Supported URI formats](/inputs/#supported-uri-formats).
+See [Supported URI formats](../inputs.md#supported-uri-formats).
 
 *Type:* `string`
 
@@ -190,7 +190,7 @@ Enable ROCm support for nixpkgs.
 
 Default profile to activate.
 Can be overridden by `--profile` CLI flag.
-See [Profiles](/profiles/).
+See [Profiles](../profiles.md).
 
 *Type:* `string`
 
@@ -231,7 +231,7 @@ secret name. No declaration in `secretspec.toml` is required.
 
 <small class="added-in">Added in <code>1.8</code></small>
 
-Enable [secretspec integration](/integrations/secretspec/).
+Enable [secretspec integration](../integrations/secretspec.md).
 
 *Type:* `boolean` · *Default:* `false`
 
