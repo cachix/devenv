@@ -28,12 +28,19 @@ function routeFor(file) {
 }
 
 function decodeHtml(value) {
-  return value
-    .replaceAll('&amp;', '&')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, number) => String.fromCodePoint(Number(number)));
+  return value.replace(/&(?:amp|quot|#x[0-9a-f]+|#\d+);/gi, (entity) => {
+    const body = entity.slice(1, -1).toLowerCase();
+    if (body === 'amp') return '&';
+    if (body === 'quot') return '"';
+
+    const radix = body.startsWith('#x') ? 16 : 10;
+    const digits = body.slice(radix === 16 ? 2 : 1);
+    const codePoint = Number.parseInt(digits, radix);
+    if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+      return entity;
+    }
+    return String.fromCodePoint(codePoint);
+  });
 }
 
 function targetFile(pathname) {
@@ -81,16 +88,7 @@ for (const page of pages.values()) {
   for (const match of page.html.matchAll(/\s(href|src)=(["'])(.*?)\2/g)) {
     const [, attribute, , encodedValue] = match;
     const value = decodeHtml(encodedValue.trim());
-    if (
-      !value ||
-      value.startsWith('data:') ||
-      value.startsWith('mailto:') ||
-      value.startsWith('tel:') ||
-      value.startsWith('javascript:') ||
-      value.startsWith('//')
-    ) {
-      continue;
-    }
+    if (!value) continue;
 
     let url;
     try {
@@ -99,6 +97,7 @@ for (const page of pages.values()) {
       failures.push(`${page.route}: malformed ${attribute}="${value}"`);
       continue;
     }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') continue;
     if (url.origin !== origin) continue;
 
     const target = targetFile(url.pathname);
