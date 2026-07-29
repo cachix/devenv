@@ -7711,7 +7711,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "signal" "term" ];
+            features = [ "fs" "process" "resource" "signal" "term" ];
           }
           {
             name = "once_cell";
@@ -8043,7 +8043,7 @@ rec {
             name = "nix";
             packageId = "nix 0.31.3";
             target = { target, features }: (target."unix" or false);
-            features = [ "fs" "process" "signal" "term" "user" ];
+            features = [ "fs" "process" "resource" "signal" "term" "user" ];
           }
           {
             name = "nix-conf-parser";
@@ -8328,7 +8328,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "signal" "term" ];
+            features = [ "fs" "process" "resource" "signal" "term" ];
           }
           {
             name = "nix-bindings-bindgen-raw";
@@ -8484,7 +8484,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "signal" "term" ];
+            features = [ "fs" "process" "resource" "signal" "term" ];
           }
           {
             name = "portable-pty";
@@ -8876,7 +8876,7 @@ rec {
             name = "nix";
             packageId = "nix 0.31.3";
             target = { target, features }: (target."unix" or false);
-            features = [ "fs" "process" "signal" "term" "user" "signal" ];
+            features = [ "fs" "process" "resource" "signal" "term" "user" "signal" ];
           }
           {
             name = "petgraph";
@@ -19021,7 +19021,7 @@ rec {
           "user" = [ "feature" ];
           "zerocopy" = [ "fs" "uio" ];
         };
-        resolvedDefaultFeatures = [ "default" "feature" "fs" "poll" "process" "signal" "term" "user" ];
+        resolvedDefaultFeatures = [ "default" "feature" "fs" "poll" "process" "resource" "signal" "term" "user" ];
       };
       "nix-bindings-bindgen-raw" = rec {
         crateName = "nix-bindings-bindgen-raw";
@@ -32388,7 +32388,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "signal" "term" "signal" "process" ];
+            features = [ "fs" "process" "resource" "signal" "term" "signal" "process" ];
           }
           {
             name = "tokio";
@@ -41120,4 +41120,3 @@ rec {
   #
   };
 }
-
