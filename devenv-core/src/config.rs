@@ -179,7 +179,7 @@ pub struct NixpkgsConfig {
 #[serde(rename_all = "snake_case")]
 pub struct Input {
     /// URI specification of the input.
-    /// See [Supported URI formats](../inputs.md#supported-uri-formats).
+    /// See [Supported URI formats](/inputs/#supported-uri-formats).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub url: Option<String>,
     /// Does the input contain `flake.nix` or `devenv.nix`.
@@ -189,17 +189,17 @@ pub struct Input {
     #[setting(default = true)]
     pub flake: bool,
     /// Another input to "inherit" from by name.
-    /// See [Following inputs](../inputs.md#following-inputs).
+    /// See [Following inputs](/inputs/#following-inputs).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub follows: Option<String>,
     /// Override nested inputs by name.
-    /// See [Following inputs](../inputs.md#following-inputs).
+    /// See [Following inputs](/inputs/#following-inputs).
     ///
     /// Opaque.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub inputs: BTreeMap<String, Input>,
     /// A list of overlays to include from the input.
-    /// See [Overlays](../overlays.md).
+    /// See [Overlays](/overlays/).
     ///
     /// Default: `[]`.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -328,7 +328,7 @@ pub struct Config {
     #[setting(merge = schematic::merge::replace)]
     pub require_version: Option<RequireVersion>,
     /// Map of Nix inputs.
-    /// See [Inputs](../inputs.md).
+    /// See [Inputs](/inputs/).
     ///
     /// Default: `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
@@ -356,7 +356,7 @@ pub struct Config {
     #[setting(nested)]
     pub nixpkgs: Option<Nixpkgs>,
     /// A list of relative paths, absolute paths, or references to inputs to import `devenv.nix` and `devenv.yaml` files.
-    /// See [Composing using imports](../composing-using-imports.md).
+    /// See [Composing using imports](/composing-using-imports/).
     ///
     /// Default: `[]`.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -391,7 +391,7 @@ pub struct Config {
     pub secretspec: Option<SecretspecConfig>,
     /// Default profile to activate.
     /// Can be overridden by `--profile` CLI flag.
-    /// See [Profiles](../profiles.md).
+    /// See [Profiles](/profiles/).
     ///
     /// Added in 1.11.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -433,7 +433,7 @@ pub struct Config {
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SecretspecConfig {
-    /// Enable [secretspec integration](../integrations/secretspec.md).
+    /// Enable [secretspec integration](/integrations/secretspec/).
     ///
     /// Default: `false`.
     ///

@@ -194,6 +194,8 @@ let
                     "$optionsFile"
                 )"
 
+                sed -i 's/[[:blank:]]\+$//' "$outFile"
+
               '') options
             )}
           ''
