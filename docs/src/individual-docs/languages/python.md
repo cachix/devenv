@@ -109,8 +109,9 @@ The path can be absolute or relative to the root of the devenv project.
 
 devenv integrates with Python package managers to automatically install dependencies when you enter the shell.
 
-!!! warning "Poetry and uv are mutually exclusive"
-    You cannot enable both `poetry.install` and `uv.sync` at the same time.
+:::caution[Poetry and uv are mutually exclusive]
+You cannot enable both `poetry.install` and `uv.sync` at the same time.
+:::
 
 ### uv
 

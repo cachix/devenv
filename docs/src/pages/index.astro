@@ -1,0 +1,948 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import { getHighlighter } from '../lib/highlighter';
+import { codeThemeNames } from '../lib/code-themes';
+import { getCollection } from 'astro:content';
+const base = import.meta.env.BASE_URL;
+
+const docs = await getCollection('docs');
+const languageCount = docs.filter(
+  (entry) => entry.id.startsWith('languages/') && entry.id !== 'languages/index',
+).length;
+const serviceCount = docs.filter(
+  (entry) => entry.id.startsWith('services/') && entry.id !== 'services/index',
+).length;
+const posts = docs
+  .filter((entry) => entry.id.startsWith('blog/') && !entry.data.draft)
+  .sort((a, b) => (b.data.date?.valueOf() ?? 0) - (a.data.date?.valueOf() ?? 0));
+const latestPost = posts[0];
+const latestPostDate = latestPost?.data.date
+  ? new Intl.DateTimeFormat('en', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(latestPost.data.date)
+  : null;
+
+// simpleicons CDN — { slug, label }
+const langs = [
+  ['rust', 'Rust'], ['python', 'Python'], ['nodedotjs', 'Node.js'], ['go', 'Go'],
+  ['ruby', 'Ruby'], ['php', 'PHP'], ['typescript', 'TypeScript'], ['elixir', 'Elixir'],
+  ['kotlin', 'Kotlin'], ['swift', 'Swift'], ['haskell', 'Haskell'], ['scala', 'Scala'],
+  ['dotnet', '.NET'], ['lua', 'Lua'], ['erlang', 'Erlang'], ['ocaml', 'OCaml'],
+  ['perl', 'Perl'], ['dart', 'Dart'], ['cplusplus', 'C++'], ['nim', 'Nim'],
+  ['crystal', 'Crystal'], ['zig', 'Zig'], ['r', 'R'], ['julia', 'Julia'],
+];
+
+const services = [
+  ['postgresql', 'PostgreSQL'], ['redis', 'Redis'], ['mysql', 'MySQL'], ['mongodb', 'MongoDB'],
+  ['mariadb', 'MariaDB'], ['elasticsearch', 'Elasticsearch'], ['rabbitmq', 'RabbitMQ'],
+  ['minio', 'MinIO'], ['caddy', 'Caddy'], ['nginx', 'nginx'], ['clickhouse', 'ClickHouse'],
+  ['nats-dot-io', 'NATS'], ['meilisearch', 'Meilisearch'], ['apachecouchdb', 'CouchDB'],
+  ['influxdb', 'InfluxDB'], ['opensearch', 'OpenSearch'], ['keycloak', 'Keycloak'],
+  ['memcached', 'memcached'], ['vault', 'Vault'], ['kafka', 'Kafka'],
+];
+
+const tools = [
+  ['docker', 'Docker'], ['nixos', 'Nix'], ['githubactions', 'GitHub Actions'],
+  ['vscodium', 'VS Code'], ['intellijidea', 'IntelliJ'], ['zedindustries', 'Zed'],
+  ['android', 'Android'], ['wordpress', 'WordPress'], ['terraform', 'Terraform'],
+  ['opentofu', 'OpenTofu'], ['claude', 'Claude Code'], ['linux', 'Linux'],
+  ['apple', 'macOS'],
+];
+
+// Duplicate for seamless loop
+const dup = <T,>(arr: T[]) => [...arr, ...arr];
+
+// Inline nix highlighting for the compose file-tree nodes.
+const hl = await getHighlighter();
+const nix = (code: string) =>
+  hl.codeToHtml(code, { lang: 'nix', themes: codeThemeNames, defaultColor: false, structure: 'inline' });
+const initialPreview = `{ pkgs, ... }: {
+  languages.rust.enable = true;
+
+  services.postgres = {
+    enable = true;
+    initialDatabases = [{ name = "app"; }];
+  };
+
+  packages = [ pkgs.cargo-watch ];
+}`;
+---
+
+<StarlightPage
+  frontmatter={{
+    title: 'Your whole development environment, declared',
+    description:
+      'Define packages, languages, services, tasks, secrets, and tooling once. Give every developer—and CI—the same fast, reproducible environment.',
+    template: 'splash',
+    hero: { tagline: '' },
+  }}
+  hasSidebar={false}
+>
+<div id="_top"></div>
+<div class="not-content">
+
+<!-- ============ HERO ============ -->
+<section class="landing-hero">
+  <div class="landing-hero-inner">
+    {latestPost && (
+      <a href={`/blog/${latestPost.id.replace(/^blog\//, '')}/`} class="landing-blog-banner">
+        <span class="landing-blog-aside">
+          <span class="landing-blog-flag">Latest from the blog</span>
+          {latestPostDate && <span class="landing-blog-date">{latestPostDate}</span>}
+        </span>
+        <span class="landing-blog-main">
+          <span class="landing-blog-title">{latestPost.data.title}</span>
+          {latestPost.data.description && (
+            <span class="landing-blog-desc">{latestPost.data.description}</span>
+          )}
+        </span>
+        <span class="landing-blog-cta" aria-hidden="true">Read post →</span>
+      </a>
+    )}
+
+    <div class="landing-hero-head">
+      <p class="landing-badge">Developer Environments using Nix</p>
+      <h1 class="landing-hero-title">Your whole development<br>environment, declared.</h1>
+      <p class="landing-hero-subtitle">
+        Define packages, languages, services, tasks, secrets, and tooling once. Give every
+        developer—and CI—the same fast, reproducible environment.
+      </p>
+      <nav class="landing-hero-actions" aria-label="Documentation shortcuts">
+        <a href={`${base}getting-started/`} class="landing-btn landing-btn-primary">Get Started</a>
+        <a href={`${base}languages/`} class="landing-btn landing-btn-secondary">
+          Languages ({languageCount})
+        </a>
+        <a href={`${base}services/`} class="landing-btn landing-btn-secondary">
+          Services ({serviceCount})
+        </a>
+        <a href={`${base}processes/`} class="landing-btn landing-btn-secondary">Processes</a>
+        <a href={`${base}reference/options/`} class="landing-btn landing-btn-secondary">
+          Options Reference
+        </a>
+      </nav>
+    </div>
+
+    <div class="landing-hero-split">
+      <!-- Prompt -->
+      <form class="landing-hero-prompt" id="generate">
+        <p class="landing-prompt-label">Describe your stack</p>
+        <input
+          type="text"
+          name="q"
+          id="prompt-input"
+          class="landing-prompt-input"
+          placeholder="Rust API with PostgreSQL and Redis"
+          aria-label="Describe your environment"
+        />
+
+        <div class="landing-prompt-chips" id="prompt-chips">
+          <button type="button" class="landing-chip" data-chip="Rust API with PostgreSQL">Rust + Postgres</button>
+          <button type="button" class="landing-chip" data-chip="Python with uv and PyTorch">Python ML</button>
+          <button type="button" class="landing-chip" data-chip="Node.js with Redis">Node + Redis</button>
+          <button type="button" class="landing-chip" data-chip="Go microservice with MySQL">Go + MySQL</button>
+          <button type="button" class="landing-chip" data-chip="Ruby on Rails with React">Rails + React</button>
+        </div>
+
+        <div class="landing-prompt-actions">
+          <a href={`${base}examples/`} class="landing-btn landing-btn-secondary">View examples</a>
+          <button type="submit" class="landing-btn landing-btn-primary">Generate config →</button>
+        </div>
+        <p class="landing-prompt-hint">
+          Generates a complete <code class="inline-code">devenv.nix</code> via{' '}
+          <a href="https://devenv.new/">devenv.new</a>
+        </p>
+      </form>
+
+      <!-- Live preview -->
+      <div class="landing-hero-preview">
+        <div class="landing-terminal" id="preview-terminal">
+          <div class="landing-terminal-header">
+            <div class="landing-terminal-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span class="landing-terminal-title" id="preview-title">devenv.nix · preview</span>
+            <button type="button" class="landing-copy-btn" data-copy-target="preview-code">Copy</button>
+          </div>
+          <pre class="landing-terminal-body"><code
+            id="preview-code"
+            class="language-nix"
+            set:html={nix(initialPreview)}
+          /></pre>
+          <div class="landing-terminal-divider" id="preview-yaml-divider" hidden></div>
+          <div class="landing-terminal-header" id="preview-yaml-header" hidden>
+            <span class="landing-terminal-title" style="padding-left:0.75rem">devenv.yaml</span>
+            <button type="button" class="landing-copy-btn" data-copy-target="preview-yaml">Copy</button>
+          </div>
+          <pre is:raw class="landing-terminal-body" id="preview-yaml-pre" hidden><code id="preview-yaml" class="language-yaml"></code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="landing-metrics">
+      <div class="landing-metric">
+        <div class="landing-metric-value">&lt;100ms</div>
+        <div class="landing-metric-label">cached shell startup</div>
+      </div>
+      <div class="landing-metric">
+        <div class="landing-metric-value">100k+</div>
+        <div class="landing-metric-label">prebuilt packages</div>
+      </div>
+      <div class="landing-metric">
+        <div class="landing-metric-value">{languageCount}</div>
+        <div class="landing-metric-label">languages</div>
+      </div>
+      <div class="landing-metric">
+        <div class="landing-metric-value">Linux · macOS · WSL</div>
+        <div class="landing-metric-label">x64 · ARM64</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MARQUEE ============ -->
+<section class="landing-marquee-section">
+  <p class="landing-marquee-heading">Languages · Services · Tools</p>
+
+  <div class="landing-marquee">
+    <div class="landing-marquee-track">
+      {dup(langs).map(([slug, label]) => (
+        <div class="landing-marquee-item">
+          <img class="landing-marquee-icon" src={`https://cdn.simpleicons.org/${slug}/888888`} alt="" loading="lazy" width="18" height="18" />
+          <span>{label}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <div class="landing-marquee">
+    <div class="landing-marquee-track is-reverse">
+      {dup(services).map(([slug, label]) => (
+        <div class="landing-marquee-item">
+          <img class="landing-marquee-icon" src={`https://cdn.simpleicons.org/${slug}/888888`} alt="" loading="lazy" width="18" height="18" />
+          <span>{label}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <div class="landing-marquee">
+    <div class="landing-marquee-track is-slow">
+      {dup(tools).map(([slug, label]) => (
+        <div class="landing-marquee-item">
+          <img class="landing-marquee-icon" src={`https://cdn.simpleicons.org/${slug}/888888`} alt="" loading="lazy" width="18" height="18" />
+          <span>{label}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="landing-section">
+  <div class="landing-container">
+    <div class="landing-section-centered">
+      <h2 class="landing-section-title">Three commands. Done.</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        From zero to a reproducible environment your whole team can use.
+      </p>
+    </div>
+
+    <div class="landing-steps">
+      <div class="landing-step">
+        <span class="landing-step-num">1</span>
+        <p class="landing-step-title">Install</p>
+        <p class="landing-step-desc">One command. Works on Linux, macOS, and WSL.</p>
+        <CodeBlock class="landing-step-code" lang="bash" code="$ nix profile install nixpkgs#devenv" />
+      </div>
+
+      <div class="landing-step">
+        <span class="landing-step-num">2</span>
+        <p class="landing-step-title">Describe</p>
+        <p class="landing-step-desc">Write <code class="inline-code">devenv.nix</code> by hand, or generate it from a prompt above.</p>
+        <CodeBlock class="landing-step-code" lang="nix" code={`languages.rust.enable = true;
+services.postgres.enable = true;`} />
+      </div>
+
+      <div class="landing-step">
+        <span class="landing-step-num">3</span>
+        <p class="landing-step-title">Activate</p>
+        <p class="landing-step-desc">Everything available, in under 100ms after the first build.</p>
+        <CodeBlock class="landing-step-code" lang="bash" code={`$ devenv shell
+(devenv) $ cargo run`} />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BENTO ============ -->
+<section class="landing-section">
+  <div class="landing-container">
+    <div class="landing-section-centered">
+      <h2 class="landing-section-title">Everything you need in one file</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Languages, services, processes, tasks, secrets — all declarative.
+      </p>
+    </div>
+
+    <div class="landing-bento">
+      <a href={`${base}languages/`} class="landing-bento-card is-link landing-bento-2">
+        <div class="landing-bento-big-num">{languageCount}</div>
+        <p class="landing-bento-title">Languages</p>
+        <p class="landing-bento-desc">Python, Rust, Go, Node, Ruby, PHP, Java, Elixir, and more — with version pinning and LSP servers.</p>
+      </a>
+
+      <a href={`${base}services/`} class="landing-bento-card is-link landing-bento-2">
+        <p class="landing-bento-title">Services</p>
+        <p class="landing-bento-desc">{serviceCount} preconfigured services, including PostgreSQL, Redis, MySQL, RabbitMQ, MinIO, Caddy, and Elasticsearch.</p>
+        <CodeBlock class="landing-bento-mini-code" lang="nix" code={`services.postgres.enable = true;
+services.redis.enable = true;`} />
+      </a>
+
+      <a href={`${base}processes/`} class="landing-bento-card is-link landing-bento-2">
+        <p class="landing-bento-title">Processes</p>
+        <p class="landing-bento-desc">Declarative process management with logs, restarts, and dependencies. Just <code class="inline-code">devenv up</code>.</p>
+      </a>
+
+      <a href={`${base}tasks/`} class="landing-bento-card is-link landing-bento-3">
+        <p class="landing-bento-title">Tasks &amp; git hooks</p>
+        <p class="landing-bento-desc">Define dependencies, run in parallel, hook into your shell or commits. Linters, formatters, codegen.</p>
+        <CodeBlock class="landing-bento-mini-code" lang="nix" code={`tasks."app:build" = {
+  exec = "yarn build";
+  before = [ "devenv:enterShell" ];
+};`} />
+      </a>
+
+      <a href={`${base}blog/2025/07/21/announcing-secretspec-declarative-secrets-management/`} class="landing-bento-card is-link landing-bento-3">
+        <p class="landing-bento-title">SecretSpec</p>
+        <p class="landing-bento-desc">Declarative secrets from Keychain, 1Password, LastPass, dotenv. No more <code class="inline-code">.env</code> in repos.</p>
+        <CodeBlock class="landing-bento-mini-code" lang="nix" code={`secretspec.enable = true;
+services.keycloak.settings.KC_PASSWORD._secret =
+  config.secretspec.secrets.KC_PASSWORD;`} />
+      </a>
+
+      <a href={`${base}containers/`} class="landing-bento-card is-link landing-bento-2">
+        <p class="landing-bento-title">Containers</p>
+        <p class="landing-bento-desc">Build OCI containers from your dev environment. Same packages, same versions, same behavior.</p>
+      </a>
+
+      <a href={`${base}tests/`} class="landing-bento-card is-link landing-bento-2">
+        <p class="landing-bento-title">Tests</p>
+        <p class="landing-bento-desc">Run integration tests with all processes active. <code class="inline-code">devenv test</code> and done.</p>
+      </a>
+
+      <a href={`${base}basics/`} class="landing-bento-card is-link landing-bento-2">
+        <p class="landing-bento-title">Native shells</p>
+        <p class="landing-bento-desc">First-class support for <strong>bash</strong>, <strong>zsh</strong>, <strong>fish</strong>, and <strong>nushell</strong>. No wrapper, no compromise.</p>
+      </a>
+
+      <a href={`${base}ad-hoc-developer-environments/`} class="landing-bento-card is-link landing-bento-6">
+        <p class="landing-bento-title">Ad-hoc shells — zero config</p>
+        <p class="landing-bento-desc">Spin up a temporary environment without writing a <code class="inline-code">devenv.nix</code>. Great for experiments, scripts, and CI matrices.</p>
+        <CodeBlock class="landing-bento-mini-code" lang="bash" code={`$ devenv -O languages.python.enable:bool true \\
+       -O languages.python.version:string "3.12" \\
+       shell`} />
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Caching (speed bars) ============ -->
+<section class="landing-showcase">
+  <div class="landing-container">
+    <div class="landing-showcase-head">
+      <span class="landing-showcase-eyebrow">Caching</span>
+      <h2 class="landing-section-title">Warm shells in milliseconds.</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Auto-invalidated evaluation caching skips unchanged work. No daemons. No manual cache management. <a href={`${base}blog/2024/10/03/devenv-13-instant-developer-environments-with-nix-caching/`} class="landing-link">How it works.</a>
+      </p>
+    </div>
+
+    <div class="landing-stat-grid">
+      <div>
+        <p class="landing-stat-caption">Cached shell startup</p>
+        <p class="landing-stat-figure">&lt;100<span class="landing-stat-unit">ms</span></p>
+      </div>
+
+      <div class="landing-speed-bars" id="speed-bars">
+        <div class="landing-bar-row">
+          <span class="landing-bar-label">Cold</span>
+          <div class="landing-bar-track"><div class="landing-bar-fill is-cold" data-fill="100"></div></div>
+          <span class="landing-bar-value">4832 ms</span>
+        </div>
+        <div class="landing-bar-row">
+          <span class="landing-bar-label">Warm</span>
+          <div class="landing-bar-track"><div class="landing-bar-fill is-warm" data-fill="0.97"></div></div>
+          <span class="landing-bar-value">47 ms</span>
+        </div>
+        <p class="landing-speedup">Same config. <strong>~100×</strong> faster on every subsequent shell.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Composability (file tree → merged) ============ -->
+<section class="landing-showcase">
+  <div class="landing-container">
+    <div class="landing-showcase-head">
+      <span class="landing-showcase-eyebrow">Composability</span>
+      <h2 class="landing-section-title">Many environments. One shell.</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Import config across folders and repositories. <a href={`${base}composing-using-imports/`} class="landing-link">First-class monorepo support.</a>
+      </p>
+    </div>
+
+    <div class="landing-compose">
+      <div class="landing-tree">
+        <div class="landing-tree-node">
+          <div class="landing-tree-node-path">frontend/devenv.nix</div>
+          <div class="landing-tree-node-content" set:html={nix('languages.javascript.enable = true;')} />
+        </div>
+        <div class="landing-tree-node">
+          <div class="landing-tree-node-path">backend/devenv.nix</div>
+          <div class="landing-tree-node-content" set:html={nix('languages.rust.enable = true;\nservices.postgres.enable = true;')} />
+        </div>
+        <div class="landing-tree-node">
+          <div class="landing-tree-node-path">github:myorg/shared</div>
+          <div class="landing-tree-node-content" set:html={nix('services.redis.enable = true;')} />
+        </div>
+      </div>
+
+      <div class="landing-compose-arrow" aria-hidden="true">→</div>
+
+      <div class="landing-merged">
+        <div class="landing-merged-label">Unified environment</div>
+        <div class="landing-merged-cmd">$ devenv shell</div>
+        <div class="landing-merged-list">
+          <span class="landing-merged-chip">node</span>
+          <span class="landing-merged-chip">rust</span>
+          <span class="landing-merged-chip">postgres</span>
+          <span class="landing-merged-chip">redis</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Native process manager ============ -->
+<section class="landing-showcase">
+  <div class="landing-container">
+    <div class="landing-showcase-head">
+      <span class="landing-showcase-eyebrow">Native process manager</span>
+      <h2 class="landing-section-title">One <code class="inline-code">devenv up</code>. Whole stack alive.</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Built-in process supervision: <a href={`${base}processes/`} class="landing-link">dependencies, ready probes, restart policies, socket activation, automatic port allocation</a>. <a href={`${base}supported-process-managers/`} class="landing-link">Or swap in process-compose, overmind, mprocs.</a>
+      </p>
+    </div>
+
+    <div class="landing-proc-grid">
+      <div class="landing-proc-card">
+        <div class="landing-proc-card-head">
+          <span class="landing-proc-name">postgres</span>
+          <span class="landing-status-pill is-running">running</span>
+        </div>
+        <div class="landing-proc-meta">port :5432 · uptime 3m 12s</div>
+        <div class="landing-proc-feat">ready probe: <code>pg_isready</code></div>
+      </div>
+
+      <div class="landing-proc-card">
+        <div class="landing-proc-card-head">
+          <span class="landing-proc-name">redis</span>
+          <span class="landing-status-pill is-running">running</span>
+        </div>
+        <div class="landing-proc-meta">port :6379 · uptime 3m 12s</div>
+        <div class="landing-proc-feat">restart: <code>on-failure</code></div>
+      </div>
+
+      <div class="landing-proc-card">
+        <div class="landing-proc-card-head">
+          <span class="landing-proc-name">migrate</span>
+          <span class="landing-status-pill is-ready">completed</span>
+        </div>
+        <div class="landing-proc-meta">one-shot · exit 0</div>
+        <div class="landing-proc-feat">after: <code>postgres</code></div>
+      </div>
+
+      <div class="landing-proc-card is-highlight">
+        <div class="landing-proc-card-head">
+          <span class="landing-proc-name">api</span>
+          <span class="landing-status-pill is-running">running</span>
+        </div>
+        <div class="landing-proc-meta">port :8080 · uptime 3m 09s</div>
+        <div class="landing-proc-feat">after: <code>postgres</code>, <code>redis</code>, <code>migrate</code></div>
+        <div class="landing-proc-feat">socket activation · zero-downtime reload</div>
+      </div>
+    </div>
+
+    <p class="landing-proc-footnote">
+      Declared once in <code class="inline-code">devenv.nix</code>. Started, ordered, restarted, and stopped by the native supervisor.
+    </p>
+  </div>
+</section>
+
+<!-- ============ SecretSpec (provider switcher) ============ -->
+<section class="landing-showcase">
+  <div class="landing-container">
+    <div class="landing-showcase-head">
+      <span class="landing-showcase-eyebrow">SecretSpec</span>
+      <h2 class="landing-section-title">Declare a secret. Swap the source.</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Same code reads from Keychain, 1Password, dotenv, or env. <a href={`${base}blog/2025/07/21/announcing-secretspec-declarative-secrets-management/`} class="landing-link">No <code class="inline-code">.env</code> in repos.</a>
+      </p>
+    </div>
+
+    <div class="landing-secret">
+      <div>
+        <div class="landing-provider-tabs" id="secret-tabs">
+          <button type="button" class="landing-provider-tab is-active" data-provider="keychain">Keychain</button>
+          <button type="button" class="landing-provider-tab" data-provider="onepassword">1Password</button>
+          <button type="button" class="landing-provider-tab" data-provider="lastpass">LastPass</button>
+          <button type="button" class="landing-provider-tab" data-provider="dotenv">.env</button>
+          <button type="button" class="landing-provider-tab" data-provider="env">env</button>
+        </div>
+
+        <div class="landing-terminal">
+          <div class="landing-terminal-header">
+            <div class="landing-terminal-dots"><span></span><span></span><span></span></div>
+            <span class="landing-terminal-title">secretspec.toml</span>
+          </div>
+          <CodeBlock class="landing-terminal-body" lang="toml" code={`[project]
+name = "my-app"
+
+[profiles.default]
+DATABASE_URL = { required = true }
+STRIPE_SECRET_KEY = { required = true }`} />
+        </div>
+      </div>
+
+      <div class="landing-secret-flow">
+        <div class="landing-secret-step is-source">
+          <span aria-hidden="true">🔐</span>
+          <span>Source: <strong id="secret-provider-name">macOS Keychain</strong></span>
+        </div>
+        <div class="landing-secret-arrow" aria-hidden="true">↓</div>
+        <div class="landing-secret-step">
+          <span aria-hidden="true">📄</span>
+          <span><strong>secretspec.toml</strong> declares <code class="inline-code">DATABASE_URL</code></span>
+        </div>
+        <div class="landing-secret-arrow" aria-hidden="true">↓</div>
+        <div class="landing-secret-step">
+          <span aria-hidden="true">🐚</span>
+          <span><code class="inline-code">$ devenv shell</code> — secret injected at runtime</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Packaging (pipeline) ============ -->
+<section class="landing-showcase">
+  <div class="landing-container">
+    <div class="landing-showcase-head">
+      <span class="landing-showcase-eyebrow">Packaging</span>
+      <h2 class="landing-section-title">From dev shell to deployable artifact.</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Same languages, same versions, same packages. <a class="landing-link" href={`${base}outputs/`}>Define outputs</a> and ship a Nix derivation.
+      </p>
+    </div>
+
+    <div class="landing-pipeline">
+      <div class="landing-pipe-card">
+        <div class="landing-pipe-label">1 · Declare</div>
+        <div class="landing-pipe-title">devenv.nix</div>
+        <CodeBlock class="landing-pipe-code" lang="nix" code={`languages.rust.enable = true;
+outputs.app =
+  config.languages.rust.import ./.;`} />
+      </div>
+
+      <div class="landing-pipe-arrow" aria-hidden="true">→</div>
+
+      <div class="landing-pipe-card">
+        <div class="landing-pipe-label">2 · Build</div>
+        <div class="landing-pipe-title">devenv build</div>
+        <CodeBlock class="landing-pipe-code" lang="bash" code={`$ devenv build outputs.app
+• Built /nix/store/...-app
+in 12.4s`} />
+      </div>
+
+      <div class="landing-pipe-arrow" aria-hidden="true">→</div>
+
+      <div class="landing-pipe-card is-final">
+        <div class="landing-pipe-label">3 · Ship</div>
+        <div class="landing-pipe-title">OCI image · Nix store · CI</div>
+        <CodeBlock class="landing-pipe-code" lang="bash" code={`$ devenv container build app
+$ docker push myorg/app:v1`} />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Community ============ -->
+<section class="landing-section">
+  <div class="landing-container">
+    <div class="landing-section-centered">
+      <h2 class="landing-section-title">Built in the open</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Active community, frequent releases, and a growing ecosystem of services and languages.
+      </p>
+    </div>
+
+    <div class="landing-community">
+      <a href="https://github.com/cachix/devenv" class="landing-community-card">
+        <span class="landing-community-stat">GitHub</span>
+        <span class="landing-community-label">Star &amp; contribute</span>
+        <span class="landing-community-desc">Read the source, file an issue, send a PR. MIT licensed.</span>
+      </a>
+      <a href="https://discord.gg/naMgvexb6q" class="landing-community-card">
+        <span class="landing-community-stat">Discord</span>
+        <span class="landing-community-label">Chat with the team</span>
+        <span class="landing-community-desc">Get help, share setups, follow what's coming next.</span>
+      </a>
+      <a href={`${base}blog/`} class="landing-community-card">
+        <span class="landing-community-stat">Blog</span>
+        <span class="landing-community-label">What's new</span>
+        <span class="landing-community-desc">Release notes, design deep-dives, and case studies.</span>
+      </a>
+      <a href="https://github.com/cachix/devenv/tree/main/examples" class="landing-community-card">
+        <span class="landing-community-stat">Examples</span>
+        <span class="landing-community-label">Ready-made setups</span>
+        <span class="landing-community-desc">Copy a working <code class="inline-code">devenv.nix</code> for your stack.</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Final CTA ============ -->
+<section class="landing-section">
+  <div class="landing-container">
+    <div class="landing-cta-card">
+      <h2 class="landing-section-title">Start building.</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Set up your first environment in minutes — or generate one from the hero above.
+      </p>
+      <div class="landing-hero-actions">
+        <a href={`${base}getting-started/`} class="landing-btn landing-btn-primary">Get Started</a>
+        <a href="https://github.com/cachix/devenv" class="landing-btn landing-btn-secondary">View on GitHub</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+  // @ts-nocheck
+  // ── Live preview generator ──
+  (function () {
+    var input = document.getElementById('prompt-input');
+    var output = document.getElementById('preview-code');
+    var form = document.getElementById('generate');
+    var chips = document.querySelectorAll('[data-chip]');
+    if (!input || !output || !form) return;
+
+    var LANGS = {
+      rust:        { test: /\b(rust|cargo|rustc)\b/i,                              key: 'rust',       extra: 'channel = "stable";' },
+      python:      { test: /\b(python|django|flask|fastapi|pytorch|torch|uv|pip|ml|machine learning|scikit)\b/i, key: 'python',     extra: 'version = "3.12";\n    venv.enable = true;' },
+      javascript:  { test: /\b(node|node\.js|nodejs|javascript|js|react|vue|svelte|next|nest|express)\b/i,       key: 'javascript', extra: 'package = pkgs.nodejs_22;' },
+      typescript:  { test: /\btypescript|ts\b/i,                                    key: 'typescript', extra: '' },
+      go:          { test: /\b(go|golang)\b/i,                                      key: 'go',         extra: '' },
+      ruby:        { test: /\b(ruby|rails)\b/i,                                     key: 'ruby',       extra: 'version = "3.3";' },
+      php:         { test: /\bphp|laravel|symfony\b/i,                              key: 'php',        extra: '' },
+      java:        { test: /\b(java|kotlin|gradle|maven|spring)\b/i,                key: 'java',       extra: '' },
+      elixir:      { test: /\b(elixir|phoenix)\b/i,                                 key: 'elixir',     extra: '' },
+      haskell:     { test: /\bhaskell\b/i,                                          key: 'haskell',    extra: '' },
+      c:           { test: /\b(c\+\+|cpp|clang|gcc)\b/i,                            key: 'c',          extra: '' },
+    };
+
+    var SERVICES = {
+      postgres:      { test: /\b(postgres|postgresql|pgsql|pg)\b/i,           key: 'postgres',      extra: 'initialDatabases = [{ name = "app"; }];' },
+      mysql:         { test: /\b(mysql|mariadb)\b/i,                          key: 'mysql',         extra: '' },
+      redis:         { test: /\bredis|cache\b/i,                              key: 'redis',         extra: '' },
+      mongodb:       { test: /\bmongo|mongodb\b/i,                            key: 'mongodb',       extra: '' },
+      elasticsearch: { test: /\b(elastic|elasticsearch|opensearch)\b/i,       key: 'elasticsearch', extra: '' },
+      rabbitmq:      { test: /\brabbit|rabbitmq|amqp\b/i,                     key: 'rabbitmq',      extra: '' },
+      minio:         { test: /\bminio|s3\b/i,                                 key: 'minio',         extra: '' },
+      caddy:         { test: /\bcaddy|nginx|reverse proxy\b/i,                key: 'caddy',         extra: '' },
+      nats:          { test: /\bnats\b/i,                                     key: 'nats',          extra: '' },
+      meilisearch:   { test: /\bmeili|meilisearch|search engine\b/i,          key: 'meilisearch',   extra: '' },
+    };
+
+    var PACKAGES = {
+      'cargo-watch': /\b(watch|hot reload|live reload)\b/i,
+      'docker':      /\bdocker|container\b/i,
+      'jq':          /\bjq|json\b/i,
+      'ripgrep':     /\bripgrep|rg|grep\b/i,
+      'awscli2':     /\baws\b/i,
+      'terraform':   /\bterraform|tf\b/i,
+    };
+
+    function build(q) {
+      var langs = [];
+      Object.keys(LANGS).forEach(function (k) {
+        if (LANGS[k].test.test(q)) langs.push(LANGS[k]);
+      });
+
+      var services = [];
+      Object.keys(SERVICES).forEach(function (k) {
+        if (SERVICES[k].test.test(q)) services.push(SERVICES[k]);
+      });
+
+      var packages = [];
+      Object.keys(PACKAGES).forEach(function (k) {
+        if (PACKAGES[k].test(q)) packages.push(k);
+      });
+
+      // Default state
+      if (langs.length === 0 && services.length === 0 && packages.length === 0) {
+        return '{ pkgs, ... }: {\n  languages.rust.enable = true;\n\n  services.postgres = {\n    enable = true;\n    initialDatabases = [{ name = "app"; }];\n  };\n\n  packages = [ pkgs.cargo-watch ];\n}';
+      }
+
+      var parts = ['{ pkgs, ... }: {'];
+
+      langs.forEach(function (l) {
+        if (l.extra) {
+          parts.push('  languages.' + l.key + ' = {');
+          parts.push('    enable = true;');
+          l.extra.split('\n').forEach(function (line) {
+            parts.push('    ' + line);
+          });
+          parts.push('  };');
+        } else {
+          parts.push('  languages.' + l.key + '.enable = true;');
+        }
+        parts.push('');
+      });
+
+      services.forEach(function (s) {
+        if (s.extra) {
+          parts.push('  services.' + s.key + ' = {');
+          parts.push('    enable = true;');
+          parts.push('    ' + s.extra);
+          parts.push('  };');
+        } else {
+          parts.push('  services.' + s.key + '.enable = true;');
+        }
+        parts.push('');
+      });
+
+      if (packages.length > 0) {
+        parts.push('  packages = [');
+        packages.forEach(function (p) {
+          parts.push('    pkgs.' + p);
+        });
+        parts.push('  ];');
+      }
+
+      // trim trailing blank
+      while (parts[parts.length - 1] === '') parts.pop();
+
+      parts.push('}');
+      return parts.join('\n');
+    }
+
+    var hlPromise;
+    var themeNames;
+    function getHighlighter() {
+      if (!hlPromise) {
+        hlPromise = Promise.all([
+          import('@shikijs/core'),
+          import('@shikijs/engine-oniguruma'),
+          import('@shikijs/langs/nix'),
+          import('@shikijs/langs/yaml'),
+          import('../lib/code-themes'),
+        ]).then(function (m) {
+          var core = m[0], onig = m[1], nix = m[2], yaml = m[3], themes = m[4];
+          themeNames = themes.codeThemeNames;
+          return core.createHighlighterCore({
+            themes: themes.codeThemes,
+            langs: [nix.default, yaml.default],
+            engine: onig.createOnigurumaEngine(import('shiki/wasm')),
+          });
+        });
+      }
+      return hlPromise;
+    }
+
+    function setNix(text) {
+      output.textContent = text;
+      output.classList.add('is-ready');
+      getHighlighter()
+        .then(function (hl) {
+          output.innerHTML = hl.codeToHtml(text, {
+            lang: 'nix',
+            themes: themeNames,
+            defaultColor: false,
+            structure: 'inline',
+          });
+        })
+        .catch(function () {
+          // The readable plain-text preview is already rendered.
+        });
+    }
+
+    function update() {
+      var q = (input.value || input.placeholder || '').trim();
+      setNix(build(q));
+    }
+
+    input.addEventListener('input', update);
+
+    // Chips fill input
+    chips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        input.value = chip.getAttribute('data-chip') || '';
+        input.focus();
+        update();
+      });
+    });
+
+    // Submit → API call, render inline
+    var submitBtn = form.querySelector('button[type="submit"]');
+    var preview = document.getElementById('preview-terminal');
+    var title = document.getElementById('preview-title');
+    var yamlPre = document.getElementById('preview-yaml-pre');
+    var yamlCode = document.getElementById('preview-yaml');
+    var yamlHeader = document.getElementById('preview-yaml-header');
+    var yamlDivider = document.getElementById('preview-yaml-divider');
+
+    function showYaml(text) {
+      if (text && text.trim() && !/^# See/.test(text.trim())) {
+        yamlCode.textContent = text;
+        yamlPre.hidden = false;
+        yamlHeader.hidden = false;
+        yamlDivider.hidden = false;
+        getHighlighter()
+          .then(function (hl) {
+            yamlCode.innerHTML = hl.codeToHtml(text, {
+              lang: 'yaml',
+              themes: themeNames,
+              defaultColor: false,
+              structure: 'inline',
+            });
+          })
+          .catch(function () {
+            // The readable plain-text preview is already rendered.
+          });
+      } else {
+        yamlPre.hidden = true;
+        yamlHeader.hidden = true;
+        yamlDivider.hidden = true;
+      }
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var q = input.value.trim();
+      if (!q) {
+        input.focus();
+        return;
+      }
+
+      var originalText = submitBtn.textContent;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Generating…';
+      title.textContent = 'devenv.nix · generating…';
+      setNix('# Talking to devenv.new …\n');
+
+      // Dev: route through Vite proxy to avoid CORS. Prod: hit devenv.new directly (requires CORS headers there).
+      var apiBase = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+        ? '/__devenv_api'
+        : 'https://devenv.new';
+
+      fetch(apiBase + '/api/generate?q=' + encodeURIComponent(q), {
+        method: 'POST',
+        mode: 'cors',
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          setNix(data.devenv_nix || '');
+          showYaml(data.devenv_yaml || '');
+          title.textContent = 'devenv.nix · generated';
+        })
+        .catch(function () {
+          // CORS or network — fall back to opening devenv.new in new tab
+          title.textContent = 'devenv.nix · opening devenv.new…';
+          setNix('# Could not generate inline (CORS).\n# Opening devenv.new in a new tab…\n');
+          window.open('https://devenv.new/?q=' + encodeURIComponent(q), '_blank', 'noopener');
+        })
+        .finally(function () {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        });
+    });
+
+    // The initial preview is highlighted at build time. Subsequent edits use
+    // the browser highlighter through the input listener above.
+  })();
+
+  // ── Speed bars animate on view ──
+  (function () {
+    var container = document.getElementById('speed-bars');
+    if (!container) return;
+    var fills = container.querySelectorAll('.landing-bar-fill');
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        fills.forEach(function (el) {
+          var pct = parseFloat(el.getAttribute('data-fill') || '0');
+          el.style.width = pct + '%';
+        });
+        observer.disconnect();
+      });
+    }, { threshold: 0.3 });
+    observer.observe(container);
+  })();
+
+  // ── Secret provider switcher ──
+  (function () {
+    var tabs = document.querySelectorAll('#secret-tabs .landing-provider-tab');
+    var name = document.getElementById('secret-provider-name');
+    if (!tabs.length || !name) return;
+    var labels = {
+      keychain:    'macOS Keychain',
+      onepassword: '1Password vault',
+      lastpass:    'LastPass vault',
+      dotenv:      '.env file',
+      env:         'Environment variables',
+    };
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        tabs.forEach(function (t) { t.classList.remove('is-active'); });
+        tab.classList.add('is-active');
+        var key = tab.getAttribute('data-provider') || 'keychain';
+        name.textContent = labels[key] || key;
+      });
+    });
+  })();
+
+  // ── Copy buttons ──
+  (function () {
+    var buttons = document.querySelectorAll('.landing-copy-btn');
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var target = document.getElementById(btn.getAttribute('data-copy-target') || '');
+        if (!target) return;
+        var text = target.textContent || '';
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(function () {
+            btn.textContent = 'Copied';
+            btn.classList.add('is-copied');
+            setTimeout(function () {
+              btn.textContent = 'Copy';
+              btn.classList.remove('is-copied');
+            }, 1500);
+          });
+        }
+      });
+    });
+  })();
+</script>
+
+</StarlightPage>

@@ -121,7 +121,8 @@ in
       };
       description = ''
         CouchDB configuration.
-        https://docs.couchdb.org/en/stable/config/couchdb.html
+        To learn more about all settings, see the
+        [CouchDB configuration reference](https://docs.couchdb.org/en/stable/config/couchdb.html).
       '';
 
       example = lib.literalExpression ''

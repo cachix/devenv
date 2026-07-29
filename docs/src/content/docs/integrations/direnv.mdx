@@ -1,0 +1,157 @@
+---
+status: deprecated
+title: "Direnv"
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+
+
+:::tip[devenv now supports native auto activation without direnv]
+As of devenv 2.0, `devenv shell` supports **native shell reloading** and
+[`devenv hook`](/auto-activation/) provides **automatic activation when switching directories**
+with no external dependencies.
+
+For most workflows, `devenv shell` combined with `devenv hook` is the recommended approach.
+direnv is still useful if you prefer in place environment modification without a subshell.
+
+See the [auto activation guide](/auto-activation/) for setup instructions.
+:::
+
+
+You can configure ``devenv`` to **seamlessly switch development environments** when navigating between project directories.
+
+This feature relies on a separate tool called [direnv](https://direnv.net) (not to be confused with devenv).
+
+## Installing ``direnv``
+
+2. [Add the direnv hook to your shell](https://direnv.net/docs/hook.html)
+
+## Configure shell activation
+
+Create an `.envrc` file in your project directory with the following content:
+
+<Tabs>
+  <TabItem label="v1.4+">
+    ``` bash title=".envrc"
+    #!/usr/bin/env bash
+
+    eval "$(devenv direnvrc)"
+
+    # You can pass flags to the devenv command
+    # For example: use devenv --impure --option services.postgres.enable:bool true
+    use devenv
+    ```
+  </TabItem>
+  <TabItem label="v1.3 and older">
+    ``` bash title=".envrc"
+    #!/usr/bin/env bash
+
+    source_url "https://raw.githubusercontent.com/cachix/devenv/82c0147677e510b247d8b9165c54f73d32dfd899/direnvrc" "sha256-7u4iDd1nZpxL4tCzmPG0dQgC5V+/44Ba+tHkPob1v2k="
+
+    use devenv
+    ```
+  </TabItem>
+</Tabs>
+
+
+This file configures direnv to use devenv for shell activation.
+
+:::note
+`devenv init` does not create a `.envrc` file by default.
+:::
+
+
+:::tip[New in version 2.2]
+Use `devenv init --include-envrc` to include an `.envrc` file. On earlier versions, create it manually using the snippet above.
+:::
+
+
+## Approving and loading the shell
+
+Once the `.envrc` file is in place, you'll see a warning in your shell:
+
+```
+direnv: error ~/myproject/.envrc is blocked. Run `direnv allow` to approve its content
+```
+
+Run `direnv allow` to approve the `.envrc` file. This step is a security measure to ensure you've reviewed the content before allowing it to modify your shell environment.
+
+After approval, direnv will automatically load and unload the devenv environment whenever you enter and exit the project directory:
+
+```sh
+$ cd /home/user/myproject/
+direnv: loading ~/myproject/.envrc
+Building shell ...
+Entering shell ...
+
+(devenv) $
+```
+
+## Passing flags to devenv
+
+You can pass command-line options directly to devenv by adding them after the `use devenv` command in your `.envrc` file:
+
+```bash
+# Example: override configuration options
+use devenv --option services.postgres.enable:bool true
+```
+
+## Customizing PS1
+
+If you'd like to use direnv and have your prompt be aware of it,
+we recommend [installing Starship](https://starship.rs/guide/).
+
+## Ignoring the `.direnv` directory
+
+The `.direnv` directory will be added to your `.gitignore` file by default when you run `devenv init`.
+
+To add it manually, run:
+
+```sh
+echo ".direnv" >> .gitignore
+```
+
+## Manually managing updates to direnvrc
+
+We occasionally make updates to our direnv integration script, also known as the `direnvrc`.
+
+From v1.4 and onwards, devenv will use the latest compatible version if set up using the latest method described above in [Configure Shell Activation](#configure-shell-activation).
+For older versions, the pinned script has to be updated manually.
+
+Pinning the `direnvrc` to a specific version from the source repository allows you audit the `direnvrc` script and have full control over when it is updated.
+The downside is that you will have to manually update the URL and content hash of the script for every single project individually.
+
+{/* We strongly recommend using the approach that supports automated upgrades described in [Configure Shell Activation](#configure-shell-activation). */}
+
+The `direnvrc` can be found at:
+
+```text
+https://raw.githubusercontent.com/cachix/devenv/VERSION/devenv/direnvrc
+```
+
+Replace `VERSION` with a valid git tag or branch name.
+
+For instance, for version 1.9.2, use:
+
+```text
+https://raw.githubusercontent.com/cachix/devenv/v1.9.2/devenv/direnvrc
+```
+
+To use it in your `.envrc`, first compute its sha256 hash:
+
+```sh
+direnv fetchurl "https://raw.githubusercontent.com/cachix/devenv/VERSION/devenv/direnvrc"
+```
+
+```sh
+Found hash: <HASH>
+```
+
+Then modify your `.envrc`, updating the URL and inserting the computed hash from the previous step:
+
+```bash
+source_url "https://raw.githubusercontent.com/cachix/devenv/VERSION/devenv/direnvrc" "<HASH>"
+
+use devenv
+```

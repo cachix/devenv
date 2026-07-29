@@ -1,0 +1,220 @@
+---
+title: "wiremock"
+---
+
+<!-- Do not edit this generated file. Edit docs/src/individual-docs instead. -->
+
+
+
+[comment]: # (Please add your documentation on top of this line)
+
+## Options
+
+### services.wiremock.enable
+
+
+
+Whether to enable WireMock.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
+
+
+### services.wiremock.package
+
+
+
+Which package of WireMock to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.wiremock
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
+
+
+### services.wiremock.disableBanner
+
+Whether to disable print banner logo.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
+
+
+### services.wiremock.mappings
+
+
+
+The mappings to mock.
+See the JSON examples on [https://wiremock.org/docs/stubbing/](https://wiremock.org/docs/stubbing/) for more information.
+
+
+
+*Type:*
+JSON value
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  {
+    request = {
+      method = "GET";
+      url = "/body";
+    };
+    response = {
+      body = "Literal text to put in the body";
+      headers = {
+        Content-Type = "text/plain";
+      };
+      status = 200;
+    };
+  }
+  {
+    request = {
+      method = "GET";
+      url = "/json";
+    };
+    response = {
+      jsonBody = {
+        someField = "someValue";
+      };
+      status = 200;
+    };
+  }
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
+
+
+### services.wiremock.port
+
+
+
+The port number for the HTTP server to listen on.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+8080
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
+
+
+### services.wiremock.rootDir
+
+
+
+Path to the WireMock root directory containing mappings and files.
+Cannot be set together with ` mappings `.
+See [https://wiremock.org/docs/standalone/java-jar/#command-line-options](https://wiremock.org/docs/standalone/java-jar/#command-line-options) for more information.
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
+
+
+### services.wiremock.verbose
+
+
+
+Whether to log verbosely to stdout.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)

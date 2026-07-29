@@ -1,0 +1,113 @@
+---
+title: "dynamodb-local"
+---
+
+<!-- Do not edit this generated file. Edit docs/src/individual-docs instead. -->
+
+
+
+[comment]: # (Please add your documentation on top of this line)
+
+## Options
+
+### services.dynamodb-local.enable
+
+Whether to enable DynamoDB Local.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
+
+
+### services.dynamodb-local.package
+
+
+
+Which package of DynamoDB to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.dynamodb-local
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
+
+
+### services.dynamodb-local.port
+
+
+
+Listen port for DynamoDB Local.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+8000
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
+
+
+### services.dynamodb-local.sharedDb
+
+
+
+If true, enables the -sharedDb flag for DynamoDB Local.
+When enabled, DynamoDB Local creates a single database file named shared-local-instance.db.
+Every program that connects to DynamoDB accesses this file. If you delete the file, you lose any data stored in it.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)

@@ -1,0 +1,18 @@
+# URLs retained from earlier versions of the documentation site.
+/guides/migrating-to-2.0/ /guides/migrating-to-20/ 301
+/automatic-shell-activation/ /auto-activation/ 301
+/blog/2023/03/20/devenv-10-rewrite-in-rust/ /blog/2024/03/20/devenv-10-rewrite-in-rust/ 301
+/blog/2024/10/22/devenv-is-switching-nix-implementation-to-tvix/ /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/ 301
+/blog/page/2/ /blog/2/ 301
+/blog/page/3/ /blog/3/ 301
+/blog/archive/* /blog/ 301
+/pre-commit-hooks/ /git-hooks/ 301
+/roadmap/ /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/ 302
+/discord https://discord.gg/naMgvexb6q 302
+/guides/profiles /profiles/ 301
+/common-patterns /recipes/nix/ 301
+/common-patterns/ /recipes/nix/ 301
+/supported-languages/* /languages/:splat 301
+/languages.md /languages/ 301
+/supported-services/* /services/:splat 301
+/services.md /services/ 301

@@ -1,0 +1,365 @@
+@import 'tailwindcss';
+@import '@astrojs/starlight-tailwind';
+
+@theme {
+  /* devenv slate-blue scale, anchored to logo #425c81 (H217 S32 L38) */
+  --color-accent-50:  #f1f4f9;
+  --color-accent-100: #dde4ee;
+  --color-accent-200: #bccbde;
+  --color-accent-300: #92a7c4;
+  --color-accent-400: #6b85aa;
+  --color-accent-500: #52708f;
+  --color-accent-600: #425c81;
+  --color-accent-700: #384c6a;
+  --color-accent-800: #2e3d54;
+  --color-accent-900: #1f2a3b;
+  --color-accent-950: #131a26;
+
+  --color-gray-100: #f5f6f8;
+  --color-gray-200: #eceef2;
+  --color-gray-300: #c0c2c7;
+  --color-gray-400: #888b96;
+  --color-gray-500: #555860;
+  --color-gray-700: #353841;
+  --color-gray-800: #24272f;
+  --color-gray-900: #17191e;
+}
+
+/* ── Navbar: translucent + blurred so the hero grid shows through ── */
+header.header {
+  background: color-mix(in srgb, var(--sl-color-bg) 60%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: none;
+}
+
+/* ── Typography + spacing ── */
+:root {
+  --sl-text-base: 0.9375rem;
+  --sl-text-sm: 0.8125rem;
+  --sl-text-xs: 0.75rem;
+  --sl-text-h1: 1.875rem;
+  --sl-text-h2: 1.375rem;
+  --sl-text-h3: 1.125rem;
+  --sl-text-h4: 1rem;
+  --sl-text-h5: 0.9375rem;
+  --sl-line-height: 1.6;
+  --sl-line-height-headings: 1.25;
+  --sl-nav-height: 3.75rem;
+  --sl-nav-pad-y: 0.65rem;
+  --sl-sidebar-width: 15.5rem;
+  --sl-content-width: 50rem;
+  --sl-text-code: 0.8125rem;
+  --sl-text-code-sm: 0.75rem;
+}
+
+/* ── Sidebar styling (unlayered so it beats Starlight's @layer starlight.core) ── */
+.sidebar-content a {
+  font-size: 0.8125rem;
+  padding-block: 0.25rem;
+  border-radius: 6px;
+  transition: none;
+  color: var(--sl-color-gray-2);
+}
+.sidebar-content :is(a, summary):focus {
+  outline: none;
+  box-shadow: none;
+}
+.sidebar-content :is(a, summary):focus-visible {
+  outline: 2px solid var(--sl-color-gray-5);
+  outline-offset: -2px;
+}
+
+/* Group label: lighter for inactive groups, darker for the active group */
+.sidebar-content .group-label > .large,
+.sidebar-content .group-label > span {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sl-color-gray-3);
+}
+.sidebar-content details:has(a[aria-current='page']) > summary .group-label > .large,
+.sidebar-content details:has(a[aria-current='page']) > summary .group-label > span {
+  color: var(--sl-color-white);
+  font-weight: 600;
+}
+[data-theme='light'] .sidebar-content details:has(a[aria-current='page']) > summary .group-label > .large,
+[data-theme='light'] .sidebar-content details:has(a[aria-current='page']) > summary .group-label > span {
+  color: var(--sl-color-gray-1);
+}
+
+.sidebar-content summary {
+  padding-block: 0.2rem;
+}
+.sidebar-content .top-level,
+.sidebar-content ul {
+  gap: 0;
+}
+.sidebar-content .top-level > li {
+  margin-block: 0;
+}
+.sidebar-content .top-level > li + li {
+  margin-top: 0.125rem;
+}
+
+/* Active item: rounded grey bg. Beats Starlight default accent bg. */
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+  background-color: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+  font-weight: 500;
+  border-radius: 6px;
+}
+[data-theme='light'] .sidebar-content a[aria-current='page'],
+[data-theme='light'] .sidebar-content a[aria-current='page']:hover,
+[data-theme='light'] .sidebar-content a[aria-current='page']:focus {
+  background-color: var(--sl-color-gray-6);
+  color: var(--sl-color-gray-1);
+}
+
+/* Sidebar collapse animation.
+   Uses ::details-content (Chrome 131+, Safari 18.2+, Firefox 133+) with
+   interpolate-size to transition block-size auto<->0. Falls back to no
+   animation in older browsers — details still toggles. */
+@supports (interpolate-size: allow-keywords) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+}
+
+.sidebar-content details::details-content {
+  block-size: 0;
+  overflow: hidden;
+  transition:
+    block-size 200ms ease,
+    content-visibility 200ms ease allow-discrete;
+}
+.sidebar-content details[open]::details-content {
+  block-size: auto;
+}
+
+/* ── Logo ── */
+.site-title img {
+  max-height: 1.25rem;
+  width: auto;
+}
+
+/* ── Search button: compact on mobile, full size at lg+ ──
+   Pre-render kbd to avoid layout shift. */
+site-search button[data-open-modal] {
+  min-width: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  font-size: 0.8125rem;
+  border-radius: 0.375rem;
+  justify-content: center;
+}
+/* Hide label text + shortcut hint on small screens (icon-only). */
+site-search button[data-open-modal] > :not(svg) {
+  display: none !important;
+}
+site-search button[data-open-modal] kbd {
+  display: none !important;
+}
+
+@media (min-width: 64rem) {
+  site-search button[data-open-modal] {
+    min-width: 16rem;
+    max-width: 18rem;
+    width: auto;
+    padding-block: 0.25rem;
+    padding-inline: 0.75rem;
+    justify-content: flex-start;
+  }
+  site-search button[data-open-modal] > :not(svg) {
+    display: revert !important;
+  }
+  site-search button[data-open-modal] kbd {
+    display: flex !important;
+  }
+}
+
+/* ── Social icons: neutral grey, accent on hover ── */
+.social-icons a {
+  color: var(--sl-color-gray-3);
+}
+.social-icons a:hover {
+  color: var(--sl-color-white);
+}
+[data-theme='light'] .social-icons a:hover {
+  color: var(--sl-color-gray-1);
+}
+
+/* ── Content typography ── */
+.sl-markdown-content :is(h1, h2, h3, h4, h5) {
+  letter-spacing: -0.015em;
+}
+.sl-markdown-content h1 { margin-bottom: 1.25rem; }
+.sl-markdown-content h2 { margin-top: 2.5rem; }
+.sl-markdown-content h3 { margin-top: 1.75rem; }
+
+/* ── Inline code ── */
+.sl-markdown-content :not(pre) > code {
+  background-color: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 4px;
+  font-size: 0.8125em;
+  padding: 0.05em 0.35em;
+  font-weight: 400;
+}
+[data-theme='light'] .sl-markdown-content :not(pre) > code {
+  background-color: #f4f5f7;
+  color: #1f2933;
+  border-color: #e4e7eb;
+}
+
+/* ── Code blocks ── */
+.expressive-code .frame pre {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.expressive-code .frame pre code {
+  padding-block: 0.85rem;
+}
+
+/* ── On this page ── */
+.right-sidebar-panel h2 {
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sl-color-gray-3);
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.right-sidebar-panel a {
+  font-size: 0.8125rem;
+  color: var(--sl-color-gray-2);
+  padding-block: 0.2rem;
+}
+.right-sidebar-panel a[aria-current='true'] {
+  color: var(--sl-color-accent);
+  font-weight: 500;
+}
+
+/* ── Tabs ── */
+starlight-tabs [role='tab'] {
+  font-size: 0.875rem;
+  padding-block: 0.5rem;
+}
+
+/* ── Site footer (every page) ── */
+.site-footer {
+  border-top: 1px solid var(--sl-color-hairline);
+  padding-block: 2.5rem 1.25rem;
+  font-size: 0.875rem;
+}
+.site-footer-inner {
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+.site-footer-cols {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(4, 1fr);
+  gap: 2.5rem;
+}
+@media (max-width: 60rem) {
+  .site-footer-cols {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+  }
+}
+@media (max-width: 30rem) {
+  .site-footer-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.site-footer-brand {
+  max-width: 18rem;
+}
+.site-footer-title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+  color: var(--sl-color-white);
+}
+:where([data-theme='light']) .site-footer-title {
+  color: var(--sl-color-gray-1);
+}
+.site-footer-desc {
+  margin: 0;
+  color: var(--sl-color-gray-3);
+  line-height: 1.5;
+}
+.site-footer-heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  margin: 0 0 0.75rem;
+}
+.site-footer-col ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.site-footer-col a {
+  color: var(--sl-color-gray-2);
+  text-decoration: none;
+}
+.site-footer-col a:hover {
+  color: var(--sl-color-white);
+}
+:where([data-theme='light']) .site-footer-col a:hover {
+  color: var(--sl-color-gray-1);
+}
+.site-footer-social a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.site-footer-social svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+.site-footer-bottom {
+  margin-top: 4.5rem;
+  color: var(--sl-color-gray-3);
+  font-size: 0.8125rem;
+}
+.site-footer-bottom p {
+  margin: 0;
+}
+
+/* ── Reference options page: skip rendering offscreen option blocks. ── */
+.option-block {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+  margin-block: 0.5rem 1.25rem;
+}
+.option-block h3 {
+  margin-top: 0.5rem;
+}
+.opt-pre {
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  overflow-x: auto;
+  margin-block: 0.5rem;
+}
+[data-theme='light'] .opt-pre {
+  background: #f4f5f7;
+  border-color: #e4e7eb;
+  color: #1f2933;
+}

@@ -1,0 +1,22 @@
+---
+import { getHighlighter } from '../lib/highlighter';
+import { codeThemeNames } from '../lib/code-themes';
+
+interface Props {
+  code: string;
+  lang?: string;
+  class?: string;
+}
+
+const { code, lang = 'nix', class: className = '' } = Astro.props;
+
+const hl = await getHighlighter();
+const html = hl.codeToHtml(code, {
+  lang,
+  themes: codeThemeNames,
+  defaultColor: false,
+  structure: 'inline',
+});
+---
+
+<pre class:list={['landing-code-hl', className]}><code set:html={html} /></pre>
