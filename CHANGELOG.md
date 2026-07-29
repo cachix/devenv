@@ -2,6 +2,10 @@
 
 ## 2.2.1 (unreleased)
 
+### Bug Fixes
+
+- Fixed `devenv shell` failing with an incorrect `out` environment variable when the experimental `ca-derivations` feature is enabled ([#2364](https://github.com/cachix/devenv/issues/2364)).
+
 ## 2.2.0 (2026-07-28)
 
 ### Bug Fixes
