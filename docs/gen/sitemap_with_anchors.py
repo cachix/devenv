@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """Generate a complete sitemap of the devenv docs, including heading anchors.
 
-MkDocs already emits a ``sitemap.xml`` listing every page, but it does not
-include the ``#`` heading anchors within each page. This script crawls a
-running ``mkdocs serve`` (or ``mkdocs build`` output served statically),
-reads its ``sitemap.xml`` for the page list, then fetches each page and
-extracts every heading anchor to produce a *complete* sitemap.
+Astro emits a ``sitemap.xml`` listing every page, but it does not include the
+``#`` heading anchors within each page. This script crawls a running Astro
+preview, reads its ``sitemap.xml`` for the page list, then fetches each page
+and extracts every heading anchor to produce a *complete* sitemap.
 
 Only the Python standard library is used, so it runs anywhere.
 
-Usage (with ``devenv up`` serving the docs):
+Usage (with ``npm run preview`` serving the docs):
 
     python3 gen/sitemap_with_anchors.py                 # text tree to stdout
     python3 gen/sitemap_with_anchors.py --format xml    # extended sitemap.xml
@@ -36,9 +35,8 @@ HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 class HeadingParser(HTMLParser):
     """Collect ``(id, level, text)`` for every heading with an ``id``.
 
-    Material for MkDocs renders headings as ``<h2 id="slug">Title<a ...>``,
-    so the anchor is the heading's own ``id`` attribute. The trailing
-    permalink ``<a class="headerlink">`` is ignored via ``_depth`` tracking.
+    The anchor is the heading's own ``id`` attribute. A trailing permalink
+    ``<a class="headerlink">`` is ignored via ``_depth`` tracking.
     """
 
     def __init__(self) -> None:
@@ -88,11 +86,38 @@ def fetch(url: str) -> bytes:
 
 
 def page_urls_from_sitemap(base_url: str) -> list[str]:
-    sitemap_url = urljoin(base_url + "/", "sitemap.xml")
-    root = ElementTree.fromstring(fetch(sitemap_url))
-    urls = [loc.text.strip() for loc in root.iter(f"{{{SITEMAP_NS}}}loc") if loc.text]
+    roots = []
+    for name in ("sitemap.xml", "sitemap-index.xml"):
+        sitemap_url = urljoin(base_url + "/", name)
+        try:
+            roots.append((sitemap_url, ElementTree.fromstring(fetch(sitemap_url))))
+            break
+        except URLError:
+            continue
+    if not roots:
+        raise SystemExit(f"no sitemap found below {base_url}")
+
+    sitemap_url, root = roots[0]
+    locations = [
+        loc.text.strip()
+        for loc in root.iter(f"{{{SITEMAP_NS}}}loc")
+        if loc.text
+    ]
+    if root.tag.endswith("sitemapindex"):
+        urls = []
+        for location in locations:
+            child_url = normalize(base_url, location)
+            child = ElementTree.fromstring(fetch(child_url))
+            urls.extend(
+                loc.text.strip()
+                for loc in child.iter(f"{{{SITEMAP_NS}}}loc")
+                if loc.text
+            )
+    else:
+        urls = locations
+
     if not urls:
-        raise SystemExit(f"no <loc> entries found in {sitemap_url}")
+        raise SystemExit(f"no page URLs found in {sitemap_url}")
     return urls
 
 
@@ -167,24 +192,6 @@ def _url(urlset: ElementTree.Element, loc: str) -> None:
 RENDERERS = {"text": render_text, "json": render_json, "xml": render_xml}
 
 
-def site_url_from_mkdocs(default: str = "https://devenv.sh") -> str:
-    """Read ``site_url`` from ``mkdocs.yml`` next to this script's docs root.
-
-    Parsed line-by-line to avoid a PyYAML dependency; falls back to
-    ``default`` if the file or key is missing.
-    """
-    from pathlib import Path
-
-    config = Path(__file__).resolve().parent.parent / "mkdocs.yml"
-    try:
-        for line in config.read_text(encoding="utf-8").splitlines():
-            if line.startswith("site_url:"):
-                return line.split(":", 1)[1].strip().strip("\"'")
-    except OSError:
-        pass
-    return default
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -194,16 +201,15 @@ def main() -> None:
     )
     ap.add_argument(
         "--public-url",
-        default=None,
+        default="https://devenv.sh",
         help="host to re-host the emitted links onto so they match production "
-        "(default: site_url from mkdocs.yml, else https://devenv.sh)",
+        "(default: %(default)s)",
     )
     ap.add_argument("--format", choices=RENDERERS, default="text")
     ap.add_argument("--output", "-o", help="write to a file instead of stdout")
     args = ap.parse_args()
 
-    public_url = args.public_url or site_url_from_mkdocs()
-    pages = build(args.base_url, public_url)
+    pages = build(args.base_url, args.public_url)
     out = RENDERERS[args.format](pages)
 
     total_anchors = sum(len(p["headings"]) for p in pages)

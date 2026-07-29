@@ -4,9 +4,6 @@ on:
   pull_request:
     paths-ignore:
       - "docs/**"
-      - "mkdocs.yml"
-      - "requirements.in"
-      - "requirements.txt"
 
   workflow_dispatch:
     inputs:

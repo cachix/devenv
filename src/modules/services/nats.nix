@@ -130,7 +130,7 @@ in
         default = 8222;
         description = ''
           Port for HTTP monitoring endpoint.
-          Access monitoring at http://host:port/varz
+          Access monitoring at `http://host:port/varz`
         '';
       };
     };

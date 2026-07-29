@@ -1,0 +1,241 @@
+---
+title: "scala"
+---
+
+<!-- Do not edit this generated file. Edit docs/src/individual-docs instead. -->
+
+## JDK
+
+To change the JDK used by the Scala tools (Metals, Coursier, Scalafmt, sbt, Mill, scala-cli), set the [`languages.java.jdk.package`](/languages/java/#languagesjavajdkpackage) option.
+
+[comment]: # (Please add your documentation on top of this line)
+
+## Options
+
+### languages.scala.enable
+
+Whether to enable tools for Scala development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
+### languages.scala.package
+
+
+
+The Scala package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.scala_3
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
+### languages.scala.lsp.enable
+
+
+
+Whether to enable Scala Language Server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
+### languages.scala.lsp.package
+
+
+
+The Scala language server package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.metals
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
+### languages.scala.mill.enable
+
+
+
+Whether to enable mill, a simplified, fast build tool for Scala.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
+### languages.scala.mill.package
+
+
+
+The mill package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.mill
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
+### languages.scala.sbt.enable
+
+
+
+Whether to enable sbt, the standard build tool for Scala.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
+
+
+### languages.scala.sbt.package
+
+
+
+The sbt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.sbt
+```
+
+
+
+*Example:*
+
+```nix
+sbt-with-scala-native
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)

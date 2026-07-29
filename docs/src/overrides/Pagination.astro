@@ -1,0 +1,77 @@
+---
+// Simple Prev/Next pager. No border, no shadow, smaller font.
+import { Icon } from '@astrojs/starlight/components';
+
+const { dir, pagination } = Astro.locals.starlightRoute;
+const { prev, next } = pagination;
+const isRtl = dir === 'rtl';
+---
+
+<div class="pagination-links print:hidden" dir={dir}>
+  {prev && (
+    <a href={prev.href} rel="prev">
+      <Icon name={isRtl ? 'right-arrow' : 'left-arrow'} size="1rem" />
+      <span class="pager-content">
+        <span class="pager-label">{Astro.locals.t('page.previousLink')}</span>
+        <span class="link-title">{prev.label}</span>
+      </span>
+    </a>
+  )}
+  {next && (
+    <a href={next.href} rel="next" class="next">
+      <span class="pager-content">
+        <span class="pager-label">{Astro.locals.t('page.nextLink')}</span>
+        <span class="link-title">{next.label}</span>
+      </span>
+      <Icon name={isRtl ? 'left-arrow' : 'right-arrow'} size="1rem" />
+    </a>
+  )}
+</div>
+
+<style>
+  .pagination-links {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: var(--sl-color-gray-3);
+    padding: 0.5rem 0;
+  }
+  a:hover .link-title {
+    color: var(--sl-color-accent);
+  }
+
+  .next {
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .pager-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .pager-label {
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-3);
+    letter-spacing: 0.01em;
+  }
+
+  .link-title {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--sl-color-white);
+    line-height: 1.2;
+  }
+  :global([data-theme='light']) .link-title {
+    color: var(--sl-color-gray-1);
+  }
+</style>

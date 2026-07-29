@@ -1,0 +1,236 @@
+---
+// Custom Astro page for the full options reference. Replaces the 9MB markdown
+// build with a compact, structured render straight from the JSON. Grouped by
+// top-level namespace; TOC only contains category headings, not the 1768
+// individual options.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { marked } from 'marked';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+marked.setOptions({ gfm: true, breaks: false });
+
+function md(s: string): string {
+  return marked.parse(s, { async: false }) as string;
+}
+
+const options = JSON.parse(
+  await readFile(resolve(process.cwd(), 'src/data/options.json'), 'utf8'),
+) as Record<string, Option>;
+
+type Decl = { name: string; url?: string };
+type Option = {
+  type?: string;
+  description?: string;
+  default?: any;
+  example?: any;
+  loc?: string[];
+  declarations?: Decl[];
+};
+
+const groups = new Map<string, Array<{ name: string; opt: Option }>>();
+for (const name of Object.keys(options).sort()) {
+  const opt = options[name];
+  const category = opt.loc?.[0] ?? '_root';
+  if (!groups.has(category)) groups.set(category, []);
+  groups.get(category)!.push({ name, opt });
+}
+
+const sortedCategories = [...groups.keys()].sort((a, b) => a.localeCompare(b));
+
+const headings = sortedCategories.map(c => ({
+  depth: 2,
+  slug: slug(c),
+  text: c,
+}));
+
+function slug(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// Preserve MkDocs' historical option anchors, which omitted punctuation.
+function optionSlug(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9_-]+/g, '');
+}
+
+function extractText(v: any): string | null {
+  if (v && typeof v === 'object' && v._type) {
+    if (v._type === 'literalExpression' || v._type === 'literalNix') return v.text;
+    if (v._type === 'literalMD' || v._type === 'literalDocBook') return v.text;
+  }
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return null;
+}
+
+function displayDecl(url: string) {
+  try {
+    const u = new URL(url);
+    return u.pathname.replace(/^\/cachix\//, '').replace(/^\/numtide\//, '');
+  } catch {
+    return url;
+  }
+}
+
+const frontmatter = {
+  title: 'Options reference',
+  description: 'Complete reference of devenv.nix configurable options.',
+};
+---
+
+<StarlightPage frontmatter={frontmatter} headings={headings}>
+  <p>
+    Reference for every configurable option in <code>devenv.nix</code>. Generated
+    from the devenv module tree.
+  </p>
+
+  {sortedCategories.map(category => (
+    <section class="option-category">
+      <h2 id={slug(category)}>{category}</h2>
+      {groups.get(category)!.map(({ name, opt }) => {
+        const defaultText = opt.default !== undefined ? extractText(opt.default) : null;
+        const exampleText = opt.example !== undefined ? extractText(opt.example) : null;
+        return (
+          <section class="option-block" id={optionSlug(name)}>
+            <h3>
+              <a href={`#${optionSlug(name)}`} class="opt-anchor">
+                <code class="opt-name">{name}</code>
+                <span class="opt-hash" aria-hidden="true">#</span>
+              </a>
+            </h3>
+            {opt.description && <div class="opt-desc" set:html={md(opt.description.trim())} />}
+            {opt.type && (
+              <p class="opt-meta">
+                <span class="opt-label">Type</span>
+                <code>{opt.type}</code>
+              </p>
+            )}
+            {defaultText !== null && (
+              defaultText.includes('\n') ? (
+                <div class="opt-meta">
+                  <span class="opt-label">Default</span>
+                  <pre class="opt-pre"><code>{defaultText}</code></pre>
+                </div>
+              ) : (
+                <p class="opt-meta">
+                  <span class="opt-label">Default</span>
+                  <code>{defaultText}</code>
+                </p>
+              )
+            )}
+            {exampleText !== null && (
+              exampleText.includes('\n') ? (
+                <div class="opt-meta">
+                  <span class="opt-label">Example</span>
+                  <pre class="opt-pre"><code>{exampleText}</code></pre>
+                </div>
+              ) : (
+                <p class="opt-meta">
+                  <span class="opt-label">Example</span>
+                  <code>{exampleText}</code>
+                </p>
+              )
+            )}
+            {opt.declarations && opt.declarations.length > 0 && (
+              <p class="opt-meta">
+                <span class="opt-label">Declared in</span>
+                {opt.declarations.map((d, i) => (
+                  <>
+                    {i > 0 && ', '}
+                    <a href={d.url ?? d.name}>{displayDecl(d.url ?? d.name)}</a>
+                  </>
+                ))}
+              </p>
+            )}
+          </section>
+        );
+      })}
+    </section>
+  ))}
+</StarlightPage>
+
+<style>
+  .option-category {
+    margin-block: 2rem;
+  }
+  .option-block {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 220px;
+    margin-block: 0.75rem 1.5rem;
+    padding-block: 0.25rem;
+    scroll-margin-top: 5rem;
+  }
+  .option-block h3 {
+    margin-top: 0.5rem;
+    font-size: 1rem;
+  }
+  .opt-anchor {
+    color: inherit;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  .opt-hash {
+    opacity: 0;
+    color: var(--sl-color-gray-3);
+    font-weight: 400;
+    transition: opacity 120ms;
+  }
+  .option-block:hover .opt-hash,
+  .opt-anchor:focus-visible .opt-hash,
+  .option-block:target .opt-hash {
+    opacity: 1;
+  }
+  .option-block:target {
+    background: var(--sl-color-gray-6);
+    border-radius: 6px;
+    padding-inline: 0.75rem;
+    margin-inline: -0.75rem;
+  }
+  :global([data-theme='light']) .option-block:target {
+    background: #f4f5f7;
+  }
+  .opt-name {
+    font-size: 0.9rem;
+  }
+  .opt-meta {
+    margin-block: 0.25rem;
+    font-size: 0.875rem;
+  }
+  .opt-label {
+    display: inline-block;
+    min-width: 5rem;
+    color: var(--sl-color-gray-3);
+    font-weight: 500;
+    margin-right: 0.5rem;
+  }
+  .opt-desc :is(p):first-child { margin-top: 0; }
+  .opt-desc :is(p):last-child { margin-bottom: 0.5rem; }
+  .opt-desc code {
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 4px;
+    padding: 0.05em 0.35em;
+    font-size: 0.8125em;
+  }
+  :global([data-theme='light']) .opt-desc code {
+    background: #f4f5f7;
+    border-color: #e4e7eb;
+    color: #1f2933;
+  }
+  .opt-pre {
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    overflow-x: auto;
+    margin-block: 0.25rem 0.5rem;
+  }
+  :global([data-theme='light']) .opt-pre {
+    background: #f4f5f7;
+    border-color: #e4e7eb;
+    color: #1f2933;
+  }
+</style>

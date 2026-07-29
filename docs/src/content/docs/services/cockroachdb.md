@@ -1,0 +1,112 @@
+---
+title: "cockroachdb"
+---
+
+<!-- Do not edit this generated file. Edit docs/src/individual-docs instead. -->
+
+
+
+[comment]: # (Please add your documentation on top of this line)
+
+## Options
+
+### services.cockroachdb.enable
+
+Whether to enable Add CockroachDB process.
+.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+### services.cockroachdb.package
+
+
+
+The CockroachDB package to use.
+
+
+
+*Type:*
+unspecified value
+
+
+
+*Default:*
+
+```nix
+pkgs.cockroachdb
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+### services.cockroachdb.http_addr
+
+
+
+The hostname or IP address to bind to for HTTP requests.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"localhost:8080"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+### services.cockroachdb.listen_addr
+
+
+
+The address/hostname and port to listen on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"localhost:26257"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)

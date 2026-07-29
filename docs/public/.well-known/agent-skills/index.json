@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "devenv-setup",
+      "type": "skill-md",
+      "description": "Set up and configure devenv developer environments. Use when the user wants to create a devenv.nix, add languages, services, packages, or configure a reproducible development environment.",
+      "url": "/.well-known/agent-skills/devenv-setup/SKILL.md",
+      "digest": "sha256:77829664ed32104385c03f31d72da2423605a9e52c8fff7cf848f018d232e4ac"
+    }
+  ]
+}
