@@ -17,6 +17,8 @@ pub use backend::{NixCBackend, ProjectRoot};
 pub mod cnix_store;
 pub use cnix_store::CNixStore;
 
+mod file_limit;
+
 pub mod lock;
 
 use std::cell::RefCell;
@@ -53,6 +55,9 @@ pub fn trigger_interrupt() {
 /// Must be called before any thread tries to register with GC.
 pub fn nix_init() {
     NIX_INIT.call_once(|| {
+        // The Nix CLI does this in initNix(), which the C API does not call.
+        file_limit::bump_open_file_limit();
+
         // Suppress Boehm GC "Repeated allocation of very large block" warnings.
         // These are harmless and would otherwise be printed directly to stderr,
         // bypassing our activity logger.
