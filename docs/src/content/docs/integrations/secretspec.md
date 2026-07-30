@@ -1,5 +1,7 @@
 ---
 title: "SecretSpec"
+sidebar:
+  hidden: true
 ---
 
 [SecretSpec] separates secret declaration from secret provisioning.
