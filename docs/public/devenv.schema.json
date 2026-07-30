@@ -15,7 +15,7 @@
       ]
     },
     "inputs": {
-      "description": "Map of Nix inputs.\nSee [Inputs](../inputs.md).\n\nDefault: `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.",
+      "description": "Map of Nix inputs.\nSee [Inputs](/inputs/).\n\nDefault: `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/Input"
@@ -44,7 +44,7 @@
       ]
     },
     "imports": {
-      "description": "A list of relative paths, absolute paths, or references to inputs to import `devenv.nix` and `devenv.yaml` files.\nSee [Composing using imports](../composing-using-imports.md).\n\nDefault: `[]`.",
+      "description": "A list of relative paths, absolute paths, or references to inputs to import `devenv.nix` and `devenv.yaml` files.\nSee [Composing using imports](/composing-using-imports/).\n\nDefault: `[]`.",
       "type": "array",
       "items": {
         "type": "string"
@@ -86,7 +86,7 @@
       ]
     },
     "profile": {
-      "description": "Default profile to activate.\nCan be overridden by `--profile` CLI flag.\nSee [Profiles](../profiles.md).\n\nAdded in 1.11.",
+      "description": "Default profile to activate.\nCan be overridden by `--profile` CLI flag.\nSee [Profiles](/profiles/).\n\nAdded in 1.11.",
       "type": [
         "string",
         "null"
@@ -132,7 +132,7 @@
       "type": "object",
       "properties": {
         "url": {
-          "description": "URI specification of the input.\nSee [Supported URI formats](../inputs.md#supported-uri-formats).",
+          "description": "URI specification of the input.\nSee [Supported URI formats](/inputs/#supported-uri-formats).",
           "type": [
             "string",
             "null"
@@ -143,21 +143,21 @@
           "type": "boolean"
         },
         "follows": {
-          "description": "Another input to \"inherit\" from by name.\nSee [Following inputs](../inputs.md#following-inputs).",
+          "description": "Another input to \"inherit\" from by name.\nSee [Following inputs](/inputs/#following-inputs).",
           "type": [
             "string",
             "null"
           ]
         },
         "inputs": {
-          "description": "Override nested inputs by name.\nSee [Following inputs](../inputs.md#following-inputs).\n\nOpaque.",
+          "description": "Override nested inputs by name.\nSee [Following inputs](/inputs/#following-inputs).\n\nOpaque.",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/Input"
           }
         },
         "overlays": {
-          "description": "A list of overlays to include from the input.\nSee [Overlays](../overlays.md).\n\nDefault: `[]`.",
+          "description": "A list of overlays to include from the input.\nSee [Overlays](/overlays/).\n\nDefault: `[]`.",
           "type": "array",
           "items": {
             "type": "string"
@@ -363,7 +363,7 @@
       "type": "object",
       "properties": {
         "enable": {
-          "description": "Enable [secretspec integration](../integrations/secretspec.md).\n\nDefault: `false`.\n\nAdded in 1.8.",
+          "description": "Enable [secretspec integration](/integrations/secretspec/).\n\nDefault: `false`.\n\nAdded in 1.8.",
           "type": "boolean"
         },
         "profile": {
