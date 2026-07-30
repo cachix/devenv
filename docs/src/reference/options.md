@@ -6049,8 +6049,6 @@ submodule
 
 ## git-hooks.hooks.biome.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -8323,8 +8321,6 @@ false
 
 
 ## git-hooks.hooks.isort.settings.flags
-
-
 
 Flags passed to isort. See all available [here](https://pycqa.github.io/isort/docs/configuration/options.html).
 
