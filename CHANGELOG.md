@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed `devenv init` hanging when an existing file differs from the template and there is no terminal to confirm on.
+- Fixed devenv freezing until killed when run on a terminal from a background process group, for example under GNU `timeout` or other wrappers that start commands in their own process group.
 - Fixed `devenv shell` failing with an incorrect `out` environment variable when the experimental `ca-derivations` feature is enabled ([#2364](https://github.com/cachix/devenv/issues/2364)).
 
 ## 2.2.0 (2026-07-28)

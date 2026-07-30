@@ -4,6 +4,7 @@ mod gc;
 mod search;
 
 use super::{processes, tasks, util};
+use crate::terminal::IsForegroundTerminal as _;
 use devenv_activity::{
     Activity, ActivityInstrument, ActivityLevel, activity, instrument_activity, message,
 };
@@ -30,7 +31,6 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
-use std::io::IsTerminal;
 use std::io::Write as _;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -180,8 +180,8 @@ impl Default for DevenvOptions {
 
 #[derive(Default, Debug)]
 pub struct ProcessOptions {
-    /// Whether the process should be detached from the current process.
-    pub detach: bool,
+    /// Whether processes run in the foreground or detached.
+    pub mode: ProcessMode,
     /// Whether the process should be logged to a file.
     pub log_to_file: bool,
     /// When true, fail if a port is in use instead of auto-allocating the next available.
@@ -191,6 +191,23 @@ pub struct ProcessOptions {
     /// When true with detach, spawn a daemon process instead of keeping
     /// processes in-process. Used by `devenv up -d`.
     pub daemon: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ProcessMode {
+    #[default]
+    Foreground,
+    Detached,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AttachSession {
+    Interactive,
+    NonInteractive,
+}
+
+fn should_attach_to_running_manager(mode: ProcessMode, session: AttachSession) -> bool {
+    mode == ProcessMode::Foreground && session == AttachSession::Interactive
 }
 
 /// A shell command ready to be executed.
@@ -826,24 +843,6 @@ impl Devenv {
             processes::check_pid_file(&self.native_manager_pid_file()).await,
             Ok(processes::PidStatus::Running(_))
         )
-    }
-
-    /// Whether an interactive foreground `devenv up` should attach to an
-    /// already-running process manager (vs. failing fast). Attaching streams a
-    /// live view until the user detaches with Ctrl-C, which only makes sense
-    /// at an interactive terminal — scripts, CI, piped output, and AI agents
-    /// would otherwise block forever. Pure so the truth table is unit-testable;
-    /// the call site supplies the real tty/CI/AI-agent values.
-    fn should_attach_to_running_manager(
-        stdin_is_tty: bool,
-        stderr_is_tty: bool,
-        is_ci: bool,
-        is_ai_agent: bool,
-    ) -> bool {
-        // AI agents (and other PTY-allocating wrappers) report ttys but would
-        // hang on the streaming attach view, so they are excluded alongside
-        // CI and non-tty stdin/stderr.
-        stdin_is_tty && stderr_is_tty && !is_ci && !is_ai_agent
     }
 
     /// Names of processes that `devenv up` should start: process tasks whose
@@ -2053,7 +2052,7 @@ impl Devenv {
         // ── Phase 4: Starting processes (if needed) ─────────────────
         if has_processes {
             let options = ProcessOptions {
-                detach: true,
+                mode: ProcessMode::Detached,
                 ..Default::default()
             };
             self.start_processes(vec![], devenv_tasks::RunMode::All, envs, options, None)
@@ -2308,35 +2307,25 @@ impl Devenv {
             if let Ok(processes::PidStatus::Running(pid)) =
                 processes::check_pid_file(&pid_file).await
             {
-                // Two callers must not attach. A detached caller (e.g. `devenv
-                // test`) can't run an isolated process set over a manager it
-                // doesn't own, and its later teardown would stop that foreign
-                // daemon. And attaching streams a live view until you detach
-                // with Ctrl-C, which only makes sense at an interactive
-                // terminal — scripts, CI, and piped output would otherwise block
-                // forever. Both fail fast like a fresh foreground start that
-                // finds a manager already running; interactive foreground
-                // `devenv up` is the only intended attacher on this path.
-                let interactive = Self::should_attach_to_running_manager(
-                    std::io::stdin().is_terminal(),
-                    std::io::stderr().is_terminal(),
-                    std::env::var_os("CI").is_some(),
-                    is_ai_agent(),
-                );
-                if options.detach || !interactive {
+                // Detached callers must not take ownership of another manager,
+                // and unattended callers must not enter a long-running attach.
+                let session = if std::env::var_os("CI").is_none()
+                    && !is_ai_agent()
+                    && std::io::stderr().is_foreground_terminal()
+                {
+                    AttachSession::Interactive
+                } else {
+                    AttachSession::NonInteractive
+                };
+                if !should_attach_to_running_manager(options.mode, session) {
                     bail!(
                         "Processes already running with PID {}. Stop them first with: devenv processes down",
                         pid
                     );
                 }
-                // Interactive foreground `devenv up`: attach and stream status
-                // until the user detaches (Ctrl-C), leaving the manager running.
-                // run_attached_foreground announces the attach in the tree.
+
                 self.attach_start_up_processes(&launch_names).await?;
                 info!(names = ?launch_names, "attached to running process manager");
-                // Reuse the already-open "Running processes" operation as the
-                // parent so the TUI shows a single process tree, and hand the
-                // TUI's restart/stop channel to the attach loop.
                 self.run_attached_foreground(&phase4, options.command_rx.take())
                     .await?;
                 return Ok(RunMode::Detached);
@@ -2395,7 +2384,7 @@ impl Devenv {
                 .await
                 .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
 
-            if !options.detach {
+            if options.mode == ProcessMode::Foreground {
                 trace!(
                     "devenv.up: calling run_foreground (native manager, detach=false), global_token_cancelled={}",
                     self.shutdown.is_cancelled()
@@ -2449,7 +2438,7 @@ impl Devenv {
             warn!(error = %e, "failed to pre-initialize task cache");
         }
 
-        if options.detach {
+        if options.mode == ProcessMode::Detached {
             let start_options = processes::StartOptions {
                 process_configs: HashMap::new(),
                 processes,
@@ -3732,26 +3721,21 @@ mod tests {
     }
 
     #[test]
-    fn should_attach_to_running_manager_truth_table() {
-        for stdin_is_tty in [false, true] {
-            for stderr_is_tty in [false, true] {
-                for is_ci in [false, true] {
-                    for is_ai_agent in [false, true] {
-                        let expected = stdin_is_tty && stderr_is_tty && !is_ci && !is_ai_agent;
-                        assert_eq!(
-                            Devenv::should_attach_to_running_manager(
-                                stdin_is_tty,
-                                stderr_is_tty,
-                                is_ci,
-                                is_ai_agent,
-                            ),
-                            expected,
-                            "stdin_tty={stdin_is_tty}, stderr_tty={stderr_is_tty}, \
-                             ci={is_ci}, ai_agent={is_ai_agent}"
-                        );
-                    }
-                }
-            }
+    fn attach_requires_foreground_mode_and_an_interactive_session() {
+        assert!(should_attach_to_running_manager(
+            ProcessMode::Foreground,
+            AttachSession::Interactive
+        ));
+
+        for (mode, session) in [
+            (ProcessMode::Foreground, AttachSession::NonInteractive),
+            (ProcessMode::Detached, AttachSession::Interactive),
+            (ProcessMode::Detached, AttachSession::NonInteractive),
+        ] {
+            assert!(
+                !should_attach_to_running_manager(mode, session),
+                "{mode:?}, {session:?}"
+            );
         }
     }
 

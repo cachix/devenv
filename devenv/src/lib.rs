@@ -12,6 +12,7 @@ pub mod mcp;
 pub mod nix_log_bridge;
 pub mod reload;
 pub(crate) mod shell_env;
+pub mod terminal;
 pub mod tracing;
 pub use devenv_processes as processes;
 mod util;
@@ -20,7 +21,7 @@ mod util;
 pub use devenv_snix_backend;
 
 pub use devenv::{
-    DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessOptions, RunMode,
+    DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessMode, ProcessOptions, RunMode,
     SecretsNeedPrompting, SecretsPromptSource, ShellCommand, format_shell_exports, is_ai_agent,
     load_cachix_secretspec,
 };

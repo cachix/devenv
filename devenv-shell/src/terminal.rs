@@ -33,6 +33,13 @@ impl RawModeGuard {
             if unsafe { libc::isatty(fd) } == 0 {
                 return Ok(Self { original: None });
             }
+            // A background process group would be stopped by tcsetattr.
+            if unsafe { libc::tcgetpgrp(fd) } != unsafe { libc::getpgrp() } {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "stdin is not the foreground terminal",
+                ));
+            }
 
             let mut termios: libc::termios = unsafe { std::mem::zeroed() };
             if unsafe { libc::tcgetattr(fd, &mut termios) } != 0 {

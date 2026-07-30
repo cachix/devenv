@@ -541,6 +541,33 @@ pub struct CliOptions {
     pub help: Option<bool>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TuiPreference {
+    Auto,
+    Enabled,
+    Disabled,
+}
+
+impl TuiPreference {
+    pub fn resolve(self, automated: bool) -> bool {
+        match self {
+            Self::Enabled => true,
+            Self::Disabled => false,
+            Self::Auto => !automated,
+        }
+    }
+}
+
+impl CliOptions {
+    pub fn tui_preference(&self) -> TuiPreference {
+        match flag(self.tui, self.no_tui) {
+            Some(true) => TuiPreference::Enabled,
+            Some(false) => TuiPreference::Disabled,
+            None => TuiPreference::Auto,
+        }
+    }
+}
+
 impl TracingCliArgs {
     /// Parse comma-separated `[format:]destination` specs from an environment variable.
     fn specs_from_env_var(
@@ -939,6 +966,14 @@ impl Commands {
             Self::DaemonProcesses { .. } => "daemon-processes",
         }
     }
+
+    /// Whether this command supports the interactive renderer.
+    pub fn supports_tui(&self) -> bool {
+        !matches!(
+            self,
+            Self::Mcp { http: None } | Self::Lsp { .. } | Self::PrintPaths
+        )
+    }
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
@@ -1203,6 +1238,66 @@ mod tests {
     fn verify_cli() {
         use clap::CommandFactory;
         Cli::command().debug_assert()
+    }
+
+    fn cli_options(args: &[&str]) -> CliOptions {
+        Cli::try_parse_from(["devenv"].iter().chain(args).chain(["version"].iter()))
+            .unwrap()
+            .cli_options
+    }
+
+    #[test]
+    fn tui_preference_from_flags() {
+        let _env = EnvVarGuard::new(&["DEVENV_TUI"]);
+        assert_eq!(cli_options(&[]).tui_preference(), TuiPreference::Auto);
+        assert_eq!(
+            cli_options(&["--tui", "true"]).tui_preference(),
+            TuiPreference::Enabled
+        );
+        assert_eq!(
+            cli_options(&["--tui", "false"]).tui_preference(),
+            TuiPreference::Disabled
+        );
+        assert_eq!(
+            cli_options(&["--no-tui"]).tui_preference(),
+            TuiPreference::Disabled
+        );
+        assert_eq!(
+            cli_options(&["--tui", "true", "--no-tui"]).tui_preference(),
+            TuiPreference::Disabled
+        );
+    }
+
+    #[test]
+    fn tui_preference_uses_automation_only_in_auto_mode() {
+        assert!(TuiPreference::Auto.resolve(false));
+        assert!(!TuiPreference::Auto.resolve(true));
+        for automated in [false, true] {
+            assert!(TuiPreference::Enabled.resolve(automated));
+            assert!(!TuiPreference::Disabled.resolve(automated));
+        }
+    }
+
+    #[test]
+    fn commands_with_incompatible_output_do_not_support_tui() {
+        assert!(!Commands::Mcp { http: None }.supports_tui());
+        assert!(
+            !Commands::Lsp {
+                print_config: false
+            }
+            .supports_tui()
+        );
+        assert!(!Commands::PrintPaths.supports_tui());
+
+        assert!(Commands::Mcp { http: Some(None) }.supports_tui());
+        assert!(Commands::Info {}.supports_tui());
+        assert!(
+            Commands::Shell {
+                cmd: None,
+                args: vec![],
+            }
+            .supports_tui()
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! `devenv init`: scaffold devenv.nix / devenv.yaml / .gitignore in a directory.
 
 use std::fs;
-use std::io::Write as _;
+use std::io::{self, IsTerminal, Write as _};
 use std::path::Path;
 
 use console::style;
@@ -11,6 +11,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use similar::{ChangeTag, TextDiff};
 
 use crate::console as devenv_console;
+use crate::terminal::{self, IsForegroundTerminal as _};
 use devenv_core::VerbosityLevel;
 
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
@@ -123,8 +124,19 @@ fn write_template(file: &File<'_>, dest: &Path, on_exists: OnExists) -> Result<(
     }
 }
 
-/// Prompt with a diff. Caller guarantees `dest` exists.
 fn confirm_overwrite(dest: &Path, contents: &str) -> Result<()> {
+    confirm_overwrite_with(dest, contents, || {
+        io::stderr().is_terminal()
+            && (io::stdin().is_foreground_terminal()
+                || terminal::controlling_terminal_is_foreground())
+    })
+}
+
+fn confirm_overwrite_with(
+    dest: &Path,
+    contents: &str,
+    can_confirm: impl FnOnce() -> bool,
+) -> Result<()> {
     let before = fs::read_to_string(dest)
         .into_diagnostic()
         .wrap_err_with(|| format!("Failed to read {}", dest.display()))?;
@@ -142,6 +154,17 @@ fn confirm_overwrite(dest: &Path, contents: &str) -> Result<()> {
         }
     }
 
+    if !can_confirm() {
+        miette::bail!(
+            help = format!(
+                "Re-run `devenv init` from an interactive terminal, or move {} aside first.",
+                dest.display()
+            ),
+            "{} already exists and differs from the template, but there is no terminal to confirm overwriting it on.",
+            dest.display()
+        );
+    }
+
     let confirmed = dialoguer::Confirm::new()
         .with_prompt(format!("{} already exists. Overwrite it?", dest.display()))
         .interact()
@@ -153,4 +176,38 @@ fn confirm_overwrite(dest: &Path, contents: &str) -> Result<()> {
             .wrap_err_with(|| format!("Failed to write {}", dest.display()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_interactive_conflict_errors_without_writing() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("devenv.nix");
+        fs::write(&dest, "existing\n").unwrap();
+
+        let err = confirm_overwrite_with(&dest, "from template\n", || false).unwrap_err();
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("devenv.nix"),
+            "error should name the file: {rendered}"
+        );
+        assert!(
+            rendered.contains("interactive terminal"),
+            "error should say how to proceed: {rendered}"
+        );
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "existing\n");
+    }
+
+    #[test]
+    fn non_interactive_identical_file_is_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("devenv.yaml");
+        fs::write(&dest, "same\n").unwrap();
+
+        confirm_overwrite_with(&dest, "same\n", || false).unwrap();
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "same\n");
+    }
 }

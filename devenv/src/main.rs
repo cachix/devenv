@@ -1,8 +1,8 @@
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
-    CacheSettings, Config, Devenv, InputOverrides, NixSettings, RunMode, SecretSettings,
-    ShellSettings, VerbosityLevel,
+    CacheSettings, Config, Devenv, InputOverrides, NixSettings, ProcessMode, RunMode,
+    SecretSettings, ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
@@ -11,6 +11,7 @@ use devenv::{
     commands, is_ai_agent,
     processes::ProcessCommand,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
+    terminal::{self, IsForegroundTerminal as _},
     tracing as devenv_tracing,
     tui::{SessionIo, ShellSession, TuiHandoff},
 };
@@ -106,9 +107,7 @@ fn main_inner() -> Result<()> {
         match run(ui, backend, shutdown, caller) {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
                 Ok(secrets_err) => {
-                    // Only prompt interactively when stdin is a terminal;
-                    // in non-interactive contexts (e.g. direnv), fail with the error.
-                    if !io::stdin().is_terminal() {
+                    if !terminal::can_use_stdin_interactively() {
                         return Err(secrets_err.into());
                     }
                     prompt_secrets(
@@ -127,7 +126,7 @@ fn main_inner() -> Result<()> {
 
 /// Options for the UI/renderer thread.
 struct UiOptions {
-    tui: bool,
+    tui_allowed: bool,
     tracing_owns_terminal: bool,
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
@@ -140,7 +139,6 @@ struct BackendOptions {
     devenv: devenv::DevenvOptions,
     command: Commands,
     verbosity: VerbosityLevel,
-    use_pty: bool,
     nix_debugger: bool,
     strict_ports: bool,
     /// Kept alive for the duration of the backend run; `Drop` removes the dirs.
@@ -353,25 +351,16 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
     let tracing_specs = cli.tracing_args.resolve().into_diagnostic()?;
     let tracing_owns_terminal = tracing_specs.iter().any(|s| s.targets_terminal());
 
-    // Explicit --tui/--no-tui wins, otherwise default to TUI when running
-    // interactively outside CI and outside AI agents.
-    let tui_requested = devenv_core::settings::flag(cli.cli_options.tui, cli.cli_options.no_tui)
-        .unwrap_or_else(|| {
-            let is_ci = env::var_os("CI").is_some();
-            let is_tty = io::stdin().is_terminal() && io::stderr().is_terminal();
-            is_tty && !is_ci && !is_ai_agent()
-        });
-    // Some commands don't support the TUI regardless of user options.
-    let tui_unsupported = matches!(
-        &command,
-        Commands::Mcp { http: None } // stdio mode needs stderr for output
-                | Commands::Lsp { .. } // LSP needs direct stdout for protocol/config output
-                | Commands::PrintPaths // print output directly, no TUI needed
-    );
-    let tui = tui_requested && !tui_unsupported && !tracing_owns_terminal && !quiet;
+    let tui_allowed = command.supports_tui()
+        && !tracing_owns_terminal
+        && !quiet
+        && cli
+            .cli_options
+            .tui_preference()
+            .resolve(env::var_os("CI").is_some() || is_ai_agent());
 
     let ui = UiOptions {
-        tui,
+        tui_allowed,
         tracing_owns_terminal,
         log_level,
         tracing_specs,
@@ -446,10 +435,6 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
     // `gc` operates on the global devenv store and doesn't need a project.
     let require_project_file = !matches!(&command, Commands::Gc { .. });
     let test_dirs = TestDirs::setup(&command)?;
-    let use_pty = shell_settings.reload
-        && matches!(&command, Commands::Shell { cmd: None, .. })
-        && io::stdin().is_terminal()
-        && io::stdout().is_terminal();
 
     // Read off `config` before its fields are moved into `DevenvOptions`.
     let strict_ports = config.strict_ports.unwrap_or(false);
@@ -480,7 +465,6 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
         devenv: devenv_options,
         command,
         verbosity,
-        use_pty,
         nix_debugger,
         strict_ports,
         test_dirs,
@@ -501,11 +485,11 @@ enum Renderer {
 }
 
 impl Renderer {
-    /// Pick the renderer from the resolved UI options and install its activity
-    /// sink. The returned guard clears the sink on drop and must outlive the
-    /// backend (it produces the events).
+    /// Pick the renderer and install its activity sink. The returned guard
+    /// clears the sink on drop and must outlive the backend (it produces the
+    /// events).
     fn init(ui: &UiOptions) -> (Self, Option<ActivityGuard>) {
-        if ui.tui {
+        if ui.tui_allowed && terminal::can_use_stdin_interactively() {
             let (rx, handle) = devenv_activity::init();
             (Renderer::Tui(rx), Some(handle.install()))
         } else if !ui.tracing_owns_terminal {
@@ -618,6 +602,7 @@ fn run(
     caller: Caller,
 ) -> Result<()> {
     let (renderer, _activity_guard) = Renderer::init(&ui);
+    let tui = matches!(&renderer, Renderer::Tui(_));
 
     let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
 
@@ -625,7 +610,6 @@ fn run(
         tracing::info!("using project root {}", root.display());
     }
 
-    let tui = ui.tui;
     let verbosity = ui.verbosity;
 
     // TUI terminal setup: save state before raw mode, install restore hooks
@@ -752,7 +736,6 @@ async fn run_backend(
         devenv: devenv_options,
         command,
         verbosity,
-        use_pty,
         nix_debugger,
         strict_ports: config_strict_ports,
         // Held until the backend run completes; `Drop` removes the temp dirs.
@@ -766,7 +749,11 @@ async fn run_backend(
     devenv.set_attach_indicator(attached);
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
-    if use_pty && let Commands::Shell { cmd, args } = command {
+    if devenv.shell_settings.reload
+        && io::stdin().is_foreground_terminal()
+        && io::stdout().is_terminal()
+        && let Commands::Shell { cmd: None, args } = command
+    {
         // Pre-compute shell environment while we still own Devenv directly.
         // This must happen while TUI is active since get_dev_environment has #[activity].
         let dotfile = devenv.dotfile().to_path_buf();
@@ -781,7 +768,7 @@ async fn run_backend(
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
             devenv: client,
-            cmd,
+            cmd: None,
             args,
             backend_done: backend_done_tx,
             terminal_ready_rx,
@@ -907,6 +894,21 @@ async fn run_up(
     }
 }
 
+fn process_options(
+    mode: ProcessMode,
+    strict_ports: bool,
+    command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+) -> devenv::ProcessOptions {
+    let detached = mode == ProcessMode::Detached;
+    devenv::ProcessOptions {
+        mode,
+        log_to_file: detached,
+        strict_ports,
+        command_rx,
+        daemon: detached,
+    }
+}
+
 /// Resolve `UpArgs` into `ProcessOptions` and start processes.
 async fn run_up_args(
     devenv: &Devenv,
@@ -917,13 +919,12 @@ async fn run_up_args(
 ) -> Result<CommandResult> {
     let strict_ports = devenv_core::settings::flag(up_args.strict_ports, up_args.no_strict_ports)
         .unwrap_or(config_strict_ports);
-    let options = devenv::ProcessOptions {
-        detach: up_args.detach,
-        log_to_file: up_args.detach,
-        strict_ports,
-        command_rx,
-        daemon: up_args.detach,
+    let mode = if up_args.detach {
+        ProcessMode::Detached
+    } else {
+        ProcessMode::Foreground
     };
+    let options = process_options(mode, strict_ports, command_rx);
     run_up(devenv, up_args.processes, up_args.mode, options, verbosity).await
 }
 
@@ -1033,13 +1034,12 @@ async fn dispatch_command(
                 run_up_args(devenv, up_args, config_strict_ports, command_rx, verbosity).await
             }
             ProcessesCommand::Start { name: None, detach } => {
-                let options = devenv::ProcessOptions {
-                    detach,
-                    log_to_file: detach,
-                    strict_ports: config_strict_ports,
-                    command_rx,
-                    daemon: detach,
+                let mode = if detach {
+                    ProcessMode::Detached
+                } else {
+                    ProcessMode::Foreground
                 };
+                let options = process_options(mode, config_strict_ports, command_rx);
                 run_up(
                     devenv,
                     vec![],
@@ -1061,16 +1061,8 @@ async fn dispatch_command(
                     devenv.processes_start(&name).await?;
                     Ok(CommandResult::Done)
                 } else {
-                    // No manager yet: cold-start one in the background
-                    // launching only this process, exactly like
-                    // `devenv up -d <name>`.
-                    let options = devenv::ProcessOptions {
-                        detach: true,
-                        log_to_file: true,
-                        strict_ports: config_strict_ports,
-                        command_rx,
-                        daemon: true,
-                    };
+                    let options =
+                        process_options(ProcessMode::Detached, config_strict_ports, command_rx);
                     run_up(
                         devenv,
                         vec![name],
