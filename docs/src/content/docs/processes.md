@@ -431,7 +431,7 @@ The CLI flags take precedence over the config value.
 
 This is useful when you need deterministic port assignments and want to be notified of conflicts rather than having them silently resolved. When a port conflict is detected in strict mode, devenv will show an error message including which process is currently using the port.
 
-## Advanced: Alternative Process Managers
+## Alternative process managers
 
 The native manager is the best starting point and supports devenv's complete
 process feature set. If you have an existing workflow that depends on a specific

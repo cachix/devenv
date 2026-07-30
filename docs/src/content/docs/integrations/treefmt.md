@@ -1,5 +1,5 @@
 ---
-title: "`devenv` Integration for [treefmt](https://treefmt.com/) via [treefmt-nix](https://github.com/numtide/treefmt-nix)"
+title: treefmt
 ---
 
 ## Set up
