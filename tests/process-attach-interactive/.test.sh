@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 # PTY merge gate for attaching to a detached native process manager.
+# PTY sessions are driven by .pty-run.py (util-linux `script -qefc` is not
+# available on macOS).
 
 set -eux
 
@@ -59,15 +61,25 @@ wait_for_manager() {
   return 1
 }
 
+# Count the manager's open fds: /proc on Linux, lsof on macOS. Empty output
+# means no source produced a count and the fd-leak checks are skipped.
 manager_fd_count() {
-  find "/proc/$DAEMON_PID/fd" -mindepth 1 -maxdepth 1 -type l 2>/dev/null | wc -l
+  if [ -d "/proc/$DAEMON_PID/fd" ]; then
+    find "/proc/$DAEMON_PID/fd" -mindepth 1 -maxdepth 1 -type l 2>/dev/null | wc -l | tr -d ' '
+  elif lsof=$(command -v lsof) || { lsof=/usr/sbin/lsof && [ -x "$lsof" ]; }; then
+    # Capture before counting: a failed lsof piped straight into wc would
+    # read as a healthy count of 0 and turn the leak check into a no-op.
+    if fd_listing=$("$lsof" -np "$DAEMON_PID" 2>/dev/null); then
+      printf '%s\n' "$fd_listing" | awk 'NR > 1 && $4 ~ /^[0-9]/' | wc -l | tr -d ' '
+    fi
+  fi
 }
 
 wait_for_manager_fd_count_at_most() {
   maximum=$1
   for _ in $(seq 1 50); do
     current=$(manager_fd_count)
-    if [ "$current" -le "$maximum" ]; then
+    if [ -n "$current" ] && [ "$current" -le "$maximum" ]; then
       return 0
     fi
     sleep 0.1
@@ -138,7 +150,7 @@ run_detach_session() {
     printf '\003'
     sleep 1
     printf '\003'
-  ) | timeout 45 script -qefc "stty rows 40 cols 120; $command" "$output" >/dev/null
+  ) | timeout 45 python3 .pty-run.py "$output" "$command" >/dev/null
   session_status=$?
   set -e
   case "$session_status" in
@@ -180,6 +192,9 @@ test -n "$ALPHA_PID"
 kill -0 "$ALPHA_PID"
 sleep 1
 FD_BASELINE=$(manager_fd_count)
+if [ -z "$FD_BASELINE" ]; then
+  echo "skipping fd-leak checks: neither /proc nor lsof is available" >&2
+fi
 for cycle in $(seq 1 5); do
   marker="repeat-attach-marker-$cycle"
   transcript="repeat-attach-$cycle.typescript"
@@ -190,7 +205,7 @@ for cycle in $(seq 1 5); do
   kill -0 "$DAEMON_PID"
   kill -0 "$ALPHA_PID"
   reachable "$PORT_ALPHA"
-  if ! wait_for_manager_fd_count_at_most "$FD_BASELINE"; then
+  if [ -n "$FD_BASELINE" ] && ! wait_for_manager_fd_count_at_most "$FD_BASELINE"; then
     echo "manager file descriptors grew from $FD_BASELINE to $(manager_fd_count) after attach cycle $cycle" >&2
     exit 1
   fi
@@ -217,7 +232,7 @@ set +e
   printf '\003'
   sleep 1
   printf '\003'
-) | timeout 60 script -qefc "stty rows 40 cols 120; devenv processes attach" attached-commands.typescript >/dev/null
+) | timeout 60 python3 .pty-run.py attached-commands.typescript "devenv processes attach" >/dev/null
 COMMAND_STATUS=$?
 set -e
 case "$COMMAND_STATUS" in
@@ -235,13 +250,13 @@ if timeout 15 devenv up --no-tui </dev/null >non-tty.txt 2>&1; then
 fi
 grep -q "Processes already running" non-tty.txt
 
-if timeout 15 script -qefc "stty rows 40 cols 120; CI=1 DEVENV_NO_AI_AGENT=1 devenv up" ci.typescript </dev/null >/dev/null; then
+if timeout 15 python3 .pty-run.py ci.typescript "CI=1 DEVENV_NO_AI_AGENT=1 devenv up" </dev/null >/dev/null; then
   echo "CI up unexpectedly attached" >&2
   exit 1
 fi
 grep -a -q "Processes already running" ci.typescript
 
-if timeout 15 script -qefc "stty rows 40 cols 120; env -u DEVENV_NO_AI_AGENT CLAUDECODE=1 devenv up" agent.typescript </dev/null >/dev/null; then
+if timeout 15 python3 .pty-run.py agent.typescript "env -u DEVENV_NO_AI_AGENT CLAUDECODE=1 devenv up" </dev/null >/dev/null; then
   echo "coding-agent up unexpectedly attached" >&2
   exit 1
 fi
@@ -271,7 +286,7 @@ set +e
   printf '\003'
   sleep 1
   printf 's'
-) | timeout 45 script -qefc "stty rows 40 cols 120; devenv processes attach" stop-manager.typescript >/dev/null
+) | timeout 45 python3 .pty-run.py stop-manager.typescript "devenv processes attach" >/dev/null
 STOP_STATUS=$?
 set -e
 case "$STOP_STATUS" in
@@ -290,7 +305,7 @@ DAEMON_PID=$(sed -n '1p' "$PID_FILE")
 if (
   sleep 3
   kill -TERM "$DAEMON_PID"
-) | timeout 45 script -qefc "stty rows 40 cols 120; devenv processes attach" manager-loss.typescript >/dev/null; then
+) | timeout 45 python3 .pty-run.py manager-loss.typescript "devenv processes attach" >/dev/null; then
   echo "attach unexpectedly succeeded after manager loss" >&2
   exit 1
 fi
