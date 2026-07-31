@@ -1571,6 +1571,70 @@ fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+    use std::sync::Mutex;
+
+    static PROCESS_STATE_LOCK: Mutex<()> = Mutex::new(());
+
+    struct ProcessStateGuard {
+        cwd: PathBuf,
+        devenv_home: Option<OsString>,
+    }
+
+    impl ProcessStateGuard {
+        fn set(cwd: &Path, devenv_home: &Path) -> Self {
+            let guard = Self {
+                cwd: env::current_dir().unwrap(),
+                devenv_home: env::var_os("DEVENV_HOME"),
+            };
+            env::set_current_dir(cwd).unwrap();
+            // SAFETY: PROCESS_STATE_LOCK serializes this test's process-wide
+            // cwd and environment changes, and both are restored by Drop.
+            unsafe { env::set_var("DEVENV_HOME", devenv_home) };
+            guard
+        }
+    }
+
+    impl Drop for ProcessStateGuard {
+        fn drop(&mut self) {
+            env::set_current_dir(&self.cwd).unwrap();
+            // SAFETY: See ProcessStateGuard::set; restoration happens before
+            // PROCESS_STATE_LOCK is released, including during unwinding.
+            unsafe {
+                match &self.devenv_home {
+                    Some(home) => env::set_var("DEVENV_HOME", home),
+                    None => env::remove_var("DEVENV_HOME"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn in_tree_allowed_profiles_reach_resolved_shell_settings() {
+        let _lock = PROCESS_STATE_LOCK.lock().unwrap();
+        let project = TempDir::new().unwrap();
+        fs::write(project.path().join("devenv.nix"), "{ }\n").unwrap();
+        let devenv_home = project.path().join("devenv-home");
+        let _state = ProcessStateGuard::set(project.path(), &devenv_home);
+
+        commands::hook::allow(&devenv_home, None, &["base".to_string()]).unwrap();
+
+        let cli = <Cli as clap::Parser>::parse_from(["devenv", "shell"]);
+        let prepared = prepare_command(cli).unwrap();
+        assert_eq!(prepared.backend.devenv.shell_settings.profiles, ["base"]);
+
+        let cli = <Cli as clap::Parser>::parse_from(["devenv", "--profile=explicit", "shell"]);
+        let prepared = prepare_command(cli).unwrap();
+        assert_eq!(
+            prepared.backend.devenv.shell_settings.profiles,
+            ["explicit"]
+        );
+
+        commands::hook::allow(&devenv_home, None, &[]).unwrap();
+        let cli = <Cli as clap::Parser>::parse_from(["devenv", "shell"]);
+        let prepared = prepare_command(cli).unwrap();
+        assert!(prepared.backend.devenv.shell_settings.profiles.is_empty());
+    }
 
     #[test]
     fn renderer_none_hands_shell_command_off_after_exit() {
