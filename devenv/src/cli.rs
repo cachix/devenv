@@ -218,7 +218,7 @@ impl FromStr for TraceOutputSpec {
     }
 }
 
-// --- Domain CLI args (clap-derived, converted to *Options for resolve()) ---
+// --- Domain CLI args (clap-derived, converted to *Options during command preparation) ---
 
 #[derive(clap::Args, Clone, Debug)]
 #[command(next_help_heading = "Nix options")]

@@ -92,7 +92,7 @@ fn main_inner() -> Result<()> {
             Commands::Inputs {
                 command: InputsCommand::Add { name, url, follows },
             } => {
-                // `inputs add` is dispatched before `resolve()` runs discovery,
+                // `inputs add` is dispatched before `prepare_command()` runs discovery,
                 // so do it here too: edit the enclosing project's `devenv.yaml`
                 // (the one `devenv shell` would use) rather than silently
                 // creating a stray one in the current subdirectory.
@@ -102,10 +102,9 @@ fn main_inner() -> Result<()> {
             _ => {}
         }
 
-        let shutdown = Shutdown::new();
-        let (ui, backend) = resolve(cli, shutdown.clone())?;
+        let prepared = prepare_command(cli)?;
 
-        match run(ui, backend, shutdown, caller) {
+        match run(prepared, caller) {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
                 Ok(secrets_err) => {
                     if !terminal::can_use_stdin_interactively() {
@@ -127,14 +126,13 @@ fn main_inner() -> Result<()> {
     }
 }
 
-/// Options for the UI/renderer thread.
-struct UiOptions {
+/// Options for the frontend/renderer thread.
+struct FrontendOptions {
     tui_allowed: bool,
     tracing_owns_terminal: bool,
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
     verbosity: VerbosityLevel,
-    discovered_root: Option<PathBuf>,
 }
 
 /// Options for the backend thread: resolved devenv config plus what to run.
@@ -147,8 +145,18 @@ struct BackendOptions {
     /// Whether an interactive reloadable shell will use the PTY session.
     /// This is decided before the frontend/backend split so both sides agree.
     use_pty: bool,
-    /// Kept alive for the duration of the backend run; `Drop` removes the dirs.
-    test_dirs: TestDirs,
+}
+
+/// Everything needed to execute a config-backed command.
+///
+/// Run-wide context and resource guards live here rather than being assigned
+/// to the frontend or backend solely for ownership reasons.
+struct PreparedCommand {
+    frontend: FrontendOptions,
+    backend: BackendOptions,
+    discovered_root: Option<PathBuf>,
+    test_environment: Option<TestEnvironment>,
+    shutdown: Arc<Shutdown>,
 }
 
 #[derive(Clone, Copy)]
@@ -182,33 +190,30 @@ impl Caller {
     }
 }
 
-/// Temporary dotfile / state directories for `devenv test`.
+/// Dotfile/state paths and temporary-directory guards for `devenv test`.
 ///
-/// The `TempDir` guards must outlive the command; dropping `TestDirs` removes
-/// the directories.
-struct TestDirs {
+/// The guards must outlive the command; dropping `TestEnvironment` removes
+/// any temporary directories.
+struct TestEnvironment {
     dotfile: Option<PathBuf>,
-    state: Option<PathBuf>,
-    _guards: (Option<TempDir>, Option<TempDir>),
+    state: PathBuf,
+    _dotfile_guard: Option<TempDir>,
+    _state_guard: Option<TempDir>,
 }
 
-impl TestDirs {
-    /// Resolve test directories for the given command.
+impl TestEnvironment {
+    /// Prepare test directories when the command is `devenv test`.
     ///
     /// Non-`test` commands get no overrides (`Devenv` uses the default
     /// `.devenv` layout). `devenv test` either runs fully isolated in temp
     /// directories (`--override-dotfile`) or reuses the real `.devenv` with an
     /// isolated `.devenv/test-state` so the eval cache survives across runs.
-    fn setup(command: &Commands) -> Result<Self> {
+    fn for_command(command: &Commands) -> Result<Option<Self>> {
         let Commands::Test {
             override_dotfile, ..
         } = command
         else {
-            return Ok(Self {
-                dotfile: None,
-                state: None,
-                _guards: (None, None),
-            });
+            return Ok(None);
         };
 
         if *override_dotfile {
@@ -231,11 +236,12 @@ impl TestDirs {
                 state_tmp.path().display()
             );
 
-            Ok(Self {
+            Ok(Some(Self {
                 dotfile: Some(dotfile_tmp.path().to_path_buf()),
-                state: Some(state_tmp.path().to_path_buf()),
-                _guards: (Some(dotfile_tmp), Some(state_tmp)),
-            })
+                state: state_tmp.path().to_path_buf(),
+                _dotfile_guard: Some(dotfile_tmp),
+                _state_guard: Some(state_tmp),
+            }))
         } else {
             // Stable test state path: isolates test services from shell state
             // while keeping the path consistent across runs so the eval cache
@@ -246,11 +252,12 @@ impl TestDirs {
                 .join(".devenv")
                 .join("test-state");
             info!("Using test state directory: {}", test_state.display());
-            Ok(Self {
+            Ok(Some(Self {
                 dotfile: None,
-                state: Some(test_state),
-                _guards: (None, None),
-            })
+                state: test_state,
+                _dotfile_guard: None,
+                _state_guard: None,
+            }))
         }
     }
 }
@@ -259,7 +266,7 @@ impl TestDirs {
 /// new working directory.
 ///
 /// Shared by both discovery sites: the early dispatch path (`inputs add`, via
-/// [`enter_discovered_project_root`]) and [`resolve`]. A chdir failure is
+/// [`enter_discovered_project_root`]) and [`prepare_command`]. A chdir failure is
 /// fatal — silently staying put would write to the wrong project.
 fn enter_root(root: &Path) -> Result<()> {
     env::set_current_dir(root)
@@ -271,7 +278,7 @@ fn enter_root(root: &Path) -> Result<()> {
             )
         })?;
     // Safety: both callers run single-threaded during early command dispatch /
-    // `resolve()`, before any tokio runtime or thread is spawned, so no other
+    // `prepare_command()`, before any tokio runtime or thread is spawned, so no other
     // thread can be reading the environment concurrently.
     unsafe {
         env::set_var("PWD", root);
@@ -279,13 +286,13 @@ fn enter_root(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// For commands dispatched before `resolve()` (e.g. `inputs add`): if invoked
+/// For commands dispatched before `prepare_command()` (e.g. `inputs add`): if invoked
 /// from a subdirectory of a project, chdir up to the directory containing
 /// `devenv.nix` so the command operates on the enclosing project, matching
 /// where `devenv shell` would run.
 fn enter_discovered_project_root() -> Result<()> {
     // Best-effort discovery: if the cwd can't be read or there's no enclosing
-    // `devenv.nix` above it, run where we are (matches `resolve()`).
+    // `devenv.nix` above it, run where we are (matches `prepare_command()`).
     let Ok(cwd) = env::current_dir() else {
         return Ok(());
     };
@@ -302,9 +309,11 @@ fn enter_discovered_project_root() -> Result<()> {
     enter_root(&root)
 }
 
-/// Resolve CLI + config files + environment into UI and backend options.
-fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendOptions)> {
+/// Prepare a config-backed CLI command for execution.
+fn prepare_command(mut cli: Cli) -> Result<PreparedCommand> {
     let command = cli.command;
+
+    // --- Project discovery and working directory ---
 
     // Source priority: explicit `--from` / `-O` overrides > a local devenv.nix
     // (here or in an ancestor) > a binding persisted by `devenv allow --from`.
@@ -318,10 +327,10 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
         && let Some(cwd) = original_cwd.as_deref()
     {
         project_root = devenv_core::paths::find_project_root(cwd);
-        // A bound directory behaves as if `--from <source>` were passed and is
-        // entered as the project root below, matching hook activation, so its
-        // devenv.yaml, .devenv state, and processes are shared by all subdirs.
         if project_root.is_none() {
+            // A bound directory behaves as if `--from <source>` were passed and is
+            // entered as the project root below, matching hook activation, so its
+            // devenv.yaml, .devenv state, and processes are shared by all subdirs.
             let home = devenv_core::paths::resolve_home()?;
             if let Some(binding) = commands::hook::trusted_from(&home, cwd)? {
                 project_root = Some(PathBuf::from(binding.path));
@@ -344,7 +353,8 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
         enter_root(root)?;
     }
 
-    // UI options: verbosity, log level, tracing, TUI. Pure CLI + env, no config.
+    // --- Frontend options ---
+
     let verbosity = resolve_verbosity(&cli.cli_options);
     let quiet = matches!(verbosity, VerbosityLevel::Quiet);
     let log_level = match verbosity {
@@ -352,7 +362,7 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
         VerbosityLevel::Quiet => devenv_tracing::Level::Warn,
         VerbosityLevel::Normal => devenv_tracing::Level::default(),
     };
-    // `resolve()` folds legacy `--trace-output` into `tracing_specs`,
+    // `TracingArgs::resolve()` folds legacy `--trace-output` into `tracing_specs`,
     // so a single walk covers env, --trace-to, and --trace-output.
     let tracing_specs = cli.tracing_args.resolve().into_diagnostic()?;
     let tracing_owns_terminal = tracing_specs.iter().any(|s| s.targets_terminal());
@@ -365,17 +375,15 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
             .tui_preference()
             .resolve(env::var_os("CI").is_some() || is_ai_agent());
 
-    let ui = UiOptions {
+    let frontend = FrontendOptions {
         tui_allowed,
         tracing_owns_terminal,
         log_level,
         tracing_specs,
         verbosity,
-        discovered_root,
     };
 
-    // Backend options. Read before the `From` conversions consume `cli.nix_args`.
-    let nix_debugger = cli.nix_args.nix_debugger;
+    // --- Project configuration ---
 
     // A `path:` source resolves to a live directory whose devenv.yaml graph is
     // merged into the config by Config::load_with_source, which also appends
@@ -423,7 +431,10 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
         config.imports.push("from".to_string());
     }
 
-    // Resolve settings from CLI + Config (pure functions, no mutation).
+    // --- Resolved settings ---
+
+    // Read before the conversion consumes `cli.nix_args`.
+    let nix_debugger = cli.nix_args.nix_debugger;
     let mut nix_settings =
         NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
     if matches!(command, Commands::Update { .. }) {
@@ -431,26 +442,29 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
     }
     let shell_settings =
         ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
+    let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
+    let secret_settings =
+        SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
+    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
+
+    // --- Command execution ---
+
+    let is_testing = matches!(&command, Commands::Test { .. });
+    // `gc` operates on the global devenv store and doesn't need a project.
+    let require_project_file = !matches!(&command, Commands::Gc { .. });
+    let test_environment = TestEnvironment::for_command(&command)?;
+
     // The frontend must prepare the PTY session before `Devenv` is constructed.
     // Capture the terminal state once so the backend follows the same decision.
     let use_pty = shell_settings.reload
         && matches!(&command, Commands::Shell { cmd: None, .. })
         && io::stdin().is_foreground_terminal()
         && io::stdout().is_terminal();
-    let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
-    let secret_settings =
-        SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
-    let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
-
-    // Per-command backend flags.
-    let is_testing = matches!(&command, Commands::Test { .. });
-    // `gc` operates on the global devenv store and doesn't need a project.
-    let require_project_file = !matches!(&command, Commands::Gc { .. });
-    let test_dirs = TestDirs::setup(&command)?;
 
     // Read off `config` before its fields are moved into `DevenvOptions`.
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
+    let shutdown = Shutdown::new();
 
     let devenv_options = devenv::DevenvOptions {
         inputs: config.inputs,
@@ -465,25 +479,32 @@ fn resolve(mut cli: Cli, shutdown: Arc<Shutdown>) -> Result<(UiOptions, BackendO
         from_external: from_source.is_some(),
         require_version_match,
         devenv_root: None,
-        devenv_dotfile: test_dirs.dotfile.clone(),
-        devenv_state: test_dirs.state.clone(),
+        devenv_dotfile: test_environment
+            .as_ref()
+            .and_then(|environment| environment.dotfile.clone()),
+        devenv_state: test_environment
+            .as_ref()
+            .map(|environment| environment.state.clone()),
         shell_cwd,
-        shutdown,
+        shutdown: shutdown.clone(),
         is_testing,
         require_project_file,
     };
 
-    let backend = BackendOptions {
-        devenv: devenv_options,
-        command,
-        verbosity,
-        nix_debugger,
-        strict_ports,
-        use_pty,
-        test_dirs,
-    };
-
-    Ok((ui, backend))
+    Ok(PreparedCommand {
+        frontend,
+        backend: BackendOptions {
+            devenv: devenv_options,
+            command,
+            verbosity,
+            nix_debugger,
+            strict_ports,
+            use_pty,
+        },
+        discovered_root,
+        test_environment,
+        shutdown,
+    })
 }
 
 /// The activity sink for a run.
@@ -501,11 +522,11 @@ impl Renderer {
     /// Pick the renderer and install its activity sink. The returned guard
     /// clears the sink on drop and must outlive the backend (it produces the
     /// events).
-    fn init(ui: &UiOptions) -> (Self, Option<ActivityGuard>) {
-        if ui.tui_allowed && terminal::can_use_stdin_interactively() {
+    fn init(frontend: &FrontendOptions) -> (Self, Option<ActivityGuard>) {
+        if frontend.tui_allowed && terminal::can_use_stdin_interactively() {
             let (rx, handle) = devenv_activity::init();
             (Renderer::Tui(rx), Some(handle.install()))
-        } else if !ui.tracing_owns_terminal {
+        } else if !frontend.tracing_owns_terminal {
             let (rx, handle) = devenv_activity::init();
             (Renderer::Console(rx), Some(handle.install()))
         } else {
@@ -696,18 +717,23 @@ fn frontend_thread_main(
 
 /// Single entry point for all command execution. Process replacement
 /// (exec, debugger) is the caller's job, after every guard here has dropped.
-fn run(
-    ui: UiOptions,
-    backend_options: BackendOptions,
-    shutdown: Arc<Shutdown>,
-    caller: Caller,
-) -> Result<CommandResult> {
-    let (renderer, _activity_guard) = Renderer::init(&ui);
+fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
+    let PreparedCommand {
+        frontend,
+        backend: backend_options,
+        discovered_root,
+        // Keep command-scoped temporary directories alive until both threads
+        // have finished and the command result has been collected.
+        test_environment: _test_environment,
+        shutdown,
+    } = prepared;
+
+    let (renderer, _activity_guard) = Renderer::init(&frontend);
     let tui = matches!(&renderer, Renderer::Tui(_));
 
-    let _tracing_guard = devenv_tracing::init_tracing(ui.log_level, &ui.tracing_specs);
+    let _tracing_guard = devenv_tracing::init_tracing(frontend.log_level, &frontend.tracing_specs);
 
-    if let Some(root) = &ui.discovered_root {
+    if let Some(root) = &discovered_root {
         tracing::info!("using project root {}", root.display());
     }
 
@@ -770,7 +796,7 @@ fn run(
     let frontend_thread = {
         let events_tx = events_tx.clone();
         let shutdown = shutdown.clone();
-        let verbosity = ui.verbosity;
+        let verbosity = frontend.verbosity;
         std::thread::Builder::new()
             .name("frontend".into())
             .spawn(move || {
@@ -860,8 +886,6 @@ async fn run_backend(
         nix_debugger,
         strict_ports: config_strict_ports,
         use_pty,
-        // Held until the backend run completes; `Drop` removes the temp dirs.
-        test_dirs: _test_dirs,
     } = backend;
 
     let devenv = Devenv::new(devenv_options).await?;
