@@ -6,6 +6,10 @@
 
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
 
+### Improvements
+
+- `devenv.yaml` can now compose configuration from remote input imports using the existing `inputs` and `imports` syntax. Remote YAML imports and their transitive inputs are pinned in the importing project's `devenv.lock`; the root project's input declarations retain precedence, allowing shared configurations to reuse a single `nixpkgs` input ([#2205](https://github.com/cachix/devenv/issues/2205)).
+
 ### Bug Fixes
 
 - Locked inputs with complete source metadata now reuse sources from the Nix store or configured binary caches without contacting their original remote, so `devenv shell` works when that remote is unavailable ([#3244](https://github.com/cachix/devenv/pull/3244)).
