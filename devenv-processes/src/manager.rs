@@ -2035,52 +2035,6 @@ impl NativeProcessManager {
         }
     }
 
-    /// Read the last N lines from a file, returning them as a single string.
-    ///
-    /// Reads at most 1 MB from the end of the file to avoid loading
-    /// arbitrarily large log files into memory.
-    fn read_tail(path: &std::path::Path, max_lines: usize) -> String {
-        use std::io::{Read, Seek, SeekFrom};
-
-        let Ok(mut file) = std::fs::File::open(path) else {
-            return String::new();
-        };
-        let Ok(metadata) = file.metadata() else {
-            return String::new();
-        };
-
-        let file_size = metadata.len();
-        let read_size = file_size.min(1024 * 1024) as usize;
-        let start_pos = file_size.saturating_sub(read_size as u64);
-
-        if file.seek(SeekFrom::Start(start_pos)).is_err() {
-            return String::new();
-        }
-
-        let mut bytes = Vec::with_capacity(read_size);
-        if file.read_to_end(&mut bytes).is_err() {
-            return String::new();
-        }
-
-        let buf = String::from_utf8_lossy(&bytes);
-
-        // Scan backwards to find the start of the last N lines
-        let mut newline_count = 0;
-        let start_byte = buf
-            .rmatch_indices('\n')
-            .find_map(|(i, _)| {
-                newline_count += 1;
-                if newline_count > max_lines {
-                    Some(i + 1)
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(0);
-
-        buf[start_byte..].trim_end_matches('\n').to_string()
-    }
-
     /// Handle a single API client connection.
     async fn handle_api_client(stream: tokio::net::UnixStream, manager: Arc<Self>) {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -2122,8 +2076,8 @@ impl NativeProcessManager {
                     let (stdout_path, stderr_path) =
                         crate::command::log_paths(&manager.state_dir, &name);
                     let (stdout, stderr) = tokio::task::spawn_blocking(move || {
-                        let stdout = Self::read_tail(&stdout_path, max_lines);
-                        let stderr = Self::read_tail(&stderr_path, max_lines);
+                        let stdout = crate::log_tailer::read_tail(&stdout_path, max_lines);
+                        let stderr = crate::log_tailer::read_tail(&stderr_path, max_lines);
                         (stdout, stderr)
                     })
                     .await
@@ -2203,6 +2157,13 @@ impl NativeProcessManager {
                         });
                     }
                 }
+                ports.sort_by(|a, b| {
+                    (&a.process_name, &a.port_name, a.port).cmp(&(
+                        &b.process_name,
+                        &b.port_name,
+                        b.port,
+                    ))
+                });
                 ApiResponse::PortAllocations { ports }
             }
             Ok(ApiRequest::Attach) => {
@@ -4205,6 +4166,83 @@ mod tests {
             Some(ManagerMode::Foreground),
             "an undeclared manager must default to Foreground"
         );
+    }
+
+    #[tokio::test]
+    async fn logs_request_counts_partial_final_line() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        manager.register_waiting(test_config("logger"), None).await;
+        let (stdout_path, stderr_path) = crate::command::log_paths(manager.state_dir(), "logger");
+        std::fs::create_dir_all(stdout_path.parent().unwrap()).unwrap();
+        std::fs::write(&stdout_path, b"one\ntwo\nthree").unwrap();
+        std::fs::write(&stderr_path, b"first\r\nsecond\r\n").unwrap();
+        manager.start_api_server().unwrap();
+
+        let response = NativeProcessManager::api_request(
+            &manager.api_socket_path(),
+            &ApiRequest::Logs {
+                name: "logger".to_string(),
+                lines: Some(2),
+            },
+        )
+        .await
+        .unwrap();
+
+        match response {
+            ApiResponse::ProcessLogs { stdout, stderr } => {
+                assert_eq!(stdout, "two\nthree");
+                assert_eq!(stderr, "first\nsecond");
+            }
+            other => panic!("expected ProcessLogs response, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ports_request_is_sorted() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        for (name, ports) in [
+            (
+                "zeta",
+                HashMap::from([("web".to_string(), 8080), ("admin".to_string(), 9000)]),
+            ),
+            ("alpha", HashMap::from([("db".to_string(), 5432)])),
+        ] {
+            manager
+                .register_waiting(
+                    ProcessConfig {
+                        ports,
+                        ..test_config(name)
+                    },
+                    None,
+                )
+                .await;
+        }
+        manager.start_api_server().unwrap();
+
+        let response =
+            NativeProcessManager::api_request(&manager.api_socket_path(), &ApiRequest::Ports)
+                .await
+                .unwrap();
+
+        match response {
+            ApiResponse::PortAllocations { ports } => {
+                let ports: Vec<_> = ports
+                    .into_iter()
+                    .map(|port| (port.process_name, port.port_name, port.port))
+                    .collect();
+                assert_eq!(
+                    ports,
+                    [
+                        ("alpha".to_string(), "db".to_string(), 5432),
+                        ("zeta".to_string(), "admin".to_string(), 9000),
+                        ("zeta".to_string(), "web".to_string(), 8080),
+                    ]
+                );
+            }
+            other => panic!("expected PortAllocations response, got {other:?}"),
+        }
     }
 
     #[test]

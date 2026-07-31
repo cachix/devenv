@@ -37856,6 +37856,70 @@ submodule
 
 
 
+## tasks.\<name>.process.linux
+
+
+
+Linux-specific process configuration.
+
+Requires devenv 2.0+.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.linux.capabilities
+
+
+
+Linux capabilities to add as ambient capabilities for this process
+(e.g., “cap_net_admin”, “cap_sys_admin”).
+
+Requires devenv 2.0+.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "cap_net_admin"
+  "cap_sys_admin"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## tasks.\<name>.process.listen
 
 

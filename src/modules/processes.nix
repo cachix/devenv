@@ -495,6 +495,7 @@ in
                   paths = map toString process.watch.paths;
                 };
                 watchdog = process.watchdog;
+                linux = process.linux;
               };
             };
           })
