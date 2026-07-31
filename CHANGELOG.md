@@ -2,6 +2,10 @@
 
 ## 2.2.1 (unreleased)
 
+### Improvements
+
+- `devenv.yaml` can now compose configuration from remote input imports using the existing `inputs` and `imports` syntax. Remote YAML imports and their transitive inputs are pinned in the importing project's `devenv.lock`; the root project's input declarations retain precedence, allowing shared configurations to reuse a single `nixpkgs` input ([#2205](https://github.com/cachix/devenv/issues/2205)).
+
 ### Bug Fixes
 
 - Fixed `devenv --profile <name> allow` ignoring the selected profile for projects with a local `devenv.nix`. Allowed in-tree projects now persist their auto-activation profiles just like out-of-tree `--from` bindings; explicit `--profile` flags still take priority.

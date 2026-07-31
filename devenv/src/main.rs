@@ -407,18 +407,32 @@ fn prepare_command(mut cli: Cli) -> Result<PreparedCommand> {
             fs::canonicalize(&full_path).unwrap_or(full_path)
         });
 
-    let mut config = Config::load_with_source(from_path.as_deref())?;
-    config.check_version(crate_version!())?;
-
     let input_overrides = InputOverrides::from(cli.input_overrides);
-    for chunk in input_overrides.override_inputs.chunks_exact(2) {
-        let [name, url] = chunk else {
-            unreachable!("chunks_exact(2)")
-        };
-        config
-            .override_input_url(name, url)
-            .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
-    }
+    let mut config = Config::load_with_source(from_path.as_deref())?;
+    apply_input_overrides(&mut config, &input_overrides.override_inputs, true)?;
+
+    // Input-style imports need their locked source before their devenv.yaml
+    // can join the normal local merge. Reloading through the same Config path
+    // keeps precedence and path normalization identical for local and remote
+    // projects. CLI overrides are reapplied because they are intentionally
+    // outside the YAML merge.
+    let preliminary_nix_settings =
+        NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args.clone()), &config);
+    config = devenv_nix_backend::lock::resolve_config_imports(
+        Path::new("."),
+        config,
+        &preliminary_nix_settings,
+        |input_sources| {
+            let mut config =
+                Config::load_with_source_and_input_sources(from_path.as_deref(), input_sources)?;
+            apply_input_overrides(&mut config, &input_overrides.override_inputs, true)?;
+            Ok(config)
+        },
+    )?;
+    // Missing overrides are errors only after imported YAML has had a chance
+    // to declare the target input.
+    apply_input_overrides(&mut config, &input_overrides.override_inputs, false)?;
+    config.check_version(crate_version!())?;
 
     // A non-path source (flake ref, via --from or a persisted binding) is
     // fetched as the `from` input and its devenv.nix imported from the store.
@@ -512,6 +526,28 @@ fn prepare_command(mut cli: Cli) -> Result<PreparedCommand> {
         test_environment,
         shutdown,
     })
+}
+
+/// Apply flat `[name, url, ...]` overrides, optionally deferring unknown names
+/// until remote YAML imports have been composed.
+fn apply_input_overrides(
+    config: &mut Config,
+    overrides: &[String],
+    defer_unknown: bool,
+) -> Result<()> {
+    for chunk in overrides.chunks_exact(2) {
+        let [name, url] = chunk else {
+            unreachable!("chunks_exact(2)")
+        };
+        let is_known = config.inputs.contains_key(name) || name == "nixpkgs" || name == "devenv";
+        if defer_unknown && !is_known {
+            continue;
+        }
+        config
+            .override_input_url(name, url)
+            .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
+    }
+    Ok(())
 }
 
 /// The activity sink for a run.
