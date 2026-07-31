@@ -57,6 +57,18 @@ $ devenv allow
 devenv: allowed /home/user/myproject
 ```
 
+To activate one or more profiles whenever the project is entered, pass them
+when allowing it:
+
+```shell-session
+$ devenv --profile backend --profile observability allow
+devenv: allowed /home/user/myproject with profile backend, observability
+```
+
+The selected profiles also apply to subsequent devenv commands in the project.
+An explicit `--profile` takes priority. Run plain `devenv allow` again to clear
+the saved profile selection without revoking trust.
+
 When you `cd` into the directory next time, devenv will automatically start a shell:
 
 ```shell-session

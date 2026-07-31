@@ -57,8 +57,8 @@ pub fn print(shell: &HookShell) -> Result<()> {
 ///
 /// `from` persists an out-of-tree source (the `--from` value), so later commands
 /// in this directory resolve their devenv.nix from it without a local file.
-/// `profiles` persists alongside it, so those commands also activate the bound
-/// profiles as if `--profile` had been passed.
+/// `profiles` persists for both local projects and out-of-tree bindings, so later
+/// commands activate them as if `--profile` had been passed.
 pub fn allow(home: &Path, from: Option<&str>, profiles: &[String]) -> Result<()> {
     allow_path(home, &env::current_dir().into_diagnostic()?, from, profiles)
 }
@@ -214,6 +214,16 @@ fn is_trusted(home: &Path, abs_str: &str) -> Result<bool> {
     Ok(find_trust_entry(home, abs_str)?.is_some())
 }
 
+/// Return profiles persisted by `devenv --profile <name> allow` for an in-tree
+/// project. The caller passes the discovered project root, so this is an exact
+/// trust-entry lookup rather than an ancestor search.
+pub fn trusted_profiles(home: &Path, project_dir: &Path) -> Result<Vec<String>> {
+    let abs_str = canonical_str(project_dir)?;
+    Ok(find_trust_entry(home, &abs_str)?
+        .map(|entry| entry.profiles)
+        .unwrap_or_default())
+}
+
 /// Walk up from `dir` to the nearest ancestor bound to an out-of-tree source via
 /// `devenv allow --from`, returning its trust entry (whose `from` is always set).
 /// In-tree trust entries (no `from`) are skipped.
@@ -285,12 +295,11 @@ fn normalize_from(from: &str, base: &Path) -> Result<String> {
     Ok(format!("path:{abs}"))
 }
 
-/// Trust `project_dir`, optionally binding it to an out-of-tree `--from` source
-/// with the given `--profile`s.
+/// Trust `project_dir` with the given `--profile`s, optionally binding it to an
+/// out-of-tree `--from` source.
 ///
 /// When `from` is `None` a local `devenv.nix` must exist. When `from` is set the
-/// directory needs no local `devenv.nix`; the module comes from the source, and
-/// `profiles` persist with the binding.
+/// directory needs no local `devenv.nix`; the module comes from the source.
 fn allow_path(
     home: &Path,
     project_dir: &Path,
@@ -304,12 +313,6 @@ fn allow_path(
         miette::bail!("No devenv.nix found in {abs_str}");
     }
 
-    // Profiles only mean something for a binding; plain trust doesn't carry
-    // configuration, so be explicit rather than silently dropping them.
-    if from.is_none() && !profiles.is_empty() {
-        eprintln!("devenv: warning: --profile is only persisted together with --from; ignoring");
-    }
-
     // A devenv.nix here or in an ancestor always takes priority over a
     // binding, so tell the user when the binding cannot apply.
     if from.is_some()
@@ -321,11 +324,7 @@ fn allow_path(
         );
     }
 
-    let profiles = if from.is_some() {
-        profiles.to_vec()
-    } else {
-        Vec::new()
-    };
+    let profiles = profiles.to_vec();
 
     let db_path = trust_db_path(home);
     let mut lines = read_trust_lines(&db_path)?;
@@ -343,6 +342,10 @@ fn allow_path(
             profiles.join(", ")
         ),
         Some(from) => eprintln!("devenv: allowed {abs_str} from {from}"),
+        None if !profiles.is_empty() => eprintln!(
+            "devenv: allowed {abs_str} with profile {}",
+            profiles.join(", ")
+        ),
         None => eprintln!("devenv: allowed {abs_str}"),
     }
     Ok(())
@@ -557,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn test_plain_allow_does_not_persist_profiles() {
+    fn test_allow_persists_profiles_for_local_project() {
         let dir = TempDir::new().unwrap();
         let project = dir.path().join("project");
         fs::create_dir_all(&project).unwrap();
@@ -565,14 +568,36 @@ mod tests {
 
         let devenv_home_dir = dir.path().join("devenv-home");
 
-        // Profiles without --from are ignored (with a warning), not stored.
-        allow_path(&devenv_home_dir, &project, None, &["backend".to_string()]).unwrap();
+        let profiles = vec!["backend".to_string(), "fast-startup".to_string()];
+        allow_path(&devenv_home_dir, &project, None, &profiles).unwrap();
 
         let abs_str = canonical_str(&project).unwrap();
         let entry = find_trust_entry(&devenv_home_dir, &abs_str)
             .unwrap()
             .unwrap();
-        assert!(entry.profiles.is_empty());
+        assert_eq!(entry.profiles, profiles);
+        assert_eq!(
+            trusted_profiles(&devenv_home_dir, &project).unwrap(),
+            profiles
+        );
+    }
+
+    #[test]
+    fn test_plain_allow_clears_persisted_profiles() {
+        let dir = TempDir::new().unwrap();
+        let project = dir.path().join("project");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("devenv.nix"), "{ }\n").unwrap();
+
+        let devenv_home_dir = dir.path().join("devenv-home");
+        allow_path(&devenv_home_dir, &project, None, &["backend".to_string()]).unwrap();
+        allow_path(&devenv_home_dir, &project, None, &[]).unwrap();
+
+        assert!(
+            trusted_profiles(&devenv_home_dir, &project)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

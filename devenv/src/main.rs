@@ -317,6 +317,8 @@ fn prepare_command(mut cli: Cli) -> Result<PreparedCommand> {
 
     // Source priority: explicit `--from` / `-O` overrides > a local devenv.nix
     // (here or in an ancestor) > a binding persisted by `devenv allow --from`.
+    // Profiles persisted by `allow` apply only when no explicit --profile was
+    // supplied.
     // Has to run before Config::load() reads "./devenv.yaml".
     let original_cwd = env::current_dir().ok();
     let has_overrides = !cli.input_overrides.nix_module_options.is_empty();
@@ -327,7 +329,12 @@ fn prepare_command(mut cli: Cli) -> Result<PreparedCommand> {
         && let Some(cwd) = original_cwd.as_deref()
     {
         project_root = devenv_core::paths::find_project_root(cwd);
-        if project_root.is_none() {
+        if let Some(root) = project_root.as_deref() {
+            if cli.shell_args.profiles.is_empty() {
+                let home = devenv_core::paths::resolve_home()?;
+                cli.shell_args.profiles = commands::hook::trusted_profiles(&home, root)?;
+            }
+        } else {
             // A bound directory behaves as if `--from <source>` were passed and is
             // entered as the project root below, matching hook activation, so its
             // devenv.yaml, .devenv state, and processes are shared by all subdirs.
