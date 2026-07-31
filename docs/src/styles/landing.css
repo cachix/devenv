@@ -24,6 +24,7 @@
 .landing-stat-grid > *,
 .landing-secret > *,
 .landing-compose > *,
+.landing-profile-grid > *,
 .landing-pipeline > *,
 .landing-proc-grid > *,
 .landing-bento > *,
@@ -39,6 +40,7 @@
 .landing-step,
 .landing-pipe-card,
 .landing-proc-card,
+.landing-profile-card,
 .landing-hero-prompt,
 .landing-hero-preview,
 .landing-tree-node {
@@ -1061,6 +1063,81 @@
 }
 
 [data-theme='dark'] .landing-merged-chip {
+  color: var(--color-gray-200);
+}
+
+/* ── Profiles ── */
+
+.landing-profile-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: stretch;
+  margin-top: 2rem;
+}
+
+@media (min-width: 900px) {
+  .landing-profile-grid {
+    grid-template-columns: 0.9fr 1.1fr;
+  }
+}
+
+.landing-profile-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.landing-profile-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  border-radius: 0.75rem;
+  background: var(--sl-color-bg-nav);
+  border: 1px solid var(--sl-color-hairline);
+}
+
+.landing-profile-card.is-highlight {
+  border-color: var(--color-accent-400);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-accent-600) 10%, transparent),
+    color-mix(in srgb, var(--color-accent-400) 6%, transparent));
+}
+
+.landing-profile-command {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-gray-900);
+  overflow-wrap: anywhere;
+}
+
+[data-theme='dark'] .landing-profile-command {
+  color: #fff;
+}
+
+.landing-profile-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.landing-profile-result span {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-gray-100);
+  border: 1px solid var(--color-gray-200);
+  color: var(--color-gray-600);
+}
+
+[data-theme='dark'] .landing-profile-result span {
+  background: var(--color-gray-800);
+  border-color: var(--color-gray-700);
   color: var(--color-gray-200);
 }
 
