@@ -2,6 +2,11 @@
 status: deprecated
 ---
 
+!!! note "Why this integration is deprecated"
+
+    [Where `.env` Went Wrong](https://secretspec.dev/blog/where-env-went-wrong/) explains why `.env` files are a
+    poor fit for configuration and secret management.
+
 !!! danger "The `.env` file leaks into `nix` store"
 
     When you use the `.env` file to store secrets, beware that this
