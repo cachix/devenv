@@ -317,12 +317,11 @@ services.redis.enable = true;`} />
 };`} />
       </a>
 
-      <a href={`${base}blog/2025/07/21/announcing-secretspec-declarative-secrets-management/`} class="landing-bento-card is-link landing-bento-3">
+      <a href={`${base}integrations/secretspec/`} class="landing-bento-card is-link landing-bento-3">
         <p class="landing-bento-title">SecretSpec</p>
-        <p class="landing-bento-desc">Declarative secrets from Keychain, 1Password, LastPass, dotenv. No more <code class="inline-code">.env</code> in repos.</p>
-        <CodeBlock class="landing-bento-mini-code" lang="nix" code={`secretspec.enable = true;
-services.keycloak.settings.KC_PASSWORD._secret =
-  config.secretspec.secrets.KC_PASSWORD;`} />
+        <p class="landing-bento-desc">Declarative secrets from Keychain, 1Password, LastPass, or dotenv. Keep values out of config and committed <code class="inline-code">.env</code> files.</p>
+        <CodeBlock class="landing-bento-mini-code" lang="nix" code={`processes.api.exec =
+  "secretspec run -- npm start";`} />
       </a>
 
       <a href={`${base}containers/`} class="landing-bento-card is-link landing-bento-2">
@@ -336,26 +335,34 @@ services.keycloak.settings.KC_PASSWORD._secret =
       </a>
 
       <a href={`${base}basics/`} class="landing-bento-card is-link landing-bento-2">
-        <p class="landing-bento-title">Native shells</p>
-        <p class="landing-bento-desc">First-class support for <strong>bash</strong>, <strong>zsh</strong>, <strong>fish</strong>, and <strong>nushell</strong>. No wrapper, no compromise.</p>
+        <p class="landing-bento-title">Basics</p>
+        <p class="landing-bento-desc">Packages, variables, files, and scripts in native <strong>bash</strong>, <strong>zsh</strong>, <strong>fish</strong>, or <strong>nushell</strong>. Auto-activate on <code class="inline-code">cd</code> and apply updates at the next prompt.</p>
       </a>
 
-      <a href={`${base}ad-hoc-developer-environments/`} class="landing-bento-card is-link landing-bento-6">
+      <a href={`${base}ad-hoc-developer-environments/`} class="landing-bento-card is-link landing-bento-3">
         <p class="landing-bento-title">Ad-hoc shells — zero config</p>
         <p class="landing-bento-desc">Spin up a temporary environment without writing a <code class="inline-code">devenv.nix</code>. Great for experiments, scripts, and CI matrices.</p>
         <CodeBlock class="landing-bento-mini-code" lang="bash" code={`$ devenv -O languages.python.enable:bool true \\
        -O languages.python.version:string "3.12" \\
        shell`} />
       </a>
+
+      <a href={`${base}packages/`} class="landing-bento-card is-link landing-bento-3">
+        <p class="landing-bento-title">Search packages &amp; options</p>
+        <p class="landing-bento-desc">Search 100,000+ packages and every devenv option from the CLI, using the exact Nixpkgs version pinned by your project.</p>
+        <CodeBlock class="landing-bento-mini-code" lang="bash" code={`$ devenv search postgres
+pkgs.postgresql_17
+services.postgres.enable`} />
+      </a>
     </div>
   </div>
 </section>
 
-<!-- ============ Caching (speed bars) ============ -->
+<!-- ============ Evaluation caching (speed bars) ============ -->
 <section class="landing-showcase">
   <div class="landing-container">
     <div class="landing-showcase-head">
-      <span class="landing-showcase-eyebrow">Caching</span>
+      <span class="landing-showcase-eyebrow">Evaluation caching</span>
       <h2 class="landing-section-title">Warm shells in milliseconds.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
         Auto-invalidated evaluation caching skips unchanged work. No daemons. No manual cache management. <a href={`${base}blog/2024/10/03/devenv-13-instant-developer-environments-with-nix-caching/`} class="landing-link">How it works.</a>
@@ -428,6 +435,69 @@ services.keycloak.settings.KC_PASSWORD._secret =
   </div>
 </section>
 
+<!-- ============ Profiles ============ -->
+<section class="landing-showcase">
+  <div class="landing-container">
+    <div class="landing-showcase-head">
+      <span class="landing-showcase-eyebrow">Profiles</span>
+      <h2 class="landing-section-title">One project. Every workflow.</h2>
+      <p class="landing-section-lead landing-section-lead-narrow">
+        Switch between frontend, backend, testing, and full-stack environments without duplicating configuration. <a href={`${base}profiles/`} class="landing-link">Layer profiles manually or activate them by hostname and user.</a>
+      </p>
+    </div>
+
+    <div class="landing-profile-grid">
+      <div class="landing-profile-stack">
+        <div class="landing-profile-card">
+          <div class="landing-profile-command">$ devenv --profile backend shell</div>
+          <div class="landing-profile-result">
+            <span>postgres</span>
+            <span>redis</span>
+            <span>API tools</span>
+          </div>
+        </div>
+
+        <div class="landing-profile-card is-highlight">
+          <div class="landing-profile-command">$ devenv --profile fullstack up</div>
+          <div class="landing-profile-result">
+            <span>backend</span>
+            <span>frontend</span>
+            <span>dev server</span>
+          </div>
+        </div>
+
+        <div class="landing-profile-card">
+          <div class="landing-profile-command">hostname.ci-runner + user.alice</div>
+          <div class="landing-profile-result">
+            <span>automatic</span>
+            <span>deterministic priority</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="landing-terminal">
+        <div class="landing-terminal-header">
+          <div class="landing-terminal-dots"><span></span><span></span><span></span></div>
+          <span class="landing-terminal-title">devenv.nix</span>
+        </div>
+        <CodeBlock class="landing-terminal-body" lang="nix" code={`profiles = {
+  backend.module = {
+    services.postgres.enable = true;
+    services.redis.enable = true;
+  };
+
+  frontend.module = {
+    languages.javascript.enable = true;
+    processes.dev.exec = "npm run dev";
+  };
+
+  fullstack.extends = [ "backend" "frontend" ];
+};`} />
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ Native process manager ============ -->
 <section class="landing-showcase">
   <div class="landing-container">
@@ -491,7 +561,7 @@ services.keycloak.settings.KC_PASSWORD._secret =
       <span class="landing-showcase-eyebrow">SecretSpec</span>
       <h2 class="landing-section-title">Declare a secret. Swap the source.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        Same code reads from Keychain, 1Password, dotenv, or env. <a href={`${base}blog/2025/07/21/announcing-secretspec-declarative-secrets-management/`} class="landing-link">No <code class="inline-code">.env</code> in repos.</a>
+        The same declaration reads from Keychain, 1Password, dotenv, or env. <a href={`${base}integrations/secretspec/`} class="landing-link">Load secrets at runtime without committing their values.</a>
       </p>
     </div>
 
@@ -532,7 +602,7 @@ STRIPE_SECRET_KEY = { required = true }`} />
         <div class="landing-secret-arrow" aria-hidden="true">↓</div>
         <div class="landing-secret-step">
           <span aria-hidden="true">🐚</span>
-          <span><code class="inline-code">$ devenv shell</code> — secret injected at runtime</span>
+          <span><code class="inline-code">$ secretspec run -- npm start</code> — exposed only to the app</span>
         </div>
       </div>
     </div>
