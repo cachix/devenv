@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv shell` occasionally losing the exit code of the shell it ran, reporting success for a session that exited nonzero.
 - Fixed `devenv --profile <name> allow` ignoring the selected profile for projects with a local `devenv.nix`. Allowed in-tree projects now persist their auto-activation profiles just like out-of-tree `--from` bindings; explicit `--profile` flags still take priority.
 - Fixed `devenv init` hanging when an existing file differs from the template and there is no terminal to confirm on.
 - Fixed devenv freezing until killed when run on a terminal from a background process group, for example under GNU `timeout` or other wrappers that start commands in their own process group.

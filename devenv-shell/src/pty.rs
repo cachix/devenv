@@ -6,7 +6,14 @@
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{self, Read, Write};
 use std::sync::Mutex;
+use std::time::Duration;
 use thiserror::Error;
+
+/// Retry budget for collecting the child's exit status. The status lands on the
+/// first attempt when idle and by the fourth under load; the rest is give-up
+/// margin.
+const REAP_ATTEMPTS: u32 = 1000;
+const REAP_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
 #[derive(Debug, Error)]
 pub enum PtyError {
@@ -98,6 +105,37 @@ impl Pty {
         child
             .try_wait()
             .map_err(|e| PtyError::Io(io::Error::other(e.to_string())))
+    }
+
+    /// Collect the child's exit status once the PTY has closed.
+    ///
+    /// The kernel closes the child's descriptors before making it reapable, so
+    /// the reader observes the PTY closing while `waitpid` still reports the
+    /// child running, and a single [`Self::try_wait`] loses the exit code — on
+    /// Linux roughly half the time under load. Retrying is bounded rather than a
+    /// blocking `Child::wait` because the reader also arrives here when a live
+    /// child merely closed the PTY (a read error on Linux), where waiting would
+    /// hold the child lock that [`Self::kill`] needs to end it.
+    ///
+    /// This polls because the status is collected from the wrong event.
+    /// Decoupling the two would have the status delivered rather than waited
+    /// for: reap on SIGCHLD, hand the child to a thread that blocks in `wait`,
+    /// or watch a pidfd or kqueue. Doing that here means moving the child out
+    /// from behind this lock so `kill` can use a pid-only `clone_killer`
+    /// signaller instead, which reworks the shutdown path.
+    pub fn wait_for_exit(&self) -> Option<portable_pty::ExitStatus> {
+        for _ in 0..REAP_ATTEMPTS {
+            match self.try_wait() {
+                Ok(Some(status)) => return Some(status),
+                Ok(None) => std::thread::sleep(REAP_POLL_INTERVAL),
+                Err(e) => {
+                    tracing::debug!(error = %e, "failed to reap inner shell");
+                    return None;
+                }
+            }
+        }
+        tracing::debug!("inner shell unreaped after PTY close, exit code unavailable");
+        None
     }
 
     /// Kill the PTY child process. Recovers from a poisoned mutex.

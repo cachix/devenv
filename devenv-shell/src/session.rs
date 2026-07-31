@@ -1823,8 +1823,7 @@ impl ShellSession {
                     buf.resize(PTY_READ_BUFFER_BYTES, 0);
                     match pty_reader.read(&mut buf) {
                         Ok(0) => {
-                            let exit_code =
-                                pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
+                            let exit_code = pty_reader.wait_for_exit().map(|s| s.exit_code());
                             let _ = pty_tx.send(Event::PtyExit(exit_code));
                             break;
                         }
@@ -1836,8 +1835,7 @@ impl ShellSession {
                         }
                         Err(e) => {
                             tracing::warn!("session: PTY read error: {}", e);
-                            let exit_code =
-                                pty_reader.try_wait().ok().flatten().map(|s| s.exit_code());
+                            let exit_code = pty_reader.wait_for_exit().map(|s| s.exit_code());
                             let _ = pty_tx.send(Event::PtyExit(exit_code));
                             break;
                         }
