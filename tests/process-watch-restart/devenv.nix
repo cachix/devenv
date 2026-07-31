@@ -21,18 +21,31 @@ in
     };
   };
 
+  # Keep this disabled: the test only verifies that Linux-specific process
+  # configuration survives the processes -> tasks translation.
+  processes.capability-config = {
+    start.enable = false;
+    exec = "true";
+    linux.capabilities = [ "net_bind_service" ];
+  };
+
   # Assert at Nix eval time that watch paths are source paths, not store paths.
-  # Without the toString fix, ./watch-target would be copied to /nix/store and
-  # the file watcher would monitor the immutable store copy instead of the source.
+  # Also cover fields shared by the process and generated task schemas: these
+  # used to drift, silently dropping linux.capabilities before Rust saw them.
   assertions =
     let
       taskConfig = config.tasks."devenv:processes:watched";
       watchPath = builtins.head taskConfig.process.watch.paths;
+      capabilityTask = config.tasks."devenv:processes:capability-config";
     in
     [
       {
         assertion = !(lib.hasPrefix "/nix/store" watchPath);
         message = "watch path should be a source path, not a store path: ${watchPath}";
+      }
+      {
+        assertion = capabilityTask.process.linux.capabilities == [ "net_bind_service" ];
+        message = "linux capabilities were dropped from the generated process task";
       }
     ];
 

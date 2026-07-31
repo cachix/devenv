@@ -157,6 +157,50 @@ where
     ))
 }
 
+/// Last `max_lines` logical lines of `path`, including an unterminated final
+/// line. Reads at most 1 MiB from the end, decodes lossily, and strips carriage
+/// returns so command output is safe to render in a terminal. Missing or
+/// unreadable files yield an empty string.
+pub fn read_tail(path: &Path, max_lines: usize) -> String {
+    use std::io::{Read, Seek, SeekFrom};
+
+    if max_lines == 0 {
+        return String::new();
+    }
+
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return String::new();
+    };
+    let Ok(metadata) = file.metadata() else {
+        return String::new();
+    };
+
+    let file_size = metadata.len();
+    let read_size = file_size.min(1024 * 1024);
+    let start_pos = file_size - read_size;
+    if file.seek(SeekFrom::Start(start_pos)).is_err() {
+        return String::new();
+    }
+
+    let mut bytes = Vec::with_capacity(read_size as usize);
+    if file.read_to_end(&mut bytes).is_err() {
+        return String::new();
+    }
+
+    let text = String::from_utf8_lossy(&bytes);
+    // A final newline terminates the last logical line rather than starting
+    // another one. Exclude it before scanning so an unterminated final line
+    // still counts, while trailing empty logical lines remain intact.
+    let text = text.strip_suffix('\n').unwrap_or(&text);
+    let start = text
+        .rmatch_indices('\n')
+        .nth(max_lines - 1)
+        .map_or(0, |(index, _)| index + 1);
+    let mut tail = text[start..].to_owned();
+    tail.retain(|c| c != '\r');
+    tail
+}
+
 /// Last `max_lines` complete lines of `path` (CR stripped, at most 64 KiB
 /// scanned, decoded lossily) and the byte offset just past the last newline —
 /// the offset a follow-up tail must start from so a partial trailing line is
@@ -268,5 +312,39 @@ mod tests {
         let (backlog, offset) = read_backlog(&path, 2);
         assert_eq!(backlog, ["two", "three"]);
         assert_eq!(offset, std::fs::metadata(path).unwrap().len());
+    }
+
+    #[test]
+    fn tail_counts_an_unterminated_final_line() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("stdout.log");
+        std::fs::write(&path, b"one\ntwo\nthree").unwrap();
+
+        assert_eq!(read_tail(&path, 2), "two\nthree");
+        assert_eq!(read_tail(&path, 1), "three");
+        assert_eq!(read_tail(&path, 0), "");
+    }
+
+    #[test]
+    fn tail_preserves_trailing_empty_lines_with_or_without_a_final_newline() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("stdout.log");
+
+        std::fs::write(&path, b"old\n\n\nlast").unwrap();
+        assert_eq!(read_tail(&path, 2), "\nlast");
+
+        std::fs::write(&path, b"old\n\n\n").unwrap();
+        assert_eq!(read_tail(&path, 2), "\n");
+        assert_eq!(read_tail(&path, 1), "");
+    }
+
+    #[test]
+    fn tail_strips_crlf_and_handles_missing_files() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("stderr.log");
+        std::fs::write(&path, b"one\r\ntwo\r\nthree\r\n").unwrap();
+
+        assert_eq!(read_tail(&path, 2), "two\nthree");
+        assert_eq!(read_tail(&temp_dir.path().join("missing.log"), 10), "");
     }
 }

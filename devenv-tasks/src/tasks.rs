@@ -212,6 +212,20 @@ struct DepEval {
     dep_in_flight: bool,
 }
 
+/// Terminal outcome from waiting for a task's dependencies.
+///
+/// This used to be represented as a `(cancelled, dependency_failed)` tuple,
+/// which allowed an invalid `(true, true)` state and made precedence at call
+/// sites easy to get wrong. Shutdown deliberately wins over a dependency
+/// failure observed at the same time: once the whole run is being cancelled,
+/// every task that has not launched should report `Cancelled` consistently.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DependencyWaitOutcome {
+    Ready,
+    Cancelled,
+    DependencyFailed,
+}
+
 impl Tasks {
     /// Create a new TasksBuilder for configuring Tasks
     pub fn builder(
@@ -788,24 +802,28 @@ impl Tasks {
             // of blocking the `Start` reply. Mirrors how the cold-start path spawns
             // per-process dependency checkers.
             tokio::spawn(async move {
-                let (dep_cancelled, dep_failed) =
-                    Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown)
-                        .await;
-                if dep_cancelled || dep_failed {
-                    process_manager.cancel_waiting(&process_name).await;
-                    // Dynamic starts do not have the cold runner's
-                    // `mark_task_skipped` wrapper, so record the terminal graph
-                    // outcome here before waking downstream dependency
-                    // waiters. Otherwise the manager says Stopped while the
-                    // task remains Pending forever, stranding transitive
-                    // dependents and `processes wait`.
-                    task_state.write().await.status = TaskStatus::Completed(if dep_cancelled {
-                        TaskCompleted::Cancelled(None)
-                    } else {
-                        TaskCompleted::DependencyFailed
-                    });
-                    notify_finished.notify_waiters();
-                    return;
+                match Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown)
+                    .await
+                {
+                    DependencyWaitOutcome::Ready => {}
+                    outcome => {
+                        process_manager.cancel_waiting(&process_name).await;
+                        // Dynamic starts do not have the cold runner's
+                        // `mark_task_skipped` wrapper, so record the terminal graph
+                        // outcome here before waking downstream dependency
+                        // waiters. Otherwise the manager says Stopped while the
+                        // task remains Pending forever, stranding transitive
+                        // dependents and `processes wait`.
+                        task_state.write().await.status = TaskStatus::Completed(match outcome {
+                            DependencyWaitOutcome::Cancelled => TaskCompleted::Cancelled(None),
+                            DependencyWaitOutcome::DependencyFailed => {
+                                TaskCompleted::DependencyFailed
+                            }
+                            DependencyWaitOutcome::Ready => unreachable!(),
+                        });
+                        notify_finished.notify_waiters();
+                        return;
+                    }
                 }
 
                 // The read guard must drop before the failure path takes the
@@ -1002,24 +1020,28 @@ impl Tasks {
         refresh_task_cache: bool,
         shell_env: HashMap<String, String>,
     ) {
-        let (dep_cancelled, dep_failed) =
-            Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown).await;
-
-        if dep_cancelled || dep_failed {
-            let task_name = task_state.read().await.task.name.clone();
-            let task_activity =
-                devenv_activity::start!(Activity::task(&task_name).id(task_activity_id));
-            let completed = if dep_cancelled {
-                task_activity.cancel();
-                TaskCompleted::Cancelled(None)
-            } else {
-                task_activity.dependency_failed();
-                TaskCompleted::DependencyFailed
-            };
-            task_state.write().await.status = TaskStatus::Completed(completed);
-            notify_finished.notify_waiters();
-            notify_ui.notify_one();
-            return;
+        match Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown).await {
+            DependencyWaitOutcome::Ready => {}
+            outcome => {
+                let task_name = task_state.read().await.task.name.clone();
+                let task_activity =
+                    devenv_activity::start!(Activity::task(&task_name).id(task_activity_id));
+                let completed = match outcome {
+                    DependencyWaitOutcome::Cancelled => {
+                        task_activity.cancel();
+                        TaskCompleted::Cancelled(None)
+                    }
+                    DependencyWaitOutcome::DependencyFailed => {
+                        task_activity.dependency_failed();
+                        TaskCompleted::DependencyFailed
+                    }
+                    DependencyWaitOutcome::Ready => unreachable!(),
+                };
+                task_state.write().await.status = TaskStatus::Completed(completed);
+                notify_finished.notify_waiters();
+                notify_ui.notify_one();
+                return;
+            }
         }
 
         let now = Instant::now();
@@ -1249,14 +1271,20 @@ impl Tasks {
 
     /// Wait for task dependencies to be satisfied in the background.
     /// Each dependency is evaluated via [`Self::eval_dep`].
-    /// Returns `(cancelled, dependency_failed)`.
+    /// Shutdown takes precedence over a dependency failure observed
+    /// concurrently, so an interrupted run reports a consistent cancellation
+    /// across the remaining dependency closure.
     async fn wait_for_task_deps(
         deps: &[(Arc<RwLock<TaskState>>, DependencyKind)],
         process_manager: &Arc<NativeProcessManager>,
         notify_finished: &Notify,
         shutdown: &tokio_shutdown::Shutdown,
-    ) -> (bool, bool) {
+    ) -> DependencyWaitOutcome {
         loop {
+            if shutdown.is_cancelled() {
+                return DependencyWaitOutcome::Cancelled;
+            }
+
             // Register the notification future BEFORE checking deps to prevent
             // missed wakeups: if a dependency transitions between our check and
             // the await, we will still be woken because the Notified was already
@@ -1269,12 +1297,20 @@ impl Tasks {
             let mut all_satisfied = true;
 
             for (dep_state, dep_kind) in deps {
-                match Self::eval_dep(dep_state, dep_kind, process_manager)
+                let satisfaction = Self::eval_dep(dep_state, dep_kind, process_manager)
                     .await
-                    .sat
-                {
+                    .sat;
+                // eval_dep awaits task and manager locks. Shutdown may have
+                // arrived while those were contended; preserve cancellation
+                // precedence before interpreting the dependency result.
+                if shutdown.is_cancelled() {
+                    return DependencyWaitOutcome::Cancelled;
+                }
+                match satisfaction {
                     DepSatisfaction::Satisfied => {}
-                    DepSatisfaction::NeverSatisfiable => return (false, true),
+                    DepSatisfaction::NeverSatisfiable => {
+                        return DependencyWaitOutcome::DependencyFailed;
+                    }
                     DepSatisfaction::NotYet => {
                         all_satisfied = false;
                         break;
@@ -1283,14 +1319,15 @@ impl Tasks {
             }
 
             if all_satisfied {
-                return (false, false);
+                return DependencyWaitOutcome::Ready;
             }
 
             tokio::select! {
-                _ = notified => {},
+                biased;
                 _ = shutdown.wait_for_shutdown() => {
-                    return (true, false);
+                    return DependencyWaitOutcome::Cancelled;
                 }
+                _ = notified => {},
             }
         }
     }
@@ -1478,7 +1515,7 @@ impl Tasks {
                             config.name,
                             deps.len()
                         );
-                        let (dep_cancelled, dep_failed) = Self::wait_for_task_deps(
+                        let dep_outcome = Self::wait_for_task_deps(
                             &deps,
                             &process_manager_clone,
                             &notify_finished_clone,
@@ -1486,13 +1523,12 @@ impl Tasks {
                         )
                         .await;
                         tracing::debug!(
-                            "Process task {}: deps done, cancelled={}, failed={}",
+                            "Process task {}: deps done, outcome={:?}",
                             config.name,
-                            dep_cancelled,
-                            dep_failed
+                            dep_outcome,
                         );
 
-                        if dep_cancelled || dep_failed {
+                        if dep_outcome != DependencyWaitOutcome::Ready {
                             // Clean up the Waiting entry in the process manager
                             // so the TUI no longer shows this process as "Waiting".
                             process_manager_clone.cancel_waiting(&config.name).await;
@@ -1500,7 +1536,7 @@ impl Tasks {
                             Self::mark_task_skipped(
                                 &task_state_clone,
                                 task_activity_id,
-                                dep_cancelled,
+                                dep_outcome == DependencyWaitOutcome::Cancelled,
                                 &completed_tasks_clone,
                                 total_tasks,
                                 &orchestration_activity_inner,
@@ -2068,6 +2104,45 @@ mod schedule_tests {
         })
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for task {name} to complete"));
+    }
+
+    #[tokio::test]
+    async fn dependency_wait_reports_failure_without_shutdown() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let dependency = Arc::new(RwLock::new(TaskState::new(
+            oneshot_task("devenv:tasks:failed", vec![]),
+            VerbosityLevel::Normal,
+            None,
+        )));
+        dependency.write().await.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
+        let deps = vec![(dependency, DependencyKind::Succeeded)];
+        let shutdown = tokio_shutdown::Shutdown::new();
+
+        assert_eq!(
+            Tasks::wait_for_task_deps(&deps, &manager, &Notify::new(), &shutdown).await,
+            DependencyWaitOutcome::DependencyFailed
+        );
+    }
+
+    #[tokio::test]
+    async fn dependency_wait_prefers_shutdown_over_failure() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let dependency = Arc::new(RwLock::new(TaskState::new(
+            oneshot_task("devenv:tasks:failed", vec![]),
+            VerbosityLevel::Normal,
+            None,
+        )));
+        dependency.write().await.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
+        let deps = vec![(dependency, DependencyKind::Succeeded)];
+        let shutdown = tokio_shutdown::Shutdown::new();
+        shutdown.shutdown();
+
+        assert_eq!(
+            Tasks::wait_for_task_deps(&deps, &manager, &Notify::new(), &shutdown).await,
+            DependencyWaitOutcome::Cancelled
+        );
     }
 
     #[tokio::test]
