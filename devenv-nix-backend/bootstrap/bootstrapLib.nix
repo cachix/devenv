@@ -393,10 +393,10 @@ rec {
                     config: optionPath:
                     if lib.isAttrs config && config ? _type then
                       config
-                    else if lib.isAttrs config then
-                      lib.mapAttrs (name: value: applyOverrideRecursive value (optionPath ++ [ name ])) config
                     else if pathNeedsOverride optionPath then
                       lib.mkOverride profilePriority config
+                    else if lib.isAttrs config then
+                      lib.mapAttrs (name: value: applyOverrideRecursive value (optionPath ++ [ name ])) config
                     else
                       config;
 

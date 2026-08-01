@@ -4,6 +4,9 @@
 
 ### Bug Fixes
 
+- Fixed profiles failing to override package-valued options, such as `languages.python.package`, unless the profile
+  used `lib.mkForce`. Automatic profile priorities now apply to derivation values while mergeable package lists
+  continue to combine ([#3057](https://github.com/cachix/devenv/issues/3057)).
 - Fixed `devenv shell` occasionally losing the exit code of the shell it ran, reporting success for a session that exited nonzero.
 - Fixed `devenv --profile <name> allow` ignoring the selected profile for projects with a local `devenv.nix`. Allowed in-tree projects now persist their auto-activation profiles just like out-of-tree `--from` bindings; explicit `--profile` flags still take priority.
 - Fixed `devenv init` hanging when an existing file differs from the template and there is no terminal to confirm on.
