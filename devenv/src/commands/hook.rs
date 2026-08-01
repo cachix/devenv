@@ -446,6 +446,26 @@ mod tests {
     }
 
     #[test]
+    fn test_hook_script_passes_shell_hint() {
+        for (shell, expected) in [
+            (HookShell::Bash, "_DEVENV_SHELL_HINT=bash"),
+            (HookShell::Zsh, "_DEVENV_SHELL_HINT=zsh"),
+            (HookShell::Fish, "_DEVENV_SHELL_HINT=fish"),
+            (HookShell::Nu, "_DEVENV_SHELL_HINT: \"nu\""),
+        ] {
+            let script = hook_script(&shell);
+            assert!(
+                script.contains(expected),
+                "{shell:?} hook does not pass its shell hint"
+            );
+            assert!(
+                !script.contains("@DEVENV_SHELL_HINT@"),
+                "{shell:?} hook left an unsubstituted shell hint"
+            );
+        }
+    }
+
+    #[test]
     fn test_allow_and_revoke() {
         let dir = TempDir::new().unwrap();
         let project = dir.path().join("myproject");

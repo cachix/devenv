@@ -32,6 +32,7 @@ use tokio_shutdown::Shutdown;
 use tracing::{info, instrument};
 
 const DEVENV_CALLER: &str = "_DEVENV_CALLER";
+const DEVENV_SHELL_HINT: &str = "_DEVENV_SHELL_HINT";
 
 fn main() {
     // Handle shell completion requests (COMPLETE=bash devenv)
@@ -49,7 +50,7 @@ fn main() {
 }
 
 fn main_inner() -> Result<()> {
-    let caller = Caller::from_env();
+    let invocation = Invocation::from_env();
 
     // Retry loop: if the backend discovers secrets need interactive prompting,
     // we prompt the user and re-run the entire command with secrets now available.
@@ -102,9 +103,9 @@ fn main_inner() -> Result<()> {
             _ => {}
         }
 
-        let prepared = prepare_command(cli)?;
+        let prepared = prepare_command(cli, invocation.shell_hint.as_deref())?;
 
-        match run(prepared, caller) {
+        match run(prepared, invocation.caller) {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
                 Ok(secrets_err) => {
                     if !terminal::can_use_stdin_interactively() {
@@ -166,21 +167,45 @@ enum Caller {
     Hook,
 }
 
-impl Caller {
+struct Invocation {
+    caller: Caller,
+    shell_hint: Option<String>,
+}
+
+impl Invocation {
     fn from_env() -> Self {
         let caller = env::var_os(DEVENV_CALLER);
+        let shell_hint = env::var(DEVENV_SHELL_HINT).ok();
         // This runs before devenv starts any threads. Removing the one-shot
-        // marker prevents commands launched by an activated shell from
-        // inheriting the original caller.
-        unsafe { env::remove_var(DEVENV_CALLER) };
-
-        match caller.as_deref().and_then(|value| value.to_str()) {
-            Some("direnv") => Self::Direnv,
-            Some("hook") => Self::Hook,
-            _ => Self::Cli,
+        // invocation metadata prevents commands launched by an activated shell
+        // from inheriting the original caller or its ambient shell hint.
+        unsafe {
+            env::remove_var(DEVENV_CALLER);
+            env::remove_var(DEVENV_SHELL_HINT);
         }
+
+        Self::from_parts(
+            caller.as_deref().and_then(|value| value.to_str()),
+            shell_hint,
+        )
     }
 
+    fn from_parts(caller: Option<&str>, shell_hint: Option<String>) -> Self {
+        let caller = match caller {
+            Some("direnv") => Caller::Direnv,
+            Some("hook") => Caller::Hook,
+            _ => Caller::Cli,
+        };
+        let shell_hint = match caller {
+            Caller::Hook => shell_hint,
+            Caller::Cli | Caller::Direnv => None,
+        };
+
+        Self { caller, shell_hint }
+    }
+}
+
+impl Caller {
     fn as_str(self) -> &'static str {
         match self {
             Self::Cli => "cli",
@@ -310,7 +335,7 @@ fn enter_discovered_project_root() -> Result<()> {
 }
 
 /// Prepare a config-backed CLI command for execution.
-fn prepare_command(mut cli: Cli) -> Result<PreparedCommand> {
+fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCommand> {
     let command = cli.command;
 
     // --- Project discovery and working directory ---
@@ -447,8 +472,11 @@ fn prepare_command(mut cli: Cli) -> Result<PreparedCommand> {
     if matches!(command, Commands::Update { .. }) {
         nix_settings.refresh_fetchers = true;
     }
-    let shell_settings =
-        ShellSettings::resolve(devenv_core::ShellOptions::from(cli.shell_args), &config);
+    let shell_settings = ShellSettings::resolve_with_shell_hint(
+        devenv_core::ShellOptions::from(cli.shell_args),
+        &config,
+        shell_hint,
+    );
     let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
     let secret_settings =
         SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
@@ -1576,6 +1604,21 @@ mod tests {
 
     static PROCESS_STATE_LOCK: Mutex<()> = Mutex::new(());
 
+    #[test]
+    fn shell_hint_is_only_accepted_from_hook_invocations() {
+        let hook = Invocation::from_parts(Some("hook"), Some("zsh".to_string()));
+        assert!(matches!(hook.caller, Caller::Hook));
+        assert_eq!(hook.shell_hint.as_deref(), Some("zsh"));
+
+        let cli = Invocation::from_parts(None, Some("zsh".to_string()));
+        assert!(matches!(cli.caller, Caller::Cli));
+        assert!(cli.shell_hint.is_none());
+
+        let direnv = Invocation::from_parts(Some("direnv"), Some("zsh".to_string()));
+        assert!(matches!(direnv.caller, Caller::Direnv));
+        assert!(direnv.shell_hint.is_none());
+    }
+
     struct ProcessStateGuard {
         cwd: PathBuf,
         devenv_home: Option<OsString>,
@@ -1620,11 +1663,11 @@ mod tests {
         commands::hook::allow(&devenv_home, None, &["base".to_string()]).unwrap();
 
         let cli = <Cli as clap::Parser>::parse_from(["devenv", "shell"]);
-        let prepared = prepare_command(cli).unwrap();
+        let prepared = prepare_command(cli, None).unwrap();
         assert_eq!(prepared.backend.devenv.shell_settings.profiles, ["base"]);
 
         let cli = <Cli as clap::Parser>::parse_from(["devenv", "--profile=explicit", "shell"]);
-        let prepared = prepare_command(cli).unwrap();
+        let prepared = prepare_command(cli, None).unwrap();
         assert_eq!(
             prepared.backend.devenv.shell_settings.profiles,
             ["explicit"]
@@ -1632,7 +1675,7 @@ mod tests {
 
         commands::hook::allow(&devenv_home, None, &[]).unwrap();
         let cli = <Cli as clap::Parser>::parse_from(["devenv", "shell"]);
-        let prepared = prepare_command(cli).unwrap();
+        let prepared = prepare_command(cli, None).unwrap();
         assert!(prepared.backend.devenv.shell_settings.profiles.is_empty());
     }
 
