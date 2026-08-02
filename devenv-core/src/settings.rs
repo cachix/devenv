@@ -270,19 +270,47 @@ impl Default for ShellSettings {
 impl ShellSettings {
     /// Resolve shell settings from options and config sources.
     ///
-    /// Precedence: Options > Config > $SHELL > login shell > Default.
+    /// Precedence: Options > Config > hook hint > $SHELL > login shell > Default.
     pub fn resolve(options: ShellOptions, config: &Config) -> Self {
-        Self::resolve_with_env_and_login_shell(
+        Self::resolve_with_shell_hint(options, config, None)
+    }
+
+    /// Resolve shell settings with a non-authoritative hint from the invoking
+    /// shell integration. Explicit options and project configuration still win.
+    pub fn resolve_with_shell_hint(
+        options: ShellOptions,
+        config: &Config,
+        shell_hint: Option<&str>,
+    ) -> Self {
+        Self::resolve_with_shell_hint_env_and_login_shell(
             options,
             config,
+            shell_hint,
             shell_name_from_env,
             login_shell_name,
         )
     }
 
+    #[cfg(test)]
     fn resolve_with_env_and_login_shell(
         options: ShellOptions,
         config: &Config,
+        env_shell: impl FnOnce() -> Option<String>,
+        login_shell: impl FnOnce() -> Option<(String, std::path::PathBuf)>,
+    ) -> Self {
+        Self::resolve_with_shell_hint_env_and_login_shell(
+            options,
+            config,
+            None,
+            env_shell,
+            login_shell,
+        )
+    }
+
+    fn resolve_with_shell_hint_env_and_login_shell(
+        options: ShellOptions,
+        config: &Config,
+        shell_hint: Option<&str>,
         env_shell: impl FnOnce() -> Option<String>,
         login_shell: impl FnOnce() -> Option<(String, std::path::PathBuf)>,
     ) -> Self {
@@ -320,6 +348,16 @@ impl ShellSettings {
                 );
                 ("bash".to_string(), None, "devenv.yaml (fallback)")
             }
+        } else if let Some(shell) = shell_hint.and_then(supported_shell) {
+            // Preserve the absolute login-shell path when it describes the
+            // hinted dialect. This keeps hook activation working even when
+            // the editor also supplied a stripped PATH.
+            let shell_path = if shell == "bash" {
+                None
+            } else {
+                login_shell().and_then(|(name, path)| (name == shell).then_some(path))
+            };
+            (shell, shell_path, "shell hook")
         } else if let Some(shell) = env_shell().and_then(|shell| supported_shell(&shell)) {
             (shell, None, "$SHELL env")
         } else if let Some((name, path)) = login_shell()
@@ -721,6 +759,78 @@ mod tests {
         };
         let settings = ShellSettings::resolve(options, &config);
         assert_eq!(settings.shell, "zsh");
+    }
+
+    #[test]
+    fn shell_settings_hook_hint_precedes_stale_env_shell() {
+        let settings = ShellSettings::resolve_with_shell_hint_env_and_login_shell(
+            ShellOptions::default(),
+            &Config::default(),
+            Some("zsh"),
+            || Some("bash".to_string()),
+            || {
+                Some((
+                    "zsh".to_string(),
+                    std::path::PathBuf::from("/run/current-system/sw/bin/zsh"),
+                ))
+            },
+        );
+
+        assert_eq!(settings.shell, "zsh");
+        assert_eq!(
+            settings.shell_path,
+            Some(std::path::PathBuf::from("/run/current-system/sw/bin/zsh"))
+        );
+    }
+
+    #[test]
+    fn shell_settings_config_precedes_hook_hint() {
+        let config = Config {
+            shell: Some("fish".into()),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve_with_shell_hint_env_and_login_shell(
+            ShellOptions::default(),
+            &config,
+            Some("zsh"),
+            || panic!("config shell should suppress ambient shell lookup"),
+            || panic!("config shell should suppress login shell lookup"),
+        );
+
+        assert_eq!(settings.shell, "fish");
+        assert!(settings.shell_path.is_none());
+    }
+
+    #[test]
+    fn shell_settings_options_precede_hook_hint() {
+        let options = ShellOptions {
+            shell: Some("bash".into()),
+            ..Default::default()
+        };
+        let settings = ShellSettings::resolve_with_shell_hint_env_and_login_shell(
+            options,
+            &Config::default(),
+            Some("zsh"),
+            || panic!("explicit shell should suppress ambient shell lookup"),
+            || panic!("explicit shell should suppress login shell lookup"),
+        );
+
+        assert_eq!(settings.shell, "bash");
+        assert!(settings.shell_path.is_none());
+    }
+
+    #[test]
+    fn shell_settings_unsupported_hook_hint_uses_env_shell() {
+        let settings = ShellSettings::resolve_with_shell_hint_env_and_login_shell(
+            ShellOptions::default(),
+            &Config::default(),
+            Some("tcsh"),
+            || Some("fish".to_string()),
+            || panic!("supported ambient shell should suppress login shell lookup"),
+        );
+
+        assert_eq!(settings.shell, "fish");
+        assert!(settings.shell_path.is_none());
     }
 
     #[test]

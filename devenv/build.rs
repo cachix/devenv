@@ -89,12 +89,13 @@ fn assemble_shell_hooks() -> Result<(), Box<dyn std::error::Error>> {
     let posix = fs::read_to_string("hooks/hook.posix.sh")?;
     println!("cargo:rerun-if-changed=hooks/hook.posix.sh");
 
-    for (register_path, out_name) in [
-        ("hooks/hook.bash-register.sh", "hook.sh"),
-        ("hooks/hook.zsh-register.zsh", "hook.zsh"),
+    for (register_path, out_name, shell_name) in [
+        ("hooks/hook.bash-register.sh", "hook.sh", "bash"),
+        ("hooks/hook.zsh-register.zsh", "hook.zsh", "zsh"),
     ] {
         let register = fs::read_to_string(register_path)?;
-        fs::write(out_dir.join(out_name), format!("{posix}\n{register}"))?;
+        let script = posix.replace("@DEVENV_SHELL_HINT@", shell_name);
+        fs::write(out_dir.join(out_name), format!("{script}\n{register}"))?;
         println!("cargo:rerun-if-changed={register_path}");
     }
 

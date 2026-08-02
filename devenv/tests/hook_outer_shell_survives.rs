@@ -226,6 +226,62 @@ fn no_respawn_inside_devenv_shell() {
 }
 
 #[test]
+fn hook_passes_invoking_shell_as_hint() {
+    for (shell, src, path_override) in shells() {
+        let project = fake_project();
+        let shim_dir = tempfile::tempdir().unwrap();
+        let calls = shim_dir.path().join("calls");
+        let shim = shim_dir.path().join("devenv");
+        fs::write(
+            &shim,
+            format!(
+                r#"#!/bin/sh
+case "$1" in
+  hook-should-activate)
+    printf '%s\n' {project:?}
+    ;;
+  shell)
+    printf '%s\n' "${{_DEVENV_SHELL_HINT:-}}" > {calls:?}
+    ;;
+esac
+"#,
+                project = project.path(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&shim, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let stale_shell = if shell == "fish" {
+            "set -gx SHELL /bin/bash"
+        } else {
+            "export SHELL=/bin/bash"
+        };
+        let clear_markers = if shell == "fish" {
+            "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR"
+        } else {
+            "unset DEVENV_ROOT _DEVENV_HOOK_DIR"
+        };
+        let script = format!(
+            "{clear_markers}\n{stale_shell}\n{src}\ncd {project:?}\n{path_override}\n_devenv_hook\n",
+            project = project.path(),
+            path_override = path_override(shim_dir.path()),
+        );
+        let out = run(shell, &script);
+        assert!(
+            out.status.success(),
+            "[{shell}] hook failed.\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        );
+        assert_eq!(
+            fs::read_to_string(&calls).unwrap_or_default().trim(),
+            shell,
+            "[{shell}] hook did not pass the invoking shell as its hint"
+        );
+    }
+}
+
+#[test]
 fn fish_deferred_activation_skips_if_already_active() {
     // Fish defers activation to the next prompt (see the comment on
     // `_devenv_hook` in hook.fish) to avoid spawning inside a PWD event
