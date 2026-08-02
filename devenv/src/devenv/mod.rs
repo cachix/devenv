@@ -3472,16 +3472,13 @@ fn resolve_secretspec_into(
         }
     };
 
-    let resolved = secretspec::Resolved {
-        secrets: validated_secrets
-            .resolved
-            .secrets
-            .into_iter()
-            .map(|(k, v)| (k, v.expose_secret().to_string()))
-            .collect(),
-        provider: validated_secrets.resolved.provider,
-        profile: validated_secrets.resolved.profile,
-    };
+    let resolved_secrets = validated_secrets
+        .resolved
+        .secrets
+        .iter()
+        .map(|(key, value)| (key.clone(), value.expose_secret().to_string()))
+        .collect();
+    let resolved = validated_secrets.into_resolved(resolved_secrets);
 
     cell.set(resolved)
         .map_err(|_| miette!("Secretspec resolved already set"))

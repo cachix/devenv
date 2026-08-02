@@ -27054,14 +27054,14 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.17.0";
+        version = "0.17.1";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "a8794e46ec9664a0e1a3869cc3105d0853937e48";
-          sha256 = "1mvr7z4q4pzy2gixggzx7j2g2vgxs88rd1nxn7878ydgir5dghmk";
+          rev = "f578b0bfd70b0729b3995aef04d52a245a04ce85";
+          sha256 = "0cfsirk2mbbkyysz56la7mlklkwah35hjrhkykzknn0x88qq5h17";
         };
         dependencies = [
           {
@@ -27236,9 +27236,9 @@ rec {
           "infisical" = [ "dep:reqwest" "tokio/sync" ];
           "kdbx" = [ "dep:keepass" ];
           "keyring" = [ "dep:keyring" "dep:whoami" ];
-          "openbao" = [ "dep:reqwest" ];
+          "openbao" = [ "dep:reqwest" "tokio/sync" ];
           "scaleway" = [ "dep:reqwest" ];
-          "vault" = [ "dep:reqwest" ];
+          "vault" = [ "dep:reqwest" "tokio/sync" ];
           "vendored-dbus" = [ "keyring?/vendored" ];
         };
         resolvedDefaultFeatures = [ "age" "akv" "awssm" "bws" "cli" "default" "gcsm" "infisical" "kdbx" "keyring" "openbao" "scaleway" "sops" "vault" ];
