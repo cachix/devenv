@@ -1,0 +1,272 @@
+---
+title: devenv.yaml
+---
+
+<!-- This file is auto-generated from devenv-core/src/config.rs doc comments. Do not edit. -->
+
+## backend
+
+Select the Nix backend used to evaluate `devenv.nix`.
+
+*Type:* `nix` · *Default:* `nix`
+
+## clean.enabled
+
+<small class="added-in">Added in <code>1.0</code></small>
+
+Clean the environment when entering the shell.
+
+*Type:* `boolean` · *Default:* `false`
+
+## clean.keep
+
+<small class="added-in">Added in <code>1.0</code></small>
+
+A list of environment variables to keep when cleaning the environment.
+
+*Type:* `list of string` · *Default:* `[]`
+
+## imports
+
+A list of relative paths, absolute paths, or references to inputs to import `devenv.nix` and `devenv.yaml` files.
+See [Composing using imports](/composing-using-imports/).
+
+*Type:* `list of string` · *Default:* `[]`
+
+## impure
+
+<small class="added-in">Added in <code>1.0</code></small>
+
+Relax the hermeticity of the environment.
+
+*Type:* `boolean` · *Default:* `false`
+
+## inputs
+
+Map of Nix inputs.
+See [Inputs](/inputs/).
+
+*Type:* `attribute set of input` · *Default:* `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`
+
+## inputs.\<name\>.flake
+
+Does the input contain `flake.nix` or `devenv.nix`.
+
+*Type:* `boolean` · *Default:* `true`
+
+## inputs.\<name\>.follows
+
+Another input to "inherit" from by name.
+See [Following inputs](/inputs/#following-inputs).
+
+*Type:* `string`
+
+## inputs.\<name\>.inputs
+
+Override nested inputs by name.
+See [Following inputs](/inputs/#following-inputs).
+
+*Type:* `attribute set of input`
+
+## inputs.\<name\>.overlays
+
+A list of overlays to include from the input.
+See [Overlays](/overlays/).
+
+*Type:* `list of string` · *Default:* `[]`
+
+## inputs.\<name\>.url
+
+URI specification of the input.
+See [Supported URI formats](/inputs/#supported-uri-formats).
+
+*Type:* `string`
+
+## nixpkgs.allow_broken
+
+<small class="added-in">Added in <code>1.7</code></small>
+
+Allow packages marked as broken.
+
+*Type:* `boolean` · *Default:* `false`
+
+## nixpkgs.allow_non_source
+
+Allow packages not built from source.
+
+*Type:* `boolean` · *Default:* `true` (nixpkgs default)
+
+## nixpkgs.allow_unfree
+
+<small class="added-in">Added in <code>1.7</code></small>
+
+Allow unfree packages.
+
+*Type:* `boolean` · *Default:* `false`
+
+## nixpkgs.allow_unsupported_system
+
+<small class="added-in">Added in <code>2.0.5</code></small>
+
+Allow packages that are not supported on the current system.
+
+*Type:* `boolean` · *Default:* `false`
+
+## nixpkgs.allowlisted_licenses
+
+A list of license names to allow.
+Uses nixpkgs license attribute names (e.g. `gpl3Only`, `mit`, `asl20`).
+See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).
+
+*Type:* `list of string` · *Default:* `[]`
+
+## nixpkgs.android_sdk.accept_license
+
+Accept the Android SDK license.
+Can also be set via the `NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1` environment variable.
+
+*Type:* `boolean` · *Default:* `false`
+
+## nixpkgs.blocklisted_licenses
+
+A list of license names to block.
+Uses nixpkgs license attribute names (e.g. `unfree`, `bsl11`).
+See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/licenses.nix).
+
+*Type:* `list of string` · *Default:* `[]`
+
+## nixpkgs.cuda_capabilities
+
+<small class="added-in">Added in <code>1.7</code></small>
+
+Select CUDA capabilities for nixpkgs.
+
+*Type:* `list of string` · *Default:* `[]`
+
+## nixpkgs.cuda_support
+
+<small class="added-in">Added in <code>1.7</code></small>
+
+Enable CUDA support for nixpkgs.
+
+*Type:* `boolean` · *Default:* `false`
+
+## nixpkgs.per_platform
+
+<small class="added-in">Added in <code>1.7</code></small>
+
+Per-platform nixpkgs configuration.
+Accepts the same options as `nixpkgs`.
+
+*Type:* `attribute set of nixpkgs config`
+
+## nixpkgs.permitted_insecure_packages
+
+<small class="added-in">Added in <code>1.7</code></small>
+
+A list of insecure permitted packages.
+
+*Type:* `list of string` · *Default:* `[]`
+
+## nixpkgs.permitted_unfree_packages
+
+<small class="added-in">Added in <code>1.9</code></small>
+
+A list of unfree packages to allow by name.
+
+*Type:* `list of string` · *Default:* `[]`
+
+## nixpkgs.rocm_support
+
+<small class="added-in">Added in <code>2.0.7</code></small>
+
+Enable ROCm support for nixpkgs.
+
+*Type:* `boolean` · *Default:* `false`
+
+## profile
+
+<small class="added-in">Added in <code>1.11</code></small>
+
+Default profile to activate.
+Can be overridden by `--profile` CLI flag.
+See [Profiles](/profiles/).
+
+*Type:* `string`
+
+## reload
+
+<small class="added-in">Added in <code>2.0</code></small>
+
+Enable auto-reload of the shell when files change.
+Can be overridden by `--reload` or `--no-reload` CLI flags.
+
+*Type:* `boolean` · *Default:* `true`
+
+## require_version
+
+<small class="added-in">Added in <code>2.1</code></small>
+
+Version requirement for the devenv CLI.
+Set to `true` to enforce that the CLI version matches the modules version
+(from the `devenv` input), or use a constraint string with operators
+(`>=`, `<=`, `>`, `<`, `=`, or a bare version for an exact match).
+
+*Type:* `boolean | string`
+
+## secretspec.cachix_auth_token
+
+<small class="added-in">Added in <code>2.2</code></small>
+
+Require the Cachix auth token through SecretSpec when
+`CACHIX_AUTH_TOKEN` is not set in the environment.
+
+Set to `true` to use the built-in `CACHIX_AUTH_TOKEN` secret name,
+`false` to disable SecretSpec lookup, or a string to use a custom
+secret name. No declaration in `secretspec.toml` is required.
+
+*Type:* `boolean | string` · *Default:* unset
+
+## secretspec.enable
+
+<small class="added-in">Added in <code>1.8</code></small>
+
+Enable [secretspec integration](/integrations/secretspec/).
+
+*Type:* `boolean` · *Default:* `false`
+
+## secretspec.profile
+
+<small class="added-in">Added in <code>1.8</code></small>
+
+Secretspec profile name to use.
+
+*Type:* `string`
+
+## secretspec.provider
+
+<small class="added-in">Added in <code>1.8</code></small>
+
+Secretspec provider to use.
+
+*Type:* `string`
+
+## shell
+
+<small class="added-in">Added in <code>2.1</code></small>
+
+Default interactive shell to use when entering the devenv environment.
+Can be overridden by the `--shell` CLI flag.
+Falls back to the `$SHELL` environment variable, then `bash`.
+
+Supported values: `bash`, `zsh`, `fish`, `nu`. Any other value falls back to `bash`.
+
+*Type:* `string` · *Default:* `$SHELL` or `bash`
+
+## strict_ports
+
+Error if a port is already in use instead of auto-allocating the next available port.
+Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags.
+
+*Type:* `boolean` · *Default:* `false`
+

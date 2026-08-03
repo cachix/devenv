@@ -124,7 +124,7 @@ profile = "minimal"
 
 ### Git hooks
 
-Rust tools integrate seamlessly with [git hooks](/reference/options.md/#git-hookshooks):
+Rust tools integrate seamlessly with [git hooks](/reference/options/#git-hookshooks):
 
 ```nix
 {

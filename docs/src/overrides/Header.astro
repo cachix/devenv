@@ -1,0 +1,328 @@
+---
+import config from 'virtual:starlight/user-config';
+
+import LanguageSelect from '@astrojs/starlight/components/LanguageSelect.astro';
+import Search from '@astrojs/starlight/components/Search.astro';
+import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro';
+import ThemeSelect from '@astrojs/starlight/components/ThemeSelect.astro';
+import { Icon } from '@astrojs/starlight/components';
+
+const shouldRenderSearch =
+  config.pagefind || config.components.Search !== '@astrojs/starlight/components/Search.astro';
+const isLanding = Astro.locals.starlightRoute?.entry?.data?.template === 'splash';
+const navLinks = [
+  { label: 'Docs', href: '/getting-started/' },
+  { label: 'Reference', href: '/reference/options/' },
+  { label: 'Blog', href: '/blog/' },
+  { label: 'Cloud', href: '/cloud/' },
+  { label: 'Community', href: '/community/get-involved/' },
+];
+---
+
+<div class:list={['header', { 'is-landing': isLanding }]}>
+  <div class="title-wrapper sl-flex">
+    <SiteTitle />
+  </div>
+
+  <nav class="top-nav print:hidden" aria-label="Primary">
+    {navLinks.map((link) => <a href={link.href}>{link.label}</a>)}
+  </nav>
+
+  <div class="search-wrapper print:hidden">
+    {shouldRenderSearch && <Search />}
+  </div>
+
+  <div class="right-group print:hidden">
+    <a
+      class="release-pill"
+      href="https://github.com/cachix/devenv/releases/latest"
+      aria-label="Latest devenv release"
+      data-release-pill
+      hidden
+    >
+      <span data-release-version></span>
+    </a>
+
+    <a
+      class="github-pill"
+      href="https://github.com/cachix/devenv"
+      aria-label="devenv on GitHub"
+    >
+      <Icon name="github" />
+      <span data-stars-count hidden></span>
+    </a>
+
+    {
+      isLanding && (
+        <details class="compact-nav">
+          <summary aria-label="Open navigation">
+            <Icon name="bars" />
+          </summary>
+          <nav aria-label="Compact primary navigation">
+            {navLinks.map((link) => (
+              <a href={link.href}>{link.label}</a>
+            ))}
+          </nav>
+        </details>
+      )
+    }
+
+    <a
+      class="social-link desktop-social"
+      href="https://discord.gg/naMgvexb6q"
+      aria-label="Discord"
+    >
+      <Icon name="discord" />
+    </a>
+    <a class="social-link desktop-social" href="/blog/rss.xml" aria-label="RSS">
+      <Icon name="rss" />
+    </a>
+
+    <div class="desktop-controls">
+      <ThemeSelect />
+      <LanguageSelect />
+    </div>
+  </div>
+</div>
+
+<script>
+  const formatStars = (count: number) =>
+    count >= 10_000
+      ? `${(count / 1000).toFixed(0)}k`
+      : count >= 1000
+        ? `${(count / 1000).toFixed(1).replace(/\.0$/, '')}k`
+        : String(count);
+
+  try {
+    const response = await fetch('/api/github');
+    if (response.ok) {
+      const { stars, latestRelease } = await response.json();
+
+      if (typeof stars === 'number') {
+        for (const target of document.querySelectorAll<HTMLElement>('[data-stars-count]')) {
+          target.textContent = formatStars(stars);
+          target.hidden = false;
+        }
+      }
+
+      if (typeof latestRelease === 'string') {
+        for (const pill of document.querySelectorAll<HTMLElement>('[data-release-pill]')) {
+          const target = pill.querySelector<HTMLElement>('[data-release-version]');
+          if (target) target.textContent = latestRelease;
+          pill.hidden = false;
+        }
+      }
+    }
+  } catch {
+    // GitHub metadata is optional; core navigation remains available.
+  }
+</script>
+
+<style>
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 100%;
+    position: relative;
+  }
+
+  .title-wrapper {
+    overflow: clip;
+    padding: 0.25rem;
+    margin: -0.25rem;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+
+  .search-wrapper {
+    order: 3;
+    min-width: 2rem;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .right-group {
+    order: 2;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .top-nav,
+  .desktop-social,
+  .desktop-controls {
+    display: none;
+  }
+
+  .compact-nav {
+    position: relative;
+  }
+
+  .compact-nav summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid var(--sl-color-hairline-shade);
+    border-radius: 999px;
+    color: var(--sl-color-gray-2);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .compact-nav summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .compact-nav summary:hover,
+  .compact-nav[open] summary {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-white);
+  }
+
+  .compact-nav summary :global(svg) {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+
+  .compact-nav nav {
+    position: absolute;
+    z-index: calc(var(--sl-z-index-navbar) + 1);
+    top: calc(100% + 0.75rem);
+    inset-inline-end: 0;
+    display: grid;
+    min-width: 11rem;
+    padding: 0.45rem;
+    border: 1px solid var(--sl-color-hairline-shade);
+    border-radius: 0.75rem;
+    background: var(--sl-color-bg-nav);
+    box-shadow: var(--sl-shadow-lg);
+  }
+
+  .compact-nav nav a {
+    padding: 0.6rem 0.75rem;
+    border-radius: 0.45rem;
+    color: var(--sl-color-gray-2);
+    font-size: 0.85rem;
+    text-decoration: none;
+  }
+
+  .compact-nav nav a:hover {
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-white);
+  }
+
+  .release-pill,
+  .github-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    min-height: 1.75rem;
+    border: 1px solid var(--sl-color-hairline-shade);
+    border-radius: 999px;
+    background: var(--sl-color-bg-nav);
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+    font-family: var(--sl-font-mono, ui-monospace, monospace);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .release-pill:hover,
+  .github-pill:hover {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-white);
+  }
+
+  .github-pill :global(svg) {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+
+  .header:not(.is-landing) .release-pill {
+    display: none;
+  }
+
+  @media (min-width: 50rem) {
+    .header {
+      gap: 1rem;
+    }
+
+    .search-wrapper {
+      order: initial;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .right-group {
+      order: initial;
+      margin-left: 0;
+      gap: 0.75rem;
+    }
+
+    .header:not(.is-landing) .release-pill {
+      display: inline-flex;
+    }
+
+    .desktop-social,
+    .desktop-controls {
+      display: flex;
+      align-items: center;
+    }
+
+    .desktop-controls {
+      gap: 0.5rem;
+    }
+
+    .social-link {
+      color: var(--sl-color-gray-2);
+      padding: 0.25rem;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .social-link:hover {
+      color: var(--sl-color-white);
+    }
+  }
+
+  @media (min-width: 76rem) {
+    .compact-nav {
+      display: none;
+    }
+
+    .top-nav {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-shrink: 0;
+    }
+
+    .top-nav a {
+      color: var(--sl-color-gray-2);
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 0.25rem 0;
+      border-bottom: 1px solid transparent;
+    }
+
+    .top-nav a:hover {
+      color: var(--sl-color-white);
+      border-bottom-color: var(--sl-color-accent);
+    }
+  }
+
+  @media (max-width: 31rem) {
+    .release-pill {
+      display: none;
+    }
+  }
+</style>

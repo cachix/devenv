@@ -36,13 +36,12 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
-          add: docs/src/reference/options.md
-          message: "Auto generate docs/src/reference/options.md"
+          add: docs/src/data/options.json
+          message: "Auto generate docs options data"
 
       - name: Generate docs
         working-directory: docs/gen
         run: |
-          devenv shell devenv-generate-docs
           devenv shell devenv-verify-individual-docs
           devenv shell devenv-generate-individual-docs
 
@@ -82,8 +81,8 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
-          add: docs/src/devenv.schema.json
-          message: "Auto generate docs/src/devenv.schema.json"
+          add: docs/public/devenv.schema.json
+          message: "Auto generate docs/public/devenv.schema.json"
 
       - name: Generate devenv.yaml options reference
         run: devenv shell -- cargo xtask generate-yaml-options-doc
@@ -92,15 +91,8 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
-          add: docs/src/reference/yaml-options.md
-          message: "Auto generate docs/src/reference/yaml-options.md"
-
-      - uses: EndBug/add-and-commit@v10
-        if: ${{ github.event_name == 'push' }}
-        with:
-          default_author: github_actions
-          add: docs/requirements.txt
-          message: "Auto update docs/requirements.txt"
+          add: docs/src/content/docs/reference/yaml-options.md
+          message: "Auto generate docs YAML options"
 
       - name: Check for uncommitted changes
         run: |

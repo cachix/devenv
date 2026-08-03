@@ -177,4 +177,4 @@ When updating the changelog:
 
 ## Files That Should Not Be Edited
 
-- `docs/reference/options.md` - Auto-generated from Nix module options
+- `docs/src/data/options.json` - Auto-generated from Nix module options

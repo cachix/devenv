@@ -1,0 +1,71 @@
+---
+title: "pascal"
+---
+
+<!-- Do not edit this generated file. Edit docs/src/individual-docs instead. -->
+
+
+
+[comment]: # (Please add your documentation on top of this line)
+
+## Options
+
+### languages.pascal.enable
+
+Whether to enable tools for Pascal development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
+
+
+
+### languages.pascal.lazarus.enable
+
+
+
+Whether to enable lazarus graphical IDE for the FreePascal language.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)

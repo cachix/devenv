@@ -4,10 +4,9 @@ set -xe
 
 pushd docs
 
-pip install -r requirements.txt
-mkdocs build
-cp _redirects site/
+npm ci
+npm run build
 
 popd
 
-mv docs/site site
+mv docs/dist site

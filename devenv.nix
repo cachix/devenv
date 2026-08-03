@@ -43,9 +43,9 @@ in
         5. Put today's date in CHANGELOG.md replacing "(unreleased)"
         6. Create a new "## X.Y.Z (unreleased)" section above the released version in CHANGELOG.md
         7. If this is a major version bump (X.Y.0, not X.Y.Z patch):
-           - Generate a blog post in docs/src/blog/posts/
-           - Follow the naming convention: devenv-vX.Y-short-description.md
-           - Use existing blog posts as reference for format and style
+           - Generate a blog post in docs/src/content/docs/blog/YYYY/MM/DD/
+           - Preserve the dated URL convention used by the existing posts
+           - Use existing blog posts as reference for frontmatter, format, and style
         8. Commit the changes
         9. Capture the release commit SHA with `git rev-parse HEAD`
         10. Push the commit(s) to GitHub

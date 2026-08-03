@@ -1,0 +1,792 @@
+---
+title: "Rust"
+---
+
+<!-- Do not edit this generated file. Edit docs/src/individual-docs instead. -->
+
+
+
+The `languages.rust` module provides comprehensive support for [Rust](https://www.rust-lang.org/) development, offering flexible toolchain management through two distinct approaches.
+
+## Getting started
+
+Enable Rust support in your `devenv.nix`:
+
+```nix
+{
+  languages.rust.enable = true;
+}
+```
+
+This will provide a complete Rust development environment with `rustc`, `cargo`, `clippy`, `rustfmt`, and `rust-analyzer`.
+
+## Toolchain management
+
+devenv supports two approaches for managing Rust toolchains:
+
+### 1. nixpkgs channel (default)
+
+The `nixpkgs` channel is easy to set up and uses the Rust version currently available in your nixpkgs revision. However, it's limited to the version in nixpkgs.
+
+```nix
+{
+  languages.rust = {
+    enable = true;
+    channel = "nixpkgs"; # default
+  };
+}
+```
+
+### 2. rust-overlay channels
+
+For more control over versions and features, use the `stable`, `beta`, or `nightly` channels powered by [rust-overlay](https://github.com/oxalica/rust-overlay):
+
+- ✅ Rustup-like channel selection
+- ✅ Access to any Rust version
+- ✅ Support for cross-compilation targets
+
+```nix
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+    version = "1.81.0"; # or "latest"
+  };
+}
+```
+
+## Examples
+
+### Basic setup with latest stable
+
+```nix
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+  };
+}
+```
+
+### Nightly Rust with extra components
+
+```nix
+{
+  languages.rust = {
+    enable = true;
+    channel = "nightly";
+    components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "miri" ];
+  };
+}
+```
+
+### Cross-compilation setup
+
+```nix
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+    targets = [ "wasm32-unknown-unknown" "aarch64-unknown-linux-gnu" ];
+  };
+}
+```
+
+### Minimal installation
+
+```nix
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+    components = [ "rustc" "cargo" "rust-std" ];
+  };
+}
+```
+
+### Using rust-toolchain.toml
+
+If your project uses a `rust-toolchain.toml` file, devenv can automatically configure the toolchain from it:
+
+```nix
+{
+  languages.rust = {
+    enable = true;
+    toolchainFile = ./rust-toolchain.toml;
+  };
+}
+```
+
+Example `rust-toolchain.toml`:
+```toml
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
+```
+
+## Integration with other tools
+
+### Git hooks
+
+Rust tools integrate seamlessly with [git hooks](/reference/options/#git-hookshooks):
+
+```nix
+{
+  languages.rust.enable = true;
+
+  git-hooks.hooks = {
+    rustfmt.enable = true;
+    clippy.enable = true;
+  };
+}
+```
+
+[comment]: # (Please add your documentation on top of this line)
+
+## Options
+
+### languages.rust.enable
+
+
+
+Whether to enable tools for Rust development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.channel
+
+The rustup toolchain to install.
+
+
+
+*Type:*
+one of “nixpkgs”, “stable”, “beta”, “nightly”
+
+
+
+*Default:*
+
+```nix
+"nixpkgs"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.clangLinker.enable
+
+
+
+Use Clang as the Rust linker driver on Linux.
+
+This avoids GCC’s ` collect2 ` wrapper, which can hit ` Argument list too long `
+in large Nix development environments before the final linker receives
+Rust’s response file.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+pkgs.stdenv.isLinux
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.components
+
+
+
+List of [Rustup components](https://rust-lang.github.io/rustup/concepts/components.html)
+to install. Defaults to those available in ` nixpkgs `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.cranelift.enable
+
+
+
+Use [Cranelift](https://cranelift.dev/) as the codegen backend for dev builds.
+
+Cranelift compiles significantly faster than LLVM at the cost of less optimized output.
+Requires the nightly channel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.cranelift.excludePackages
+
+
+
+List of crate names that should use the LLVM backend instead of Cranelift.
+
+Generates per-package overrides in ` .cargo/config.toml `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "aws-lc-sys"
+  "aws-lc-rs"
+  "rustls"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.cranelift.forceBuildScriptsLlvm
+
+
+
+Force build scripts and proc macros to use the LLVM backend.
+
+Some build scripts may not work with Cranelift. Enable this to fall back to
+LLVM for build scripts while keeping Cranelift for regular code.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.import
+
+
+
+Import a Cargo project using crate2nix.
+
+This function takes a path to a directory containing a Cargo.toml file
+and returns a derivation that builds the Rust project using crate2nix.
+
+Example usage:
+
+```nix
+let
+mypackage = config.languages.rust.import ./path/to/cargo/project {};
+in {
+languages.rust.enable = true;
+packages = [ mypackage ];
+}
+```
+
+
+
+*Type:*
+function that evaluates to a(n) function that evaluates to a(n) package
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.lld.enable
+
+
+
+Use [lld](https://lld.llvm.org/) as the linker.
+
+lld is LLVM’s linker and is the recommended fast linker for Darwin.
+Works on both Linux and macOS.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.lsp.enable
+
+
+
+Whether to enable Rust Language Server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.lsp.package
+
+
+
+The Rust language server package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+Depends on the configured toolchain:
+
+ - ` nixpkgs ` channel: ` pkgs.rust-analyzer `.
+ - non-nixpkgs channel: the ` rust-analyzer ` component from the rust-overlay toolchain, with a fallback to ` pkgs.rust-analyzer ` if not present in the manifest.
+ - ` toolchainFile `: the aggregated toolchain package derived from the file.
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.mold.enable
+
+
+
+Use [mold](https://github.com/rui314/mold) as the linker.
+
+mold is a faster drop-in replacement for existing Unix linkers.
+It is several times quicker than the LLVM lld linker.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.rustflags
+
+
+
+Extra flags to pass to the Rust compiler.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.targets
+
+
+
+List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
+to install. Defaults to only the native target.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.toolchain
+
+
+
+Rust component packages. May optionally define additional components, for example ` miri `.
+
+
+
+*Type:*
+open submodule of attribute set of package
+
+
+
+*Default:*
+
+```nix
+nixpkgs
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.toolchain.cargo
+
+
+
+cargo package
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+
+```nix
+pkgs.cargo
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.toolchain.clippy
+
+
+
+clippy package
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+
+```nix
+pkgs.clippy
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.toolchain.rust-analyzer
+
+
+
+rust-analyzer package
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+
+```nix
+pkgs.rust-analyzer
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.toolchain.rustc
+
+
+
+rustc package
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+
+```nix
+pkgs.rustc
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.toolchain.rustfmt
+
+
+
+rustfmt package
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+
+```nix
+pkgs.rustfmt
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.toolchainFile
+
+
+
+Path to a ` rust-toolchain ` or ` rust-toolchain.toml ` file for automatic toolchain configuration.
+
+When set, devenv will use rust-overlay’s ` fromRustupToolchainFile ` to automatically
+configure the toolchain based on the file contents (channel, components, targets, profile).
+
+This follows the standard Rust toolchain file format documented at:
+https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file
+
+Cannot be used together with manual ` channel ` or ` version ` configuration.
+
+Example:
+
+```nix
+languages.rust.toolchainFile = ./rust-toolchain.toml;
+```
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+./rust-toolchain.toml
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.toolchainPackage
+
+
+
+The aggregated toolchain package, which includes the configured components and targets.
+This is automatically set based on the channel and components configuration.
+
+
+
+*Type:*
+package
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.version
+
+
+
+Which version of rust to use, this value could be ` latest `,` 1.81.0 `, ` 2021-01-01 `.
+Only works when languages.rust.channel is NOT nixpkgs.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"latest"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.wild.enable
+
+
+
+Use [wild](https://github.com/wild-linker/wild) as the linker.
+
+wild is a very fast linker for Linux.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)

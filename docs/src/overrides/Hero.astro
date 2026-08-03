@@ -1,0 +1,7 @@
+---
+import Default from '@astrojs/starlight/components/Hero.astro';
+
+const entry = Astro.locals.starlightRoute?.entry;
+const isLanding = entry?.data?.template === 'splash' && entry.id !== '404';
+---
+{isLanding ? null : <Default {...Astro.props}><slot /></Default>}
