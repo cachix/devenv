@@ -2,6 +2,10 @@
 
 ## 2.2.2 (unreleased)
 
+### Bug Fixes
+
+- Fixed allocated ports resolving to the declared base port in every command except `devenv up` and `devenv tasks run`. `devenv shell`, `direnv-export` and the other evaluating commands seed port allocations from a running process manager again ([#2710](https://github.com/cachix/devenv/issues/2710)).
+
 ## 2.2.1 (2026-08-02)
 
 ### Bug Fixes
