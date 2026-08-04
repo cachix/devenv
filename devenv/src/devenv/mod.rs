@@ -107,7 +107,6 @@ pub struct DevenvOptions {
     /// where the user invoked devenv rather than the (chdir'd) root. `None`
     /// inherits the process working directory.
     pub shell_cwd: Option<PathBuf>,
-    pub shutdown: Arc<tokio_shutdown::Shutdown>,
     pub is_testing: bool,
     /// Whether a `devenv.nix` project file is required. Commands that operate
     /// outside of a project (e.g. `gc`) set this to `false` so they can run
@@ -116,29 +115,6 @@ pub struct DevenvOptions {
 }
 
 impl DevenvOptions {
-    pub fn new(shutdown: Arc<tokio_shutdown::Shutdown>) -> Self {
-        Self {
-            inputs: BTreeMap::new(),
-            imports: Vec::new(),
-            git_root: None,
-            nixpkgs_config: NixpkgsConfig::default(),
-            nix_settings: NixSettings::default(),
-            shell_settings: ShellSettings::default(),
-            cache_settings: CacheSettings::default(),
-            secret_settings: SecretSettings::default(),
-            input_overrides: InputOverrides::default(),
-            from_external: false,
-            require_version_match: false,
-            devenv_root: None,
-            devenv_dotfile: None,
-            devenv_state: None,
-            shell_cwd: None,
-            shutdown,
-            is_testing: false,
-            require_project_file: true,
-        }
-    }
-
     /// Resolve the canonical devenv dotfile path from options.
     ///
     /// Applies canonicalization (to resolve symlinks) and profile suffix
@@ -175,7 +151,25 @@ impl DevenvOptions {
 
 impl Default for DevenvOptions {
     fn default() -> Self {
-        Self::new(tokio_shutdown::Shutdown::new())
+        Self {
+            inputs: BTreeMap::new(),
+            imports: Vec::new(),
+            git_root: None,
+            nixpkgs_config: NixpkgsConfig::default(),
+            nix_settings: NixSettings::default(),
+            shell_settings: ShellSettings::default(),
+            cache_settings: CacheSettings::default(),
+            secret_settings: SecretSettings::default(),
+            input_overrides: InputOverrides::default(),
+            from_external: false,
+            require_version_match: false,
+            devenv_root: None,
+            devenv_dotfile: None,
+            devenv_state: None,
+            shell_cwd: None,
+            is_testing: false,
+            require_project_file: true,
+        }
     }
 }
 
@@ -319,16 +313,8 @@ fn is_valid_secret_name(name: &str) -> bool {
 }
 
 pub struct Devenv {
-    pub inputs: BTreeMap<String, Input>,
-    pub imports: Vec<String>,
-    pub git_root: Option<PathBuf>,
-    pub nixpkgs_config: NixpkgsConfig,
-    pub nix_settings: NixSettings,
-    pub shell_settings: ShellSettings,
-    pub cache_settings: CacheSettings,
-    pub secret_settings: SecretSettings,
-    pub input_overrides: InputOverrides,
-    pub from_external: bool,
+    /// The options this instance was built from.
+    options: DevenvOptions,
 
     /// Aggregated, immutable configuration shared with the backend via
     /// `Arc<NixConfig>`.
@@ -418,7 +404,11 @@ fn cachix_netrc_path(runtime_dir: &Path, process_id: u32) -> Result<PathBuf> {
 }
 
 impl Devenv {
-    pub async fn new(options: DevenvOptions) -> Result<Self> {
+    pub async fn new(
+        options: DevenvOptions,
+        shutdown: Arc<tokio_shutdown::Shutdown>,
+    ) -> Result<Self> {
+        let retained_options = options.clone();
         let devenv_home = devenv_core::paths::resolve_home()?;
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
         let devenv_home_gc = devenv_home.join("gc");
@@ -684,16 +674,7 @@ impl Devenv {
         };
 
         Ok(Self {
-            inputs: options.inputs,
-            imports: options.imports,
-            git_root: options.git_root,
-            nixpkgs_config: options.nixpkgs_config,
-            nix_settings,
-            shell_settings,
-            cache_settings,
-            secret_settings,
-            input_overrides: options.input_overrides,
-            from_external: options.from_external,
+            options: retained_options,
             devenv_root,
             devenv_dotfile,
             devenv_state: options.devenv_state,
@@ -713,7 +694,7 @@ impl Devenv {
             secretspec: secretspec_cell,
             port_allocator,
             native_process_manager: OnceCell::new(),
-            shutdown: options.shutdown,
+            shutdown,
             task_exports: std::sync::Mutex::new(BTreeMap::new()),
             task_messages: std::sync::Mutex::new(Vec::new()),
         })
@@ -767,7 +748,7 @@ impl Devenv {
             tmp: self.devenv_tmp.clone(),
             runtime: self.devenv_runtime.clone(),
             state: self.devenv_state.clone(),
-            git_root: self.git_root.clone(),
+            git_root: self.options.git_root.clone(),
         }
     }
 
@@ -785,6 +766,16 @@ impl Devenv {
     /// project root was discovered in a parent directory.
     pub fn shell_cwd(&self) -> Option<&Path> {
         self.shell_cwd.as_deref()
+    }
+
+    /// The options this instance was built from.
+    pub fn options(&self) -> &DevenvOptions {
+        &self.options
+    }
+
+    /// Shutdown handle shared with the CLI's signal handling.
+    pub fn shutdown(&self) -> Arc<tokio_shutdown::Shutdown> {
+        Arc::clone(&self.shutdown)
     }
 
     /// Get the process runtime directory, creating it on first access.
@@ -1352,7 +1343,7 @@ impl Devenv {
                 cachix::CachixIntegration::init(
                     cnix,
                     &self.cachix_manager,
-                    &self.nix_settings,
+                    &self.options.nix_settings,
                     &self.shutdown,
                 )
                 .await
@@ -1435,12 +1426,13 @@ impl Devenv {
             .to_string();
 
         // Determine target shell and dialect
-        let dialect = create_dialect(&self.shell_settings.shell);
+        let dialect = create_dialect(&self.options.shell_settings.shell);
         let target_shell_path = if dialect.name() != "bash" {
             // Prefer the absolute path from the login-shell database (populated when the shell
             // was resolved via getpwuid). In stripped environments $SHELL and PATH may not
             // contain the shell's Nix store path, so resolve_shell_path would fail.
             let path = self
+                .options
                 .shell_settings
                 .shell_path
                 .as_ref()
@@ -1530,7 +1522,7 @@ impl Devenv {
         crate::shell_env::apply_shell_env(
             &mut shell_cmd,
             shell_for_env,
-            &self.shell_settings.clean,
+            &self.options.shell_settings.clean,
         );
 
         // Inject OTEL trace context so instrumented subprocesses join the trace.
@@ -1659,8 +1651,8 @@ impl Devenv {
         async {
             cnix.update(
                 input_name,
-                &self.inputs,
-                &self.input_overrides.override_inputs,
+                &self.options.inputs,
+                &self.options.input_overrides.override_inputs,
             )
             .await
         }
@@ -1781,7 +1773,7 @@ impl Devenv {
         }
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
-            .with_refresh_task_cache(self.cache_settings.refresh_task_cache)
+            .with_refresh_task_cache(self.options.cache_settings.refresh_task_cache)
             .build()
             .await?;
 
@@ -1972,7 +1964,7 @@ impl Devenv {
             })?;
         let shell_envs = Self::parse_env_null_separated(&content);
 
-        let mut envs: HashMap<String, String> = self.shell_settings.clean.kept_env_vars();
+        let mut envs: HashMap<String, String> = self.options.shell_settings.clean.kept_env_vars();
 
         for (key, value) in shell_envs {
             if Self::is_valid_env_name(&key) {

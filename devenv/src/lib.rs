@@ -30,6 +30,7 @@ pub use devenv_tasks as tasks;
 // Re-export common subsystem crates for convenience.
 pub use devenv_activity as activity;
 pub use devenv_tui as tui;
+pub use tokio_shutdown;
 
 // Re-export core types from devenv-core for convenience
 pub use devenv_core::{

@@ -521,7 +521,6 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             .as_ref()
             .map(|environment| environment.state.clone()),
         shell_cwd,
-        shutdown: shutdown.clone(),
         is_testing,
         require_project_file,
     };
@@ -923,7 +922,7 @@ async fn run_backend(
         use_pty,
     } = backend;
 
-    let devenv = Devenv::new(devenv_options).await?;
+    let devenv = Devenv::new(devenv_options, shutdown.clone()).await?;
 
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd: None, args } = command {
@@ -932,9 +931,9 @@ async fn run_backend(
         let dotfile = devenv.dotfile().to_path_buf();
         let initial_env_script = devenv.print_dev_env(false).await?;
         let bash_path = devenv.get_bash_path().await?;
-        let clean = devenv.shell_settings.clean.clone();
-        let shell = devenv.shell_settings.shell.clone();
-        let shell_path = devenv.shell_settings.shell_path.clone();
+        let clean = devenv.options().shell_settings.clean.clone();
+        let shell = devenv.options().shell_settings.shell.clone();
+        let shell_path = devenv.options().shell_settings.shell_path.clone();
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
 
@@ -1386,14 +1385,12 @@ async fn dispatch_command(
             Ok(CommandResult::Print(output))
         }
         Commands::Mcp { http } => {
-            let mcp_options = devenv::DevenvOptions {
-                inputs: devenv.inputs.clone(),
-                imports: devenv.imports.clone(),
-                git_root: devenv.git_root.clone(),
-                nixpkgs_config: devenv.nixpkgs_config.clone(),
-                ..Default::default()
-            };
-            devenv::mcp::run_mcp_server(mcp_options, http.map(|p| p.unwrap_or(8080))).await?;
+            devenv::mcp::run_mcp_server(
+                devenv.options().clone(),
+                devenv.shutdown(),
+                http.map(|p| p.unwrap_or(8080)),
+            )
+            .await?;
             Ok(CommandResult::Done)
         }
         Commands::Lsp { print_config } => {

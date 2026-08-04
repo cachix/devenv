@@ -2,6 +2,11 @@
 
 ## 2.2.2 (unreleased)
 
+### Bug Fixes
+
+- Fixed `devenv mcp` ignoring termination signals. A single SIGTERM or SIGINT now shuts the server down immediately, without waiting for further input on stdin; previously it kept running until it was killed forcefully or its client closed stdin ([#3065](https://github.com/cachix/devenv/issues/3065)).
+- Fixed `devenv mcp` ignoring most of the session's configuration; it previously fell back to default Nix, cache, and shell settings for everything except inputs and imports.
+
 ## 2.2.1 (2026-08-02)
 
 ### Bug Fixes

@@ -28,7 +28,7 @@ impl Devenv {
                 _ => bail!("Unsupported container architecture for macOS: {host_arch}"),
             }
         } else {
-            &self.nix_settings.system
+            &self.options.nix_settings.system
         };
         let attr = format!("devenv.perSystem.{target_system}.containerBuilds.{name}.derivation");
         let paths = self
@@ -96,7 +96,7 @@ impl Devenv {
             .await?;
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
-            .with_refresh_task_cache(self.cache_settings.refresh_task_cache)
+            .with_refresh_task_cache(self.options.cache_settings.refresh_task_cache)
             .build()
             .await?;
 

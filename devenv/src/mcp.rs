@@ -24,6 +24,7 @@ use tracing::{info, warn};
 #[derive(Clone)]
 struct DevenvMcpServer {
     options: DevenvOptions,
+    shutdown: Arc<tokio_shutdown::Shutdown>,
     cache: Arc<RwLock<McpCache>>,
     tool_router: ToolRouter<Self>,
     /// Path to the native process manager API socket, if available.
@@ -37,10 +38,11 @@ struct McpCache {
 }
 
 impl DevenvMcpServer {
-    fn new(options: DevenvOptions) -> Self {
+    fn new(options: DevenvOptions, shutdown: Arc<tokio_shutdown::Shutdown>) -> Self {
         let process_socket_path = Self::compute_socket_path(&options);
         Self {
             options,
+            shutdown,
             cache: Arc::new(RwLock::new(McpCache::default())),
             tool_router: Self::tool_router(),
             process_socket_path,
@@ -101,7 +103,7 @@ impl DevenvMcpServer {
     async fn initialize(&self) -> Result<()> {
         info!("Initializing MCP server cache...");
 
-        let devenv = Devenv::new(self.options.clone()).await?;
+        let devenv = Devenv::new(self.options.clone(), self.shutdown.clone()).await?;
 
         // Fetch and cache packages
         {
@@ -488,10 +490,84 @@ fn start_response(resp: devenv_processes::ApiResponse) -> Option<Value> {
     }
 }
 
-pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> Result<()> {
+/// Stdin as an `AsyncRead` fed by a dedicated reader thread.
+///
+/// `tokio::io::stdin()` reads on the runtime's blocking pool, and a blocking
+/// read of stdin cannot be cancelled: dropping the runtime would then wait
+/// until the next byte or EOF arrives. Reading on a detached thread keeps
+/// runtime shutdown independent of stdin; the thread stays parked in `read`
+/// until the process exits.
+struct ThreadedStdin {
+    rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    chunk: Vec<u8>,
+    pos: usize,
+}
+
+impl ThreadedStdin {
+    fn spawn() -> std::io::Result<Self> {
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        std::thread::Builder::new()
+            .name("mcp-stdin".into())
+            .spawn(move || {
+                use std::io::Read;
+                let mut stdin = std::io::stdin();
+                let mut buf = [0u8; 8192];
+                loop {
+                    match stdin.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if tx.blocking_send(buf[..n].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                        Err(e) => {
+                            warn!(error = %e, "stdin read error");
+                            break;
+                        }
+                    }
+                }
+            })?;
+        Ok(Self {
+            rx,
+            chunk: Vec::new(),
+            pos: 0,
+        })
+    }
+}
+
+impl tokio::io::AsyncRead for ThreadedStdin {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        if this.pos >= this.chunk.len() {
+            match this.rx.poll_recv(cx) {
+                std::task::Poll::Ready(Some(chunk)) => {
+                    this.chunk = chunk;
+                    this.pos = 0;
+                }
+                std::task::Poll::Ready(None) => return std::task::Poll::Ready(Ok(())),
+                std::task::Poll::Pending => return std::task::Poll::Pending,
+            }
+        }
+        let n = buf.remaining().min(this.chunk.len() - this.pos);
+        buf.put_slice(&this.chunk[this.pos..this.pos + n]);
+        this.pos += n;
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+
+pub async fn run_mcp_server(
+    options: DevenvOptions,
+    shutdown: Arc<tokio_shutdown::Shutdown>,
+    http_port: Option<u16>,
+) -> Result<()> {
     info!("Starting devenv MCP server");
 
-    let server = DevenvMcpServer::new(options);
+    let server = DevenvMcpServer::new(options, shutdown.clone());
 
     // Initialize cache in background thread (Nix FFI futures are not Send)
     // Server starts immediately, tools return empty results until cache is ready
@@ -539,9 +615,12 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
                         .detail(format!("http://0.0.0.0:{}/", port))
                 );
 
+                // Signals (SIGTERM/SIGINT/SIGHUP) arrive as a cancellation of
+                // the CLI-wide shutdown token, not as raw signals here.
+                let shutdown_token = shutdown.cancellation_token();
                 axum::serve(tcp_listener, router)
-                    .with_graceful_shutdown(async {
-                        tokio::signal::ctrl_c().await.ok();
+                    .with_graceful_shutdown(async move {
+                        shutdown_token.cancelled().await;
                     })
                     .await
                     .map_err(|e| miette!("HTTP server error: {}", e))?;
@@ -549,15 +628,31 @@ pub async fn run_mcp_server(options: DevenvOptions, http_port: Option<u16>) -> R
             None => {
                 info!("Starting MCP server in stdio mode");
 
-                let service = server
-                    .serve(rmcp::transport::stdio())
-                    .await
-                    .map_err(|e| miette!("Failed to start MCP server: {}", e))?;
-
-                service
-                    .waiting()
-                    .await
-                    .map_err(|e| miette!("MCP server error: {}", e))?;
+                // `serve` blocks reading the initialize handshake and
+                // `waiting` blocks until the client closes stdin, so both
+                // must race the CLI-wide shutdown (SIGTERM/SIGINT/SIGHUP)
+                // or a signalled process never exits. Dropping the service
+                // cancels its task via its drop guard.
+                let shutdown_token = shutdown.cancellation_token();
+                let stdin = ThreadedStdin::spawn()
+                    .map_err(|e| miette!("Failed to spawn stdin reader thread: {}", e))?;
+                let serve_and_wait = async {
+                    let service = server
+                        .serve((stdin, tokio::io::stdout()))
+                        .await
+                        .map_err(|e| miette!("Failed to start MCP server: {}", e))?;
+                    service
+                        .waiting()
+                        .await
+                        .map_err(|e| miette!("MCP server error: {}", e))?;
+                    Ok::<_, miette::Report>(())
+                };
+                tokio::select! {
+                    result = serve_and_wait => result?,
+                    _ = shutdown_token.cancelled() => {
+                        info!("Shutdown requested, stopping MCP server");
+                    }
+                }
             }
         }
         Ok(())
@@ -686,9 +781,10 @@ mod tests {
             devenv_root,
             ..Default::default()
         };
-        let server = DevenvMcpServer::new(options.clone());
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let server = DevenvMcpServer::new(options.clone(), shutdown.clone());
 
-        let devenv = Devenv::new(options).await.unwrap();
+        let devenv = Devenv::new(options, shutdown).await.unwrap();
 
         let packages = server.fetch_packages_with_devenv(&devenv).await;
 
@@ -758,9 +854,10 @@ mod tests {
             devenv_root,
             ..Default::default()
         };
-        let server = DevenvMcpServer::new(options.clone());
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let server = DevenvMcpServer::new(options.clone(), shutdown.clone());
 
-        let devenv = Devenv::new(options).await.unwrap();
+        let devenv = Devenv::new(options, shutdown).await.unwrap();
 
         let options = server.fetch_options_with_devenv(&devenv).await;
 
