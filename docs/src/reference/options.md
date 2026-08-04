@@ -1312,6 +1312,30 @@ true
 
 
 
+## claude.code.agent
+
+
+
+The agent to use as Claude Code’s primary agent.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## claude.code.agents
 
 
@@ -2768,8 +2792,6 @@ null
 
 ## containers.\<name>.isBuilding
 
-
-
 Set to true when the environment is building this container.
 
 
@@ -2791,6 +2813,8 @@ false
 
 
 ## containers.\<name>.layers
+
+
 
 The layers to create.
 
@@ -6033,8 +6057,6 @@ string
 
 ## git-hooks.hooks.biome
 
-
-
 biome hook
 
 
@@ -6048,6 +6070,8 @@ submodule
 
 
 ## git-hooks.hooks.biome.enable
+
+
 
 Whether to enable this pre-commit hook.
 
@@ -8298,8 +8322,6 @@ submodule
 
 ## git-hooks.hooks.isort.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -8321,6 +8343,8 @@ false
 
 
 ## git-hooks.hooks.isort.settings.flags
+
+
 
 Flags passed to isort. See all available [here](https://pycqa.github.io/isort/docs/configuration/options.html).
 
