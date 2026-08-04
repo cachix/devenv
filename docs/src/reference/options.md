@@ -1420,6 +1420,30 @@ string
 
 
 
+## claude.code.agents.\<name>.effort
+
+
+
+Override the effort level for this agent.
+
+
+
+*Type:*
+null or one of “low”, “medium”, “high”, “xhigh”, “max”
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## claude.code.agents.\<name>.model
 
 
@@ -2768,8 +2792,6 @@ list of anything
 
 ## containers.\<name>.fromImage
 
-
-
 An existing OCI base image to build on top of, built with nix2container’s pullImage.
 
 
@@ -2791,6 +2813,8 @@ null
 
 
 ## containers.\<name>.isBuilding
+
+
 
 Set to true when the environment is building this container.
 
@@ -6033,8 +6057,6 @@ null or string
 
 ## git-hooks.hooks.autoflake.settings.flags
 
-
-
 Flags passed to autoflake.
 
 
@@ -6056,6 +6078,8 @@ string
 
 
 ## git-hooks.hooks.biome
+
+
 
 biome hook
 
@@ -8306,8 +8330,6 @@ false
 
 ## git-hooks.hooks.isort
 
-
-
 isort hook
 
 
@@ -8321,6 +8343,8 @@ submodule
 
 
 ## git-hooks.hooks.isort.enable
+
+
 
 Whether to enable this pre-commit hook.
 
