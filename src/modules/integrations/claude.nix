@@ -355,7 +355,7 @@ in
               description = "What the sub-agent does";
             };
             proactive = lib.mkOption {
-              type = lib.types.bool;
+              type = lib.types.nullOr lib.types.bool;
               default = false;
               description = "Whether Claude should use this sub-agent automatically";
             };
@@ -691,7 +691,7 @@ in
                 ---
                 name: ${name}
                 description: ${agent.description}
-                proactive: ${lib.boolToString agent.proactive}
+                ${lib.optionalString (agent.proactive != null) "proactive: ${lib.boolToString agent.proactive}"}
                 ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
                 ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
                 ${lib.optionalString (agent.permissionMode != null) "permissionMode: ${agent.permissionMode}"}
@@ -705,27 +705,47 @@ in
       ];
 
       # Add a message about the integration
-      infoSections."claude" = [
-        ''
-          Claude Code integration is enabled with automatic hooks and commands setup.
-          Settings are configured at: ${cfg.settingsPath}
-          ${lib.optionalString config.git-hooks.enable "- Auto-formatting: enabled via git-hooks (git-hooks-run)"}
-          ${lib.optionalString (cfg.commands != { })
-            "- Project commands: ${
-              lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
-            }"
-          }
-          ${lib.optionalString (cfg.agents != { })
-            "- Sub-agents: ${
-              lib.concatStringsSep ", " (lib.attrNames cfg.agents)
-            }"
-          }
-          ${lib.optionalString (cfg.mcpServers != { })
-            "- MCP servers: ${
-              lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)
-            } (configured at ${config.devenv.root}/.mcp.json)"
-          }
-        ''
+      infoSections."claude" =
+        let
+          primaryAgent = lib.filterAttrs (n: a: a.proactive == null) cfg.agents;
+        in
+        [
+          ''
+            Claude Code integration is enabled with automatic hooks and commands setup.
+            Settings are configured at: ${cfg.settingsPath}
+            ${lib.optionalString config.git-hooks.enable "- Auto-formatting: enabled via git-hooks (git-hooks-run)"}
+            ${lib.optionalString (cfg.commands != { })
+              "- Project commands: ${
+                lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
+              }"
+            }
+            ${lib.optionalString (primaryAgent != { })
+              "- Primary agent: ${
+                lib.concatStringsSep ", " (lib.attrNames primaryAgent)
+              }"
+            }
+            ${lib.optionalString (cfg.agents != { })
+              "- Sub-agents: ${
+                lib.concatStringsSep ", " (lib.attrNames (lib.filterAttrs (n: a: a.proactive != null) cfg.agents))
+              }"
+            }
+            ${lib.optionalString (cfg.mcpServers != { })
+              "- MCP servers: ${
+                lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)
+              } (configured at ${config.devenv.root}/.mcp.json)"
+            }
+          ''
+        ];
+
+      assertions = [
+        {
+          assertion = cfg.agent != null -> (cfg.agents.${cfg.agent} or null) != null;
+          message = "claude.code.agent must be set to one of the claude.code.agents.<NAME>";
+        }
+        {
+          assertion = cfg.agent != null -> cfg.agents.${cfg.agent}.proactive == null;
+          message = "claude.code.agent not null requires claude.code.agents.<NAME>.proactive to be null";
+        }
       ];
     })
 
