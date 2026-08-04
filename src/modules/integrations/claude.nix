@@ -713,7 +713,8 @@ in
       # Add a message about the integration
       infoSections."claude" =
         let
-          primaryAgent = lib.filterAttrs (n: a: a.proactive == null) cfg.agents;
+          primaryAgent = lib.filterAttrs (n: a: n == cfg.agent) cfg.agents;
+          subAgents = lib.filterAttrs (n: a: n != cfg.agent) cfg.agents;
         in
         [
           ''
@@ -730,9 +731,9 @@ in
                 lib.concatStringsSep ", " (lib.attrNames primaryAgent)
               }"
             }
-            ${lib.optionalString (cfg.agents != { })
+            ${lib.optionalString (subAgents != { })
               "- Sub-agents: ${
-                lib.concatStringsSep ", " (lib.attrNames (lib.filterAttrs (n: a: a.proactive != null) cfg.agents))
+                lib.concatStringsSep ", " (lib.attrNames  subAgents)
               }"
             }
             ${lib.optionalString (cfg.mcpServers != { })
@@ -749,8 +750,8 @@ in
           message = "claude.code.agent must be set to one of the claude.code.agents.<NAME>";
         }
         {
-          assertion = cfg.agent != null -> cfg.agents.${cfg.agent}.proactive == null;
-          message = "claude.code.agent not null requires claude.code.agents.<NAME>.proactive to be null";
+          assertion = cfg.agent != null -> (cfg.agents.${cfg.agent}.proactive or null) == null;
+          message = "claude.code.agent = <NAME> requires claude.code.agents.<NAME>.proactive to be null";
         }
       ];
     })
