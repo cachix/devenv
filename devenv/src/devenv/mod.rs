@@ -381,6 +381,10 @@ pub struct Devenv {
 
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
+    // Names whose resolved SecretSpec strings point at temporary files. The
+    // `ResolvedSecrets` value owns those files; machines reads their contents
+    // when preparing bootstrap payloads.
+    secretspec_as_paths: HashSet<String>,
 
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
@@ -556,7 +560,13 @@ impl Devenv {
         }
 
         let mut secretspec_cell: OnceCell<ResolvedSecrets> = OnceCell::new();
-        resolve_secretspec_into(&devenv_root, &secret_settings, &mut secretspec_cell)?;
+        let mut secretspec_as_paths = HashSet::new();
+        resolve_secretspec_into(
+            &devenv_root,
+            &secret_settings,
+            &mut secretspec_cell,
+            &mut secretspec_as_paths,
+        )?;
 
         // Create the cachix manager after secretspec so a secretspec secret
         // can authenticate pulls (netrc) and pushes (daemon env) even when
@@ -720,6 +730,7 @@ impl Devenv {
             dev_env_cache: OnceCell::new(),
             eval_cache_pool,
             secretspec: secretspec_cell,
+            secretspec_as_paths,
             port_allocator,
             native_process_manager: OnceCell::new(),
             shutdown,
@@ -3061,6 +3072,30 @@ impl Devenv {
         self.secretspec.get()
     }
 
+    /// Return the actual bytes behind a resolved SecretSpec value. Ordinary
+    /// secrets are encoded directly; `as_path = true` secrets are read from
+    /// the temporary file retained by `ResolvedSecrets`.
+    async fn secretspec_value_bytes(&self, name: &str) -> Result<Option<Vec<u8>>> {
+        let Some(value) = self
+            .secretspec()
+            .and_then(|resolved| resolved.secrets.get(name))
+        else {
+            return Ok(None);
+        };
+
+        if self.secretspec_as_paths.contains(name) {
+            fs::read(value)
+                .await
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!("Failed to read temporary file for SecretSpec secret {name}")
+                })
+                .map(Some)
+        } else {
+            Ok(Some(value.as_bytes().to_vec()))
+        }
+    }
+
     /// Inner implementation without activity wrapper.
     /// Called directly by `up()` (which creates its own "Configuring shell" activity)
     /// and by `get_dev_environment()` (which wraps with `#[activity]`).
@@ -3531,6 +3566,7 @@ fn resolve_secretspec_into(
     devenv_root: &Path,
     secret_settings: &SecretSettings,
     cell: &mut OnceCell<ResolvedSecrets>,
+    as_paths: &mut HashSet<String>,
 ) -> Result<()> {
     let secretspec_path = devenv_root.join("secretspec.toml");
     if !secretspec_path.exists() {
@@ -3575,7 +3611,7 @@ fn resolve_secretspec_into(
         (None, None)
     };
 
-    let mut secrets = secretspec::Secrets::load()
+    let mut secrets = secretspec::Secrets::load_from(&secretspec_path)
         .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
 
     if let Some(ref provider_str) = provider {
@@ -3597,6 +3633,14 @@ fn resolve_secretspec_into(
             .into());
         }
     };
+
+    as_paths.extend(
+        validated_secrets
+            .resolution
+            .iter()
+            .filter(|resolution| resolution.as_path)
+            .map(|resolution| resolution.name.clone()),
+    );
 
     let resolved_secrets = validated_secrets
         .resolved
@@ -3842,6 +3886,44 @@ mod tests {
                 .expect("resolve built-in token");
 
         assert_eq!(token.as_deref(), Some("test-token"));
+    }
+
+    #[test]
+    fn project_secretspec_records_and_retains_as_path_values() {
+        let root = tempfile::tempdir().expect("create project root");
+        std::fs::write(
+            root.path().join("secretspec.toml"),
+            r#"[project]
+name = "machines-test"
+revision = "1.0"
+require_reason = false
+
+[profiles.default]
+BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
+"#,
+        )
+        .expect("write SecretSpec manifest");
+        std::fs::write(root.path().join(".env"), "BOOTSTRAP_KEY=secret-contents\n")
+            .expect("write dotenv provider");
+        let settings = SecretSettings {
+            secretspec: Some(devenv_core::config::SecretspecConfig {
+                enable: true,
+                provider: Some("dotenv:.env".to_string()),
+                ..Default::default()
+            }),
+        };
+        let mut cell = OnceCell::new();
+        let mut as_paths = HashSet::new();
+
+        resolve_secretspec_into(root.path(), &settings, &mut cell, &mut as_paths)
+            .expect("resolve project SecretSpec");
+
+        assert!(as_paths.contains("BOOTSTRAP_KEY"));
+        let path = PathBuf::from(&cell.get().unwrap().secrets["BOOTSTRAP_KEY"]);
+        assert_eq!(
+            std::fs::read_to_string(path).expect("as_path file remains alive"),
+            "secret-contents"
+        );
     }
 
     #[test]

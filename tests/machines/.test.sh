@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# SecretSpec's env provider materializes this as an `as_path` temporary file.
+# The bootstrap implementation must stream the file contents, not its path.
+export SECRET_MACHINE_AGE_KEY="bootstrap-test-value"
+
 # 1. Schema evaluates and an empty machine has the expected default system.
 devenv eval 'machines.empty.system' | jq -e '.["machines.empty.system"] == "x86_64-linux"'
 
@@ -110,7 +114,7 @@ fi
 #     name must appear at least once.
 devenv machines info >info.log 2>&1
 sed 's/\x1b\[[0-9;]*m//g' info.log >info.stripped
-for m in empty hm mac nixos nohost; do
+for m in empty hm mac missing-secret nixos nohost secretful; do
   grep -q "^| $m" info.stripped || (echo "missing $m in info output"; cat info.stripped; exit 1)
 done
 
@@ -212,5 +216,44 @@ if devenv machines install --use-machines-as-builders nohost 2>err.log; then
   exit 1
 fi
 grep -q "does not have .target.host. set" err.log
+
+# 26. SecretSpec bootstrap metadata exposes only its reference and file
+#     metadata, never the secret value itself.
+devenv eval 'machinesMeta.secretful.secrets' \
+  | jq -e '.["machinesMeta.secretful.secrets"] == [
+      {
+        "mode": "0600",
+        "owner": "0:0",
+        "secret": "SECRET_MACHINE_AGE_KEY",
+        "target": "/var/lib/sops-nix/key.txt"
+      }
+    ]'
+
+# 27. An as_path SecretSpec value is materialized successfully before the
+#     install build begins. The fixture still lacks disko, so that is the next
+#     expected failure after bootstrap validation.
+if devenv machines install --phases install secretful 2>err.log; then
+  echo "expected missing-disko failure after SecretSpec validation"
+  exit 1
+fi
+grep -q "devenv inputs add disko" err.log
+if grep -q "Failed to read temporary file for SecretSpec secret" err.log; then
+  echo "as_path SecretSpec bootstrap materialization failed"
+  cat err.log
+  exit 1
+fi
+
+# 28. An undeclared bootstrap reference fails before build, SSH, or destructive
+#     work even though SecretSpec itself is enabled and another value resolved.
+if devenv machines install --phases install missing-secret 2>err.log; then
+  echo "expected unresolved SecretSpec reference to fail"
+  exit 1
+fi
+grep -q "SecretSpec did not resolve 1 bootstrap secret reference" err.log
+if grep -q "devenv inputs add disko" err.log; then
+  echo "unresolved bootstrap reference was checked after the build"
+  cat err.log
+  exit 1
+fi
 
 echo "all machines checks passed"

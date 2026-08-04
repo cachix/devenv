@@ -1,20 +1,22 @@
 # Machines
 
-!!! tip "New in version 2.0"
+!!! warning "Experimental"
+
+    The machines interface is new and may still change before it is declared stable.
 
 The `machines` option lets a single `devenv.nix` declare one or more full system configurations (NixOS hosts, nix-darwin machines, or home-manager users) alongside the dev shell that builds them. Each entry is keyed by name and carries an optional `system`, an optional `target` submodule, and one or more of `nixos`, `nix-darwin`, or `home-manager` modules.
 
-!!! warning "Rollout status"
+!!! note "Current implementation"
 
-    The `machines` feature is landing in slices. As of devenv 2.0.7:
+    The current machines implementation includes:
 
     - **Build targets** work: `devenv build machines.<name>` realises every role a machine declares; `devenv build machines.<name>.build.<role>` builds a single role.
     - **`devenv machines info [name...]`** lists every machine with its system, target, and configured roles. Read-only; does not force `build.*`.
     - **`devenv machines deploy`** works for all three roles — **NixOS**, **nix-darwin**, and **home-manager**. Each named machine is built locally, copied to `target.host` over SSH via `nix copy`, and activated. The fixed per-machine role order is NixOS → nix-darwin → home-manager. `target.host`-less home-manager machines activate in-process on the current host. nix-darwin activation sets `HOME=/var/root` automatically; the TouchID/sudo caveat under [nix-darwin](#nix-darwin) still applies because that's a target-side concern devenv can't work around.
     - **Parallel deploys** are on by default. The working set runs concurrently under one top-level activity, each machine pipelined independently (build → copy → activate). Pass **`--max-concurrent N`** to cap how many machines run at once; `--max-concurrent 1` forces strictly sequential ordering, matching the doc's "watching a single host closely" case. `-j` is not used here because it's already the global Nix `max-jobs` flag. A failure on one machine does not stop the others: every machine finishes its own pipeline, and the run exits non-zero if any failed.
     - **Bulk `devenv machines deploy`** (no arguments) enumerates every entry in the attrset and deploys each one that has `target.host` set. Entries without a host — including local-only home-manager — are reported through the activity layer as `skipped`, which is how you opt them out of bulk runs. To still deploy a `target.host`-less home-manager entry, name it explicitly.
-    - **`devenv machines install <name1> [<name2> ...]`** runs the full install pipeline: preflight probe → kexec into NixOS installer → nixos-facter hardware probe (writes `.machines/<name>/facter.json`) → disko partitioning → nix copy + nixos-install → reboot. Supports `--phases`, `--stop-after-disko`, `--no-reboot`, `--disko-mode disko|format|mount`, and `--max-concurrent N`. Install-time secrets (`install.encryptionKeys`) are piped to the target before disko; extra files (`install.extraFiles`) and SSH host key preservation (`install.copyHostKeys`) happen after nixos-install, before reboot. Custom kexec images are supported via `install.kexec.image` and `install.kexec.postSshPort`.
-    - **`--use-machines-as-builders`** configures Nix's remote builder list from the machines metadata (every machine with `target.host` becomes a candidate builder for its `system`). Sets `builders-use-substitutes = true`. Available on both `deploy` and `install`. Note: the builder config is applied via `NIX_CONFIG` env var before evaluation; whether the FFI backend picks it up depends on its initialization order.
+    - **`devenv machines install <name1> [<name2> ...]`** runs the full install pipeline: preflight probe → kexec into NixOS installer → nixos-facter hardware probe (writes `.machines/<name>/facter.json`) → disko partitioning → nix copy + nixos-install → reboot. Supports `--phases`, `--stop-after-disko`, `--no-reboot`, `--disko-mode disko|format|mount`, and `--max-concurrent N`. Install-time encryption keys (`install.encryptionKeys`) are piped to the target before disko; extra files (`install.extraFiles`), SecretSpec bootstrap files (`install.secrets`), and SSH host key preservation (`install.copyHostKeys`) happen after nixos-install, before reboot. Custom kexec images are supported via `install.kexec.image` and `install.kexec.postSshPort`.
+    - **`--use-machines-as-builders`** configures the live C-Nix remote builder settings from machines metadata (every machine with `target.host` becomes a candidate builder for its `system`) and enables builder substitutes. It is available on both `deploy` and `install` and currently requires the C-Nix backend.
 
 !!! note "Renamed from `configurations`"
 
@@ -50,14 +52,13 @@ One `target` is shared across `nixos`, `nix-darwin`, and `home-manager` on the s
 Every SSH connection devenv opens for install, deploy, copy, and builder routing uses these defaults:
 
 - `StrictHostKeyChecking=accept-new`, so parallel runs do not deadlock on interactive host key prompts on first contact. Pre populate `~/.ssh/known_hosts` if you want stricter checking.
-- `IdentitiesOnly=yes` when an `IdentityFile` is set for the target in your `~/.ssh/config`, so a loaded `ssh-agent` with many keys does not trip the remote `MaxAuthTries` and disconnect before the right key is tried.
 - A bounded `ConnectTimeout`, so an unreachable host in a bulk run fails fast instead of hanging the whole batch.
 
 Override any of these by adding your own `-o` pair to `target.sshOpts`; the last value wins.
 
-### Dotted machine names
+### Machine names
 
-`machines."host.example.com" = { ... };` is supported. Dots in the attribute name are not split into nested attrs, so the machine key can be the FQDN.
+Machine names must start with a letter or underscore and contain only letters, digits, underscores, and hyphens. Dotted names such as `machines."host.example.com"` are not accepted because the CLI uses names in Nix attribute paths.
 
 ## NixOS
 
@@ -65,7 +66,14 @@ NixOS deployment is inspired by [nixos-anywhere](https://github.com/nix-communit
 
 ### Disk layout with disko
 
-Declare the disk layout inside `machines.<name>.nixos` using disko options. devenv imports the disko module automatically, so no extra input is required:
+Add the `disko` input to `devenv.yaml`, then declare the disk layout inside `machines.<name>.nixos`. devenv imports `disko.nixosModules.disko` automatically:
+
+```yaml title="devenv.yaml"
+inputs:
+  disko:
+    url: github:nix-community/disko
+    follows: nixpkgs
+```
 
 ```nix title="devenv.nix"
 { ... }: {
@@ -294,11 +302,55 @@ A couple of footguns to know about when combining roles on one entry:
 
 ## Secrets
 
-Handling secrets is out of scope for `machines`. Use [sops-nix](https://github.com/Mic92/sops-nix) or [agenix](https://github.com/ryantm/agenix) inside your `nixos` or `home-manager` module; both integrate cleanly with the standard NixOS activation that `deploy` runs.
+Use [sops-nix](https://github.com/Mic92/sops-nix) or [agenix](https://github.com/ryantm/agenix) inside your `nixos` or `home-manager` module for steady-state secret management. Both integrate cleanly with the standard NixOS activation that `deploy` runs.
 
 !!! warning "Do not inline secrets into Nix modules"
 
-    Any literal string you embed directly into a module, for example `environment.etc."foo".text = "hunter2";` or a password baked into a `services.*` option, lands in the world readable `/nix/store`. Every user on the target can read it, and the value is also copied to every substituter the target trusts. Always route secrets through sops-nix or agenix (or equivalent) rather than embedding them.
+    Any literal string you embed directly into a module, for example `environment.etc."foo".text = "hunter2";` or a password baked into a `services.*` option, lands in the world readable `/nix/store`. Every user on the target can read it, and the value is also copied to every substituter the target trusts. Always route runtime secrets through sops-nix or agenix (or equivalent) rather than embedding them.
+
+### Bootstrapping from SecretSpec
+
+Runtime secret stores still need an initial credential—for example the age identity that lets sops-nix decrypt secrets on first boot. `install.secrets` writes those bootstrap files from the active [SecretSpec](integrations/secretspec.md) profile after `nixos-install` and before reboot:
+
+```yaml title="devenv.yaml"
+secretspec:
+  enable: true
+  provider: keyring
+  profile: production
+```
+
+```toml title="secretspec.toml"
+[project]
+name = "infrastructure"
+revision = "1.0"
+require_reason = false
+
+[profiles.production]
+WEB1_AGE_KEY = { description = "sops age identity for web1" }
+```
+
+```nix title="devenv.nix"
+machines.web1 = {
+  target.host = "root@web1.example.com";
+
+  install.secrets."/var/lib/sops-nix/key.txt" = {
+    secret = "WEB1_AGE_KEY";
+    owner = "0:0";
+    mode = "0600";
+  };
+
+  nixos = {
+    sops.age.keyFile = "/var/lib/sops-nix/key.txt";
+    # ...
+  };
+};
+```
+
+The attribute name is an absolute path in the installed system. `secret` is a name from the selected SecretSpec profile; values are resolved and materialized before any selected machine starts preflight or destructive work, then streamed to SSH on stdin. They do not appear in machine metadata, process arguments, remote scripts, or Nix store paths. File ownership must use numeric `uid:gid`, because the live installer does not know users declared only in the new NixOS system.
+
+SecretSpec entries with `as_path = true` are supported: devenv reads the retained temporary file and sends its contents, not its local filename. When installing several machines, every entry can select different secret names, or several entries can reference one shared secret. The provider and profile are global to the invocation; override them with `--secretspec-provider` and `--secretspec-profile`.
+
+`install.secrets` is intentionally bootstrap-only. It runs as part of the `install` phase, after `install.extraFiles` (so a SecretSpec file wins if both target the same path) and before `install.copyHostKeys` and reboot. It is not reapplied by `devenv machines deploy`; use sops-nix, agenix, or another runtime mechanism for rotation.
 
 LUKS root unlock keys are a separate case: they are consumed by disko at install time, not at runtime. Configure them with disko's `passwordFile` or `settings.keyFile`, which are read on the host running `devenv machines install` rather than on the target, and keep them out of your runtime secret store.
 
@@ -452,7 +504,7 @@ A few behaviors are explicit non features, called out so you do not infer them f
 - **Only `switch` activation.** There is no `boot`, `test`, or `dry-activate` mode, and no `--reboot` flag. If you need a reboot after a kernel update, follow `deploy` with a manual `ssh <host> systemctl reboot`.
 - **No built in healthchecks.** The summary reports whatever the activation script returned. If you need a post deploy probe, run it yourself after the command exits.
 - **Stateless.** The only source of truth is `devenv.nix` plus the target's running system. Unlike NixOps, there is no state file to back up, synchronize, or recover from.
-- **`install` is not resumable.** A failed install is recovered by re running `install`, which re wipes the disks.
+- **Resume is phase-based, not stateful.** Use `--phases` to restart at a known boundary after inspecting the target. devenv does not record completed phases or automatically infer where to resume.
 - **Multi role entries are not transactional.** NixOS plus home-manager on one entry can partially succeed. See [Combining roles on one machine](#combining-roles-on-one-machine) for the exact semantics.
 - **No CLI tags, groups, or label filters.** Filter at the Nix layer with `lib.filterAttrs`, or pass the names you want explicitly. See [Filtering machines](#filtering-machines).
 
@@ -468,13 +520,13 @@ Common failure symptoms and what they usually mean:
 
 ## Roadmap
 
-The `machines` feature is landing in slices. Some options and flags described below are still being implemented; each slice is shippable independently and closes a specific parity gap with nixos-anywhere.
+The machines work is organized into independently useful slices. Status labels below distinguish the current implementation from proposed follow-up interfaces.
 
 ### Slice 1: hardware detection via nixos-facter
 
 **Status:** implemented.
 
-Adds the `machines.<name>.hardware.facter` option and the `.machines/<name>/facter.json` convention (see [Hardware detection with nixos-facter](#hardware-detection-with-nixos-facter)). When `install` lands, first run against a fresh target SSHes in after kexec, runs `nixos-facter`, writes the report to `.machines/<name>/facter.json`, and `git add --intent-to-add`s it. The assembler auto imports `nixos-facter-modules.nixosModules.facter` and wires `facter.reportPath` whenever `hardware.facter` is non null, the same way the disko module is imported today.
+Adds the `machines.<name>.hardware.facter` option and the `.machines/<name>/facter.json` convention (see [Hardware detection with nixos-facter](#hardware-detection-with-nixos-facter)). During install, the facter phase SSHes into the installer, runs `nixos-facter`, writes the report to `.machines/<name>/facter.json`, and runs `git add --intent-to-add`. The module imports `nixos-facter-modules.nixosModules.facter` and wires `facter.reportPath` whenever `hardware.facter` is non-null.
 
 ### Slice 2: install phases and disko modes
 
@@ -496,27 +548,33 @@ Also adds `--disko-mode disko|format|mount` for non destructive and recovery flo
 - `format` creates partitions without destroying existing ones, useful when initializing a second disk alongside an existing layout.
 - `mount` mounts an existing layout without touching partitions, which is the recovery path when the rootfs is gone but data partitions survived.
 
-When this lands, the "install is not resumable" entry in [Known limitations](#known-limitations) goes away.
-
 ### Slice 3: bootstrap files and install time secrets
 
 **Status:** implemented.
 
-Runtime secret stores (sops-nix, agenix) solve the steady state problem but leave the bootstrap problem: the key needed to decrypt the first secret has to arrive on the target somehow. Slice 3 adds three install time options per machine:
+Runtime secret stores (sops-nix, agenix) solve the steady state problem but leave the bootstrap problem: the key needed to decrypt the first secret has to arrive on the target somehow. Slice 3 adds four install time options per machine:
 
 ```nix title="devenv.nix"
 machines.web1 = {
   install = {
     extraFiles = {
       "/var/lib/secret-age-key" = {
-        source = ./secrets/web1-age.key;
+        source = "secrets/web1-age.key";
+        owner = "0:0";
+        mode = "0600";
+      };
+    };
+
+    secrets = {
+      "/var/lib/sops-nix/key.txt" = {
+        secret = "WEB1_AGE_KEY";
         owner = "0:0";
         mode = "0600";
       };
     };
 
     encryptionKeys = {
-      "/tmp/luks.key" = ./secrets/web1-luks.key;
+      "/tmp/luks.key" = "secrets/web1-luks.key";
     };
 
     copyHostKeys = true;
@@ -524,21 +582,24 @@ machines.web1 = {
 };
 ```
 
+Paths are given as strings (absolute or relative to the devenv project root), **not** as Nix path literals (`./secrets/…`). This is load-bearing: a Nix path literal would copy the secret into `/nix/store`, which is world-readable. Strings are read by the CLI at install time and never leave the host.
+
 - `install.extraFiles` copies files onto `/` of the new system after install, before reboot. Use it for age/sops master keys, SSH host keys, `/var/lib/*` seeds. Matches nixos-anywhere's `--extra-files` and `--chown`.
+- `install.secrets` resolves named values from the active SecretSpec profile and streams them into the new system after `nixos-install`. Use it instead of keeping bootstrap key files in the project checkout.
 - `install.encryptionKeys` drops keyfiles into the installer **before disko runs**, so LUKS layouts with `passwordFile = "/tmp/luks.key"` can unlock. The keys live on the host running `devenv machines install`, not in the store.
 - `install.copyHostKeys` preserves `/etc/ssh/ssh_host_*` across a reinstall, so the target's SSH identity stays stable and `known_hosts` on every client keeps working.
 
 ### Slice 4: build placement
 
-**Status:** implemented.
+**Status:** proposed.
 
-Replaces `--use-machines-as-builders` with the richer `--build-on auto|local|remote` vocabulary:
+A future interface could replace `--use-machines-as-builders` with richer `--build-on auto|local|remote` vocabulary:
 
 - `auto` (default) builds locally when the current host can realize the target's `system`, otherwise routes to a matching machine in the attrset.
 - `local` forces local builds and fails loudly if the current host cannot produce the target's `system`.
 - `remote` forces building on the target itself. Not useful for `install`, since a freshly kexec'd target has no usable Nix, but valid for `deploy`.
 
-`--use-machines-as-builders` stays as a backwards compatible alias for `--build-on auto`.
+The current implementation exposes only `--use-machines-as-builders`.
 
 ### Slice 5: kexec override
 
@@ -557,14 +618,14 @@ machines.armbox = {
 };
 ```
 
-- `install.kexec.image` points at an alternate kexec tarball, either a local path or an http(s) URL fetched on the remote. Needed for VPN enabled installers, non standard architectures, or locked down cloud kernels.
+- `install.kexec.image` points at an alternate HTTP(S) kexec tarball fetched on the remote. Needed for VPN-enabled installers, non-standard architectures, or locked-down cloud kernels.
 - `install.kexec.postSshPort` sets the SSH port to reconnect to after kexec lands in the installer, for targets whose live sshd listens on a non 22 port.
 
 ### Slice 6: host fact probing
 
 **Status:** implemented.
 
-Internal only, no user facing option. Before any phase, `install` and `deploy` run an SSH preflight probe on the target: is the installer already running, is this a container, is root / sudo / doas available, is tar or cpio available for closure transport, is `nixos-facter` already on PATH. The probe picks the right tool for each step and aborts with a clear error when a prerequisite is missing, instead of running partway and failing at a confusing boundary. This replaces the current "assume root SSH, assume kexec works, fail loudly" posture.
+Internal only, with no user-facing option. When the kexec phase is selected, install probes the target before changing it and verifies that SSH is running as root and that `tar` and `curl` are available. Resume runs that omit kexec skip this probe because the target is already expected to be in installer state.
 
 ## Reference
 

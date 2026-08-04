@@ -50,4 +50,30 @@
     install.copyHostKeys = true;
     nixos = { services.openssh.enable = true; };
   };
+
+  # Machine metadata contains only the SecretSpec name and target metadata.
+  # The value remains in the Rust-side resolved SecretSpec state.
+  machines.secretful = {
+    target.host = "root@secretful.example.com";
+    install.secrets."/var/lib/sops-nix/key.txt" = {
+      secret = "SECRET_MACHINE_AGE_KEY";
+      owner = "0:0";
+      mode = "0600";
+    };
+    nixos = {
+      services.openssh.enable = true;
+      users.users.root.openssh.authorizedKeys.keys = [ "ssh-ed25519 test" ];
+    };
+  };
+
+  machines.missing-secret = {
+    target.host = "root@missing-secret.example.com";
+    install.secrets."/var/lib/sops-nix/key.txt" = {
+      secret = "UNDECLARED_MACHINE_KEY";
+    };
+    nixos = {
+      services.openssh.enable = true;
+      users.users.root.openssh.authorizedKeys.keys = [ "ssh-ed25519 test" ];
+    };
+  };
 }

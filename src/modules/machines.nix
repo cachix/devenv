@@ -51,6 +51,15 @@ let
     else if lib.hasPrefix "/" value then /. + value
     else /. + (outerConfig.devenv.root + "/" + value);
 
+  # Resolve a user-provided `install.{extraFiles.source,encryptionKeys}` path
+  # string to an absolute filesystem path *without* coercing through a Nix
+  # path literal. Using strings throughout is load-bearing: coercing the
+  # value to a Nix path would `/nix/store`-import the secret, which is
+  # exactly what callers need to avoid for LUKS keys and age identities.
+  resolveInstallPath = value:
+    if lib.hasPrefix "/" value then value
+    else "${outerConfig.devenv.root}/${value}";
+
   # Build the NixOS toplevel closure for a machine's `nixos` module.
   #
   # Requires `inputs.disko` (always, because disko is the declarative
@@ -129,8 +138,8 @@ let
         default = [ ];
         description = ''
           Extra `ssh -o` options appended after devenv's defaults
-          (`StrictHostKeyChecking=accept-new`, `IdentitiesOnly=yes` when an `IdentityFile` is configured,
-          and a bounded `ConnectTimeout`). The last value wins, so this list overrides the defaults.
+          (`StrictHostKeyChecking=accept-new` and a bounded `ConnectTimeout`).
+          The last value wins, so this list overrides the defaults.
         '';
         example = lib.literalExpression ''[ "-o" "IdentitiesOnly=yes" "-o" "ConnectTimeout=10" ]'';
       };
@@ -205,8 +214,7 @@ let
                     description = ''
                       Override the default nixos-images kexec tarball URL. Set this for
                       custom installer images, non-standard architectures, or VPN-enabled
-                      installers. Accepts a local path or an http(s) URL that is fetched
-                      on the remote target.
+                      installers. Must be an HTTP(S) URL fetched on the remote target.
                     '';
                     example = "https://example.com/custom-kexec-aarch64.tar.gz";
                   };
@@ -232,13 +240,18 @@ let
               type = lib.types.attrsOf (lib.types.submodule {
                 options = {
                   source = lib.mkOption {
-                    type = lib.types.path;
-                    description = "Local path to the file to copy onto the installed system.";
+                    type = lib.types.str;
+                    description = ''
+                      Local path to the file to copy onto the installed system.
+                      Accepts an absolute path or a path relative to the devenv project root.
+                      Must be a string (not a Nix path literal) so secrets stay on the host
+                      running `devenv machines install` and never enter `/nix/store`.
+                    '';
                   };
                   owner = lib.mkOption {
                     type = lib.types.str;
                     default = "0:0";
-                    description = "Owner in `uid:gid` format applied via chown on the target.";
+                    description = "Numeric owner in `uid:gid` format applied via chown on the target.";
                   };
                   mode = lib.mkOption {
                     type = lib.types.str;
@@ -258,7 +271,53 @@ let
               example = lib.literalExpression ''
                 {
                   "/var/lib/secret-age-key" = {
-                    source = ./secrets/age.key;
+                    source = "secrets/age.key";
+                    owner = "0:0";
+                    mode = "0600";
+                  };
+                }
+              '';
+            };
+
+            secrets = lib.mkOption {
+              type = lib.types.attrsOf (lib.types.submodule {
+                options = {
+                  secret = lib.mkOption {
+                    type = lib.types.str;
+                    description = ''
+                      Name of the secret in the active SecretSpec profile. The
+                      value is resolved by the devenv CLI at install time and
+                      is never included in machine metadata or a Nix store path.
+                    '';
+                    example = "WEB1_AGE_KEY";
+                  };
+                  owner = lib.mkOption {
+                    type = lib.types.str;
+                    default = "0:0";
+                    description = "Numeric owner in `uid:gid` format applied via chown on the target.";
+                  };
+                  mode = lib.mkOption {
+                    type = lib.types.str;
+                    default = "0600";
+                    description = "File mode applied via chmod on the target.";
+                  };
+                };
+              });
+              default = { };
+              description = ''
+                Bootstrap files populated from the active SecretSpec profile
+                after `nixos-install` and before reboot. Attribute names are
+                absolute paths in the installed system. Secret values are
+                streamed over SSH and never placed in `/nix/store`.
+
+                SecretSpec must be enabled in `devenv.yaml`. Use the global
+                `--secretspec-provider` and `--secretspec-profile` flags to
+                select the source for an install invocation.
+              '';
+              example = lib.literalExpression ''
+                {
+                  "/var/lib/sops-nix/key.txt" = {
+                    secret = "WEB1_AGE_KEY";
                     owner = "0:0";
                     mode = "0600";
                   };
@@ -267,17 +326,19 @@ let
             };
 
             encryptionKeys = lib.mkOption {
-              type = lib.types.attrsOf lib.types.path;
+              type = lib.types.attrsOf lib.types.str;
               default = { };
               description = ''
                 Keyfiles dropped onto the installer **before disko runs**, so LUKS
                 layouts with `passwordFile = "/tmp/luks.key"` can unlock. Attribute
                 names are absolute target paths on the installer; values are local
-                source paths on the host running `devenv machines install`.
+                source paths (string, absolute or relative to the devenv project root)
+                on the host running `devenv machines install`. Strings — not Nix path
+                literals — so LUKS keys never enter `/nix/store`.
               '';
               example = lib.literalExpression ''
                 {
-                  "/tmp/luks.key" = ./secrets/luks.key;
+                  "/tmp/luks.key" = "secrets/luks.key";
                 }
               '';
             };
@@ -375,15 +436,65 @@ let
         internal = true;
         description = "Disko mount script (mount only, no partitioning) for this machine.";
       };
+
+      # Shared lazy NixOS evaluation, set once per machine when `nixos != null`.
+      # Every `build.*` and `installCheck` consumer reads through this option
+      # so `nixosSystem { … }` runs exactly once, instead of once per output.
+      _nixosEval = lib.mkOption {
+        type = lib.types.unspecified;
+        internal = true;
+        visible = false;
+        default = null;
+        description = "Shared internal NixOS evaluation result for this machine.";
+      };
+
+      installCheck = lib.mkOption {
+        visible = false;
+        type = lib.types.submodule {
+          options = {
+            hasRootAuth = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Whether the evaluated NixOS root account has a password or authorized SSH key.";
+            };
+          };
+        };
+        internal = true;
+        default = { };
+      };
     };
 
+    # Evaluate NixOS once per machine. The thunk stays unforced while
+    # `config.nixos == null` because every `build.*` and `installCheck`
+    # consumer guards access behind `lib.mkIf (config.nixos != null) …`.
+    config._nixosEval = lib.mkIf (config.nixos != null) (nixosEval config);
+
     config.build = {
-      nixos = lib.mkIf (config.nixos != null) (nixosEval config).config.system.build.toplevel;
-      diskoScript = lib.mkIf (config.nixos != null) (nixosEval config).config.system.build.diskoScript;
-      diskoFormatScript = lib.mkIf (config.nixos != null) (nixosEval config).config.system.build.formatScript;
-      diskoMountScript = lib.mkIf (config.nixos != null) (nixosEval config).config.system.build.mountScript;
+      nixos = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.toplevel;
+      diskoScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.diskoScript;
+      diskoFormatScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.formatScript;
+      diskoMountScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.mountScript;
       nix-darwin = lib.mkIf (config.nix-darwin != null) (buildNixDarwinToplevel config);
       home-manager = lib.mkIf (config.home-manager != null) (buildHomeManagerToplevel config);
+    };
+
+    # Lazy: only forced when the CLI reads `installCheck.hasRootAuth`
+    # (i.e. during `devenv machines install`), never during `info`/`deploy`.
+    # For home-manager-only machines the default `hasRootAuth = false` stays.
+    config.installCheck = lib.mkIf (config.nixos != null) {
+      hasRootAuth =
+        let
+          root = config._nixosEval.config.users.users.root or { };
+          keys = root.openssh.authorizedKeys.keys or [ ];
+          keyFiles = root.openssh.authorizedKeys.keyFiles or [ ];
+          hasPassword =
+            (root.hashedPassword or null) != null
+            || (root.initialHashedPassword or null) != null
+            || (root.hashedPasswordFile or null) != null
+            || (root.password or null) != null
+            || (root.initialPassword or null) != null;
+        in
+        keys != [ ] || keyFiles != [ ] || hasPassword;
     };
   });
 in
@@ -405,29 +516,70 @@ in
     # input-missing errors on unrelated machines) and without trying to
     # serialise user-supplied NixOS module functions through `devenv eval`.
     machinesMeta = lib.mkOption {
+      visible = false;
       type = lib.types.attrsOf (lib.types.submodule {
         options = {
-          system = lib.mkOption { type = lib.types.str; };
+          system = lib.mkOption {
+            type = lib.types.str;
+            description = "Machine system copied into CLI metadata.";
+          };
           target = lib.mkOption {
+            description = "Machine SSH target copied into CLI metadata.";
             type = lib.types.submodule {
               options = {
-                host = lib.mkOption { type = lib.types.nullOr lib.types.str; };
-                sshOpts = lib.mkOption { type = lib.types.listOf lib.types.str; };
+                host = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  description = "SSH host copied into CLI metadata.";
+                };
+                sshOpts = lib.mkOption {
+                  type = lib.types.listOf lib.types.str;
+                  description = "SSH options copied into CLI metadata.";
+                };
               };
             };
           };
-          hasNixos = lib.mkOption { type = lib.types.bool; };
-          hasNixDarwin = lib.mkOption { type = lib.types.bool; };
-          hasHomeManager = lib.mkOption { type = lib.types.bool; };
-          kexecImage = lib.mkOption { type = lib.types.nullOr lib.types.str; };
-          kexecPostSshPort = lib.mkOption { type = lib.types.nullOr lib.types.port; };
-          copyHostKeys = lib.mkOption { type = lib.types.bool; };
-          # extraFiles and encryptionKeys contain Nix paths that can't be
-          # JSON-serialised to absolute filesystem paths directly. Instead
-          # we expose them as attrsets of { source = "/nix/store/..."; ... }
-          # which the Rust CLI can read and pipe to the target via SSH.
-          extraFiles = lib.mkOption { type = lib.types.attrsOf lib.types.attrs; };
-          encryptionKeys = lib.mkOption { type = lib.types.attrsOf lib.types.str; };
+          hasNixos = lib.mkOption {
+            type = lib.types.bool;
+            description = "Whether the machine defines a NixOS role.";
+          };
+          hasNixDarwin = lib.mkOption {
+            type = lib.types.bool;
+            description = "Whether the machine defines a nix-darwin role.";
+          };
+          hasHomeManager = lib.mkOption {
+            type = lib.types.bool;
+            description = "Whether the machine defines a home-manager role.";
+          };
+          kexecImage = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            description = "Kexec image override copied into CLI metadata.";
+          };
+          kexecPostSshPort = lib.mkOption {
+            type = lib.types.nullOr lib.types.port;
+            description = "Post-kexec SSH port copied into CLI metadata.";
+          };
+          copyHostKeys = lib.mkOption {
+            type = lib.types.bool;
+            description = "Whether install should preserve SSH host keys.";
+          };
+          # Only SecretSpec names and target metadata cross the Nix/Rust
+          # boundary. Values stay in the CLI's resolved SecretSpec state.
+          secrets = lib.mkOption {
+            type = lib.types.listOf lib.types.attrs;
+            description = "Normalized SecretSpec bootstrap references for CLI consumption.";
+          };
+          # extraFiles.source and encryptionKeys values are resolved to
+          # absolute filesystem path strings by `resolveInstallPath`. They
+          # never enter `/nix/store` — critical for LUKS keys and age
+          # identities.
+          extraFiles = lib.mkOption {
+            type = lib.types.attrsOf lib.types.attrs;
+            description = "Normalized install-time extra files for CLI consumption.";
+          };
+          encryptionKeys = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
+            description = "Normalized install-time encryption keys for CLI consumption.";
+          };
         };
       });
       internal = true;
@@ -446,13 +598,16 @@ in
       kexecImage = m.install.kexec.image;
       kexecPostSshPort = m.install.kexec.postSshPort;
       copyHostKeys = m.install.copyHostKeys;
+      secrets = lib.mapAttrsToList
+        (target: secret: secret // { inherit target; })
+        m.install.secrets;
       extraFiles = lib.mapAttrs
         (_path: f: {
-          source = builtins.toString f.source;
+          source = resolveInstallPath f.source;
           inherit (f) owner mode;
         })
         m.install.extraFiles;
-      encryptionKeys = lib.mapAttrs (_path: src: builtins.toString src) m.install.encryptionKeys;
+      encryptionKeys = lib.mapAttrs (_path: src: resolveInstallPath src) m.install.encryptionKeys;
     })
     config.machines;
 }

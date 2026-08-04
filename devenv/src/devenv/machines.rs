@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -39,6 +39,8 @@ struct MachineMeta {
     kexec_post_ssh_port: Option<u16>,
     #[serde(rename = "copyHostKeys")]
     copy_host_keys: bool,
+    #[serde(rename = "secrets", default)]
+    bootstrap_secrets: Vec<BootstrapSecret>,
     #[serde(rename = "extraFiles", default)]
     extra_files: BTreeMap<String, ExtraFile>,
     #[serde(rename = "encryptionKeys", default)]
@@ -53,6 +55,23 @@ struct ExtraFile {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+struct BootstrapSecret {
+    target: String,
+    secret: String,
+    owner: String,
+    mode: String,
+}
+
+/// Sanity check surfaced from the machine's evaluated NixOS config. Loaded
+/// lazily per machine at install time through the same `_nixosEval` thunk that
+/// produces the toplevel.
+#[derive(Debug, Clone, Deserialize)]
+struct MachineInstallCheck {
+    #[serde(rename = "hasRootAuth")]
+    has_root_auth: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 struct MachineTarget {
     host: Option<String>,
     #[serde(rename = "sshOpts")]
@@ -60,10 +79,11 @@ struct MachineTarget {
 }
 
 /// Facts collected from a preflight SSH probe on the install target.
-/// Parsed from key=value lines emitted by the probe script.
+/// Parsed from key=value lines emitted by the probe script. `uid` remains
+/// unset for empty or malformed output so install preflight fails closed.
 #[derive(Debug, Default)]
 struct HostFacts {
-    uid: u32,
+    uid: Option<u32>,
     has_tar: bool,
     has_curl: bool,
 }
@@ -74,7 +94,7 @@ impl HostFacts {
         for line in output.lines() {
             let line = line.trim();
             if let Some(val) = line.strip_prefix("user=") {
-                facts.uid = val.parse().unwrap_or(u32::MAX);
+                facts.uid = val.parse().ok();
             } else if let Some(val) = line.strip_prefix("has_tar=") {
                 facts.has_tar = val == "1";
             } else if let Some(val) = line.strip_prefix("has_curl=") {
@@ -162,8 +182,8 @@ impl SshTarget {
 /// machine with `target.host` set and a matching `system` becomes a
 /// candidate remote builder. Returns `None` if no builders are available.
 ///
-/// Format: `ssh://user@host system - - - - -` (one line per builder),
-/// joined by `;` for `NIX_CONFIG`.
+/// Format: `ssh://user@host system` (one entry per builder), joined by `;`
+/// for Nix's `builders` setting.
 fn resolve_builders_config(meta: &BTreeMap<String, MachineMeta>) -> Option<String> {
     let entries: Vec<String> = meta
         .values()
@@ -179,6 +199,16 @@ fn resolve_builders_config(meta: &BTreeMap<String, MachineMeta>) -> Option<Strin
     } else {
         Some(entries.join(" ; "))
     }
+}
+
+fn configure_remote_builders(devenv: &Devenv, meta: &BTreeMap<String, MachineMeta>) -> Result<()> {
+    let Some(builders) = resolve_builders_config(meta) else {
+        return Ok(());
+    };
+    if devenv.cnix().is_none() {
+        bail!("--use-machines-as-builders currently requires the C-Nix backend");
+    }
+    devenv_nix_backend::backend::apply_remote_builders(&builders)
 }
 
 /// Return the default nixos-images kexec tarball URL for the given system.
@@ -202,6 +232,119 @@ fn ssh_opts_argv(user_opts: &[String]) -> Vec<String> {
     let mut v: Vec<String> = DEFAULT_SSH_OPTS.iter().map(|s| s.to_string()).collect();
     v.extend(user_opts.iter().cloned());
     v
+}
+
+/// Machine names are interpolated into bare Nix attr paths. Keep them to a
+/// deliberately small set that cannot change attr-path or shell semantics.
+fn validate_machine_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        bail!("Machine name cannot be empty");
+    }
+    let first = name.chars().next().expect("non-empty machine name");
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        bail!(
+            "Invalid machine name {name:?}: must start with a letter or underscore, \
+             then only letters, digits, '_' or '-'."
+        );
+    }
+    for c in name.chars() {
+        if !(c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            bail!(
+                "Invalid machine name {name:?}: contains '{c}'. \
+                 Only letters, digits, '_' and '-' are allowed."
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Kexec images are fetched by curl on the target. Limit overrides to plain
+/// HTTP(S) URLs and reject characters with shell semantics.
+fn validate_kexec_url(url: &str) -> Result<()> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        bail!(
+            "install.kexec.image {url:?} must be an http:// or https:// URL — \
+             the kexec phase fetches it with curl on the target."
+        );
+    }
+    for c in url.chars() {
+        let ok = c.is_ascii_alphanumeric()
+            || matches!(
+                c,
+                '-' | '.'
+                    | '_'
+                    | '~'
+                    | ':'
+                    | '/'
+                    | '?'
+                    | '#'
+                    | '['
+                    | ']'
+                    | '@'
+                    | '&'
+                    | '+'
+                    | ','
+                    | '='
+                    | '%'
+            );
+        if !ok {
+            bail!(
+                "install.kexec.image {url:?} contains character {c:?} which is \
+                 not allowed in a URL used by the kexec phase."
+            );
+        }
+    }
+    Ok(())
+}
+
+/// POSIX single-quote a value interpolated into a remote shell command.
+fn shell_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for c in s.chars() {
+        if c == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(c);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+/// Validate a configured file path written on the installer or below `/mnt`.
+fn validate_target_file_path(path: &str) -> Result<()> {
+    if !path.starts_with('/') || path == "/" {
+        bail!("target file path {path:?} must be an absolute file path");
+    }
+    if path.chars().any(char::is_control) {
+        bail!("target file path {path:?} cannot contain control characters");
+    }
+    if path.split('/').any(|component| component == "..") {
+        bail!("target file path {path:?} cannot contain '..' components");
+    }
+    Ok(())
+}
+
+fn validate_file_owner(owner: &str) -> Result<()> {
+    let Some((uid, gid)) = owner.split_once(':') else {
+        bail!("file owner {owner:?} must use numeric uid:gid format");
+    };
+    if uid.is_empty()
+        || gid.is_empty()
+        || !uid.chars().all(|c| c.is_ascii_digit())
+        || !gid.chars().all(|c| c.is_ascii_digit())
+    {
+        bail!("file owner {owner:?} must use numeric uid:gid format");
+    }
+    Ok(())
+}
+
+fn validate_file_mode(mode: &str) -> Result<()> {
+    if !(3..=4).contains(&mode.len()) || !mode.chars().all(|c| matches!(c, '0'..='7')) {
+        bail!("file mode {mode:?} must be a 3- or 4-digit octal mode");
+    }
+    Ok(())
 }
 
 /// Build the `NIX_SSHOPTS` env var value used by `nix copy`. Nix parses this
@@ -249,7 +392,6 @@ fn format_roles(m: &MachineMeta) -> String {
 
 impl Devenv {
     pub async fn machines_info(&self, names: &[String]) -> Result<String> {
-        self.assemble().await?;
         let meta = self.load_machines_meta().await?;
 
         // Resolve the working set. With no explicit names, show every
@@ -318,28 +460,11 @@ impl Devenv {
         disko_mode: DiskoMode,
         use_machines_as_builders: bool,
     ) -> Result<()> {
-        self.assemble().await?;
-
         let meta = self.load_machines_meta().await?;
 
         // Configure remote builders if requested (same mechanism as deploy).
         if use_machines_as_builders {
-            if let Some(builders) = resolve_builders_config(&meta) {
-                let existing = std::env::var("NIX_CONFIG").unwrap_or_default();
-                let sep = if existing.is_empty() { "" } else { "\n" };
-                // SAFETY: set_var is unsafe in Rust 2024 because env mutation
-                // is not thread-safe. We are single-threaded at this point
-                // (before spawning parallel machine jobs), and no other thread
-                // reads NIX_CONFIG concurrently.
-                unsafe {
-                    std::env::set_var(
-                        "NIX_CONFIG",
-                        format!(
-                            "{existing}{sep}builders = {builders}\nbuilders-use-substitutes = true"
-                        ),
-                    );
-                }
-            }
+            configure_remote_builders(self, &meta)?;
         }
 
         // Validate names
@@ -380,6 +505,91 @@ impl Devenv {
                      `devenv machines install` always operates over SSH."
                 );
             }
+
+            if phases.contains(&InstallPhase::Install) {
+                for (target, file) in &m.extra_files {
+                    validate_target_file_path(target).wrap_err_with(|| {
+                        format!("Invalid machines.{name}.install.extraFiles target")
+                    })?;
+                    validate_file_owner(&file.owner).wrap_err_with(|| {
+                        format!("Invalid owner for machines.{name}.install.extraFiles.{target:?}")
+                    })?;
+                    validate_file_mode(&file.mode).wrap_err_with(|| {
+                        format!("Invalid mode for machines.{name}.install.extraFiles.{target:?}")
+                    })?;
+                }
+                for secret in &m.bootstrap_secrets {
+                    validate_target_file_path(&secret.target).wrap_err_with(|| {
+                        format!("Invalid machines.{name}.install.secrets target")
+                    })?;
+                    validate_file_owner(&secret.owner).wrap_err_with(|| {
+                        format!(
+                            "Invalid owner for machines.{name}.install.secrets.{:?}",
+                            secret.target
+                        )
+                    })?;
+                    validate_file_mode(&secret.mode).wrap_err_with(|| {
+                        format!(
+                            "Invalid mode for machines.{name}.install.secrets.{:?}",
+                            secret.target
+                        )
+                    })?;
+                }
+            }
+            if phases.contains(&InstallPhase::Disko) {
+                for target in m.encryption_keys.keys() {
+                    validate_target_file_path(target).wrap_err_with(|| {
+                        format!("Invalid machines.{name}.install.encryptionKeys target")
+                    })?;
+                }
+            }
+        }
+
+        // Resolve and materialize every bootstrap value before starting any
+        // per-machine job. A missing reference or unreadable `as_path` value
+        // therefore fails before preflight, kexec, or disko touches a target.
+        let mut bootstrap_values = HashMap::new();
+        if phases.contains(&InstallPhase::Install)
+            && names
+                .iter()
+                .any(|name| !meta[name].bootstrap_secrets.is_empty())
+        {
+            let resolved = self.secretspec().ok_or_else(|| {
+                miette!(
+                    "Machine bootstrap secrets require SecretSpec. Add a secretspec.toml and enable it under `secretspec:` in devenv.yaml, or pass --secretspec-provider/--secretspec-profile."
+                )
+            })?;
+
+            let mut missing = Vec::new();
+            for name in names {
+                for secret in &meta[name].bootstrap_secrets {
+                    if !resolved.secrets.contains_key(&secret.secret) {
+                        missing.push(format!(
+                            "machines.{name}.install.secrets.{:?} references {:?}",
+                            secret.target, secret.secret
+                        ));
+                    }
+                }
+            }
+            if !missing.is_empty() {
+                bail!(
+                    "SecretSpec did not resolve {} bootstrap secret reference(s):\n- {}",
+                    missing.len(),
+                    missing.join("\n- ")
+                );
+            }
+
+            for name in names {
+                for secret in &meta[name].bootstrap_secrets {
+                    if !bootstrap_values.contains_key(&secret.secret) {
+                        let value = self
+                            .secretspec_value_bytes(&secret.secret)
+                            .await?
+                            .expect("SecretSpec reference checked above");
+                        bootstrap_values.insert(secret.secret.clone(), value);
+                    }
+                }
+            }
         }
 
         let concurrency = max_concurrent
@@ -389,6 +599,7 @@ impl Devenv {
 
         let jobs = names.iter().map(|name| {
             let machine = &meta[name];
+            let bootstrap_values = &bootstrap_values;
             let target_label = machine.target.host.as_deref().unwrap_or("(no target)");
             let activity = activity!(
                 INFO,
@@ -397,7 +608,7 @@ impl Devenv {
             );
             async move {
                 let outcome = async {
-                    self.install_one_machine(name, machine, phases, disko_mode)
+                    self.install_one_machine(name, machine, phases, disko_mode, bootstrap_values)
                         .await
                 }
                 .in_activity(&activity)
@@ -443,6 +654,7 @@ impl Devenv {
         machine: &MachineMeta,
         phases: &HashSet<InstallPhase>,
         disko_mode: DiskoMode,
+        bootstrap_values: &HashMap<String, Vec<u8>>,
     ) -> Result<()> {
         let host = machine
             .target
@@ -520,6 +732,25 @@ impl Devenv {
             .await?;
         }
 
+        // `nixos-install --no-root-password` must not create a system with no
+        // usable root authentication. Evaluate this only when Install runs.
+        if phases.contains(&InstallPhase::Install) {
+            let check = self.load_machine_install_check(name).await?;
+            if !check.has_root_auth {
+                bail!(
+                    "machines.{name}: refusing to install. The NixOS config \
+                     declares no authentication for root, and `nixos-install` \
+                     runs with `--no-root-password`, so the target would boot \
+                     locked out. Set one of:\n\
+                     \x20 - users.users.root.openssh.authorizedKeys.keys\n\
+                     \x20 - users.users.root.openssh.authorizedKeys.keyFiles\n\
+                     \x20 - users.users.root.hashedPassword\n\
+                     \x20 - users.users.root.hashedPasswordFile\n\
+                     \x20 - users.users.root.initialHashedPassword"
+                );
+            }
+        }
+
         // Phase 4: install
         if phases.contains(&InstallPhase::Install) {
             let act = activity!(INFO, operation, "Installing NixOS");
@@ -536,6 +767,22 @@ impl Devenv {
             async {
                 self.install_extra_files(&target, ssh_opts, &machine.extra_files)
                     .await
+            }
+            .in_activity(&act)
+            .await?;
+        }
+
+        if phases.contains(&InstallPhase::Install) && !machine.bootstrap_secrets.is_empty() {
+            let act = activity!(INFO, operation, "Copying SecretSpec bootstrap secrets");
+            async {
+                self.install_bootstrap_secrets(
+                    name,
+                    &target,
+                    ssh_opts,
+                    &machine.bootstrap_secrets,
+                    bootstrap_values,
+                )
+                .await
             }
             .in_activity(&act)
             .await?;
@@ -587,13 +834,19 @@ impl Devenv {
 
         let facts = HostFacts::parse(&output);
 
-        if facts.uid != 0 {
-            bail!(
+        match facts.uid {
+            None => bail!(
+                "machines.{name}: preflight probe did not return a `user=` line. \
+                 The SSH command ran but produced unexpected output, so devenv \
+                 cannot confirm the target is in a safe state. Re-check SSH \
+                 connectivity and that the remote shell allows `id -u`."
+            ),
+            Some(uid) if uid != 0 => bail!(
                 "machines.{name}: install requires root SSH access, but the \
-                 current user on the target has uid {}. Either SSH in as root \
-                 or configure root login on the target.",
-                facts.uid
-            );
+                 current user on the target has uid {uid}. Either SSH in as \
+                 root or configure root login on the target."
+            ),
+            Some(_) => {}
         }
         if !facts.has_tar {
             bail!(
@@ -624,12 +877,17 @@ impl Devenv {
         machine: &MachineMeta,
     ) -> Result<()> {
         let url = match &machine.kexec_image {
-            Some(custom) => custom.clone(),
+            Some(custom) => {
+                validate_kexec_url(custom)
+                    .wrap_err_with(|| format!("install.kexec.image on machines.{name}"))?;
+                custom.clone()
+            }
             None => kexec_url(&machine.system)?,
         };
+        let url_q = shell_quote(&url);
         let script = format!(
             "set -euo pipefail && \
-             curl --fail -L {url} | tar xzf - -C /root && \
+             curl --fail -L {url_q} | tar xzf - -C /root && \
              /root/kexec/run"
         );
         self.ssh_run(target, ssh_opts, &script)
@@ -770,6 +1028,7 @@ impl Devenv {
                 .wrap_err_with(|| format!("Failed to read encryption key {local_source}"))?;
             // Pipe the key via stdin to avoid it appearing in the process
             // command line or on the remote filesystem before chmod.
+            let target_path = shell_quote(target_path);
             let script = format!("cat > {target_path} && chmod 0600 {target_path}");
             let mut cmd = process::Command::new("ssh");
             for opt in ssh_opts_argv(ssh_opts) {
@@ -814,14 +1073,16 @@ impl Devenv {
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to read {}", file.source))?;
             // Write to /mnt/<path> since the installed system is mounted there.
+            // Every config-derived interpolation is shell-quoted.
             let mnt_path = format!("/mnt{target_path}");
+            let mnt = shell_quote(&mnt_path);
+            let mode = shell_quote(&file.mode);
+            let owner = shell_quote(&file.owner);
             let script = format!(
-                "mkdir -p $(dirname {mnt_path}) && \
-                 cat > {mnt_path} && \
-                 chmod {mode} {mnt_path} && \
-                 chown {owner} {mnt_path}",
-                mode = file.mode,
-                owner = file.owner,
+                "mkdir -p \"$(dirname {mnt})\" && \
+                 cat > {mnt} && \
+                 chmod -- {mode} {mnt} && \
+                 chown -- {owner} {mnt}"
             );
             let mut cmd = process::Command::new("ssh");
             for opt in ssh_opts_argv(ssh_opts) {
@@ -847,6 +1108,78 @@ impl Devenv {
         Ok(())
     }
 
+    /// Materialize SecretSpec values in the installed system. Values were
+    /// resolved and copied into `bootstrap_values` before any machine job
+    /// started; only their bytes travel over SSH stdin.
+    async fn install_bootstrap_secrets(
+        &self,
+        name: &str,
+        target: &SshTarget,
+        ssh_opts: &[String],
+        secrets: &[BootstrapSecret],
+        bootstrap_values: &HashMap<String, Vec<u8>>,
+    ) -> Result<()> {
+        for secret in secrets {
+            let contents = bootstrap_values.get(&secret.secret).ok_or_else(|| {
+                miette!(
+                    "SecretSpec secret {:?} for machines.{name} was not resolved",
+                    secret.secret
+                )
+            })?;
+
+            let mnt_path = format!("/mnt{}", secret.target);
+            let mnt = shell_quote(&mnt_path);
+            let mode = shell_quote(&secret.mode);
+            let owner = shell_quote(&secret.owner);
+            let script = format!(
+                "set -eu; umask 077; \
+                 mkdir -p -- \"$(dirname -- {mnt})\"; \
+                 cat > {mnt}; \
+                 chmod -- {mode} {mnt}; \
+                 chown -- {owner} {mnt}"
+            );
+
+            let mut cmd = process::Command::new("ssh");
+            for opt in ssh_opts_argv(ssh_opts) {
+                cmd.arg(opt);
+            }
+            if let Some(port) = target.port() {
+                cmd.arg("-p").arg(port.to_string());
+            }
+            cmd.arg(target.ssh_destination()).arg(&script);
+            cmd.stdin(Stdio::piped())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit());
+
+            let mut child = cmd.spawn().into_diagnostic().wrap_err_with(|| {
+                format!("Failed to start SSH while writing bootstrap secret for machines.{name}")
+            })?;
+            if let Some(mut stdin) = child.stdin.take() {
+                use tokio::io::AsyncWriteExt;
+                stdin
+                    .write_all(contents)
+                    .await
+                    .into_diagnostic()
+                    .wrap_err_with(|| {
+                        format!(
+                            "Failed to stream SecretSpec secret {:?} to machines.{name}",
+                            secret.secret
+                        )
+                    })?;
+            }
+            let status = child.wait().await.into_diagnostic()?;
+            if !status.success() {
+                bail!(
+                    "Failed to install SecretSpec secret {:?} at {} on machines.{name}",
+                    secret.secret,
+                    secret.target
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     /// Preserve SSH host keys across a reinstall by copying them from
     /// the installer's `/etc/ssh/` to the installed system at `/mnt/etc/ssh/`.
     async fn install_copy_host_keys(&self, target: &SshTarget, ssh_opts: &[String]) -> Result<()> {
@@ -862,8 +1195,13 @@ impl Devenv {
 
     /// Phase 5: reboot into the installed system.
     async fn install_reboot(&self, target: &SshTarget, ssh_opts: &[String]) -> Result<()> {
-        // reboot exits non-zero because the SSH connection drops. Ignore
-        // the exit code; what matters is that the command was sent.
+        self.ssh_run_capture(target, ssh_opts, "true")
+            .await
+            .wrap_err(
+                "Cannot reach target to reboot — SSH connection failed before issuing reboot",
+            )?;
+        // The probe above separates a dial failure from the expected
+        // connection drop after issuing reboot.
         let _ = self.ssh_run(target, ssh_opts, "reboot").await;
         Ok(())
     }
@@ -930,10 +1268,10 @@ impl Devenv {
             cmd.stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
-            if let Ok(status) = cmd.status().await {
-                if status.success() {
-                    return Ok(());
-                }
+            if let Ok(status) = cmd.status().await
+                && status.success()
+            {
+                return Ok(());
             }
             if tokio::time::Instant::now() >= deadline {
                 bail!(
@@ -951,40 +1289,15 @@ impl Devenv {
         max_concurrent: Option<usize>,
         use_machines_as_builders: bool,
     ) -> Result<()> {
-        // When --use-machines-as-builders is set, configure Nix's remote
-        // builder list from the machines metadata BEFORE assemble(), so the
-        // FFI backend picks it up during initialization. Uses NIX_CONFIG
-        // env var which Nix reads at startup.
+        // Configure the live C-Nix builder settings before parallel jobs.
         if use_machines_as_builders {
-            // We need meta to resolve builders, but meta requires assemble.
-            // Chicken-and-egg: assemble first (without builders), load meta,
-            // then re-set env for subsequent build calls.
-            self.assemble().await?;
             let meta = self.load_machines_meta().await?;
-            if let Some(builders) = resolve_builders_config(&meta) {
-                let existing = std::env::var("NIX_CONFIG").unwrap_or_default();
-                let sep = if existing.is_empty() { "" } else { "\n" };
-                // SAFETY: set_var is unsafe in Rust 2024 because env mutation
-                // is not thread-safe. We are single-threaded at this point
-                // (before spawning parallel machine jobs), and no other thread
-                // reads NIX_CONFIG concurrently.
-                unsafe {
-                    std::env::set_var(
-                        "NIX_CONFIG",
-                        format!(
-                            "{existing}{sep}builders = {builders}\nbuilders-use-substitutes = true"
-                        ),
-                    );
-                }
-            }
-            // Continue with the existing meta
-            let meta = meta; // rebind to make the borrow checker happy
+            configure_remote_builders(self, &meta)?;
             return self
                 .machines_deploy_inner(names, max_concurrent, &meta)
                 .await;
         }
 
-        self.assemble().await?;
         let meta = self.load_machines_meta().await?;
         self.machines_deploy_inner(names, max_concurrent, &meta)
             .await
@@ -1119,15 +1432,28 @@ impl Devenv {
     /// Goes through the `machinesMeta` option specifically (not `machines`)
     /// so that `devenv eval` does not try to serialise user-supplied NixOS
     /// module functions or force `build.*` closures for unrelated machines.
-    async fn load_machines_meta(&self) -> Result<BTreeMap<String, MachineMeta>> {
-        let json = self
-            .nix
-            .eval(&["devenv.config.machinesMeta"])
-            .await
-            .wrap_err("Failed to load machinesMeta from devenv.nix")?;
+    async fn load_machine_install_check(&self, name: &str) -> Result<MachineInstallCheck> {
+        let attr = format!("devenv.config.machines.{name}.installCheck");
+        let json = self.backend.eval_devenv(&[attr.as_str()]).await?;
         serde_json::from_str(&json)
             .into_diagnostic()
-            .wrap_err("Failed to parse machinesMeta JSON")
+            .wrap_err_with(|| format!("Failed to parse installCheck JSON for machines.{name}"))
+    }
+
+    async fn load_machines_meta(&self) -> Result<BTreeMap<String, MachineMeta>> {
+        let json = self
+            .backend
+            .eval_devenv(&["devenv.config.machinesMeta"])
+            .await
+            .wrap_err("Failed to load machinesMeta from devenv.nix")?;
+        let meta: BTreeMap<String, MachineMeta> = serde_json::from_str(&json)
+            .into_diagnostic()
+            .wrap_err("Failed to parse machinesMeta JSON")?;
+        for name in meta.keys() {
+            validate_machine_name(name)
+                .wrap_err("Rejecting machine with an unsafe attribute name")?;
+        }
+        Ok(meta)
     }
 
     async fn deploy_one_machine(&self, name: &str, machine: &MachineMeta) -> Result<()> {
@@ -1262,7 +1588,7 @@ impl Devenv {
     /// Build a single machine role using the existing `devenv build` path.
     async fn build_machine_role(&self, name: &str, role: &str) -> Result<PathBuf> {
         let attr = format!("machines.{name}.build.{role}");
-        let mut results = self.build(&[attr.clone()]).await?;
+        let mut results = self.build(std::slice::from_ref(&attr)).await?;
         let (_built_attr, path) = results.pop().ok_or_else(|| {
             miette!("devenv build {attr} produced no output paths (internal error)")
         })?;
@@ -1406,6 +1732,36 @@ mod tests {
     }
 
     #[test]
+    fn shell_quote_escapes_values() {
+        assert_eq!(shell_quote("/tmp/luks.key"), "'/tmp/luks.key'");
+        assert_eq!(shell_quote(""), "''");
+        assert_eq!(shell_quote("ada's key"), r"'ada'\''s key'");
+        assert_eq!(shell_quote("/tmp/k; rm -rf /mnt"), "'/tmp/k; rm -rf /mnt'");
+        assert_eq!(shell_quote("$(whoami)"), "'$(whoami)'");
+    }
+
+    #[test]
+    fn target_file_path_rejects_escape_and_relative_paths() {
+        assert!(validate_target_file_path("/var/lib/app/key").is_ok());
+        assert!(validate_target_file_path("relative/key").is_err());
+        assert!(validate_target_file_path("/").is_err());
+        assert!(validate_target_file_path("/var/lib/../../etc/shadow").is_err());
+        assert!(validate_target_file_path("/var/lib/key\nname").is_err());
+    }
+
+    #[test]
+    fn bootstrap_file_metadata_is_restricted() {
+        assert!(validate_file_owner("0:0").is_ok());
+        assert!(validate_file_owner("1000:100").is_ok());
+        assert!(validate_file_owner("root:root").is_err());
+        assert!(validate_file_owner("--reference=/etc/passwd").is_err());
+        assert!(validate_file_mode("600").is_ok());
+        assert!(validate_file_mode("0600").is_ok());
+        assert!(validate_file_mode("u=rw").is_err());
+        assert!(validate_file_mode("0888").is_err());
+    }
+
+    #[test]
     fn nix_ssh_opts_env_joins_with_spaces() {
         let user = vec!["-o".to_string(), "IdentitiesOnly=yes".to_string()];
         let env = nix_ssh_opts_env(&user);
@@ -1436,10 +1792,31 @@ mod tests {
     }
 
     #[test]
+    fn validate_machine_names() {
+        assert!(validate_machine_name("web1").is_ok());
+        assert!(validate_machine_name("db-primary").is_ok());
+        assert!(validate_machine_name("_scratch").is_ok());
+        assert!(validate_machine_name("").is_err());
+        assert!(validate_machine_name("foo.bar").is_err());
+        assert!(validate_machine_name("foo;rm").is_err());
+        assert!(validate_machine_name("1foo").is_err());
+    }
+
+    #[test]
+    fn validate_kexec_urls() {
+        assert!(validate_kexec_url("https://example.com/image.tar.gz").is_ok());
+        assert!(validate_kexec_url("http://example.com/a/b.tar.gz").is_ok());
+        assert!(validate_kexec_url("file:///tmp/foo").is_err());
+        assert!(validate_kexec_url("https://example.com/$(whoami)").is_err());
+        assert!(validate_kexec_url("https://example.com/x;rm").is_err());
+        assert!(validate_kexec_url("https://example.com/x y").is_err());
+    }
+
+    #[test]
     fn host_facts_parse_root() {
         let output = "user=0\nhas_tar=1\nhas_curl=1\n";
         let facts = HostFacts::parse(output);
-        assert_eq!(facts.uid, 0);
+        assert_eq!(facts.uid, Some(0));
         assert!(facts.has_tar);
         assert!(facts.has_curl);
     }
@@ -1448,25 +1825,30 @@ mod tests {
     fn host_facts_parse_non_root() {
         let output = "user=1000\nhas_tar=1\nhas_curl=0\n";
         let facts = HostFacts::parse(output);
-        assert_eq!(facts.uid, 1000);
+        assert_eq!(facts.uid, Some(1000));
         assert!(facts.has_tar);
         assert!(!facts.has_curl);
     }
 
     #[test]
-    fn host_facts_parse_empty() {
+    fn host_facts_parse_empty_fails_closed() {
         let facts = HostFacts::parse("");
-        // Defaults: uid=0 (u32 default), has_tar=false, has_curl=false
-        assert_eq!(facts.uid, 0);
+        assert_eq!(facts.uid, None);
         assert!(!facts.has_tar);
         assert!(!facts.has_curl);
+    }
+
+    #[test]
+    fn host_facts_parse_malformed_uid() {
+        let facts = HostFacts::parse("user=abc\nhas_tar=1\nhas_curl=1\n");
+        assert_eq!(facts.uid, None);
     }
 
     #[test]
     fn host_facts_parse_extra_whitespace() {
         let output = "  user=0  \n  has_tar=1  \n  has_curl=1  \n";
         let facts = HostFacts::parse(output);
-        assert_eq!(facts.uid, 0);
+        assert_eq!(facts.uid, Some(0));
         assert!(facts.has_tar);
         assert!(facts.has_curl);
     }
@@ -1494,6 +1876,7 @@ mod tests {
                 kexec_image: None,
                 kexec_post_ssh_port: None,
                 copy_host_keys: false,
+                bootstrap_secrets: Vec::new(),
                 extra_files: BTreeMap::new(),
                 encryption_keys: BTreeMap::new(),
             },
@@ -1512,6 +1895,7 @@ mod tests {
                 kexec_image: None,
                 kexec_post_ssh_port: None,
                 copy_host_keys: false,
+                bootstrap_secrets: Vec::new(),
                 extra_files: BTreeMap::new(),
                 encryption_keys: BTreeMap::new(),
             },

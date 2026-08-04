@@ -1740,6 +1740,22 @@ pub fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
     Ok(())
 }
 
+/// Apply a machine-derived remote builder list to the live C-Nix settings.
+///
+/// `devenv machines` discovers builders through Nix evaluation, which occurs
+/// after backend initialization. Updating `NIX_CONFIG` at that point is too
+/// late for the embedded Nix library; its process-global settings must be
+/// changed directly before machine build jobs begin.
+pub fn apply_remote_builders(builders: &str) -> Result<()> {
+    settings::set("builders", builders)
+        .to_miette()
+        .wrap_err("Failed to set machines as remote builders")?;
+    settings::set("builders-use-substitutes", "true")
+        .to_miette()
+        .wrap_err("Failed to enable substitutes on machine builders")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
