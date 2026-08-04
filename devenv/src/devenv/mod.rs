@@ -136,6 +136,10 @@ pub struct DevenvOptions {
     /// inherits the process working directory.
     pub shell_cwd: Option<PathBuf>,
     pub is_testing: bool,
+    /// Whether resolved SecretSpec values are made available to Nix module
+    /// evaluation. Machine installs disable this so bootstrap credentials stay
+    /// on the CLI side of the Nix/Rust boundary.
+    pub expose_secretspec_values_to_nix: bool,
     /// Whether a `devenv.nix` project file is required. Commands that operate
     /// outside of a project (e.g. `gc`) set this to `false` so they can run
     /// from any directory.
@@ -196,6 +200,7 @@ impl Default for DevenvOptions {
             devenv_state: None,
             shell_cwd: None,
             is_testing: false,
+            expose_secretspec_values_to_nix: true,
             require_project_file: true,
         }
     }
@@ -435,6 +440,23 @@ fn cachix_netrc_path(runtime_dir: &Path, process_id: u32) -> Result<PathBuf> {
     .wrap_err("Failed to resolve the Cachix netrc path")
 }
 
+/// Machine installation can retain provider credentials for the duration of
+/// several concurrent jobs. Disable process and child-process core dumps
+/// before resolving those credentials so a crash cannot persist them to a
+/// core file. Lowering both limits is intentionally irreversible for this CLI
+/// invocation.
+fn disable_core_dumps_for_secret_operation() -> Result<()> {
+    #[cfg(unix)]
+    {
+        use nix::sys::resource::{Resource, setrlimit};
+
+        setrlimit(Resource::RLIMIT_CORE, 0, 0)
+            .into_diagnostic()
+            .wrap_err("Failed to disable core dumps before resolving machine secrets")?;
+    }
+    Ok(())
+}
+
 impl Devenv {
     pub async fn new(
         options: DevenvOptions,
@@ -460,6 +482,7 @@ impl Devenv {
         let shell_settings = options.shell_settings;
         let cache_settings = options.cache_settings;
         let secret_settings = options.secret_settings;
+        let expose_secretspec_values_to_nix = options.expose_secretspec_values_to_nix;
         let devenv_dot_gc = devenv_dotfile.join("gc");
 
         // TMPDIR for build artifacts - should NOT use XDG_RUNTIME_DIR as that's
@@ -561,6 +584,9 @@ impl Devenv {
 
         let mut secretspec_cell: OnceCell<ResolvedSecrets> = OnceCell::new();
         let mut secretspec_as_paths = HashSet::new();
+        if !expose_secretspec_values_to_nix {
+            disable_core_dumps_for_secret_operation()?;
+        }
         resolve_secretspec_into(
             &devenv_root,
             &secret_settings,
@@ -668,6 +694,7 @@ impl Devenv {
                     options.require_version_match,
                     options.is_testing,
                     secretspec_cell.get(),
+                    expose_secretspec_values_to_nix,
                     &fingerprint,
                 )?);
 
@@ -698,6 +725,7 @@ impl Devenv {
                     options.require_version_match,
                     options.is_testing,
                     secretspec_cell.get(),
+                    expose_secretspec_values_to_nix,
                     "",
                 )?);
 
@@ -3501,6 +3529,7 @@ fn build_bootstrap_args(
     require_version_match: bool,
     is_testing: bool,
     secretspec: Option<&ResolvedSecrets>,
+    expose_secretspec_values_to_nix: bool,
     lock_fingerprint: &str,
 ) -> Result<BootstrapArgs> {
     let paths = &config.paths;
@@ -3520,11 +3549,8 @@ fn build_bootstrap_args(
             .to_string_lossy()
     ));
 
-    let secretspec_data: Option<SecretspecData> = secretspec.map(|resolved| SecretspecData {
-        profile: resolved.profile.clone(),
-        provider: resolved.provider.clone(),
-        secrets: resolved.secrets.clone().into_iter().collect(),
-    });
+    let secretspec_data = secretspec
+        .map(|resolved| secretspec_data_for_nix(resolved, expose_secretspec_values_to_nix));
 
     let cli_options = CliOptionsConfig(parse_cli_options(
         &config.input_overrides.nix_module_options,
@@ -3560,6 +3586,18 @@ fn build_bootstrap_args(
     };
 
     BootstrapArgs::from_serializable(&args)
+}
+
+fn secretspec_data_for_nix(resolved: &ResolvedSecrets, expose_values: bool) -> SecretspecData {
+    SecretspecData {
+        profile: resolved.profile.clone(),
+        provider: resolved.provider.clone(),
+        secrets: if expose_values {
+            resolved.secrets.clone().into_iter().collect()
+        } else {
+            Default::default()
+        },
+    }
 }
 
 fn resolve_secretspec_into(
@@ -3841,6 +3879,26 @@ mod tests {
             error
                 .to_string()
                 .contains("Invalid secretspec.cachix_auth_token")
+        );
+    }
+
+    #[test]
+    fn machine_install_can_hide_secretspec_values_from_nix() {
+        let resolved = secretspec::Resolved::new(
+            HashMap::from([("BOOTSTRAP_KEY".to_string(), "raw-secret-value".to_string())]),
+            "env".to_string(),
+            "default".to_string(),
+        );
+
+        let hidden = secretspec_data_for_nix(&resolved, false);
+        assert_eq!(hidden.profile, "default");
+        assert_eq!(hidden.provider, "env");
+        assert!(hidden.secrets.is_empty());
+
+        let exposed = secretspec_data_for_nix(&resolved, true);
+        assert_eq!(
+            exposed.secrets.get("BOOTSTRAP_KEY").map(String::as_str),
+            Some("raw-secret-value")
         );
     }
 

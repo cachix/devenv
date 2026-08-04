@@ -222,16 +222,17 @@ grep -q "does not have .target.host. set" err.log
 devenv eval 'machinesMeta.secretful.secrets' \
   | jq -e '.["machinesMeta.secretful.secrets"] == [
       {
-        "mode": "0600",
+        "mode": "0644",
         "owner": "0:0",
         "secret": "SECRET_MACHINE_AGE_KEY",
         "target": "/var/lib/sops-nix/key.txt"
       }
     ]'
 
-# 27. An as_path SecretSpec value is materialized successfully before the
-#     install build begins. The fixture still lacks disko, so that is the next
-#     expected failure after bootstrap validation.
+# 27. A machine install withholds resolved values from Nix (the fixture's mode
+#     therefore becomes the valid 0600 instead of its normal-eval 0644), and
+#     its as_path value is materialized before the install build begins. The
+#     fixture still lacks disko, so that is the next expected failure.
 if devenv machines install --phases install secretful 2>err.log; then
   echo "expected missing-disko failure after SecretSpec validation"
   exit 1
@@ -253,6 +254,43 @@ grep -q "SecretSpec did not resolve 1 bootstrap secret reference" err.log
 if grep -q "devenv inputs add disko" err.log; then
   echo "unresolved bootstrap reference was checked after the build"
   cat err.log
+  exit 1
+fi
+
+# 29. Secret-bearing installs force strict host authentication from their
+#     first SSH call, even if target.sshOpts tries to disable it. The mock
+#     fails preflight before kexec or any destructive operation.
+mkdir -p mock-bin
+cat >mock-bin/ssh <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"$SSH_ARGS_LOG"
+exit 1
+EOF
+chmod +x mock-bin/ssh
+if env SSH_ARGS_LOG="$PWD/ssh-args.log" PATH="$PWD/mock-bin:$PATH" \
+  devenv machines install --phases kexec,install secretful 2>err.log; then
+  echo "expected mocked strict-host preflight to fail"
+  exit 1
+fi
+if ! grep -q "Preflight probe failed" err.log; then
+  echo "mocked SSH did not fail during preflight"
+  cat err.log
+  exit 1
+fi
+if test "$(sed -n '1p' ssh-args.log)" != "-o" || \
+  test "$(sed -n '2p' ssh-args.log)" != "StrictHostKeyChecking=yes"; then
+  echo "strict host checking was not the first effective SSH option"
+  cat ssh-args.log
+  exit 1
+fi
+if ! grep -qx "StrictHostKeyChecking=no" ssh-args.log; then
+  echo "fixture's insecure SSH option was not present behind the forced policy"
+  cat ssh-args.log
+  exit 1
+fi
+if grep -q "bootstrap-test-value" ssh-args.log; then
+  echo "secret value leaked into SSH arguments"
+  cat ssh-args.log
   exit 1
 fi
 

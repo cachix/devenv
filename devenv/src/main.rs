@@ -500,6 +500,12 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
     let shutdown = Shutdown::new();
+    let expose_secretspec_values_to_nix = !matches!(
+        &command,
+        Commands::Machines {
+            command: MachinesCommand::Install { .. }
+        }
+    );
 
     let devenv_options = devenv::DevenvOptions {
         inputs: config.inputs,
@@ -522,6 +528,7 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             .map(|environment| environment.state.clone()),
         shell_cwd,
         is_testing,
+        expose_secretspec_values_to_nix,
         require_project_file,
     };
 

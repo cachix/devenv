@@ -43,7 +43,7 @@ A minimal NixOS machine:
 `target` is a submodule describing the SSH destination used by install and deploy. It exposes two fields:
 
 - `target.host` is an optional string. Set it to an SSH URI in one of these forms: `user@host`, `user@host:port`, or the full `ssh://user@host:port`. Omitting `target.host` means "activate in process on the current host" and is only valid for `home-manager`. Note that setting it to `"localhost"` is not the same as omitting it; `"localhost"` still routes through SSH.
-- `target.sshOpts` is an optional list of strings, appended as extra `-o` options after devenv's defaults. Use it to override anything in the default set below.
+- `target.sshOpts` is an optional list of SSH option tokens. They are applied before devenv's defaults because OpenSSH keeps the first value it obtains for most settings; use them to override the default set below.
 
 One `target` is shared across `nixos`, `nix-darwin`, and `home-manager` on the same machine, so if you declare more than one role on a single entry they all land on the same host.
 
@@ -51,10 +51,12 @@ One `target` is shared across `nixos`, `nix-darwin`, and `home-manager` on the s
 
 Every SSH connection devenv opens for install, deploy, copy, and builder routing uses these defaults:
 
-- `StrictHostKeyChecking=accept-new`, so parallel runs do not deadlock on interactive host key prompts on first contact. Pre populate `~/.ssh/known_hosts` if you want stricter checking.
+- `StrictHostKeyChecking=accept-new`, so parallel runs do not deadlock on interactive host key prompts on first contact. Pre-populate `~/.ssh/known_hosts` if you want stricter checking.
 - A bounded `ConnectTimeout`, so an unreachable host in a bulk run fails fast instead of hanging the whole batch.
 
-Override any of these by adding your own `-o` pair to `target.sshOpts`; the last value wins.
+Override these by adding your own `-o` pair to `target.sshOpts`; the configured value is passed first and therefore wins.
+
+An install that includes `install.secrets` is deliberately stricter from its first SSH connection: it forces `StrictHostKeyChecking=yes` and disables forwarding, agent forwarding, X11 forwarding, local commands, and TTY allocation. These settings cannot be weakened through `target.sshOpts`. Add every host identity used during the run to `known_hosts` before starting—including both the original system and kexec installer identities if they differ. A per-machine file can be selected with `[ "-o" "UserKnownHostsFile=/absolute/path" ]`. Unknown identities fail before preflight or destructive work.
 
 ### Machine names
 
@@ -346,7 +348,11 @@ machines.web1 = {
 };
 ```
 
-The attribute name is an absolute path in the installed system. `secret` is a name from the selected SecretSpec profile; values are resolved and materialized before any selected machine starts preflight or destructive work, then streamed to SSH on stdin. They do not appear in machine metadata, process arguments, remote scripts, or Nix store paths. File ownership must use numeric `uid:gid`, because the live installer does not know users declared only in the new NixOS system.
+The attribute name is an absolute path in the installed system. `secret` is a name from the selected SecretSpec profile; values are resolved and materialized before any selected machine starts preflight or destructive work, then streamed to SSH on stdin. They do not appear in machine metadata, process arguments, remote scripts, or Nix store paths. During `machines install`, devenv also withholds resolved SecretSpec values from Nix evaluation—`config.secretspec.secrets` is empty for that invocation—so imported modules cannot accidentally interpolate a bootstrap credential into a derivation. Profile and provider metadata remain available.
+
+The receiver sends a byte-counted frame, writes it under `umask 077` to a temporary file in the destination directory, rejects truncation, applies ownership and permissions, syncs it, and atomically renames it into place. A failed transfer leaves an existing destination unchanged and removes the temporary file. Extra payload copies use zeroize-on-drop memory, and core dumps are disabled before SecretSpec resolution for the install process and its children.
+
+File ownership must use numeric `uid:gid`, because the live installer does not know users declared only in the new NixOS system. Secret modes cannot contain special or execute bits, group write, or permissions for other users; `0400`, `0600`, and `0640` are accepted.
 
 SecretSpec entries with `as_path = true` are supported: devenv reads the retained temporary file and sends its contents, not its local filename. When installing several machines, every entry can select different secret names, or several entries can reference one shared secret. The provider and profile are global to the invocation; override them with `--secretspec-provider` and `--secretspec-profile`.
 
@@ -515,7 +521,7 @@ Common failure symptoms and what they usually mean:
 - **`Too many authentication failures` when connecting.** Your `ssh-agent` has more keys loaded than the remote `MaxAuthTries` allows, and the remote disconnects before the right key is offered. Set `IdentitiesOnly yes` for the target host in `~/.ssh/config`, or pass `[ "-o" "IdentitiesOnly=yes" ]` via `target.sshOpts`.
 - **Install hangs right after kexec.** The kexec'd installer most likely came up on a different IP than the one you started against, because DHCP handed it a new lease. Check the console or the DHCP server's lease table for the installer's new address, and use a static address or a MAC reservation for next time.
 - **`cannot add path '/nix/store/...' because it lacks a valid signature by a trusted key`.** A cross arch deploy is pushing an unsigned closure and the target's nix-daemon is refusing it. Add the invoking user to `nix.settings.trusted-users` on the target, or sign the paths. See [Builder trust](#builder-trust).
-- **`Host key verification failed` on first contact.** devenv uses `StrictHostKeyChecking=accept-new` by default, which trusts on first use. If you overrode it (for example to `yes`), pre populate `~/.ssh/known_hosts` for the targets in the run.
+- **`Host key verification failed` on first contact.** devenv normally uses `StrictHostKeyChecking=accept-new`, but installs containing `install.secrets` force `yes` from the first connection. Pre-populate `~/.ssh/known_hosts` (or the file selected with `UserKnownHostsFile`) with every pre- and post-kexec target identity before starting a secret-bearing install.
 - **Cross arch deploy reports success but the box is on the old generation.** A wrong architecture `switch-to-configuration` can fail with `Exec format error` and still be reported as success by some code paths. SSH in and check the running system generation (`readlink /run/current-system`) to confirm, and see [Verify cross arch activations manually](#verify-cross-arch-activations-manually).
 
 ## Roadmap

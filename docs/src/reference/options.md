@@ -24095,7 +24095,8 @@ null
 Bootstrap files populated from the active SecretSpec profile
 after ` nixos-install ` and before reboot. Attribute names are
 absolute paths in the installed system. Secret values are
-streamed over SSH and never placed in ` /nix/store `.
+streamed over strictly authenticated SSH into an atomic
+target-side file and never placed in ` /nix/store `.
 
 SecretSpec must be enabled in ` devenv.yaml `. Use the global
 ` --secretspec-provider ` and ` --secretspec-profile ` flags to
@@ -24138,7 +24139,10 @@ attribute set of (submodule)
 
 
 
-File mode applied via chmod on the target.
+File mode applied via chmod on the target. Special and
+execute bits, group write, and every permission for
+other users are rejected. Modes such as 0400, 0600, and
+0640 are accepted.
 
 
 
@@ -24378,9 +24382,11 @@ null
 
 
 
-Extra ` ssh -o ` options appended after devenv’s defaults
+Extra ` ssh -o ` options applied before devenv’s defaults
 (` StrictHostKeyChecking=accept-new ` and a bounded ` ConnectTimeout `).
-The last value wins, so this list overrides the defaults.
+OpenSSH keeps the first value for most settings, so this list
+overrides the defaults. Installs that transmit SecretSpec bootstrap
+secrets force stricter non-overridable SSH settings.
 
 
 

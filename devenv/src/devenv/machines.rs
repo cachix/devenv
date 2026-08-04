@@ -8,20 +8,41 @@ use cli_table::{Table, WithTitle};
 use devenv_activity::{ActivityInstrument, activity};
 use futures::stream::StreamExt;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
+use secrecy::{ExposeSecret, SecretSlice};
 use serde::Deserialize;
 use tokio::process;
 
 use super::Devenv;
 
-/// Default SSH options applied to every connection `devenv machines deploy`
-/// opens, ahead of any user-supplied `target.sshOpts`. User options are
-/// appended after, so they win on conflicts (doc: "last value wins").
+/// Default SSH options applied to every connection opened by `devenv
+/// machines`. OpenSSH keeps the first value it obtains for most options, so
+/// configured `target.sshOpts` must be placed before these defaults.
 const DEFAULT_SSH_OPTS: &[&str] = &[
     "-o",
     "StrictHostKeyChecking=accept-new",
     "-o",
     "ConnectTimeout=10",
 ];
+
+/// Non-overridable SSH policy for an install that will transmit bootstrap
+/// secrets. It is prepended even before configured options because OpenSSH's
+/// first-value-wins semantics make these settings authoritative.
+const SECRET_INSTALL_SSH_OPTS: &[&str] = &[
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "ClearAllForwardings=yes",
+    "-o",
+    "ForwardAgent=no",
+    "-o",
+    "ForwardX11=no",
+    "-o",
+    "PermitLocalCommand=no",
+    "-o",
+    "RequestTTY=no",
+];
+
+type BootstrapValues = HashMap<String, SecretSlice<u8>>;
 
 #[derive(Debug, Clone, Deserialize)]
 struct MachineMeta {
@@ -227,9 +248,21 @@ fn kexec_url(system: &str) -> Result<String> {
     ))
 }
 
-/// Build the argv fragment for ssh options: defaults first, user opts last.
+/// Build the argv fragment for SSH options. OpenSSH uses the first obtained
+/// value for most settings, so explicit machine options precede our defaults.
 fn ssh_opts_argv(user_opts: &[String]) -> Vec<String> {
-    let mut v: Vec<String> = DEFAULT_SSH_OPTS.iter().map(|s| s.to_string()).collect();
+    let mut v = user_opts.to_vec();
+    v.extend(DEFAULT_SSH_OPTS.iter().map(|s| s.to_string()));
+    v
+}
+
+/// Force fail-closed host authentication and disable forwarding features for
+/// every connection in an install that will eventually transmit secrets.
+fn secret_install_ssh_opts(user_opts: &[String]) -> Vec<String> {
+    let mut v: Vec<String> = SECRET_INSTALL_SSH_OPTS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     v.extend(user_opts.iter().cloned());
     v
 }
@@ -345,6 +378,63 @@ fn validate_file_mode(mode: &str) -> Result<()> {
         bail!("file mode {mode:?} must be a 3- or 4-digit octal mode");
     }
     Ok(())
+}
+
+/// Bootstrap credentials should not accidentally be installed with special,
+/// executable, group-writable, or world-accessible permission bits. Group
+/// read remains available for services that use a dedicated credentials
+/// group (for example, 0640).
+fn validate_secret_file_mode(mode: &str) -> Result<()> {
+    validate_file_mode(mode)?;
+    let parsed = u32::from_str_radix(mode, 8).expect("validated octal mode");
+    if parsed & 0o7000 != 0 || parsed & 0o111 != 0 || parsed & 0o020 != 0 || parsed & 0o007 != 0 {
+        bail!(
+            "secret file mode {mode:?} is too permissive: special and execute bits, group write, and all permissions for other users are forbidden"
+        );
+    }
+    Ok(())
+}
+
+/// Build the target-side receiver for one bootstrap secret. The payload is
+/// framed as `<decimal byte length>\n<raw bytes>`. It is written to a private
+/// temporary file, checked for truncation, and atomically renamed over the
+/// destination only after its metadata is correct.
+fn bootstrap_secret_receiver_script(
+    allowed_root: &str,
+    target: &str,
+    mode: &str,
+    owner: &str,
+) -> String {
+    let root = shell_quote(allowed_root);
+    let target = shell_quote(target);
+    let mode = shell_quote(mode);
+    let owner = shell_quote(owner);
+    format!(
+        "set -eu; umask 077; \
+         root={root}; dest={target}; dir=$(dirname -- \"$dest\"); \
+         mkdir -p -- \"$dir\"; \
+         resolved_root=$(realpath -e -- \"$root\"); \
+         resolved_dir=$(realpath -e -- \"$dir\"); \
+         case \"$resolved_dir/\" in \"$resolved_root\"/*) ;; \
+           *) echo 'Secret destination escapes the installed system' >&2; exit 1 ;; \
+         esac; \
+         tmp=$(mktemp -- \"$dir/.devenv-secret.XXXXXX\"); \
+         cleanup() {{ if [ -n \"$tmp\" ]; then rm -f -- \"$tmp\"; fi; }}; \
+         trap cleanup EXIT HUP INT TERM; \
+         IFS= read -r expected; \
+         case \"$expected\" in ''|*[!0-9]*) echo 'Invalid secret payload length' >&2; exit 1 ;; esac; \
+         head -c \"$expected\" > \"$tmp\"; \
+         actual=$(stat -c %s -- \"$tmp\"); \
+         if [ \"$actual\" != \"$expected\" ]; then \
+           echo 'Truncated secret payload' >&2; exit 1; \
+         fi; \
+         chmod -- {mode} \"$tmp\"; \
+         chown -- {owner} \"$tmp\"; \
+         sync -f \"$tmp\"; \
+         mv -T -- \"$tmp\" \"$dest\"; \
+         tmp=; \
+         sync -f \"$dir\""
+    )
 }
 
 /// Build the `NIX_SSHOPTS` env var value used by `nix copy`. Nix parses this
@@ -528,7 +618,7 @@ impl Devenv {
                             secret.target
                         )
                     })?;
-                    validate_file_mode(&secret.mode).wrap_err_with(|| {
+                    validate_secret_file_mode(&secret.mode).wrap_err_with(|| {
                         format!(
                             "Invalid mode for machines.{name}.install.secrets.{:?}",
                             secret.target
@@ -586,7 +676,7 @@ impl Devenv {
                             .secretspec_value_bytes(&secret.secret)
                             .await?
                             .expect("SecretSpec reference checked above");
-                        bootstrap_values.insert(secret.secret.clone(), value);
+                        bootstrap_values.insert(secret.secret.clone(), SecretSlice::from(value));
                     }
                 }
             }
@@ -654,7 +744,7 @@ impl Devenv {
         machine: &MachineMeta,
         phases: &HashSet<InstallPhase>,
         disko_mode: DiskoMode,
-        bootstrap_values: &HashMap<String, Vec<u8>>,
+        bootstrap_values: &BootstrapValues,
     ) -> Result<()> {
         let host = machine
             .target
@@ -662,7 +752,16 @@ impl Devenv {
             .as_deref()
             .expect("validated in machines_install");
         let pre_kexec_target = SshTarget::parse(host)?;
-        let ssh_opts = &machine.target.ssh_opts;
+        // A machine that will receive secrets must use pinned host identity
+        // verification from the very first connection. Otherwise an attacker
+        // could win trust-on-first-use during preflight and remain trusted by
+        // the later secret-transfer connection.
+        let ssh_opts =
+            if phases.contains(&InstallPhase::Install) && !machine.bootstrap_secrets.is_empty() {
+                secret_install_ssh_opts(&machine.target.ssh_opts)
+            } else {
+                machine.target.ssh_opts.clone()
+            };
 
         // Preflight: probe the target before any destructive work. The
         // probe is lightweight (one SSH round-trip) and catches the most
@@ -673,7 +772,7 @@ impl Devenv {
         if phases.contains(&InstallPhase::Kexec) {
             let act = activity!(INFO, operation, "Preflight check");
             async {
-                self.install_preflight(name, &pre_kexec_target, ssh_opts)
+                self.install_preflight(name, &pre_kexec_target, &ssh_opts)
                     .await
             }
             .in_activity(&act)
@@ -685,7 +784,7 @@ impl Devenv {
         if phases.contains(&InstallPhase::Kexec) {
             let act = activity!(INFO, operation, "kexec");
             async {
-                self.install_kexec(name, &pre_kexec_target, ssh_opts, machine)
+                self.install_kexec(name, &pre_kexec_target, &ssh_opts, machine)
                     .await
             }
             .in_activity(&act)
@@ -704,7 +803,7 @@ impl Devenv {
         // Phase 2: facter
         if phases.contains(&InstallPhase::Facter) {
             let act = activity!(INFO, operation, "Probing hardware (nixos-facter)");
-            async { self.install_facter(name, &target, ssh_opts).await }
+            async { self.install_facter(name, &target, &ssh_opts).await }
                 .in_activity(&act)
                 .await?;
         }
@@ -714,7 +813,7 @@ impl Devenv {
         if phases.contains(&InstallPhase::Disko) && !machine.encryption_keys.is_empty() {
             let act = activity!(INFO, operation, "Copying encryption keys");
             async {
-                self.install_encryption_keys(&target, ssh_opts, &machine.encryption_keys)
+                self.install_encryption_keys(&target, &ssh_opts, &machine.encryption_keys)
                     .await
             }
             .in_activity(&act)
@@ -725,7 +824,7 @@ impl Devenv {
         if phases.contains(&InstallPhase::Disko) {
             let act = activity!(INFO, operation, "Partitioning (disko)");
             async {
-                self.install_disko(name, &target, ssh_opts, disko_mode)
+                self.install_disko(name, &target, &ssh_opts, disko_mode)
                     .await
             }
             .in_activity(&act)
@@ -754,7 +853,7 @@ impl Devenv {
         // Phase 4: install
         if phases.contains(&InstallPhase::Install) {
             let act = activity!(INFO, operation, "Installing NixOS");
-            async { self.install_nixos(name, &target, ssh_opts).await }
+            async { self.install_nixos(name, &target, &ssh_opts).await }
                 .in_activity(&act)
                 .await?;
         }
@@ -765,7 +864,7 @@ impl Devenv {
         if phases.contains(&InstallPhase::Install) && !machine.extra_files.is_empty() {
             let act = activity!(INFO, operation, "Copying extra files");
             async {
-                self.install_extra_files(&target, ssh_opts, &machine.extra_files)
+                self.install_extra_files(&target, &ssh_opts, &machine.extra_files)
                     .await
             }
             .in_activity(&act)
@@ -778,7 +877,7 @@ impl Devenv {
                 self.install_bootstrap_secrets(
                     name,
                     &target,
-                    ssh_opts,
+                    &ssh_opts,
                     &machine.bootstrap_secrets,
                     bootstrap_values,
                 )
@@ -790,7 +889,7 @@ impl Devenv {
 
         if phases.contains(&InstallPhase::Install) && machine.copy_host_keys {
             let act = activity!(INFO, operation, "Copying SSH host keys");
-            async { self.install_copy_host_keys(&target, ssh_opts).await }
+            async { self.install_copy_host_keys(&target, &ssh_opts).await }
                 .in_activity(&act)
                 .await?;
         }
@@ -798,7 +897,7 @@ impl Devenv {
         // Phase 5: reboot
         if phases.contains(&InstallPhase::Reboot) {
             let act = activity!(INFO, operation, "Rebooting");
-            async { self.install_reboot(&target, ssh_opts).await }
+            async { self.install_reboot(&target, &ssh_opts).await }
                 .in_activity(&act)
                 .await?;
         }
@@ -1117,7 +1216,7 @@ impl Devenv {
         target: &SshTarget,
         ssh_opts: &[String],
         secrets: &[BootstrapSecret],
-        bootstrap_values: &HashMap<String, Vec<u8>>,
+        bootstrap_values: &BootstrapValues,
     ) -> Result<()> {
         for secret in secrets {
             let contents = bootstrap_values.get(&secret.secret).ok_or_else(|| {
@@ -1127,17 +1226,10 @@ impl Devenv {
                 )
             })?;
 
+            let contents = contents.expose_secret();
             let mnt_path = format!("/mnt{}", secret.target);
-            let mnt = shell_quote(&mnt_path);
-            let mode = shell_quote(&secret.mode);
-            let owner = shell_quote(&secret.owner);
-            let script = format!(
-                "set -eu; umask 077; \
-                 mkdir -p -- \"$(dirname -- {mnt})\"; \
-                 cat > {mnt}; \
-                 chmod -- {mode} {mnt}; \
-                 chown -- {owner} {mnt}"
-            );
+            let script =
+                bootstrap_secret_receiver_script("/mnt", &mnt_path, &secret.mode, &secret.owner);
 
             let mut cmd = process::Command::new("ssh");
             for opt in ssh_opts_argv(ssh_opts) {
@@ -1150,22 +1242,33 @@ impl Devenv {
             cmd.stdin(Stdio::piped())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());
+            cmd.kill_on_drop(true);
 
             let mut child = cmd.spawn().into_diagnostic().wrap_err_with(|| {
                 format!("Failed to start SSH while writing bootstrap secret for machines.{name}")
             })?;
-            if let Some(mut stdin) = child.stdin.take() {
+            let write_result = async {
                 use tokio::io::AsyncWriteExt;
-                stdin
-                    .write_all(contents)
-                    .await
-                    .into_diagnostic()
-                    .wrap_err_with(|| {
-                        format!(
-                            "Failed to stream SecretSpec secret {:?} to machines.{name}",
-                            secret.secret
-                        )
-                    })?;
+                let mut stdin = child
+                    .stdin
+                    .take()
+                    .ok_or_else(|| miette!("SSH stdin was not available for machines.{name}"))?;
+                let header = format!("{}\n", contents.len());
+                stdin.write_all(header.as_bytes()).await.into_diagnostic()?;
+                stdin.write_all(contents).await.into_diagnostic()?;
+                stdin.shutdown().await.into_diagnostic()?;
+                Ok::<(), miette::Report>(())
+            }
+            .await;
+            if let Err(error) = write_result {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                return Err(error).wrap_err_with(|| {
+                    format!(
+                        "Failed to stream SecretSpec secret {:?} to machines.{name}",
+                        secret.secret
+                    )
+                });
             }
             let status = child.wait().await.into_diagnostic()?;
             if !status.success() {
@@ -1718,17 +1821,33 @@ mod tests {
     }
 
     #[test]
-    fn ssh_opts_argv_prepends_defaults() {
+    fn ssh_opts_argv_places_configured_values_before_defaults() {
         let user = vec!["-o".to_string(), "IdentitiesOnly=yes".to_string()];
         let argv = ssh_opts_argv(&user);
         assert_eq!(argv[0], "-o");
-        assert_eq!(argv[1], "StrictHostKeyChecking=accept-new");
+        assert_eq!(argv[1], "IdentitiesOnly=yes");
         assert_eq!(argv[2], "-o");
-        assert_eq!(argv[3], "ConnectTimeout=10");
-        // User opts are appended after so "last value wins" semantics on
-        // conflicts matches the SSH option parser's behaviour.
+        assert_eq!(argv[3], "StrictHostKeyChecking=accept-new");
         assert_eq!(argv[4], "-o");
-        assert_eq!(argv[5], "IdentitiesOnly=yes");
+        assert_eq!(argv[5], "ConnectTimeout=10");
+    }
+
+    #[test]
+    fn secret_install_ssh_policy_cannot_be_weakened_by_machine_options() {
+        let user = vec!["-o".to_string(), "StrictHostKeyChecking=no".to_string()];
+        let configured = secret_install_ssh_opts(&user);
+        let argv = ssh_opts_argv(&configured);
+
+        assert_eq!(&argv[0..2], ["-o", "StrictHostKeyChecking=yes"]);
+        assert!(
+            argv.windows(2)
+                .any(|pair| pair == ["-o", "ClearAllForwardings=yes"])
+        );
+        let insecure_position = argv
+            .iter()
+            .position(|arg| arg == "StrictHostKeyChecking=no")
+            .unwrap();
+        assert!(insecure_position > 1);
     }
 
     #[test]
@@ -1759,6 +1878,13 @@ mod tests {
         assert!(validate_file_mode("0600").is_ok());
         assert!(validate_file_mode("u=rw").is_err());
         assert!(validate_file_mode("0888").is_err());
+        assert!(validate_secret_file_mode("0400").is_ok());
+        assert!(validate_secret_file_mode("0600").is_ok());
+        assert!(validate_secret_file_mode("0640").is_ok());
+        assert!(validate_secret_file_mode("0660").is_err());
+        assert!(validate_secret_file_mode("0644").is_err());
+        assert!(validate_secret_file_mode("0700").is_err());
+        assert!(validate_secret_file_mode("4600").is_err());
     }
 
     #[test]
@@ -1767,7 +1893,107 @@ mod tests {
         let env = nix_ssh_opts_env(&user);
         assert_eq!(
             env,
-            "-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o IdentitiesOnly=yes"
+            "-o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn bootstrap_receiver_replaces_destination_only_after_complete_payload() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use tokio::io::AsyncWriteExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("var/lib/app/key");
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, b"old-secret").unwrap();
+        let root_metadata = std::fs::metadata(root.path()).unwrap();
+        let owner = format!("{}:{}", root_metadata.uid(), root_metadata.gid());
+        let script = bootstrap_secret_receiver_script(
+            root.path().to_str().unwrap(),
+            target.to_str().unwrap(),
+            "0600",
+            &owner,
+        );
+
+        let payload = b"complete\0binary\nsecret";
+        let mut child = process::Command::new("sh")
+            .arg("-c")
+            .arg(script)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        stdin
+            .write_all(format!("{}\n", payload.len()).as_bytes())
+            .await
+            .unwrap();
+        stdin.write_all(payload).await.unwrap();
+        stdin.shutdown().await.unwrap();
+        drop(stdin);
+        let output = child.wait_with_output().await.unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(std::fs::read(&target).unwrap(), payload);
+        assert_eq!(
+            std::fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn bootstrap_receiver_rejects_truncation_and_preserves_old_value() {
+        use std::os::unix::fs::MetadataExt;
+        use tokio::io::AsyncWriteExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("var/lib/app/key");
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, b"old-secret").unwrap();
+        let root_metadata = std::fs::metadata(root.path()).unwrap();
+        let owner = format!("{}:{}", root_metadata.uid(), root_metadata.gid());
+        let script = bootstrap_secret_receiver_script(
+            root.path().to_str().unwrap(),
+            target.to_str().unwrap(),
+            "0600",
+            &owner,
+        );
+
+        let payload = b"partial";
+        let mut child = process::Command::new("sh")
+            .arg("-c")
+            .arg(script)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        stdin
+            .write_all(format!("{}\n", payload.len() + 5).as_bytes())
+            .await
+            .unwrap();
+        stdin.write_all(payload).await.unwrap();
+        stdin.shutdown().await.unwrap();
+        drop(stdin);
+        let status = child.wait().await.unwrap();
+
+        assert!(!status.success());
+        assert_eq!(std::fs::read(&target).unwrap(), b"old-secret");
+        assert!(
+            std::fs::read_dir(target.parent().unwrap())
+                .unwrap()
+                .all(|entry| !entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".devenv-secret."))
         );
     }
 

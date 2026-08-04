@@ -1,4 +1,4 @@
-{ ... }: {
+{ config, ... }: {
   # Machine with no roles: should evaluate cleanly, with every build.* output
   # falling back to the declared `null` default.
   machines.empty = { };
@@ -52,13 +52,18 @@
   };
 
   # Machine metadata contains only the SecretSpec name and target metadata.
-  # The value remains in the Rust-side resolved SecretSpec state.
+  # The conditional mode is a security regression sentinel: ordinary eval
+  # exposes SecretSpec values by design and therefore produces 0644, while
+  # `machines install` must hide values from Nix and see the valid 0600 mode.
   machines.secretful = {
     target.host = "root@secretful.example.com";
+    # The secret-bearing install must force `yes` ahead of this deliberately
+    # insecure value. A shell integration check captures the actual SSH argv.
+    target.sshOpts = [ "-o" "StrictHostKeyChecking=no" ];
     install.secrets."/var/lib/sops-nix/key.txt" = {
       secret = "SECRET_MACHINE_AGE_KEY";
       owner = "0:0";
-      mode = "0600";
+      mode = if config.secretspec.secrets ? SECRET_MACHINE_AGE_KEY then "0644" else "0600";
     };
     nixos = {
       services.openssh.enable = true;
