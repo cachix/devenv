@@ -369,6 +369,11 @@ in
               default = null;
               description = "Override the model for this agent.";
             };
+            effort = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "low" "medium" "high" "xhigh" "max" ]);
+              default = null;
+              description = "Override the effort level for this agent.";
+            };
             prompt = lib.mkOption {
               type = lib.types.lines;
               description = "The system prompt for the sub-agent";
@@ -694,6 +699,7 @@ in
                 ${lib.optionalString (agent.proactive != null) "proactive: ${lib.boolToString agent.proactive}"}
                 ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
                 ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
+                ${lib.optionalString (agent.effort != null) "effort: ${agent.effort}"}
                 ${lib.optionalString (agent.permissionMode != null) "permissionMode: ${agent.permissionMode}"}
                 ---
 
