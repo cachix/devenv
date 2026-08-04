@@ -228,6 +228,7 @@ let
       ConfigChange = buildHooks "ConfigChange" (groupedHooks.ConfigChange or [ ]);
     };
     inherit (cfg)
+      agent
       apiKeyHelper
       model
       forceLoginMethod
@@ -245,6 +246,12 @@ in
 {
   options.claude.code = {
     enable = lib.mkEnableOption "Claude Code integration with automatic hooks and commands setup";
+
+    agent = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "The agent to use as Claude Code's primary agent.";
+    };
 
     hooks = lib.mkOption {
       type = lib.types.submodule {
