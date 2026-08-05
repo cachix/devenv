@@ -6,7 +6,7 @@
       enable = true;
       install.enable = true;
       config = {
-        profiles = {
+        profiles.default = {
           settings.compiler."compiler.cppstd" = "14";
           settings._.build_type = "Debug";
         };

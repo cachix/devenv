@@ -1,6 +1,6 @@
 { pkgs, config, ... }:
 let
-  getCommand = package: builtins.baseNameOf (pkgs.lib.getExe package);
+  getCommand = package: baseNameOf (pkgs.lib.getExe package);
   cfg = config.languages.cplusplus;
 in
 {
