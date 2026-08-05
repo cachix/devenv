@@ -191,7 +191,7 @@ in
 
       # Tell Conan to use the already installed system-wide CMake when resolving
       # the dependencies on platform tools:
-      languages.cplusplus.conan.config.profiles.platformToolRequires = lib.mkDefault {
+      languages.cplusplus.conan.config.profiles.default.platformToolRequires = lib.mkDefault {
         cmake = cfg.cmake.package.version;
       };
 

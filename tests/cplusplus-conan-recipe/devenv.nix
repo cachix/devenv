@@ -1,6 +1,6 @@
 { pkgs, config, ... }:
 let
-  getCommand = package: builtins.baseNameOf (pkgs.lib.getExe package);
+  getCommand = package: baseNameOf (pkgs.lib.getExe package);
   cfg = config.languages.cplusplus;
 in
 {
@@ -10,7 +10,7 @@ in
       enable = true;
       install.enable = true;
       config = {
-        profiles = {
+        profiles.default = {
           settings.compiler."compiler.cppstd" = "17";
           settings._.build_type = "Release";
         };
