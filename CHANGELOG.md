@@ -2,6 +2,10 @@
 
 ## 2.2.2 (unreleased)
 
+### Bug Fixes
+
+- Fixed devenv exporting an inferred SecretSpec provider into the development shell when no provider override was configured, which replaced per-secret provider fallback chains for commands run inside the shell.
+
 ## 2.2.1 (2026-08-02)
 
 ### Bug Fixes
