@@ -556,6 +556,15 @@ impl Devenv {
 
         let mut secretspec_cell: OnceCell<ResolvedSecrets> = OnceCell::new();
         resolve_secretspec_into(&devenv_root, &secret_settings, &mut secretspec_cell)?;
+        let secretspec_provider_override = secret_settings
+            .secretspec
+            .as_ref()
+            .and_then(|config| config.provider.as_deref());
+        let secretspec_data = secretspec_cell.get().map(|resolved| SecretspecData {
+            profile: resolved.profile.clone(),
+            provider: secretspec_provider_override.map(str::to_owned),
+            secrets: resolved.secrets.clone().into_iter().collect(),
+        });
 
         // Create the cachix manager after secretspec so a secretspec secret
         // can authenticate pulls (netrc) and pushes (daemon env) even when
@@ -656,7 +665,7 @@ impl Devenv {
                     options.from_external,
                     options.require_version_match,
                     options.is_testing,
-                    secretspec_cell.get(),
+                    secretspec_data.as_ref(),
                     &fingerprint,
                 )?);
 
@@ -686,7 +695,7 @@ impl Devenv {
                     options.from_external,
                     options.require_version_match,
                     options.is_testing,
-                    secretspec_cell.get(),
+                    secretspec_data.as_ref(),
                     "",
                 )?);
 
@@ -3464,7 +3473,7 @@ fn build_bootstrap_args(
     from_external: bool,
     require_version_match: bool,
     is_testing: bool,
-    secretspec: Option<&ResolvedSecrets>,
+    secretspec: Option<&SecretspecData>,
     lock_fingerprint: &str,
 ) -> Result<BootstrapArgs> {
     let paths = &config.paths;
@@ -3483,12 +3492,6 @@ fn build_bootstrap_args(
             .expect("dotfile has filename")
             .to_string_lossy()
     ));
-
-    let secretspec_data: Option<SecretspecData> = secretspec.map(|resolved| SecretspecData {
-        profile: resolved.profile.clone(),
-        provider: resolved.provider.clone(),
-        secrets: resolved.secrets.clone().into_iter().collect(),
-    });
 
     let cli_options = CliOptionsConfig(parse_cli_options(
         &config.input_overrides.nix_module_options,
@@ -3514,7 +3517,7 @@ fn build_bootstrap_args(
         hostname: hostname.as_deref(),
         username: username.as_deref(),
         git_root: paths.git_root.as_deref(),
-        secretspec: secretspec_data.as_ref(),
+        secretspec,
         devenv_inputs: &config.inputs,
         devenv_imports: imports,
         impure: nix.impure,
