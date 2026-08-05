@@ -2509,9 +2509,12 @@ dependencies = [
  "devenv-nix-backend",
  "globset",
  "miette",
+ "nix 0.31.3",
+ "portable-pty",
  "serde",
  "serde_json",
  "serde_yaml",
+ "signal-hook 0.4.4",
  "tempfile",
  "tokio",
 ]

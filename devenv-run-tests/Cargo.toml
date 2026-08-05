@@ -6,6 +6,9 @@ license.workspace = true
 
 [dependencies]
 clap.workspace = true
+nix.workspace = true
+portable-pty.workspace = true
+signal-hook.workspace = true
 devenv.workspace = true
 devenv-nix-backend.workspace = true
 devenv-mailbox.workspace = true

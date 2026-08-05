@@ -8686,6 +8686,15 @@ rec {
             features = [ "fancy" ];
           }
           {
+            name = "nix";
+            packageId = "nix 0.31.3";
+            features = [ "fs" "process" "resource" "signal" "term" ];
+          }
+          {
+            name = "portable-pty";
+            packageId = "portable-pty";
+          }
+          {
             name = "serde";
             packageId = "serde";
             features = [ "derive" ];
@@ -8697,6 +8706,10 @@ rec {
           {
             name = "serde_yaml";
             packageId = "serde_yaml";
+          }
+          {
+            name = "signal-hook";
+            packageId = "signal-hook 0.4.4";
           }
           {
             name = "tempfile";

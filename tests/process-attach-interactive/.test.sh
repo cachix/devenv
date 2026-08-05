@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 
 # PTY merge gate for attaching to a detached native process manager.
-# PTY sessions are driven by .pty-run.py (util-linux `script -qefc` is not
-# available on macOS).
+# Sessions are driven by `devenv-run-tests pty`: stdin is a directive script
+# (expect:/send:/run:), so actions follow observed events and every controller
+# command is bounded. Inputs are sent once; a dropped command is a test failure.
+# Attach streams replay a log backlog, so an expect can consume a stale
+# occurrence; markers are unique per session to keep matches live.
+# Expected text must lie within one styled span: the TUI emits escape codes
+# between UI elements, so a pattern spanning elements never matches.
 
 set -eux
 
@@ -29,73 +34,8 @@ reachable() {
   curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:$1/" 2>/dev/null
 }
 
-wait_for_port() {
-  port=$1
-  for _ in $(seq 1 60); do
-    if reachable "$port"; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_port_free() {
-  port=$1
-  for _ in $(seq 1 30); do
-    if ! reachable "$port"; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_manager() {
-  for _ in $(seq 1 60); do
-    if [ -s "$PID_FILE" ] && devenv processes wait >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-# Count the manager's open fds: /proc on Linux, lsof on macOS. Empty output
-# means no source produced a count and the fd-leak checks are skipped.
-manager_fd_count() {
-  if [ -d "/proc/$DAEMON_PID/fd" ]; then
-    find "/proc/$DAEMON_PID/fd" -mindepth 1 -maxdepth 1 -type l 2>/dev/null | wc -l | tr -d ' '
-  elif lsof=$(command -v lsof) || { lsof=/usr/sbin/lsof && [ -x "$lsof" ]; }; then
-    # Capture before counting: a failed lsof piped straight into wc would
-    # read as a healthy count of 0 and turn the leak check into a no-op.
-    if fd_listing=$("$lsof" -np "$DAEMON_PID" 2>/dev/null); then
-      printf '%s\n' "$fd_listing" | awk 'NR > 1 && $4 ~ /^[0-9]/' | wc -l | tr -d ' '
-    fi
-  fi
-}
-
-wait_for_manager_fd_count_at_most() {
-  maximum=$1
-  for _ in $(seq 1 50); do
-    current=$(manager_fd_count)
-    if [ -n "$current" ] && [ "$current" -le "$maximum" ]; then
-      return 0
-    fi
-    sleep 0.1
-  done
-  return 1
-}
-
 alpha_process_pid() {
-  needle="python3 -u -m http.server $PORT_ALPHA"
-  ps -eo pid=,args= |
-    awk -v needle="$needle" '
-      index($0, needle) && !index($0, "awk -v needle=") {
-        print $1
-        exit
-      }
-    '
+  sh .process-pid.sh "$PORT_ALPHA"
 }
 
 dump_failure_state() {
@@ -112,6 +52,13 @@ dump_failure_state() {
       tail -n 80 "$file" >&2 || true
     fi
   done
+  for t in ./*.typescript; do
+    if [ -f "$t" ]; then
+      echo "==> $t <==" >&2
+      tail -c 4000 "$t" | tr -d '\000' >&2 || true
+      echo >&2
+    fi
+  done
 }
 
 cleanup() {
@@ -120,12 +67,13 @@ cleanup() {
   if [ "$status" -ne 0 ]; then
     dump_failure_state
   fi
+  # `devenv processes down` blocks until the daemon and its processes exit.
   devenv processes down >/dev/null 2>&1 || true
-  if ! wait_for_port_free "$PORT_ALPHA"; then
+  if reachable "$PORT_ALPHA"; then
     echo "alpha port remained bound after cleanup" >&2
     status=1
   fi
-  if ! wait_for_port_free "$PORT_BETA"; then
+  if reachable "$PORT_BETA"; then
     echo "beta port remained bound after cleanup" >&2
     status=1
   fi
@@ -138,23 +86,26 @@ if reachable "$PORT_ALPHA" || reachable "$PORT_BETA"; then
   exit 1
 fi
 
+# The attach pane shows only the newest log lines, so sessions may only
+# expect text that is near the tail: fresh markers, or a "Serving HTTP" the
+# session itself provoked.
 run_detach_session() {
   output=$1
   command=$2
-  marker=${3:-attach-live-marker}
+  marker=$3
   set +e
-  (
-    sleep 3
-    curl -sf -o /dev/null "http://127.0.0.1:$PORT_ALPHA/$marker" || true
-    sleep 2
-    printf '\003'
-    sleep 1
-    printf '\003'
-  ) | timeout 45 python3 .pty-run.py "$output" "$command" >/dev/null
+  devenv-run-tests pty "$output" "$command" >/dev/null <<EOF
+expect:Attached to the running process manager
+run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/$marker
+expect:$marker
+send:\003
+expect:Detach
+send:\003
+EOF
   session_status=$?
   set -e
   case "$session_status" in
-    0|130) ;;
+    0) ;;
     *)
       echo "detach session exited with status $session_status" >&2
       return "$session_status"
@@ -163,100 +114,146 @@ run_detach_session() {
 }
 
 devenv up -d >/dev/null 2>&1
-wait_for_manager
-wait_for_port "$PORT_ALPHA"
+devenv processes wait
 DAEMON_PID=$(sed -n '1p' "$PID_FILE")
 kill -0 "$DAEMON_PID"
 
 # E04: plain interactive `devenv up` attaches and a second Ctrl-C detaches.
-run_detach_session plain-up.typescript "devenv up"
+# First attach on a fresh daemon: "Serving HTTP" is still the newest alpha
+# line, and seeing it guarantees alpha is bound before the marker fetch.
+set +e
+devenv-run-tests pty plain-up.typescript "devenv up" >/dev/null <<EOF
+expect:Attached to the running process manager
+expect:Serving HTTP
+run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/plain-up-marker
+expect:plain-up-marker
+send:\003
+expect:Detach
+send:\003
+EOF
+session_status=$?
+set -e
+case "$session_status" in
+  0) ;;
+  *) echo "plain up session exited with status $session_status" >&2; exit "$session_status" ;;
+esac
 grep -a -q "Attached to the running process manager" plain-up.typescript
-grep -a -q "attach-live-marker" plain-up.typescript
+grep -a -q "plain-up-marker" plain-up.typescript
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
 kill -0 "$DAEMON_PID"
 reachable "$PORT_ALPHA"
 
 # E05: explicit attach observes the same daemon without scheduling work.
-run_detach_session explicit-attach.typescript "devenv processes attach"
+run_detach_session explicit-attach.typescript "devenv processes attach" explicit-attach-marker
 grep -a -q "Attached to the running process manager" explicit-attach.typescript
-grep -a -q "attach-live-marker" explicit-attach.typescript
+grep -a -q "explicit-attach-marker" explicit-attach.typescript
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
 reachable "$PORT_ALPHA"
 
 # R03: repeat real PTY attachments while generating unique logs. Every
 # disconnect must release its socket/log tailers, and neither daemon nor child
-# PID may change. Protocol-level tests assert each unique line arrives once;
-# this checks the OS resource boundary through /proc.
+# PID may change. Fd counts are taken mid-attach so cycles compare like with
+# like; each cycle's check observes the previous cycle's residue.
 ALPHA_PID=$(alpha_process_pid)
 test -n "$ALPHA_PID"
 kill -0 "$ALPHA_PID"
-sleep 1
-FD_BASELINE=$(manager_fd_count)
-if [ -z "$FD_BASELINE" ]; then
+
+set +e
+devenv-run-tests pty fd-baseline.typescript "devenv processes attach" >/dev/null <<EOF
+expect:Attached to the running process manager
+run:sh .fd-count.sh $DAEMON_PID > fd-baseline.txt
+send:\003
+expect:Detach
+send:\003
+EOF
+session_status=$?
+set -e
+case "$session_status" in
+  0) ;;
+  *) echo "fd baseline session exited with status $session_status" >&2; exit "$session_status" ;;
+esac
+if [ ! -s fd-baseline.txt ]; then
   echo "skipping fd-leak checks: neither /proc nor lsof is available" >&2
 fi
+
 for cycle in $(seq 1 5); do
   marker="repeat-attach-marker-$cycle"
   transcript="repeat-attach-$cycle.typescript"
-  run_detach_session "$transcript" "devenv processes attach" "$marker"
+  set +e
+  devenv-run-tests pty "$transcript" "devenv processes attach" >/dev/null <<EOF
+expect:Attached to the running process manager
+run:[ ! -s fd-baseline.txt ] || [ "\$(sh .fd-count.sh $DAEMON_PID)" -le "\$(cat fd-baseline.txt)" ]
+run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/$marker
+expect:$marker
+send:\003
+expect:Detach
+send:\003
+EOF
+  session_status=$?
+  set -e
+  case "$session_status" in
+    0) ;;
+    *) echo "attach cycle $cycle exited with status $session_status" >&2; exit "$session_status" ;;
+  esac
   grep -a -q "$marker" "$transcript"
   test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
   test "$(alpha_process_pid)" = "$ALPHA_PID"
   kill -0 "$DAEMON_PID"
   kill -0 "$ALPHA_PID"
   reachable "$PORT_ALPHA"
-  if [ -n "$FD_BASELINE" ] && ! wait_for_manager_fd_count_at_most "$FD_BASELINE"; then
-    echo "manager file descriptors grew from $FD_BASELINE to $(manager_fd_count) after attach cycle $cycle" >&2
-    exit 1
-  fi
 done
 
 # E06: attached TUI commands restart, stop, and then re-start the process.
+# The PTY verifies selection and sends each key exactly once. Process identity
+# is checked out of band because a full-screen redraw can replay old log text.
+# The sync marker appearing in alpha's log pane proves the process row is
+# rendered before any key is sent; the downs overshoot to the clamped bottom
+# row (alpha, always last), and the process-specific footer confirms selection.
 set +e
-(
-  sleep 3
-  printf '\033[B\033[B'
-  sleep 1
-  printf '\022'
-  sleep 3
-  printf '\030'
-  sleep 4
-  if ! reachable "$PORT_ALPHA"; then
-    touch attached-stop-ok
-  fi
-  printf '\022'
-  sleep 4
-  if reachable "$PORT_ALPHA"; then
-    touch attached-restart-ok
-  fi
-  printf '\003'
-  sleep 1
-  printf '\003'
-) | timeout 60 python3 .pty-run.py attached-commands.typescript "devenv processes attach" >/dev/null
+devenv-run-tests pty attached-commands.typescript "devenv processes attach" >/dev/null <<EOF
+expect:Attached to the running process manager
+run:[ ! -s fd-baseline.txt ] || [ "\$(sh .fd-count.sh $DAEMON_PID)" -le "\$(cat fd-baseline.txt)" ]
+run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/e06-sync-marker
+expect:e06-sync-marker
+send:\033[B\033[B\033[B\033[B\033[B\033[B
+expect:(re)start process
+send:\022
+run:sh .wait-process.sh changed $PORT_ALPHA $ALPHA_PID
+run:sh .process-pid.sh $PORT_ALPHA > e06-restarted-pid.txt
+run:curl -sf -o /dev/null http://127.0.0.1:$PORT_ALPHA/
+send:\030
+run:sh .wait-process.sh absent $PORT_ALPHA
+run:! curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:$PORT_ALPHA/
+send:\022
+run:sh .wait-process.sh changed $PORT_ALPHA "\$(cat e06-restarted-pid.txt)"
+run:curl -sf -o /dev/null http://127.0.0.1:$PORT_ALPHA/
+send:\003
+expect:Detach
+send:\003
+EOF
 COMMAND_STATUS=$?
 set -e
 case "$COMMAND_STATUS" in
-  0|130) ;;
+  0) ;;
   *) echo "attached command session exited with status $COMMAND_STATUS" >&2; exit "$COMMAND_STATUS" ;;
 esac
-test -f attached-stop-ok
-test -f attached-restart-ok
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
+reachable "$PORT_ALPHA"
 
 # E10: automation must fail fast even when a wrapper allocated a PTY.
-if timeout 15 devenv up --no-tui </dev/null >non-tty.txt 2>&1; then
+if devenv up --no-tui </dev/null >non-tty.txt 2>&1; then
   echo "non-TTY up unexpectedly attached" >&2
   exit 1
 fi
 grep -q "Processes already running" non-tty.txt
 
-if timeout 15 python3 .pty-run.py ci.typescript "CI=1 DEVENV_NO_AI_AGENT=1 devenv up" </dev/null >/dev/null; then
+if devenv-run-tests pty ci.typescript "CI=1 DEVENV_NO_AI_AGENT=1 devenv up" </dev/null >/dev/null; then
   echo "CI up unexpectedly attached" >&2
   exit 1
 fi
 grep -a -q "Processes already running" ci.typescript
 
-if timeout 15 python3 .pty-run.py agent.typescript "env -u DEVENV_NO_AI_AGENT CLAUDECODE=1 devenv up" </dev/null >/dev/null; then
+if devenv-run-tests pty agent.typescript "env -u DEVENV_NO_AI_AGENT CLAUDECODE=1 devenv up" </dev/null >/dev/null; then
   echo "coding-agent up unexpectedly attached" >&2
   exit 1
 fi
@@ -280,37 +277,46 @@ if reachable "$PORT_BETA"; then
 fi
 
 # E07: choosing `s` from the attached interrupt prompt stops the manager.
+# The client's stop blocks until the daemon is gone, so the post-session
+# checks are one-shot.
 set +e
-(
-  sleep 3
-  printf '\003'
-  sleep 1
-  printf 's'
-) | timeout 45 python3 .pty-run.py stop-manager.typescript "devenv processes attach" >/dev/null
+devenv-run-tests pty stop-manager.typescript "devenv processes attach" >/dev/null <<EOF
+expect:Attached to the running process manager
+send:\003
+expect:Detach
+send:s
+EOF
 STOP_STATUS=$?
 set -e
 case "$STOP_STATUS" in
-  0|130) ;;
+  0) ;;
   *) echo "stop-manager session exited with status $STOP_STATUS" >&2; exit "$STOP_STATUS" ;;
 esac
-wait_for_port_free "$PORT_ALPHA"
+if reachable "$PORT_ALPHA"; then
+  echo "alpha port still bound after manager stop" >&2
+  exit 1
+fi
 test ! -e "$PID_FILE"
 test ! -e "$SOCKET_FILE"
 
 # E08: losing the daemon externally is reported as an error, not a detach.
 devenv up -d >/dev/null 2>&1
-wait_for_manager
-wait_for_port "$PORT_ALPHA"
+devenv processes wait
 DAEMON_PID=$(sed -n '1p' "$PID_FILE")
-if (
-  sleep 3
-  kill -TERM "$DAEMON_PID"
-) | timeout 45 python3 .pty-run.py manager-loss.typescript "devenv processes attach" >/dev/null; then
-  echo "attach unexpectedly succeeded after manager loss" >&2
+set +e
+devenv-run-tests pty manager-loss.typescript "devenv processes attach" >/dev/null <<EOF
+expect:Attached to the running process manager
+run:kill -TERM $DAEMON_PID
+expect:process manager went away
+EOF
+LOSS_STATUS=$?
+set -e
+test "$LOSS_STATUS" -ne 0
+grep -a -q "process manager went away" manager-loss.typescript
+if reachable "$PORT_ALPHA"; then
+  echo "alpha port still bound after manager loss" >&2
   exit 1
 fi
-grep -a -q "process manager went away" manager-loss.typescript
-wait_for_port_free "$PORT_ALPHA"
 test ! -e "$PID_FILE"
 test ! -e "$SOCKET_FILE"
 

@@ -1,3 +1,5 @@
+mod pty;
+
 use clap::Parser;
 use devenv::activity::ActivityLevel;
 use devenv::{
@@ -38,6 +40,9 @@ enum Commands {
     /// Generate JSON metadata for tests
     #[clap(name = "generate-json")]
     GenerateJson(GenerateJsonArgs),
+    /// Run a command on a fresh PTY, relaying stdin and capturing output
+    #[clap(name = "pty")]
+    Pty(PtyArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -67,6 +72,22 @@ struct RunArgs {
 
     #[clap(value_parser, default_values = DEFAULT_DIRECTORIES)]
     directories: Vec<PathBuf>,
+}
+
+#[derive(Parser, Debug)]
+struct PtyArgs {
+    #[clap(value_parser, help = "File to capture PTY output to")]
+    transcript: PathBuf,
+
+    #[clap(value_parser, help = "Shell command to run on the PTY")]
+    command: String,
+
+    #[clap(
+        long,
+        default_value_t = 30,
+        help = "Seconds allowed per expect: directive and for the final drain (exit 124)"
+    )]
+    step_timeout: u64,
 }
 
 #[derive(Parser, Debug)]
@@ -527,6 +548,16 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 }
 
 fn main() -> Result<ExitCode> {
+    // Dispatch before the Nix/GC runtime and the DEVENV_RUN_TESTS re-exec.
+    if let Commands::Pty(pty_args) = Args::parse().command {
+        let code = pty::run(
+            &pty_args.transcript,
+            &pty_args.command,
+            std::time::Duration::from_secs(pty_args.step_timeout),
+        )?;
+        return Ok(ExitCode::from((code & 0xff) as u8));
+    }
+
     // Nix evaluation recurses deeply enough to overflow the default 8MB main
     // thread stack, so the whole run happens on a thread sized for Nix.
     let thread = std::thread::Builder::new()
@@ -668,8 +699,9 @@ exec '{bin_dir}/devenv' \
         (
             "PATH",
             format!(
-                "{}:{}",
+                "{}:{}:{}",
                 wrapper_dir.path().display(),
+                executable_dir.display(),
                 env::var("PATH").unwrap_or_default()
             ),
         ),
@@ -733,6 +765,8 @@ async fn execute_command(args: &Args) -> Result<()> {
     match &args.command {
         Commands::Run(run_args) => run_tests(run_args).await,
         Commands::GenerateJson(gen_args) => generate_json(gen_args).await,
+        // Dispatched in main() before the runtime starts.
+        Commands::Pty(_) => unreachable!("pty is handled in main"),
     }
 }
 
