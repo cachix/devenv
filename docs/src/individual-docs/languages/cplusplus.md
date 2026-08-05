@@ -45,7 +45,7 @@ There corresponds the following conan-flake options:
 
 ```nix
 {
-  profiles = {
+  profiles.default = {
     settings.compiler."compiler.cppstd" = "14";
     settings._.build_type = "Debug";
 
@@ -74,7 +74,7 @@ Set your `devenv.nix` file accordingly. For example, the above is actually equiv
       enable = true;
       install.enable = true;
       config = {
-        profiles = {
+        profiles.default = {
           settings.compiler."compiler.cppstd" = "14";
           settings._.build_type = "Debug";
         };
@@ -88,7 +88,7 @@ By default, when `languages.cplusplus.conan` is enabled:
 
 - The C++ package is set to `config.stdenv.cc` &mdash; that is, the system C compiler configured for devenv to use for the developer environment.
 - Whenever devenv is configured without a C compiler toolchain (see the recipe [Skip the C compiler toolchain](../recipes/nix.md#skip-the-c-compiler-toolchain) for an example), the C++ package is defaulted to `pkgs.stdenv.cc` instead.
-- Conan is configured to use the `languages.cplusplus.cmake` package available in the developer shell; as can be seen from the above example, the devenv integration automatically takes care of the CMake part, and the `profiles.platformToolRequires` and `devShell.tools` options are not required to be set explicitly.
+- Conan is configured to use the `languages.cplusplus.cmake` package available in the developer shell; as can be seen from the above example, the devenv integration automatically takes care of the CMake part, and the `profiles.default.platformToolRequires` and `devShell.tools` options are not required to be set explicitly.
 
 ### In Action:
 
@@ -135,7 +135,7 @@ If you would like to integrate with the LLVM compiler infrastructure:
       enable = true;
       install.enable = true;
       config = {
-        profiles = {
+        profiles.default = {
           settings._.build_type = "Release";
         };
         stdenv = pkgs.overrideCC
@@ -172,7 +172,7 @@ Or even:
       enable = true;
       install.enable = true;
       config = {
-        profiles = {
+        profiles.default = {
           settings._.build_type = "Release";
         };
       };
@@ -222,7 +222,7 @@ With [local-recipe-index](https://docs.conan.io/2/tutorial/conan_repositories/se
       install.enable = true;
 
       config = {
-        profiles = {
+        profiles.default = {
           settings.compiler."compiler.cppstd" = "17";
           settings._.build_type = "Release";
         };
