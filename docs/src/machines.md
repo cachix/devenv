@@ -43,20 +43,20 @@ A minimal NixOS machine:
 `target` is a submodule describing the SSH destination used by install and deploy. It exposes two fields:
 
 - `target.host` is an optional string. Set it to an SSH URI in one of these forms: `user@host`, `user@host:port`, or the full `ssh://user@host:port`. Omitting `target.host` means "activate in process on the current host" and is only valid for `home-manager`. Note that setting it to `"localhost"` is not the same as omitting it; `"localhost"` still routes through SSH.
-- `target.sshOpts` is an optional list of SSH option tokens. They are applied before devenv's defaults because OpenSSH keeps the first value it obtains for most settings; use them to override the default set below.
+- `target.sshOpts` is an optional list of SSH option tokens. They are applied before devenv's defaults for direct SSH and `nix copy` connections because OpenSSH keeps the first value it obtains for most settings; use them to override the default set below. Nix remote-builder connections are the exception described under [SSH config and the nix-daemon](#ssh-config-and-the-nix-daemon).
 
 One `target` is shared across `nixos`, `nix-darwin`, and `home-manager` on the same machine, so if you declare more than one role on a single entry they all land on the same host.
 
 ### SSH defaults
 
-Every SSH connection devenv opens for install, deploy, copy, and builder routing uses these defaults:
+Every direct SSH or `nix copy` connection devenv opens for install and deploy uses these defaults:
 
 - `StrictHostKeyChecking=accept-new`, so parallel runs do not deadlock on interactive host key prompts on first contact. Pre-populate `~/.ssh/known_hosts` if you want stricter checking.
 - A bounded `ConnectTimeout`, so an unreachable host in a bulk run fails fast instead of hanging the whole batch.
 
 Override these by adding your own `-o` pair to `target.sshOpts`; the configured value is passed first and therefore wins.
 
-An install that includes `install.secrets` is deliberately stricter from its first SSH connection: it forces `StrictHostKeyChecking=yes` and disables forwarding, agent forwarding, X11 forwarding, local commands, and TTY allocation. These settings cannot be weakened through `target.sshOpts`. Add every host identity used during the run to `known_hosts` before starting—including both the original system and kexec installer identities if they differ. A per-machine file can be selected with `[ "-o" "UserKnownHostsFile=/absolute/path" ]`. Unknown identities fail before preflight or destructive work.
+An install that transmits local file payloads through `install.secrets`, `install.encryptionKeys`, or `install.extraFiles` is deliberately stricter from its first SSH connection: it forces `StrictHostKeyChecking=yes` and disables forwarding, agent forwarding, X11 forwarding, local commands, and TTY allocation. These settings cannot be weakened through `target.sshOpts`. Add every host identity used during the run to `known_hosts` before starting—including both the original system and kexec installer identities if they differ. A per-machine file can be selected with `[ "-o" "UserKnownHostsFile=/absolute/path" ]`. Unknown identities fail before preflight or destructive work.
 
 ### Machine names
 
@@ -169,7 +169,7 @@ Install requires an explicit name. Because it wipes disks, running `devenv machi
 $ devenv machines install server1 server2
 ```
 
-Pass `-j N` to cap how many hosts install at once. `-j 1` runs them one at a time, which is useful for a controlled rollout or for watching a single host closely.
+Pass `--max-concurrent N` to cap how many hosts install at once. `--max-concurrent 1` runs them one at a time, which is useful for a controlled rollout or for watching a single host closely. (`-j` remains the global Nix `max-jobs` flag.)
 
 #### Preflight for install
 
@@ -178,7 +178,7 @@ Before running `install` against a real target, confirm:
 - **Root SSH is enabled on the remote installer.** Install logs in as `root` and does not escalate with `sudo`. Many cloud minimal images disable root login by default; either pick an image that allows it or run `passwd root` on the console before invoking install.
 - **The target kernel can kexec.** kexec is how devenv pivots into the NixOS installer without requiring pre installed NixOS. Some older ARM boards (early Raspberry Pi revisions) and a few locked down cloud kernels refuse mid kexec. If you hit this, boot the NixOS minimal ISO manually and use `devenv machines deploy` instead.
 - **The target has roughly 1 GB of free RAM.** The kexec'd installer holds the next system closure in memory before writing it to disk, and smaller VPS instances (512 MB, 1 GB) have OOMed mid run.
-- **TCP 22 is reachable from the host running devenv.** Ordinary installs add the target to `known_hosts` on first contact because `StrictHostKeyChecking=accept-new` is the default. Secret-bearing installs require a pre-pinned identity as described under [SSH defaults](#ssh-defaults).
+- **TCP 22 is reachable from the host running devenv.** Ordinary installs add the target to `known_hosts` on first contact because `StrictHostKeyChecking=accept-new` is the default. Installs that transmit local files require a pre-pinned identity as described under [SSH defaults](#ssh-defaults).
 
 The disko layout describes the filesystems and you own `boot.loader.*` directly. Everything else the target needs (initrd kernel modules, CPU microcode, GPU drivers, network controller modules) comes from the nixos-facter report that devenv generates on first install; see [Hardware detection with nixos-facter](#hardware-detection-with-nixos-facter).
 
@@ -223,11 +223,11 @@ Deploy with:
 $ devenv machines deploy mac
 ```
 
-This is equivalent to `darwin-rebuild switch` over SSH. There is no `install` equivalent for darwin, since Apple ships the OS.
+This is equivalent to `darwin-rebuild switch` over SSH. There is no `install` equivalent for darwin, since Apple ships the OS. Consequently, the `install.*` bootstrap settings—including SecretSpec—are NixOS-only.
 
 Two macOS specific things to know before deploying:
 
-- **sudo over SSH and TouchID.** On macOS, admin user `sudo` can be gated on TouchID, which cannot be satisfied over SSH; the activation hangs waiting for a fingerprint that will never come. Pick one of: SSH in as `root` (which requires enabling root login, not recommended by Apple), configure passwordless `sudo` for the deploy user in the `nix-darwin` module (`security.sudo.extraConfig` or the equivalent), or pre authenticate with `sudo -v` in a separate terminal on the target before starting deploy.
+- **sudo over SSH and TouchID.** On macOS, admin user `sudo` can be gated on TouchID, which cannot be satisfied by devenv's non-interactive SSH command. Either SSH in as `root` (which requires enabling root login and is not recommended by Apple), or configure passwordless `sudo` for the deploy user in the nix-darwin module (`security.sudo.extraConfig` or the equivalent). devenv invokes `sudo -H` automatically for non-root targets.
 - **Activation expects `HOME=/var/root`.** darwin activation uses launchd and `defaults` which resolve paths relative to `$HOME`, and without an explicit `HOME` set the activation misbehaves in subtle ways. devenv sets `HOME=/var/root` for the remote activation step so you do not need to; this is documented here so you are not surprised if you look at the remote command line.
 
 ## home-manager
@@ -291,15 +291,15 @@ A single entry can carry more than one role. Both modules apply to the same host
 }
 ```
 
-Installing this entry provisions NixOS on the host and then applies the home-manager configuration for `jdoe` on the same machine.
+`devenv machines install server` provisions only the NixOS role. After the target reboots, `devenv machines deploy server` activates the declared roles in order, including the home-manager configuration for `jdoe`.
 
-Roles activate in a fixed order: NixOS (or nix-darwin) first, then home-manager. home-manager depends on the user existing on the target, so running it after the system switch is the only order that works for a fresh entry.
+During `deploy`, roles activate in a fixed order: NixOS (or nix-darwin) first, then home-manager. home-manager depends on the user existing on the target, so running it after the system switch is the only order that works for a fresh entry.
 
 The two roles are not transactional: a partial success is possible and is reported as a failure. If NixOS activation fails, home-manager is not attempted and the entry is reported as failed. If NixOS succeeds but home-manager fails, the NixOS switch stays applied, the entry is still reported as failed, and bulk deploys exit nonzero. Re running `deploy` is safe: NixOS activation is idempotent, so only home-manager will do work on the retry.
 
 A couple of footguns to know about when combining roles on one entry:
 
-- **Pin `users.users.<name>.uid` and `users.groups.<name>.gid` explicitly.** On a fresh install the user is created by NixOS activation, and if the uid is not pinned, a later NixOS change that renumbers it will silently break ownership of every file home-manager wrote under that user. Pinning both values up front avoids this class of bug entirely.
+- **Pin `users.users.<name>.uid` and `users.groups.<name>.gid` explicitly.** On a fresh install the user is created from the NixOS configuration, and if the uid is not pinned, a later NixOS change that renumbers it will silently break ownership of every file home-manager wrote under that user. Pinning both values up front avoids this class of bug entirely.
 - **Make sure `home.homeDirectory` matches the path NixOS actually creates.** A `/Users/jdoe` value copy pasted from a nix-darwin example will activate cleanly on a Linux target and write files to the wrong place, because home-manager does not cross check the NixOS user's `home` attribute. Keep the two in sync, or factor them through a shared `let` binding.
 
 ## Secrets
@@ -350,7 +350,7 @@ machines.web1 = {
 
 The attribute name is an absolute path in the installed system. `secret` is a name from the selected SecretSpec profile. The default execution mode is `local`: values are resolved and materialized on the workstation before any selected machine starts preflight or destructive work, then streamed to SSH on stdin. They do not appear in machine metadata, process arguments, remote scripts, or Nix store paths. During `machines install`, devenv also withholds resolved SecretSpec values from Nix evaluation—`config.secretspec.secrets` is empty for that invocation—so imported modules cannot accidentally interpolate a bootstrap credential into a derivation. Profile and provider metadata remain available.
 
-The receiver sends a byte-counted frame, writes it under `umask 077` to a temporary file in the destination directory, rejects truncation, applies ownership and permissions, syncs it, and atomically renames it into place. A failed transfer leaves an existing destination unchanged and removes the temporary file. Extra payload copies use zeroize-on-drop memory, and core dumps are disabled before SecretSpec resolution for the install process and its children.
+All local install file transfers—SecretSpec values, encryption keys, and extra files—use a byte-counted frame. The receiver writes under `umask 077` to a temporary file in the destination directory, rejects truncation, applies ownership and permissions, syncs it, and atomically renames it into place. A failed transfer leaves an existing destination unchanged and removes the temporary file. Payload copies use zeroize-on-drop memory, and core dumps are disabled for the install process and its children.
 
 File ownership must use numeric `uid:gid`, because the live installer does not know users declared only in the new NixOS system. Secret modes cannot contain special or execute bits, group write, or permissions for other users; `0400`, `0600`, and `0640` are accepted.
 
@@ -391,7 +391,7 @@ Target execution protects secrets from an honest workstation process, but a work
 
 `install.secrets` is intentionally bootstrap-only. It runs as part of the `install` phase, after `install.extraFiles` (so a SecretSpec file wins if both target the same path) and before `install.copyHostKeys` and reboot. It is not reapplied by `devenv machines deploy`; use sops-nix, agenix, or another runtime mechanism for rotation.
 
-LUKS root unlock keys are a separate case: they are consumed by disko at install time, not at runtime. Configure them with disko's `passwordFile` or `settings.keyFile`, which are read on the host running `devenv machines install` rather than on the target, and keep them out of your runtime secret store.
+LUKS root unlock keys are a separate case: they are consumed by disko at install time, not at runtime. Point disko's `passwordFile` or `settings.keyFile` at an installer path and map that path to a local source with `install.encryptionKeys`. devenv reads the source on the workstation and streams it to the live installer before disko runs, without putting it in the Nix store.
 
 ## Deploying multiple machines
 
@@ -440,7 +440,7 @@ Keep this at the Nix layer rather than wrapping `devenv machines deploy` in a sh
 
 ### Parallelism and failure handling
 
-Machines are deployed in parallel by default. Each machine runs its own build, copy, and activation pipeline independently, and the summary printed at the end shows the outcome for each one. Pass `--max-concurrent N` to cap how many machines run at once; `--max-concurrent 1` runs them strictly one at a time, which helps when you want predictable ordering or when debugging a specific host. (`-j` is not used because it's already the global Nix `max-jobs` flag.) The same flag will apply to `install` when that slice lands.
+Machines are deployed in parallel by default. Each machine runs its own build, copy, and activation pipeline independently, and the summary printed at the end shows the outcome for each one. Pass `--max-concurrent N` to cap how many machines run at once; `--max-concurrent 1` runs them strictly one at a time, which helps when you want predictable ordering or when debugging a specific host. (`-j` is not used because it's already the global Nix `max-jobs` flag.) The same flag also caps concurrent `install` jobs.
 
 Build and activation are interleaved: each machine builds its own closure immediately before copying and activating, not all closures up front. A failure on one machine does not stop the others. Machines that already activated stay applied, machines still running finish their own pipelines, and every outcome lands in the final summary. `devenv machines deploy` exits nonzero if any machine in the run failed. If you want every closure built before any deploy runs, build each machine explicitly with `devenv build machines.<name>` first and only then invoke `devenv machines deploy`.
 
@@ -460,7 +460,7 @@ A single `devenv.nix` can declare machines for different systems, and `devenv ma
 
 By default, devenv builds locally. If the current host can't realize a derivation for the target's `system`, the build fails loudly rather than silently falling back to building somewhere else.
 
-Pass `--use-machines-as-builders` to change that. With the flag set, devenv treats every entry in `machines` that has a matching `system` (and a reachable `target.host`) as a candidate Nix remote builder for the current run, and routes builds for mismatched targets to them. This is the one piece of configuration that crosses machine boundaries: `machines.mac` (aarch64-darwin) can build the closure for `machines.server` (x86_64-linux), or vice versa, without you having to hand configure `nix.conf`. The flag is global and applies to every machine in the run, including builds triggered by `install` and `devenv build machines.<name>`.
+Pass `--use-machines-as-builders` to change that. With the flag set, devenv adds every entry with `target.host` to Nix's remote-builder list, tagged with that entry's `system`. Nix can then route a build to a machine whose system matches the derivation—for example, an x86_64-linux builder can build for an x86_64-linux target while devenv itself runs on aarch64-darwin. The flag applies to builds performed by that `machines deploy` or `machines install` invocation; plain `devenv build` does not expose this flag.
 
 ```shell-session
 $ devenv machines deploy --use-machines-as-builders
@@ -483,15 +483,11 @@ devenv sets `builders-use-substitutes = true` on the ephemeral builder configura
 
 ### SSH config and the nix-daemon
 
-The nix-daemon runs as `root` (or a dedicated build user), not as your interactive user, and it reads SSH configuration from that user's home directory. If you have custom host aliases, jump hosts, or identity files in your own `~/.ssh/config`, the daemon will not see them when it opens the builder connection. Put the options you need for the builder into `target.sshOpts` on the builder machine entry so devenv passes them explicitly, rather than relying on the invoking user's SSH config.
-
-### Verify cross arch activations manually
-
-A final caveat: when the orchestrator and target architectures differ, a broken activation script can still exit zero. Specifically, if the closure ends up carrying a wrong architecture `switch-to-configuration`, the kernel returns `Exec format error` when it tries to run it, and some code paths report that as success rather than a hard failure. The summary will show green, but the box will be running the old generation. After a cross arch deploy, SSH in and spot check the running system generation before trusting the summary.
+The nix-daemon runs as `root` (or a dedicated build user), not as your interactive user, and it reads SSH configuration from that user's home directory. If you have custom host aliases, jump hosts, or identity files in your own `~/.ssh/config`, the daemon will not see them when it opens the builder connection. The generated C-Nix `builders` setting carries the SSH destination and system, but not arbitrary per-machine `target.sshOpts`; configure builder authentication and routing in the daemon user's SSH configuration. `target.sshOpts` still applies to devenv's direct SSH and `nix copy` connections.
 
 ## Listing machines
 
-`devenv machines info` prints a table of every machine declared in `devenv.nix` with the metadata devenv uses to build, deploy, and (eventually) install them:
+`devenv machines info` prints a table of every machine declared in `devenv.nix` with the metadata devenv uses to build, deploy, and install them:
 
 ```shell-session
 $ devenv machines info
@@ -551,11 +547,10 @@ A few behaviors are explicit non features, called out so you do not infer them f
 
 Common failure symptoms and what they usually mean:
 
-- **`Too many authentication failures` when connecting.** Your `ssh-agent` has more keys loaded than the remote `MaxAuthTries` allows, and the remote disconnects before the right key is offered. Set `IdentitiesOnly yes` for the target host in `~/.ssh/config`, or pass `[ "-o" "IdentitiesOnly=yes" ]` via `target.sshOpts`.
+- **`Too many authentication failures` when connecting.** Your `ssh-agent` has more keys loaded than the remote `MaxAuthTries` allows, and the remote disconnects before the right key is offered. For direct deploy/install connections, pass `[ "-o" "IdentitiesOnly=yes" ]` via `target.sshOpts`; for Nix remote-builder connections, set it in the nix-daemon user's SSH configuration.
 - **Install hangs right after kexec.** The kexec'd installer most likely came up on a different IP than the one you started against, because DHCP handed it a new lease. Check the console or the DHCP server's lease table for the installer's new address, and use a static address or a MAC reservation for next time.
 - **`cannot add path '/nix/store/...' because it lacks a valid signature by a trusted key`.** A cross arch deploy is pushing an unsigned closure and the target's nix-daemon is refusing it. Add the invoking user to `nix.settings.trusted-users` on the target, or sign the paths. See [Builder trust](#builder-trust).
-- **`Host key verification failed` on first contact.** devenv normally uses `StrictHostKeyChecking=accept-new`, but installs containing `install.secrets` force `yes` from the first connection. Pre-populate `~/.ssh/known_hosts` (or the file selected with `UserKnownHostsFile`) with every pre- and post-kexec target identity before starting a secret-bearing install.
-- **Cross arch deploy reports success but the box is on the old generation.** A wrong architecture `switch-to-configuration` can fail with `Exec format error` and still be reported as success by some code paths. SSH in and check the running system generation (`readlink /run/current-system`) to confirm, and see [Verify cross arch activations manually](#verify-cross-arch-activations-manually).
+- **`Host key verification failed` on first contact.** devenv normally uses `StrictHostKeyChecking=accept-new`, but installs that transmit `install.secrets`, `install.encryptionKeys`, or `install.extraFiles` force `yes` from the first connection. Pre-populate `~/.ssh/known_hosts` (or the file selected with `UserKnownHostsFile`) with every pre- and post-kexec target identity before starting the install.
 
 ## Roadmap
 
@@ -626,7 +621,7 @@ Paths are given as strings (absolute or relative to the devenv project root), **
 - `install.extraFiles` copies files onto `/` of the new system after install, before reboot. Use it for age/sops master keys, SSH host keys, `/var/lib/*` seeds. Matches nixos-anywhere's `--extra-files` and `--chown`.
 - `install.secrets` resolves named values from the active SecretSpec profile after `nixos-install`. The default `install.secretspec.execution = "local"` streams them from the workstation; `"target"` resolves them directly on the installer without exposing values or provider credentials to the workstation.
 - `install.encryptionKeys` drops keyfiles into the installer **before disko runs**, so LUKS layouts with `passwordFile = "/tmp/luks.key"` can unlock. The keys live on the host running `devenv machines install`, not in the store.
-- `install.copyHostKeys` preserves `/etc/ssh/ssh_host_*` across a reinstall, so the target's SSH identity stays stable and `known_hosts` on every client keeps working.
+- `install.copyHostKeys` copies `/etc/ssh/ssh_host_*` from the live installer into the installed system, keeping the post-kexec SSH identity stable across the first boot.
 
 ### Slice 4: build placement
 

@@ -27,8 +27,8 @@
     };
   };
 
-  # nix-darwin-only machine: used to exercise the "not yet supported" error
-  # path in `devenv machines deploy`.
+  # nix-darwin-only machine: used to exercise the targeted missing-host error
+  # path in `devenv machines deploy` (nix-darwin deployment requires SSH).
   machines.mac = {
     nix-darwin = { environment.systemPackages = [ ]; };
   };

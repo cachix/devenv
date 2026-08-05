@@ -23822,10 +23822,10 @@ submodule
 
 
 
-Preserve ` /etc/ssh/ssh_host_* ` across a reinstall by copying
-them from the installer into the installed system before reboot.
-This keeps the target’s SSH identity stable so ` known_hosts ` on
-every client keeps working.
+Copy ` /etc/ssh/ssh_host_* ` from the live installer into the
+installed system before reboot. This keeps the SSH identity
+stable between the post-kexec installer and the first boot, so
+that identity’s ` known_hosts ` entry keeps working.
 
 
 
@@ -24493,7 +24493,8 @@ Extra ` ssh -o ` options applied before devenv’s defaults
 (` StrictHostKeyChecking=accept-new ` and a bounded ` ConnectTimeout `).
 OpenSSH keeps the first value for most settings, so this list
 overrides the defaults. Installs that transmit SecretSpec bootstrap
-secrets force stricter non-overridable SSH settings.
+values, encryption keys, or extra files force stricter
+non-overridable SSH settings.
 
 
 

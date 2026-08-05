@@ -24,10 +24,10 @@ const DEFAULT_SSH_OPTS: &[&str] = &[
     "ConnectTimeout=10",
 ];
 
-/// Non-overridable SSH policy for an install that will transmit bootstrap
-/// secrets. It is prepended even before configured options because OpenSSH's
+/// Non-overridable SSH policy for an install that will transmit local file
+/// payloads. It is prepended even before configured options because OpenSSH's
 /// first-value-wins semantics make these settings authoritative.
-const SECRET_INSTALL_SSH_OPTS: &[&str] = &[
+const SENSITIVE_INSTALL_SSH_OPTS: &[&str] = &[
     "-o",
     "StrictHostKeyChecking=yes",
     "-o",
@@ -283,14 +283,24 @@ fn ssh_opts_argv(user_opts: &[String]) -> Vec<String> {
 }
 
 /// Force fail-closed host authentication and disable forwarding features for
-/// every connection in an install that will eventually transmit secrets.
-fn secret_install_ssh_opts(user_opts: &[String]) -> Vec<String> {
-    let mut v: Vec<String> = SECRET_INSTALL_SSH_OPTS
+/// every connection in an install that will transmit local file payloads.
+fn sensitive_install_ssh_opts(user_opts: &[String]) -> Vec<String> {
+    let mut v: Vec<String> = SENSITIVE_INSTALL_SSH_OPTS
         .iter()
         .map(|s| s.to_string())
         .collect();
     v.extend(user_opts.iter().cloned());
     v
+}
+
+fn install_transmits_local_files(
+    phases: &HashSet<InstallPhase>,
+    has_encryption_keys: bool,
+    has_extra_files: bool,
+    has_bootstrap_secrets: bool,
+) -> bool {
+    (phases.contains(&InstallPhase::Disko) && has_encryption_keys)
+        || (phases.contains(&InstallPhase::Install) && (has_extra_files || has_bootstrap_secrets))
 }
 
 /// Machine names are interpolated into bare Nix attr paths. Keep them to a
@@ -371,6 +381,28 @@ fn shell_quote(s: &str) -> String {
     out
 }
 
+/// Build the privileged nix-darwin activation command. Remote macOS deploys
+/// commonly log in as an administrator rather than root, so activation must
+/// actually invoke the passwordless `sudo` that the user configured. Root
+/// targets skip sudo, and both paths use an explicit nix-env discovered before
+/// privilege escalation so sudo's restricted PATH cannot hide Nix.
+fn nix_darwin_activation_script(toplevel: &Path) -> String {
+    let toplevel = shell_quote(&toplevel.display().to_string());
+    format!(
+        "set -eu; p={toplevel}; \
+         nix_env=$(command -v nix-env 2>/dev/null || true); \
+         if [ -z \"$nix_env\" ]; then nix_env=/nix/var/nix/profiles/default/bin/nix-env; fi; \
+         if [ ! -x \"$nix_env\" ]; then echo 'nix-env is not available on the target' >&2; exit 1; fi; \
+         if [ \"$(id -u)\" -eq 0 ]; then \
+           \"$nix_env\" --profile /nix/var/nix/profiles/system --set \"$p\" && \
+             HOME=/var/root \"$p/activate\"; \
+         else \
+           sudo -H -- \"$nix_env\" --profile /nix/var/nix/profiles/system --set \"$p\" && \
+             sudo -H -- /usr/bin/env HOME=/var/root \"$p/activate\"; \
+         fi"
+    )
+}
+
 /// Validate a configured file path written on the installer or below `/mnt`.
 fn validate_target_file_path(path: &str) -> Result<()> {
     if !path.starts_with('/') || path == "/" {
@@ -421,11 +453,11 @@ fn validate_secret_file_mode(mode: &str) -> Result<()> {
     Ok(())
 }
 
-/// Build the target-side receiver for one bootstrap secret. The payload is
+/// Build the target-side receiver for one install-time file. The payload is
 /// framed as `<decimal byte length>\n<raw bytes>`. It is written to a private
 /// temporary file, checked for truncation, and atomically renamed over the
 /// destination only after its metadata is correct.
-fn bootstrap_secret_receiver_script(
+fn install_file_receiver_script(
     allowed_root: &str,
     target: &str,
     mode: &str,
@@ -441,9 +473,11 @@ fn bootstrap_secret_receiver_script(
          mkdir -p -- \"$dir\"; \
          resolved_root=$(realpath -e -- \"$root\"); \
          resolved_dir=$(realpath -e -- \"$dir\"); \
-         case \"$resolved_dir/\" in \"$resolved_root\"/*) ;; \
-           *) echo 'Secret destination escapes the installed system' >&2; exit 1 ;; \
-         esac; \
+         if [ \"$resolved_root\" != / ]; then \
+           case \"$resolved_dir/\" in \"$resolved_root\"/*) ;; \
+             *) echo 'File destination escapes its allowed root' >&2; exit 1 ;; \
+           esac; \
+         fi; \
          tmp=$(mktemp -- \"$dir/.devenv-secret.XXXXXX\"); \
          cleanup() {{ if [ -n \"$tmp\" ]; then rm -f -- \"$tmp\"; fi; }}; \
          trap cleanup EXIT HUP INT TERM; \
@@ -1002,16 +1036,21 @@ impl Devenv {
             .as_deref()
             .expect("validated in machines_install");
         let pre_kexec_target = SshTarget::parse(host)?;
-        // A machine that will receive secrets must use pinned host identity
-        // verification from the very first connection. Otherwise an attacker
-        // could win trust-on-first-use during preflight and remain trusted by
-        // the later secret-transfer connection.
-        let ssh_opts =
-            if phases.contains(&InstallPhase::Install) && !machine.bootstrap_secrets.is_empty() {
-                secret_install_ssh_opts(&machine.target.ssh_opts)
-            } else {
-                machine.target.ssh_opts.clone()
-            };
+        // A machine that will receive any local file payload must use pinned
+        // host identity verification from the very first connection. Both
+        // encryptionKeys and extraFiles commonly contain credentials, so they
+        // get the same policy as SecretSpec bootstrap values.
+        let transmits_local_files = install_transmits_local_files(
+            phases,
+            !machine.encryption_keys.is_empty(),
+            !machine.extra_files.is_empty(),
+            !machine.bootstrap_secrets.is_empty(),
+        );
+        let ssh_opts = if transmits_local_files {
+            sensitive_install_ssh_opts(&machine.target.ssh_opts)
+        } else {
+            machine.target.ssh_opts.clone()
+        };
 
         // Preflight: probe the target before any destructive work. The
         // probe is lightweight (one SSH round-trip) and catches the most
@@ -1408,39 +1447,23 @@ impl Devenv {
         keys: &BTreeMap<String, String>,
     ) -> Result<()> {
         for (target_path, local_source) in keys {
-            let contents = tokio::fs::read(local_source)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to read encryption key {local_source}"))?;
-            // Pipe the key via stdin to avoid it appearing in the process
-            // command line or on the remote filesystem before chmod.
-            let target_path = shell_quote(target_path);
-            let script = format!("cat > {target_path} && chmod 0600 {target_path}");
-            let mut cmd = process::Command::new("ssh");
-            for opt in ssh_opts_argv(ssh_opts) {
-                cmd.arg(opt);
-            }
-            if let Some(port) = target.port() {
-                cmd.arg("-p").arg(port.to_string());
-            }
-            cmd.arg(target.ssh_destination()).arg(&script);
-            cmd.stdin(Stdio::piped())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit());
-            let mut child = cmd.spawn().into_diagnostic()?;
-            if let Some(mut stdin) = child.stdin.take() {
-                use tokio::io::AsyncWriteExt;
-                stdin
-                    .write_all(&contents)
+            let contents = SecretSlice::from(
+                tokio::fs::read(local_source)
                     .await
                     .into_diagnostic()
-                    .wrap_err("Failed to pipe encryption key to ssh")?;
-                // drop stdin to close the pipe and let the remote `cat` finish
-            }
-            let status = child.wait().await.into_diagnostic()?;
-            if !status.success() {
-                bail!("Failed to copy encryption key to {target_path} on target");
-            }
+                    .wrap_err_with(|| format!("Failed to read encryption key {local_source}"))?,
+            );
+            self.stream_install_file(
+                target,
+                ssh_opts,
+                "/",
+                target_path,
+                "0600",
+                "0:0",
+                contents.expose_secret(),
+                &format!("encryption key at {target_path}"),
+            )
+            .await?;
         }
         Ok(())
     }
@@ -1454,42 +1477,25 @@ impl Devenv {
         files: &BTreeMap<String, ExtraFile>,
     ) -> Result<()> {
         for (target_path, file) in files {
-            let contents = tokio::fs::read(&file.source)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to read {}", file.source))?;
-            // Write to /mnt/<path> since the installed system is mounted there.
-            // Every config-derived interpolation is shell-quoted.
-            let mnt_path = format!("/mnt{target_path}");
-            let mnt = shell_quote(&mnt_path);
-            let mode = shell_quote(&file.mode);
-            let owner = shell_quote(&file.owner);
-            let script = format!(
-                "mkdir -p \"$(dirname {mnt})\" && \
-                 cat > {mnt} && \
-                 chmod -- {mode} {mnt} && \
-                 chown -- {owner} {mnt}"
+            let contents = SecretSlice::from(
+                tokio::fs::read(&file.source)
+                    .await
+                    .into_diagnostic()
+                    .wrap_err_with(|| format!("Failed to read {}", file.source))?,
             );
-            let mut cmd = process::Command::new("ssh");
-            for opt in ssh_opts_argv(ssh_opts) {
-                cmd.arg(opt);
-            }
-            if let Some(port) = target.port() {
-                cmd.arg("-p").arg(port.to_string());
-            }
-            cmd.arg(target.ssh_destination()).arg(&script);
-            cmd.stdin(Stdio::piped())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit());
-            let mut child = cmd.spawn().into_diagnostic()?;
-            if let Some(mut stdin) = child.stdin.take() {
-                use tokio::io::AsyncWriteExt;
-                stdin.write_all(&contents).await.into_diagnostic()?;
-            }
-            let status = child.wait().await.into_diagnostic()?;
-            if !status.success() {
-                bail!("Failed to copy extra file to {mnt_path} on target");
-            }
+            // Write below /mnt since the installed system is mounted there.
+            let mnt_path = format!("/mnt{target_path}");
+            self.stream_install_file(
+                target,
+                ssh_opts,
+                "/mnt",
+                &mnt_path,
+                &file.mode,
+                &file.owner,
+                contents.expose_secret(),
+                &format!("extra file at {target_path}"),
+            )
+            .await?;
         }
         Ok(())
     }
@@ -1513,60 +1519,79 @@ impl Devenv {
                 )
             })?;
 
-            let contents = contents.expose_secret();
             let mnt_path = format!("/mnt{}", secret.target);
-            let script =
-                bootstrap_secret_receiver_script("/mnt", &mnt_path, &secret.mode, &secret.owner);
-
-            let mut cmd = process::Command::new("ssh");
-            for opt in ssh_opts_argv(ssh_opts) {
-                cmd.arg(opt);
-            }
-            if let Some(port) = target.port() {
-                cmd.arg("-p").arg(port.to_string());
-            }
-            cmd.arg(target.ssh_destination()).arg(&script);
-            cmd.stdin(Stdio::piped())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit());
-            cmd.kill_on_drop(true);
-
-            let mut child = cmd.spawn().into_diagnostic().wrap_err_with(|| {
-                format!("Failed to start SSH while writing bootstrap secret for machines.{name}")
-            })?;
-            let write_result = async {
-                use tokio::io::AsyncWriteExt;
-                let mut stdin = child
-                    .stdin
-                    .take()
-                    .ok_or_else(|| miette!("SSH stdin was not available for machines.{name}"))?;
-                let header = format!("{}\n", contents.len());
-                stdin.write_all(header.as_bytes()).await.into_diagnostic()?;
-                stdin.write_all(contents).await.into_diagnostic()?;
-                stdin.shutdown().await.into_diagnostic()?;
-                Ok::<(), miette::Report>(())
-            }
-            .await;
-            if let Err(error) = write_result {
-                let _ = child.kill().await;
-                let _ = child.wait().await;
-                return Err(error).wrap_err_with(|| {
-                    format!(
-                        "Failed to stream SecretSpec secret {:?} to machines.{name}",
-                        secret.secret
-                    )
-                });
-            }
-            let status = child.wait().await.into_diagnostic()?;
-            if !status.success() {
-                bail!(
-                    "Failed to install SecretSpec secret {:?} at {} on machines.{name}",
-                    secret.secret,
-                    secret.target
-                );
-            }
+            self.stream_install_file(
+                target,
+                ssh_opts,
+                "/mnt",
+                &mnt_path,
+                &secret.mode,
+                &secret.owner,
+                contents.expose_secret(),
+                &format!(
+                    "SecretSpec secret {:?} at {} on machines.{name}",
+                    secret.secret, secret.target
+                ),
+            )
+            .await?;
         }
 
+        Ok(())
+    }
+
+    /// Stream exact bytes over SSH stdin and atomically install them with the
+    /// requested metadata. No payload is placed in argv or the remote script.
+    #[allow(clippy::too_many_arguments)]
+    async fn stream_install_file(
+        &self,
+        target: &SshTarget,
+        ssh_opts: &[String],
+        allowed_root: &str,
+        destination: &str,
+        mode: &str,
+        owner: &str,
+        contents: &[u8],
+        description: &str,
+    ) -> Result<()> {
+        let script = install_file_receiver_script(allowed_root, destination, mode, owner);
+        let mut cmd = process::Command::new("ssh");
+        for opt in ssh_opts_argv(ssh_opts) {
+            cmd.arg(opt);
+        }
+        if let Some(port) = target.port() {
+            cmd.arg("-p").arg(port.to_string());
+        }
+        cmd.arg(target.ssh_destination()).arg(&script);
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        cmd.kill_on_drop(true);
+
+        let mut child = cmd
+            .spawn()
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to start SSH while installing {description}"))?;
+        let write_result = async {
+            use tokio::io::AsyncWriteExt;
+            let mut stdin = child.stdin.take().ok_or_else(|| {
+                miette!("SSH stdin was not available while installing {description}")
+            })?;
+            let header = format!("{}\n", contents.len());
+            stdin.write_all(header.as_bytes()).await.into_diagnostic()?;
+            stdin.write_all(contents).await.into_diagnostic()?;
+            stdin.shutdown().await.into_diagnostic()?;
+            Ok::<(), miette::Report>(())
+        }
+        .await;
+        if let Err(error) = write_result {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            return Err(error).wrap_err_with(|| format!("Failed to stream {description}"));
+        }
+        let status = child.wait().await.into_diagnostic()?;
+        if !status.success() {
+            bail!("Failed to install {description}");
+        }
         Ok(())
     }
 
@@ -1637,8 +1662,8 @@ impl Devenv {
         Ok(())
     }
 
-    /// Preserve SSH host keys across a reinstall by copying them from
-    /// the installer's `/etc/ssh/` to the installed system at `/mnt/etc/ssh/`.
+    /// Keep the post-kexec SSH identity across first boot by copying host keys
+    /// from the installer's `/etc/ssh/` into `/mnt/etc/ssh/`.
     async fn install_copy_host_keys(&self, target: &SshTarget, ssh_opts: &[String]) -> Result<()> {
         self.ssh_run(
             target,
@@ -1813,11 +1838,11 @@ impl Devenv {
         // Parallel execution. Doc: "Machines are deployed in parallel by
         // default. Each machine runs its own build, copy, and activation
         // pipeline independently, and the summary printed at the end shows
-        // the outcome for each one. Pass `-j N` to cap how many machines
-        // run at once; `-j 1` runs them strictly one at a time."
+        // the outcome for each one. Pass `--max-concurrent N` to cap how many
+        // machines run at once; `--max-concurrent 1` runs them one at a time."
         //
         // Default cap = working_set.len() (every machine runs concurrently);
-        // an explicit `--max-concurrent N` clamps it. `-j 1` gives
+        // an explicit `--max-concurrent N` clamps it. A limit of 1 gives
         // deterministic sequential ordering, which matches the doc's
         // "watching a single host closely" use case.
         let concurrency = max_concurrent
@@ -1989,18 +2014,11 @@ impl Devenv {
             .await
             .wrap_err_with(|| format!("Failed to copy nix-darwin closure to {host}"))?;
 
-        let toplevel_str = toplevel.display().to_string();
-        // nix-darwin activation: swap the system profile, then run the
-        // toplevel's `activate` script. `HOME=/var/root` is required because
-        // the darwin activation script calls `defaults` and launchd which
-        // resolve paths relative to $HOME — without a stable value they
-        // misbehave in subtle ways. Users still need to arrange root SSH or
-        // passwordless sudo themselves; doc covers the TouchID caveat.
-        let script = format!(
-            "nix-env --profile /nix/var/nix/profiles/system --set {p} && \
-             HOME=/var/root {p}/activate",
-            p = toplevel_str
-        );
+        // nix-darwin activation swaps the system profile and runs the
+        // toplevel's `activate` script with the root HOME it expects. Normal
+        // administrator targets use passwordless sudo; explicit root targets
+        // run the same operations directly.
+        let script = nix_darwin_activation_script(&toplevel);
         self.ssh_run(&target, &machine.target.ssh_opts, &script)
             .await
             .wrap_err_with(|| format!("nix-darwin activation failed on {host}"))?;
@@ -2187,9 +2205,9 @@ mod tests {
     }
 
     #[test]
-    fn secret_install_ssh_policy_cannot_be_weakened_by_machine_options() {
+    fn sensitive_install_ssh_policy_cannot_be_weakened_by_machine_options() {
         let user = vec!["-o".to_string(), "StrictHostKeyChecking=no".to_string()];
-        let configured = secret_install_ssh_opts(&user);
+        let configured = sensitive_install_ssh_opts(&user);
         let argv = ssh_opts_argv(&configured);
 
         assert_eq!(&argv[0..2], ["-o", "StrictHostKeyChecking=yes"]);
@@ -2205,12 +2223,34 @@ mod tests {
     }
 
     #[test]
+    fn every_selected_local_file_phase_enables_sensitive_ssh_policy() {
+        let disko = HashSet::from([InstallPhase::Disko]);
+        let install = HashSet::from([InstallPhase::Install]);
+
+        assert!(install_transmits_local_files(&disko, true, false, false));
+        assert!(install_transmits_local_files(&install, false, true, false));
+        assert!(install_transmits_local_files(&install, false, false, true));
+        assert!(!install_transmits_local_files(&disko, false, true, true));
+        assert!(!install_transmits_local_files(&install, true, false, false));
+    }
+
+    #[test]
     fn shell_quote_escapes_values() {
         assert_eq!(shell_quote("/tmp/luks.key"), "'/tmp/luks.key'");
         assert_eq!(shell_quote(""), "''");
         assert_eq!(shell_quote("ada's key"), r"'ada'\''s key'");
         assert_eq!(shell_quote("/tmp/k; rm -rf /mnt"), "'/tmp/k; rm -rf /mnt'");
         assert_eq!(shell_quote("$(whoami)"), "'$(whoami)'");
+    }
+
+    #[test]
+    fn nix_darwin_activation_escalates_non_root_targets() {
+        let script = nix_darwin_activation_script(Path::new("/nix/store/test-darwin-system"));
+        assert!(script.contains("if [ \"$(id -u)\" -eq 0 ]"));
+        assert!(script.contains("sudo -H -- \"$nix_env\""));
+        assert!(script.contains("sudo -H -- /usr/bin/env HOME=/var/root"));
+        assert!(script.contains("/nix/var/nix/profiles/system"));
+        assert!(script.contains("$p/activate"));
     }
 
     #[test]
@@ -2253,7 +2293,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[tokio::test]
-    async fn bootstrap_receiver_replaces_destination_only_after_complete_payload() {
+    async fn install_file_receiver_supports_root_and_replaces_only_after_complete_payload() {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         use tokio::io::AsyncWriteExt;
 
@@ -2263,12 +2303,7 @@ mod tests {
         std::fs::write(&target, b"old-secret").unwrap();
         let root_metadata = std::fs::metadata(root.path()).unwrap();
         let owner = format!("{}:{}", root_metadata.uid(), root_metadata.gid());
-        let script = bootstrap_secret_receiver_script(
-            root.path().to_str().unwrap(),
-            target.to_str().unwrap(),
-            "0600",
-            &owner,
-        );
+        let script = install_file_receiver_script("/", target.to_str().unwrap(), "0600", &owner);
 
         let payload = b"complete\0binary\nsecret";
         let mut child = process::Command::new("sh")
@@ -2302,7 +2337,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[tokio::test]
-    async fn bootstrap_receiver_rejects_truncation_and_preserves_old_value() {
+    async fn install_file_receiver_rejects_truncation_and_preserves_old_value() {
         use std::os::unix::fs::MetadataExt;
         use tokio::io::AsyncWriteExt;
 
@@ -2312,7 +2347,7 @@ mod tests {
         std::fs::write(&target, b"old-secret").unwrap();
         let root_metadata = std::fs::metadata(root.path()).unwrap();
         let owner = format!("{}:{}", root_metadata.uid(), root_metadata.gid());
-        let script = bootstrap_secret_receiver_script(
+        let script = install_file_receiver_script(
             root.path().to_str().unwrap(),
             target.to_str().unwrap(),
             "0600",
