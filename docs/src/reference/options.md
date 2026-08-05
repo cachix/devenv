@@ -16511,6 +16511,14 @@ boolean
 true
 ```
 
+
+
+*Example:*
+
+```nix
+true
+```
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
 
@@ -16600,7 +16608,7 @@ pkgs.haskell-language-server
 
 
 
-Whether to enable the Haskell Stack
+Whether to enable Stack.
 
 
 
@@ -16610,6 +16618,14 @@ boolean
 
 
 *Default:*
+
+```nix
+true
+```
+
+
+
+*Example:*
 
 ```nix
 true
