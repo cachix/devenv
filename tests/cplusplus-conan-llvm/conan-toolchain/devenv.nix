@@ -1,7 +1,7 @@
 { pkgs, config, lib, ... }:
 let
   inherit (lib) getExe;
-  getCommand = package: builtins.baseNameOf (getExe package);
+  getCommand = package: baseNameOf (getExe package);
   cfg = config.languages.cplusplus;
 in
 {
@@ -11,7 +11,7 @@ in
       enable = true;
       install.enable = true;
       config = {
-        profiles = {
+        profiles.default = {
           settings._.build_type = "Release";
         };
         stdenv = pkgs.overrideCC
