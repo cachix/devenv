@@ -178,7 +178,7 @@ Before running `install` against a real target, confirm:
 - **Root SSH is enabled on the remote installer.** Install logs in as `root` and does not escalate with `sudo`. Many cloud minimal images disable root login by default; either pick an image that allows it or run `passwd root` on the console before invoking install.
 - **The target kernel can kexec.** kexec is how devenv pivots into the NixOS installer without requiring pre installed NixOS. Some older ARM boards (early Raspberry Pi revisions) and a few locked down cloud kernels refuse mid kexec. If you hit this, boot the NixOS minimal ISO manually and use `devenv machines deploy` instead.
 - **The target has roughly 1 GB of free RAM.** The kexec'd installer holds the next system closure in memory before writing it to disk, and smaller VPS instances (512 MB, 1 GB) have OOMed mid run.
-- **TCP 22 is reachable from the host running devenv.** `install` will also add the target to your `known_hosts` on first contact because `StrictHostKeyChecking=accept-new` is the default.
+- **TCP 22 is reachable from the host running devenv.** Ordinary installs add the target to `known_hosts` on first contact because `StrictHostKeyChecking=accept-new` is the default. Secret-bearing installs require a pre-pinned identity as described under [SSH defaults](#ssh-defaults).
 
 The disko layout describes the filesystems and you own `boot.loader.*` directly. Everything else the target needs (initrd kernel modules, CPU microcode, GPU drivers, network controller modules) comes from the nixos-facter report that devenv generates on first install; see [Hardware detection with nixos-facter](#hardware-detection-with-nixos-facter).
 
@@ -348,13 +348,46 @@ machines.web1 = {
 };
 ```
 
-The attribute name is an absolute path in the installed system. `secret` is a name from the selected SecretSpec profile; values are resolved and materialized before any selected machine starts preflight or destructive work, then streamed to SSH on stdin. They do not appear in machine metadata, process arguments, remote scripts, or Nix store paths. During `machines install`, devenv also withholds resolved SecretSpec values from Nix evaluation—`config.secretspec.secrets` is empty for that invocation—so imported modules cannot accidentally interpolate a bootstrap credential into a derivation. Profile and provider metadata remain available.
+The attribute name is an absolute path in the installed system. `secret` is a name from the selected SecretSpec profile. The default execution mode is `local`: values are resolved and materialized on the workstation before any selected machine starts preflight or destructive work, then streamed to SSH on stdin. They do not appear in machine metadata, process arguments, remote scripts, or Nix store paths. During `machines install`, devenv also withholds resolved SecretSpec values from Nix evaluation—`config.secretspec.secrets` is empty for that invocation—so imported modules cannot accidentally interpolate a bootstrap credential into a derivation. Profile and provider metadata remain available.
 
 The receiver sends a byte-counted frame, writes it under `umask 077` to a temporary file in the destination directory, rejects truncation, applies ownership and permissions, syncs it, and atomically renames it into place. A failed transfer leaves an existing destination unchanged and removes the temporary file. Extra payload copies use zeroize-on-drop memory, and core dumps are disabled before SecretSpec resolution for the install process and its children.
 
 File ownership must use numeric `uid:gid`, because the live installer does not know users declared only in the new NixOS system. Secret modes cannot contain special or execute bits, group write, or permissions for other users; `0400`, `0600`, and `0640` are accepted.
 
 SecretSpec entries with `as_path = true` are supported: devenv reads the retained temporary file and sends its contents, not its local filename. When installing several machines, every entry can select different secret names, or several entries can reference one shared secret. The provider and profile are global to the invocation; override them with `--secretspec-provider` and `--secretspec-profile`.
+
+#### Resolving on the target
+
+To keep provider credentials and resolved values off the workstation, select target execution for a machine:
+
+```nix title="devenv.nix"
+machines.web1 = {
+  target.host = "root@web1.example.com";
+
+  install.secretspec = {
+    execution = "target";
+    provider = "awssm";
+    profile = "production";
+  };
+
+  install.secrets."/var/lib/sops-nix/key.txt" = {
+    secret = "WEB1_AGE_KEY";
+    owner = "0:0";
+    mode = "0600";
+  };
+
+  nixos = {
+    sops.age.keyFile = "/var/lib/sops-nix/key.txt";
+    # ...
+  };
+};
+```
+
+In this mode, devenv parses `secretspec.toml` but never asks the workstation's provider for this machine's values. It flattens manifest inheritance, retains only the selected and default profiles, forces requested entries to file output, and sends the declaration manifest—without any fetched provider values—to the installer over SSH. Committed SecretSpec defaults remain part of that manifest, so do not use defaults for values the workstation must not know. The target-architecture `secretspec` executable is included in the NixOS system closure; after `nixos-install`, the live installer runs it directly from that closure and asks only for each `install.secrets` reference. Resolved bytes stay in a private target-side temporary directory and are atomically installed beneath `/mnt`.
+
+`provider` and `profile` under `install.secretspec` override the global selection for that machine. If omitted, the invocation's global selection is used and the profile falls back to `default`. Provider credentials are never copied or forwarded: they must already be available to the installer through workload identity, instance metadata, a target-local SecretSpec configuration, or another provider-native mechanism. A short-lived, machine-scoped bootstrap credential can also be provisioned independently, but forwarding the workstation's long-lived credential defeats the isolation this mode provides.
+
+Target execution protects secrets from an honest workstation process, but a workstation that controls a malicious NixOS configuration could still install software that exfiltrates values after the target fetches them. Removing that deeper trust requires independently verified or signed system closures and, where appropriate, Secure or Measured Boot with provider-side attestation.
 
 `install.secrets` is intentionally bootstrap-only. It runs as part of the `install` phase, after `install.extraFiles` (so a SecretSpec file wins if both target the same path) and before `install.copyHostKeys` and reboot. It is not reapplied by `devenv machines deploy`; use sops-nix, agenix, or another runtime mechanism for rotation.
 
@@ -591,7 +624,7 @@ machines.web1 = {
 Paths are given as strings (absolute or relative to the devenv project root), **not** as Nix path literals (`./secrets/…`). This is load-bearing: a Nix path literal would copy the secret into `/nix/store`, which is world-readable. Strings are read by the CLI at install time and never leave the host.
 
 - `install.extraFiles` copies files onto `/` of the new system after install, before reboot. Use it for age/sops master keys, SSH host keys, `/var/lib/*` seeds. Matches nixos-anywhere's `--extra-files` and `--chown`.
-- `install.secrets` resolves named values from the active SecretSpec profile and streams them into the new system after `nixos-install`. Use it instead of keeping bootstrap key files in the project checkout.
+- `install.secrets` resolves named values from the active SecretSpec profile after `nixos-install`. The default `install.secretspec.execution = "local"` streams them from the workstation; `"target"` resolves them directly on the installer without exposing values or provider credentials to the workstation.
 - `install.encryptionKeys` drops keyfiles into the installer **before disko runs**, so LUKS layouts with `passwordFile = "/tmp/luks.key"` can unlock. The keys live on the host running `devenv machines install`, not in the store.
 - `install.copyHostKeys` preserves `/etc/ssh/ssh_host_*` across a reinstall, so the target's SSH identity stays stable and `known_hosts` on every client keeps working.
 

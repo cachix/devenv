@@ -81,4 +81,25 @@
       users.users.root.openssh.authorizedKeys.keys = [ "ssh-ed25519 test" ];
     };
   };
+
+  # Target-side resolution must not ask the workstation's env provider for
+  # this value. The production profile declares it, but the integration test
+  # intentionally leaves REMOTE_MACHINE_TOKEN unset locally.
+  machines.target-secretful = {
+    target.host = "root@target-secretful.example.com";
+    install.secretspec = {
+      execution = "target";
+      provider = "env";
+      profile = "production";
+    };
+    install.secrets."/var/lib/bootstrap/token" = {
+      secret = "REMOTE_MACHINE_TOKEN";
+      owner = "0:0";
+      mode = "0600";
+    };
+    nixos = {
+      services.openssh.enable = true;
+      users.users.root.openssh.authorizedKeys.keys = [ "ssh-ed25519 test" ];
+    };
+  };
 }

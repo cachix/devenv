@@ -304,10 +304,10 @@ pub fn parse_cli_options(raw_options: &[String]) -> Result<Vec<CliOption>> {
 #[derive(Debug, Clone, Serialize)]
 pub struct SecretspecData {
     /// The profile that was used to load secrets
-    pub profile: String,
+    pub profile: Option<String>,
 
     /// The provider that was used to load secrets
-    pub provider: String,
+    pub provider: Option<String>,
 
     /// Map of secret names to their values
     pub secrets: BTreeMap<String, String>,

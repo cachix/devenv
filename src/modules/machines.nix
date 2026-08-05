@@ -91,6 +91,15 @@ let
           { nixpkgs.hostPlatform = machine.system; }
           disko.nixosModules.disko
           machine.nixos
+          ({ pkgs, ... }: lib.mkIf
+            (machine.install.secrets != { } && machine.install.secretspec.execution == "target")
+            {
+              # Target-side bootstrap resolution runs after nixos-install but
+              # before reboot. Keeping the resolver in the system closure
+              # makes the exact target-architecture binary available without
+              # copying a workstation binary or fetching executable code.
+              environment.systemPackages = [ pkgs.secretspec ];
+            })
         ] ++ facterModules;
       };
 
@@ -281,6 +290,44 @@ let
               '';
             };
 
+            secretspec = lib.mkOption {
+              type = lib.types.submodule {
+                options = {
+                  execution = lib.mkOption {
+                    type = lib.types.enum [ "local" "target" ];
+                    default = "local";
+                    description = ''
+                      Where SecretSpec resolves bootstrap values. `local`
+                      resolves on the workstation and streams values over SSH.
+                      `target` sends only a reduced SecretSpec manifest and
+                      resolves through the provider on the installer machine.
+                    '';
+                  };
+                  provider = lib.mkOption {
+                    type = lib.types.nullOr lib.types.str;
+                    default = null;
+                    description = ''
+                      Optional target-side provider override. When unset, the
+                      global SecretSpec provider selected for this invocation is
+                      used. Provider credentials must be available independently
+                      on the installer and are never forwarded by devenv.
+                    '';
+                  };
+                  profile = lib.mkOption {
+                    type = lib.types.nullOr lib.types.str;
+                    default = null;
+                    description = ''
+                      Optional target-side profile override. When unset, the
+                      global SecretSpec profile is used, falling back to
+                      `default`.
+                    '';
+                  };
+                };
+              };
+              default = { };
+              description = "How install-time SecretSpec bootstrap values are resolved.";
+            };
+
             secrets = lib.mkOption {
               type = lib.types.attrsOf (lib.types.submodule {
                 options = {
@@ -288,8 +335,9 @@ let
                     type = lib.types.str;
                     description = ''
                       Name of the secret in the active SecretSpec profile. The
-                      value is resolved by the devenv CLI at install time and
-                      is never included in machine metadata or a Nix store path.
+                      value is resolved at install time according to
+                      `install.secretspec.execution` and is never included in
+                      machine metadata or a Nix store path.
                     '';
                     example = "WEB1_AGE_KEY";
                   };
@@ -314,9 +362,11 @@ let
               description = ''
                 Bootstrap files populated from the active SecretSpec profile
                 after `nixos-install` and before reboot. Attribute names are
-                absolute paths in the installed system. Secret values are
-                streamed over strictly authenticated SSH into an atomic
-                target-side file and never placed in `/nix/store`.
+                absolute paths in the installed system. Local execution streams
+                values over strictly authenticated SSH; target execution sends
+                only a reduced manifest and fetches values on the installer.
+                Both modes atomically install files without placing values in
+                `/nix/store`.
 
                 SecretSpec must be enabled in `devenv.yaml`. Use the global
                 `--secretspec-provider` and `--secretspec-profile` flags to
@@ -570,8 +620,28 @@ in
             type = lib.types.bool;
             description = "Whether install should preserve SSH host keys.";
           };
+          secretspec = lib.mkOption {
+            description = "SecretSpec bootstrap execution metadata.";
+            type = lib.types.submodule {
+              options = {
+                execution = lib.mkOption {
+                  type = lib.types.enum [ "local" "target" ];
+                  description = "Where bootstrap values are resolved.";
+                };
+                provider = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  description = "Target-side SecretSpec provider override.";
+                };
+                profile = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  description = "Target-side SecretSpec profile override.";
+                };
+              };
+            };
+          };
           # Only SecretSpec names and target metadata cross the Nix/Rust
-          # boundary. Values stay in the CLI's resolved SecretSpec state.
+          # boundary. Values stay either in the CLI's resolved state or on
+          # the installer, according to the selected execution mode.
           secrets = lib.mkOption {
             type = lib.types.listOf lib.types.attrs;
             description = "Normalized SecretSpec bootstrap references for CLI consumption.";
@@ -606,6 +676,15 @@ in
       kexecImage = m.install.kexec.image;
       kexecPostSshPort = m.install.kexec.postSshPort;
       copyHostKeys = m.install.copyHostKeys;
+      secretspec = {
+        inherit (m.install.secretspec) execution;
+        provider =
+          if m.install.secretspec.provider != null then m.install.secretspec.provider
+          else outerConfig.secretspec.provider;
+        profile =
+          if m.install.secretspec.profile != null then m.install.secretspec.profile
+          else outerConfig.secretspec.profile;
+      };
       secrets = lib.mapAttrsToList
         (target: secret: secret // { inherit target; })
         m.install.secrets;

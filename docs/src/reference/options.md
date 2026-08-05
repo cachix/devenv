@@ -24094,9 +24094,11 @@ null
 
 Bootstrap files populated from the active SecretSpec profile
 after ` nixos-install ` and before reboot. Attribute names are
-absolute paths in the installed system. Secret values are
-streamed over strictly authenticated SSH into an atomic
-target-side file and never placed in ` /nix/store `.
+absolute paths in the installed system. Local execution streams
+values over strictly authenticated SSH; target execution sends
+only a reduced manifest and fetches values on the installer.
+Both modes atomically install files without placing values in
+` /nix/store `.
 
 SecretSpec must be enabled in ` devenv.yaml `. Use the global
 ` --secretspec-provider ` and ` --secretspec-profile ` flags to
@@ -24191,8 +24193,9 @@ string
 
 
 Name of the secret in the active SecretSpec profile. The
-value is resolved by the devenv CLI at install time and
-is never included in machine metadata or a Nix store path.
+value is resolved at install time according to
+` install.secretspec.execution ` and is never included in
+machine metadata or a Nix store path.
 
 
 
@@ -24205,6 +24208,110 @@ string
 
 ```nix
 "WEB1_AGE_KEY"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec
+
+
+
+How install-time SecretSpec bootstrap values are resolved.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec.execution
+
+
+
+Where SecretSpec resolves bootstrap values. ` local `
+resolves on the workstation and streams values over SSH.
+` target ` sends only a reduced SecretSpec manifest and
+resolves through the provider on the installer machine.
+
+
+
+*Type:*
+one of “local”, “target”
+
+
+
+*Default:*
+
+```nix
+"local"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec.profile
+
+
+
+Optional target-side profile override. When unset, the
+global SecretSpec profile is used, falling back to
+` default `.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec.provider
+
+
+
+Optional target-side provider override. When unset, the
+global SecretSpec provider selected for this invocation is
+used. Provider credentials must be available independently
+on the installer and are never forwarded by devenv.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
 ```
 
 *Declared by:*

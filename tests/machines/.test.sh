@@ -294,4 +294,26 @@ if grep -q "bootstrap-test-value" ssh-args.log; then
   exit 1
 fi
 
+# 30. Target-side resolution exposes its execution metadata but never asks the
+#     workstation provider for REMOTE_MACHINE_TOKEN. Manifest validation runs
+#     first; the fixture's missing disko input is therefore the next failure.
+devenv eval 'machinesMeta.target-secretful.secretspec' \
+  | jq -e '.["machinesMeta.target-secretful.secretspec"] == {
+      "execution": "target",
+      "profile": "production",
+      "provider": "env"
+    }'
+if env -u REMOTE_MACHINE_TOKEN \
+  devenv --secretspec-provider env --secretspec-profile production \
+    machines install --phases install target-secretful 2>err.log; then
+  echo "expected missing-disko failure after target manifest validation"
+  exit 1
+fi
+grep -q "devenv inputs add disko" err.log
+if grep -q "REMOTE_MACHINE_TOKEN.*missing\|Missing.*REMOTE_MACHINE_TOKEN" err.log; then
+  echo "target-side secret was incorrectly requested from the workstation provider"
+  cat err.log
+  exit 1
+fi
+
 echo "all machines checks passed"

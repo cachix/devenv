@@ -386,11 +386,6 @@ pub struct Devenv {
 
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
-    // Names whose resolved SecretSpec strings point at temporary files. The
-    // `ResolvedSecrets` value owns those files; machines reads their contents
-    // when preparing bootstrap payloads.
-    secretspec_as_paths: HashSet<String>,
-
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
@@ -587,12 +582,19 @@ impl Devenv {
         if !expose_secretspec_values_to_nix {
             disable_core_dumps_for_secret_operation()?;
         }
-        resolve_secretspec_into(
-            &devenv_root,
-            &secret_settings,
-            &mut secretspec_cell,
-            &mut secretspec_as_paths,
-        )?;
+        // Machine installs may choose target-side SecretSpec resolution. Do
+        // not contact the workstation's provider until machines_install has
+        // inspected the evaluated per-machine execution mode. Local-mode
+        // installs resolve on demand there; target-only installs never expose
+        // provider credentials or values to this process.
+        if expose_secretspec_values_to_nix {
+            resolve_secretspec_into(
+                &devenv_root,
+                &secret_settings,
+                &mut secretspec_cell,
+                &mut secretspec_as_paths,
+            )?;
+        }
 
         // Create the cachix manager after secretspec so a secretspec secret
         // can authenticate pulls (netrc) and pushes (daemon env) even when
@@ -694,6 +696,7 @@ impl Devenv {
                     options.require_version_match,
                     options.is_testing,
                     secretspec_cell.get(),
+                    &secret_settings,
                     expose_secretspec_values_to_nix,
                     &fingerprint,
                 )?);
@@ -725,6 +728,7 @@ impl Devenv {
                     options.require_version_match,
                     options.is_testing,
                     secretspec_cell.get(),
+                    &secret_settings,
                     expose_secretspec_values_to_nix,
                     "",
                 )?);
@@ -758,7 +762,6 @@ impl Devenv {
             dev_env_cache: OnceCell::new(),
             eval_cache_pool,
             secretspec: secretspec_cell,
-            secretspec_as_paths,
             port_allocator,
             native_process_manager: OnceCell::new(),
             shutdown,
@@ -3100,30 +3103,6 @@ impl Devenv {
         self.secretspec.get()
     }
 
-    /// Return the actual bytes behind a resolved SecretSpec value. Ordinary
-    /// secrets are encoded directly; `as_path = true` secrets are read from
-    /// the temporary file retained by `ResolvedSecrets`.
-    async fn secretspec_value_bytes(&self, name: &str) -> Result<Option<Vec<u8>>> {
-        let Some(value) = self
-            .secretspec()
-            .and_then(|resolved| resolved.secrets.get(name))
-        else {
-            return Ok(None);
-        };
-
-        if self.secretspec_as_paths.contains(name) {
-            fs::read(value)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| {
-                    format!("Failed to read temporary file for SecretSpec secret {name}")
-                })
-                .map(Some)
-        } else {
-            Ok(Some(value.as_bytes().to_vec()))
-        }
-    }
-
     /// Inner implementation without activity wrapper.
     /// Called directly by `up()` (which creates its own "Configuring shell" activity)
     /// and by `get_dev_environment()` (which wraps with `#[activity]`).
@@ -3521,6 +3500,7 @@ fn format_tasks_json(tasks: &[tasks::TaskConfig]) -> Result<String> {
     serde_json::to_string_pretty(&items).into_diagnostic()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_bootstrap_args(
     config: &NixConfig,
     imports: &[String],
@@ -3529,6 +3509,7 @@ fn build_bootstrap_args(
     require_version_match: bool,
     is_testing: bool,
     secretspec: Option<&ResolvedSecrets>,
+    secret_settings: &SecretSettings,
     expose_secretspec_values_to_nix: bool,
     lock_fingerprint: &str,
 ) -> Result<BootstrapArgs> {
@@ -3550,7 +3531,15 @@ fn build_bootstrap_args(
     ));
 
     let secretspec_data = secretspec
-        .map(|resolved| secretspec_data_for_nix(resolved, expose_secretspec_values_to_nix));
+        .map(|resolved| secretspec_data_for_nix(resolved, expose_secretspec_values_to_nix))
+        .or_else(|| {
+            let config = secret_settings.secretspec.as_ref()?;
+            config.enable.then(|| SecretspecData {
+                profile: config.profile.clone(),
+                provider: config.provider.clone(),
+                secrets: Default::default(),
+            })
+        });
 
     let cli_options = CliOptionsConfig(parse_cli_options(
         &config.input_overrides.nix_module_options,
@@ -3590,8 +3579,8 @@ fn build_bootstrap_args(
 
 fn secretspec_data_for_nix(resolved: &ResolvedSecrets, expose_values: bool) -> SecretspecData {
     SecretspecData {
-        profile: resolved.profile.clone(),
-        provider: resolved.provider.clone(),
+        profile: Some(resolved.profile.clone()),
+        provider: Some(resolved.provider.clone()),
         secrets: if expose_values {
             resolved.secrets.clone().into_iter().collect()
         } else {
@@ -3891,8 +3880,8 @@ mod tests {
         );
 
         let hidden = secretspec_data_for_nix(&resolved, false);
-        assert_eq!(hidden.profile, "default");
-        assert_eq!(hidden.provider, "env");
+        assert_eq!(hidden.profile.as_deref(), Some("default"));
+        assert_eq!(hidden.provider.as_deref(), Some("env"));
         assert!(hidden.secrets.is_empty());
 
         let exposed = secretspec_data_for_nix(&resolved, true);
