@@ -47,11 +47,7 @@ in
     };
 
     stack = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = true;
-        description = '' Whether to enable the Haskell Stack      '';
-      };
+      enable = lib.mkEnableOption "Stack" // { default = true; };
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -74,13 +70,7 @@ in
     };
 
     cabal = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = true;
-        description = ''
-          Whether to enable Cabal.
-        '';
-      };
+      enable = lib.mkEnableOption "Cabal" // { default = true; };
 
       package = lib.mkOption {
         type = lib.types.package;
