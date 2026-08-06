@@ -114,3 +114,12 @@ jobs:
       - name: Run integration tests
         run: |
           ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- cargo nextest run -j 4 --features devenv/test-all --retries 3
+
+      # Exercise the actual terminal boundary on every platform: PTY resize,
+      # crossterm key decoding, rendering, and reactive process commands.
+      - name: Run deterministic TUI replay regression
+        run: |
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- \
+            cargo build -p devenv-run-tests -p devenv-tui --features devenv-tui/deterministic-tui
+          bash devenv-tui/tests/replay-pty.sh \
+            target/debug/devenv-run-tests target/debug/tui-replay

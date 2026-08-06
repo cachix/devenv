@@ -8,6 +8,8 @@
 //!   successive occurrences.
 //! - `send:BYTES` — write BYTES to the PTY, decoding printf-style escapes
 //!   (`\003`, `\x03`, `\e`, `\r`, `\n`, `\t`, `\\`).
+//! - `resize:COLSxROWS` — resize the PTY and deliver the resulting SIGWINCH
+//!   (for example, `resize:80x24`).
 //! - `run:CMD` — run CMD via `sh -c`; a non-zero exit fails the session.
 //!   The command is bounded by the same timeout as an expectation.
 
@@ -150,6 +152,10 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
         } else if let Some(bytes) = line.strip_prefix("send:") {
             writer.write_all(&decode_send(bytes)?).into_diagnostic()?;
             writer.flush().into_diagnostic()?;
+        } else if let Some(size) = line.strip_prefix("resize:") {
+            pty.master
+                .resize(parse_size(size)?)
+                .map_err(|error| miette!("failed to resize PTY to {size}: {error}"))?;
         } else if let Some(cmd) = line.strip_prefix("run:") {
             match run_command(cmd, step_timeout, &active_run_group)? {
                 Some(status) if status.success() => {}
@@ -195,6 +201,29 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
         WaitStatus::Signaled(_, sig, _) => Ok(128 + sig as i32),
         other => Err(miette!("unexpected wait status: {other:?}")),
     }
+}
+
+fn parse_size(value: &str) -> Result<PtySize> {
+    let (cols, rows) = value
+        .split_once('x')
+        .ok_or_else(|| miette!("invalid PTY size {value:?}; expected COLSxROWS"))?;
+    let cols = cols
+        .parse::<u16>()
+        .into_diagnostic()
+        .wrap_err_with(|| format!("invalid PTY column count in {value:?}"))?;
+    let rows = rows
+        .parse::<u16>()
+        .into_diagnostic()
+        .wrap_err_with(|| format!("invalid PTY row count in {value:?}"))?;
+    if cols == 0 || rows == 0 {
+        return Err(miette!("PTY dimensions must be greater than zero"));
+    }
+    Ok(PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
+    })
 }
 
 /// Owns the spawned PTY process group until it has been reaped normally.
@@ -373,6 +402,16 @@ mod tests {
         assert!(decode_send(r"\q").is_err());
         assert!(decode_send(r"tail\").is_err());
         assert!(decode_send(r"\x0").is_err());
+    }
+
+    #[test]
+    fn parses_terminal_size_as_columns_by_rows() {
+        let size = parse_size("120x40").unwrap();
+        assert_eq!(size.cols, 120);
+        assert_eq!(size.rows, 40);
+        assert!(parse_size("120").is_err());
+        assert!(parse_size("0x40").is_err());
+        assert!(parse_size("120xnope").is_err());
     }
 
     #[test]
