@@ -1,46 +1,56 @@
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use devenv_activity::ActivityEvent;
-use devenv_mailbox::FrontendCommand;
-use serde::Deserialize;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use devenv_activity::{ActivityEvent, Process, ProcessStatus, Timestamp};
+use devenv_mailbox::{FrontendCommand, FrontendEvent, ProcessCommand};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
-use thiserror::Error;
 use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Parser)]
 #[command(about = "Replay devenv trace files with TUI visualization")]
 struct Args {
-    /// Path to the trace file (JSONL format)
+    /// Path to the trace file (JSONL format).
     trace_file: PathBuf,
 
-    /// Replay speed multiplier (e.g., 2.0 for 2x speed, 0.5 for half speed)
+    /// Replay speed multiplier (e.g. 2.0 for 2x speed).
     #[arg(long, short, default_value = "1.0")]
     speed: f64,
 
     /// Keep the TUI running after the trace drains instead of exiting.
-    ///
-    /// The trace provides a deterministic data stream while the program stays
-    /// live for input. Intended for fuzzing the input/render path (e.g. with
-    /// `bombadil terminal test`), bounded by the fuzzer's timeout or Ctrl+C.
     #[arg(long)]
     hold: bool,
 
     /// Number of times to replay the trace (0 = repeat forever).
-    ///
-    /// Useful for continuous data churn while fuzzing.
     #[arg(long = "loop", default_value = "1")]
     loop_count: u64,
+
+    /// Render the interrupt prompt as an attached process session.
+    #[arg(long)]
+    attached: bool,
+
+    /// Respond deterministically to process restart/stop commands from the TUI.
+    ///
+    /// Process names and IDs are discovered from Process::Start events in the
+    /// trace. This makes the replay a reactive system instead of a static film.
+    #[arg(long)]
+    reactive: bool,
+
+    /// Write reactive commands and resulting states as flushed JSONL records.
+    /// Intended for deterministic PTY assertions and fuzz failure diagnosis.
+    #[arg(long, requires = "reactive")]
+    event_log: Option<PathBuf>,
 }
 
-/// Raw trace event as it appears in the JSONL file
+/// Raw tracing record as it appears in a JSONL trace.
 #[derive(Debug, Deserialize)]
 struct TraceEvent {
     target: String,
@@ -48,142 +58,96 @@ struct TraceEvent {
     fields: serde_json::Value,
 }
 
-#[derive(Debug, Error)]
-enum ActivityParseError {
-    #[error("not a devenv activity event")]
-    NotActivityEvent,
-    #[error("failed to deserialize activity: {0}")]
-    DeserializationError(#[from] serde_json::Error),
+#[derive(Clone, Debug)]
+struct ReplayEvent {
+    timestamp: DateTime<Utc>,
+    activity: ActivityEvent,
 }
 
-struct TraceStream {
-    lines: std::io::Lines<BufReader<File>>,
-    line_num: usize,
-    first_timestamp: Option<DateTime<Utc>>,
+/// Parse and validate the complete trace before the TUI takes over the terminal.
+///
+/// Valid non-activity tracing records are ignored, but malformed JSON and
+/// malformed `devenv_activity::events` records are errors. A trace with no
+/// activity events is never a successful replay.
+fn load_trace(reader: impl BufRead) -> Result<Vec<ReplayEvent>> {
+    let mut events = Vec::new();
+
+    for (index, line) in reader.lines().enumerate() {
+        let line_num = index + 1;
+        let line = line.with_context(|| format!("failed to read trace line {line_num}"))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let mut trace: TraceEvent = serde_json::from_str(&line)
+            .with_context(|| format!("invalid JSON trace record on line {line_num}"))?;
+        if trace.target != "devenv_activity::events" {
+            continue;
+        }
+
+        let value = trace
+            .fields
+            .get_mut("event")
+            .map(serde_json::Value::take)
+            .with_context(|| {
+                format!("activity trace record on line {line_num} has no fields.event")
+            })?;
+        let activity = serde_json::from_value(value)
+            .with_context(|| format!("invalid activity event on trace line {line_num}"))?;
+        events.push(ReplayEvent {
+            timestamp: trace.timestamp,
+            activity,
+        });
+    }
+
+    if events.is_empty() {
+        bail!("trace contains no devenv activity events");
+    }
+
+    Ok(events)
 }
 
-impl TraceStream {
-    fn new(file: File) -> Self {
-        Self {
-            lines: BufReader::new(file).lines(),
-            line_num: 0,
-            first_timestamp: None,
-        }
-    }
-
-    fn next_event(&mut self) -> Result<Option<TraceEvent>> {
-        loop {
-            self.line_num += 1;
-
-            match self.lines.next() {
-                Some(Ok(line)) => {
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-
-                    match serde_json::from_str::<TraceEvent>(&line) {
-                        Ok(event) => {
-                            if self.first_timestamp.is_none() {
-                                self.first_timestamp = Some(event.timestamp);
-                            }
-                            return Ok(Some(event));
-                        }
-                        Err(e) => {
-                            warn!(
-                                "Failed to parse JSON on line {}: {}. Skipping...",
-                                self.line_num, e
-                            );
-                            continue;
-                        }
-                    }
-                }
-                Some(Err(e)) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to read line {}: {}",
-                        self.line_num,
-                        e
-                    ));
-                }
-                None => return Ok(None),
-            }
-        }
-    }
-}
-
-/// Deserializes a trace event into an ActivityEvent.
-fn deserialize_activity(mut event: TraceEvent) -> Result<ActivityEvent, ActivityParseError> {
-    if event.target != "devenv_activity::events" {
-        return Err(ActivityParseError::NotActivityEvent);
-    }
-
-    let event_value = event
-        .fields
-        .get_mut("event")
-        .map(serde_json::Value::take)
-        .ok_or(ActivityParseError::NotActivityEvent)?;
-
-    Ok(serde_json::from_value(event_value)?)
-}
-
-fn process_event(tx: &mpsc::UnboundedSender<ActivityEvent>, event: TraceEvent) {
-    match deserialize_activity(event) {
-        Ok(activity) => {
-            let _ = tx.send(activity);
-        }
-        Err(ActivityParseError::NotActivityEvent) => {}
-        Err(e) => {
-            info!("Failed to parse activity event: {}", e);
-        }
-    }
+fn load_trace_file(path: &Path) -> Result<Vec<ReplayEvent>> {
+    let file = File::open(path)
+        .with_context(|| format!("failed to open trace file: {}", path.display()))?;
+    load_trace(BufReader::new(file))
+        .with_context(|| format!("failed to load trace file: {}", path.display()))
 }
 
 async fn replay_events(
-    mut stream: TraceStream,
+    events: &[ReplayEvent],
     tx: &mpsc::UnboundedSender<ActivityEvent>,
     speed: f64,
 ) -> Result<()> {
+    let first_timestamp = events[0].timestamp;
     let start_time = Instant::now();
-    let mut event_count = 0;
 
-    while let Some(event) = stream.next_event()? {
-        event_count += 1;
+    for event in events {
+        let time_offset = event.timestamp.signed_duration_since(first_timestamp);
+        let target_elapsed_ms = time_offset.num_milliseconds().max(0) as f64 / speed;
+        let target_elapsed = Duration::from_millis(target_elapsed_ms as u64);
 
-        let target_elapsed = if let Some(first_timestamp) = stream.first_timestamp {
-            let time_offset = event.timestamp.signed_duration_since(first_timestamp);
-            let target_elapsed_ms = time_offset.num_milliseconds().max(0) as f64 / speed;
-            Duration::from_millis(target_elapsed_ms as u64)
-        } else {
-            Duration::from_millis(0)
-        };
-
-        let current_elapsed = start_time.elapsed();
-        if target_elapsed > current_elapsed {
-            let sleep_duration = target_elapsed - current_elapsed;
-            sleep(sleep_duration).await;
+        if target_elapsed > start_time.elapsed() {
+            sleep(target_elapsed - start_time.elapsed()).await;
         }
 
-        process_event(tx, event);
+        tx.send(event.activity.clone())
+            .context("TUI closed while replaying activity events")?;
     }
 
-    info!("Replay finished. Processed {} total events.", event_count);
-
+    info!(activity_events = events.len(), "replay iteration finished");
     Ok(())
 }
 
-/// Replays the trace `loop_count` times (0 = forever), reopening the file each
-/// iteration since `TraceStream` consumes it.
 async fn run_replays(
-    path: &PathBuf,
+    events: &[ReplayEvent],
     tx: &mpsc::UnboundedSender<ActivityEvent>,
     speed: f64,
     loop_count: u64,
 ) -> Result<()> {
-    let mut iteration: u64 = 0;
+    let mut iteration = 0;
     loop {
-        let file = File::open(path)
-            .with_context(|| format!("Failed to open trace file: {}", path.display()))?;
-        replay_events(TraceStream::new(file), tx, speed).await?;
-
+        replay_events(events, tx, speed).await?;
         iteration += 1;
         if loop_count != 0 && iteration >= loop_count {
             return Ok(());
@@ -191,8 +155,137 @@ async fn run_replays(
     }
 }
 
+fn process_ids(events: &[ReplayEvent]) -> BTreeMap<String, u64> {
+    events
+        .iter()
+        .filter_map(|event| match &event.activity {
+            ActivityEvent::Process(Process::Start { id, name, .. }) => Some((name.clone(), *id)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum HarnessRecord<'a> {
+    Command {
+        command: &'a str,
+        process: &'a str,
+    },
+    Status {
+        process: &'a str,
+        status: ProcessStatus,
+    },
+}
+
+fn record(file: &mut Option<File>, value: HarnessRecord<'_>) -> Result<()> {
+    let Some(file) = file else {
+        return Ok(());
+    };
+    serde_json::to_writer(&mut *file, &value).context("failed to write replay event log")?;
+    writeln!(file).context("failed to terminate replay event log record")?;
+    file.flush().context("failed to flush replay event log")
+}
+
+fn send_status(
+    tx: &mpsc::UnboundedSender<ActivityEvent>,
+    log: &mut Option<File>,
+    process: &str,
+    id: u64,
+    status: ProcessStatus,
+) -> Result<()> {
+    record(log, HarnessRecord::Status { process, status })?;
+    tx.send(ActivityEvent::Process(Process::Status {
+        id,
+        status,
+        timestamp: Timestamp::now(),
+    }))
+    .context("TUI closed while applying a reactive process transition")
+}
+
+async fn run_reactive_backend(
+    mut rx: mpsc::Receiver<FrontendEvent>,
+    activity_tx: mpsc::UnboundedSender<ActivityEvent>,
+    renderer_tx: mpsc::Sender<FrontendCommand>,
+    processes: BTreeMap<String, u64>,
+    mut log: Option<File>,
+) -> Result<()> {
+    while let Some(event) = rx.recv().await {
+        let FrontendEvent::Process(command) = event else {
+            continue;
+        };
+
+        match command {
+            ProcessCommand::Restart(name) => {
+                let id = processes
+                    .get(&name)
+                    .copied()
+                    .with_context(|| format!("TUI requested unknown process {name:?}"))?;
+                record(
+                    &mut log,
+                    HarnessRecord::Command {
+                        command: "restart",
+                        process: &name,
+                    },
+                )?;
+                send_status(&activity_tx, &mut log, &name, id, ProcessStatus::Restarting)?;
+                sleep(Duration::from_millis(100)).await;
+                send_status(&activity_tx, &mut log, &name, id, ProcessStatus::Ready)?;
+            }
+            ProcessCommand::Stop(name) => {
+                let id = processes
+                    .get(&name)
+                    .copied()
+                    .with_context(|| format!("TUI requested unknown process {name:?}"))?;
+                record(
+                    &mut log,
+                    HarnessRecord::Command {
+                        command: "stop",
+                        process: &name,
+                    },
+                )?;
+                send_status(&activity_tx, &mut log, &name, id, ProcessStatus::Stopping)?;
+                sleep(Duration::from_millis(100)).await;
+                send_status(&activity_tx, &mut log, &name, id, ProcessStatus::Stopped)?;
+            }
+            ProcessCommand::StopManager => {
+                record(
+                    &mut log,
+                    HarnessRecord::Command {
+                        command: "stop_manager",
+                        process: "*",
+                    },
+                )?;
+                for (name, id) in &processes {
+                    send_status(&activity_tx, &mut log, name, *id, ProcessStatus::Stopping)?;
+                }
+                sleep(Duration::from_millis(100)).await;
+                for (name, id) in &processes {
+                    send_status(&activity_tx, &mut log, name, *id, ProcessStatus::Stopped)?;
+                }
+                renderer_tx
+                    .send(FrontendCommand::ExitRenderer)
+                    .await
+                    .context("TUI closed before process-manager shutdown completed")?;
+                return Ok(());
+            }
+        }
+    }
+
+    Ok(())
+}
+
 async fn ctrl_c() {
-    signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
+    signal::ctrl_c().await.expect("failed to listen for Ctrl+C");
+}
+
+async fn await_reactive_backend(
+    task: &mut Option<tokio::task::JoinHandle<Result<()>>>,
+) -> Result<()> {
+    match task {
+        Some(task) => task.await.context("reactive backend task panicked")?,
+        None => std::future::pending().await,
+    }
 }
 
 #[tokio::main]
@@ -201,119 +294,211 @@ async fn main() -> Result<()> {
     tracing_subscriber::registry().init();
 
     let args = Args::parse();
-
-    if args.speed <= 0.0 {
-        bail!("Speed must be greater than 0");
+    if args.speed <= 0.0 || !args.speed.is_finite() {
+        bail!("speed must be a finite number greater than 0");
     }
 
-    // Validate the trace file exists before spawning the TUI; run_replays
-    // reopens it (once per loop iteration).
-    File::open(&args.trace_file)
-        .with_context(|| format!("Failed to open trace file: {}", args.trace_file.display()))?;
+    // Validation deliberately happens before the TUI enters raw mode.
+    let events = load_trace_file(&args.trace_file)?;
+    let processes = process_ids(&events);
+    if args.reactive && processes.is_empty() {
+        bail!("--reactive requires at least one process start event in the trace");
+    }
 
-    let (tx, rx) = mpsc::unbounded_channel();
-    let (renderer_tx, renderer_rx) = mpsc::channel(1);
+    let event_log = args
+        .event_log
+        .as_ref()
+        .map(|path| {
+            OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(path)
+                .with_context(|| format!("failed to create event log: {}", path.display()))
+        })
+        .transpose()?;
+
+    let (activity_tx, activity_rx) = mpsc::unbounded_channel();
+    let (renderer_tx, renderer_rx) = mpsc::channel(4);
+    let (event_tx, event_rx) = mpsc::channel(16);
     let shutdown = Shutdown::new();
 
-    // Renderer lifecycle is deliberately separate from replayable activity
-    // data. This lets --loop replay every recorded activity and lets --hold
-    // keep the TUI alive after the data stream drains.
-    let mut exit_tx = Some(renderer_tx);
+    if args.attached {
+        renderer_tx
+            .send(FrontendCommand::SetAttached(true))
+            .await
+            .context("failed to initialize attached replay mode")?;
+    }
 
-    info!("Spawning TUI");
+    let mut app = devenv_tui::TuiApp::new(activity_rx, renderer_rx, shutdown.clone());
+    if args.reactive {
+        app = app.with_event_sender(event_tx);
+    } else {
+        drop(event_tx);
+    }
 
-    let mut tui_task = tokio::spawn({
-        let shutdown = shutdown.clone();
-        async move {
-            match devenv_tui::TuiApp::new(rx, renderer_rx, shutdown)
-                .run()
-                .await
-            {
-                Ok(_) => info!("TUI exited normally"),
-                Err(e) => warn!("TUI error: {e}"),
-            }
-        }
+    info!(
+        activity_events = events.len(),
+        process_count = processes.len(),
+        "spawning TUI"
+    );
+    let mut tui_task = tokio::spawn(async move { app.run().await.context("TUI failed") });
+
+    let mut backend_task = args.reactive.then(|| {
+        tokio::spawn(run_reactive_backend(
+            event_rx,
+            activity_tx.clone(),
+            renderer_tx.clone(),
+            processes,
+            event_log,
+        ))
     });
 
-    info!("Starting trace replay from: {}", args.trace_file.display());
-
-    // Run the replay on its own task with a cloned sender. The original `tx`
-    // stays alive in `main` so the activity channel never closes — in hold mode
-    // a closed channel would make the TUI exit (see TuiApp::run).
     let mut replay_task = tokio::spawn({
-        let replay_tx = tx.clone();
-        let path = args.trace_file.clone();
+        let replay_tx = activity_tx.clone();
+        let events = events.clone();
         let speed = args.speed;
         let loop_count = args.loop_count;
-        async move { run_replays(&path, &replay_tx, speed, loop_count).await }
+        async move { run_replays(&events, &replay_tx, speed, loop_count).await }
     });
 
     tokio::select! {
         result = &mut replay_task => {
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => warn!("Replay error: {e}"),
-                Err(e) => warn!("Replay task panicked: {e}"),
-            }
+            result.context("replay task panicked")??;
 
             if args.hold {
-                // Hold the TUI open for input fuzzing: do NOT signal
-                // exit and keep `tx` alive. Wait for the TUI to exit
-                // on its own or for an interrupt (the fuzzer's timeout kills
-                // the process).
-                info!("Trace drained; holding TUI open (--hold). Ctrl+C to exit.");
+                info!("trace drained; holding TUI open");
                 tokio::select! {
-                    _ = &mut tui_task => info!("TUI exited"),
+                    result = &mut tui_task => {
+                        result.context("TUI task panicked")??;
+                    }
+                    result = await_reactive_backend(&mut backend_task) => {
+                        result?;
+                        backend_task = None;
+                        tui_task.await.context("TUI task panicked")??;
+                    }
                     _ = ctrl_c() => {
-                        info!("Interrupted");
+                        info!("interrupted");
                         shutdown.shutdown();
                     }
                 }
             } else {
-                // Signal TUI that replay is done and let it drain and exit.
-                if let Some(tx) = exit_tx.take() {
-                    let _ = tx.send(FrontendCommand::ExitRenderer).await;
-                }
-                let _ = (&mut tui_task).await;
+                renderer_tx
+                    .send(FrontendCommand::ExitRenderer)
+                    .await
+                    .context("TUI closed before replay completion")?;
+                tui_task.await.context("TUI task panicked")??;
             }
         }
-        _ = &mut tui_task => {
-            info!("TUI exited");
+        result = &mut tui_task => {
+            result.context("TUI task panicked")??;
+        }
+        result = await_reactive_backend(&mut backend_task) => {
+            result?;
+            backend_task = None;
+            tui_task.await.context("TUI task panicked")??;
         }
         _ = ctrl_c() => {
-            info!("Interrupted");
+            info!("interrupted");
             shutdown.shutdown();
-            // Signal TUI that we're done (after interrupt)
-            if let Some(tx) = exit_tx.take() {
-                let _ = tx.send(FrontendCommand::ExitRenderer).await;
-            }
+            let _ = renderer_tx.send(FrontendCommand::ExitRenderer).await;
         }
     }
 
+    if let Some(task) = backend_task.take() {
+        task.abort();
+    }
+    replay_task.abort();
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
+
+    const PROCESS: &str = r#"{"target":"devenv_activity::events","timestamp":"2025-01-14T10:00:00Z","fields":{"event":{"activity_kind":"process","event":"start","id":7,"name":"web","parent":null,"command":"serve","ports":["http:8080"],"ready_probe":"http: localhost:8080","level":"info","timestamp":"2025-01-14T10:00:00Z"}}}"#;
 
     #[test]
-    fn legacy_renderer_control_is_not_replayed_as_activity() {
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        process_event(
-            &tx,
-            TraceEvent {
-                target: "devenv_activity::events".into(),
-                timestamp: Utc::now(),
-                fields: serde_json::json!({
-                    "event": {
-                        "activity_kind": "control",
-                        "control": "exit"
-                    }
-                }),
-            },
-        );
+    fn rejects_non_json_trace() {
+        let error = load_trace(Cursor::new("legacy text trace\n")).unwrap_err();
+        assert!(error.to_string().contains("invalid JSON trace record"));
+    }
 
-        assert!(rx.try_recv().is_err());
+    #[test]
+    fn rejects_trace_without_activity_events() {
+        let trace = r#"{"target":"other","timestamp":"2025-01-14T10:00:00Z","fields":{}}"#;
+        let error = load_trace(Cursor::new(trace)).unwrap_err();
+        assert!(error.to_string().contains("no devenv activity events"));
+    }
+
+    #[test]
+    fn loads_processes_for_reactive_control() {
+        let events = load_trace(Cursor::new(PROCESS)).unwrap();
+        assert_eq!(process_ids(&events).get("web"), Some(&7));
+    }
+
+    #[test]
+    fn checked_in_process_fixture_is_replayable() {
+        let events =
+            load_trace(Cursor::new(include_str!("../../replays/processes.jsonl"))).unwrap();
+        assert_eq!(events.len(), 9);
+        assert_eq!(process_ids(&events).len(), 3);
+    }
+
+    #[test]
+    fn rejects_legacy_renderer_control_as_an_activity() {
+        let trace = r#"{"target":"devenv_activity::events","timestamp":"2025-01-14T10:00:00Z","fields":{"event":{"activity_kind":"control","control":"exit"}}}"#;
+        let error = load_trace(Cursor::new(trace)).unwrap_err();
+        assert!(error.to_string().contains("invalid activity event"));
+    }
+
+    #[tokio::test]
+    async fn reactive_backend_applies_restart_and_stop_transitions() {
+        let (event_tx, event_rx) = mpsc::channel(4);
+        let (activity_tx, mut activity_rx) = mpsc::unbounded_channel();
+        let (renderer_tx, _renderer_rx) = mpsc::channel(1);
+        let task = tokio::spawn(run_reactive_backend(
+            event_rx,
+            activity_tx,
+            renderer_tx,
+            BTreeMap::from([("web".to_string(), 7)]),
+            None,
+        ));
+
+        event_tx
+            .send(FrontendEvent::Process(ProcessCommand::Restart(
+                "web".to_string(),
+            )))
+            .await
+            .unwrap();
+        assert_status(activity_rx.recv().await.unwrap(), ProcessStatus::Restarting);
+        assert_status(activity_rx.recv().await.unwrap(), ProcessStatus::Ready);
+
+        event_tx
+            .send(FrontendEvent::Process(ProcessCommand::Stop(
+                "web".to_string(),
+            )))
+            .await
+            .unwrap();
+        assert_status(activity_rx.recv().await.unwrap(), ProcessStatus::Stopping);
+        assert_status(activity_rx.recv().await.unwrap(), ProcessStatus::Stopped);
+
+        drop(event_tx);
+        task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn reactive_backend_task_errors_are_propagated() {
+        let mut task = Some(tokio::spawn(async { bail!("backend failed") }));
+        let error = await_reactive_backend(&mut task).await.unwrap_err();
+        assert!(error.to_string().contains("backend failed"));
+    }
+
+    fn assert_status(event: ActivityEvent, expected: ProcessStatus) {
+        assert!(matches!(
+            event,
+            ActivityEvent::Process(Process::Status { id: 7, status, .. }) if status == expected
+        ));
     }
 }
