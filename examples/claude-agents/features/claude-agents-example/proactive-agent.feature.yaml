@@ -1,0 +1,14 @@
+feature:
+  name: proactive-agent
+  product: claude-agents-example
+  description: >
+    A proactive agent that is not a primary one and also none of the `supervise`, `prepare-task`, `implement` or `review-task` agents.
+
+components:
+  EXAMPLES:
+    requirements:
+      1: This agent is capable of running generic tasks on behalf of the user, reading code, fetching dependencies and executing commands.
+
+  TESTS:
+    requirements:
+      1: Simple sanity checks are performed querying directly this agent.
