@@ -207,7 +207,7 @@ let
         description = ''
           process-compose.yaml specific process attributes.
 
-          Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml`
+          Example: ``https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml``
 
           Only used when using ``process.manager.implementation = "process-compose";``
         '';
