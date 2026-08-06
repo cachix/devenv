@@ -16,7 +16,27 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 use tokio::sync::{Notify, mpsc};
 use tokio_shutdown::Shutdown;
-use tracing::debug;
+use tracing::{debug, warn};
+
+/// Process commands share the existing frontend/backend mailbox. Keeping a
+/// second queue here made overload ambiguous: input could be accepted by the
+/// view while still waiting to enter the real mailbox. A full mailbox means
+/// the backend is busy, so the input remains unaccepted and can be retried.
+pub(crate) type ProcessCommandSender = mpsc::Sender<FrontendEvent>;
+
+fn enqueue_process_command(tx: &ProcessCommandSender, command: ProcessCommand) -> bool {
+    match tx.try_send(FrontendEvent::Process(command)) {
+        Ok(()) => true,
+        Err(mpsc::error::TrySendError::Closed(_)) => {
+            warn!("process command receiver closed");
+            false
+        }
+        Err(mpsc::error::TrySendError::Full(_)) => {
+            debug!("process command ignored while backend mailbox is full");
+            false
+        }
+    }
+}
 
 /// Newtype around an `Arc<Notify>` used to bypass the render throttle on
 /// shutdown. Distinct from the regular activity-change notify so iocraft's
@@ -181,7 +201,7 @@ impl TuiApp {
         // the next throttle tick (which can lose intermediate notifies).
         let render_shutdown = Arc::new(Notify::new());
         let shutdown = self.shutdown;
-        let event_tx = self.event_tx;
+        let process_command_tx = self.event_tx;
 
         let exit_flag = ExitFlag::new();
 
@@ -292,7 +312,7 @@ impl TuiApp {
                 render_shutdown.clone(),
                 shutdown.clone(),
                 config.clone(),
-                event_tx.clone(),
+                process_command_tx.clone(),
                 exit_flag.clone(),
             )
             .await;
@@ -318,6 +338,10 @@ impl TuiApp {
         let renderer_rx = event_processor_handle
             .await
             .map_err(std::io::Error::other)?;
+
+        // No view retains a sender now. Accepted commands are already in the
+        // frontend mailbox; there is no intermediate queue to flush.
+        drop(process_command_tx);
 
         // Final render pass to ensure all drained events are displayed.
         // Clear previous inline render, then render final state.
@@ -424,7 +448,7 @@ impl TuiApp {
 }
 
 pub(crate) fn request_interrupt_prompt(
-    event_tx: Option<&mpsc::Sender<FrontendEvent>>,
+    event_tx: Option<&ProcessCommandSender>,
     ui_state: &Arc<RwLock<UiState>>,
     attached: bool,
 ) -> bool {
@@ -444,7 +468,7 @@ pub(crate) fn handle_interrupt_prompt_key(
     key_event: &KeyEvent,
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
-    event_tx: Option<&mpsc::Sender<FrontendEvent>>,
+    event_tx: Option<&ProcessCommandSender>,
 ) -> bool {
     let (prompt_active, attached) = ui_state
         .read()
@@ -463,10 +487,9 @@ pub(crate) fn handle_interrupt_prompt_key(
         }
         // s: stop the whole process manager (attach mode only).
         KeyCode::Char('s') if attached => {
-            if let Some(tx) = event_tx {
-                let _ = tx.try_send(FrontendEvent::Process(ProcessCommand::StopManager));
-            }
-            if let Ok(mut ui) = ui_state.write() {
+            if event_tx.is_some_and(|tx| enqueue_process_command(tx, ProcessCommand::StopManager))
+                && let Ok(mut ui) = ui_state.write()
+            {
                 ui.clear_interrupt_prompt();
             }
         }
@@ -623,7 +646,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     }
 
     // Get optional command sender for process control
-    let event_tx = hooks.use_context::<Option<mpsc::Sender<FrontendEvent>>>();
+    let event_tx = hooks.use_context::<Option<ProcessCommandSender>>();
 
     // Handle keyboard events - only UI state updates, no activity model writes
     hooks.use_terminal_events({
@@ -659,7 +682,8 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
                             // Restart selected process
-                            if let Some(tx) = event_tx.as_ref()
+                            if key_event.kind == KeyEventKind::Press
+                                && let Some(tx) = event_tx.as_ref()
                                 && let Ok(ui) = ui_state.read()
                                 && let Some(activity_id) = ui.selected_activity
                                 && let Ok(model) = activity_model.read()
@@ -670,16 +694,18 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                         if proc.status.is_restartable()
                                 )
                             {
-                                let _ = tx.try_send(FrontendEvent::Process(
+                                enqueue_process_command(
+                                    tx,
                                     ProcessCommand::Restart(activity.name.clone()),
-                                ));
+                                );
                             }
                         }
                         KeyCode::Char('x')
                             if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
                             // Stop selected process (only if active)
-                            if let Some(tx) = event_tx.as_ref()
+                            if key_event.kind == KeyEventKind::Press
+                                && let Some(tx) = event_tx.as_ref()
                                 && let Ok(ui) = ui_state.read()
                                 && let Some(activity_id) = ui.selected_activity
                                 && let Ok(model) = activity_model.read()
@@ -688,9 +714,10 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                     activity.variant
                                 && proc.status.is_stoppable()
                             {
-                                let _ = tx.try_send(FrontendEvent::Process(ProcessCommand::Stop(
-                                    activity.name.clone(),
-                                )));
+                                enqueue_process_command(
+                                    tx,
+                                    ProcessCommand::Stop(activity.name.clone()),
+                                );
                             }
                         }
                         KeyCode::Char('e')
@@ -828,7 +855,7 @@ async fn run_view(
     render_shutdown: Arc<Notify>,
     shutdown: Arc<Shutdown>,
     config: Arc<TuiConfig>,
-    event_tx: Option<mpsc::Sender<FrontendEvent>>,
+    event_tx: Option<ProcessCommandSender>,
     exit_flag: ExitFlag,
 ) -> std::io::Result<()> {
     // Copy view_mode in a block to ensure the guard is dropped before any await
@@ -999,5 +1026,19 @@ mod tests {
             Some(&tx)
         ));
         assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn process_command_is_rejected_safely_when_frontend_mailbox_is_full() {
+        let (tx, mut rx) = mpsc::channel(1);
+        assert!(enqueue_process_command(&tx, ProcessCommand::StopManager));
+        assert!(!enqueue_process_command(
+            &tx,
+            ProcessCommand::Restart("alpha".to_string())
+        ));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(FrontendEvent::Process(ProcessCommand::StopManager))
+        ));
     }
 }

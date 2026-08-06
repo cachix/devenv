@@ -6,17 +6,18 @@
 //! Supports mouse-based text selection with OSC 52 clipboard copy.
 
 use crate::TuiConfig;
-use crate::app::{ExitFlag, handle_interrupt_prompt_key, request_interrupt_prompt};
+use crate::app::{
+    ExitFlag, ProcessCommandSender, handle_interrupt_prompt_key, request_interrupt_prompt,
+};
 use crate::model::{ActivityModel, UiState, ViewMode};
 use base64::Engine;
 use crossterm::event::MouseButton;
-use devenv_mailbox::FrontendEvent;
 use iocraft::prelude::*;
 use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
 use std::io::Write as _;
 use std::sync::{Arc, RwLock};
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::Notify;
 use tokio_shutdown::Shutdown;
 
 /// Width of the line-number field, e.g. "NNNNN".
@@ -100,7 +101,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let model_version = hooks.use_context::<crate::app::ModelVersion>().0.clone();
     let render_shutdown = hooks.use_context::<crate::app::RenderShutdown>().0.clone();
     let shutdown = hooks.use_context::<Arc<Shutdown>>();
-    let command_tx = hooks.use_context::<Option<mpsc::Sender<FrontendEvent>>>();
+    let command_tx = hooks.use_context::<Option<ProcessCommandSender>>();
     let (width, height) = hooks.use_terminal_size();
 
     // Component-local scroll state - updates are immediate, no model lock needed.
@@ -369,7 +370,7 @@ fn handle_key_event(
     key_event: KeyEvent,
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
-    command_tx: Option<&mpsc::Sender<FrontendEvent>>,
+    command_tx: Option<&ProcessCommandSender>,
     attached: bool,
     scroll_offset: &mut State<usize>,
     total_visual_rows: usize,
