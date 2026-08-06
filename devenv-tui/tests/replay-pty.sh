@@ -46,7 +46,7 @@ resize:120x40
 send:\e
 expect:hide stopped
 send:\e[B
-expect:Ctrl-R
+expect:restart
 send:\x12
 expect:restarting
 expect:ready
@@ -54,14 +54,14 @@ run:test "$(tail -n 1 "$TUI_REPLAY_EVENT_LOG")" = '{"kind":"status","process":"a
 send:\x18
 expect:stopping
 run:while ! tail -n 1 "$TUI_REPLAY_EVENT_LOG" | grep -Fq '"process":"api","status":"stopped"'; do sleep 0.02; done
-expect:Ctrl-R
+expect:restart
 send:\x12
 expect:restarting
 expect:ready
 send:\x03
 expect:Detach
 send:\e
-expect:Ctrl-R
+expect:restart
 send:\x03
 expect:Detach
 send:s

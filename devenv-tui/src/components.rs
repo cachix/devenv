@@ -205,6 +205,21 @@ pub const LOG_VIEWPORT_SHOW_OUTPUT: usize = 3;
 /// for unconstrained scrolling.
 pub const INLINE_LOG_MAX_VISUAL_ROWS: u32 = 50;
 
+/// Keep activity data from becoming terminal control input. Newlines and tabs
+/// are layout, not content, in single-row fields; other C0/C1 controls are
+/// equally unsafe and are rendered as spaces.
+pub(crate) fn sanitize_inline_text(text: &str) -> String {
+    text.chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect()
+}
+
 /// Format elapsed time for display: ms -> s -> m s -> h m
 /// When `high_resolution` is true, shows ms for sub-second durations.
 /// When `high_resolution` is false, hides if < 300ms, otherwise shows x.xs resolution.
@@ -318,11 +333,21 @@ impl ActivityTextComponent {
         depth: usize,
         prefix_children: Vec<AnyElement<'static>>,
     ) -> AnyElement<'static> {
+        let name = sanitize_inline_text(&self.name);
+        let action = sanitize_inline_text(&self.action);
+        let suffix = self
+            .suffix
+            .as_deref()
+            .map(sanitize_inline_text)
+            .filter(|suffix| !suffix.is_empty());
+        // iocraft's flex row retains one trailing cell beyond the explicit
+        // child budgets, so reserve it before deciding how much name/suffix
+        // content can be rendered.
         let (shortened_name, display_suffix) = calculate_display_info(
-            &self.name,
-            terminal_width as u32,
-            &self.action,
-            self.suffix.as_deref(),
+            &name,
+            terminal_width.saturating_sub(1) as u32,
+            &action,
+            suffix.as_deref(),
             &self.elapsed,
             depth,
         );
@@ -349,10 +374,10 @@ impl ActivityTextComponent {
         let mut final_prefix = prefix_children;
 
         // Only add action text if action is not empty
-        if !self.action.is_empty() {
+        if !action.is_empty() {
             // Action word should be capitalized
             let action_text = {
-                let mut chars = self.action.chars();
+                let mut chars = action.chars();
                 match chars.next() {
                     Some(first) => {
                         format!(
@@ -385,7 +410,7 @@ impl ActivityTextComponent {
                     // Each item uses leading margin (margin_left) to separate from predecessor
                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
                         #(if !shortened_name.is_empty() {
-                            let has_predecessor = !self.action.is_empty();
+                            let has_predecessor = !action.is_empty();
                             let margin = if has_predecessor { 1 } else { 0 };
                             vec![element!(View(margin_left: margin) {
                                 Text(content: shortened_name, color: name_color, weight: Weight::Bold)
@@ -420,7 +445,7 @@ impl ActivityTextComponent {
                     // Each item uses leading margin (margin_left) to separate from predecessor
                     View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
                         #(if !shortened_name.is_empty() {
-                            let has_predecessor = !self.action.is_empty();
+                            let has_predecessor = !action.is_empty();
                             let margin = if has_predecessor { 1 } else { 0 };
                             vec![element!(View(margin_left: margin) {
                                 Text(content: shortened_name, color: name_color, weight: Weight::Bold)
@@ -718,6 +743,7 @@ pub fn calculate_display_info(
     elapsed: &str,
     depth: usize,
 ) -> (String, Option<String>) {
+    let suffix = suffix.filter(|suffix| !suffix.is_empty());
     // Calculate base width: padding + indent + hierarchy + spinner + action + name_margin + elapsed
     let indent_width = if depth > 0 {
         2 + (depth - 1) * 2 // spinner offset (2) + nesting indent
@@ -728,13 +754,15 @@ pub fn calculate_display_info(
     let action_width = action.len() + 1; // action + margin_right
     let name_margin_width = 1; // margin_right after name
     let elapsed_width = elapsed.len();
-    let padding_width = 2; // left + right padding
-    let spinner_width = if depth == 0 { 2 } else { 0 }; // "⠋ " for top-level items
+    let padding_width = 1; // activity rows reserve one column on the right
+    // Every activity has a two-column status indicator (glyph + margin), at
+    // every depth. Previously nested rows omitted it from the budget.
+    let status_width = 2;
 
     let base_width = padding_width
         + indent_width
         + hierarchy_width
-        + spinner_width
+        + status_width
         + action_width
         + name_margin_width
         + elapsed_width;
@@ -837,6 +865,7 @@ pub struct ExpandedContentComponent<'a> {
     pub empty_message: &'a str,
     pub max_lines: usize,
     pub depth: usize,
+    pub terminal_width: Option<usize>,
 }
 
 impl<'a> ExpandedContentComponent<'a> {
@@ -846,6 +875,7 @@ impl<'a> ExpandedContentComponent<'a> {
             empty_message: "  → no content",
             max_lines: LOG_VIEWPORT_COLLAPSED,
             depth: 0,
+            terminal_width: None,
         }
     }
 
@@ -864,19 +894,34 @@ impl<'a> ExpandedContentComponent<'a> {
         self
     }
 
-    /// The last `max_lines` log lines, preserving chronological order. Wrapping
-    /// is left to iocraft's `Text` widget so word boundaries and unicode width
-    /// are handled correctly.
+    pub fn with_terminal_width(mut self, width: u16) -> Self {
+        self.terminal_width = Some(width as usize);
+        self
+    }
+
+    /// The last `max_lines` logical log lines, preserving chronological order.
+    /// Long unbroken strings are hard-wrapped here because a `Text` child's
+    /// intrinsic width can otherwise expand its parent beyond the terminal.
     fn visible_lines(&self) -> Vec<String> {
         let Some(lines) = self.lines else {
             return Vec::new();
         };
-        lines
+        let lines: Vec<_> = lines
             .iter()
             .rev()
             .take(self.max_lines)
             .rev()
             .cloned()
+            .collect();
+        let Some(terminal_width) = self.terminal_width else {
+            return lines;
+        };
+
+        // Left margin + border + the leading content space + right margin.
+        let width = terminal_width.saturating_sub(2 + self.depth * 2 + 3).max(1);
+        lines
+            .into_iter()
+            .flat_map(|line| hard_wrap(&line, width))
             .collect()
     }
 
@@ -913,10 +958,18 @@ impl<'a> ExpandedContentComponent<'a> {
             ];
         }
 
-        // Fallback: show empty message with minimal height
+        // Fallback: show an empty-state hint on one row. Bound it explicitly;
+        // unbroken hint text has the same intrinsic-width behavior as logs.
+        let empty_message = self
+            .terminal_width
+            .and_then(|width| {
+                let budget = width.saturating_sub(indent + 1).max(1);
+                hard_wrap(self.empty_message, budget).into_iter().next()
+            })
+            .unwrap_or_else(|| self.empty_message.to_string());
         vec![element! {
             View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
-                Text(content: self.empty_message.to_string(), color: Color::AnsiValue(245))
+                Text(content: empty_message, color: Color::AnsiValue(245))
             }
         }
         .into_any()]
@@ -948,6 +1001,32 @@ impl<'a> ExpandedContentComponent<'a> {
         }
         .into_any()
     }
+}
+
+fn hard_wrap(line: &str, max_width: usize) -> Vec<String> {
+    use unicode_width::UnicodeWidthChar;
+
+    let mut wrapped = Vec::new();
+    for logical_line in line.split('\n') {
+        let mut current = String::new();
+        let mut width = 0;
+        for character in logical_line.chars() {
+            let character = if character.is_control() {
+                ' '
+            } else {
+                character
+            };
+            let character_width = character.width().unwrap_or(0);
+            if width > 0 && width + character_width > max_width {
+                wrapped.push(std::mem::take(&mut current));
+                width = 0;
+            }
+            current.push(character);
+            width += character_width;
+        }
+        wrapped.push(current);
+    }
+    wrapped
 }
 
 /// Backwards-compatible alias
@@ -997,8 +1076,8 @@ mod tests {
     }
 
     // For depth=0, action="", elapsed="1.0s":
-    // base_width = padding(2) + spinner(2) + action(0+1) + name_margin(1) + elapsed(4) = 10
-    // remaining = terminal_width - 10
+    // base_width = padding(1) + status(2) + action(0+1) + name_margin(1) + elapsed(4) = 9
+    // remaining = terminal_width - 9
 
     #[test]
     fn everything_fits_with_suffix() {
@@ -1025,9 +1104,8 @@ mod tests {
 
     #[test]
     fn long_suffix_truncated_before_name() {
-        // remaining = 60 - 10 = 50, name=24
-        // space_for_suffix = 50 - 24 - 1(margin) = 25 chars
-        // suffix(63 chars) > 25 so truncated to 25 chars (24 kept + …)
+        // remaining = 60 - 9 = 51, name=24
+        // space_for_suffix = 51 - 24 - 1(margin) = 26 chars
         let long_suffix = "4 lines → DEVENV_EXPORT:VklSVFVBTF9FTlY==L2hvbWUvZG9tZW4vZGV2";
         let (name, suffix) = calculate_display_info(
             "devenv:python:virtualenv",
@@ -1044,16 +1122,16 @@ mod tests {
             "truncation preserves the start"
         );
         assert!(suffix.ends_with('…'));
-        assert_eq!(suffix.chars().count(), 25);
+        assert_eq!(suffix.chars().count(), 26);
     }
 
     #[test]
     fn suffix_dropped_when_only_1_char_available() {
-        // remaining = 36 - 10 = 26, name=24
+        // remaining = 35 - 9 = 26, name=24
         // space_for_suffix = 26 - 24 - 1(margin) = 1 char, which is < 2 so suffix is dropped
         let (name, suffix) = calculate_display_info(
             "devenv:python:virtualenv",
-            36,
+            35,
             "",
             Some("cached"),
             "1.0s",
@@ -1065,19 +1143,17 @@ mod tests {
 
     #[test]
     fn name_truncated_left_when_no_suffix() {
-        // remaining = 20 - 10 = 10, name=24 doesn't fit, 10 > 4 so left-truncate
-        // start_char = 24 - (10-1) = 15, keeps 9 chars + "…" = 10 chars
+        // remaining = 20 - 9 = 11, name=24 doesn't fit and is left-truncated
         let (name, suffix) =
             calculate_display_info("devenv:python:virtualenv", 20, "", None, "1.0s", 0);
         assert!(name.starts_with('…'));
-        assert_eq!(name.chars().count(), 10);
+        assert_eq!(name.chars().count(), 11);
         assert_eq!(suffix, None);
     }
 
     #[test]
     fn name_truncated_after_suffix_dropped() {
-        // remaining = 20 - 10 = 10, name=24 doesn't fit
-        // suffix can't fit either, gets dropped, then name is left-truncated to 10 chars
+        // remaining = 20 - 9 = 11; suffix is dropped, then the name is truncated
         let (name, suffix) = calculate_display_info(
             "devenv:python:virtualenv",
             20,
@@ -1087,13 +1163,13 @@ mod tests {
             0,
         );
         assert!(name.starts_with('…'));
-        assert_eq!(name.chars().count(), 10);
+        assert_eq!(name.chars().count(), 11);
         assert_eq!(suffix, None);
     }
 
     #[test]
     fn very_constrained_uses_aggressive_shortening() {
-        // base=10 >= terminal=5, hits shorten_store_path_aggressive
+        // base=9 >= terminal=5, hits shorten_store_path_aggressive
         let (name, suffix) = calculate_display_info(
             "/nix/store/abc123hash-some-package-1.0",
             5,
@@ -1109,21 +1185,20 @@ mod tests {
 
     #[test]
     fn extremely_narrow_remaining() {
-        // remaining = 14 - 10 = 4, which is <= 4 so just "…"
+        // remaining = 13 - 9 = 4, which is <= 4 so just "…"
         let (name, suffix) =
-            calculate_display_info("devenv:python:virtualenv", 14, "", None, "1.0s", 0);
+            calculate_display_info("devenv:python:virtualenv", 13, "", None, "1.0s", 0);
         assert_eq!(name, "…");
         assert_eq!(suffix, None);
     }
 
     #[test]
     fn nesting_reduces_budget() {
-        // depth=0: base = 10, remaining = 42-10 = 32
-        // depth=2: base = padding(2)+indent(4)+hierarchy(2)+spinner(0)+action(0+1)+name_margin(1)+elapsed(4) = 14
-        //          remaining = 42 - 14 = 28
+        // depth=0: base = 9, remaining = 33
+        // depth=2 includes indent(4), hierarchy(2), and status(2): base = 15,
+        //          remaining = 27
         // name(24) + suffix("cached" 6+1margin) = 31
-        // depth=0: 32 >= 31, fits
-        // depth=2: 28 < 31, doesn't fit, space_for_suffix = 28-24-1 = 3 >= 2, so suffix truncated
+        // depth=0 fits; depth=2 leaves two columns for a truncated suffix.
         let (_, suffix_shallow) = calculate_display_info(
             "devenv:python:virtualenv",
             42,
@@ -1144,23 +1219,21 @@ mod tests {
         assert_eq!(name_deep, "devenv:python:virtualenv");
         let s = suffix_deep.expect("suffix should be truncated not dropped");
         assert!(s.ends_with('…'));
-        assert_eq!(s.chars().count(), 3);
+        assert_eq!(s.chars().count(), 2);
     }
 
     #[test]
     fn action_reduces_budget() {
         // action="building"(8+1=9)
-        // base = padding(2)+spinner(2)+action(9)+name_margin(1)+elapsed(4) = 18
-        // remaining = 60 - 18 = 42, name("some-package")=12
-        // space_for_suffix = 42 - 12 - 1 = 29
-        // suffix(56 chars) > 29 so truncated to 29 chars (28 kept + …)
+        // base = padding(1)+status(2)+action(9)+name_margin(1)+elapsed(4) = 17
+        // remaining = 43; after name and margin the suffix gets 30 columns.
         let long_suffix = "4 lines → DEVENV_EXPORT:VklSVFVBTF9FTlY==L2hvbWUvZG9tZW4";
         let (name, suffix) =
             calculate_display_info("some-package", 60, "building", Some(long_suffix), "1.0s", 0);
         assert_eq!(name, "some-package");
         let suffix = suffix.expect("suffix should be truncated");
         assert!(suffix.ends_with('…'));
-        assert_eq!(suffix.chars().count(), 29);
+        assert_eq!(suffix.chars().count(), 30);
     }
 
     #[test]
@@ -1170,8 +1243,8 @@ mod tests {
         // but char index was used for slicing.
         // "ä" is 2 bytes in UTF-8, so 30 chars = 60 bytes.
         // With terminal_width=80, action="building", path="pkg":
-        //   base_width = 2+2+9+1+4 = 18, remaining = 62
-        //   space_for_suffix = 62 - 3 - 1 = 58
+        //   base_width = 1+2+9+1+4 = 17, remaining = 63
+        //   space_for_suffix = 63 - 3 - 1 = 59
         //   Old code: 58 >= suffix.len()(60) → false, then chars[..57] on 30-char vec → panic!
         let suffix = "ääääääääääääääääääääääääääääää"; // 30 chars, 60 bytes
         let (name, _suffix) =
@@ -1197,8 +1270,8 @@ mod tests {
 
     #[test]
     fn expanded_content_passes_long_lines_through_unchanged() {
-        // Long lines are wrapped by iocraft's Text widget at render time, not
-        // shortened here; verify the full line survives `visible_lines`.
+        // Without a terminal width (e.g. standalone component use), preserve
+        // the old behavior and let the parent renderer choose a width.
         let long = "INFO    -  [12:00:00] Serving on http://127.0.0.1:8000/".to_string();
         let mut logs = VecDeque::new();
         logs.push_back(long.clone());
@@ -1206,6 +1279,19 @@ mod tests {
         let component = ExpandedContentComponent::new(Some(&logs)).with_max_lines(3);
 
         assert_eq!(component.visible_lines(), vec![long]);
+    }
+
+    #[test]
+    fn expanded_content_hard_wraps_unbroken_wide_text_to_its_budget() {
+        let mut logs = VecDeque::new();
+        logs.push_back("aaaaaaaaaaaaaaaaaaaa界界".to_string());
+
+        // Width 20 minus the component's five columns of framing gives each
+        // content chunk a 15-column budget.
+        let component = ExpandedContentComponent::new(Some(&logs)).with_terminal_width(20);
+        let lines = component.visible_lines();
+
+        assert_eq!(lines, vec!["aaaaaaaaaaaaaaa", "aaaaa界界"]);
     }
 
     #[test]

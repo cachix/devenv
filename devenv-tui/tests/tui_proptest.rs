@@ -359,9 +359,6 @@ fn max_line_width(out: &str) -> usize {
 /// terminals. The richest short-text state (a process selected, with the
 /// hide-stopped toggle showing) must fit a normal ~80-column terminal.
 ///
-/// Scope: this covers the standard short-text tier only. The verbose tier
-/// (>= 100 columns) and very narrow terminals (< ~73 columns) can still overflow
-/// when a process is selected — see `rendered_lines_fit_usable_width`.
 #[test]
 fn navbar_fits_standard_widths() {
     let mut m = ActivityModel::new();
@@ -439,22 +436,9 @@ proptest! {
     }
 
     /// (5) On usable terminals (>= 40 columns) no rendered line ever exceeds the
-    /// terminal width.
-    ///
-    /// IGNORED — this documents a known, pre-existing cosmetic overflow: the
-    /// bottom navigation/help bar is a fixed row of hint segments with no width
-    /// budget. The common standard-width case is fixed (compact hints; see
-    /// `navbar_fits_standard_widths`), but two cases remain: the verbose tier
-    /// (>= 100 columns) and very narrow terminals (< ~73 columns) can still
-    /// overflow by a few columns when a process is selected, because the verbose
-    /// hint labels have no budget. iocraft does not hard-clip overflowing `Text`
-    /// to the layout width, so a full fix needs progressive disclosure (dropping
-    /// hints to fit), a UX change tracked separately. Activity/log content wraps
-    /// correctly, and the interrupt prompt is covered by
-    /// `interrupt_prompt_fits_usable_widths`.
-    /// Run with `--run-ignored all` to characterize the remaining overflow.
+    /// terminal width. The help row has a real width budget and clips its least
+    /// important trailing hints when the full vocabulary does not fit.
     #[test]
-    #[ignore = "known nav-bar overflow; see doc comment"]
     fn rendered_lines_fit_usable_width(ops in prop::collection::vec(op_wide(), 0..120)) {
         let mut model = ActivityModel::new();
         let mut ui = UiState::new();

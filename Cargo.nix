@@ -9096,6 +9096,10 @@ rec {
             features = [ "env-filter" "json" "valuable" ];
           }
           {
+            name = "unicode-width";
+            packageId = "unicode-width 0.1.14";
+          }
+          {
             name = "url";
             packageId = "url";
           }
@@ -9119,10 +9123,6 @@ rec {
             name = "tokio";
             packageId = "tokio";
             features = [ "process" "fs" "io-util" "macros" "rt-multi-thread" "sync" "time" "test-util" ];
-          }
-          {
-            name = "unicode-width";
-            packageId = "unicode-width 0.1.14";
           }
         ];
         features = {

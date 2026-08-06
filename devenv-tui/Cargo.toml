@@ -53,6 +53,7 @@ chrono.workspace = true
 
 # Human-readable formatting
 human-repr.workspace = true
+unicode-width = "0.1"
 
 # URL parsing
 url.workspace = true
@@ -68,7 +69,6 @@ insta.workspace = true
 devenv-activity = { workspace = true, features = ["test-helpers"] }
 tokio = { workspace = true, features = ["test-util"] }
 proptest.workspace = true
-unicode-width = "0.1"
 
 [features]
 default = []

@@ -375,6 +375,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .render(terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
+                    .with_terminal_width(terminal_width)
                     .with_empty_message("  → no build logs yet (press Ctrl-E to expand)")
                     .render_with_main_line(main_line);
             }
@@ -452,6 +453,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     "  → waiting for output..."
                 };
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_terminal_width(terminal_width)
                     .with_empty_message(empty_message);
                 if task_failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
@@ -592,6 +594,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let failed = *completed == Some(false);
             if (failed || *is_selected) && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_terminal_width(terminal_width)
                     .with_empty_message("  → no files evaluated yet (press Ctrl-E to expand)");
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
@@ -667,6 +670,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let failed = *completed == Some(false);
             if (failed || *is_selected) && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_terminal_width(terminal_width)
                     .with_empty_message("  → no output yet");
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
@@ -754,6 +758,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             let process_failed = *completed == Some(false) || process_data.status.is_failed();
             if logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_terminal_width(terminal_width)
                     .with_depth(*depth)
                     .with_empty_message("→ no output yet (press 'e' to expand)");
                 if process_failed && *render_context == RenderContext::Final {
@@ -1261,7 +1266,10 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
 
     // Build help text - always show, adapt based on terminal width
     let mut help_children = vec![];
-    let use_short_text = terminal_width < 100; // Use shorter text for narrow terminals
+    // The verbose process vocabulary can exceed even a 120-column terminal
+    // once summary counts and the hide-stopped action are present. Keep the
+    // compact tier through 159 columns; very narrow terminals use keys only.
+    let use_short_text = terminal_width < 160;
     let show_hide_toggle = summary.stopped_processes > 0 || hide_stopped_processes;
 
     let up_arrow_color = if can_go_up {
@@ -1303,7 +1311,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             if is_stoppable {
                 help_children
                     .push(element!(Text(content: if use_short_text { "^X" } else { "Ctrl-X" }, color: COLOR_INTERACTIVE)).into_any());
-                if use_short_text {
+                if use_symbols {
+                    help_children.push(element!(Text(content: " ")).into_any());
+                } else if use_short_text {
                     help_children.push(element!(Text(content: " stop ")).into_any());
                 } else {
                     help_children.push(element!(Text(content: " stop process • ")).into_any());
@@ -1311,7 +1321,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             }
             if is_restartable {
                 help_children.push(element!(Text(content: if use_short_text { "^R" } else { "Ctrl-R" }, color: COLOR_INTERACTIVE)).into_any());
-                if use_short_text {
+                if use_symbols {
+                    help_children.push(element!(Text(content: " ")).into_any());
+                } else if use_short_text {
                     help_children.push(element!(Text(content: " restart ")).into_any());
                 } else {
                     help_children.push(element!(Text(content: " (re)start process • ")).into_any());
@@ -1320,7 +1332,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         }
         if show_hide_toggle {
             help_children.push(element!(Text(content: if use_short_text { "^H" } else { "Ctrl-H" }, color: COLOR_INTERACTIVE)).into_any());
-            if use_short_text {
+            if use_symbols {
+                help_children.push(element!(Text(content: " ")).into_any());
+            } else if use_short_text {
                 help_children.push(element!(Text(content: if hide_stopped_processes { " show " } else { " hide " })).into_any());
             } else {
                 help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped • " } else { " hide stopped • " })).into_any());
@@ -1355,16 +1369,81 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         }
         if show_hide_toggle {
             help_children.push(element!(Text(content: if use_short_text { "^H" } else { "Ctrl-H" }, color: COLOR_INTERACTIVE)).into_any());
-            help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped" } else { " hide stopped" })).into_any());
+            if !use_symbols {
+                help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped" } else { " hide stopped" })).into_any());
+            }
         }
     }
 
+    // Both halves of a flex row have intrinsic widths: asking them to shrink
+    // does not clip the Text children in iocraft's string renderer (and a real
+    // terminal would wrap them). Give the row a bounded information policy:
+    // selection mode prioritizes actionable keys; otherwise a mixed workload
+    // gets a compact aggregate rather than five unbounded category summaries.
+    let summary_category_count = usize::from(
+        summary.active_builds > 0 || summary.completed_builds > 0 || summary.failed_builds > 0,
+    ) + usize::from(
+        summary.active_downloads > 0 || summary.completed_downloads > 0,
+    ) + usize::from(
+        summary.active_queries > 0 || summary.completed_queries > 0,
+    ) + usize::from(
+        summary.running_tasks > 0 || summary.completed_tasks > 0 || summary.failed_tasks > 0,
+    ) + usize::from(summary.total_processes > 0);
+    if has_selection {
+        children.clear();
+    } else if summary_category_count > 1
+        && (terminal_width as usize) < summary_category_count * 20 + 8
+    {
+        children.clear();
+        children.push(
+            element!(Text(content: format!("{summary_category_count} activity groups"))).into_any(),
+        );
+    }
+
+    if has_selection {
+        if terminal_width < 60 {
+            return element!(View(
+                flex_direction: FlexDirection::Row,
+                width: terminal_width.saturating_sub(2) as u32,
+                overflow: Overflow::Hidden
+            ) {
+                #(help_children)
+            })
+            .into_any();
+        }
+        return element!(View(
+            flex_direction: FlexDirection::Row,
+            width: 100pct,
+            overflow: Overflow::Hidden
+        ) {
+            #(help_children)
+        })
+        .into_any();
+    }
+
     // Create layout with stats on left and help on right
+    let content_width = terminal_width.saturating_sub(2) as u32;
+    if terminal_width < 60 {
+        return element!(View(flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: content_width) {
+            View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                #(children)
+            }
+            View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 1) {
+                #(help_children)
+            }
+        }).into_any();
+    }
     element!(View(flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
         View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
             #(children)
         }
-        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: if use_symbols { 1 } else { 2 }) {
+        View(
+            flex_direction: FlexDirection::Row,
+            flex_shrink: 1.0,
+            min_width: 0,
+            overflow: Overflow::Hidden,
+            margin_left: if use_symbols { 1 } else { 2 }
+        ) {
             #(help_children)
         }
     }).into_any()
