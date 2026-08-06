@@ -36,6 +36,10 @@ trap cleanup EXIT
 fixture="$repo_root/devenv-tui/replays/processes.jsonl"
 command="\"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\" \"$fixture\""
 
+# The selected process and its actions must survive the narrow-to-wide resize.
+# Avoid standalone legacy Esc in this byte-level harness: without a terminal
+# emulator replying to the keyboard-protocol query it remains ambiguous until
+# another input byte arrives.
 "$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
 expect:api
 expect:worker
@@ -43,9 +47,6 @@ resize:48x12
 send:j
 expect:api
 resize:120x40
-send:\e
-expect:hide stopped
-send:\e[B
 expect:restart
 send:\x12
 expect:restarting
@@ -60,7 +61,7 @@ expect:restarting
 expect:ready
 send:\x03
 expect:Detach
-send:\e
+send:c
 expect:restart
 send:\x03
 expect:Detach
