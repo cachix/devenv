@@ -3,6 +3,23 @@
 let
   cfg = config.languages.rust;
 
+  # Linkers the user can enable explicitly; at most one may be active.
+  explicitLinkers = [ cfg.mold.enable cfg.lld.enable cfg.wild.enable ];
+
+  # Setting an explicit linker driver makes rustc stop adding the default LLD
+  # flags on targets where rustc links with LLD out of the box. Force Clang to
+  # use LLD there unless the user selected a different linker through devenv.
+  forceLldWithClang =
+    cfg.clangLinker.enable
+    && pkgs.stdenv.hostPlatform.rust.rustcTarget == "x86_64-unknown-linux-gnu"
+    && !lib.any lib.id explicitLinkers;
+
+  # Pin the linker path so LLD does not need to be installed on PATH (and a
+  # stray ld.lld earlier on PATH cannot take over).
+  clangLinkerDriver = pkgs.writeShellScript "devenv-rust-linker" ''
+    exec ${lib.getExe pkgs.clang} --ld-path=${pkgs.llvmPackages.bintools}/bin/ld.lld "$@"
+  '';
+
   # The components to actually install in the toolchain. Appends the cranelift
   # codegen backend on top of the user-configured `components` (which keeps its
   # default) rather than overriding them.
@@ -119,6 +136,8 @@ in
         This avoids GCC's `collect2` wrapper, which can hit `Argument list too long`
         in large Nix development environments before the final linker receives
         Rust's response file.
+
+        On x86_64 Linux (glibc), Clang uses LLD unless another linker is enabled.
       '';
     };
 
@@ -304,7 +323,7 @@ in
             '';
           }
           {
-            assertion = lib.count lib.id [ cfg.mold.enable cfg.lld.enable cfg.wild.enable ] <= 1;
+            assertion = lib.count lib.id explicitLinkers <= 1;
             message = ''
               Only one linker can be enabled at a time.
 
@@ -432,7 +451,8 @@ in
           # silently dropping any flags configured there (e.g. `--cfg tracing_unstable`).
           # The per-target linker env var sets the linker without touching rustflags.
           // lib.optionalAttrs cfg.clangLinker.enable {
-            "CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" = "clang";
+            "CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" =
+              if forceLldWithClang then clangLinkerDriver else lib.getExe pkgs.clang;
           };
 
         git-hooks.tools = {
