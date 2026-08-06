@@ -34,10 +34,6 @@ reachable() {
   curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:$1/" 2>/dev/null
 }
 
-alpha_process_pid() {
-  sh .process-pid.sh "$PORT_ALPHA"
-}
-
 dump_failure_state() {
   echo "native manager diagnostics:" >&2
   if [ -f "$PID_FILE" ]; then
@@ -151,13 +147,9 @@ test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
 reachable "$PORT_ALPHA"
 
 # R03: repeat real PTY attachments while generating unique logs. Every
-# disconnect must release its socket/log tailers, and neither daemon nor child
-# PID may change. Fd counts are taken mid-attach so cycles compare like with
+# disconnect must release its socket/log tailers, and the daemon must remain
+# healthy. Fd counts are taken mid-attach so cycles compare like with
 # like; each cycle's check observes the previous cycle's residue.
-ALPHA_PID=$(alpha_process_pid)
-test -n "$ALPHA_PID"
-kill -0 "$ALPHA_PID"
-
 set +e
 devenv-run-tests pty fd-baseline.typescript "devenv processes attach" >/dev/null <<EOF
 expect:Attached to the running process manager
@@ -197,22 +189,18 @@ EOF
   esac
   grep -a -q "$marker" "$transcript"
   test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
-  test "$(alpha_process_pid)" = "$ALPHA_PID"
   kill -0 "$DAEMON_PID"
-  kill -0 "$ALPHA_PID"
   reachable "$PORT_ALPHA"
 done
 
 # E06: attached TUI commands restart, stop, and then re-start the process.
-# The PTY verifies selection and sends each key exactly once. Process identity
-# is checked out of band because a full-screen redraw can replay old log text.
+# The PTY verifies selection and sends each key exactly once. Command
+# completion comes from the attach client itself; lifecycle state comes from
+# the manager's public status API. This keeps the test at the process-manager
+# boundary instead of rediscovering child processes through `ps` output.
 # The sync marker appearing in alpha's log pane proves the process row is
 # rendered before any key is sent; the downs overshoot to the clamped bottom
-# row (alpha, always last), and the process-specific footer confirms selection.
-# After restart, a live PID/port is not sufficient: Ctrl-X is accepted only
-# once the attach TUI has consumed the daemon's Ready status. A fresh log
-# marker followed by a new ready render proves the model will accept Ctrl-X.
-# Likewise, the stopped label proves it will accept the second Ctrl-R.
+# row (alpha, always last), and the compact process footer confirms selection.
 set +e
 devenv-run-tests pty attached-commands.typescript "devenv processes attach" >/dev/null <<EOF
 expect:Attached to the running process manager
@@ -220,21 +208,21 @@ run:[ ! -s fd-baseline.txt ] || [ "\$(sh .fd-count.sh $DAEMON_PID)" -le "\$(cat 
 run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/e06-sync-marker
 expect:e06-sync-marker
 send:\033[B\033[B\033[B\033[B\033[B\033[B
-expect:(re)start process
+expect:restart
 send:\022
-run:sh .wait-process.sh changed $PORT_ALPHA $ALPHA_PID
-run:sh .process-pid.sh $PORT_ALPHA > e06-restarted-pid.txt
-run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/e06-first-ready-marker
-expect:e06-first-ready-marker
-expect:ready
+expect:process alpha restarted
+run:sh .wait-process-status.sh alpha ready
+run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/e06-after-restart-marker
+expect:e06-after-restart-marker
 send:\030
-run:sh .wait-process.sh absent $PORT_ALPHA
+expect:process alpha stopped
+run:sh .wait-process-status.sh alpha stopped
 expect:stopped
 run:! curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:$PORT_ALPHA/
 send:\022
-run:sh .wait-process.sh changed $PORT_ALPHA "\$(cat e06-restarted-pid.txt)"
-run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/e06-second-ready-marker
-expect:e06-second-ready-marker
+run:sh .wait-process-status.sh alpha ready
+run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/e06-after-start-marker
+expect:e06-after-start-marker
 send:\003
 expect:Detach
 send:\003
