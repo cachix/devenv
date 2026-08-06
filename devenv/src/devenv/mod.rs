@@ -32,9 +32,11 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
+use std::future::Future;
 use std::io::Write as _;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::{Output, Stdio};
 use std::sync::Arc;
 use tasks::Tasks;
@@ -49,6 +51,31 @@ use tracing::{Instrument, debug, debug_span, info, info_span, instrument, trace,
 /// name because it was started under a different configuration.
 const RESTART_FOR_CONFIG_GUIDANCE: &str =
     "Restart it with `devenv processes down` and `devenv up -d` to pick up configuration changes";
+enum AttachedCommandCompletion {
+    Process {
+        command: processes::ProcessCommand,
+        response: Result<processes::ApiResponse>,
+    },
+    StopManager(Result<()>),
+}
+
+type AttachedCommandFuture<'a> = Pin<Box<dyn Future<Output = AttachedCommandCompletion> + 'a>>;
+
+fn same_process_command(
+    left: &processes::ProcessCommand,
+    right: &processes::ProcessCommand,
+) -> bool {
+    matches!(
+        (left, right),
+        (
+            processes::ProcessCommand::Restart(left),
+            processes::ProcessCommand::Restart(right)
+        ) | (
+            processes::ProcessCommand::Stop(left),
+            processes::ProcessCommand::Stop(right)
+        ) if left == right
+    )
+}
 
 /// Detect whether we are running inside an AI coding agent.
 ///
@@ -1087,6 +1114,31 @@ impl Devenv {
         }
     }
 
+    async fn execute_attached_command(
+        &self,
+        command: processes::ProcessCommand,
+    ) -> AttachedCommandCompletion {
+        let request = match &command {
+            processes::ProcessCommand::Restart(name) => {
+                processes::ApiRequest::Restart { name: name.clone() }
+            }
+            processes::ProcessCommand::Stop(name) => {
+                processes::ApiRequest::Stop { name: name.clone() }
+            }
+            processes::ProcessCommand::StopManager => {
+                return AttachedCommandCompletion::StopManager(self.down().await);
+            }
+        };
+
+        // The bound exceeds the daemon's worst case for stop/restart (5s
+        // SIGTERM grace + 15s port release). This future is polled alongside
+        // the attach stream, so a slow command cannot stall status or logs.
+        let response = self
+            .native_api_request_timeout(&request, std::time::Duration::from_secs(30))
+            .await;
+        AttachedCommandCompletion::Process { command, response }
+    }
+
     /// Foreground view while attached to a running daemon: consume one
     /// streaming `Attach` connection and mirror process state, ports, and logs
     /// into the activity system under `parent`. Ctrl-C detaches cleanly
@@ -1100,10 +1152,14 @@ impl Devenv {
         frontend_command_tx: Option<tokio::sync::mpsc::Sender<FrontendCommand>>,
     ) -> Result<()> {
         let mut stream =
-            processes::NativeProcessManager::attach_stream(&self.native_socket_path()).await?;
+            Some(processes::NativeProcessManager::attach_stream(&self.native_socket_path()).await?);
         let token = self.shutdown.cancellation_token();
         let parent_id = parent.id();
         let mut procs: HashMap<String, devenv_activity::ActivityRef> = HashMap::new();
+        let mut pending_command: Option<AttachedCommandFuture<'_>> = None;
+        let mut active_command: Option<processes::ProcessCommand> = None;
+        let mut queued_command: Option<processes::ProcessCommand> = None;
+        let mut manager_stop_in_progress = false;
 
         // Tell the TUI we are attached so its Ctrl-C prompt offers detach vs
         // stop the manager instead of the in-process keep-running vs quit.
@@ -1156,78 +1212,143 @@ impl Devenv {
                 } => {
                     match event {
                         Some(FrontendEvent::Shell(_)) => {}
-                        Some(FrontendEvent::Process(cmd)) => match cmd {
-                            // Stop the whole manager (chosen from the attach-mode
-                            // Ctrl-C prompt): tear the daemon down and exit.
-                            processes::ProcessCommand::StopManager => {
+                        Some(FrontendEvent::Process(processes::ProcessCommand::StopManager)) => {
+                            // Manager shutdown is a priority action. Cancel any
+                            // one-shot request and discard stale per-process
+                            // intent instead of waiting for its timeout.
+                            queued_command = None;
+                            active_command = Some(processes::ProcessCommand::StopManager);
+                            pending_command = Some(Box::pin(
+                                self.execute_attached_command(
+                                    processes::ProcessCommand::StopManager,
+                                ),
+                            ));
+                            manager_stop_in_progress = true;
+                            frontend_event_rx = None;
+                            async {
                                 message(ActivityLevel::Info, "stopping the process manager");
-                                match self.down().await {
-                                    Ok(()) => {
-                                        message(ActivityLevel::Info, "process manager stopped");
-                                        return Ok(());
-                                    }
-                                    Err(e) => {
-                                        message(
-                                            ActivityLevel::Error,
-                                            format!("failed to stop the process manager: {e}"),
-                                        );
-                                        return Err(e);
-                                    }
-                                }
                             }
-                            cmd => {
-                                let request = match cmd {
-                                    processes::ProcessCommand::Restart(name) => {
-                                        processes::ApiRequest::Restart { name }
-                                    }
-                                    processes::ProcessCommand::Stop(name) => {
-                                        processes::ApiRequest::Stop { name }
-                                    }
-                                    // Handled above.
-                                    processes::ProcessCommand::StopManager => unreachable!(),
-                                };
-                                // Ctrl-C must not be dead while the one-shot is in
-                                // flight: race the request against the token. The
-                                // bound must exceed the daemon's own worst case for
-                                // stop/restart (5s SIGTERM grace + 15s port release).
-                                tokio::select! {
-                                    _ = token.cancelled() => {
-                                        detached();
-                                        return Ok(());
-                                    }
-                                    result = self.native_api_request_timeout(
-                                        &request,
-                                        std::time::Duration::from_secs(30),
-                                    ) => match result {
-                                        Ok(processes::ApiResponse::Ok) => {}
-                                        Ok(processes::ApiResponse::Error { message: m }) => {
-                                            message(
-                                                ActivityLevel::Error,
-                                                format!("process command failed: {m}"),
-                                            );
-                                        }
-                                        Ok(other) => {
-                                            message(
-                                                ActivityLevel::Error,
-                                                format!("unexpected response: {other:?}"),
-                                            );
-                                        }
-                                        Err(e) => {
-                                            message(
-                                                ActivityLevel::Error,
-                                                format!("process command failed: {e}"),
-                                            );
-                                        }
-                                    },
-                                }
+                            .in_activity(parent)
+                            .await;
+                        }
+                        Some(FrontendEvent::Process(cmd)) => {
+                            // A repeated key press while the same operation is
+                            // active is already represented by that operation.
+                            if active_command
+                                .as_ref()
+                                .is_some_and(|active| same_process_command(active, &cmd))
+                            {
+                                queued_command = None;
+                                continue;
                             }
-                        },
-                        // Channel closed (TUI gone): a closed channel returns
-                        // None forever, so disable the arm and keep streaming.
+
+                            if pending_command.is_none() {
+                                active_command = Some(cmd.clone());
+                                pending_command = Some(Box::pin(self.execute_attached_command(cmd)));
+                            } else {
+                                // Human input is an intent, not a work log. At
+                                // most one follow-up is useful; newer input
+                                // supersedes an older command not yet started.
+                                queued_command = Some(cmd);
+                            }
+                        }
+                        // A closed channel returns immediately forever, so
+                        // disable this select arm and keep streaming.
                         None => frontend_event_rx = None,
                     }
                 }
-                ev = stream.next() => match ev {
+                completion = async {
+                    match pending_command.as_mut() {
+                        Some(command) => command.await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    pending_command = None;
+                    active_command = None;
+                    match completion {
+                        AttachedCommandCompletion::StopManager(result) => match result {
+                            Ok(()) => {
+                                async {
+                                    message(ActivityLevel::Info, "process manager stopped");
+                                }
+                                .in_activity(parent)
+                                .await;
+                                return Ok(());
+                            }
+                            Err(e) => {
+                                async {
+                                    message(
+                                        ActivityLevel::Error,
+                                        format!("failed to stop the process manager: {e}"),
+                                    );
+                                }
+                                .in_activity(parent)
+                                .await;
+                                return Err(e);
+                            }
+                        },
+                        AttachedCommandCompletion::Process { command, response } => {
+                            let (verb, name) = match &command {
+                                processes::ProcessCommand::Restart(name) => ("restarted", name),
+                                processes::ProcessCommand::Stop(name) => ("stopped", name),
+                                processes::ProcessCommand::StopManager => unreachable!(),
+                            };
+                            match response {
+                                Ok(processes::ApiResponse::Ok) => {
+                                    async {
+                                        message(
+                                            ActivityLevel::Info,
+                                            format!("process {name} {verb}"),
+                                        );
+                                    }
+                                    .in_activity(parent)
+                                    .await;
+                                }
+                                Ok(processes::ApiResponse::Error { message: m }) => {
+                                    async {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("process command failed: {m}"),
+                                        );
+                                    }
+                                    .in_activity(parent)
+                                    .await;
+                                }
+                                Ok(other) => {
+                                    async {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("unexpected response: {other:?}"),
+                                        );
+                                    }
+                                    .in_activity(parent)
+                                    .await;
+                                }
+                                Err(e) => {
+                                    async {
+                                        message(
+                                            ActivityLevel::Error,
+                                            format!("process command failed: {e}"),
+                                        );
+                                    }
+                                    .in_activity(parent)
+                                    .await;
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(cmd) = queued_command.take() {
+                        active_command = Some(cmd.clone());
+                        pending_command = Some(Box::pin(self.execute_attached_command(cmd)));
+                    }
+                }
+                ev = async {
+                    match stream.as_mut() {
+                        Some(stream) => stream.next().await,
+                        None => std::future::pending().await,
+                    }
+                } => match ev {
                     Some(Ok(processes::AttachEvent::Snapshot { processes })) => {
                         for info in &processes {
                             upsert(&mut procs, parent_id, info);
@@ -1245,6 +1366,14 @@ impl Devenv {
                         }
                     }
                     Some(Err(e)) => {
+                        // Stopping the manager tears down the attach socket
+                        // before the independent stop request observes process
+                        // exit. Keep polling that request; its result is the
+                        // authoritative outcome of the user action.
+                        if manager_stop_in_progress {
+                            stream = None;
+                            continue;
+                        }
                         // A Ctrl-C racing the stream teardown is a deliberate
                         // detach, not a daemon failure.
                         if token.is_cancelled() {
@@ -1256,6 +1385,10 @@ impl Devenv {
                         return Err(e.wrap_err("attach stream failed"));
                     }
                     None => {
+                        if manager_stop_in_progress {
+                            stream = None;
+                            continue;
+                        }
                         if token.is_cancelled() {
                             detached();
                             return Ok(());
@@ -3530,6 +3663,23 @@ fn native_manager_seedable(pid_status: Option<&processes::PidStatus>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn identical_attached_process_commands_compare_by_kind_and_target() {
+        let restart_alpha = processes::ProcessCommand::Restart("alpha".to_string());
+        assert!(same_process_command(
+            &restart_alpha,
+            &processes::ProcessCommand::Restart("alpha".to_string())
+        ));
+        assert!(!same_process_command(
+            &restart_alpha,
+            &processes::ProcessCommand::Stop("alpha".to_string())
+        ));
+        assert!(!same_process_command(
+            &restart_alpha,
+            &processes::ProcessCommand::Restart("beta".to_string())
+        ));
+    }
 
     #[test]
     fn cachix_netrc_path_is_absolute_for_relative_runtime_dir() {
