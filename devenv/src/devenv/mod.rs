@@ -2902,12 +2902,26 @@ impl Devenv {
 
         self.port_allocator.set_allow_in_use(false);
 
-        match processes::NativeProcessManager::api_request(
-            &self.native_socket_path(),
-            &processes::ApiRequest::Ports,
+        // Bounded because this runs before every command: a manager whose
+        // socket accepts but never answers must not hang the CLI.
+        let query = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            processes::NativeProcessManager::api_request(
+                &self.native_socket_path(),
+                &processes::ApiRequest::Ports,
+            ),
         )
-        .await
-        {
+        .await;
+
+        let response = match query {
+            Ok(response) => response,
+            Err(_) => {
+                trace!("Timed out querying native manager for ports");
+                return;
+            }
+        };
+
+        match response {
             Ok(processes::ApiResponse::PortAllocations { ports }) => {
                 let seeds: Vec<(String, String, u16)> = ports
                     .into_iter()
