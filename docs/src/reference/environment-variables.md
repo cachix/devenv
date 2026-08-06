@@ -167,6 +167,12 @@ Authentication token for pulling from and pushing to Cachix binary caches.
 Override the provider for the [secretspec integration](../integrations/secretspec.md).
 Mirrored by the `--secretspec-provider` flag.
 
+!!! tip "New in version 2.2.2"
+
+    devenv exports this variable into the development shell only when a provider
+    override was explicitly configured. Otherwise, commands use the provider
+    routes from `secretspec.toml`.
+
 ### [`SECRETSPEC_PROFILE`](#secretspec_profile)
 
 Override the profile for the [secretspec integration](../integrations/secretspec.md).

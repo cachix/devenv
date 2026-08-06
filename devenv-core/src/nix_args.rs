@@ -306,8 +306,8 @@ pub struct SecretspecData {
     /// The profile that was used to load secrets
     pub profile: String,
 
-    /// The provider that was used to load secrets
-    pub provider: String,
+    /// An explicit provider override selected through devenv
+    pub provider: Option<String>,
 
     /// Map of secret names to their values
     pub secrets: BTreeMap<String, String>,
@@ -495,6 +495,25 @@ mod tests {
     /// Matches pattern: key = value (with possible whitespace variation)
     fn contains_key_value(output: &str, key: &str, value: &str) -> bool {
         output.contains(&format!("{} = {}", key, value))
+    }
+
+    #[test]
+    fn secretspec_provider_override_serializes_as_optional() {
+        let without_override = SecretspecData {
+            profile: "production".to_string(),
+            provider: None,
+            secrets: BTreeMap::new(),
+        };
+        let with_override = SecretspecData {
+            provider: Some("sops".to_string()),
+            ..without_override.clone()
+        };
+
+        let serialized = ser_nix::to_string(&without_override).unwrap();
+        assert!(contains_key_value(&serialized, "provider", "null"));
+
+        let serialized = ser_nix::to_string(&with_override).unwrap();
+        assert!(contains_key_value(&serialized, "provider", "\"sops\""));
     }
 
     // Nixpkgs upstream output contract: NixpkgsConfigForNix serializes as

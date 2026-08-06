@@ -26551,7 +26551,7 @@ null
 
 
 
-The secretspec provider that was used to load secrets (read-only)
+The explicit secretspec provider override selected through devenv, if any (read-only)
 
 
 
