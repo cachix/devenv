@@ -7,7 +7,7 @@ use devenv_activity::{ActivityEvent, ActivityOutcome, Process as ProcessEvent, T
 use tokio::sync::mpsc;
 
 use crate::types::VerbosityLevel;
-use crate::types::{ProcessPhase, TaskCompleted, TaskStatus, TaskType, TasksStatus, process_name};
+use crate::types::{TaskCompleted, TaskStatus, TaskType, TasksStatus, process_name};
 use crate::{Error, Outputs, Tasks};
 
 /// Line-buffered console output
@@ -115,7 +115,12 @@ impl TasksUi {
             } else {
                 let cancel = self.tasks.shutdown.cancellation_token();
                 let pm = Arc::clone(&self.tasks.process_manager);
-                let fg_handle = tokio::spawn(async move { pm.run_foreground(cancel, None).await });
+                let on_idle = match self.tasks.supervisor {
+                    devenv_processes::Supervisor::Native => devenv_processes::OnIdle::Linger,
+                    devenv_processes::Supervisor::External => devenv_processes::OnIdle::Exit,
+                };
+                let fg_handle =
+                    tokio::spawn(async move { pm.run_foreground(cancel, None, on_idle).await });
 
                 if let Err(e) = self
                     .consume_events_until(fg_handle)
@@ -370,18 +375,21 @@ impl TasksUi {
         let mut errors = String::new();
         for index in &self.tasks.tasks_order {
             let task_state = self.tasks.graph[*index].read().await;
-            let gave_up = task_state.task.r#type == TaskType::Process
-                && self
-                    .tasks
-                    .process_manager
-                    .get_phase(process_name(&task_state.task.name))
-                    .await
-                    == Some(ProcessPhase::GaveUp);
-            if gave_up {
+            let process_name = process_name(&task_state.task.name);
+            let process_failure = if task_state.task.r#type == TaskType::Process {
+                self.tasks.process_manager.job_state(process_name).await
+            } else {
+                None
+            };
+            if let Some(status) = process_failure.filter(|status| status.has_failed()) {
+                let reason = if status.is_gave_up() {
+                    "gave up (crash loop)"
+                } else {
+                    "exited unsuccessfully"
+                };
                 errors.push_str(&format!(
-                    "\n--- {} (process {}) gave up (crash loop)\n",
-                    task_state.task.name,
-                    process_name(&task_state.task.name)
+                    "\n--- {} (process {}) {}\n",
+                    task_state.task.name, process_name, reason
                 ));
                 errors.push_str("---\n");
             } else if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) =

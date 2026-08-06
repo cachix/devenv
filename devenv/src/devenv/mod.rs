@@ -835,6 +835,7 @@ impl Devenv {
             env,
             bash,
             ignore_process_deps: false,
+            supervisor: processes::Supervisor::Native,
         })
     }
 
@@ -1980,6 +1981,7 @@ impl Devenv {
             env: envs,
             bash,
             ignore_process_deps: false,
+            supervisor: processes::Supervisor::Native,
         };
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
@@ -2521,7 +2523,11 @@ impl Devenv {
                 );
                 let result = tasks_runner
                     .process_manager()
-                    .run_foreground(self.shutdown.cancellation_token(), None)
+                    .run_foreground(
+                        self.shutdown.cancellation_token(),
+                        None,
+                        processes::OnIdle::Linger,
+                    )
                     .await
                     .map_err(|e| miette!("Process manager error: {}", e));
                 trace!("devenv.up: run_foreground returned");

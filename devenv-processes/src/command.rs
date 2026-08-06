@@ -84,7 +84,11 @@ pub fn build_command(
     let command = Arc::new(Command {
         program,
         options: SpawnOptions {
-            session: true,
+            // Native supervision owns and signals the complete process tree,
+            // so it starts a fresh session. Under an external supervisor the
+            // outer manager already created the process group and (possibly)
+            // a controlling PTY; preserve both by staying in that session.
+            session: config.supervisor == crate::config::Supervisor::Native,
             ..Default::default()
         },
     });

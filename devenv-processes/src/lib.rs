@@ -47,14 +47,14 @@ pub mod supervisor_state;
 // Re-export config types at crate root
 pub use config::{
     HttpGetProbe, HttpProbe, ListenKind, ListenSpec, ProcessConfig, ProcessType, ReadyConfig,
-    RestartConfig, RestartPolicy, SocketActivationConfig, WatchConfig, WatchdogConfig,
+    RestartConfig, RestartPolicy, SocketActivationConfig, Supervisor, WatchConfig, WatchdogConfig,
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use devenv_mailbox::ProcessCommand;
 pub use manager::{
     ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, ManagerMode,
-    NativeProcessManager, PortInfo, ProcessInfo, ProcessPhase, ProcessResources, ProcessScheduler,
-    ProcessState, StartOutcome,
+    NativeProcessManager, OnIdle, PortInfo, ProcessInfo, ProcessPhase, ProcessResources,
+    ProcessScheduler, ProcessState, StartOutcome,
 };
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;

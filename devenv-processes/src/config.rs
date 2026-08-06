@@ -215,6 +215,20 @@ impl Default for StartConfig {
     }
 }
 
+/// Who owns process supervision and its execution environment.
+///
+/// Native supervision gives devenv ownership of restart/readiness/watch policy,
+/// process groups, and captured stdio. External supervision runs the process
+/// once and preserves the outer manager's process group and stdio (for example,
+/// a process-compose or mprocs PTY).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Supervisor {
+    #[default]
+    Native,
+    External,
+}
+
 /// Process configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessConfig {
@@ -254,14 +268,18 @@ pub struct ProcessConfig {
     /// Linux-specific configuration
     #[serde(default)]
     pub linux: LinuxConfig,
+    /// Who owns lifecycle policy, process grouping, and stdio.
+    #[serde(default)]
+    pub supervisor: Supervisor,
 }
 
 impl ProcessConfig {
     /// Whether this config has any readiness mechanism (probe, TCP listen, or allocated ports).
     pub fn has_readiness_probe(&self) -> bool {
-        self.ready.is_some()
-            || self.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
-            || !self.ports.is_empty()
+        self.supervisor == Supervisor::Native
+            && (self.ready.is_some()
+                || self.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
+                || !self.ports.is_empty())
     }
 }
 
@@ -283,6 +301,7 @@ impl Default for ProcessConfig {
             watch: WatchConfig::default(),
             watchdog: None,
             linux: LinuxConfig::default(),
+            supervisor: Supervisor::default(),
         }
     }
 }

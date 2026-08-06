@@ -506,10 +506,16 @@ in
         # Not used by the native manager (devenv 2.0+) which handles process tasks directly.
         process.taskCommandsBase =
           let
-            ignoreProcessDepsFlag = lib.optionalString (implementation != "native") " --ignore-process-deps";
+            runArgs = (lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } {
+              task-file = config.task.config;
+              mode = "all";
+              cache-dir = config.devenv.dotfile;
+              runtime-dir = config.devenv.runtime;
+              supervisor = if implementation == "native" then "native" else "external";
+            };
           in
           lib.mapAttrs
-            (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime}${ignoreProcessDepsFlag} devenv:processes:${name}")
+            (name: _: "${config.task.package}/bin/devenv-tasks run ${runArgs} ${lib.escapeShellArg "devenv:processes:${name}"}")
             enabledProcesses;
 
         # With exec prefix for proper signal handling (derived from base)

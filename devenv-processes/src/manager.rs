@@ -184,7 +184,7 @@ use watchexec_supervisor::{
     job::{Job, start_job},
 };
 
-use crate::config::ProcessConfig;
+use crate::config::{ProcessConfig, Supervisor};
 use crate::pid::{self, PidStatus};
 use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
 use crate::{ProcessManager, StartOptions};
@@ -249,6 +249,15 @@ pub enum ProcessPhase {
     Exited,
     /// Supervisor gave up (crash loop).
     GaveUp,
+}
+
+/// What the foreground manager should do after every process settles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OnIdle {
+    /// Keep the manager available for interactive restarts until shutdown.
+    Linger,
+    /// Return once no process can make further progress on its own.
+    Exit,
 }
 
 impl std::fmt::Display for ProcessPhase {
@@ -408,6 +417,19 @@ fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
             | ProcessEntry::Launching { .. } => None,
         })
         .collect()
+}
+
+/// Whether any entry can still make progress without external input.
+fn has_live_processes(processes: &HashMap<String, ProcessEntry>) -> bool {
+    processes.values().any(|entry| match entry {
+        ProcessEntry::Waiting { .. } | ProcessEntry::Launching { .. } => true,
+        ProcessEntry::Active(handle) => matches!(
+            handle.status_rx.borrow().phase,
+            crate::supervisor_state::SupervisorPhase::Starting
+                | crate::supervisor_state::SupervisorPhase::Ready
+        ),
+        ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. } => false,
+    })
 }
 
 /// A managed process entry: not started, waiting for dependencies, or active.
@@ -790,8 +812,7 @@ struct LaunchSetup {
     status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     notify_socket: Option<Arc<NotifySocket>>,
-    stdout_tailer: JoinHandle<()>,
-    stderr_tailer: JoinHandle<()>,
+    output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
     stderr_log: PathBuf,
 }
 
@@ -800,8 +821,10 @@ impl LaunchSetup {
     /// tailers and stop the spawned child with the standard grace period. Used
     /// when shutdown raced the launch or the entry changed underneath it.
     async fn abort_and_stop(self) {
-        self.stdout_tailer.abort();
-        self.stderr_tailer.abort();
+        if let Some((stdout_tailer, stderr_tailer)) = self.output_readers {
+            stdout_tailer.abort();
+            stderr_tailer.abort();
+        }
         self.job
             .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
             .await;
@@ -1294,7 +1317,7 @@ impl NativeProcessManager {
                                 resources,
                                 status_rx: setup.status_rx,
                                 supervisor_task,
-                                output_readers: Some((setup.stdout_tailer, setup.stderr_tailer)),
+                                output_readers: setup.output_readers,
                                 notify_forwarder,
                             }),
                         );
@@ -1329,7 +1352,8 @@ impl NativeProcessManager {
         activity: &devenv_activity::ActivityRef,
     ) -> Result<LaunchSetup> {
         // Create notify socket if configured via ready.notify
-        let uses_notify = config.ready.as_ref().is_some_and(|r| r.notify);
+        let native = config.supervisor == Supervisor::Native;
+        let uses_notify = native && config.ready.as_ref().is_some_and(|r| r.notify);
         let notify_socket = if uses_notify {
             let socket = NotifySocket::new(state_dir, &config.name).await?;
             info!(
@@ -1343,7 +1367,11 @@ impl NativeProcessManager {
         };
 
         // Get watchdog interval if configured
-        let watchdog_usec = config.watchdog.as_ref().map(|w| w.usec);
+        let watchdog_usec = if native {
+            config.watchdog.as_ref().map(|watchdog| watchdog.usec)
+        } else {
+            None
+        };
 
         // Build the command (creates log directory and wrapper script)
         let proc_cmd = crate::command::build_command(
@@ -1353,9 +1381,11 @@ impl NativeProcessManager {
             watchdog_usec,
         )?;
 
-        // Truncate log files if they exist
-        let _ = std::fs::write(&proc_cmd.stdout_log, "");
-        let _ = std::fs::write(&proc_cmd.stderr_log, "");
+        if native {
+            // Native supervision owns captured output.
+            let _ = std::fs::write(&proc_cmd.stdout_log, "");
+            let _ = std::fs::write(&proc_cmd.stderr_log, "");
+        }
 
         let (job, _task) = start_job(proc_cmd.command);
         let job = Arc::new(job);
@@ -1399,6 +1429,7 @@ impl NativeProcessManager {
         let spawn_cwd = proc_cmd.cwd;
         let spawn_stdout = proc_cmd.stdout_log.clone();
         let spawn_stderr = proc_cmd.stderr_log.clone();
+        let inherit_stdio = config.supervisor == Supervisor::External;
 
         job.set_spawn_hook(move |command_wrap, _ctx| {
             let cmd = command_wrap.command_mut();
@@ -1406,17 +1437,26 @@ impl NativeProcessManager {
             if let Some(ref cwd) = spawn_cwd {
                 cmd.current_dir(cwd);
             }
-            cmd.stdin(std::process::Stdio::null());
-            cmd.stdout(
-                crate::command::open_log_file(&spawn_stdout)
-                    .map(std::process::Stdio::from)
-                    .unwrap_or_else(std::process::Stdio::null),
-            );
-            cmd.stderr(
-                crate::command::open_log_file(&spawn_stderr)
-                    .map(std::process::Stdio::from)
-                    .unwrap_or_else(std::process::Stdio::null),
-            );
+            if inherit_stdio {
+                // The external manager owns these descriptors. They may be a
+                // private PTY, pipes, or /dev/null; preserving them lets the
+                // outer manager decide how this process interacts with users.
+                cmd.stdin(std::process::Stdio::inherit());
+                cmd.stdout(std::process::Stdio::inherit());
+                cmd.stderr(std::process::Stdio::inherit());
+            } else {
+                cmd.stdin(std::process::Stdio::null());
+                cmd.stdout(
+                    crate::command::open_log_file(&spawn_stdout)
+                        .map(std::process::Stdio::from)
+                        .unwrap_or_else(std::process::Stdio::null),
+                );
+                cmd.stderr(
+                    crate::command::open_log_file(&spawn_stderr)
+                        .map(std::process::Stdio::from)
+                        .unwrap_or_else(std::process::Stdio::null),
+                );
+            }
 
             // Inject OTEL trace context so instrumented subprocesses join the trace.
             cmd.envs(devenv_activity::trace_propagation_env());
@@ -1428,18 +1468,21 @@ impl NativeProcessManager {
 
         job.start().await;
 
-        // Spawn file tailers to emit output to activity
         let stderr_log = proc_cmd.stderr_log.clone();
-        let stdout_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.clone(), false);
-        let stderr_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.clone(), true);
+        let output_readers = native.then(|| {
+            let stdout_tailer =
+                crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.clone(), false);
+            let stderr_tailer =
+                crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.clone(), true);
+            (stdout_tailer, stderr_tailer)
+        });
 
         // Create status channel for supervisor state observation.
         // Processes with no readiness mechanism are reported Ready right away.
         let initial_status = crate::supervisor_state::JobStatus {
             phase: initial_phase(config),
             restart_count: 0,
+            exit_status: None,
         };
         let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
 
@@ -1448,8 +1491,7 @@ impl NativeProcessManager {
             status_tx,
             status_rx,
             notify_socket,
-            stdout_tailer,
-            stderr_tailer,
+            output_readers,
             stderr_log,
         })
     }
@@ -1704,27 +1746,28 @@ impl NativeProcessManager {
             .activity
             .set_status(ProcessStatus::Restarting);
 
-        // Truncate log files and restart output tailers
-        let (stdout_log, stderr_log) = crate::command::log_paths(&self.state_dir, name);
-        let _ = std::fs::write(&stdout_log, "");
-        let _ = std::fs::write(&stderr_log, "");
-
         if let Some((stdout_reader, stderr_reader)) = handle.output_readers.take() {
             stdout_reader.abort();
             stderr_reader.abort();
         }
-        handle.output_readers = Some((
-            crate::log_tailer::spawn_file_tailer(
-                stdout_log,
-                handle.resources.activity.ref_handle(),
-                false,
-            ),
-            crate::log_tailer::spawn_file_tailer(
-                stderr_log,
-                handle.resources.activity.ref_handle(),
-                true,
-            ),
-        ));
+        if handle.resources.config.supervisor == Supervisor::Native {
+            // Native supervision owns the log files and their activity tailers.
+            let (stdout_log, stderr_log) = crate::command::log_paths(&self.state_dir, name);
+            let _ = std::fs::write(&stdout_log, "");
+            let _ = std::fs::write(&stderr_log, "");
+            handle.output_readers = Some((
+                crate::log_tailer::spawn_file_tailer(
+                    stdout_log,
+                    handle.resources.activity.ref_handle(),
+                    false,
+                ),
+                crate::log_tailer::spawn_file_tailer(
+                    stderr_log,
+                    handle.resources.activity.ref_handle(),
+                    true,
+                ),
+            ));
+        }
 
         // Check if the old supervision still monitors the job. It doesn't when
         // the supervisor task has exited (e.g., due to max restarts), or when
@@ -1753,6 +1796,7 @@ impl NativeProcessManager {
                 .send(crate::supervisor_state::JobStatus {
                     phase: initial_phase(&handle.resources.config),
                     restart_count: 0,
+                    exit_status: None,
                 });
             handle.supervisor_task =
                 crate::supervisor::spawn_supervisor(&handle.resources, self.shutdown.clone());
@@ -2634,15 +2678,25 @@ impl NativeProcessManager {
         &self,
         cancellation_token: tokio_util::sync::CancellationToken,
         mut frontend_event_rx: Option<mpsc::Receiver<FrontendEvent>>,
+        on_idle: OnIdle,
     ) -> Result<()> {
         trace!(
-            "run_foreground: ENTERED, token_cancelled={}",
+            "run_foreground: ENTERED, on_idle={:?}, token_cancelled={}",
+            on_idle,
             cancellation_token.is_cancelled()
         );
         info!("Manager event loop started (foreground)");
-        let mut saw_processes = false;
 
         loop {
+            let changed = self.entries_changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+
+            if on_idle == OnIdle::Exit && !has_live_processes(&*self.processes.read().await) {
+                trace!("All processes settled, shutting down");
+                break;
+            }
+
             tokio::select! {
                 biased;
                 _ = cancellation_token.cancelled() => {
@@ -2662,16 +2716,7 @@ impl NativeProcessManager {
                         self.handle_command(command).await;
                     }
                 }
-                _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    let is_empty = self.processes.read().await.is_empty();
-                    if !is_empty {
-                        saw_processes = true;
-                    }
-                    if is_empty && saw_processes {
-                        trace!("All processes exited, shutting down");
-                        break;
-                    }
-                }
+                _ = &mut changed => {}
             }
         }
 
@@ -2870,7 +2915,7 @@ impl ProcessManager for NativeProcessManager {
 
         // Run the event loop (shutdown via cancellation token from tokio-shutdown)
         let token = options.cancellation_token.unwrap_or_default();
-        let result = self.run_foreground(token, None).await;
+        let result = self.run_foreground(token, None, OnIdle::Linger).await;
 
         // Clean up PID file
         let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;
@@ -2973,6 +3018,39 @@ mod tests {
 
         // Clean up
         let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn external_supervisor_runs_once_and_returns_child_failure() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let config = ProcessConfig {
+            name: "externally-supervised".to_string(),
+            exec: "exit 7".to_string(),
+            supervisor: Supervisor::External,
+            // The external manager owns restart policy, so this must be ignored.
+            restart: crate::config::RestartConfig {
+                on: RestartPolicy::Always,
+                max: Some(5),
+                window: None,
+            },
+            ..Default::default()
+        };
+
+        manager.start_command(&config, None).await.unwrap();
+        wait_for_manager_phase(&manager, &config.name, ProcessPhase::Exited).await;
+
+        let status = manager.job_state(&config.name).await.unwrap();
+        assert!(status.has_failed());
+        assert_eq!(status.restart_count, 0);
+
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            manager.run_foreground(CancellationToken::new(), None, OnIdle::Exit),
+        )
+        .await
+        .expect("externally supervised manager should exit after its child settles")
+        .unwrap();
     }
 
     fn test_config(name: &str) -> ProcessConfig {

@@ -6,6 +6,7 @@
 
 - Fixed `devenv mcp` ignoring termination signals. A single SIGTERM or SIGINT now shuts the server down immediately, without waiting for further input on stdin; previously it kept running until it was killed forcefully or its client closed stdin ([#3065](https://github.com/cachix/devenv/issues/3065)).
 - Fixed `devenv mcp` ignoring most of the session's configuration; it previously fell back to default Nix, cache, and shell settings for everything except inputs and imports.
+- Fixed processes launched by external managers such as process-compose losing their stdin and PTY through the `devenv-tasks` wrapper. External managers now own process grouping, stdio, readiness, and restart policy; the wrapper exits with the child's success or failure instead of remaining falsely reported as running ([#2879](https://github.com/cachix/devenv/issues/2879)).
 
 ## 2.2.1 (2026-08-02)
 

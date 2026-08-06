@@ -12,7 +12,7 @@ use tracing::{debug, info, trace, warn};
 use watchexec_supervisor::job::CommandState;
 use watchexec_supervisor::{ProcessEnd, Signal};
 
-use crate::config::ListenKind;
+use crate::config::{ListenKind, Supervisor};
 use crate::manager::ProcessResources;
 use crate::supervisor_state::{
     Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
@@ -45,6 +45,43 @@ pub fn spawn_supervisor(
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
     let name = config.name.clone();
+
+    if config.supervisor == Supervisor::External {
+        return tokio::spawn(async move {
+            tokio::select! {
+                biased;
+                _ = shutdown.cancelled() => return,
+                _ = job.to_wait() => {}
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            job.run_async(move |ctx| {
+                let status = match ctx.current {
+                    CommandState::Finished { status, .. } => {
+                        if matches!(status, ProcessEnd::Success) {
+                            ExitStatus::Success
+                        } else {
+                            ExitStatus::Failure
+                        }
+                    }
+                    _ => ExitStatus::Failure,
+                };
+                Box::new(async move {
+                    let _ = tx.send(status);
+                })
+            })
+            .await;
+            let exit_status = rx.await.unwrap_or(ExitStatus::Failure);
+
+            let _ = status_tx.send(JobStatus {
+                phase: SupervisorPhase::Exited,
+                restart_count: 0,
+                exit_status: Some(exit_status),
+            });
+            activity.set_status(ProcessStatus::Exited);
+            trace!("Externally supervised process {} exited", name);
+        });
+    }
 
     // Probe timing from ready config
     let initial_delay = Duration::from_secs(config.ready.as_ref().map_or(0, |r| r.initial_delay));

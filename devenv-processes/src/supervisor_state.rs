@@ -75,6 +75,8 @@ impl RestartTrigger {
 pub struct JobStatus {
     pub phase: SupervisorPhase,
     pub restart_count: usize,
+    /// Exit result of the most recently settled child, if any.
+    pub exit_status: Option<ExitStatus>,
 }
 
 impl JobStatus {
@@ -84,6 +86,10 @@ impl JobStatus {
 
     pub fn is_gave_up(&self) -> bool {
         self.phase == SupervisorPhase::GaveUp
+    }
+
+    pub fn has_failed(&self) -> bool {
+        self.is_gave_up() || self.exit_status == Some(ExitStatus::Failure)
     }
 }
 
@@ -104,6 +110,7 @@ pub struct SupervisorState {
     watchdog_deadline: Option<Instant>,
     startup_deadline: Option<Instant>,
     phase: SupervisorPhase,
+    exit_status: Option<ExitStatus>,
 
     // Config (immutable after construction)
     watchdog_timeout: Option<Duration>,
@@ -140,6 +147,7 @@ impl SupervisorState {
             watchdog_deadline: None,
             startup_deadline: startup_timeout.map(|d: Duration| now + d),
             phase: SupervisorPhase::Starting,
+            exit_status: None,
             watchdog_timeout,
             watchdog_require_ready,
             restart_policy: config.restart.on,
@@ -190,6 +198,7 @@ impl SupervisorState {
                 Action::None
             }
             Event::ProcessExit { status } => {
+                self.exit_status = Some(status);
                 let should_restart = match self.restart_policy {
                     RestartPolicy::Never => false,
                     RestartPolicy::Always => true,
@@ -208,6 +217,7 @@ impl SupervisorState {
     /// Called after a restart completes — single place to reset state.
     pub fn on_restart_complete(&mut self, now: Instant) {
         self.restart_count += 1;
+        self.exit_status = None;
         self.watchdog_armed = false;
         self.watchdog_deadline = None;
         self.phase = SupervisorPhase::Starting;
@@ -247,6 +257,7 @@ impl SupervisorState {
         JobStatus {
             phase: self.phase,
             restart_count: self.restart_count,
+            exit_status: self.exit_status,
         }
     }
 

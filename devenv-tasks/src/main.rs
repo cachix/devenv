@@ -1,6 +1,6 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use devenv_core::VerbosityLevel;
-use devenv_processes::get_process_runtime_dir;
+use devenv_processes::{Supervisor, get_process_runtime_dir};
 use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, is_tty};
 use std::{env, fmt::Display, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
@@ -38,10 +38,33 @@ enum Command {
 
         #[clap(
             long,
-            help = "Exclude non-root process tasks from the scheduled subgraph (used when process-compose manages process ordering)"
+            value_enum,
+            default_value_t = SupervisorArg::Native,
+            help = "Who owns process lifecycle and stdio. External managers run each process once and preserve the invoking manager's process group and descriptors."
+        )]
+        supervisor: SupervisorArg,
+
+        #[clap(
+            long,
+            help = "Exclude non-root process tasks from the scheduled subgraph. Implied by --supervisor external; retained for backwards compatibility."
         )]
         ignore_process_deps: bool,
     },
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum SupervisorArg {
+    Native,
+    External,
+}
+
+impl From<SupervisorArg> for Supervisor {
+    fn from(value: SupervisorArg) -> Self {
+        match value {
+            SupervisorArg::Native => Supervisor::Native,
+            SupervisorArg::External => Supervisor::External,
+        }
+    }
 }
 
 type Result<T> = std::result::Result<T, TaskError>;
@@ -152,8 +175,11 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             task_file,
             cache_dir,
             runtime_dir,
+            supervisor,
             ignore_process_deps,
         } => {
+            let supervisor = Supervisor::from(supervisor);
+            let ignore_process_deps = ignore_process_deps || supervisor == Supervisor::External;
             let mut tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
 
             // If --show-output flag is present, enable output for all tasks
@@ -180,6 +206,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 env: std::env::vars().collect(),
                 bash: String::new(),
                 ignore_process_deps,
+                supervisor,
             };
 
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))

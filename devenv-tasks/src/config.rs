@@ -1,7 +1,7 @@
 use crate::SudoContext;
 use crate::error::Error;
 use crate::types::{DependencyKind, DependencySpec, TaskType};
-use devenv_processes::ProcessConfig;
+use devenv_processes::{ProcessConfig, Supervisor};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -73,6 +73,10 @@ pub struct Config {
     /// via depends_on while devenv-tasks handles non-process dependencies (migrations, etc).
     #[serde(default)]
     pub ignore_process_deps: bool,
+    /// Whether devenv or the invoking process manager owns process lifecycle,
+    /// process grouping, and stdio.
+    #[serde(default)]
+    pub supervisor: Supervisor,
 }
 
 impl TryFrom<serde_json::Value> for Config {

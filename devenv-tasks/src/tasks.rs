@@ -119,6 +119,7 @@ impl TasksBuilder {
             bash: self.config.bash,
             refresh_task_cache: self.refresh_task_cache,
             ignore_process_deps: self.config.ignore_process_deps,
+            supervisor: self.config.supervisor,
             task_index_by_name: HashMap::new(),
             start_with_deps_lock: Mutex::new(()),
             scheduled_task_indices: Mutex::new(HashSet::new()),
@@ -171,6 +172,8 @@ pub struct Tasks {
     pub(crate) refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
     pub(crate) ignore_process_deps: bool,
+    /// Who owns lifecycle policy, process grouping, and stdio.
+    pub(crate) supervisor: devenv_processes::Supervisor,
     /// Full task name -> graph node index. Covers every configured task:
     /// `schedule()` narrows what runs (`tasks_order`) but keeps the full graph,
     /// so a process not brought up by this run is still addressable here and can
@@ -261,7 +264,18 @@ impl Tasks {
                         Some(ProcessPhase::NotStarted | ProcessPhase::Stopped) => {
                             status.skipped += 1
                         }
-                        Some(ProcessPhase::Exited) => status.succeeded += 1,
+                        Some(ProcessPhase::Exited) => {
+                            if self
+                                .process_manager
+                                .job_state(pname)
+                                .await
+                                .is_some_and(|state| state.has_failed())
+                            {
+                                status.failed += 1;
+                            } else {
+                                status.succeeded += 1;
+                            }
+                        }
                         Some(ProcessPhase::GaveUp) => status.failed += 1,
                         Some(
                             ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready,
@@ -762,6 +776,7 @@ impl Tasks {
                 let ts = self.graph[index].read().await;
                 match ts.build_process_config(&self.env, &self.bash) {
                     Ok(mut config) => {
+                        config.supervisor = self.supervisor;
                         config.start.enable = true;
                         config
                     }
@@ -1403,6 +1418,7 @@ impl Tasks {
             }
             match ts.build_process_config(&self.env, &self.bash) {
                 Ok(mut config) => {
+                    config.supervisor = self.supervisor;
                     has_process_tasks = true;
                     if scheduled.contains(&index) {
                         self.process_manager
@@ -1999,6 +2015,7 @@ mod schedule_tests {
             env: HashMap::new(),
             bash: String::new(),
             ignore_process_deps,
+            supervisor: devenv_processes::Supervisor::Native,
         };
 
         let shutdown = tokio_shutdown::Shutdown::new();
