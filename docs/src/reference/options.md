@@ -1501,7 +1501,7 @@ Whether Claude should use this sub-agent automatically
 
 
 *Type:*
-null or boolean
+boolean
 
 
 
