@@ -209,6 +209,10 @@ done
 # The sync marker appearing in alpha's log pane proves the process row is
 # rendered before any key is sent; the downs overshoot to the clamped bottom
 # row (alpha, always last), and the process-specific footer confirms selection.
+# After restart, a live PID/port is not sufficient: Ctrl-X is accepted only
+# once the attach TUI has consumed the daemon's Ready status. A fresh log
+# marker followed by a new ready render proves the model will accept Ctrl-X.
+# Likewise, the stopped label proves it will accept the second Ctrl-R.
 set +e
 devenv-run-tests pty attached-commands.typescript "devenv processes attach" >/dev/null <<EOF
 expect:Attached to the running process manager
@@ -220,13 +224,17 @@ expect:(re)start process
 send:\022
 run:sh .wait-process.sh changed $PORT_ALPHA $ALPHA_PID
 run:sh .process-pid.sh $PORT_ALPHA > e06-restarted-pid.txt
-run:curl -sf -o /dev/null http://127.0.0.1:$PORT_ALPHA/
+run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/e06-first-ready-marker
+expect:e06-first-ready-marker
+expect:ready
 send:\030
 run:sh .wait-process.sh absent $PORT_ALPHA
+expect:stopped
 run:! curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:$PORT_ALPHA/
 send:\022
 run:sh .wait-process.sh changed $PORT_ALPHA "\$(cat e06-restarted-pid.txt)"
-run:curl -sf -o /dev/null http://127.0.0.1:$PORT_ALPHA/
+run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/e06-second-ready-marker
+expect:e06-second-ready-marker
 send:\003
 expect:Detach
 send:\003

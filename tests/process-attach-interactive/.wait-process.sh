@@ -34,4 +34,8 @@ for _ in $(seq 1 125); do
 done
 
 echo "timed out waiting for process on port $port to become $mode (old PID: ${old_pid:-none})" >&2
+ps -eo pid=,ppid=,stat=,comm=,args= |
+  awk -v needle="python3 -u -m http.server $port" '
+    $4 !~ /(^|\/)awk$/ && index($0, needle) { print "still matched: " $0 > "/dev/stderr" }
+  '
 exit 1
