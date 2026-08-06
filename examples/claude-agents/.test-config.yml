@@ -1,2 +1,2 @@
-use_shell: false
+use_shell: true
 use_tmp_dir: false
