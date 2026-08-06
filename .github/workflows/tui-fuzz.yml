@@ -27,7 +27,9 @@ permissions:
   contents: read
 
 env:
-  BOMBADIL_VERSION: v0.6.0
+  # Post-v0.6.1: includes configurable PTY quiescence and generated action
+  # templates. Pin until those terminal changes are included in a release.
+  BOMBADIL_REV: ddf7942fa502ca65b9f7b2d605fedf649b2528c2
 
 jobs:
   fuzz:
@@ -68,22 +70,52 @@ jobs:
           echo "Built tui-replay at $bin"
           echo "bin=$bin" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch bombadil ${{ env.BOMBADIL_VERSION }}
+      - name: Build deterministic PTY driver
+        id: build-pty-driver
         run: |
-          curl -fsSL -o bombadil \
-            "https://github.com/antithesishq/bombadil/releases/download/${BOMBADIL_VERSION}/bombadil-x86_64-linux"
-          chmod +x bombadil
-          ./bombadil --version
+          bin=$("${{ steps.build-devenv.outputs.path }}/bin/devenv" shell -- \
+            cargo build -p devenv-run-tests --bin devenv-run-tests \
+              --message-format=json -q \
+            | jq -rR 'fromjson? | select(.reason == "compiler-artifact" and .target.name == "devenv-run-tests") | .executable // empty' \
+            | tail -1)
+          echo "Built PTY driver at $bin"
+          echo "bin=$bin" >> "$GITHUB_OUTPUT"
+
+      # Run the stable regression first. A failure here is actionable without
+      # interpreting a random trace and protects the target Bombadil relies on.
+      - name: Run deterministic replay corpus
+        run: |
+          bash devenv-tui/tests/replay-pty.sh \
+            "${{ steps.build-pty-driver.outputs.bin }}" \
+            "${{ steps.build-tui-replay.outputs.bin }}"
+
+      - name: Build pinned bombadil
+        id: build-bombadil
+        run: |
+          path=$(nix build --accept-flake-config --no-link --print-out-paths \
+            "github:antithesishq/bombadil/${BOMBADIL_REV}#default")
+          echo "Built bombadil ${BOMBADIL_REV} at $path"
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+          "$path/bin/bombadil" --version
 
       - name: Run terminal fuzz
         run: |
-          ./bombadil terminal test \
+          fixture="$PWD/devenv-tui/replays/processes.jsonl"
+          set +e
+          "${{ steps.build-bombadil.outputs.path }}/bin/bombadil" terminal test \
             --time-limit "${{ github.event.inputs.time-limit || '120s' }}" \
             --exit-on-violation \
+            --quiescence-timeout-ms 50 \
             --scrollback-lines-max 100 \
             --specification devenv-tui/bombadil/devenv-tui.spec.ts \
             --output-path bombadil-out \
-            -- "${{ steps.build-tui-replay.outputs.bin }}" --hold --loop 0 devenv-tui/replays/quick-test
+            -- "${{ steps.build-tui-replay.outputs.bin }}" \
+              --hold --attached --reactive "$fixture" \
+            > bombadil.log 2>&1
+          status=$?
+          set -e
+          tail -n 200 bombadil.log
+          exit "$status"
 
       - name: Compress reproducer
         if: failure()
@@ -97,6 +129,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: bombadil-reproducer
-          path: bombadil-reproducer.tar.zst
+          path: |
+            bombadil-reproducer.tar.zst
+            bombadil.log
           if-no-files-found: ignore
           retention-days: 14

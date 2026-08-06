@@ -71,25 +71,47 @@ cargo run --bin tui-replay trace.jsonl
 cargo run --bin tui-replay <(zstd -dc trace.jsonl.zst)
 ```
 
-#### Long lived mode (for fuzzing)
+#### Reactive long-lived mode (for PTY tests and fuzzing)
 
-`--hold` keeps the TUI running after the trace drains, so the data stream is
-deterministic while the program stays live for input. `--loop N` replays the
-trace N times (0 = forever) for continuous data churn. Together they make a
-stable target for a terminal fuzzer such as `bombadil terminal test`:
+`tui-replay` validates the complete JSONL trace before taking over the terminal
+and rejects traces with no activity events. `--hold` keeps the TUI running after
+the trace drains. `--reactive` connects TUI process commands to a deterministic
+backend derived from the trace's process names and IDs; `--attached` enables the
+real attach-mode interrupt prompt. Together these flags make a stable system
+under test rather than a static recording:
 
 ```bash
 cargo build -p devenv-tui --features deterministic-tui --bin tui-replay
-bombadil terminal test --time-limit 20s --output-path /tmp/bombadil-out \
-  -- ./target/debug/tui-replay --hold --loop 0 devenv-tui/replays/quick-test
+bombadil terminal test --time-limit 20s --quiescence-timeout-ms 50 \
+  --output-path /tmp/bombadil-out \
+  --specification devenv-tui/bombadil/devenv-tui.spec.ts \
+  -- ./target/debug/tui-replay --hold --attached --reactive \
+    devenv-tui/replays/processes.jsonl
 ```
 
-The fuzzer spawns the program in its own PTY and injects random input; the
-process exits only on Ctrl+C or when `--time-limit` is reached. Reproduce a
-failing run with `bombadil terminal test --reproduce /tmp/bombadil-out -- ...`.
+The trace is replayed once; repeating it would overwrite process states produced
+by input and make the target non-causal. The fuzzer owns the PTY and injects
+random input until its time limit. Reproduce a failing run with
+`bombadil terminal test --reproduce /tmp/bombadil-out -- ...`.
 
-Note: the trace at `--output-path` records the full terminal grid per sampled
-state, so it grows fast (multiple GB for a 20s run) — delete it after triage.
+For a deterministic regression of the same target, including resize, restart,
+stop, and interrupt-prompt behavior, run:
+
+```bash
+cargo build -p devenv-run-tests -p devenv-tui \
+  --features devenv-tui/deterministic-tui
+bash devenv-tui/tests/replay-pty.sh \
+  target/debug/devenv-run-tests target/debug/tui-replay
+```
+
+`--event-log PATH` writes and flushes semantic process commands and transitions
+as JSONL. The PTY regression uses it to distinguish a real command round trip
+from stale ANSI text in terminal history.
+
+Note: use the pinned post-v0.6.1 Bombadil revision documented in
+`bombadil/README.md`. Released v0.6.1 lacks PTY quiescence. The trace records
+the full terminal grid per sampled state and grows quickly, so delete it after
+triage.
 
 ## Views
 
