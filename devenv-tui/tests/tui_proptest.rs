@@ -311,7 +311,15 @@ fn apply_op(model: &mut ActivityModel, ui: &mut UiState, op: Op) {
 /// `deterministic-tui`). Panicking here fails the property — that is the point.
 fn render(model: &ActivityModel, ui: &UiState) -> String {
     let width = ui.terminal_size.width.max(1) as usize;
-    let mut element: AnyElement = view(model, ui, RenderContext::Normal, None, false).into();
+    let child: AnyElement = view(model, ui, RenderContext::Normal, None, false).into();
+    // Production mounts the TUI below an explicitly sized terminal viewport.
+    // Mirror that boundary so percentage widths and overflow are resolved by
+    // iocraft instead of laying out an unconstrained tree at intrinsic width.
+    let mut element = element! {
+        View(width: width as u32) {
+            #(vec![child])
+        }
+    };
     element.render(Some(width)).to_string()
 }
 
@@ -381,25 +389,28 @@ fn navbar_fits_standard_widths() {
     }
 }
 
-/// Regression for the summary compaction boundary. Three activity groups plus
-/// the show-stopped hint need the compact summary at exactly 68 columns.
+/// A mixed summary plus the show-stopped hint must stay within the flex row at
+/// every usable width. The framework clips lower-priority summary details while
+/// preserving the controls on the right.
 #[test]
-fn navbar_fits_summary_compaction_boundary() {
+fn navbar_fits_mixed_summary_widths() {
     let mut model = ActivityModel::new();
-    model.apply_activity_event(task_hierarchy_single(0, "task", None, false, false));
     model.apply_activity_event(process_start(1, "process"));
     model.apply_activity_event(build_start_with(2, "build", None));
+    model.apply_activity_event(process_complete(1, ActivityOutcome::Success));
+    model.apply_activity_event(fetch_start(3, FetchKind::Download, "download"));
 
-    let mut ui = UiState::new();
-    ui.toggle_hide_stopped_processes();
-    ui.set_terminal_size(68, 1);
+    for width in 40u16..=120 {
+        let mut ui = UiState::new();
+        ui.set_terminal_size(width, 1);
 
-    let output = render(&model, &ui);
-    let widest = max_line_width(&output);
-    assert!(
-        widest <= 68,
-        "nav bar width {widest} exceeds terminal width 68:\n{output}"
-    );
+        let output = render(&model, &ui);
+        let widest = max_line_width(&output);
+        assert!(
+            widest <= width as usize,
+            "nav bar width {widest} exceeds terminal width {width}:\n{output}"
+        );
+    }
 }
 
 proptest! {

@@ -1375,31 +1375,6 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         }
     }
 
-    // Both halves of a flex row have intrinsic widths: asking them to shrink
-    // does not clip the Text children in iocraft's string renderer (and a real
-    // terminal would wrap them). Give the row a bounded information policy:
-    // selection mode prioritizes actionable keys; otherwise a mixed workload
-    // gets a compact aggregate rather than five unbounded category summaries.
-    let summary_category_count = usize::from(
-        summary.active_builds > 0 || summary.completed_builds > 0 || summary.failed_builds > 0,
-    ) + usize::from(
-        summary.active_downloads > 0 || summary.completed_downloads > 0,
-    ) + usize::from(
-        summary.active_queries > 0 || summary.completed_queries > 0,
-    ) + usize::from(
-        summary.running_tasks > 0 || summary.completed_tasks > 0 || summary.failed_tasks > 0,
-    ) + usize::from(summary.total_processes > 0);
-    if has_selection {
-        children.clear();
-    } else if summary_category_count > 1
-        && (terminal_width as usize) <= summary_category_count * 20 + 8
-    {
-        children.clear();
-        children.push(
-            element!(Text(content: format!("{summary_category_count} activity groups"))).into_any(),
-        );
-    }
-
     if has_selection {
         if terminal_width < 60 {
             return element!(View(

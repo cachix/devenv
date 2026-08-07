@@ -37,8 +37,8 @@ fixture="$repo_root/devenv-tui/replays/processes.jsonl"
 command="\"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\" \"$fixture\""
 
 # The selected process and its actions must survive the narrow-to-wide resize.
-# Avoid standalone legacy Esc in this byte-level harness: without a terminal
-# emulator replying to the keyboard-protocol query it remains ambiguous until
+# Avoid standalone Esc in this byte-level harness: the emulated terminal reports
+# no keyboard-protocol enhancement, so legacy decoding keeps Esc ambiguous until
 # another input byte arrives.
 "$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
 expect:api

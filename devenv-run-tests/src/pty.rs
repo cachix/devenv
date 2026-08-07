@@ -26,7 +26,7 @@ use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::ExitStatus;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -84,10 +84,11 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
         }
     });
 
-    let mut writer = pty
+    let writer = pty
         .master
         .take_writer()
         .map_err(|e| miette!("failed to open pty writer: {e}"))?;
+    let writer = Arc::new(Mutex::new(writer));
     let mut reader = pty
         .master
         .try_clone_reader()
@@ -96,7 +97,18 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to create {}", transcript.display()))?;
     let (chunk_tx, chunk_rx) = mpsc::channel::<Vec<u8>>();
+    let terminal_writer = Arc::clone(&writer);
     let reader_thread = thread::spawn(move || {
+        // Crossterm probes for the Kitty keyboard protocol before entering its
+        // event loop. A bare PTY has no terminal emulator to answer it, which
+        // leaves startup dependent on a timeout and can race scripted input.
+        // Reply only to the primary-device-attributes query: this explicitly
+        // selects legacy key decoding, matching a terminal without keyboard
+        // enhancement support.
+        const KEYBOARD_PROBE: &[u8] = b"\x1b[?u\x1b[c";
+        const PRIMARY_DEVICE_ATTRIBUTES: &[u8] = b"\x1b[?1;2c";
+        let mut probe_output = Vec::new();
+        let mut answered_probe = false;
         let mut buf = [0u8; 4096];
         loop {
             // Linux raises EIO once the slave side is closed; macOS returns EOF.
@@ -105,6 +117,27 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
                 Ok(n) => {
                     if out.write_all(&buf[..n]).is_err() {
                         break;
+                    }
+                    if !answered_probe {
+                        probe_output.extend_from_slice(&buf[..n]);
+                        if find(&probe_output, KEYBOARD_PROBE).is_some() {
+                            let Ok(mut writer) = terminal_writer.lock() else {
+                                break;
+                            };
+                            if writer.write_all(PRIMARY_DEVICE_ATTRIBUTES).is_err()
+                                || writer.flush().is_err()
+                            {
+                                break;
+                            }
+                            answered_probe = true;
+                        } else {
+                            // Keep only enough output to recognize a probe split
+                            // across two reads.
+                            let keep = KEYBOARD_PROBE.len().saturating_sub(1);
+                            if probe_output.len() > keep {
+                                probe_output.drain(..probe_output.len() - keep);
+                            }
+                        }
                     }
                     let _ = chunk_tx.send(buf[..n].to_vec());
                 }
@@ -150,6 +183,9 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
                 }
             }
         } else if let Some(bytes) = line.strip_prefix("send:") {
+            let mut writer = writer
+                .lock()
+                .map_err(|_| miette!("PTY writer lock poisoned"))?;
             writer.write_all(&decode_send(bytes)?).into_diagnostic()?;
             writer.flush().into_diagnostic()?;
         } else if let Some(size) = line.strip_prefix("resize:") {
