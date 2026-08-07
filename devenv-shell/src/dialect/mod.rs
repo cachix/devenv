@@ -392,6 +392,11 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
 
         let script = format!("source {devenv_fish:?}\ncd /\necho SHOULD_NOT_REACH\n");
         let output = Command::new("fish")
+            // Keep the test independent of user, system, and vendor Fish
+            // configuration. A separately loaded devenv hook consumes
+            // `_DEVENV_HOOK_DIR` before this generated rcfile is sourced, and
+            // its prompt handler does not run under `fish -c`.
+            .arg("--no-config")
             .env("DEVENV_ROOT", &root)
             .env("_DEVENV_HOOK_DIR", &root)
             .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())

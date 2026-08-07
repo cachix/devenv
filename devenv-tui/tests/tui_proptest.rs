@@ -381,6 +381,27 @@ fn navbar_fits_standard_widths() {
     }
 }
 
+/// Regression for the summary compaction boundary. Three activity groups plus
+/// the show-stopped hint need the compact summary at exactly 68 columns.
+#[test]
+fn navbar_fits_summary_compaction_boundary() {
+    let mut model = ActivityModel::new();
+    model.apply_activity_event(task_hierarchy_single(0, "task", None, false, false));
+    model.apply_activity_event(process_start(1, "process"));
+    model.apply_activity_event(build_start_with(2, "build", None));
+
+    let mut ui = UiState::new();
+    ui.toggle_hide_stopped_processes();
+    ui.set_terminal_size(68, 1);
+
+    let output = render(&model, &ui);
+    let widest = max_line_width(&output);
+    assert!(
+        widest <= 68,
+        "nav bar width {widest} exceeds terminal width 68:\n{output}"
+    );
+}
+
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: 128,

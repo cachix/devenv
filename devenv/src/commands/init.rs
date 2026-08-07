@@ -189,14 +189,15 @@ mod tests {
         fs::write(&dest, "existing\n").unwrap();
 
         let err = confirm_overwrite_with(&dest, "from template\n", || false).unwrap_err();
-        let rendered = format!("{err:?}");
+        let message = err.to_string();
+        let help = err.help().map(|help| help.to_string()).unwrap_or_default();
         assert!(
-            rendered.contains("devenv.nix"),
-            "error should name the file: {rendered}"
+            message.contains("devenv.nix"),
+            "error should name the file: {message}"
         );
         assert!(
-            rendered.contains("interactive terminal"),
-            "error should say how to proceed: {rendered}"
+            help.contains("interactive terminal"),
+            "error should say how to proceed: {help}"
         );
         assert_eq!(fs::read_to_string(&dest).unwrap(), "existing\n");
     }

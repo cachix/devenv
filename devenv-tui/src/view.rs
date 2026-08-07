@@ -1392,7 +1392,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     if has_selection {
         children.clear();
     } else if summary_category_count > 1
-        && (terminal_width as usize) < summary_category_count * 20 + 8
+        && (terminal_width as usize) <= summary_category_count * 20 + 8
     {
         children.clear();
         children.push(
