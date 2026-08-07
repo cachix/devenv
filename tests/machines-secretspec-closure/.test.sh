@@ -1,6 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# A deterministic root-authentication failure must be reported before disko
+# can build, copy, or execute its destructive script.
+mkdir -p mock-bin
+cat >mock-bin/ssh <<'EOF'
+#!/usr/bin/env bash
+touch "$SSH_CALLED"
+exit 97
+EOF
+chmod +x mock-bin/ssh
+if env SSH_CALLED="$PWD/ssh-called" PATH="$PWD/mock-bin:$PATH" \
+  devenv machines install --phases disko,install unauthenticated 2>unauthenticated.err; then
+  echo "expected unauthenticated install to be rejected"
+  exit 1
+fi
+grep -q "refusing to install" unauthenticated.err
+if [[ -e ssh-called ]]; then
+  echo "unauthenticated install reached SSH before its root-authentication check"
+  exit 1
+fi
+
 build_json=$(devenv build machines.resolver.build.nixos)
 toplevel=$(jq -er '."machines.resolver.build.nixos"' <<<"$build_json")
 launcher="$toplevel/sw/bin/devenv-machines-secretspec"

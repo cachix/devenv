@@ -297,6 +297,8 @@ A single entry can carry more than one role. Both modules apply to the same host
 
 During `deploy`, roles activate in a fixed order: NixOS (or nix-darwin) first, then home-manager. home-manager depends on the user existing on the target, so running it after the system switch is the only order that works for a fresh entry.
 
+When the shared SSH target logs in as `root` or as a different administrator, devenv runs the home-manager activation as `home.username` with `HOME` set to `home.homeDirectory`. It uses `runuser` for root sessions and falls back to passwordless `sudo` for administrator sessions.
+
 The two roles are not transactional: a partial success is possible and is reported as a failure. If NixOS activation fails, home-manager is not attempted and the entry is reported as failed. If NixOS succeeds but home-manager fails, the NixOS switch stays applied, the entry is still reported as failed, and bulk deploys exit nonzero. Re running `deploy` is safe: NixOS activation is idempotent, so only home-manager will do work on the retry.
 
 A couple of footguns to know about when combining roles on one entry:

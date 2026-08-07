@@ -190,19 +190,61 @@ let
         modules = [ machine.nix-darwin ];
       }).config.system.build.toplevel;
 
-  # Build the home-manager activation package for a machine's `home-manager` module.
+  # Build the home-manager activation package for a machine's `home-manager`
+  # module. A machine has one shared SSH target, which is commonly root for a
+  # combined NixOS + home-manager deployment. Wrap the upstream activation so
+  # it always runs as the configured home-manager user with the matching HOME.
   buildHomeManagerToplevel = machine:
     if homeManager == null then
       throw (outerConfig.lib._mkInputError homeManagerInputArgs)
     else
       let
         machinePkgs = import inputs.nixpkgs { inherit (machine) system; };
+        evaluated = homeManager.lib.homeManagerConfiguration {
+          pkgs = machinePkgs;
+          extraSpecialArgs = { inherit inputs self; };
+          modules = [ machine.home-manager ];
+        };
+        activationPackage = evaluated.activationPackage;
+        homeUser = evaluated.config.home.username;
+        homeDirectory = toString evaluated.config.home.homeDirectory;
+        activationDriver = machinePkgs.writeShellScript "devenv-home-manager-activate" ''
+          set -eu
+
+          user=${lib.escapeShellArg homeUser}
+          home=${lib.escapeShellArg homeDirectory}
+          activate=${lib.escapeShellArg "${activationPackage}/activate"}
+
+          if [ "$(id -un)" = "$user" ]; then
+            exec env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+          fi
+
+          if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
+            exec runuser -u "$user" -- \
+              env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+          fi
+
+          if command -v sudo >/dev/null 2>&1; then
+            exec sudo -H -u "$user" -- \
+              env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+          fi
+
+          echo "home-manager activation must run as $user, but the current user is $(id -un) and neither runuser nor sudo is available" >&2
+          exit 1
+        '';
       in
-      (homeManager.lib.homeManagerConfiguration {
-        pkgs = machinePkgs;
-        extraSpecialArgs = { inherit inputs self; };
-        modules = [ machine.home-manager ];
-      }).activationPackage;
+      machinePkgs.symlinkJoin {
+        name = "devenv-home-manager-generation";
+        paths = [ activationPackage ];
+        postBuild = ''
+          rm -f "$out/activate"
+          ln -s ${activationDriver} "$out/activate"
+          if [ -d "$out/bin" ]; then
+            rm -f "$out/bin/home-manager-generation"
+            ln -s ${activationDriver} "$out/bin/home-manager-generation"
+          fi
+        '';
+      };
 
   targetOptions = lib.types.submodule {
     options = {

@@ -29,4 +29,14 @@
       ];
     };
   };
+
+  machines.unauthenticated = {
+    system = pkgs.stdenv.hostPlatform.system;
+    target.host = "root@unauthenticated.example.com";
+    hardware.facter = null;
+    nixos = {
+      system.stateVersion = "24.11";
+      networking.hostName = "unauthenticated-test";
+    };
+  };
 }

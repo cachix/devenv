@@ -46,6 +46,7 @@ const SENSITIVE_INSTALL_SSH_OPTS: &[&str] = &[
 /// resolution. It execs devenv's bundled SecretSpec by exact store path,
 /// avoiding collisions with other packages that provide `bin/secretspec`.
 const TARGET_SECRETSPEC_LAUNCHER: &str = "devenv-machines-secretspec";
+const NIXOS_FACTER_COMMAND: &str = "nixos-facter";
 
 /// Workstation-side SecretSpec selectors that must not leak into target
 /// resolution through an OpenSSH `SendEnv` rule. Removing them from the local
@@ -60,6 +61,34 @@ const TARGET_SECRETSPEC_LOCAL_ENV: &[&str] = &[
 
 type BootstrapValues = HashMap<String, SecretSlice<u8>>;
 type TargetBootstrapManifests = HashMap<String, SecretSlice<u8>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RebootSshOutcome {
+    Accepted,
+    VerifyTransition,
+    Rejected,
+}
+
+fn classify_reboot_ssh_status(status: &std::process::ExitStatus) -> RebootSshOutcome {
+    if status.success() {
+        RebootSshOutcome::Accepted
+    } else if status.code() == Some(255) {
+        RebootSshOutcome::VerifyTransition
+    } else {
+        RebootSshOutcome::Rejected
+    }
+}
+
+fn boot_change_observed(
+    previous_boot_id: &str,
+    observed_boot_id: Option<&str>,
+    accept_unreachable: bool,
+) -> bool {
+    match observed_boot_id {
+        Some(boot_id) => boot_id != previous_boot_id,
+        None => accept_unreachable,
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -307,6 +336,35 @@ fn sensitive_install_ssh_opts(user_opts: &[String]) -> Vec<String> {
         .collect();
     v.extend(user_opts.iter().cloned());
     v
+}
+
+/// Prevent workstation-side SecretSpec selectors from being forwarded by an
+/// OpenSSH `SendEnv` rule. Target-side resolution must use only explicit
+/// per-machine overrides or configuration native to the target.
+fn clear_target_secretspec_local_env(cmd: &mut process::Command) {
+    for &name in TARGET_SECRETSPEC_LOCAL_ENV {
+        cmd.env_remove(name);
+    }
+}
+
+/// Reject repeated machine names before any install preparation or target
+/// interaction. Running two destructive pipelines for the same machine is
+/// never meaningful, even when concurrency is explicitly limited to one.
+fn validate_unique_install_names(names: &[String]) -> Result<()> {
+    let mut seen = HashSet::new();
+    let mut duplicates = Vec::new();
+    for name in names {
+        if !seen.insert(name.as_str()) && !duplicates.iter().any(|item| item == name) {
+            duplicates.push(name.clone());
+        }
+    }
+    if !duplicates.is_empty() {
+        bail!(
+            "Duplicate machine name(s) in install request: {}. Each machine may be named only once.",
+            duplicates.join(", ")
+        );
+    }
+    Ok(())
 }
 
 fn install_transmits_local_files(
@@ -795,6 +853,7 @@ impl Devenv {
         disko_mode: DiskoMode,
         use_machines_as_builders: bool,
     ) -> Result<()> {
+        validate_unique_install_names(names)?;
         let meta = self.load_machines_meta().await?;
 
         // Configure remote builders if requested (same mechanism as deploy).
@@ -1120,6 +1179,27 @@ impl Devenv {
                 .await?;
         }
 
+        // `nixos-install --no-root-password` must not create a system with no
+        // usable root authentication. The check runs after facter because the
+        // evaluated NixOS configuration may consume its freshly written report,
+        // but before encryption keys or disko can touch the target.
+        if phases.contains(&InstallPhase::Install) {
+            let check = self.load_machine_install_check(name).await?;
+            if !check.has_root_auth {
+                bail!(
+                    "machines.{name}: refusing to install. The NixOS config \
+                     declares no authentication for root, and `nixos-install` \
+                     runs with `--no-root-password`, so the target would boot \
+                     locked out. Set one of:\n\
+                     \x20 - users.users.root.openssh.authorizedKeys.keys\n\
+                     \x20 - users.users.root.openssh.authorizedKeys.keyFiles\n\
+                     \x20 - users.users.root.hashedPassword\n\
+                     \x20 - users.users.root.hashedPasswordFile\n\
+                     \x20 - users.users.root.initialHashedPassword"
+                );
+            }
+        }
+
         // Encryption keys are dropped onto the installer BEFORE disko runs
         // so LUKS layouts with `passwordFile` can reference them.
         if phases.contains(&InstallPhase::Disko) && !machine.encryption_keys.is_empty() {
@@ -1141,25 +1221,6 @@ impl Devenv {
             }
             .in_activity(&act)
             .await?;
-        }
-
-        // `nixos-install --no-root-password` must not create a system with no
-        // usable root authentication. Evaluate this only when Install runs.
-        if phases.contains(&InstallPhase::Install) {
-            let check = self.load_machine_install_check(name).await?;
-            if !check.has_root_auth {
-                bail!(
-                    "machines.{name}: refusing to install. The NixOS config \
-                     declares no authentication for root, and `nixos-install` \
-                     runs with `--no-root-password`, so the target would boot \
-                     locked out. Set one of:\n\
-                     \x20 - users.users.root.openssh.authorizedKeys.keys\n\
-                     \x20 - users.users.root.openssh.authorizedKeys.keyFiles\n\
-                     \x20 - users.users.root.hashedPassword\n\
-                     \x20 - users.users.root.hashedPasswordFile\n\
-                     \x20 - users.users.root.initialHashedPassword"
-                );
-            }
         }
 
         // Phase 4: install
@@ -1332,6 +1393,10 @@ impl Devenv {
             }
             None => kexec_url(&machine.system)?,
         };
+        let previous_boot_id = self
+            .ssh_read_boot_id(target, ssh_opts)
+            .await
+            .wrap_err_with(|| format!("Failed to read the pre-kexec boot ID on machines.{name}"))?;
         let url_q = shell_quote(&url);
         let script = format!(
             "set -euo pipefail && \
@@ -1344,9 +1409,10 @@ impl Devenv {
                 format!("kexec failed on machines.{name} — is root SSH enabled and the target reachable?")
             })?;
 
-        // After kexec the target reboots into the NixOS installer. Wait
-        // for SSH to come back. If install.kexec.postSshPort is set, probe
-        // on that port instead of the original.
+        // The upstream nixos-images script schedules kexec several seconds in
+        // the background, so an immediate successful SSH connection can still
+        // be the old OS. Require a different kernel boot ID before treating the
+        // installer as ready. If install.kexec.postSshPort is set, probe there.
         let wait_target = match machine.kexec_post_ssh_port {
             Some(port) => SshTarget {
                 port: Some(port),
@@ -1354,11 +1420,11 @@ impl Devenv {
             },
             None => target.clone(),
         };
-        self.ssh_wait_ready(&wait_target, ssh_opts, 300)
+        self.ssh_wait_for_boot_change(&wait_target, ssh_opts, &previous_boot_id, 300, false)
             .await
             .wrap_err_with(|| {
                 format!(
-                    "Timed out waiting for machines.{name} to come back after kexec. \
+                    "Timed out waiting for machines.{name} to boot the kexec installer. \
                  If the target got a new IP from DHCP, update target.host and re-run."
                 )
             })?;
@@ -1377,7 +1443,7 @@ impl Devenv {
         ssh_opts: &[String],
     ) -> Result<()> {
         let json = self
-            .ssh_run_capture(target, ssh_opts, "nixos-facter --json")
+            .ssh_run_capture(target, ssh_opts, NIXOS_FACTER_COMMAND)
             .await
             .wrap_err_with(|| {
                 format!("nixos-facter failed on machines.{name} — is the NixOS installer running?")
@@ -1585,9 +1651,7 @@ impl Devenv {
             cmd.arg("-p").arg(port.to_string());
         }
         cmd.arg(target.ssh_destination()).arg(&script);
-        for &name in TARGET_SECRETSPEC_LOCAL_ENV {
-            cmd.env_remove(name);
-        }
+        clear_target_secretspec_local_env(&mut cmd);
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
@@ -1653,6 +1717,7 @@ impl Devenv {
             cmd.arg("-p").arg(port.to_string());
         }
         cmd.arg(target.ssh_destination()).arg(&script);
+        clear_target_secretspec_local_env(&mut cmd);
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
@@ -1705,15 +1770,29 @@ impl Devenv {
 
     /// Phase 5: reboot into the installed system.
     async fn install_reboot(&self, target: &SshTarget, ssh_opts: &[String]) -> Result<()> {
-        self.ssh_run_capture(target, ssh_opts, "true")
+        let previous_boot_id = self.ssh_read_boot_id(target, ssh_opts).await.wrap_err(
+            "Cannot reach target to reboot — SSH connection failed before issuing reboot",
+        )?;
+        let status = self.ssh_status(target, ssh_opts, "reboot").await?;
+        match classify_reboot_ssh_status(&status) {
+            RebootSshOutcome::Accepted => return Ok(()),
+            RebootSshOutcome::Rejected => {
+                bail!(
+                    "ssh {} 'reboot' exited with {status}; the target did not accept the reboot command",
+                    target.ssh_destination()
+                );
+            }
+            RebootSshOutcome::VerifyTransition => {}
+        }
+
+        // OpenSSH uses 255 both for an expected connection drop during reboot
+        // and for transport failures. Accept it only if the old boot actually
+        // disappears or a different boot ID becomes visible.
+        self.ssh_wait_for_boot_change(target, ssh_opts, &previous_boot_id, 30, true)
             .await
             .wrap_err(
-                "Cannot reach target to reboot — SSH connection failed before issuing reboot",
-            )?;
-        // The probe above separates a dial failure from the expected
-        // connection drop after issuing reboot.
-        let _ = self.ssh_run(target, ssh_opts, "reboot").await;
-        Ok(())
+                "SSH disconnected while issuing reboot, but the target stayed on the old boot",
+            )
     }
 
     /// Like `ssh_run` but captures stdout into a String.
@@ -1752,41 +1831,80 @@ impl Devenv {
             .wrap_err("ssh stdout was not valid UTF-8")
     }
 
-    /// Poll SSH connectivity until the target responds or the timeout
-    /// expires. Used after kexec to wait for the NixOS installer to boot.
-    async fn ssh_wait_ready(
+    async fn ssh_read_boot_id(
         &self,
         target: &SshTarget,
         user_ssh_opts: &[String],
+    ) -> Result<String> {
+        let output = self
+            .ssh_run_capture(target, user_ssh_opts, "cat /proc/sys/kernel/random/boot_id")
+            .await?;
+        let boot_id = output.trim();
+        if boot_id.is_empty() {
+            bail!(
+                "SSH to {} returned an empty kernel boot ID",
+                target.ssh_destination()
+            );
+        }
+        Ok(boot_id.to_string())
+    }
+
+    /// Probe the kernel boot ID without surfacing transient SSH errors. This is
+    /// used only inside bounded transition polling loops.
+    async fn ssh_probe_boot_id(
+        &self,
+        target: &SshTarget,
+        user_ssh_opts: &[String],
+    ) -> Option<String> {
+        let mut probe_opts = vec!["-o".to_string(), "ConnectTimeout=5".to_string()];
+        probe_opts.extend(user_ssh_opts.iter().cloned());
+        let mut cmd = process::Command::new("ssh");
+        for opt in ssh_opts_argv(&probe_opts) {
+            cmd.arg(opt);
+        }
+        if let Some(port) = target.port() {
+            cmd.arg("-p").arg(port.to_string());
+        }
+        cmd.arg(target.ssh_destination())
+            .arg("cat /proc/sys/kernel/random/boot_id");
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        let output = cmd.output().await.ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let output = String::from_utf8(output.stdout).ok()?;
+        let boot_id = output.trim();
+        (!boot_id.is_empty()).then(|| boot_id.to_string())
+    }
+
+    /// Wait until the target is no longer the kernel boot observed before a
+    /// kexec or reboot command. Kexec requires the replacement boot to be SSH
+    /// ready; reboot may accept the expected interval where SSH is unreachable.
+    async fn ssh_wait_for_boot_change(
+        &self,
+        target: &SshTarget,
+        user_ssh_opts: &[String],
+        previous_boot_id: &str,
         timeout_secs: u64,
+        accept_unreachable: bool,
     ) -> Result<()> {
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
         let probe_interval = std::time::Duration::from_secs(5);
-        // Use a short ConnectTimeout for probes so we don't block the
-        // full interval on an unreachable host.
-        let mut probe_opts = vec!["-o".to_string(), "ConnectTimeout=5".to_string()];
-        probe_opts.extend(user_ssh_opts.iter().cloned());
         loop {
-            let mut cmd = process::Command::new("ssh");
-            for opt in ssh_opts_argv(&probe_opts) {
-                cmd.arg(opt);
-            }
-            if let Some(port) = target.port() {
-                cmd.arg("-p").arg(port.to_string());
-            }
-            cmd.arg(target.ssh_destination()).arg("true");
-            cmd.stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
-            if let Ok(status) = cmd.status().await
-                && status.success()
-            {
+            let observed_boot_id = self.ssh_probe_boot_id(target, user_ssh_opts).await;
+            if boot_change_observed(
+                previous_boot_id,
+                observed_boot_id.as_deref(),
+                accept_unreachable,
+            ) {
                 return Ok(());
             }
             if tokio::time::Instant::now() >= deadline {
                 bail!(
-                    "SSH to {} did not become ready within {timeout_secs}s",
-                    target.ssh_destination()
+                    "SSH to {} remained on kernel boot {previous_boot_id} for {timeout_secs}s",
+                    target.ssh_destination(),
                 );
             }
             tokio::time::sleep(probe_interval).await;
@@ -2134,6 +2252,23 @@ impl Devenv {
         user_ssh_opts: &[String],
         script: &str,
     ) -> Result<()> {
+        let status = self.ssh_status(target, user_ssh_opts, script).await?;
+        if !status.success() {
+            bail!(
+                "ssh {} '{}' exited with {status}",
+                target.ssh_destination(),
+                script
+            );
+        }
+        Ok(())
+    }
+
+    async fn ssh_status(
+        &self,
+        target: &SshTarget,
+        user_ssh_opts: &[String],
+        script: &str,
+    ) -> Result<std::process::ExitStatus> {
         let mut cmd = process::Command::new("ssh");
         for opt in ssh_opts_argv(user_ssh_opts) {
             cmd.arg(opt);
@@ -2150,14 +2285,7 @@ impl Devenv {
             .await
             .into_diagnostic()
             .wrap_err("Failed to spawn ssh")?;
-        if !status.success() {
-            bail!(
-                "ssh {} '{}' exited with {status}",
-                target.ssh_destination(),
-                script
-            );
-        }
-        Ok(())
+        Ok(status)
     }
 }
 
@@ -2248,6 +2376,70 @@ mod tests {
             .position(|arg| arg == "StrictHostKeyChecking=no")
             .unwrap();
         assert!(insecure_position > 1);
+    }
+
+    #[test]
+    fn duplicate_install_machine_names_are_rejected() {
+        let names = vec![
+            "server".to_string(),
+            "database".to_string(),
+            "server".to_string(),
+            "server".to_string(),
+        ];
+        let error = validate_unique_install_names(&names).unwrap_err();
+        assert!(error.to_string().contains("Duplicate machine name(s)"));
+        assert!(error.to_string().contains("server"));
+        assert!(
+            validate_unique_install_names(&["server".to_string(), "database".to_string()]).is_ok()
+        );
+    }
+
+    #[test]
+    fn target_secretspec_ssh_removes_workstation_selectors() {
+        use std::ffi::OsStr;
+
+        let mut cmd = process::Command::new("ssh");
+        clear_target_secretspec_local_env(&mut cmd);
+        for name in TARGET_SECRETSPEC_LOCAL_ENV {
+            assert!(
+                cmd.as_std()
+                    .get_envs()
+                    .any(|(key, value)| { key == OsStr::new(name) && value.is_none() })
+            );
+        }
+    }
+
+    #[test]
+    fn boot_transition_does_not_accept_the_old_ssh_endpoint() {
+        assert!(!boot_change_observed("old", Some("old"), false));
+        assert!(boot_change_observed("old", Some("new"), false));
+        assert!(!boot_change_observed("old", None, false));
+        assert!(boot_change_observed("old", None, true));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reboot_status_propagates_remote_failures() {
+        use std::os::unix::process::ExitStatusExt;
+
+        assert_eq!(
+            classify_reboot_ssh_status(&std::process::ExitStatus::from_raw(0)),
+            RebootSshOutcome::Accepted
+        );
+        assert_eq!(
+            classify_reboot_ssh_status(&std::process::ExitStatus::from_raw(23 << 8)),
+            RebootSshOutcome::Rejected
+        );
+        assert_eq!(
+            classify_reboot_ssh_status(&std::process::ExitStatus::from_raw(255 << 8)),
+            RebootSshOutcome::VerifyTransition
+        );
+    }
+
+    #[test]
+    fn nixos_facter_uses_implicit_json_stdout() {
+        assert_eq!(NIXOS_FACTER_COMMAND, "nixos-facter");
+        assert!(!NIXOS_FACTER_COMMAND.contains("--json"));
     }
 
     #[test]
