@@ -1,6 +1,7 @@
 mod cachix;
 mod container;
 mod gc;
+mod machines;
 mod search;
 
 use super::{processes, tasks, util};
@@ -135,6 +136,10 @@ pub struct DevenvOptions {
     /// inherits the process working directory.
     pub shell_cwd: Option<PathBuf>,
     pub is_testing: bool,
+    /// Whether resolved SecretSpec values are made available to Nix module
+    /// evaluation. Machine installs disable this so bootstrap credentials stay
+    /// on the CLI side of the Nix/Rust boundary.
+    pub expose_secretspec_values_to_nix: bool,
     /// Whether a `devenv.nix` project file is required. Commands that operate
     /// outside of a project (e.g. `gc`) set this to `false` so they can run
     /// from any directory.
@@ -195,6 +200,7 @@ impl Default for DevenvOptions {
             devenv_state: None,
             shell_cwd: None,
             is_testing: false,
+            expose_secretspec_values_to_nix: true,
             require_project_file: true,
         }
     }
@@ -380,7 +386,6 @@ pub struct Devenv {
 
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
-
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
@@ -430,6 +435,23 @@ fn cachix_netrc_path(runtime_dir: &Path, process_id: u32) -> Result<PathBuf> {
     .wrap_err("Failed to resolve the Cachix netrc path")
 }
 
+/// Machine installation can retain provider credentials for the duration of
+/// several concurrent jobs. Disable process and child-process core dumps
+/// before resolving those credentials so a crash cannot persist them to a
+/// core file. Lowering both limits is intentionally irreversible for this CLI
+/// invocation.
+fn disable_core_dumps_for_secret_operation() -> Result<()> {
+    #[cfg(unix)]
+    {
+        use nix::sys::resource::{Resource, setrlimit};
+
+        setrlimit(Resource::RLIMIT_CORE, 0, 0)
+            .into_diagnostic()
+            .wrap_err("Failed to disable core dumps before resolving machine secrets")?;
+    }
+    Ok(())
+}
+
 impl Devenv {
     pub async fn new(
         options: DevenvOptions,
@@ -455,6 +477,7 @@ impl Devenv {
         let shell_settings = options.shell_settings;
         let cache_settings = options.cache_settings;
         let secret_settings = options.secret_settings;
+        let expose_secretspec_values_to_nix = options.expose_secretspec_values_to_nix;
         let devenv_dot_gc = devenv_dotfile.join("gc");
 
         // TMPDIR for build artifacts - should NOT use XDG_RUNTIME_DIR as that's
@@ -555,7 +578,23 @@ impl Devenv {
         }
 
         let mut secretspec_cell: OnceCell<ResolvedSecrets> = OnceCell::new();
-        resolve_secretspec_into(&devenv_root, &secret_settings, &mut secretspec_cell)?;
+        let mut secretspec_as_paths = HashSet::new();
+        if !expose_secretspec_values_to_nix {
+            disable_core_dumps_for_secret_operation()?;
+        }
+        // Machine installs may choose target-side SecretSpec resolution. Do
+        // not contact the workstation's provider until machines_install has
+        // inspected the evaluated per-machine execution mode. Local-mode
+        // installs resolve on demand there; target-only installs never expose
+        // provider credentials or values to this process.
+        if expose_secretspec_values_to_nix {
+            resolve_secretspec_into(
+                &devenv_root,
+                &secret_settings,
+                &mut secretspec_cell,
+                &mut secretspec_as_paths,
+            )?;
+        }
 
         // Create the cachix manager after secretspec so a secretspec secret
         // can authenticate pulls (netrc) and pushes (daemon env) even when
@@ -657,6 +696,8 @@ impl Devenv {
                     options.require_version_match,
                     options.is_testing,
                     secretspec_cell.get(),
+                    &secret_settings,
+                    expose_secretspec_values_to_nix,
                     &fingerprint,
                 )?);
 
@@ -687,6 +728,8 @@ impl Devenv {
                     options.require_version_match,
                     options.is_testing,
                     secretspec_cell.get(),
+                    &secret_settings,
+                    expose_secretspec_values_to_nix,
                     "",
                 )?);
 
@@ -3457,6 +3500,7 @@ fn format_tasks_json(tasks: &[tasks::TaskConfig]) -> Result<String> {
     serde_json::to_string_pretty(&items).into_diagnostic()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_bootstrap_args(
     config: &NixConfig,
     imports: &[String],
@@ -3465,6 +3509,8 @@ fn build_bootstrap_args(
     require_version_match: bool,
     is_testing: bool,
     secretspec: Option<&ResolvedSecrets>,
+    secret_settings: &SecretSettings,
+    expose_secretspec_values_to_nix: bool,
     lock_fingerprint: &str,
 ) -> Result<BootstrapArgs> {
     let paths = &config.paths;
@@ -3484,11 +3530,16 @@ fn build_bootstrap_args(
             .to_string_lossy()
     ));
 
-    let secretspec_data: Option<SecretspecData> = secretspec.map(|resolved| SecretspecData {
-        profile: resolved.profile.clone(),
-        provider: resolved.provider.clone(),
-        secrets: resolved.secrets.clone().into_iter().collect(),
-    });
+    let secretspec_data = secretspec
+        .map(|resolved| secretspec_data_for_nix(resolved, expose_secretspec_values_to_nix))
+        .or_else(|| {
+            let config = secret_settings.secretspec.as_ref()?;
+            config.enable.then(|| SecretspecData {
+                profile: config.profile.clone(),
+                provider: config.provider.clone(),
+                secrets: Default::default(),
+            })
+        });
 
     let cli_options = CliOptionsConfig(parse_cli_options(
         &config.input_overrides.nix_module_options,
@@ -3526,10 +3577,23 @@ fn build_bootstrap_args(
     BootstrapArgs::from_serializable(&args)
 }
 
+fn secretspec_data_for_nix(resolved: &ResolvedSecrets, expose_values: bool) -> SecretspecData {
+    SecretspecData {
+        profile: Some(resolved.profile.clone()),
+        provider: Some(resolved.provider.clone()),
+        secrets: if expose_values {
+            resolved.secrets.clone().into_iter().collect()
+        } else {
+            Default::default()
+        },
+    }
+}
+
 fn resolve_secretspec_into(
     devenv_root: &Path,
     secret_settings: &SecretSettings,
     cell: &mut OnceCell<ResolvedSecrets>,
+    as_paths: &mut HashSet<String>,
 ) -> Result<()> {
     let secretspec_path = devenv_root.join("secretspec.toml");
     if !secretspec_path.exists() {
@@ -3574,7 +3638,7 @@ fn resolve_secretspec_into(
         (None, None)
     };
 
-    let mut secrets = secretspec::Secrets::load()
+    let mut secrets = secretspec::Secrets::load_from(&secretspec_path)
         .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
 
     if let Some(ref provider_str) = provider {
@@ -3596,6 +3660,14 @@ fn resolve_secretspec_into(
             .into());
         }
     };
+
+    as_paths.extend(
+        validated_secrets
+            .resolution
+            .iter()
+            .filter(|resolution| resolution.as_path)
+            .map(|resolution| resolution.name.clone()),
+    );
 
     let resolved_secrets = validated_secrets
         .resolved
@@ -3800,6 +3872,26 @@ mod tests {
     }
 
     #[test]
+    fn machine_install_can_hide_secretspec_values_from_nix() {
+        let resolved = secretspec::Resolved::new(
+            HashMap::from([("BOOTSTRAP_KEY".to_string(), "raw-secret-value".to_string())]),
+            "env".to_string(),
+            "default".to_string(),
+        );
+
+        let hidden = secretspec_data_for_nix(&resolved, false);
+        assert_eq!(hidden.profile.as_deref(), Some("default"));
+        assert_eq!(hidden.provider.as_deref(), Some("env"));
+        assert!(hidden.secrets.is_empty());
+
+        let exposed = secretspec_data_for_nix(&resolved, true);
+        assert_eq!(
+            exposed.secrets.get("BOOTSTRAP_KEY").map(String::as_str),
+            Some("raw-secret-value")
+        );
+    }
+
+    #[test]
     fn built_in_cachix_secret_prompts_without_project_manifest() {
         let root = tempfile::tempdir().expect("create project root");
         let settings = SecretSettings {
@@ -3841,6 +3933,44 @@ mod tests {
                 .expect("resolve built-in token");
 
         assert_eq!(token.as_deref(), Some("test-token"));
+    }
+
+    #[test]
+    fn project_secretspec_records_and_retains_as_path_values() {
+        let root = tempfile::tempdir().expect("create project root");
+        std::fs::write(
+            root.path().join("secretspec.toml"),
+            r#"[project]
+name = "machines-test"
+revision = "1.0"
+require_reason = false
+
+[profiles.default]
+BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
+"#,
+        )
+        .expect("write SecretSpec manifest");
+        std::fs::write(root.path().join(".env"), "BOOTSTRAP_KEY=secret-contents\n")
+            .expect("write dotenv provider");
+        let settings = SecretSettings {
+            secretspec: Some(devenv_core::config::SecretspecConfig {
+                enable: true,
+                provider: Some("dotenv:.env".to_string()),
+                ..Default::default()
+            }),
+        };
+        let mut cell = OnceCell::new();
+        let mut as_paths = HashSet::new();
+
+        resolve_secretspec_into(root.path(), &settings, &mut cell, &mut as_paths)
+            .expect("resolve project SecretSpec");
+
+        assert!(as_paths.contains("BOOTSTRAP_KEY"));
+        let path = PathBuf::from(&cell.get().unwrap().secrets["BOOTSTRAP_KEY"]);
+        assert_eq!(
+            std::fs::read_to_string(path).expect("as_path file remains alive"),
+            "secret-contents"
+        );
     }
 
     #[test]

@@ -480,9 +480,16 @@ rec {
         lib.concatMapAttrs
           (
             name: option:
-            if lib.isOption option then
+            # Skip invisible options (e.g. renamed aliases from
+            # `mkRenamedOptionModule`, which forward reads to their target and
+            # trigger deprecation warnings).
+            if lib.isOption option && (option.visible or true) == false then
+              { }
+            else if lib.isOption option then
               let
                 typeName = option.type.name or "";
+                elemType = option.type.nestedTypes.elemType or null;
+                elemTypeName = elemType.name or "";
               in
               if
                 builtins.elem typeName [
@@ -493,6 +500,23 @@ rec {
                 {
                   ${name} = config.${name};
                 }
+              # Recurse into `attrsOf submodule` options (e.g. `machines`) so
+              # that output-typed sub-options inside each submodule entry become
+              # build targets under `build.<name>.<entry>.<sub>`. Without this,
+              # a `mkOption { type = attrsOf submodule; }` is opaque to the
+              # walker and none of its nested outputs are ever collected.
+              else if typeName == "attrsOf" && elemTypeName == "submodule" then
+                let
+                  subOptions = elemType.getSubOptions [ ];
+                  entries = config.${name} or { };
+                  perEntry = lib.mapAttrs
+                    (
+                      _entryName: entryConfig: build subOptions entryConfig
+                    )
+                    entries;
+                  filtered = lib.filterAttrs (_: v: v != { }) perEntry;
+                in
+                if filtered != { } then { ${name} = filtered; } else { }
               else
                 { }
             else if builtins.isAttrs option && !lib.isDerivation option then
