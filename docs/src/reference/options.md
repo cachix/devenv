@@ -24096,13 +24096,17 @@ Bootstrap files populated from the active SecretSpec profile
 after ` nixos-install ` and before reboot. Attribute names are
 absolute paths in the installed system. Local execution streams
 values over strictly authenticated SSH; target execution sends
-only a reduced manifest and fetches values on the installer.
+only a self-contained declaration manifest and fetches values
+on the installer.
 Both modes atomically install files without placing values in
 ` /nix/store `.
 
-SecretSpec must be enabled in ` devenv.yaml `. Use the global
-` --secretspec-provider ` and ` --secretspec-profile ` flags to
-select the source for an install invocation.
+Local execution requires SecretSpec to be enabled in
+` devenv.yaml `; use the global ` --secretspec-provider ` and
+` --secretspec-profile ` flags to select its source. Target
+execution only requires ` secretspec.toml ` and leaves provider
+and profile selection to the target unless explicitly overridden
+by ` install.secretspec `.
 
 
 
@@ -24245,7 +24249,7 @@ submodule
 
 Where SecretSpec resolves bootstrap values. ` local `
 resolves on the workstation and streams values over SSH.
-` target ` sends only a reduced SecretSpec manifest and
+` target ` sends only a self-contained SecretSpec manifest and
 resolves through the provider on the installer machine.
 
 
@@ -24266,13 +24270,51 @@ one of “local”, “target”
 
 
 
+## machines.\<name>.install.secretspec.extraPackages
+
+
+
+Function selecting additional target-architecture packages
+required by the chosen SecretSpec providers, such as ` sops `
+or ` pass `. These packages are included in a private resolver
+runtime for target execution, not the system-wide command
+namespace.
+
+
+
+*Type:*
+function that evaluates to a(n) list of package
+
+
+
+*Default:*
+
+```nix
+_targetPkgs: [ ]
+```
+
+
+
+*Example:*
+
+```nix
+targetPkgs: [ targetPkgs.sops targetPkgs.pass ]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
 ## machines.\<name>.install.secretspec.profile
 
 
 
-Optional target-side profile override. When unset, the
-global SecretSpec profile is used, falling back to
-` default `.
+Explicit target-side profile override. When unset, devenv
+does not pass ` --profile `; SecretSpec selects the profile
+from the target environment or target-global configuration,
+falling back to ` default `. The workstation profile is never
+inherited.
 
 
 
@@ -24296,10 +24338,14 @@ null
 
 
 
-Optional target-side provider override. When unset, the
-global SecretSpec provider selected for this invocation is
-used. Provider credentials must be available independently
-on the installer and are never forwarded by devenv.
+Explicit target-side provider override. When unset, devenv
+does not pass ` --provider `; SecretSpec selects providers
+from the manifest, target environment, and target-global
+configuration. The workstation provider is never inherited.
+Provider credentials must be available independently on the
+installer and are never forwarded by devenv. This option is
+non-secret metadata and must not contain credentials; use a
+provider alias or target-global configuration instead.
 
 
 

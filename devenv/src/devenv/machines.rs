@@ -42,6 +42,22 @@ const SENSITIVE_INSTALL_SSH_OPTS: &[&str] = &[
     "RequestTTY=no",
 ];
 
+/// Unique launcher installed in the NixOS system path for target-side
+/// resolution. It execs devenv's bundled SecretSpec by exact store path,
+/// avoiding collisions with other packages that provide `bin/secretspec`.
+const TARGET_SECRETSPEC_LAUNCHER: &str = "devenv-machines-secretspec";
+
+/// Workstation-side SecretSpec selectors that must not leak into target
+/// resolution through an OpenSSH `SendEnv` rule. Removing them from the local
+/// ssh process leaves target-native environment and global configuration intact.
+const TARGET_SECRETSPEC_LOCAL_ENV: &[&str] = &[
+    "SECRETSPEC_FILE",
+    "SECRETSPEC_PROFILE",
+    "SECRETSPEC_PROVIDER",
+    "SECRETSPEC_REASON",
+    "SECRETSPEC_SCOPE",
+];
+
 type BootstrapValues = HashMap<String, SecretSlice<u8>>;
 type TargetBootstrapManifests = HashMap<String, SecretSlice<u8>>;
 
@@ -497,21 +513,23 @@ fn install_file_receiver_script(
     )
 }
 
-/// Produce a self-contained SecretSpec manifest containing only the active and
-/// default profiles. Configuration inheritance is flattened structurally on
-/// the workstation; provider access is deliberately not performed here. Every
-/// requested entry is forced to `as_path`, allowing the target receiver to copy
-/// exact bytes without placing a value on stdout. Other declarations remain so
-/// composed secrets and profile-wide constraints retain their semantics, but
-/// the receiver asks SecretSpec to resolve only the explicitly requested names.
+/// Produce a self-contained SecretSpec manifest. Configuration inheritance is
+/// flattened structurally on the workstation; provider access is deliberately
+/// not performed here. Every requested entry is forced to `as_path`, allowing
+/// the target receiver to copy exact bytes without placing a value on stdout.
+/// Profiles, scopes, provider aliases, and declarations otherwise remain
+/// intact so the target can apply its own native SecretSpec policy. The
+/// receiver asks SecretSpec to resolve only the explicitly requested names.
 fn target_secretspec_manifest(
     secretspec_path: &Path,
-    profile_name: &str,
+    profile_name: Option<&str>,
     secret_names: impl IntoIterator<Item = String>,
 ) -> Result<Vec<u8>> {
     let mut config = secretspec::Config::try_from(secretspec_path)
         .map_err(|e| miette!("Failed to load SecretSpec configuration: {e}"))?;
-    if !config.profiles.contains_key(profile_name) {
+    if let Some(profile_name) = profile_name
+        && !config.profiles.contains_key(profile_name)
+    {
         let mut available: Vec<&str> = config.profiles.keys().map(String::as_str).collect();
         available.sort_unstable();
         return Err(miette!(
@@ -527,22 +545,34 @@ fn target_secretspec_manifest(
 
     for name in names {
         let mut found = false;
-        if let Some(secret) = config
-            .profiles
-            .get_mut(profile_name)
-            .and_then(|profile| profile.secrets.get_mut(&name))
-        {
-            secret.as_path = Some(true);
-            found = true;
-        }
-        if profile_name != "default"
-            && let Some(secret) = config
+        if let Some(profile_name) = profile_name {
+            if let Some(secret) = config
                 .profiles
-                .get_mut("default")
+                .get_mut(profile_name)
                 .and_then(|profile| profile.secrets.get_mut(&name))
-        {
-            secret.as_path = Some(true);
-            found = true;
+            {
+                secret.as_path = Some(true);
+                found = true;
+            }
+            if profile_name != "default"
+                && let Some(secret) = config
+                    .profiles
+                    .get_mut("default")
+                    .and_then(|profile| profile.secrets.get_mut(&name))
+            {
+                secret.as_path = Some(true);
+                found = true;
+            }
+        } else {
+            // With no explicit profile, SecretSpec chooses from target-local
+            // configuration. Mark every declaration of the requested name so
+            // any valid target-selected profile still returns a private path.
+            for profile in config.profiles.values_mut() {
+                if let Some(secret) = profile.secrets.get_mut(&name) {
+                    secret.as_path = Some(true);
+                    found = true;
+                }
+            }
         }
         if !found {
             missing.push(name);
@@ -550,17 +580,22 @@ fn target_secretspec_manifest(
     }
 
     if !missing.is_empty() {
+        if let Some(profile_name) = profile_name {
+            bail!(
+                "SecretSpec profile {profile_name:?} does not declare bootstrap secret(s): {}",
+                missing.join(", ")
+            );
+        }
         bail!(
-            "SecretSpec profile {profile_name:?} does not declare bootstrap secret(s): {}",
+            "SecretSpec does not declare bootstrap secret(s) in any profile: {}",
             missing.join(", ")
         );
     }
 
+    // Config::try_from has already merged project.extends. Removing only the
+    // now-stale pointer makes the transferred manifest self-contained; all
+    // native SecretSpec policy remains present.
     config.project.extends = None;
-    config
-        .profiles
-        .retain(|name, _| name == profile_name || name == "default");
-    config.scopes = None;
     let manifest = toml::to_string(&config)
         .into_diagnostic()
         .wrap_err("Failed to serialize target SecretSpec manifest")?;
@@ -568,7 +603,7 @@ fn target_secretspec_manifest(
 }
 
 /// Build the installer-side program for target-resolved secrets. Stdin carries
-/// only a reduced SecretSpec manifest, framed as `<length>\n<bytes>`. SecretSpec
+/// only a self-contained SecretSpec manifest, framed as `<length>\n<bytes>`. SecretSpec
 /// writes each fetched value into a private temporary file below a controlled
 /// TMPDIR; this script copies it to a same-directory temporary destination and
 /// atomically renames it into the installed system.
@@ -576,17 +611,20 @@ fn target_secretspec_installer_script(
     allowed_root: &str,
     secretspec_bin: &Path,
     machine_name: &str,
-    profile: &str,
+    profile: Option<&str>,
     provider: Option<&str>,
     secrets: &[BootstrapSecret],
 ) -> String {
     let root = shell_quote(allowed_root);
     let resolver = shell_quote(&secretspec_bin.display().to_string());
     let reason = shell_quote(&format!("bootstrap machines.{machine_name}"));
-    let profile = shell_quote(profile);
+    let profile_arg = profile
+        .map(|value| format!(" --profile {}", shell_quote(value)))
+        .unwrap_or_default();
     let mut script = format!(
         "set -eu; ulimit -c 0; umask 077; \
          root={root}; resolver={resolver}; \
+         PATH=$(dirname -- \"$resolver\"):$PATH; export PATH; \
          work=$(mktemp -d /tmp/devenv-secretspec.XXXXXX); \
          manifest=\"$work/secretspec.toml\"; tmp=; resolved=; \
          cleanup() {{ \
@@ -618,7 +656,7 @@ fn target_secretspec_installer_script(
             .unwrap_or_default();
         script.push_str(&format!(
             "resolved=$(\"$resolver\" --file \"$manifest\" --reason {reason} \
-               get {name} --profile {profile}{provider_arg}); \
+               get {name}{profile_arg}{provider_arg}); \
              resolved=$(realpath -e -- \"$resolved\"); \
              case \"$resolved\" in \"$work\"/*) ;; \
                *) echo 'SecretSpec returned a file outside its private directory' >&2; exit 1 ;; \
@@ -845,24 +883,10 @@ impl Devenv {
         // Prepare every bootstrap input before starting any per-machine job so
         // a missing declaration fails before preflight, kexec, or disko touches
         // a target. Local machines resolve values now. Target machines receive
-        // only a reduced manifest and do not contact the local provider.
+        // only a self-contained manifest and do not contact the local provider.
         let mut bootstrap_values = HashMap::new();
         let mut target_manifests = TargetBootstrapManifests::new();
         if phases.contains(&InstallPhase::Install) {
-            let has_bootstrap_secrets = names
-                .iter()
-                .any(|name| !meta[name].bootstrap_secrets.is_empty());
-            let secretspec_enabled = self
-                .secret_settings
-                .secretspec
-                .as_ref()
-                .is_some_and(|config| config.enable);
-            if has_bootstrap_secrets && !secretspec_enabled {
-                bail!(
-                    "Machine bootstrap secrets require SecretSpec. Add a secretspec.toml and enable it under `secretspec:` in devenv.yaml, or pass --secretspec-provider/--secretspec-profile."
-                );
-            }
-
             let local_names: Vec<&String> = names
                 .iter()
                 .filter(|name| {
@@ -943,10 +967,9 @@ impl Devenv {
                         manifest_path.display()
                     );
                 }
-                let profile = machine.secretspec.profile.as_deref().unwrap_or("default");
                 let manifest = target_secretspec_manifest(
                     &manifest_path,
-                    profile,
+                    machine.secretspec.profile.as_deref(),
                     machine
                         .bootstrap_secrets
                         .iter()
@@ -1562,6 +1585,9 @@ impl Devenv {
             cmd.arg("-p").arg(port.to_string());
         }
         cmd.arg(target.ssh_destination()).arg(&script);
+        for &name in TARGET_SECRETSPEC_LOCAL_ENV {
+            cmd.env_remove(name);
+        }
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
@@ -1596,7 +1622,7 @@ impl Devenv {
     }
 
     /// Resolve bootstrap values on the installer itself. The workstation sends
-    /// only the reduced SecretSpec manifest; provider authentication and secret
+    /// only the self-contained SecretSpec manifest; provider authentication and secret
     /// bytes remain on the target. The resolver is part of the just-installed
     /// NixOS toplevel and therefore already present in the copied closure.
     async fn install_target_bootstrap_secrets(
@@ -1606,13 +1632,15 @@ impl Devenv {
         ssh_opts: &[String],
         install: TargetBootstrapInstall<'_>,
     ) -> Result<()> {
-        let profile = install.settings.profile.as_deref().unwrap_or("default");
-        let secretspec_bin = install.toplevel.join("sw/bin/secretspec");
+        let secretspec_bin = install
+            .toplevel
+            .join("sw/bin")
+            .join(TARGET_SECRETSPEC_LAUNCHER);
         let script = target_secretspec_installer_script(
             "/mnt",
             &secretspec_bin,
             name,
-            profile,
+            install.settings.profile.as_deref(),
             install.settings.provider.as_deref(),
             install.secrets,
         );
@@ -2387,7 +2415,7 @@ mod tests {
     }
 
     #[test]
-    fn target_manifest_flattens_profiles_without_resolving_values() {
+    fn target_manifest_flattens_inheritance_and_preserves_native_policy() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("secretspec.toml");
         std::fs::write(
@@ -2410,20 +2438,27 @@ DEV_ONLY = { description = "development only" }
 
 [providers]
 remote = "env"
+
+[scopes.bootstrap]
+secrets = ["BOOTSTRAP_KEY"]
 "#,
         )
         .unwrap();
 
         let manifest =
-            target_secretspec_manifest(&path, "production", ["BOOTSTRAP_KEY".to_string()]).unwrap();
+            target_secretspec_manifest(&path, Some("production"), ["BOOTSTRAP_KEY".to_string()])
+                .unwrap();
         let manifest = String::from_utf8(manifest).unwrap();
         let parsed: secretspec::Config = manifest.parse().unwrap();
 
         assert!(parsed.project.extends.is_none());
-        assert!(parsed.scopes.is_none());
+        assert_eq!(
+            parsed.scopes.as_ref().unwrap()["bootstrap"].secrets,
+            vec!["BOOTSTRAP_KEY"]
+        );
         assert!(parsed.profiles.contains_key("default"));
         assert!(parsed.profiles.contains_key("production"));
-        assert!(!parsed.profiles.contains_key("development"));
+        assert!(parsed.profiles.contains_key("development"));
         assert_eq!(
             parsed.profiles["default"].secrets["BOOTSTRAP_KEY"].as_path,
             Some(true)
@@ -2453,13 +2488,67 @@ DECLARED = { description = "declared" }
         )
         .unwrap();
 
-        let error = target_secretspec_manifest(&path, "default", ["MISSING".to_string()])
+        let error = target_secretspec_manifest(&path, Some("default"), ["MISSING".to_string()])
             .expect_err("an undeclared target secret must fail before installation");
         assert!(
             error
                 .to_string()
                 .contains("does not declare bootstrap secret")
         );
+    }
+
+    #[test]
+    fn target_resolution_can_defer_provider_and_profile_selection() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("secretspec.toml");
+        std::fs::write(
+            &path,
+            r#"
+[project]
+name = "machine-test"
+revision = "1.0"
+require_reason = false
+
+[profiles.default]
+BOOTSTRAP_KEY = { description = "default bootstrap key" }
+
+[profiles.production]
+BOOTSTRAP_KEY = { description = "production bootstrap key", providers = ["remote"] }
+
+[providers]
+remote = "awssm"
+"#,
+        )
+        .unwrap();
+
+        let manifest =
+            target_secretspec_manifest(&path, None, ["BOOTSTRAP_KEY".to_string()]).unwrap();
+        let parsed: secretspec::Config = String::from_utf8(manifest).unwrap().parse().unwrap();
+        assert_eq!(
+            parsed.profiles["default"].secrets["BOOTSTRAP_KEY"].as_path,
+            Some(true)
+        );
+        assert_eq!(
+            parsed.profiles["production"].secrets["BOOTSTRAP_KEY"].as_path,
+            Some(true)
+        );
+
+        let script = target_secretspec_installer_script(
+            "/mnt",
+            Path::new("/run/current-system/sw/bin/secretspec"),
+            "server",
+            None,
+            None,
+            &[BootstrapSecret {
+                target: "/var/lib/app/key".to_string(),
+                secret: "BOOTSTRAP_KEY".to_string(),
+                owner: "0:0".to_string(),
+                mode: "0600".to_string(),
+            }],
+        );
+        assert!(!script.contains("--profile"));
+        assert!(!script.contains("--provider"));
+        assert!(script.contains("PATH=$(dirname -- \"$resolver\"):$PATH"));
     }
 
     #[cfg(target_os = "linux")]
@@ -2491,7 +2580,7 @@ DECLARED = { description = "declared" }
             root.path().to_str().unwrap(),
             &resolver,
             "server",
-            "production",
+            Some("production"),
             Some("env"),
             &secrets,
         );

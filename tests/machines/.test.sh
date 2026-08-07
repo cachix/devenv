@@ -294,14 +294,14 @@ if grep -q "bootstrap-test-value" ssh-args.log; then
   exit 1
 fi
 
-# 30. Target-side resolution exposes its execution metadata but never asks the
-#     workstation provider for REMOTE_MACHINE_TOKEN. Manifest validation runs
-#     first; the fixture's missing disko input is therefore the next failure.
+# 30. Target-side resolution exposes its execution metadata but never inherits
+#     or asks the workstation provider for REMOTE_MACHINE_TOKEN. Manifest
+#     validation runs first; missing disko is therefore the next failure.
 devenv eval 'machinesMeta.target-secretful.secretspec' \
   | jq -e '.["machinesMeta.target-secretful.secretspec"] == {
       "execution": "target",
       "profile": "production",
-      "provider": "env"
+      "provider": null
     }'
 if env -u REMOTE_MACHINE_TOKEN \
   devenv --secretspec-provider env --secretspec-profile production \
@@ -315,5 +315,24 @@ if grep -q "REMOTE_MACHINE_TOKEN.*missing\|Missing.*REMOTE_MACHINE_TOKEN" err.lo
   cat err.log
   exit 1
 fi
+
+# 31. A target-only install does not require the workstation SecretSpec
+#     integration to be enabled. Keep the fixture change scoped to this check.
+cp devenv.yaml devenv.yaml.enabled
+trap 'mv devenv.yaml.enabled devenv.yaml' EXIT
+sed -i 's/  enable: true/  enable: false/' devenv.yaml
+if env -u REMOTE_MACHINE_TOKEN \
+  devenv machines install --phases install target-secretful 2>err.log; then
+  echo "expected missing-disko failure with local SecretSpec disabled"
+  exit 1
+fi
+grep -q "devenv inputs add disko" err.log
+if grep -q "require an enabled secretspec\|Machine bootstrap secrets require SecretSpec" err.log; then
+  echo "target-only bootstrap incorrectly required local SecretSpec"
+  cat err.log
+  exit 1
+fi
+mv devenv.yaml.enabled devenv.yaml
+trap - EXIT
 
 echo "all machines checks passed"

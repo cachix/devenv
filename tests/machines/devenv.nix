@@ -89,8 +89,8 @@
     target.host = "root@target-secretful.example.com";
     install.secretspec = {
       execution = "target";
-      provider = "env";
       profile = "production";
+      extraPackages = targetPkgs: [ targetPkgs.coreutils ];
     };
     install.secrets."/var/lib/bootstrap/token" = {
       secret = "REMOTE_MACHINE_TOKEN";

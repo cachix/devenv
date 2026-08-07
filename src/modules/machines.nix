@@ -42,6 +42,39 @@ let
   nixDarwin = inputs.nix-darwin or null;
   homeManager = inputs.home-manager or null;
 
+  # The CLI and SecretSpec are released together. Use the devenv package from
+  # the same source as these modules so target-side resolution cannot silently
+  # pick an unrelated (and potentially incompatible) nixpkgs SecretSpec.
+  #
+  # Flake consumers already provide the full devenv flake. The CLI deliberately
+  # uses the lightweight `src/modules` flake, whose sourceInfo still points at
+  # the repository root; in that case, load the root flake using its locked NAR
+  # hash. This remains lazy unless a NixOS machine enables target resolution.
+  devenvPackageFor = system:
+    let
+      devenvInput = inputs.devenv or (throw "The devenv input is required for target-side SecretSpec resolution");
+      fullDevenvInput =
+        if devenvInput ? packages then
+          devenvInput
+        else if devenvInput ? sourceInfo && devenvInput.sourceInfo ? outPath then
+          let
+            sourceInfo =
+              if devenvInput.sourceInfo ? narHash then
+                devenvInput.sourceInfo
+              else
+                builtins.fetchTree {
+                  type = "path";
+                  path = devenvInput.sourceInfo.outPath;
+                };
+          in
+          builtins.getFlake (builtins.unsafeDiscardStringContext
+            "path:${sourceInfo.outPath}?narHash=${sourceInfo.narHash}")
+        else
+          throw "The devenv input does not expose packages or locked source metadata";
+    in
+      fullDevenvInput.packages.${system}.devenv or
+        (throw "The devenv input does not provide a devenv package for ${system}");
+
   # Resolve a user-provided `hardware.facter` value to a path. Users may pass
   # either a Nix path literal (preferred) or a string relative to the project
   # root, so the option accepts both.
@@ -91,15 +124,38 @@ let
           { nixpkgs.hostPlatform = machine.system; }
           disko.nixosModules.disko
           machine.nixos
-          ({ pkgs, ... }: lib.mkIf
-            (machine.install.secrets != { } && machine.install.secretspec.execution == "target")
-            {
-              # Target-side bootstrap resolution runs after nixos-install but
-              # before reboot. Keeping the resolver in the system closure
-              # makes the exact target-architecture binary available without
-              # copying a workstation binary or fetching executable code.
-              environment.systemPackages = [ pkgs.secretspec ];
-            })
+          ({ pkgs, ... }:
+            let
+              targetDevenv = devenvPackageFor machine.system;
+              # Copy only the bundled resolver out of the target-architecture
+              # devenv package. The installed system therefore does not retain
+              # devenv's larger runtime closure just to run SecretSpec once.
+              targetSecretspec = pkgs.runCommand "devenv-bundled-secretspec" { } ''
+                install -Dm755 ${targetDevenv}/bin/secretspec $out/bin/secretspec
+              '';
+              targetSecretspecPackages = machine.install.secretspec.extraPackages pkgs;
+              targetSecretspecRuntime = pkgs.buildEnv {
+                name = "devenv-machines-secretspec-runtime";
+                paths = [ targetSecretspec ] ++ targetSecretspecPackages;
+                pathsToLink = [ "/bin" ];
+                ignoreCollisions = true;
+              };
+              targetSecretspecLauncher = pkgs.writeShellScriptBin "devenv-machines-secretspec" ''
+                export PATH=${targetSecretspecRuntime}/bin:$PATH
+                exec ${targetSecretspec}/bin/secretspec "$@"
+              '';
+            in
+            lib.mkIf
+              (machine.install.secrets != { } && machine.install.secretspec.execution == "target")
+              {
+                # Target-side bootstrap resolution runs after nixos-install but
+                # before reboot. The private launcher calls devenv's bundled
+                # resolver by exact store path and exposes helpers through its
+                # own PATH. Only that launcher enters the system profile:
+                # another package cannot replace the resolver, and helpers do
+                # not pollute the installed machine's global command namespace.
+                environment.systemPackages = [ targetSecretspecLauncher ];
+              })
         ] ++ facterModules;
       };
 
@@ -300,7 +356,7 @@ let
                     description = ''
                       Where SecretSpec resolves bootstrap values. `local`
                       resolves on the workstation and streams values over SSH.
-                      `target` sends only a reduced SecretSpec manifest and
+                      `target` sends only a self-contained SecretSpec manifest and
                       resolves through the provider on the installer machine.
                     '';
                   };
@@ -308,19 +364,38 @@ let
                     type = lib.types.nullOr lib.types.str;
                     default = null;
                     description = ''
-                      Optional target-side provider override. When unset, the
-                      global SecretSpec provider selected for this invocation is
-                      used. Provider credentials must be available independently
-                      on the installer and are never forwarded by devenv.
+                      Explicit target-side provider override. When unset, devenv
+                      does not pass `--provider`; SecretSpec selects providers
+                      from the manifest, target environment, and target-global
+                      configuration. The workstation provider is never inherited.
+                      Provider credentials must be available independently on the
+                      installer and are never forwarded by devenv. This option is
+                      non-secret metadata and must not contain credentials; use a
+                      provider alias or target-global configuration instead.
                     '';
                   };
                   profile = lib.mkOption {
                     type = lib.types.nullOr lib.types.str;
                     default = null;
                     description = ''
-                      Optional target-side profile override. When unset, the
-                      global SecretSpec profile is used, falling back to
-                      `default`.
+                      Explicit target-side profile override. When unset, devenv
+                      does not pass `--profile`; SecretSpec selects the profile
+                      from the target environment or target-global configuration,
+                      falling back to `default`. The workstation profile is never
+                      inherited.
+                    '';
+                  };
+                  extraPackages = lib.mkOption {
+                    type = lib.types.functionTo (lib.types.listOf lib.types.package);
+                    default = _targetPkgs: [ ];
+                    defaultText = lib.literalExpression "_targetPkgs: [ ]";
+                    example = lib.literalExpression "targetPkgs: [ targetPkgs.sops targetPkgs.pass ]";
+                    description = ''
+                      Function selecting additional target-architecture packages
+                      required by the chosen SecretSpec providers, such as `sops`
+                      or `pass`. These packages are included in a private resolver
+                      runtime for target execution, not the system-wide command
+                      namespace.
                     '';
                   };
                 };
@@ -365,13 +440,17 @@ let
                 after `nixos-install` and before reboot. Attribute names are
                 absolute paths in the installed system. Local execution streams
                 values over strictly authenticated SSH; target execution sends
-                only a reduced manifest and fetches values on the installer.
+                only a self-contained declaration manifest and fetches values
+                on the installer.
                 Both modes atomically install files without placing values in
                 `/nix/store`.
 
-                SecretSpec must be enabled in `devenv.yaml`. Use the global
-                `--secretspec-provider` and `--secretspec-profile` flags to
-                select the source for an install invocation.
+                Local execution requires SecretSpec to be enabled in
+                `devenv.yaml`; use the global `--secretspec-provider` and
+                `--secretspec-profile` flags to select its source. Target
+                execution only requires `secretspec.toml` and leaves provider
+                and profile selection to the target unless explicitly overridden
+                by `install.secretspec`.
               '';
               example = lib.literalExpression ''
                 {
@@ -680,11 +759,15 @@ in
       secretspec = {
         inherit (m.install.secretspec) execution;
         provider =
-          if m.install.secretspec.provider != null then m.install.secretspec.provider
-          else outerConfig.secretspec.provider;
+          if m.install.secretspec.execution == "target" then
+            m.install.secretspec.provider
+          else
+            outerConfig.secretspec.provider;
         profile =
-          if m.install.secretspec.profile != null then m.install.secretspec.profile
-          else outerConfig.secretspec.profile;
+          if m.install.secretspec.execution == "target" then
+            m.install.secretspec.profile
+          else
+            outerConfig.secretspec.profile;
       };
       secrets = lib.mapAttrsToList
         (target: secret: secret // { inherit target; })

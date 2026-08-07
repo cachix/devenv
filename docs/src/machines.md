@@ -366,7 +366,6 @@ machines.web1 = {
 
   install.secretspec = {
     execution = "target";
-    provider = "awssm";
     profile = "production";
   };
 
@@ -383,9 +382,24 @@ machines.web1 = {
 };
 ```
 
-In this mode, devenv parses `secretspec.toml` but never asks the workstation's provider for this machine's values. It flattens manifest inheritance, retains only the selected and default profiles, forces requested entries to file output, and sends the declaration manifest—without any fetched provider values—to the installer over SSH. Committed SecretSpec defaults remain part of that manifest, so do not use defaults for values the workstation must not know. The target-architecture `secretspec` executable is included in the NixOS system closure; after `nixos-install`, the live installer runs it directly from that closure and asks only for each `install.secrets` reference. Resolved bytes stay in a private target-side temporary directory and are atomically installed beneath `/mnt`.
+In this mode, devenv parses `secretspec.toml` but never asks the workstation's provider for this machine's values. It flattens manifest inheritance, forces only the requested entries to file output, and sends the self-contained declaration manifest—without any fetched provider values—to the installer over SSH. Profiles, scopes, provider aliases, composed declarations, and validation policy are retained so the target runs normal SecretSpec resolution rather than a devenv-specific provider implementation. Committed SecretSpec defaults remain part of that manifest, so do not use defaults for values the workstation must not know. The target-architecture `secretspec` executable is included in the NixOS system closure; after `nixos-install`, the live installer runs it directly from that closure and asks only for each `install.secrets` reference. Resolved bytes stay in a private target-side temporary directory and are atomically installed beneath `/mnt`.
 
-`provider` and `profile` under `install.secretspec` override the global selection for that machine. If omitted, the invocation's global selection is used and the profile falls back to `default`. Provider credentials are never copied or forwarded: they must already be available to the installer through workload identity, instance metadata, a target-local SecretSpec configuration, or another provider-native mechanism. A short-lived, machine-scoped bootstrap credential can also be provisioned independently, but forwarding the workstation's long-lived credential defeats the isolation this mode provides.
+Target execution deliberately does not inherit the workstation's SecretSpec provider or profile. When `provider` is `null`, devenv omits `--provider`, preserving manifest provider references, target environment selection, and target-global SecretSpec configuration. An explicit value is an opt-in override and, like SecretSpec's own `--provider`, applies to the complete resolution including references. Treat this option as a non-secret provider selector: it is machine metadata and becomes part of the remote command, so credentials belong in target-side provider configuration rather than the override. `profile` behaves the same way: when omitted, SecretSpec selects it from the target environment or target-global configuration and ultimately falls back to `default`. Set it explicitly when the machine declaration should enforce a profile. Devenv also removes workstation-side `SECRETSPEC_*` selector variables from the `ssh` child, preventing an OpenSSH `SendEnv` rule from silently restoring the workstation selection.
+
+Target-only bootstrapping does not require `secretspec.enable` in `devenv.yaml`; only the committed `secretspec.toml` declaration is required on the workstation. Global `--secretspec-provider` and `--secretspec-profile` flags affect local execution, not target execution.
+
+Devenv never copies or explicitly forwards provider credentials. They must already be available to the **live installer** through workload identity, instance metadata, its SecretSpec global configuration, or another provider-native mechanism. Credentials that become available only after boot are not usable by this installer-time mode. A short-lived, machine-scoped bootstrap credential can also be provisioned independently, but forwarding the workstation's long-lived credential defeats the isolation this mode provides. OpenSSH can independently forward arbitrary environment variables through user or system `SendEnv`/`SetEnv` configuration; audit those settings if provider credentials exist in the workstation environment.
+
+The resolver is the SecretSpec executable bundled with the same devenv release as the machines module, built for the target architecture. It does not use `pkgs.secretspec`, so an older or independently versioned nixpkgs package cannot drift from the manifest implementation in devenv. Providers that require helper commands can add target-architecture packages:
+
+```nix
+install.secretspec = {
+  execution = "target";
+  extraPackages = targetPkgs: [ targetPkgs.sops targetPkgs.pass ];
+};
+```
+
+The dedicated launcher references the bundled resolver's exact store path, so an unrelated system package cannot win a `bin/secretspec` collision. `extraPackages` enter a private resolver `PATH`, making provider helper commands available from the live installer without adding them to the installed system's global command namespace.
 
 Target execution protects secrets from an honest workstation process, but a workstation that controls a malicious NixOS configuration could still install software that exfiltrates values after the target fetches them. Removing that deeper trust requires independently verified or signed system closures and, where appropriate, Secure or Measured Boot with provider-side attestation.
 
