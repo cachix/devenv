@@ -33,6 +33,7 @@
   services.redis.enable = true;
   services.rustfs.enable = true;
   services.sqld.enable = true;
+  services.surrealdb.enable = true;
   services.tailscale.enable = true;
   services.temporal.enable = true;
   services.tideways.enable = true;
