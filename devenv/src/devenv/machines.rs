@@ -899,7 +899,7 @@ impl Devenv {
                 let mut as_paths = HashSet::new();
                 super::resolve_secretspec_into(
                     &self.devenv_root,
-                    &self.secret_settings,
+                    &self.options.secret_settings,
                     &mut resolved_cell,
                     &mut as_paths,
                 )?;

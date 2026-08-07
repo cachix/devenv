@@ -42,6 +42,26 @@ let
   nixDarwin = inputs.nix-darwin or null;
   homeManager = inputs.home-manager or null;
 
+  # Plain nixpkgs flakes expose lib.nixosSystem. devenv-nixpkgs intentionally
+  # exposes a smaller library plus patched legacyPackages, so construct the
+  # equivalent evaluator from its underlying nixpkgs source in that case.
+  nixosSystemFor = system:
+    if inputs.nixpkgs.lib ? nixosSystem then
+      inputs.nixpkgs.lib.nixosSystem
+    else if inputs.nixpkgs ? inputs
+      && builtins.hasAttr "nixpkgs-src" inputs.nixpkgs.inputs
+      && inputs.nixpkgs ? legacyPackages
+      && builtins.hasAttr system inputs.nixpkgs.legacyPackages then
+      args:
+      import (inputs.nixpkgs.inputs."nixpkgs-src" + "/nixos/lib/eval-config.nix") (args // {
+        # Avoid eval-config's impure builtins.currentSystem default and reuse
+        # the patched package set exported by devenv-nixpkgs.
+        system = null;
+        pkgs = inputs.nixpkgs.legacyPackages.${system};
+      })
+    else
+      throw "The nixpkgs input cannot construct a NixOS system for ${system}";
+
   # The CLI and SecretSpec are released together. Use the devenv package from
   # the same source as these modules so target-side resolution cannot silently
   # pick an unrelated (and potentially incompatible) nixpkgs SecretSpec.
@@ -118,7 +138,7 @@ let
             ]
           else [ ];
       in
-      inputs.nixpkgs.lib.nixosSystem {
+      (nixosSystemFor machine.system) {
         specialArgs = { inherit inputs self; };
         modules = [
           { nixpkgs.hostPlatform = machine.system; }

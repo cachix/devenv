@@ -74,7 +74,9 @@ Add the `disko` input to `devenv.yaml`, then declare the disk layout inside `mac
 inputs:
   disko:
     url: github:nix-community/disko
-    follows: nixpkgs
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
 ```
 
 ```nix title="devenv.nix"
