@@ -407,29 +407,14 @@ pub fn validate_lock_file(
         );
     };
 
-    let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
-        .context("Failed to create flake inputs")?;
-
-    let source_path = root.join("devenv.nix");
-    let source_path_str = source_path
-        .to_str()
-        .context("Source path contains invalid UTF-8")?;
-
-    // Virtual mode so unlocked local inputs don't fail validation;
-    // we compare the computed lock against the existing one to detect drift.
-    let locker = InputsLocker::new(flake_settings)
-        .with_inputs(flake_inputs)
-        .source_path(source_path_str)
-        .old_lock_file(&old_lock)
-        .mode(LockMode::Virtual)
-        .use_registries(true);
-
-    let lock_result = {
-        let _guard = crate::umask_guard::UmaskGuard::restrictive();
-        locker.lock(fetch_settings, eval_state)
-    };
-
-    let new_lock = lock_result.context("Lock validation failed")?;
+    let new_lock = resolve_lock_file(
+        eval_state,
+        fetch_settings,
+        flake_settings,
+        root,
+        inputs,
+        Some(&old_lock),
+    )?;
     if new_lock.has_changes(&old_lock)? {
         tracing::debug!("Lock validation found changes, writing updated lock");
         // Writing new_lock directly avoids re-fetching every input: it was
@@ -437,6 +422,41 @@ pub fn validate_lock_file(
         write_lock_file(&new_lock, &lock_file_path).context("Failed to write lock file")?;
     }
     Ok(())
+}
+
+/// Resolve `inputs` to a lock graph in memory, using `old_lock` to preserve
+/// existing pins. The caller decides when the graph is complete and should be
+/// written to disk.
+pub(crate) fn resolve_lock_file(
+    eval_state: &EvalState,
+    fetch_settings: &FetchersSettings,
+    flake_settings: &FlakeSettings,
+    root: &Path,
+    inputs: &BTreeMap<String, Input>,
+    old_lock: Option<&LockFile>,
+) -> Result<LockFile> {
+    let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
+        .context("Failed to create flake inputs")?;
+    let source_path = root.join("devenv.nix");
+    let source_path_str = source_path
+        .to_str()
+        .context("Source path contains invalid UTF-8")?;
+
+    // Virtual mode lets config composition discover every imported input
+    // before committing the resulting graph to devenv.lock.
+    let mut locker = InputsLocker::new(flake_settings)
+        .with_inputs(flake_inputs)
+        .source_path(source_path_str)
+        .mode(LockMode::Virtual)
+        .use_registries(true);
+    if let Some(old_lock) = old_lock {
+        locker = locker.old_lock_file(old_lock);
+    }
+
+    let _guard = crate::umask_guard::UmaskGuard::restrictive();
+    locker
+        .lock(fetch_settings, eval_state)
+        .context("Lock validation failed")
 }
 
 /// Compute a content fingerprint from all locked inputs' fingerprints.

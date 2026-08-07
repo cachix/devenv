@@ -24,25 +24,39 @@ If you enter the ``frontend`` directory, the environment will activate based on 
 If you enter the top-level project, the environment is combined with what's defined in ``backend/devenv.nix`` and ``frontend/devenv.nix``.
 For example, ``devenv up`` will start both the frontend and backend processes.
 
-!!! note "Added in 1.10"
+!!! note "YAML composition"
 
-    Composing ``devenv.yaml`` files is now supported for local files (relative and absolute paths).
-    Remote inputs are not yet supported for ``devenv.yaml`` imports.
+    Local `devenv.yaml` composition was added in 1.10. Remote input composition
+    is supported in 2.2.1 and later.
 
 ## Sharing configuration from another repository
 
-To keep your devenv configuration in a separate repository, for example when working on a team that doesn't use devenv, declare it as a `path:` input and import it:
+To keep your devenv configuration in a separate repository, declare it as an
+input and import the directory containing its `devenv.yaml` and `devenv.nix`:
 
 ```yaml title="devenv.yaml"
 inputs:
   shared-config:
-    url: path:../shared-config/
+    url: github:my-org/shared-devenv-config
     flake: false
 imports:
-- shared-config
+- shared-config/profiles/backend
 ```
 
-The sibling `shared-config` repository only needs a `devenv.nix` file.
+This uses the existing input import syntax; no additional YAML option is
+required. Imports inside the remote `devenv.yaml` are composed recursively,
+and relative `path:` inputs declared there resolve inside the fetched source.
+
+The importing project's `devenv.lock` is the single lock file for the composed
+environment. A `devenv.lock` in the imported repository is not merged. Input
+declarations use the same precedence as local YAML composition, so a declaration
+in the root project wins when both configurations use the same name. In
+particular, when the shared configuration also declares `nixpkgs`, the root
+project's pinned `nixpkgs` is reused instead of creating a second one. Use
+distinct input names when the versions must remain independent.
+
+For a sibling checkout, use `url: path:../shared-config/` in the same example.
+The shared repository may also contain only a `devenv.nix` file.
 Combine this with [profiles](profiles.md) to define one shared configuration that adapts to each project.
 
 !!! tip "New in version 2.2"

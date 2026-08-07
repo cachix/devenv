@@ -435,24 +435,43 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
         let status: miette::Result<()> = if test_config.use_shell {
             // Now load config from the current directory (which might be temp dir)
-            let mut config = Config::load_from(&devenv_root)?;
-            for input in args.override_inputs.chunks_exact(2) {
+            let devenv_input_url = format!("git+file:{}?dir=src/modules", cwd.display());
+            let apply_test_inputs = |config: &mut Config| -> Result<()> {
+                for input in args.override_inputs.chunks_exact(2) {
+                    config
+                        .override_input_url(&input[0], &input[1])
+                        .wrap_err(format!(
+                            "Failed to override input {} with {}",
+                            &input[0], &input[1]
+                        ))?;
+                }
                 config
-                    .override_input_url(&input[0], &input[1])
-                    .wrap_err(format!(
-                        "Failed to override input {} with {}",
-                        &input[0], &input[1]
-                    ))?;
-            }
+                    .add_input("devenv", &devenv_input_url, &[])
+                    .wrap_err("Failed to add devenv input")?;
+                Ok(())
+            };
 
-            // Override the input for the devenv module
-            config
-                .add_input(
-                    "devenv",
-                    &format!("git+file:{}?dir=src/modules", cwd.display()),
-                    &[],
-                )
-                .wrap_err("Failed to add devenv input")?;
+            let mut config = Config::load_from(&devenv_root)?;
+            apply_test_inputs(&mut config)?;
+
+            let preliminary_nix_settings = NixSettings {
+                backend: config.backend.clone(),
+                ..NixSettings::default()
+            };
+            config = devenv_nix_backend::lock::resolve_config_imports(
+                &devenv_root,
+                config,
+                &preliminary_nix_settings,
+                |input_sources| {
+                    let mut config = Config::load_from_with_source_and_input_sources(
+                        &devenv_root,
+                        None,
+                        input_sources,
+                    )?;
+                    apply_test_inputs(&mut config)?;
+                    Ok(config)
+                },
+            )?;
 
             let nix_settings = NixSettings {
                 backend: config.backend.clone(),

@@ -5,13 +5,19 @@ use schematic::ConfigLoader;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
     path::{Path, PathBuf},
 };
 
 const YAML_CONFIG: &str = "devenv.yaml";
 const YAML_LOCAL_CONFIG: &str = "devenv.local.yaml";
+
+#[derive(Clone, Copy)]
+struct ImportRoots<'a> {
+    git_root: Option<&'a Path>,
+    input_sources: &'a BTreeMap<String, PathBuf>,
+}
 
 /// Version requirement for the devenv CLI.
 ///
@@ -495,6 +501,19 @@ impl Config {
         Self::load_from_with_source("./", source_dir)
     }
 
+    /// Like [`Config::load_with_source`], with locked filesystem locations for
+    /// input-style imports such as `shared-config/profiles/backend`.
+    ///
+    /// Input sources are resolved by the backend from `devenv.lock`. Keeping
+    /// fetching out of this crate lets the local-only loader remain usable
+    /// without a Nix store.
+    pub fn load_with_source_and_input_sources(
+        source_dir: Option<&Path>,
+        input_sources: &BTreeMap<String, PathBuf>,
+    ) -> Result<Self> {
+        Self::load_from_with_source_and_input_sources("./", source_dir, input_sources)
+    }
+
     /// Loads configuration from a directory path, including all imported configurations.
     ///
     /// This method recursively loads the base `devenv.yaml` file and all configurations
@@ -523,6 +542,20 @@ impl Config {
     /// [`Config::load_from`] with an optional out-of-tree source directory;
     /// see [`Config::load_with_source`] for the source merge semantics.
     pub fn load_from_with_source<P>(path: P, source_dir: Option<&Path>) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        Self::load_from_with_source_and_input_sources(path, source_dir, &BTreeMap::new())
+    }
+
+    /// [`Config::load_from_with_source`] with locked sources for input-style
+    /// imports. The source paths must point at the selected input root (and
+    /// therefore already include a flake reference's `dir` parameter).
+    pub fn load_from_with_source_and_input_sources<P>(
+        path: P,
+        source_dir: Option<&Path>,
+        input_sources: &BTreeMap<String, PathBuf>,
+    ) -> Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -613,7 +646,10 @@ impl Config {
                 Self::collect_import_files(
                     &source_result.config.imports,
                     source_dir,
-                    source_git_root.as_deref(),
+                    ImportRoots {
+                        git_root: source_git_root.as_deref(),
+                        input_sources,
+                    },
                     &mut source_yamls,
                     &mut source_dir_only_imports,
                     &mut visited,
@@ -639,7 +675,9 @@ impl Config {
                             import,
                             source_dir,
                             source_git_root.as_deref(),
-                        )?;
+                            input_sources,
+                        )?
+                        .expect("file imports always resolve");
                         let resolved = resolved.canonicalize().unwrap_or(resolved);
                         source_module_imports.push(format!("path:{}", resolved.display()));
                     }
@@ -665,7 +703,10 @@ impl Config {
         Self::collect_import_files(
             &temp_result.config.imports,
             base_path,
-            git_root.as_deref(),
+            ImportRoots {
+                git_root: git_root.as_deref(),
+                input_sources,
+            },
             &mut imported_yamls,
             &mut dir_only_imports,
             &mut visited,
@@ -802,11 +843,12 @@ impl Config {
                 // the live source tree; emit them absolute so they stay valid
                 // from the project root (relative escapes also break under
                 // lazy-trees).
-                let from_source_side = source_root_canon.as_ref().is_some_and(|root| {
-                    input_dir
-                        .canonicalize()
-                        .is_ok_and(|dir| dir.starts_with(root))
-                });
+                let from_source_side =
+                    source_root_canon.as_ref().is_some_and(|root| {
+                        input_dir
+                            .canonicalize()
+                            .is_ok_and(|dir| dir.starts_with(root))
+                    }) || Self::containing_input_source(input_dir, input_sources).is_some();
                 if from_source_side {
                     if let Some(url) = canonical_url(&resolved, &query_suffix) {
                         input.url = Some(url);
@@ -866,7 +908,8 @@ impl Config {
         // Add all loaded file imports (normalized).
         for yaml_path in &imported_yamls {
             if let Some(import_dir) = yaml_path.parent()
-                && let Some(normalized) = Self::normalize_path(import_dir, base_path)
+                && let Some(normalized) =
+                    Self::normalize_import_path(import_dir, base_path, input_sources)
                 && seen.insert(normalized.clone())
             {
                 final_imports.push(normalized);
@@ -877,7 +920,8 @@ impl Config {
         // devenv.yaml of their own. There's nothing to merge, but their
         // devenv.nix should still be loaded.
         for import_dir in &dir_only_imports {
-            if let Some(normalized) = Self::normalize_path(import_dir, base_path)
+            if let Some(normalized) =
+                Self::normalize_import_path(import_dir, base_path, input_sources)
                 && seen.insert(normalized.clone())
             {
                 final_imports.push(normalized);
@@ -999,6 +1043,56 @@ impl Config {
     /// Checks if an import is a file-based import (relative or absolute path).
     fn is_file_import(import: &str) -> bool {
         import.starts_with("./") || import.starts_with("../") || import.starts_with('/')
+    }
+
+    /// Names of declared inputs referenced by `imports`.
+    ///
+    /// These are the only inputs the backend needs to materialize while
+    /// composing YAML, avoiding an eager fetch of unrelated inputs such as
+    /// nixpkgs.
+    pub fn input_import_names(&self) -> BTreeSet<String> {
+        self.imports
+            .iter()
+            .filter(|import| !Self::is_file_import(import) && !import.starts_with("path:"))
+            .filter_map(|import| import.split('/').next())
+            .filter(|name| self.inputs.contains_key(*name))
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// Find the most specific locked input source containing `path`.
+    fn containing_input_source<'a>(
+        path: &Path,
+        input_sources: &'a BTreeMap<String, PathBuf>,
+    ) -> Option<(&'a str, &'a Path)> {
+        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        input_sources
+            .iter()
+            .filter(|(_, root)| canonical_path.starts_with(root))
+            .max_by_key(|(_, root)| root.components().count())
+            .map(|(name, root)| (name.as_str(), root.as_path()))
+    }
+
+    /// Render a resolved module path relative to an input when possible, and
+    /// relative to the project otherwise.
+    fn normalize_import_path(
+        source: &Path,
+        base: &Path,
+        input_sources: &BTreeMap<String, PathBuf>,
+    ) -> Option<String> {
+        if let Some((name, root)) = Self::containing_input_source(source, input_sources) {
+            let source = source
+                .canonicalize()
+                .unwrap_or_else(|_| source.to_path_buf());
+            let relative = source.strip_prefix(root).ok()?;
+            if relative.as_os_str().is_empty() {
+                Some(name.to_string())
+            } else {
+                Some(format!("{name}/{}", relative.display()))
+            }
+        } else {
+            Self::normalize_path(source, base)
+        }
     }
 
     /// Normalizes a path relative to a base directory.
@@ -1217,25 +1311,41 @@ impl Config {
         import: &str,
         base_path: &Path,
         git_root: Option<&Path>,
-    ) -> Result<PathBuf> {
-        let resolved = if import.starts_with('/') {
-            if let Some(root) = git_root {
-                root.join(import.strip_prefix('/').unwrap())
+        input_sources: &BTreeMap<String, PathBuf>,
+    ) -> Result<Option<PathBuf>> {
+        let containing_source = Self::containing_input_source(base_path, input_sources);
+        let (resolved, security_root, security_git_root) = if import.starts_with('/') {
+            if let Some((_, root)) = containing_source {
+                (root.join(import.strip_prefix('/').unwrap()), root, None)
+            } else if let Some(root) = git_root {
+                (root.join(import.strip_prefix('/').unwrap()), root, git_root)
             } else {
                 bail!(
                     "Absolute import path '{}' requires a git repository. Use relative paths (e.g., './' or '../') instead.",
                     import
                 );
             }
+        } else if Self::is_file_import(import) {
+            let security_root = containing_source
+                .map(|(_, root)| root)
+                .unwrap_or_else(|| git_root.unwrap_or(base_path));
+            (
+                base_path.join(import),
+                security_root,
+                containing_source.is_none().then_some(git_root).flatten(),
+            )
         } else {
-            base_path.join(import)
+            let (input_name, subpath) = import.split_once('/').unwrap_or((import, ""));
+            let Some(root) = input_sources.get(input_name) else {
+                return Ok(None);
+            };
+            (root.join(subpath), root.as_path(), None)
         };
 
         // Security check
-        let security_root = git_root.unwrap_or(base_path);
-        Self::validate_within_root(&resolved, security_root, import, git_root)?;
+        Self::validate_within_root(&resolved, security_root, import, security_git_root)?;
 
-        Ok(resolved)
+        Ok(Some(resolved))
     }
 
     /// Recursively collects all import files starting from the given imports list.
@@ -1247,11 +1357,12 @@ impl Config {
     /// # Arguments
     /// * `imports` - List of import paths (directories) to process
     /// * `base_path` - The base directory for resolving relative import paths
-    /// * `git_root` - Optional git repository root for resolving absolute paths and security checks
+    /// * `roots` - Git and locked-input roots used for resolution and security checks
     /// * `yaml_files` - Accumulator for collecting YAML file paths in load order
-    /// * `dir_only_imports` - Accumulator for imported directories that have no `devenv.yaml`
-    ///   of their own. There's nothing to merge or recurse into, but the directory still needs
-    ///   to end up in the final imports list so its `devenv.nix` gets loaded.
+    /// * `dir_only_imports` - Accumulator for imported directories without a
+    ///   `devenv.yaml`, and directly imported Nix files. There's nothing to
+    ///   merge or recurse into, but each module still needs to reach the final
+    ///   imports list.
     /// * `visited` - Set of canonical paths already visited (prevents circular imports)
     /// * `depth` - Current recursion depth (prevents stack overflow)
     ///
@@ -1267,7 +1378,7 @@ impl Config {
     fn collect_import_files(
         imports: &[String],
         base_path: &Path,
-        git_root: Option<&Path>,
+        roots: ImportRoots<'_>,
         yaml_files: &mut Vec<PathBuf>,
         dir_only_imports: &mut Vec<PathBuf>,
         visited: &mut HashSet<PathBuf>,
@@ -1284,7 +1395,13 @@ impl Config {
 
         for import in imports {
             // Resolve and validate the import path
-            let import_path = Self::resolve_import_path(import, base_path, git_root)?;
+            let Some(import_path) =
+                Self::resolve_import_path(import, base_path, roots.git_root, roots.input_sources)?
+            else {
+                // Input-style imports are resolved in a second pass after the
+                // backend materializes their locked sources.
+                continue;
+            };
 
             if import_path.is_dir() {
                 let yaml_path = import_path.join(YAML_CONFIG);
@@ -1328,7 +1445,7 @@ impl Config {
                     Self::collect_import_files(
                         &temp_result.config.imports,
                         &import_path,
-                        git_root,
+                        roots,
                         yaml_files,
                         dir_only_imports,
                         visited,
@@ -1351,6 +1468,22 @@ impl Config {
                     if visited.insert(canonical_dir) {
                         dir_only_imports.push(import_path.clone());
                     }
+                }
+            } else if import_path.is_file() {
+                // A transitive `./module.nix` import has no YAML to merge, but
+                // it still needs to reach the final Nix module list.
+                let canonical_file =
+                    import_path
+                        .canonicalize()
+                        .into_diagnostic()
+                        .wrap_err_with(|| {
+                            format!(
+                                "Failed to canonicalize import path: {}",
+                                import_path.display()
+                            )
+                        })?;
+                if visited.insert(canonical_file) {
+                    dir_only_imports.push(import_path);
                 }
             }
         }
@@ -1683,6 +1816,157 @@ mod tests {
         // The second value should override the first
         let merged_profile = config2.profile.or(config1.profile);
         assert_eq!(merged_profile, Some("override".to_string()));
+    }
+
+    #[test]
+    fn locked_input_source_composes_remote_yaml_graph() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let project = temp_dir.path().join("project");
+        let shared = temp_dir.path().join("shared");
+        let backend = shared.join("profiles/backend");
+        let nested = backend.join("nested");
+        fs::create_dir_all(&project).expect("Failed to create project");
+        fs::create_dir_all(&nested).expect("Failed to create nested remote config");
+        fs::create_dir_all(backend.join("dependency")).expect("Failed to create path input");
+
+        fs::write(
+            project.join("devenv.yaml"),
+            r#"
+inputs:
+  shared:
+    url: github:example/shared
+    flake: false
+  nixpkgs:
+    url: github:NixOS/nixpkgs/root
+imports:
+  - shared/profiles/backend
+strict_ports: false
+"#,
+        )
+        .expect("Failed to write project config");
+        fs::write(
+            backend.join("devenv.yaml"),
+            r#"
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/imported
+  tool:
+    url: github:example/tool
+  local-dependency:
+    url: path:./dependency
+    flake: false
+imports:
+  - ./nested
+  - ./extra.nix
+reload: false
+"#,
+        )
+        .expect("Failed to write remote config");
+        fs::write(backend.join("devenv.nix"), "{ }").expect("Failed to write remote module");
+        fs::write(backend.join("extra.nix"), "{ }").expect("Failed to write remote Nix import");
+        fs::write(
+            nested.join("devenv.yaml"),
+            "inputs:\n  nested-tool:\n    url: github:example/nested-tool\n",
+        )
+        .expect("Failed to write nested config");
+        fs::write(nested.join("devenv.nix"), "{ }").expect("Failed to write nested module");
+
+        let shared = shared
+            .canonicalize()
+            .expect("Failed to canonicalize input source");
+        let input_sources = BTreeMap::from([("shared".to_string(), shared)]);
+        let config =
+            Config::load_from_with_source_and_input_sources(&project, None, &input_sources)
+                .expect("Failed to compose locked input config");
+
+        assert!(config.inputs.contains_key("tool"));
+        assert!(config.inputs.contains_key("nested-tool"));
+        assert_eq!(
+            config.inputs["nixpkgs"].url.as_deref(),
+            Some("github:NixOS/nixpkgs/root"),
+            "the root project must retain precedence over imported inputs"
+        );
+        assert_eq!(
+            config.inputs["local-dependency"].url,
+            Some(format!(
+                "path:{}",
+                backend
+                    .join("dependency")
+                    .canonicalize()
+                    .expect("Failed to canonicalize path input")
+                    .display()
+            ))
+        );
+        assert_eq!(config.reload, Some(false));
+        assert_eq!(config.strict_ports, Some(false));
+        assert!(
+            config
+                .imports
+                .contains(&"shared/profiles/backend".to_string())
+        );
+        assert!(
+            config
+                .imports
+                .contains(&"shared/profiles/backend/nested".to_string())
+        );
+        assert!(
+            config
+                .imports
+                .contains(&"shared/profiles/backend/extra.nix".to_string())
+        );
+    }
+
+    #[test]
+    fn locked_input_source_rejects_import_escape() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let project = temp_dir.path().join("project");
+        let shared = temp_dir.path().join("shared");
+        let profile = shared.join("profiles/backend");
+        fs::create_dir_all(&project).expect("Failed to create project");
+        fs::create_dir_all(&profile).expect("Failed to create remote config");
+        fs::write(
+            project.join("devenv.yaml"),
+            "inputs:\n  shared:\n    url: github:example/shared\nimports:\n  - shared/profiles/backend\n",
+        )
+        .expect("Failed to write project config");
+        fs::write(
+            profile.join("devenv.yaml"),
+            "imports:\n  - ../../../outside\n",
+        )
+        .expect("Failed to write remote config");
+
+        let input_sources = BTreeMap::from([(
+            "shared".to_string(),
+            shared
+                .canonicalize()
+                .expect("Failed to canonicalize input source"),
+        )]);
+        let error = Config::load_from_with_source_and_input_sources(&project, None, &input_sources)
+            .expect_err("an imported config must not escape its locked source");
+        assert!(
+            error.to_string().contains("resolves outside"),
+            "unexpected error: {error:?}"
+        );
+    }
+
+    #[test]
+    fn input_import_names_only_returns_declared_input_targets() {
+        let config = Config {
+            inputs: BTreeMap::from([("shared".to_string(), Input::default())]),
+            imports: vec![
+                "./local".to_string(),
+                "path:/absolute/local".to_string(),
+                "missing/profile".to_string(),
+                "shared/profile".to_string(),
+                "shared/other".to_string(),
+            ],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            config.input_import_names(),
+            BTreeSet::from(["shared".to_string()])
+        );
     }
 
     #[test]
