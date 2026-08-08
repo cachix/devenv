@@ -355,7 +355,7 @@ in
               description = "What the sub-agent does";
             };
             proactive = lib.mkOption {
-              type = lib.types.nullOr lib.types.bool;
+              type = lib.types.bool;
               default = false;
               description = "Whether Claude should use this sub-agent automatically";
             };
@@ -696,7 +696,7 @@ in
                 ---
                 name: ${name}
                 description: ${agent.description}
-                ${lib.optionalString (agent.proactive != null) "proactive: ${lib.boolToString agent.proactive}"}
+                proactive: ${lib.boolToString agent.proactive}
                 ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
                 ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
                 ${lib.optionalString (agent.effort != null) "effort: ${agent.effort}"}
@@ -713,7 +713,8 @@ in
       # Add a message about the integration
       infoSections."claude" =
         let
-          primaryAgent = lib.filterAttrs (n: a: n == cfg.agent) cfg.agents;
+          primaryAgents = lib.filterAttrs (n: a: n == cfg.agent) cfg.agents;
+          primaryAgent = if primaryAgents != { } then builtins.head (lib.attrNames primaryAgents) else cfg.agent;
           subAgents = lib.filterAttrs (n: a: n != cfg.agent) cfg.agents;
         in
         [
@@ -726,14 +727,12 @@ in
                 lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
               }"
             }
-            ${lib.optionalString (primaryAgent != { })
-              "- Primary agent: ${
-                lib.concatStringsSep ", " (lib.attrNames primaryAgent)
-              }"
+            ${lib.optionalString (primaryAgent != null)
+              "- Primary agent: ${primaryAgent}"
             }
             ${lib.optionalString (subAgents != { })
               "- Sub-agents: ${
-                lib.concatStringsSep ", " (lib.attrNames  subAgents)
+                lib.concatStringsSep ", " (lib.attrNames subAgents)
               }"
             }
             ${lib.optionalString (cfg.mcpServers != { })
@@ -743,17 +742,6 @@ in
             }
           ''
         ];
-
-      assertions = [
-        {
-          assertion = cfg.agent != null -> (cfg.agents.${cfg.agent} or null) != null;
-          message = "claude.code.agent must be set to one of the claude.code.agents.<NAME>";
-        }
-        {
-          assertion = cfg.agent != null -> (cfg.agents.${cfg.agent}.proactive or null) == null;
-          message = "claude.code.agent = <NAME> requires claude.code.agents.<NAME>.proactive to be null";
-        }
-      ];
     })
 
   ];
