@@ -212,6 +212,8 @@ Agents are specialized AI assistants that handle specific tasks with their own c
       description = "Expert code review specialist that checks for quality, security, and best practices";
       proactive = true;  # Claude will use this automatically when appropriate
       tools = [ "Read" "Grep" "TodoWrite" ];
+      model = "opus";
+      effort = "high";
       prompt = ''
         You are an expert code reviewer. When reviewing code, check for:
         - Code readability and maintainability
@@ -253,12 +255,32 @@ Agents are specialized AI assistants that handle specific tasks with their own c
 }
 ```
 
+### Primary Agent
+
+By default, Claude Code's main conversation runs as its built-in general-purpose agent. Set `claude.code.agent` to use a different agent as the primary agent instead:
+
+```nix
+{
+  claude.code.agent = "code-reviewer";
+}
+```
+
+`claude.code.agent` accepts either:
+
+- The name of one of your project's `claude.code.agents.<name>` entries. That agent becomes the primary agent, and is removed from the sub-agents list.
+- The name of a Claude Code built-in agent (e.g. `"general-purpose"`) that isn't defined under `claude.code.agents`. In this case every configured agent is still available as a sub-agent.
+
+This is reflected in `devenv info`, which reports a `Primary agent: <name>` line and, when other agents remain, a `Sub-agents: <names>` line.
+
 ### Properties
 
 - **description**: What the sub-agent does (shown in Claude's agent selection)
 - **proactive**: Whether Claude should use this sub-agent automatically when relevant
 - **tools**: List of tools the sub-agent can use (restricts access for safety)
+- **model**: Override the model for this agent (`opus`, `sonnet`, or `haiku`)
+- **effort**: Override the reasoning effort for this agent (`low`, `medium`, `high`, `xhigh`, or `max`)
 - **prompt**: The system prompt that defines the sub-agent's behavior
+- **permissionMode**: Permission mode for this specific sub-agent (`default`, `acceptEdits`, `plan`, or `bypassPermissions`)
 
 ### Available Tools
 

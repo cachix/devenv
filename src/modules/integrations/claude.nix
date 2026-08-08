@@ -228,6 +228,7 @@ let
       ConfigChange = buildHooks "ConfigChange" (groupedHooks.ConfigChange or [ ]);
     };
     inherit (cfg)
+      agent
       apiKeyHelper
       model
       forceLoginMethod
@@ -245,6 +246,12 @@ in
 {
   options.claude.code = {
     enable = lib.mkEnableOption "Claude Code integration with automatic hooks and commands setup";
+
+    agent = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "The agent to use as Claude Code's primary agent.";
+    };
 
     hooks = lib.mkOption {
       type = lib.types.submodule {
@@ -361,6 +368,11 @@ in
               type = lib.types.nullOr (lib.types.enum [ "opus" "sonnet" "haiku" ]);
               default = null;
               description = "Override the model for this agent.";
+            };
+            effort = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "low" "medium" "high" "xhigh" "max" ]);
+              default = null;
+              description = "Override the effort level for this agent.";
             };
             prompt = lib.mkOption {
               type = lib.types.lines;
@@ -687,6 +699,7 @@ in
                 proactive: ${lib.boolToString agent.proactive}
                 ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
                 ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
+                ${lib.optionalString (agent.effort != null) "effort: ${agent.effort}"}
                 ${lib.optionalString (agent.permissionMode != null) "permissionMode: ${agent.permissionMode}"}
                 ---
 
@@ -698,28 +711,37 @@ in
       ];
 
       # Add a message about the integration
-      infoSections."claude" = [
-        ''
-          Claude Code integration is enabled with automatic hooks and commands setup.
-          Settings are configured at: ${cfg.settingsPath}
-          ${lib.optionalString config.git-hooks.enable "- Auto-formatting: enabled via git-hooks (git-hooks-run)"}
-          ${lib.optionalString (cfg.commands != { })
-            "- Project commands: ${
-              lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
-            }"
-          }
-          ${lib.optionalString (cfg.agents != { })
-            "- Sub-agents: ${
-              lib.concatStringsSep ", " (lib.attrNames cfg.agents)
-            }"
-          }
-          ${lib.optionalString (cfg.mcpServers != { })
-            "- MCP servers: ${
-              lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)
-            } (configured at ${config.devenv.root}/.mcp.json)"
-          }
-        ''
-      ];
+      infoSections."claude" =
+        let
+          primaryAgents = lib.filterAttrs (n: a: n == cfg.agent) cfg.agents;
+          primaryAgent = if primaryAgents != { } then builtins.head (lib.attrNames primaryAgents) else cfg.agent;
+          subAgents = lib.filterAttrs (n: a: n != cfg.agent) cfg.agents;
+        in
+        [
+          ''
+            Claude Code integration is enabled with automatic hooks and commands setup.
+            Settings are configured at: ${cfg.settingsPath}
+            ${lib.optionalString config.git-hooks.enable "- Auto-formatting: enabled via git-hooks (git-hooks-run)"}
+            ${lib.optionalString (cfg.commands != { })
+              "- Project commands: ${
+                lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
+              }"
+            }
+            ${lib.optionalString (primaryAgent != null)
+              "- Primary agent: ${primaryAgent}"
+            }
+            ${lib.optionalString (subAgents != { })
+              "- Sub-agents: ${
+                lib.concatStringsSep ", " (lib.attrNames subAgents)
+              }"
+            }
+            ${lib.optionalString (cfg.mcpServers != { })
+              "- MCP servers: ${
+                lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)
+              } (configured at ${config.devenv.root}/.mcp.json)"
+            }
+          ''
+        ];
     })
 
   ];
