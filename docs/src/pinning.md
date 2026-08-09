@@ -71,6 +71,34 @@ $ devenv inputs add my-input github:org/repo --follows nixpkgs
 
 This updates `devenv.yaml`. The lock is refreshed the next time you run a devenv command on the project.
 
+## Pinning an individual package version
+
+Pinning a nixpkgs input selects one revision of the whole package collection. To select an exact version of an
+individual package instead, add the [nixpkgs-multiverse](https://github.com/fzakaria/nixpkgs-multiverse) input:
+
+```shell-session
+$ devenv inputs add nixpkgs-multiverse github:fzakaria/nixpkgs-multiverse
+```
+
+Then select packages by attribute and version in `devenv.nix`:
+
+```nix title="devenv.nix"
+{ multiverse, ... }:
+
+{
+  packages = [
+    multiverse.cmake."3.16.5"
+    multiverse.bun."0.7.0"
+  ];
+}
+```
+
+`devenv.lock` pins the Multiverse revision, and its version index selects the corresponding historical nixpkgs
+revision for each package. Those historical revisions are fetched only when referenced. Running
+`devenv update nixpkgs-multiverse` intentionally refreshes the version index; until then, the selected packages
+remain reproducible. See [Installing a specific version](packages.md#installing-a-specific-version) for usage
+details and limitations.
+
 ## Commit the lockfile
 
 Commit `devenv.lock` to version control. It is what makes the environment reproducible across machines.
