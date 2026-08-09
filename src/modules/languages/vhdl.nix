@@ -21,9 +21,7 @@ in {
     };
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.ghdl-gcc;
-      description = "The VHDL package to use (automatically set based on backend).";
-      apply = backend: let
+      default = let
         packages = {
           "ghdl-gcc" = pkgs.ghdl-gcc;
           "ghdl-llvm" = pkgs.ghdl-llvm;
@@ -31,7 +29,8 @@ in {
           "nvc" = pkgs.nvc;
         };
       in
-        packages.${backend} or (throw "Unknown VHDL backend: ${backend}");
+        packages.${config.languages.vhdl.backend} or pkgs.ghdl-gcc;
+      description = "The VHDL package to use (automatically set based on backend).";
     };
 
     lsp = {
