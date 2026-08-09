@@ -56,6 +56,8 @@ There are a few special inputs passed into `devenv.nix`:
 ```
 
 - `pkgs` is a `nixpkgs` input containing [all of the available packages](./packages.md#searching) for your system.
+- `multiverse`, when the `nixpkgs-multiverse` input is configured, provides packages indexed by version, such as
+  `multiverse.cmake."3.16.5"`. The original input is available as `inputs."nixpkgs-multiverse"`.
 - `lib` is [a collection of functions for working with Nix data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library). You can use [noogle](https://noogle.dev/) to search for a function.
 - `config` is the final resolved configuration for your developer environment, which you can use to reference any other options set in [devenv.nix](./reference/options.md).
    Since Nix supports lazy evaluation, you can reference any option you define in the same file as long as it doesn't reference itself!
