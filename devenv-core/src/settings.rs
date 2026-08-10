@@ -176,9 +176,19 @@ impl NixSettings {
     /// falling back to `config.impure` when `None`.
     pub fn resolve(options: NixOptions, config: &Config) -> Self {
         let defaults = NixBuildDefaults::defaults();
+        // Nix options are applied after the dedicated settings, so the last
+        // `--nix-option system` value is the system Nix will actually use.
+        let system = options
+            .nix_options
+            .chunks_exact(2)
+            .rev()
+            .find(|pair| pair[0] == "system")
+            .map(|pair| pair[1].clone())
+            .or(options.system)
+            .unwrap_or_else(default_system);
         Self {
             impure: options.impure.unwrap_or(config.impure),
-            system: options.system.unwrap_or_else(default_system),
+            system,
             max_jobs: options.max_jobs.unwrap_or(defaults.max_jobs),
             cores: options.cores.unwrap_or(defaults.cores),
             offline: options.offline.unwrap_or(false),
@@ -575,6 +585,36 @@ mod tests {
     fn nix_settings_system_from_options() {
         let options = NixOptions {
             system: Some("x86_64-linux".into()),
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = NixSettings::resolve(options, &config);
+        assert_eq!(settings.system, "x86_64-linux");
+    }
+
+    #[test]
+    fn nix_settings_system_from_nix_options() {
+        let options = NixOptions {
+            nix_options: vec!["system".into(), "x86_64-linux".into()],
+            ..Default::default()
+        };
+        let config = Config::default();
+        let settings = NixSettings::resolve(options, &config);
+        assert_eq!(settings.system, "x86_64-linux");
+    }
+
+    #[test]
+    fn nix_settings_last_system_nix_option_wins() {
+        let options = NixOptions {
+            system: Some("aarch64-linux".into()),
+            nix_options: vec![
+                "system".into(),
+                "i686-linux".into(),
+                "sandbox".into(),
+                "false".into(),
+                "system".into(),
+                "x86_64-linux".into(),
+            ],
             ..Default::default()
         };
         let config = Config::default();

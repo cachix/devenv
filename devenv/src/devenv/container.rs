@@ -12,6 +12,27 @@ fn sanitize_container_name(name: &str) -> String {
         .collect::<String>()
 }
 
+fn container_target_system<'a>(
+    host_os: &str,
+    host_arch: &str,
+    configured_system: &'a str,
+) -> Result<&'a str> {
+    // `default_system()` never returns a `-linux` system on macOS (it's
+    // always `<arch>-darwin`), so a `-linux` value here is an explicit target
+    // selected via `--system` or `--nix-option system`.
+    if configured_system.ends_with("-linux") {
+        Ok(configured_system)
+    } else if host_os == "macos" {
+        match host_arch {
+            "aarch64" => Ok("aarch64-linux"),
+            "x86_64" => Ok("x86_64-linux"),
+            _ => bail!("Unsupported container architecture for macOS: {host_arch}"),
+        }
+    } else {
+        Ok(configured_system)
+    }
+}
+
 impl Devenv {
     pub async fn container_build(&self, name: &str) -> Result<String> {
         self.setup_cachix().await?;
@@ -21,22 +42,11 @@ impl Devenv {
             .join(format!("container-{sanitized_name}-derivation"));
         let host_arch = env!("TARGET_ARCH");
         let host_os = env!("TARGET_OS");
-        // `default_system()` never returns a `-linux` system on macOS (it's
-        // always `<arch>-darwin`), so a `-linux` value here only happens when
-        // the user explicitly overrode it via `--system` or `--nix-option
-        // system`. Respect that override instead of always mapping the host
-        // architecture to a Linux container target.
-        let target_system = if self.options.nix_settings.system.ends_with("-linux") {
-            self.options.nix_settings.system.as_str()
-        } else if host_os == "macos" {
-            match host_arch {
-                "aarch64" => "aarch64-linux",
-                "x86_64" => "x86_64-linux",
-                _ => bail!("Unsupported container architecture for macOS: {host_arch}"),
-            }
-        } else {
-            &self.options.nix_settings.system
-        };
+        let target_system = container_target_system(
+            host_os,
+            host_arch,
+            self.options.nix_settings.system.as_str(),
+        )?;
         let attr = format!("devenv.perSystem.{target_system}.containerBuilds.{name}.derivation");
         let paths = self
             .backend()
@@ -143,5 +153,28 @@ impl Devenv {
         Ok(ShellCommand {
             command: std::process::Command::new(paths[0].as_path()),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::container_target_system;
+
+    #[test]
+    fn macos_uses_explicit_linux_system() {
+        let system = container_target_system("macos", "aarch64", "x86_64-linux").unwrap();
+        assert_eq!(system, "x86_64-linux");
+    }
+
+    #[test]
+    fn macos_maps_default_system_to_linux() {
+        let system = container_target_system("macos", "aarch64", "aarch64-darwin").unwrap();
+        assert_eq!(system, "aarch64-linux");
+    }
+
+    #[test]
+    fn non_macos_uses_configured_system() {
+        let system = container_target_system("linux", "x86_64", "aarch64-linux").unwrap();
+        assert_eq!(system, "aarch64-linux");
     }
 }
