@@ -21,7 +21,14 @@ impl Devenv {
             .join(format!("container-{sanitized_name}-derivation"));
         let host_arch = env!("TARGET_ARCH");
         let host_os = env!("TARGET_OS");
-        let target_system = if host_os == "macos" {
+        // `default_system()` never returns a `-linux` system on macOS (it's
+        // always `<arch>-darwin`), so a `-linux` value here only happens when
+        // the user explicitly overrode it via `--system` or `--nix-option
+        // system`. Respect that override instead of always mapping the host
+        // architecture to a Linux container target.
+        let target_system = if self.options.nix_settings.system.ends_with("-linux") {
+            self.options.nix_settings.system.as_str()
+        } else if host_os == "macos" {
             match host_arch {
                 "aarch64" => "aarch64-linux",
                 "x86_64" => "x86_64-linux",
