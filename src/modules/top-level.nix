@@ -10,6 +10,8 @@ let
   # Returns a list of all the entries in a folder
   listEntries = path: map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
+  isAppleSDK = pkg: pkg ? sdkroot;
+
   drvOrPackageToPaths =
     drvOrPackage:
     let
@@ -29,7 +31,17 @@ let
 
   profile = pkgs.buildEnv {
     name = "devenv-profile";
-    paths = lib.flatten (builtins.map drvOrPackageToPaths config.packages);
+    # Apple SDKs expose a top-level `Library`, which collides with packages
+    # exposing `library` on case-insensitive Darwin filesystems. Keep SDKs as
+    # shell inputs below, but do not link them into the user profile.
+    paths = lib.flatten (
+      builtins.map drvOrPackageToPaths (
+        if pkgs.stdenv.isDarwin then
+          builtins.filter (pkg: !isAppleSDK pkg) config.packages
+        else
+          config.packages
+      )
+    );
     ignoreCollisions = true;
     ignoreSingleFileOutputs = true;
   };
@@ -405,7 +417,7 @@ in
         # so they participate in the SDK version comparison done by stdenv's setup hooks.
         partitioned =
           if pkgs.stdenv.isDarwin then
-            builtins.partition (pkg: pkg ? sdkroot) config.packages
+            builtins.partition isAppleSDK config.packages
           else
             {
               right = [ ];
