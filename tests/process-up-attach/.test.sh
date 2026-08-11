@@ -21,8 +21,50 @@ set -ex
 export DEVENV_NO_AI_AGENT=1
 export DEVENV_RUNTIME="$PWD/.runtime"
 
-PORT_A=18561
-PORT_B=18562
+PORT_A=
+PORT_B=
+PORT_A_FILE=.devenv/state/alpha-port
+PORT_B_FILE=.devenv/state/beta-port
+
+load_ports() {
+  for _ in $(seq 1 30); do
+    if [ -s "$PORT_A_FILE" ] && [ -s "$PORT_B_FILE" ]; then
+      read -r PORT_A < "$PORT_A_FILE"
+      read -r PORT_B < "$PORT_B_FILE"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+load_alpha_port() {
+  for _ in $(seq 1 30); do
+    if [ -s "$PORT_A_FILE" ]; then
+      read -r PORT_A < "$PORT_A_FILE"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+load_beta_port() {
+  for _ in $(seq 1 30); do
+    if [ -s "$PORT_B_FILE" ]; then
+      read -r PORT_B < "$PORT_B_FILE"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+reset_port_files() {
+  PORT_A=
+  PORT_B=
+  rm -f "$PORT_A_FILE" "$PORT_B_FILE"
+}
 
 reachable() {
   curl -s -o /dev/null --connect-timeout 1 "http://127.0.0.1:$1/" 2>/dev/null
@@ -70,14 +112,20 @@ cleanup() {
     done
   fi
   devenv processes down >/dev/null 2>&1 || true
-  wait_for_port_free "$PORT_A" || status=1
-  wait_for_port_free "$PORT_B" || status=1
+  if [ -n "$PORT_A" ]; then
+    wait_for_port_free "$PORT_A" || status=1
+  fi
+  if [ -n "$PORT_B" ]; then
+    wait_for_port_free "$PORT_B" || status=1
+  fi
   exit "$status"
 }
 trap cleanup EXIT INT TERM
 
 # Start both processes.
+reset_port_files
 devenv up -d
+load_ports
 devenv processes wait
 wait_for_port "$PORT_A" || { echo "FAIL: alpha did not start"; devenv processes down || true; exit 1; }
 wait_for_port "$PORT_B" || { echo "FAIL: beta did not start"; devenv processes down || true; exit 1; }
@@ -128,6 +176,7 @@ wait_for_port_free "$PORT_B" || { echo "FAIL: beta still bound after down"; exit
 # Foreground ownership guard: a `devenv up -d` must refuse to schedule into a
 # foreground `devenv up` session owned by another terminal — that session owns
 # its processes, and its exit tears them down.
+reset_port_files
 devenv up --no-tui >fg.log 2>&1 &
 FG_PID=$!
 wait_for_manager || {
@@ -136,6 +185,7 @@ wait_for_manager || {
   kill -INT "$FG_PID" 2>/dev/null || true
   exit 1
 }
+load_ports
 if devenv up -d >fgup.txt 2>&1; then
   echo "FAIL: up -d should refuse against a foreground up session; got:"
   cat fgup.txt
@@ -171,10 +221,12 @@ grep -q "No processes running" attach_out.txt || {
 # full process set (beta is registered, visible as not started), so a
 # follow-up named start schedules into it over the socket instead of erroring
 # or spawning a second manager.
+reset_port_files
 devenv processes start alpha
 wait_for_manager || { echo "FAIL: processes start did not cold-start a manager"; exit 1; }
+load_alpha_port
 wait_for_port "$PORT_A" || { echo "FAIL: alpha not started by cold processes start"; devenv processes down || true; exit 1; }
-if reachable "$PORT_B"; then
+if [ -e "$PORT_B_FILE" ]; then
   echo "FAIL: beta started by cold 'processes start alpha'"
   devenv processes down || true
   exit 1
@@ -182,6 +234,7 @@ fi
 devenv processes list | grep -q beta || { echo "FAIL: beta missing from list after cold subset start"; devenv processes down || true; exit 1; }
 devenv processes start beta
 devenv processes wait
+load_beta_port
 wait_for_port "$PORT_B" || { echo "FAIL: beta not started over the socket"; devenv processes down || true; exit 1; }
 devenv processes down
 wait_for_port_free "$PORT_A" || { echo "FAIL: alpha still bound after final down"; exit 1; }

@@ -2,6 +2,15 @@
 
 let
   cfg = config.languages.r;
+  rPackage =
+    if cfg.lsp.enable then
+      pkgs.rWrapper.override
+        {
+          R = cfg.package;
+          packages = [ cfg.lsp.package ];
+        }
+    else
+      cfg.package;
 in
 {
   options.languages.r = {
@@ -35,9 +44,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [
-      cfg.package
-    ] ++ lib.optional cfg.radian.enable cfg.radian.package
-    ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    packages = [ rPackage ] ++ lib.optional cfg.radian.enable cfg.radian.package;
   };
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -xe
 
-wait_for_port 9000
-sleep 2
-clickhouse-client --query "SELECT 1"
+CLICKHOUSE_PORT=${CLICKHOUSE_PORT:?CLICKHOUSE_PORT is not set}
+
+wait_for_port "$CLICKHOUSE_PORT"
+clickhouse-client --host 127.0.0.1 --port "$CLICKHOUSE_PORT" --query "SELECT 1"

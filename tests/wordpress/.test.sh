@@ -1,5 +1,8 @@
 set -e
 
+WORDPRESS_HTTP_PORT=${WORDPRESS_HTTP_PORT:?WORDPRESS_HTTP_PORT is not set}
+WORDPRESS_URL="http://127.0.0.1:$WORDPRESS_HTTP_PORT/index.php"
+
 # Verify PHP extensions are loaded (regression test for #2404)
 echo "Checking PHP extensions..."
 php_modules=$(php -m)
@@ -20,25 +23,26 @@ wait_for_processes
 # Verify database exists and the seeded wordpress user can connect
 mysql -h 127.0.0.1 -uwordpress -pwordpress wordpress -e 'SELECT 1'
 
-# Create a test PHP file. PHP-FPM clears inherited environment variables, so
-# bake the dynamically allocated MySQL port into the generated script.
-cat > index.php << PHPEOF
-<?php
-// Test database connection
-\$conn = new mysqli('127.0.0.1', 'wordpress', 'wordpress', 'wordpress', ${MYSQL_TCP_PORT});
-if (\$conn->connect_error) {
-    http_response_code(500);
-    die("DB error: " . \$conn->connect_error);
-}
-\$conn->close();
-echo "OK";
-PHPEOF
+# Test PHP through Caddy. The process readiness probe exercises this same
+# endpoint, while the retry keeps the assertion resilient to a restart between
+# readiness and the test request.
+response_file=wordpress-response.txt
+http_status=000
+for _ in $(seq 1 10); do
+    http_status=$(curl -sS -o "$response_file" -w '%{http_code}' "$WORDPRESS_URL") || true
+    if [ "$http_status" = "200" ] && grep -qx 'OK' "$response_file"; then
+        echo "WordPress stack test passed"
+        exit 0
+    fi
+    sleep 1
+done
 
-# Test PHP through Caddy
-response=$(curl -sf http://localhost:8000/index.php)
-if [ "$response" != "OK" ]; then
-    echo "PHP test failed: $response"
-    exit 1
-fi
-
-echo "WordPress stack test passed"
+echo "PHP test failed with HTTP $http_status" >&2
+cat "$response_file" >&2 || true
+for log in "$DEVENV_RUNTIME"/processes/logs/*; do
+    if [ -f "$log" ]; then
+        echo "==> $log <==" >&2
+        tail -n 80 "$log" >&2
+    fi
+done
+exit 1
