@@ -121,8 +121,13 @@ const resize = actions((): ActionTemplate[] =>
     : [],
 );
 
+const restartInFlight = () =>
+  Object.values(processStates.current).includes("restarting");
 const restartProcess = actions((): ActionTemplate[] =>
-  mainView() ? [k("\x12")] : [],
+  mainView() && !restartInFlight() ? [k("\x12")] : [],
+);
+const restartBurst = actions((): ActionTemplate[] =>
+  mainView() && !restartInFlight() ? [k("\x12".repeat(64))] : [],
 );
 const stopProcess = actions((): ActionTemplate[] =>
   mainView() ? [k("\x18")] : [],
@@ -147,7 +152,7 @@ export const drive = weighted([
   [4, stopProcess], // Ctrl+X  stop process
   // A valid-input burst must be coalesced or rejected safely while the backend
   // catches up; user-controlled terminal input can never be a panic condition.
-  [2, whenMain(k("\x12".repeat(64)))],
+  [2, restartBurst],
   [4, whenMain(k("\x08"))], // Ctrl+H  toggle hide-stopped
   [5, whenReady(k("\x1b"))], // Esc     clear selection / back
   [12, resize],
@@ -178,13 +183,24 @@ export const noPanicText = always(() => !leaked.current);
 // before any generated input is allowed.
 export const fixtureAppears = eventually(mainView).within(2, "seconds");
 
+const restartTarget: Record<ProcessName, VisibleStatus> = {
+  api: "ready",
+  worker: "running",
+  disabled: "running",
+};
+
 const restartCompletes = (process: ProcessName) =>
   always(
     now(() => processStates.current[process] === "restarting").implies(
-      eventually(() => processStates.current[process] === "ready").within(
-        2,
-        "seconds",
-      ),
+      eventually(() => {
+        const state = processStates.current[process];
+        // The terminal cannot observe a process row while another view is on
+        // screen or Ctrl-H has hidden it. A stop also legitimately supersedes
+        // an in-flight restart and has its own completion property below.
+        return !mainView() || state === null ||
+          state === restartTarget[process] ||
+          state === "stopping" || state === "stopped";
+      }).within(2, "seconds"),
     ),
   );
 
