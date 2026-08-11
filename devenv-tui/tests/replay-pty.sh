@@ -41,11 +41,16 @@ command="\"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\"
 # no keyboard-protocol enhancement, so legacy decoding keeps Esc ambiguous until
 # another input byte arrives.
 # The first restart is a pasted/key-repeat burst; it must remain one user intent.
+# Wait for the stopped fixture row before navigating: under load, selecting a
+# process while that row is still being inserted can clear or move the selection.
 "$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
 expect:api
 expect:worker
-resize:48x12
+expect:disabled
+expect:stopped
 send:j
+expect:restart
+resize:48x12
 expect:api
 resize:120x40
 expect:restart
