@@ -61,6 +61,31 @@ async fn test_shell_command_runs() {
     assert!(content.contains("hello world"));
 }
 
+/// Test that an OS-level spawn failure is returned by start_command.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_start_reports_spawn_failure() {
+    let ctx = TestContext::new();
+    let missing_cwd = ctx.temp_path().join("missing-working-directory");
+    let config = ProcessConfig {
+        name: "spawn-failure".to_string(),
+        exec: "sleep 3600".to_string(),
+        cwd: Some(missing_cwd),
+        ..Default::default()
+    };
+    let manager = ctx.create_manager();
+
+    let error = match manager.start_command(&config, None).await {
+        Ok(_) => panic!("starting with a nonexistent working directory should fail"),
+        Err(error) => error,
+    };
+
+    let message = error.to_string();
+    assert!(
+        message.contains("Failed to spawn process 'spawn-failure'"),
+        "unexpected error: {message}"
+    );
+}
+
 /// Test stopping a long-running process via the manager
 #[tokio::test(flavor = "multi_thread")]
 async fn test_stop_single_process() {

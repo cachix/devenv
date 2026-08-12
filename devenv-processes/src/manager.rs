@@ -1390,6 +1390,21 @@ impl NativeProcessManager {
         let (job, _task) = start_job(proc_cmd.command);
         let job = Arc::new(job);
 
+        // watchexec-supervisor reports spawn failures only through its error
+        // handler. Without one, the start ticket completes successfully even
+        // when no child was created.
+        let (start_error_tx, mut start_error_rx) = mpsc::unbounded_channel();
+        let process_name = config.name.clone();
+        job.set_error_handler(move |error| {
+            let message = error
+                .get()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "unknown supervisor error".to_string());
+            warn!("Process '{}' supervisor error: {}", process_name, message);
+            let _ = start_error_tx.send(message);
+        })
+        .await;
+
         // Setup socket activation and/or capabilities if configured
         let has_sockets = !config.listen.is_empty();
         let has_caps = !config.linux.capabilities.is_empty();
@@ -1457,6 +1472,10 @@ impl NativeProcessManager {
         });
 
         job.start().await;
+        if let Ok(error) = start_error_rx.try_recv() {
+            job.delete().await;
+            bail!("Failed to spawn process '{}': {}", config.name, error);
+        }
 
         // Spawn file tailers to emit output to activity
         let stderr_log = proc_cmd.stderr_log.clone();
