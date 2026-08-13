@@ -8214,7 +8214,7 @@ rec {
       };
       "devenv" = rec {
         crateName = "devenv";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         crateBin = [
           {
@@ -8487,7 +8487,7 @@ rec {
       };
       "devenv-activity" = rec {
         crateName = "devenv-activity";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-activity; };
         libName = "devenv_activity";
@@ -8552,7 +8552,7 @@ rec {
       };
       "devenv-activity-macros" = rec {
         crateName = "devenv-activity-macros";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-activity-macros; };
         procMacro = true;
@@ -8576,7 +8576,7 @@ rec {
       };
       "devenv-cache-core" = rec {
         crateName = "devenv-cache-core";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-cache-core; };
         libName = "devenv_cache_core";
@@ -8638,7 +8638,7 @@ rec {
       };
       "devenv-core" = rec {
         crateName = "devenv-core";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-core; };
         libName = "devenv_core";
@@ -8771,7 +8771,7 @@ rec {
       };
       "devenv-eval-cache" = rec {
         crateName = "devenv-eval-cache";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-eval-cache; };
         libName = "devenv_eval_cache";
@@ -8842,7 +8842,7 @@ rec {
       };
       "devenv-event-sources" = rec {
         crateName = "devenv-event-sources";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-event-sources; };
         libName = "devenv_event_sources";
@@ -8914,7 +8914,7 @@ rec {
       };
       "devenv-mailbox" = rec {
         crateName = "devenv-mailbox";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-mailbox; };
         libName = "devenv_mailbox";
@@ -8928,7 +8928,7 @@ rec {
       };
       "devenv-nix-backend" = rec {
         crateName = "devenv-nix-backend";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-nix-backend; };
         libName = "devenv_nix_backend";
@@ -9067,7 +9067,7 @@ rec {
       };
       "devenv-nix-backend-macros" = rec {
         crateName = "devenv-nix-backend-macros";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-nix-backend-macros; };
         procMacro = true;
@@ -9087,7 +9087,7 @@ rec {
       };
       "devenv-processes" = rec {
         crateName = "devenv-processes";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-processes; };
         libName = "devenv_processes";
@@ -9204,7 +9204,7 @@ rec {
       };
       "devenv-reload" = rec {
         crateName = "devenv-reload";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-reload; };
         libName = "devenv_reload";
@@ -9265,7 +9265,7 @@ rec {
       };
       "devenv-run-tests" = rec {
         crateName = "devenv-run-tests";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         crateBin = [
           {
@@ -9342,7 +9342,7 @@ rec {
       };
       "devenv-shell" = rec {
         crateName = "devenv-shell";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-shell; };
         libName = "devenv_shell";
@@ -9422,7 +9422,7 @@ rec {
       };
       "devenv-snix-backend" = rec {
         crateName = "devenv-snix-backend";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-snix-backend; };
         libName = "devenv_snix_backend";
@@ -9492,7 +9492,7 @@ rec {
       };
       "devenv-tasks" = rec {
         crateName = "devenv-tasks";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         crateBin = [
           {
@@ -9621,7 +9621,7 @@ rec {
       };
       "devenv-tui" = rec {
         crateName = "devenv-tui";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         crateBin = [
           {
@@ -20433,7 +20433,7 @@ rec {
       };
       "nix-conf-parser" = rec {
         crateName = "nix-conf-parser";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./nix-conf-parser; };
         libName = "nix_conf_parser";
@@ -33755,7 +33755,7 @@ rec {
       };
       "tokio-shutdown" = rec {
         crateName = "tokio-shutdown";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./tokio-shutdown; };
         libName = "tokio_shutdown";
@@ -41255,7 +41255,7 @@ rec {
       };
       "xtask" = rec {
         crateName = "xtask";
-        version = "2.2.2";
+        version = "2.2.3";
         edition = "2024";
         crateBin = [
           {
