@@ -62,13 +62,16 @@ let
   rewriteSource =
     decl:
     let
-      source = lib.lists.findFirst (
-        src:
-        let
-          prefix = toString src.prefix;
-        in
-        decl == prefix || lib.strings.hasPrefix "${prefix}/" decl
-      ) null sources;
+      source = lib.lists.findFirst
+        (
+          src:
+          let
+            prefix = toString src.prefix;
+          in
+          decl == prefix || lib.strings.hasPrefix "${prefix}/" decl
+        )
+        null
+        sources;
       prefix =
         if source == null then
           throw "Failed to rewrite source url for module: ${decl}"
