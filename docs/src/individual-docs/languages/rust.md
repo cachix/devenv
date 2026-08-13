@@ -1,11 +1,11 @@
 
 # Rust
 
-The `languages.rust` module provides comprehensive support for [Rust](https://www.rust-lang.org/) development, offering flexible toolchain management through two distinct approaches.
+The `languages.rust` module adds the [Rust](https://www.rust-lang.org/) compiler and common Rust development tools to your environment. You can use the toolchain from nixpkgs or select a toolchain with rust-overlay.
 
 ## Getting started
 
-Enable Rust support in your `devenv.nix`:
+Add this option to your `devenv.nix`:
 
 ```nix
 {
@@ -13,15 +13,15 @@ Enable Rust support in your `devenv.nix`:
 }
 ```
 
-This will provide a complete Rust development environment with `rustc`, `cargo`, `clippy`, `rustfmt`, and `rust-analyzer`.
+This option installs `rustc`, `cargo`, `clippy`, `rustfmt`, and `rust-analyzer`.
 
 ## Toolchain management
 
-devenv supports two approaches for managing Rust toolchains:
+You can get the Rust toolchain from nixpkgs or rust-overlay.
 
 ### 1. nixpkgs channel (default)
 
-The `nixpkgs` channel is easy to set up and uses the Rust version currently available in your nixpkgs revision. However, it's limited to the version in nixpkgs.
+The `nixpkgs` channel is the default. It does not require an additional input. It uses the Rust version in your nixpkgs revision.
 
 ```nix
 {
@@ -34,25 +34,36 @@ The `nixpkgs` channel is easy to set up and uses the Rust version currently avai
 
 ### 2. rust-overlay channels
 
-For more control over versions and features, use the `stable`, `beta`, or `nightly` channels powered by [rust-overlay](https://github.com/oxalica/rust-overlay):
+Use [rust-overlay](https://github.com/oxalica/rust-overlay) when you need a specific Rust channel, version, or compilation target. Before you select the `stable`, `beta`, or `nightly` channel, add the `rust-overlay` input to your `devenv.yaml`:
 
-- ✅ Rustup-like channel selection
-- ✅ Access to any Rust version
-- ✅ Support for cross-compilation targets
+```yaml title="devenv.yaml"
+inputs:
+  rust-overlay:
+    url: github:oxalica/rust-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+```
+
+Then select the channel in your `devenv.nix`:
 
 ```nix
 {
   languages.rust = {
     enable = true;
     channel = "stable";
-    version = "1.81.0"; # or "latest"
+    version = "1.81.0";
   };
 }
 ```
+
+The `version` option uses `"latest"` by default. You can also set it to a specific Rust version or a nightly release date.
 
 ## Examples
 
-### Basic setup with latest stable
+### Use the latest stable toolchain
+
+The `stable` channel uses the latest version by default:
 
 ```nix
 {
@@ -63,7 +74,9 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
-### Nightly Rust with extra components
+### Add components to a nightly toolchain
+
+Set the channel to `nightly`. List each component that you need in the `components` option:
 
 ```nix
 {
@@ -75,7 +88,9 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
-### Cross-compilation setup
+### Add cross-compilation targets
+
+Use the `targets` option to install additional compilation targets:
 
 ```nix
 {
@@ -87,7 +102,9 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
-### Minimal installation
+### Install fewer components
+
+Use the `components` option to install only the tools that you need:
 
 ```nix
 {
@@ -99,9 +116,9 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
-### Using rust-toolchain.toml
+### Use rust-toolchain.toml
 
-If your project uses a `rust-toolchain.toml` file, devenv can automatically configure the toolchain from it:
+If your project has a `rust-toolchain.toml` file, set `toolchainFile` to its path. This option uses the `rust-overlay` input from the earlier example.
 
 ```nix
 {
@@ -112,7 +129,8 @@ If your project uses a `rust-toolchain.toml` file, devenv can automatically conf
 }
 ```
 
-Example `rust-toolchain.toml`:
+For example, this `rust-toolchain.toml` selects the stable channel and two components:
+
 ```toml
 [toolchain]
 channel = "stable"
@@ -124,7 +142,7 @@ profile = "minimal"
 
 ### Git hooks
 
-Rust tools integrate seamlessly with [git hooks](/reference/options.md/#git-hookshooks):
+[Git hooks](/reference/options.md/#git-hookshooks) can run Rust checks before each commit:
 
 ```nix
 {
