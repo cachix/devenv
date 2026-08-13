@@ -28381,14 +28381,14 @@ rec {
       };
       "secretspec" = rec {
         crateName = "secretspec";
-        version = "0.19.0";
+        version = "0.19.1";
         edition = "2024";
         crateBin = [];
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "f2610cda66173b5d7441d4c9771459a3f2666c1d";
-          sha256 = "0zdda9c0vscc5z6gvhqfi25ash9bw503hg1i855lp8lbrhzdzb5v";
+          rev = "b90afe381452918134c40f9d91a7a7246c9fb9ca";
+          sha256 = "18mqhkvq1p125c351z926q6lgi8ii20gibykv9glv1n9sx3gnjmh";
         };
         dependencies = [
           {

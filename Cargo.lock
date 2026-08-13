@@ -8311,8 +8311,8 @@ dependencies = [
 
 [[package]]
 name = "secretspec"
-version = "0.19.0"
-source = "git+https://github.com/cachix/secretspec?tag=v0.19.0#f2610cda66173b5d7441d4c9771459a3f2666c1d"
+version = "0.19.1"
+source = "git+https://github.com/cachix/secretspec?tag=v0.19.1#b90afe381452918134c40f9d91a7a7246c9fb9ca"
 dependencies = [
  "age",
  "aws-config",
