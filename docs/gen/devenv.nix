@@ -43,26 +43,18 @@ let
     path: opt:
     filterGitHooks path opt && filterTreefmt path opt;
 
-  getStorePath =
-    p:
-    lib.pipe p [
-      (lib.strings.splitString "/")
-      (lib.lists.take 4)
-      (lib.strings.concatStringsSep "/")
-    ];
-
   # Rewrite source declarations to GitHub URLs
   sources = [
     {
-      name = getStorePath inputs.devenv.outPath;
-      url = "https://github.com/cachix/devenv/blob/main";
+      prefix = inputs.devenv.outPath;
+      url = "https://github.com/cachix/devenv/blob/main/src/modules";
     }
     {
-      name = inputs.git-hooks.outPath;
+      prefix = inputs.git-hooks.outPath;
       url = "https://github.com/cachix/git-hooks.nix/blob/master";
     }
     {
-      name = inputs.treefmt-nix.outPath;
+      prefix = inputs.treefmt-nix.outPath;
       url = "https://github.com/numtide/treefmt-nix/blob/main";
     }
   ];
@@ -70,11 +62,20 @@ let
   rewriteSource =
     decl:
     let
-      prefix = getStorePath decl;
-      source = lib.lists.findFirst (src: src.name == prefix) { } sources;
+      source = lib.lists.findFirst (
+        src:
+        let
+          prefix = toString src.prefix;
+        in
+        decl == prefix || lib.strings.hasPrefix "${prefix}/" decl
+      ) null sources;
+      prefix =
+        if source == null then
+          throw "Failed to rewrite source url for module: ${decl}"
+        else
+          toString source.prefix;
       path = lib.strings.removePrefix prefix decl;
-      sourceUrl = source.url or (throw "Failed to rewrite source url for module: ${decl}");
-      url = sourceUrl + path;
+      url = source.url + path;
     in
     {
       name = url;
