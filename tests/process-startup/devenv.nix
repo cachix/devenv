@@ -109,6 +109,7 @@ in
       touch ${markerDir}/producer-a.started
       exec sleep infinity
     '';
+    ready.exec = "test -f ${markerDir}/producer-a.started";
   };
 
   # 10. Independent producer B
@@ -118,13 +119,14 @@ in
       touch ${markerDir}/producer-b.started
       exec sleep infinity
     '';
+    ready.exec = "test -f ${markerDir}/producer-b.started";
   };
 
   # 11. Consumer depends on both producers
   processes.consumer = {
     exec = ''
       mkdir -p ${markerDir}
-      # Verify both producers started before us
+      # Verify both producers became ready before us
       if [ ! -f ${markerDir}/producer-a.started ] || [ ! -f ${markerDir}/producer-b.started ]; then
         touch ${markerDir}/consumer.ordering-violation
       fi
@@ -132,8 +134,8 @@ in
       exec sleep infinity
     '';
     after = [
-      "devenv:processes:producer-a@started"
-      "devenv:processes:producer-b@started"
+      "devenv:processes:producer-a@ready"
+      "devenv:processes:producer-b@ready"
     ];
   };
 

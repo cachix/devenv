@@ -14,9 +14,9 @@ assert_file foo.ini <<EOF
 [foo]
 bar=baz
 EOF
-assert_file foo.yaml <<EOF
-foo: bar
-EOF
+# YAML renderers may include directives and document separators. Assert the
+# generated document semantically instead of snapshotting their formatting.
+[ "$(yq --output-format=json --indent=0 '.' foo.yaml)" = '{"foo":"bar"}' ]
 assert_file foo.toml <<EOF
 foo = "bar"
 EOF
