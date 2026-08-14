@@ -137,7 +137,7 @@ If you would like to integrate with the LLVM compiler infrastructure:
       install.enable = true;
       config = {
         profiles.default = {
-          settings._.build_type = "Release";
+          settings.build_type = "Release";
         };
         stdenv = pkgs.overrideCC
           (
@@ -174,7 +174,7 @@ Or even:
       install.enable = true;
       config = {
         profiles.default = {
-          settings._.build_type = "Release";
+          settings.build_type = "Release";
         };
       };
     };
