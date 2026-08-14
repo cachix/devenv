@@ -88,10 +88,7 @@ config.env.DEVENV_STATE + "/couchdb"
 
 
 CouchDB configuration\.
-to know more about all settings, look at:
-\<link
-xlink:href=“https://docs\.couchdb\.org/en/stable/config/couchdb\.html”
-/>
+https://docs\.couchdb\.org/en/stable/config/couchdb\.html
 
 
 

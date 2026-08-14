@@ -59,7 +59,7 @@ signed integer
 
 Top-level process-compose\.yaml options
 
-Example: https://github\.com/F1bonacc1/process-compose/blob/main/process-compose\.yaml\`
+Example: https://github\.com/F1bonacc1/process-compose/blob/main/process-compose\.yaml
 
 
 
