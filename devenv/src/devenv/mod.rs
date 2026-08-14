@@ -3317,6 +3317,7 @@ fn merge_task_input(
 }
 
 fn format_tasks_tree(tasks: &[tasks::TaskConfig]) -> String {
+    use console::style;
     use std::fmt::Write;
 
     let mut output = String::new();
@@ -3361,34 +3362,58 @@ fn format_tasks_tree(tasks: &[tasks::TaskConfig]) -> String {
         visited.insert(task_name.to_string());
 
         let connector = if is_last { "└── " } else { "├── " };
-        let _ = write!(output, "{prefix}{connector}{task_name}");
+        let task = task_configs.get(task_name).copied();
+        let is_process = matches!(task.map(|t| t.r#type), Some(tasks::TaskType::Process));
 
-        // Add additional info if available
-        if let Some(task) = task_configs.get(task_name) {
-            let mut extra_info = Vec::new();
+        let name = if is_process {
+            style(task_name).cyan().bold().to_string()
+        } else {
+            style(task_name).bold().to_string()
+        };
+        let _ = write!(output, "{prefix}{connector}{name}");
 
-            if task.status.is_some() {
-                extra_info.push("has status check".to_string());
+        if let Some(task) = task {
+            if is_process {
+                let _ = write!(output, " {}", style("(process)").dim());
+            } else if task.command.is_none() {
+                let _ = write!(output, " {}", style("(no command)").dim());
             }
 
-            if !task.exec_if_modified.is_empty() {
-                let files = task.exec_if_modified.join(", ");
-                extra_info.push(format!("watches: {files}"));
-            }
-
-            if !extra_info.is_empty() {
-                let _ = write!(output, " ({})", extra_info.join(", "));
+            if !task.description.is_empty() {
+                let _ = write!(output, " {}", style(&task.description).dim());
             }
         }
 
         let _ = writeln!(output);
+
+        // Detail lines (status check, watched files) use the same
+        // continuation prefix as child tasks so the tree stays aligned.
+        let child_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
+
+        if let Some(task) = task {
+            if task.status.is_some() {
+                let _ = writeln!(
+                    output,
+                    "{child_prefix}{}",
+                    style("· has status check").dim()
+                );
+            }
+
+            if !task.exec_if_modified.is_empty() {
+                let files = task.exec_if_modified.join(", ");
+                let _ = writeln!(
+                    output,
+                    "{child_prefix}{} {files}",
+                    style("· watches:").dim()
+                );
+            }
+        }
 
         // Get children of this task
         let children = children_map
             .get(&Some(task_name))
             .cloned()
             .unwrap_or_default();
-        let new_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
 
         for (i, child) in children.iter().enumerate() {
             let is_last_child = i == children.len() - 1;
@@ -3398,7 +3423,7 @@ fn format_tasks_tree(tasks: &[tasks::TaskConfig]) -> String {
                 children_map,
                 task_configs,
                 visited,
-                &new_prefix,
+                &child_prefix,
                 is_last_child,
             );
         }
