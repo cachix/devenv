@@ -2,6 +2,10 @@
 
 ## 2.2.3 (unreleased)
 
+### Improvements
+
+- Reduced the size of the devenv closure from 528 MB to 376 MB. It no longer contains duplicate copies of glibc, OpenSSL, curl, Boost, ICU and the Nix libraries, which were pulled in by `cachix` and `nixd` being built against different package sets than devenv itself.
+
 ## 2.2.2 (2026-08-13)
 
 ### Bug Fixes

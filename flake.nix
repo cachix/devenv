@@ -39,6 +39,7 @@
   inputs.cachix = {
     url = "github:cachix/cachix/latest";
     inputs = {
+      nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "flake-compat";
       git-hooks.follows = "git-hooks";
       devenv.follows = "";
@@ -93,7 +94,19 @@
               nix = inputs.nix.packages.${system}.nix-cli // {
                 inherit (inputs.nix.packages.${system}.nix) libs;
               };
-              nixd = inputs.nixd.packages.${system}.nixd.override { llvmStatic = true; };
+              # Build nixd against the same nix components as devenv, otherwise
+              # it drags a second copy of the nix libraries into the closure.
+              nixd =
+                let
+                  nixdPkgs = inputs.nixd.packages.${system};
+                  nixComponents = final.nix.libs;
+                in
+                nixdPkgs.nixd.override {
+                  llvmStatic = true;
+                  inherit nixComponents;
+                  nixf = nixdPkgs.nixf.override { inherit (nixComponents) nix-expr; };
+                  nixt = nixdPkgs.nixt.override { inherit nixComponents; };
+                };
               crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
               libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" {
                 optimize = "ReleaseSafe";
