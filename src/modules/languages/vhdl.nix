@@ -29,7 +29,7 @@ in {
           "nvc" = pkgs.nvc;
         };
       in
-        packages.${config.languages.vhdl.backend} or pkgs.ghdl-gcc;
+        packages.${cfg.backend} or pkgs.ghdl-gcc;
       description = "The VHDL package to use (automatically set based on backend).";
     };
 
