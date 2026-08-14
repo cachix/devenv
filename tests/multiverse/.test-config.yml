@@ -1,0 +1,6 @@
+# The fixture intentionally evaluates historical nixpkgs package graphs. Those
+# snapshots predate current Darwin SDK/platform metadata and no longer evaluate
+# on modern macOS runners.
+broken_systems:
+  - aarch64-darwin
+  - x86_64-darwin

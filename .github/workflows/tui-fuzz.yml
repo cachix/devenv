@@ -101,6 +101,7 @@ jobs:
       - name: Run terminal fuzz
         run: |
           fixture="$PWD/devenv-tui/replays/processes.jsonl"
+          event_log="$PWD/bombadil-events.jsonl"
           set +e
           "${{ steps.build-bombadil.outputs.path }}/bin/bombadil" terminal test \
             --time-limit "${{ github.event.inputs.time-limit || '120s' }}" \
@@ -110,7 +111,7 @@ jobs:
             --specification devenv-tui/bombadil/devenv-tui.spec.ts \
             --output-path bombadil-out \
             -- "${{ steps.build-tui-replay.outputs.bin }}" \
-              --hold --attached --reactive "$fixture" \
+              --hold --attached --reactive --event-log "$event_log" "$fixture" \
             > bombadil.log 2>&1
           status=$?
           set -e
@@ -132,5 +133,6 @@ jobs:
           path: |
             bombadil-reproducer.tar.zst
             bombadil.log
+            bombadil-events.jsonl
           if-no-files-found: ignore
           retention-days: 14

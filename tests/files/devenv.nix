@@ -1,5 +1,7 @@
 { pkgs, lib, config, ... }: {
 
+  packages = [ pkgs.yq-go ];
+
   files = {
     "foo.json".json = {
       foo = "bar";

@@ -1,14 +1,16 @@
-{ pkgs, lib, ... }:
+{ config, pkgs, lib, ... }:
+let
+  prometheusPort = config.processes.prometheus.ports.main.value;
+in
 {
   services.prometheus = {
     enable = true;
     port = 9090;
-    storage.path = "/tmp/prometheus-1";
     scrapeConfigs = [
       {
         job_name = "prometheus";
         static_configs = [{
-          targets = [ "localhost:9090" ];
+          targets = [ "127.0.0.1:${toString prometheusPort}" ];
         }];
       }
     ];
@@ -19,6 +21,10 @@
   };
 
   scripts.ping-prometheus.exec = ''
-    ${lib.getExe pkgs.curl} -sf http://localhost:9090/-/healthy
+    ${lib.getExe pkgs.curl} -sf http://127.0.0.1:${toString prometheusPort}/-/healthy
+  '';
+
+  enterTest = ''
+    export PROMETHEUS_PORT=${toString prometheusPort}
   '';
 }

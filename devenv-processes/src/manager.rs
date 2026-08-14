@@ -17,6 +17,36 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
 
+fn same_process_command(left: &ProcessCommand, right: &ProcessCommand) -> bool {
+    matches!(
+        (left, right),
+        (ProcessCommand::Restart(left), ProcessCommand::Restart(right))
+            | (ProcessCommand::Stop(left), ProcessCommand::Stop(right))
+            if left == right
+    )
+}
+
+async fn recv_process_command(rx: &mut mpsc::Receiver<FrontendEvent>) -> Option<ProcessCommand> {
+    while let Some(event) = rx.recv().await {
+        if let FrontendEvent::Process(command) = event {
+            return Some(command);
+        }
+    }
+    None
+}
+
+/// Keep only the newest process intent that accumulated while the backend was
+/// busy. Terminal key repeats are input intent, not a queue of work to replay.
+fn latest_queued_process_command(rx: &mut mpsc::Receiver<FrontendEvent>) -> Option<ProcessCommand> {
+    let mut latest = None;
+    while let Ok(event) = rx.try_recv() {
+        if let FrontendEvent::Process(command) = event {
+            latest = Some(command);
+        }
+    }
+    latest
+}
+
 /// Request sent by a client to the native manager API socket.
 ///
 /// Protocol: newline-delimited JSON over a Unix stream socket.
@@ -1360,6 +1390,21 @@ impl NativeProcessManager {
         let (job, _task) = start_job(proc_cmd.command);
         let job = Arc::new(job);
 
+        // watchexec-supervisor reports spawn failures only through its error
+        // handler. Without one, the start ticket completes successfully even
+        // when no child was created.
+        let (start_error_tx, mut start_error_rx) = mpsc::unbounded_channel();
+        let process_name = config.name.clone();
+        job.set_error_handler(move |error| {
+            let message = error
+                .get()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "unknown supervisor error".to_string());
+            warn!("Process '{}' supervisor error: {}", process_name, message);
+            let _ = start_error_tx.send(message);
+        })
+        .await;
+
         // Setup socket activation and/or capabilities if configured
         let has_sockets = !config.listen.is_empty();
         let has_caps = !config.linux.capabilities.is_empty();
@@ -1427,6 +1472,10 @@ impl NativeProcessManager {
         });
 
         job.start().await;
+        if let Ok(error) = start_error_rx.try_recv() {
+            job.delete().await;
+            bail!("Failed to spawn process '{}': {}", config.name, error);
+        }
 
         // Spawn file tailers to emit output to activity
         let stderr_log = proc_cmd.stderr_log.clone();
@@ -2619,10 +2668,14 @@ impl NativeProcessManager {
     pub fn start_command_listener(self: &Arc<Self>, mut rx: mpsc::Receiver<FrontendEvent>) {
         let pm = Arc::clone(self);
         tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                if let FrontendEvent::Process(command) = event {
-                    pm.handle_command(command).await;
-                }
+            let mut queued_command = None;
+            while let Some(command) = match queued_command.take() {
+                Some(command) => Some(command),
+                None => recv_process_command(&mut rx).await,
+            } {
+                pm.handle_command(command.clone()).await;
+                queued_command = latest_queued_process_command(&mut rx)
+                    .filter(|queued| !same_process_command(&command, queued));
             }
         });
     }
@@ -2641,6 +2694,7 @@ impl NativeProcessManager {
         );
         info!("Manager event loop started (foreground)");
         let mut saw_processes = false;
+        let mut queued_command = None;
 
         loop {
             tokio::select! {
@@ -2653,13 +2707,20 @@ impl NativeProcessManager {
                     break;
                 }
                 Some(event) = async {
-                    match frontend_event_rx.as_mut() {
-                        Some(rx) => rx.recv().await,
-                        None => std::future::pending().await,
+                    match queued_command.take() {
+                        Some(command) => Some(FrontendEvent::Process(command)),
+                        None => match frontend_event_rx.as_mut() {
+                            Some(rx) => rx.recv().await,
+                            None => std::future::pending().await,
+                        },
                     }
                 } => {
                     if let FrontendEvent::Process(command) = event {
-                        self.handle_command(command).await;
+                        self.handle_command(command.clone()).await;
+                        queued_command = frontend_event_rx
+                            .as_mut()
+                            .and_then(latest_queued_process_command)
+                            .filter(|queued| !same_process_command(&command, queued));
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {
@@ -2948,6 +3009,44 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = NativeProcessManager::new(temp_dir.path().to_path_buf());
         assert!(manager.is_ok());
+    }
+
+    #[tokio::test]
+    async fn process_command_queue_keeps_only_the_latest_intent() {
+        let (tx, mut rx) = mpsc::channel(4);
+        tx.send(FrontendEvent::Process(ProcessCommand::Restart(
+            "alpha".to_string(),
+        )))
+        .await
+        .unwrap();
+        tx.send(FrontendEvent::Process(ProcessCommand::Stop(
+            "alpha".to_string(),
+        )))
+        .await
+        .unwrap();
+        tx.send(FrontendEvent::Process(ProcessCommand::Restart(
+            "beta".to_string(),
+        )))
+        .await
+        .unwrap();
+
+        let first = recv_process_command(&mut rx).await.unwrap();
+        let latest = latest_queued_process_command(&mut rx).unwrap();
+
+        assert!(matches!(first, ProcessCommand::Restart(name) if name == "alpha"));
+        assert!(matches!(latest, ProcessCommand::Restart(name) if name == "beta"));
+    }
+
+    #[test]
+    fn repeated_process_command_is_the_same_intent() {
+        assert!(same_process_command(
+            &ProcessCommand::Restart("alpha".to_string()),
+            &ProcessCommand::Restart("alpha".to_string()),
+        ));
+        assert!(!same_process_command(
+            &ProcessCommand::Restart("alpha".to_string()),
+            &ProcessCommand::Stop("alpha".to_string()),
+        ));
     }
 
     #[tokio::test]

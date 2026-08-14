@@ -1,6 +1,8 @@
 # Changelog
 
-## 2.2.2 (unreleased)
+## 2.2.3 (unreleased)
+
+## 2.2.2 (2026-08-13)
 
 ### Bug Fixes
 
@@ -96,6 +98,9 @@
 
 ### Improvements
 
+- Added a `multiverse` package argument for selecting historical Nixpkgs packages by version, such as
+  `multiverse.cmake."3.16.5"`, backed by an optional `nixpkgs-multiverse` input
+  ([#16](https://github.com/cachix/devenv/issues/16)).
 - `devenv shell` reload sessions now redraw only the terminal rows that changed instead of the whole screen every time output scrolls, reducing flicker and output bandwidth. Resizing the terminal mid-session no longer risks dropping pending lines from scrollback.
 - Reduced renderer fragmentation in `devenv shell` by reading PTY output in larger batches, lowering syscall and event-allocation overhead during full-screen repaint bursts.
 - `DEVENV_HOME` now overrides where devenv stores all per-user data (GC roots, trust database, cached keys), not just the trust database.

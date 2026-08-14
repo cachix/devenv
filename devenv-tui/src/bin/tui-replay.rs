@@ -155,14 +155,63 @@ async fn run_replays(
     }
 }
 
-fn process_ids(events: &[ReplayEvent]) -> BTreeMap<String, u64> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ReactiveProcess {
+    id: u64,
+    stable_status: ProcessStatus,
+}
+
+fn reactive_processes(events: &[ReplayEvent]) -> BTreeMap<String, ReactiveProcess> {
     events
         .iter()
         .filter_map(|event| match &event.activity {
-            ActivityEvent::Process(Process::Start { id, name, .. }) => Some((name.clone(), *id)),
+            ActivityEvent::Process(Process::Start {
+                id,
+                name,
+                ready_probe,
+                ..
+            }) => Some((
+                name.clone(),
+                ReactiveProcess {
+                    id: *id,
+                    stable_status: if ready_probe.is_some() {
+                        ProcessStatus::Ready
+                    } else {
+                        ProcessStatus::Running
+                    },
+                },
+            )),
             _ => None,
         })
         .collect()
+}
+
+fn same_process_command(left: &ProcessCommand, right: &ProcessCommand) -> bool {
+    matches!(
+        (left, right),
+        (ProcessCommand::Restart(left), ProcessCommand::Restart(right))
+            | (ProcessCommand::Stop(left), ProcessCommand::Stop(right))
+            if left == right
+    )
+}
+
+async fn recv_process_command(rx: &mut mpsc::Receiver<FrontendEvent>) -> Option<ProcessCommand> {
+    while let Some(event) = rx.recv().await {
+        if let FrontendEvent::Process(command) = event {
+            return Some(command);
+        }
+    }
+    None
+}
+
+fn latest_queued_process_command(rx: &mut mpsc::Receiver<FrontendEvent>) -> Option<ProcessCommand> {
+    let mut latest = None;
+    while let Ok(event) = rx.try_recv() {
+        if let FrontendEvent::Process(command) = event {
+            latest = Some(command);
+        }
+    }
+    latest
 }
 
 #[derive(Serialize)]
@@ -207,17 +256,19 @@ async fn run_reactive_backend(
     mut rx: mpsc::Receiver<FrontendEvent>,
     activity_tx: mpsc::UnboundedSender<ActivityEvent>,
     renderer_tx: mpsc::Sender<FrontendCommand>,
-    processes: BTreeMap<String, u64>,
+    processes: BTreeMap<String, ReactiveProcess>,
     mut log: Option<File>,
 ) -> Result<()> {
-    while let Some(event) = rx.recv().await {
-        let FrontendEvent::Process(command) = event else {
-            continue;
-        };
+    let mut queued_command = None;
+    while let Some(command) = match queued_command.take() {
+        Some(command) => Some(command),
+        None => recv_process_command(&mut rx).await,
+    } {
+        let handled_command = command.clone();
 
         match command {
             ProcessCommand::Restart(name) => {
-                let id = processes
+                let process = processes
                     .get(&name)
                     .copied()
                     .with_context(|| format!("TUI requested unknown process {name:?}"))?;
@@ -228,12 +279,24 @@ async fn run_reactive_backend(
                         process: &name,
                     },
                 )?;
-                send_status(&activity_tx, &mut log, &name, id, ProcessStatus::Restarting)?;
+                send_status(
+                    &activity_tx,
+                    &mut log,
+                    &name,
+                    process.id,
+                    ProcessStatus::Restarting,
+                )?;
                 sleep(Duration::from_millis(100)).await;
-                send_status(&activity_tx, &mut log, &name, id, ProcessStatus::Ready)?;
+                send_status(
+                    &activity_tx,
+                    &mut log,
+                    &name,
+                    process.id,
+                    process.stable_status,
+                )?;
             }
             ProcessCommand::Stop(name) => {
-                let id = processes
+                let process = processes
                     .get(&name)
                     .copied()
                     .with_context(|| format!("TUI requested unknown process {name:?}"))?;
@@ -244,9 +307,21 @@ async fn run_reactive_backend(
                         process: &name,
                     },
                 )?;
-                send_status(&activity_tx, &mut log, &name, id, ProcessStatus::Stopping)?;
+                send_status(
+                    &activity_tx,
+                    &mut log,
+                    &name,
+                    process.id,
+                    ProcessStatus::Stopping,
+                )?;
                 sleep(Duration::from_millis(100)).await;
-                send_status(&activity_tx, &mut log, &name, id, ProcessStatus::Stopped)?;
+                send_status(
+                    &activity_tx,
+                    &mut log,
+                    &name,
+                    process.id,
+                    ProcessStatus::Stopped,
+                )?;
             }
             ProcessCommand::StopManager => {
                 record(
@@ -256,12 +331,24 @@ async fn run_reactive_backend(
                         process: "*",
                     },
                 )?;
-                for (name, id) in &processes {
-                    send_status(&activity_tx, &mut log, name, *id, ProcessStatus::Stopping)?;
+                for (name, process) in &processes {
+                    send_status(
+                        &activity_tx,
+                        &mut log,
+                        name,
+                        process.id,
+                        ProcessStatus::Stopping,
+                    )?;
                 }
                 sleep(Duration::from_millis(100)).await;
-                for (name, id) in &processes {
-                    send_status(&activity_tx, &mut log, name, *id, ProcessStatus::Stopped)?;
+                for (name, process) in &processes {
+                    send_status(
+                        &activity_tx,
+                        &mut log,
+                        name,
+                        process.id,
+                        ProcessStatus::Stopped,
+                    )?;
                 }
                 renderer_tx
                     .send(FrontendCommand::ExitRenderer)
@@ -269,7 +356,10 @@ async fn run_reactive_backend(
                     .context("TUI closed before process-manager shutdown completed")?;
                 return Ok(());
             }
-        }
+        };
+
+        queued_command = latest_queued_process_command(&mut rx)
+            .filter(|queued| !same_process_command(&handled_command, queued));
     }
 
     Ok(())
@@ -300,7 +390,7 @@ async fn main() -> Result<()> {
 
     // Validation deliberately happens before the TUI enters raw mode.
     let events = load_trace_file(&args.trace_file)?;
-    let processes = process_ids(&events);
+    let processes = reactive_processes(&events);
     if args.reactive && processes.is_empty() {
         bail!("--reactive requires at least one process start event in the trace");
     }
@@ -435,7 +525,13 @@ mod tests {
     #[test]
     fn loads_processes_for_reactive_control() {
         let events = load_trace(Cursor::new(PROCESS)).unwrap();
-        assert_eq!(process_ids(&events).get("web"), Some(&7));
+        assert_eq!(
+            reactive_processes(&events).get("web"),
+            Some(&ReactiveProcess {
+                id: 7,
+                stable_status: ProcessStatus::Ready,
+            })
+        );
     }
 
     #[test]
@@ -443,7 +539,11 @@ mod tests {
         let events =
             load_trace(Cursor::new(include_str!("../../replays/processes.jsonl"))).unwrap();
         assert_eq!(events.len(), 9);
-        assert_eq!(process_ids(&events).len(), 3);
+        let processes = reactive_processes(&events);
+        assert_eq!(processes.len(), 3);
+        assert_eq!(processes["api"].stable_status, ProcessStatus::Ready);
+        assert_eq!(processes["worker"].stable_status, ProcessStatus::Running);
+        assert_eq!(processes["disabled"].stable_status, ProcessStatus::Running);
     }
 
     #[test]
@@ -462,7 +562,13 @@ mod tests {
             event_rx,
             activity_tx,
             renderer_tx,
-            BTreeMap::from([("web".to_string(), 7)]),
+            BTreeMap::from([(
+                "web".to_string(),
+                ReactiveProcess {
+                    id: 7,
+                    stable_status: ProcessStatus::Ready,
+                },
+            )]),
             None,
         ));
 
@@ -486,6 +592,41 @@ mod tests {
 
         drop(event_tx);
         task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn reactive_backend_coalesces_restart_bursts_and_restores_running() {
+        let (event_tx, event_rx) = mpsc::channel(64);
+        for _ in 0..64 {
+            event_tx
+                .send(FrontendEvent::Process(ProcessCommand::Restart(
+                    "web".to_string(),
+                )))
+                .await
+                .unwrap();
+        }
+        drop(event_tx);
+
+        let (activity_tx, mut activity_rx) = mpsc::unbounded_channel();
+        let (renderer_tx, _renderer_rx) = mpsc::channel(1);
+        let task = tokio::spawn(run_reactive_backend(
+            event_rx,
+            activity_tx,
+            renderer_tx,
+            BTreeMap::from([(
+                "web".to_string(),
+                ReactiveProcess {
+                    id: 7,
+                    stable_status: ProcessStatus::Running,
+                },
+            )]),
+            None,
+        ));
+
+        assert_status(activity_rx.recv().await.unwrap(), ProcessStatus::Restarting);
+        assert_status(activity_rx.recv().await.unwrap(), ProcessStatus::Running);
+        task.await.unwrap().unwrap();
+        assert!(activity_rx.recv().await.is_none());
     }
 
     #[tokio::test]

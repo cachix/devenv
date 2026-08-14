@@ -8,7 +8,26 @@
 
 set -ex
 
-PORT=18457
+PORT=
+PORT_FILE=.devenv/state/http-port
+
+load_port() {
+  for _ in $(seq 1 30); do
+    if [ -s "$PORT_FILE" ]; then
+      read -r PORT < "$PORT_FILE"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+start_daemon() {
+  PORT=
+  rm -f "$PORT_FILE"
+  devenv up -d
+  load_port
+}
 
 runtime_hash() {
   dotfile="$(pwd -P)/.devenv"
@@ -33,6 +52,7 @@ wait_for_port() {
 }
 
 port_free() {
+  [ -z "$PORT" ] && return 0
   ! curl -s -o /dev/null --connect-timeout 1 http://127.0.0.1:$PORT/ 2>/dev/null
 }
 
@@ -82,7 +102,7 @@ trap cleanup EXIT INT TERM
 
 # === Test 1: up -d then down cleans up ===
 echo "--- Test 1: basic up -d / down ---"
-devenv up -d
+start_daemon
 devenv processes wait
 wait_for_port
 devenv processes down
@@ -91,7 +111,7 @@ echo "PASS: basic up -d / down"
 
 # === Test 2: up -d attaches when a daemon is already running ===
 echo "--- Test 2: up -d attaches when a daemon is already running ---"
-devenv up -d
+start_daemon
 devenv processes wait
 wait_for_port
 
@@ -122,13 +142,13 @@ echo "PASS: up -d attaches when daemon running"
 
 # === Test 3: up -d / down / restart ===
 echo "--- Test 3: restart after down ---"
-devenv up -d
+start_daemon
 devenv processes wait
 wait_for_port
 devenv processes down
 wait_for_port_free || { echo "FAIL: port bound before restart"; exit 1; }
 
-devenv up -d
+start_daemon
 devenv processes wait
 wait_for_port || { echo "FAIL: restart failed"; exit 1; }
 devenv processes down
@@ -138,7 +158,7 @@ echo "PASS: restart after down"
 
 # === Test 4: double down is safe ===
 echo "--- Test 4: double down ---"
-devenv up -d
+start_daemon
 devenv processes wait
 devenv processes down
 wait_for_port_free || true
@@ -149,12 +169,15 @@ echo "PASS: double down"
 
 # === Test 5: concurrent cold daemon starts have one owner ===
 echo "--- Test 5: concurrent daemon startup ---"
+PORT=
+rm -f "$PORT_FILE"
 devenv up -d >concurrent-1.txt 2>&1 &
 UP_ONE=$!
 devenv up -d >concurrent-2.txt 2>&1 &
 UP_TWO=$!
 wait "$UP_ONE"
 wait "$UP_TWO"
+load_port
 devenv processes wait
 wait_for_port
 

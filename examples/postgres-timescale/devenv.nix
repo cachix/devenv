@@ -3,7 +3,7 @@
 {
   services.postgres = {
     enable = true;
-    package = pkgs.postgresql_15;
+    package = pkgs.postgresql_16;
     initialDatabases = [{ name = "mydb"; }];
     extensions = extensions: [
       extensions.postgis

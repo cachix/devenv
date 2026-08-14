@@ -34,7 +34,36 @@ Entering shell ...
 jq-1.6
 ```
 
-If you need a newer (or older) version of a certain package, you can [fetch them from another nixpkgs input](recipes/nix.md).
+## Installing a specific version
+
+Add the [nixpkgs-multiverse](https://github.com/fzakaria/nixpkgs-multiverse) input once:
+
+```shell-session
+$ devenv inputs add nixpkgs-multiverse github:fzakaria/nixpkgs-multiverse
+```
+
+Packages are then available by their Nixpkgs attribute and version:
+
+```nix title="devenv.nix"
+{ pkgs, multiverse, ... }:
+
+{
+  packages = [
+    pkgs.git
+    multiverse.cmake."3.16.5"
+    multiverse.bun."0.7.0"
+  ];
+}
+```
+
+The `nixpkgs-multiverse` input is pinned in `devenv.lock`. Historical Nixpkgs revisions are fetched lazily, so only
+revisions providing packages you use are downloaded. The unmodified input remains available as
+`inputs."nixpkgs-multiverse"` for advanced use. See [Pinning an individual package version](pinning.md#pinning-an-individual-package-version)
+for the reproducibility and update workflow.
+
+Multiverse indexes top-level package attributes from published Nixpkgs releases and `nixos-unstable` channel
+revisions. If a package or version is not indexed, you can still
+[fetch it from another nixpkgs input](recipes/nix.md).
 
 ## Searching
 

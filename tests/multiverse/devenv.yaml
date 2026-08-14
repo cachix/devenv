@@ -1,0 +1,3 @@
+inputs:
+  nixpkgs-multiverse:
+    url: github:fzakaria/nixpkgs-multiverse/c2b0a50710c6615c237e8d7e193b6a91f73fc7e5

@@ -1,4 +1,5 @@
 { config
+, inputs ? { }
 , pkgs
 , lib
 , bootstrapPkgs ? null
@@ -313,6 +314,14 @@ in
   ++ (listEntries ./process-managers);
 
   config = {
+    # Expose versioned packages as `multiverse.<attr>."<version>"`. Using a
+    # distinct input name keeps the raw flake available without shadowing this
+    # module argument.
+    _module.args.multiverse = import ./lib/multiverse.nix {
+      inherit inputs pkgs;
+      flakesIntegration = config.devenv.flakesIntegration;
+    };
+
     assertions = [
       {
         assertion =
