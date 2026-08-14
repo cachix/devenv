@@ -12,7 +12,7 @@ in
       install.enable = true;
       config = {
         profiles.default = {
-          settings._.build_type = "Release";
+          settings.build_type = "Release";
         };
         stdenv = pkgs.overrideCC
           (

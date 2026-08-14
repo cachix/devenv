@@ -21,7 +21,7 @@ in
       install.enable = true;
       config = {
         profiles.default = {
-          settings._.build_type = "Release";
+          settings.build_type = "Release";
         };
         remotes.local = {
           url = "./repo";

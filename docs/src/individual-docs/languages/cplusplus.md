@@ -46,8 +46,8 @@ There corresponds the following conan-flake options:
 ```nix
 {
   profiles.default = {
-    settings.compiler."compiler.cppstd" = "14";
-    settings._.build_type = "Debug";
+    settings."compiler.cppstd" = "14";
+    settings.build_type = "Debug";
 
     platformToolRequires = {
       cmake = pkgs.cmake.version;
@@ -75,8 +75,8 @@ Set your `devenv.nix` file accordingly. For example, the above is actually equiv
       install.enable = true;
       config = {
         profiles.default = {
-          settings.compiler."compiler.cppstd" = "14";
-          settings._.build_type = "Debug";
+          settings."compiler.cppstd" = "14";
+          settings.build_type = "Debug";
         };
       };
     };
@@ -223,8 +223,8 @@ With [local-recipe-index](https://docs.conan.io/2/tutorial/conan_repositories/se
 
       config = {
         profiles.default = {
-          settings.compiler."compiler.cppstd" = "17";
-          settings._.build_type = "Release";
+          settings."compiler.cppstd" = "17";
+          settings.build_type = "Release";
         };
 
         remotes.local = {

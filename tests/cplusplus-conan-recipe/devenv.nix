@@ -11,8 +11,8 @@ in
       install.enable = true;
       config = {
         profiles.default = {
-          settings.compiler."compiler.cppstd" = "17";
-          settings._.build_type = "Release";
+          settings."compiler.cppstd" = "17";
+          settings.build_type = "Release";
         };
         remotes.local = {
           url = "./repo";
