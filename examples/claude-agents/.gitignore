@@ -1,0 +1,16 @@
+# acai
+.agents/skills
+
+# JavaScript runtimes
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lockb
+
+# claude
+**/.claude/settings.local.json
+.claude/settings.json
+.claude/agents
+.mcp.json
+.devcontainer.json

@@ -1312,6 +1312,30 @@ true
 
 
 
+## claude.code.agent
+
+
+
+The agent to use as Claude Code’s primary agent.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## claude.code.agents
 
 
@@ -1390,6 +1414,30 @@ What the sub-agent does
 
 *Type:*
 string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.agents.\<name>.effort
+
+
+
+Override the effort level for this agent.
+
+
+
+*Type:*
+null or one of “low”, “medium”, “high”, “xhigh”, “max”
+
+
+
+*Default:*
+
+```nix
+null
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
@@ -2744,8 +2792,6 @@ list of anything
 
 ## containers.\<name>.fromImage
 
-
-
 An existing OCI base image to build on top of, built with nix2container’s pullImage.
 
 
@@ -2791,6 +2837,8 @@ false
 
 
 ## containers.\<name>.layers
+
+
 
 The layers to create.
 
@@ -6009,8 +6057,6 @@ null or string
 
 ## git-hooks.hooks.autoflake.settings.flags
 
-
-
 Flags passed to autoflake.
 
 
@@ -6048,6 +6094,8 @@ submodule
 
 
 ## git-hooks.hooks.biome.enable
+
+
 
 Whether to enable this pre-commit hook.
 
@@ -8282,8 +8330,6 @@ false
 
 ## git-hooks.hooks.isort
 
-
-
 isort hook
 
 
@@ -8321,6 +8367,8 @@ false
 
 
 ## git-hooks.hooks.isort.settings.flags
+
+
 
 Flags passed to isort. See all available [here](https://pycqa.github.io/isort/docs/configuration/options.html).
 
