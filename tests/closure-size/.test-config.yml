@@ -1,0 +1,3 @@
+# Runs in the repository, not a temp copy: the test inspects our own flake outputs.
+use_shell: false
+use_tmp_dir: false
