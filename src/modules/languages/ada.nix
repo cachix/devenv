@@ -1,9 +1,9 @@
-{
-  pkgs,
-  config,
-  lib,
-  ...
-}: let
+{ pkgs
+, config
+, lib
+, ...
+}:
+let
   cfg = config.languages.ada;
 
   compilerPackages = {
@@ -14,12 +14,13 @@
   };
 
   gnatCompiler = compilerPackages.${cfg.version};
-in {
+in
+{
   options.languages.ada = {
     enable = lib.mkEnableOption "tools for Ada Development";
 
     version = lib.mkOption {
-      type = lib.types.enum ["gnat13" "gnat14" "gnat15" "gnat16"];
+      type = lib.types.enum [ "gnat13" "gnat14" "gnat15" "gnat16" ];
       default = "gnat13";
       defaultText = lib.literalExpression "gnat13";
       description = ''
@@ -75,8 +76,8 @@ in {
     };
   };
   config = lib.mkIf cfg.enable {
-    packages = with pkgs;
-      [cfg.package]
+    packages =
+      [ cfg.package ]
       ++ lib.optional cfg.gpr2.enable cfg.gpr2.package
       ++ lib.optional cfg.xmlada.enable cfg.xmlada.package;
   };
