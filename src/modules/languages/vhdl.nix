@@ -1,18 +1,28 @@
-{
-  pkgs,
-  config,
-  lib,
-  ...
-}: let
+{ pkgs
+, config
+, lib
+, ...
+}:
+let
   cfg = config.languages.vhdl;
-in {
+  compilerPackages = {
+    ghdl-gcc = pkgs.ghdl-gcc;
+    ghdl-llvm = pkgs.ghdl-llvm;
+    ghdl-mcode = pkgs.ghdl-mcode;
+    nvc = pkgs.nvc;
+  };
+in
+{
   options.languages.vhdl = {
     enable = lib.mkEnableOption "tools for VHDL Development";
-    backend = lib.mkOption {
-      type = lib.types.enum ["ghdl-gcc" "ghdl-llvm" "ghdl-mcode" "nvc"];
-      default = "ghdl-gcc";
+    compiler = lib.mkOption {
+      type = lib.types.enum (builtins.attrNames compilerPackages);
+      default =
+        if pkgs.stdenv.isDarwin
+        then "ghdl-llvm"
+        else "ghdl-gcc";
       description = ''
-        The VHDL compiler backend to use.
+        The VHDL compiler to use.
         - ghdl-gcc: GHDL with GCC backend
         - ghdl-llvm: GHDL with LLVM backend
         - ghdl-mcode: GHDL with built-in mcode backend
@@ -21,30 +31,27 @@ in {
     };
     package = lib.mkOption {
       type = lib.types.package;
-      default = let
-        packages = {
-          "ghdl-gcc" = pkgs.ghdl-gcc;
-          "ghdl-llvm" = pkgs.ghdl-llvm;
-          "ghdl-mcode" = pkgs.ghdl-mcode;
-          "nvc" = pkgs.nvc;
-        };
-      in
-        packages.${cfg.backend} or pkgs.ghdl-gcc;
-      description = "The VHDL package to use (automatically set based on backend).";
+      default = compilerPackages.${cfg.compiler};
+      defaultText = lib.literalExpression "pkgs.\${cfg.compiler}";
+      description = "The VHDL package to use (automatically set based on compiler).";
     };
 
     lsp = {
-      enable = lib.mkEnableOption "VHDL Language Server" // {default = true;};
+      enable = lib.mkEnableOption "VHDL Language Server" // { default = true; };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.vhdl-ls;
-        defaultText = lib.literalExpression "pkgs.vhdl_ls";
-        description = "The VHDL language server package to use.";
+        defaultText = lib.literalExpression "pkgs.vhdl-ls";
+        description = ''
+          The VHDL language server package to use.
+
+          You can see this example of [vhdl-ls configuration](https://github.com/VHDL-LS/rust_hdl#example-vhdl_lstoml--quickstart) to start.
+        '';
       };
     };
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [cfg.package] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+    packages = [ cfg.package ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }
