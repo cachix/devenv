@@ -1,75 +1,80 @@
-{
-  pkgs,
-  config,
-  lib,
-  ...
-}: let
+{ pkgs
+, config
+, lib
+, ...
+}:
+let
   cfg = config.languages.assembly;
 
-  crossPkgs =
-    if cfg.type == "arm"
-    then
-      if cfg.targetArch == "aarch64"
-      then pkgs.pkgsCross.aarch64-multiplatform
-      else if cfg.targetArch == "armv7l"
-      then pkgs.pkgsCross.armv7l-hf-multiplatform
-      else null
-    else if cfg.type == "riscv"
-    then
-      if cfg.targetArch == "riscv64"
-      then pkgs.pkgsCross.riscv64
-      else if cfg.targetArch == "riscv32"
-      then pkgs.pkgsCross.riscv32
-      else null
-    else null;
-
-  targetCompiler =
-    if crossPkgs != null
-    then crossPkgs.stdenv.cc
-    else null;
-  targetBinutils =
-    if crossPkgs != null
-    then crossPkgs.binutils
-    else null;
-
   asmTargetPkgs = {
-    "nasm" = pkgs.nasm;
-    "fasm" = pkgs.fasm;
-    "yasm" = pkgs.yasm;
+    nasm = pkgs.nasm;
+    fasm = pkgs.fasm;
+    yasm = pkgs.yasm;
   };
 
-  inconsistentAsmAndTargetArch =
-    if cfg.type == "arm"
-    then builtins.elem cfg.targetArch ["aarch64" "armv7l"]
-    else if cfg.type == "riscv"
-    then builtins.elem cfg.targetArch ["riscv32" "riscv64"]
-    else if builtins.elem cfg.type ["nasm" "fasm" "yasm" "custom"]
-    then cfg.targetArch == "x86_64" || cfg.targetArch == null
-    else true;
+  emulatorPkgs = {
+    qemu = pkgs.qemu;
+    rvvm = pkgs.rvvm;
+  };
+
+  isCrossCompile = builtins.elem cfg.type [ "arm" "riscv" ];
+
+  archMapping = {
+    nasm = [ "x86_64" ];
+    fasm = [ "x86_64" ];
+    yasm = [ "x86_64" ];
+    arm = [ "aarch64" "armv7l" ];
+    riscv = [ "riscv32" "riscv64" ];
+  };
+  crossArchMap = {
+    aarch64 = pkgs.pkgsCross.aarch64-multiplatform;
+    armv7l = pkgs.pkgsCross.armv7l-hf-multiplatform;
+    riscv32 = pkgs.pkgsCross.riscv32;
+    riscv64 = pkgs.pkgsCross.riscv64;
+  };
+
+  crossPkgs =
+    if isCrossCompile && cfg.targetArch != "x86_64"
+    then crossArchMap.${cfg.targetArch} or { }
+    else { };
+
+  targetTool = crossPkgs.stdenv.cc or asmTargetPkgs.${cfg.type};
+  targetBinutils = crossPkgs.binutils or null;
+
+  isValidArchMapping =
+    builtins.hasAttr cfg.type archMapping
+    && builtins.elem cfg.targetArch archMapping.${cfg.type};
 
   rvvmRequiresRiscv =
     !(cfg.emulator.enable
       && cfg.emulator.type == "rvvm"
       && cfg.type != "riscv");
-in {
+in
+{
   options.languages.assembly = {
     enable = lib.mkEnableOption "tools for Assembly Development";
 
     type = lib.mkOption {
-      type = lib.types.enum ["nasm" "fasm" "yasm" "arm" "riscv" "custom"];
+      type = lib.types.enum [ "nasm" "fasm" "yasm" "arm" "riscv" ];
       default = "nasm";
+      defaultText = lib.literalExpression "nasm";
       description = ''
         Assembler selection.
         - nasm / fasm / yasm.
         - arm.
         - riscv.
-        - custom: User-provided assembly tool.
       '';
     };
 
     targetArch = lib.mkOption {
-      type = lib.types.nullOr (lib.types.enum ["x86_64" "aarch64" "armv7l" "riscv32" "riscv64"]);
-      default = "x86_64";
+      type = lib.types.nullOr (lib.types.enum [ "x86_64" "aarch64" "armv7l" "riscv32" "riscv64" ]);
+      default =
+        if cfg.type == "riscv"
+        then "riscv64"
+        else if cfg.type == "arm"
+        then "aarch64"
+        else "x86_64";
+      defaultText = lib.literalExpression "x86_64";
       description = ''
         Target architecture.
 
@@ -87,34 +92,22 @@ in {
 
     package = lib.mkOption {
       type = lib.types.package;
-      default =
-        if targetCompiler != null
-        then targetCompiler
-        else if cfg.type == "custom"
-        then pkgs.nasm
-        else asmTargetPkgs.${cfg.type} or pkgs.nasm;
+      default = targetTool;
       defaultText = lib.literalExpression "pkgs.nasm";
       description = ''
         The Assembly packate to use. Override this option to inject
         a custom-built assembler.
-
-        e.g: languages.assembly.package = pkgs.callPackage ./my-custom-nasm {};
-
-        When type="custom", this defaults to nasm but EXPECTS user override.
       '';
     };
 
     binutils = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
-      default =
-        if targetBinutils != null
-        then targetBinutils
-        else null;
-      defaultText = lib.literalExpression "crossPkgs.binutils";
+      default = targetBinutils;
+      defaultText = lib.literalExpression "crossPkgs.bintuils or null";
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Assembly Language Server" // {default = true;};
+      enable = lib.mkEnableOption "Assembly Language Server" // { default = true; };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.asm-lsp;
@@ -127,33 +120,26 @@ in {
       enable =
         lib.mkEnableOption "System Emulator (qemu / rvvm)."
         // {
-          default = cfg.type == "arm" || cfg.type == "riscv";
-          defaultText = lib.literalExpression ''
-            languages.assembly.type == "arm" || languages.assembly.type == "riscv"
-          '';
+          default = isCrossCompile;
+          defaultText = lib.literalExpression "isCrossCompile";
         };
       type = lib.mkOption {
-        type = lib.types.nullOr (lib.types.enum ["qemu" "rvvm"]);
-        default = "qemu";
+        type = lib.types.enum [ "qemu" "rvvm" ];
+        default =
+          if cfg.type == "riscv"
+          then "rvvm"
+          else "qemu";
+        defaultText = "qemu";
         description = ''
           Select your system emulator backend.
           - qemu: general purpose.
           - rvvm: only RISC-V.
-          - null: disable automatic 'package' selection, useful if you
-                  are going to override 'package' manually.
         '';
       };
       package = lib.mkOption {
         type = lib.types.nullOr lib.types.package;
-        default = let
-          emulatorPkgs = {
-            "qemu" = pkgs.qemu;
-            "rvvm" = pkgs.rvvm;
-          };
-        in
-          if cfg.emulator.type == null
-          then null
-          else emulatorPkgs.${cfg.emulator.type} or pkgs.qemu;
+        default = emulatorPkgs.${cfg.emulator.type};
+        defaultText = "pkgs.qemu";
         description = ''
           System emulator, solved by `emulator.type`, but you can overwrite
           for an emulator of your choice.
@@ -168,14 +154,14 @@ in {
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = inconsistentAsmAndTargetArch;
+        assertion = isValidArchMapping;
         message = ''
           Inconsistency between `type` and `targetArch`:
             type       = ${cfg.type}
             targetArch = ${builtins.toString cfg.targetArch}
 
           Valid mapping:
-            nasm/fasm/yasm/custom → x86_64 | null  (native)
+            nasm/fasm/yasm/custom  → x86_64  | null  (native)
             arm                    → aarch64 | armv7l
             riscv                  → riscv32 | riscv64
         '';
@@ -189,8 +175,8 @@ in {
       }
     ];
 
-    packages = with pkgs;
-      [cfg.package]
+    packages =
+      [ cfg.package ]
       ++ lib.optional cfg.lsp.enable cfg.lsp.package
       ++ lib.optional (cfg.emulator.enable && cfg.emulator.package != null) cfg.emulator.package;
   };
