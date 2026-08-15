@@ -5,6 +5,7 @@
 ### Improvements
 
 - Reduced the size of the devenv closure from 528 MB to 376 MB. It no longer contains duplicate copies of glibc, OpenSSL, curl, Boost, ICU and the Nix libraries, which were pulled in by `cachix` and `nixd` being built against different package sets than devenv itself.
+- `devenv tasks list` now prints a more readable human tree: task names are colored (processes in cyan), descriptions are shown inline, and details like status checks and watched files are broken onto their own indented lines instead of being crammed into a single parenthetical.
 
 ## 2.2.2 (2026-08-13)
 
