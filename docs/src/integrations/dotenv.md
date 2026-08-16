@@ -7,16 +7,11 @@ status: deprecated
     [Where `.env` Went Wrong](https://secretspec.dev/blog/where-env-went-wrong/) explains why `.env` files are a
     poor fit for configuration and secret management.
 
-!!! danger "The `.env` file leaks into `nix` store"
+!!! danger "Dotenv values can enter the Nix store"
 
-    When you use the `.env` file to store secrets, beware that this
-    integration copies these secrets (the entire `.env` file actually)
-    into the `nix` store. Depending on your threat model, this can leak
-    your secrets publicly: anybody with read-access to your `nix` store
-    (any user on a typical nixos setup) can read your secrets.
-
-    The new [SecretSpec][secretspec] integration does not suffer from
-    this problem.
+    Dotenv values participate in Nix evaluation and can be copied into the
+    Nix store, evaluation cache, logs, derivations, or generated files. Any
+    user with read access to those locations may be able to read the values.
 
 !!! tip "Consider SecretSpec for new projects"
 
@@ -42,12 +37,37 @@ If you have a `.env`, you'll see instructions how to enable integration:
   # dotenv.filename = ".env.production";
   # or
   # dotenv.filename = [ ".env.production" ".env.development" ]
+
+  # Expand $NAME and ${NAME:-default} references. This is off by default
+  # so dollar signs in passwords, hashes, and tokens remain literal.
+  # dotenv.substitution = true;
+
 }
 ```
 
-When the developer environment is loaded, environment variables from `.env` will be loaded
-and set into `config.env`.
+When the developer environment is loaded, the devenv CLI parses dotenv files with `dotenv-ng`.
+Files later in `dotenv.filename` override values from earlier files.
 
-Variables from `.env` are set using `lib.mkDefault`, meaning that any existing `env` variables set in `devenv.nix` will have priority over them.
+Dotenv values are available through `config.env` during module evaluation. Explicit `env`
+variables in `devenv.nix` have priority over values from dotenv:
+
+```nix title="devenv.nix"
+{ config, ... }:
+{
+  dotenv.enable = true;
+  env.DATABASE_HOST_ALIAS = "db-${config.env.DATABASE_HOST}";
+}
+```
+
+Because the values participate in Nix evaluation, they can be copied into the evaluation cache,
+derivations, store paths, logs, or generated files. The cache tracks dotenv file hashes,
+including missing layered files, and the inherited variables used by substitution.
+
+The integration supports quoted and multiline values, comments, optional `export`
+prefixes, and dotenv files in subdirectories. Relative filenames are resolved from the project
+root. When substitution is enabled, values in earlier dotenv assignments take precedence over
+the inherited environment. Files created by enter-shell tasks are also loaded for the final shell,
+but values that did not exist during evaluation cannot be consumed by Nix modules until the next
+evaluation. The devenv CLI is required; the flake integration cannot load dotenv values.
 
 [secretspec]: secretspec.md

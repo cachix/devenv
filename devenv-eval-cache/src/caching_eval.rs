@@ -196,9 +196,9 @@ impl CachingEvalService {
 
     /// Remove all cached eval entries that have associated resource specs.
     ///
-    /// Used when a resource replay (e.g. port allocation) fails: one bad entry
-    /// means port assignments across attrs may be inconsistent, so every
-    /// port-dependent entry must be purged together. Returns the number of
+    /// Used when resource replay fails: one bad entry may make resource state
+    /// across attrs inconsistent, so every resource-dependent entry must be
+    /// purged together. Returns the number of
     /// rows deleted.
     pub async fn invalidate_resource_dependent(&self) -> Result<u64, CacheError> {
         Ok(db::delete_evals_with_resource_specs(&self.pool).await?)
@@ -399,7 +399,7 @@ impl CachedEval {
         }
     }
 
-    /// Set the resource manager for tracking port allocations across cache hits.
+    /// Set the resource manager for replaying side effects and input state across cache hits.
     ///
     /// When set, on cache miss: snapshots resource allocations (e.g., ports) and
     /// stores them alongside the cached eval result.
@@ -410,7 +410,7 @@ impl CachedEval {
         self
     }
 
-    /// Set a callback invoked when resource replay fails and all port-dependent
+    /// Set a callback invoked when resource replay fails and all resource-dependent
     /// cache entries are purged. Use this to clear any in-memory cached Nix values
     /// so that re-evaluation starts from a clean state.
     pub fn with_on_resource_invalidation(mut self, f: Arc<dyn Fn() + Send + Sync>) -> Self {
@@ -445,8 +445,8 @@ impl CachedEval {
     /// Replay resource allocations from a cached eval entry (public API).
     ///
     /// Call this when using a custom cache hit path that bypasses `eval()`/`eval_typed()`,
-    /// such as `dev_env()`'s store-path existence check. This ensures port allocations
-    /// are re-acquired even when the normal caching flow is skipped.
+    /// such as `dev_env()`'s store-path existence check. This ensures resource
+    /// state is replayed even when the normal caching flow is skipped.
     ///
     /// Returns Ok(()) if replay succeeded or no resources were stored.
     /// Returns Err if replay failed (caller should re-evaluate).
@@ -468,8 +468,8 @@ impl CachedEval {
         }
     }
 
-    /// Handle a resource replay failure by purging all port-dependent cache
-    /// entries, resetting the port allocator, and invoking the invalidation
+    /// Handle a replay failure by purging all resource-dependent cache entries,
+    /// resetting resource state, and invoking the invalidation
     /// callback so the caller can clear any in-memory cached Nix values.
     async fn handle_replay_failure(
         &self,
@@ -477,10 +477,10 @@ impl CachedEval {
         rm: &ResourceManager,
         error: &CacheError,
     ) {
-        warn!(error = %error, "Resource replay failed, invalidating all port-dependent cache entries");
+        warn!(error = %error, "Resource replay failed, invalidating all resource-dependent cache entries");
 
         if let Err(db_err) = service.invalidate_resource_dependent().await {
-            warn!(error = %db_err, "Failed to delete port-dependent cache entries");
+            warn!(error = %db_err, "Failed to delete resource-dependent cache entries");
         }
 
         rm.clear_all();
