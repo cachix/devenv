@@ -13,6 +13,7 @@
 
 ### Bug Fixes
 
+- Fixed the native process manager ignoring the shutdown signal a service needs. `processes.<name>.shutdown.signal` and `processes.<name>.shutdown.grace` now configure the graceful signal and the SIGKILL grace period for both the native manager and process-compose; the PostgreSQL service uses SIGINT (fast shutdown) again under `devenv up`. Restarts triggered by crashes, file watching, and the watchdog also honor the configured grace period (previously fixed at 2 seconds).
 - Fixed `devenv mcp` ignoring termination signals. A single SIGTERM or SIGINT now shuts the server down immediately, without waiting for further input on stdin; previously it kept running until it was killed forcefully or its client closed stdin ([#3065](https://github.com/cachix/devenv/issues/3065)).
 - Fixed `devenv mcp` ignoring most of the session's configuration; it previously fell back to default Nix, cache, and shell settings for everything except inputs and imports.
 

@@ -2,6 +2,7 @@
 let
   pcProcesses = config.process.managers.process-compose.settings.processes;
   foo = pcProcesses.foo;
+  bar = pcProcesses.bar;
 in
 {
   process.manager.implementation = "process-compose";
@@ -21,10 +22,23 @@ in
     };
 
     restart.on = "on_failure";
+    shutdown = {
+      signal = 2;
+      grace = 3;
+    };
 
     process-compose = {
       readiness_probe.failure_threshold = 99;
       availability.max_restarts = 7;
+    };
+  };
+
+  # devenv-tasks receives SIGTERM and translates it for the service.
+  processes.bar = {
+    exec = "sleep infinity";
+    shutdown = {
+      signal = 2;
+      grace = 1;
     };
   };
 
@@ -44,6 +58,14 @@ in
     {
       assertion = foo.availability.max_restarts == 7;
       message = "process-compose merge: user override of availability.max_restarts not applied. Got: ${toString (foo.availability.max_restarts or null)}";
+    }
+    {
+      assertion = foo.shutdown.signal == 2 && foo.shutdown.timeout_seconds == 11;
+      message = "process-compose merge: shutdown settings of a direct process were not translated. Got: ${builtins.toJSON (foo.shutdown or {})}";
+    }
+    {
+      assertion = bar.shutdown.signal == 15 && bar.shutdown.timeout_seconds == 7;
+      message = "process-compose merge: a devenv-tasks wrapped process must receive SIGTERM. Got: ${builtins.toJSON (bar.shutdown or {})}";
     }
   ];
 

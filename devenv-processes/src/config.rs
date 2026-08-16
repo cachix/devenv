@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// Process type determining lifecycle behavior
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,6 +203,41 @@ pub struct LinuxConfig {
     pub capabilities: Vec<String>,
 }
 
+/// Graceful process shutdown configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShutdownConfig {
+    /// Unix signal number sent for graceful shutdown.
+    #[serde(default = "default_shutdown_signal")]
+    pub signal: i32,
+    /// Seconds to wait before escalating to SIGKILL.
+    #[serde(default = "default_shutdown_grace")]
+    pub grace: u64,
+}
+
+fn default_shutdown_signal() -> i32 {
+    15
+}
+
+fn default_shutdown_grace() -> u64 {
+    5
+}
+
+impl Default for ShutdownConfig {
+    fn default() -> Self {
+        Self {
+            signal: default_shutdown_signal(),
+            grace: default_shutdown_grace(),
+        }
+    }
+}
+
+impl ShutdownConfig {
+    /// Grace period as a [`Duration`].
+    pub fn grace_duration(&self) -> Duration {
+        Duration::from_secs(self.grace)
+    }
+}
+
 /// Auto-start configuration for a process
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StartConfig {
@@ -251,6 +287,9 @@ pub struct ProcessConfig {
     /// Watchdog configuration for health monitoring
     #[serde(default)]
     pub watchdog: Option<WatchdogConfig>,
+    /// Signal and grace period used when stopping the process.
+    #[serde(default)]
+    pub shutdown: ShutdownConfig,
     /// Linux-specific configuration
     #[serde(default)]
     pub linux: LinuxConfig,
@@ -282,6 +321,7 @@ impl Default for ProcessConfig {
             restart: RestartConfig::default(),
             watch: WatchConfig::default(),
             watchdog: None,
+            shutdown: ShutdownConfig::default(),
             linux: LinuxConfig::default(),
         }
     }
