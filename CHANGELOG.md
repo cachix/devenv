@@ -21,6 +21,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv-tasks` leaving its processes running when it exited with an error, and when process-compose disappeared without signalling it. Processes now stop on every exit path, and a `devenv-tasks` process that loses its parent shuts down gracefully.
 - Fixed the native process manager leaving processes behind when a service moved parts of itself into a private process group, for example a shell in monitor mode or `ghciwatch`. Stopping or restarting a process now terminates every process group left in the service session, and a leader that exits takes such groups with it before the restart decision.
 - Fixed the native process manager ignoring the shutdown signal a service needs. `processes.<name>.shutdown.signal` and `processes.<name>.shutdown.grace` now configure the graceful signal and the SIGKILL grace period for both the native manager and process-compose; the PostgreSQL service uses SIGINT (fast shutdown) again under `devenv up`. Restarts triggered by crashes, file watching, and the watchdog also honor the configured grace period (previously fixed at 2 seconds).
 - Fixed `devenv mcp` ignoring termination signals. A single SIGTERM or SIGINT now shuts the server down immediately, without waiting for further input on stdin; previously it kept running until it was killed forcefully or its client closed stdin ([#3065](https://github.com/cachix/devenv/issues/3065)).

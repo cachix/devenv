@@ -31,7 +31,13 @@ ignore.workspace = true
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["user", "signal"] }
 
+[features]
+default = []
+# Fault-injection hooks for the integration tests in `tests/`.
+test-all = ["devenv-processes/test-all"]
+
 [dev-dependencies]
 pretty_assertions.workspace = true
 proptest.workspace = true
 tokio-test.workspace = true
+nix = { workspace = true, features = ["signal"] }

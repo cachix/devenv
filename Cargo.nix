@@ -8481,7 +8481,7 @@ rec {
           "otlp-http-json" = [ "otlp" "opentelemetry-otlp/http-json" ];
           "otlp-http-protobuf" = [ "otlp" "opentelemetry-otlp/http-proto" ];
           "snix" = [ "dep:devenv-snix-backend" "devenv-core/snix" ];
-          "test-all" = [ "test-mcp" "devenv-processes/test-all" "devenv-nix-backend/test-all" "devenv-reload/test-all" "devenv-shell/test-all" "devenv-tui/test-all" ];
+          "test-all" = [ "test-mcp" "devenv-processes/test-all" "devenv-tasks/test-all" "devenv-nix-backend/test-all" "devenv-reload/test-all" "devenv-shell/test-all" "devenv-tui/test-all" ];
         };
         resolvedDefaultFeatures = [ "default" "otlp" "otlp-grpc" "otlp-http-json" "otlp-http-protobuf" "snix" "test-all" "test-mcp" ];
       };
@@ -9614,6 +9614,11 @@ rec {
         ];
         devDependencies = [
           {
+            name = "nix";
+            packageId = "nix 0.31.3";
+            features = [ "fs" "process" "resource" "signal" "term" "signal" ];
+          }
+          {
             name = "pretty_assertions";
             packageId = "pretty_assertions";
             features = [ "unstable" ];
@@ -9627,7 +9632,9 @@ rec {
             packageId = "tokio-test";
           }
         ];
-
+        features = {
+        };
+        resolvedDefaultFeatures = [ "default" "test-all" ];
       };
       "devenv-tui" = rec {
         crateName = "devenv-tui";
