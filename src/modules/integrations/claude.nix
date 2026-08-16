@@ -166,13 +166,14 @@ let
       allowList = flattenTier "allow";
       askList = flattenTier "ask";
       denyList = flattenTier "deny";
+      disableBypassPermissionsMode = if perms.disableBypassPermissionsMode == true then "disable" else null;
     in
-    if toolPerms == { } && perms.defaultMode == null && perms.disableBypassPermissionsMode == null && perms.additionalDirectories == [ ] then
+    if toolPerms == { } && perms.defaultMode == null && disableBypassPermissionsMode == null && perms.additionalDirectories == [ ] then
       null
     else
       lib.filterAttrs (n: v: v != null && v != [ ]) {
         defaultMode = perms.defaultMode;
-        disableBypassPermissionsMode = perms.disableBypassPermissionsMode;
+        inherit disableBypassPermissionsMode;
         additionalDirectories = if perms.additionalDirectories == [ ] then null else perms.additionalDirectories;
         allow = if allowList == [ ] then null else allowList;
         ask = if askList == [ ] then null else askList;
@@ -367,9 +368,13 @@ in
               description = "List of allowed tools for this sub-agent";
             };
             model = lib.mkOption {
-              type = lib.types.nullOr (lib.types.enum [ "opus" "sonnet" "haiku" ]);
+              type = lib.types.nullOr lib.types.str;
               default = null;
-              description = "Override the model for this agent.";
+              description = ''
+                Override the model for this agent.
+                Accepts an alias (`sonnet`, `opus`, `haiku`, `fable`), a full model ID (e.g. `claude-opus-5`), or `inherit`.
+              '';
+              example = "opus";
             };
             effort = lib.mkOption {
               type = lib.types.nullOr (lib.types.enum [ "low" "medium" "high" "xhigh" "max" ]);
@@ -384,13 +389,26 @@ in
               type = lib.types.nullOr (
                 lib.types.enum [
                   "default"
+                  "manual"
                   "acceptEdits"
                   "plan"
+                  "auto"
+                  "dontAsk"
                   "bypassPermissions"
                 ]
               );
               default = null;
-              description = "Permission mode for this specific sub-agent.";
+              description = ''
+                Permission mode for this specific sub-agent.
+                `manual` is an alias for `default`.
+              '';
+            };
+            assertions = lib.mkOption {
+              type = lib.types.listOf lib.types.unspecified;
+              default = [ ];
+              internal = true;
+              visible = false;
+              description = "Assertions raised by this agent's submodule, collected into the top-level assertions.";
             };
           };
         }
@@ -459,14 +477,19 @@ in
     forceLoginMethod = lib.mkOption {
       type = lib.types.nullOr (
         lib.types.enum [
-          "browser"
-          "api-key"
+          "claudeai"
+          "console"
+          "gateway"
         ]
       );
       default = null;
       description = ''
-        Restrict the login method to either browser or API key authentication.
+        Restrict the login method.
+        - claudeai: only claude.ai accounts
+        - console: only Claude Console (API key) accounts
+        - gateway: only a cloud gateway
       '';
+      example = "claudeai";
     };
 
     cleanupPeriodDays = lib.mkOption {
@@ -498,17 +521,22 @@ in
             type = lib.types.nullOr (
               lib.types.enum [
                 "default"
+                "manual"
                 "acceptEdits"
                 "plan"
+                "auto"
+                "dontAsk"
                 "bypassPermissions"
               ]
             );
             default = null;
             description = ''
               Global permission mode for Claude Code.
-              - default: Prompts on first use of each tool
+              - default: Prompts on first use of each tool (`manual` is an alias)
               - acceptEdits: Auto-accepts file edits
               - plan: Read-only mode
+              - auto: Auto-approves tool calls with background safety checks
+              - dontAsk: Auto-denies unless pre-approved via permissions
               - bypassPermissions: Skips all permission prompts
             '';
             example = "acceptEdits";
@@ -518,6 +546,7 @@ in
             default = null;
             description = ''
               Security option to prevent the dangerous bypassPermissions mode.
+              Written to `settings.json` as `"disableBypassPermissionsMode": "disable"`.
             '';
             example = true;
           };
@@ -667,6 +696,15 @@ in
         }
         {
           date = "2026-08-16";
+          title = "claude.code.forceLoginMethod values changed to match Claude Code";
+          when = cfg.enable;
+          description = ''
+            `claude.code.forceLoginMethod` now accepts `claudeai`, `console`, or `gateway`, the values Claude Code recognises.
+            The previous `browser` and `api-key` values were never valid; replace them with `claudeai` and `console` respectively.
+          '';
+        }
+        {
+          date = "2026-08-16";
           title = "claude.code.agents.<name>.proactive removed";
           when = cfg.enable;
           description = ''
@@ -676,6 +714,10 @@ in
           '';
         }
       ];
+    }
+
+    {
+      assertions = lib.flatten (lib.mapAttrsToList (_: agent: agent.assertions) cfg.agents);
     }
 
     (lib.mkIf cfg.enable {
