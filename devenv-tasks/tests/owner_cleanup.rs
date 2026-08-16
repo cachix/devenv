@@ -251,3 +251,103 @@ async fn parent_death_reclaims_service_session() {
     assert!(parent_exited, "service survived parent death");
     assert!(child_exited, "private process group survived parent death");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sigkill_of_devenv_tasks_reclaims_service_session() {
+    let fixture = Fixture::new("orphan-test");
+    fixture.write_task(
+        fixture.leader_with_private_child(),
+        ShutdownConfig::default(),
+    );
+
+    let mut owner_command = fixture.owner_command();
+    // Model the process group that process-compose gives its child.
+    owner_command.process_group(0);
+    let mut owner = owner_command.spawn().expect("spawn devenv-tasks");
+    let (parent_pid, child_pid) = fixture.wait_ready().await;
+
+    signal::killpg(
+        Pid::from_raw(owner.id().expect("owner pid") as i32),
+        Signal::SIGKILL,
+    )
+    .unwrap();
+    let _ = owner.wait().await;
+
+    let parent_exited = wait_for_exit(parent_pid, Duration::from_secs(8)).await;
+    let child_exited = wait_for_exit(child_pid, Duration::from_secs(8)).await;
+    kill_leftovers(&[parent_pid, child_pid]);
+    assert!(parent_exited, "service leader survived owner SIGKILL");
+    assert!(child_exited, "private process group survived owner SIGKILL");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn restart_reconciles_previous_session_before_launch() {
+    let fixture = Fixture::new("reconcile-test");
+    let shutdown = ShutdownConfig {
+        signal: 15,
+        grace: 1,
+    };
+
+    // The old service ignores SIGTERM, so only the guardian's SIGKILL
+    // escalation ends it.
+    let old_pid_file = fixture.path("old.pid");
+    let old_ready = fixture.path("old.ready");
+    fixture.write_task(
+        format!(
+            "bash -c 'trap \"\" TERM; echo $$ > {}; touch {}; while :; do sleep 1; done'",
+            old_pid_file.display(),
+            old_ready.display(),
+        ),
+        shutdown.clone(),
+    );
+    let mut old_owner = fixture.owner_command().spawn().expect("spawn old owner");
+    assert!(
+        wait_for_file(&old_ready, READY_TIMEOUT).await,
+        "old service did not become ready"
+    );
+    let old_pid = read_pid(&old_pid_file);
+
+    signal::kill(
+        Pid::from_raw(old_owner.id().expect("old owner pid") as i32),
+        Signal::SIGKILL,
+    )
+    .unwrap();
+    let _ = old_owner.wait().await;
+
+    let new_pid_file = fixture.path("new.pid");
+    let new_ready = fixture.path("new.ready");
+    fixture.write_task(
+        format!(
+            "bash -c 'echo $$ > {}; touch {}; while :; do sleep 1; done'",
+            new_pid_file.display(),
+            new_ready.display(),
+        ),
+        shutdown,
+    );
+    let mut new_owner = fixture.owner_command().spawn().expect("spawn new owner");
+
+    let new_started = wait_for_file(&new_ready, READY_TIMEOUT).await;
+    let old_exited = wait_for_exit(old_pid, Duration::from_secs(1)).await;
+    let new_pid = new_started.then(|| read_pid(&new_pid_file));
+
+    let _ = new_owner.start_kill();
+    let _ = new_owner.wait().await;
+    let new_exited = match new_pid {
+        Some(pid) => wait_for_exit(pid, Duration::from_secs(5)).await,
+        None => true,
+    };
+    kill_leftovers(&[old_pid]);
+    if let Some(pid) = new_pid {
+        kill_leftovers(&[pid]);
+    }
+
+    assert!(
+        new_started,
+        "new service did not launch after lease reconciliation"
+    );
+    assert!(
+        old_exited,
+        "new service launched before the previous session was reclaimed"
+    );
+    assert!(new_exited, "new service survived owner shutdown");
+}

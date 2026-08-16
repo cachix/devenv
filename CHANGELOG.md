@@ -21,9 +21,10 @@
 
 ### Bug Fixes
 
-- Fixed `devenv-tasks` leaving its processes running when it exited with an error, and when process-compose disappeared without signalling it. Processes now stop on every exit path, and a `devenv-tasks` process that loses its parent shuts down gracefully.
-- Fixed the native process manager leaving processes behind when a service moved parts of itself into a private process group, for example a shell in monitor mode or `ghciwatch`. Stopping or restarting a process now terminates every process group left in the service session, and a leader that exits takes such groups with it before the restart decision.
-- Fixed the native process manager ignoring the shutdown signal a service needs. `processes.<name>.shutdown.signal` and `processes.<name>.shutdown.grace` now configure the graceful signal and the SIGKILL grace period for both the native manager and process-compose; the PostgreSQL service uses SIGINT (fast shutdown) again under `devenv up`. Restarts triggered by crashes, file watching, and the watchdog also honor the configured grace period (previously fixed at 2 seconds).
+- Fixed services surviving a crash of `devenv-tasks` or the native process manager. A guardian now cleans abandoned service sessions, and the next manager reconciles them before starting the same process.
+- Fixed `devenv-tasks` leaving processes running after errors or parent death. It now stops processes before returning and when it loses its parent.
+- Fixed the native manager missing descendants in separate process groups. Stop and restart now clean the whole service session.
+- Added `processes.<name>.shutdown.signal` and `.grace` for the native manager and process-compose. The same settings apply to restarts, and PostgreSQL now uses SIGINT for fast shutdown.
 - Fixed `devenv mcp` ignoring termination signals. A single SIGTERM or SIGINT now shuts the server down immediately, without waiting for further input on stdin; previously it kept running until it was killed forcefully or its client closed stdin ([#3065](https://github.com/cachix/devenv/issues/3065)).
 - Fixed `devenv mcp` ignoring most of the session's configuration; it previously fell back to default Nix, cache, and shell settings for everything except inputs and imports.
 

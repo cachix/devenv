@@ -95,8 +95,18 @@ enum TaskError {
     Json(#[from] serde_json::Error),
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    // Handle the guardian re-exec before starting the runtime.
+    if let Some(code) = devenv_processes::maybe_run_session_guardian() {
+        std::process::exit(code);
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(async_main())
+}
+
+async fn async_main() -> Result<()> {
     let shutdown = Shutdown::new();
     shutdown.install_signals().await;
     // A second signal force-exits without running teardown or destructors, and

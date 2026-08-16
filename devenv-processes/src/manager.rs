@@ -1365,6 +1365,9 @@ impl NativeProcessManager {
         config: &ProcessConfig,
         activity: &devenv_activity::ActivityRef,
     ) -> Result<LaunchSetup> {
+        // A previous manager may have left this process's session behind.
+        crate::session::reconcile_process(state_dir, &config.name).await?;
+
         // Create notify socket if configured via ready.notify
         let uses_notify = config.ready.as_ref().is_some_and(|r| r.notify);
         let notify_socket = if uses_notify {
@@ -1453,6 +1456,9 @@ impl NativeProcessManager {
         let spawn_stdout = proc_cmd.stdout_log.clone();
         let spawn_stderr = proc_cmd.stderr_log.clone();
         let registration = crate::session::SessionRegistrationWrapper {
+            state_dir: state_dir.to_path_buf(),
+            process_name: config.name.clone(),
+            shutdown: config.shutdown.clone(),
             registry: Arc::clone(&sessions),
         };
 
