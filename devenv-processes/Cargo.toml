@@ -32,6 +32,9 @@ portable-pty.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 caps.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+libc.workspace = true
+
 [features]
 default = []
 test-all = ["test-file-watcher"]

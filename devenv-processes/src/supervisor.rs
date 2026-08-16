@@ -9,8 +9,8 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
 
+use watchexec_supervisor::ProcessEnd;
 use watchexec_supervisor::job::CommandState;
-use watchexec_supervisor::{ProcessEnd, Signal};
 
 use crate::config::ListenKind;
 use crate::manager::ProcessResources;
@@ -41,8 +41,7 @@ pub fn spawn_supervisor(
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
     let job = resources.job.clone();
-    let graceful_signal = Signal::from(config.shutdown.signal);
-    let grace = config.shutdown.grace_duration();
+    let sessions = resources.sessions.clone();
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
@@ -256,8 +255,12 @@ pub fn spawn_supervisor(
                     }
                     match state.on_event(Event::FileChange, Instant::now()) {
                         Action::Restart => {
-                            job.stop_with_signal(graceful_signal, grace).await;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            crate::session::stop_job(&job, &sessions, &config.shutdown).await;
+                            tokio::select! {
+                                _ = shutdown.cancelled() => break 'supervisor,
+                                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
+                            }
+                            if shutdown.is_cancelled() { break 'supervisor; }
                             job.start().await;
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
@@ -303,7 +306,14 @@ pub fn spawn_supervisor(
                                     match state.on_event(Event::WatchdogTrigger, Instant::now()) {
                                         Action::Restart => {
                                             activity.error("Watchdog trigger - process signaled failure");
-                                            job.restart_with_signal(graceful_signal, grace).await;
+                                            if !crate::session::restart_job(
+                                                &job,
+                                                &sessions,
+                                                &config.shutdown,
+                                                &shutdown,
+                                            ).await {
+                                                break 'supervisor;
+                                            }
                                             state.on_restart_complete(Instant::now());
                                             let count = state.restart_count();
                                             let msg = format!("Restarted (attempt {count})");
@@ -367,7 +377,14 @@ pub fn spawn_supervisor(
                         now,
                     ) {
                         Action::Restart => {
-                            job.restart_with_signal(graceful_signal, grace).await;
+                            if !crate::session::restart_job(
+                                &job,
+                                &sessions,
+                                &config.shutdown,
+                                &shutdown,
+                            ).await {
+                                break 'supervisor;
+                            }
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
                             let msg = format!("Restarted (attempt {count})");
@@ -417,6 +434,9 @@ pub fn spawn_supervisor(
                             break;
                         }
                     };
+
+                    // Clean the session before deciding whether to restart.
+                    sessions.cleanup(&config.shutdown).await;
 
                     match state.on_event(Event::ProcessExit { status: exit_status }, Instant::now()) {
                         Action::Restart => {

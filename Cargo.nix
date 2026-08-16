@@ -9122,6 +9122,11 @@ rec {
             packageId = "futures";
           }
           {
+            name = "libc";
+            packageId = "libc";
+            target = { target, features }: ("macos" == target."os" or null);
+          }
+          {
             name = "miette";
             packageId = "miette";
             features = [ "fancy" ];

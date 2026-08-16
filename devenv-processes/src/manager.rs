@@ -209,10 +209,7 @@ impl Drop for AttachStream {
     }
 }
 
-use watchexec_supervisor::{
-    Signal,
-    job::{Job, start_job},
-};
+use watchexec_supervisor::job::{Job, start_job};
 
 use crate::config::{ProcessConfig, ShutdownConfig};
 use crate::pid::{self, PidStatus};
@@ -242,6 +239,8 @@ pub struct ProcessResources {
     pub notify_socket: Option<Arc<NotifySocket>>,
     pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     pub stderr_log: PathBuf,
+    /// Sessions created by this process across restarts.
+    pub sessions: Arc<crate::session::SessionRegistry>,
 }
 
 /// Handle to a managed process job
@@ -373,6 +372,7 @@ struct StopParts {
     output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
     ports: Vec<u16>,
     shutdown: ShutdownConfig,
+    sessions: Arc<crate::session::SessionRegistry>,
 }
 
 /// Tear an `Active` handle out for stopping: always record the terminal
@@ -404,6 +404,7 @@ fn take_active_for_stop(
         config,
         activity,
         job,
+        sessions,
         ..
     } = resources;
 
@@ -426,6 +427,7 @@ fn take_active_for_stop(
         output_readers,
         ports,
         shutdown,
+        sessions,
     }
 }
 
@@ -827,6 +829,7 @@ struct LaunchSetup {
     stderr_tailer: JoinHandle<()>,
     stderr_log: PathBuf,
     shutdown: ShutdownConfig,
+    sessions: Arc<crate::session::SessionRegistry>,
 }
 
 impl LaunchSetup {
@@ -836,12 +839,7 @@ impl LaunchSetup {
     async fn abort_and_stop(self) {
         self.stdout_tailer.abort();
         self.stderr_tailer.abort();
-        self.job
-            .stop_with_signal(
-                Signal::from(self.shutdown.signal),
-                self.shutdown.grace_duration(),
-            )
-            .await;
+        crate::session::stop_job(&self.job, &self.sessions, &self.shutdown).await;
     }
 }
 
@@ -1317,6 +1315,7 @@ impl NativeProcessManager {
                             notify_socket: setup.notify_socket,
                             status_tx: setup.status_tx,
                             stderr_log: setup.stderr_log,
+                            sessions: setup.sessions,
                         };
                         let supervisor_task =
                             crate::supervisor::spawn_supervisor(&resources, shutdown.clone());
@@ -1396,6 +1395,7 @@ impl NativeProcessManager {
 
         let (job, _task) = start_job(proc_cmd.command);
         let job = Arc::new(job);
+        let sessions = Arc::new(crate::session::SessionRegistry::default());
 
         // watchexec-supervisor reports spawn failures only through its error
         // handler. Without one, the start ticket completes successfully even
@@ -1451,6 +1451,9 @@ impl NativeProcessManager {
         let spawn_cwd = proc_cmd.cwd;
         let spawn_stdout = proc_cmd.stdout_log.clone();
         let spawn_stderr = proc_cmd.stderr_log.clone();
+        let registration = crate::session::SessionRegistrationWrapper {
+            registry: Arc::clone(&sessions),
+        };
 
         job.set_spawn_hook(move |command_wrap, _ctx| {
             let cmd = command_wrap.command_mut();
@@ -1472,6 +1475,8 @@ impl NativeProcessManager {
 
             // Inject OTEL trace context so instrumented subprocesses join the trace.
             cmd.envs(devenv_activity::trace_propagation_env());
+
+            command_wrap.wrap(registration.clone());
 
             if let Some((ref fds, ref capabilities)) = process_setup {
                 command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
@@ -1508,6 +1513,7 @@ impl NativeProcessManager {
             stderr_tailer,
             stderr_log,
             shutdown: config.shutdown.clone(),
+            sessions,
         })
     }
 
@@ -1524,22 +1530,20 @@ impl NativeProcessManager {
             output_readers,
             ports,
             shutdown,
+            sessions,
         } = parts;
-        let grace_period = shutdown.grace_duration();
 
-        // Abort the supervisor task first to prevent restarts
         supervisor_task.abort();
+        let _ = supervisor_task.await;
         notify_forwarder.abort();
 
-        // Abort output reader tasks
         if let Some((stdout_reader, stderr_reader)) = output_readers {
             stdout_reader.abort();
             stderr_reader.abort();
         }
 
-        // Send the configured graceful signal, then SIGKILL after the grace period
-        job.stop_with_signal(Signal::from(shutdown.signal), grace_period)
-            .await;
+        // Stop the leader and every process group in its sessions.
+        crate::session::stop_job(&job, &sessions, &shutdown).await;
 
         if !ports.is_empty() {
             let release_status =
@@ -1818,12 +1822,16 @@ impl NativeProcessManager {
         } else {
             // Supervisor is still running — just restart the job.
             // The existing supervisor will continue monitoring with its current restart_count.
-            let shutdown = &handle.resources.config.shutdown;
-            handle
-                .resources
-                .job
-                .restart_with_signal(Signal::from(shutdown.signal), shutdown.grace_duration())
-                .await;
+            let restarted = crate::session::restart_job(
+                &handle.resources.job,
+                &handle.resources.sessions,
+                &handle.resources.config.shutdown,
+                &self.shutdown,
+            )
+            .await;
+            if !restarted {
+                bail!("process manager is shutting down");
+            }
         }
 
         // The supervisor will update the status via status_tx once the

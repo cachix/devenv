@@ -2632,6 +2632,7 @@ dependencies = [
  "devenv-event-sources",
  "devenv-mailbox",
  "futures",
+ "libc",
  "miette",
  "netstat2",
  "nix 0.31.3",
