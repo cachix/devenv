@@ -1366,8 +1366,7 @@ attribute set of (submodule)
 ```nix
 {
   code-reviewer = {
-    description = "Expert code review specialist that checks for quality, security, and best practices";
-    proactive = true;
+    description = "Expert code review specialist that checks for quality, security, and best practices. Use proactively after code changes.";
     model = "opus";
     tools = [ "Read" "Grep" "TodoWrite" ];
     permissionMode = "plan";
@@ -1385,7 +1384,6 @@ attribute set of (submodule)
 
   test-writer = {
     description = "Specialized in writing comprehensive test suites";
-    proactive = false;
     tools = [ "Read" "Write" "Edit" "Bash" ];
     prompt = ''
       You are a test writing specialist. Create comprehensive test suites that:
@@ -1449,11 +1447,12 @@ null
 
 
 Override the model for this agent.
+Accepts an alias (` sonnet `, ` opus `, ` haiku `, ` fable `), a full model ID (e.g. ` claude-opus-5 `), or ` inherit `.
 
 
 
 *Type:*
-null or one of “opus”, “sonnet”, “haiku”
+null or string
 
 
 
@@ -1461,6 +1460,14 @@ null or one of “opus”, “sonnet”, “haiku”
 
 ```nix
 null
+```
+
+
+
+*Example:*
+
+```nix
+"opus"
 ```
 
 *Declared by:*
@@ -1473,11 +1480,12 @@ null
 
 
 Permission mode for this specific sub-agent.
+` manual ` is an alias for ` default `.
 
 
 
 *Type:*
-null or one of “default”, “acceptEdits”, “plan”, “bypassPermissions”
+null or one of “default”, “manual”, “acceptEdits”, “plan”, “auto”, “dontAsk”, “bypassPermissions”
 
 
 
@@ -1485,30 +1493,6 @@ null or one of “default”, “acceptEdits”, “plan”, “bypassPermission
 
 ```nix
 null
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
-
-
-
-## claude.code.agents.\<name>.proactive
-
-
-
-Whether Claude should use this sub-agent automatically
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-
-```nix
-false
 ```
 
 *Declared by:*
@@ -1710,12 +1694,16 @@ attribute set of string
 
 
 
-Restrict the login method to either browser or API key authentication.
+Restrict the login method.
+
+ - claudeai: only claude.ai accounts
+ - console: only Claude Console (API key) accounts
+ - gateway: only a cloud gateway
 
 
 
 *Type:*
-null or one of “browser”, “api-key”
+null or one of “claudeai”, “console”, “gateway”
 
 
 
@@ -1723,6 +1711,14 @@ null or one of “browser”, “api-key”
 
 ```nix
 null
+```
+
+
+
+*Example:*
+
+```nix
+"claudeai"
 ```
 
 *Declared by:*
@@ -2461,15 +2457,17 @@ list of string
 
 Global permission mode for Claude Code.
 
- - default: Prompts on first use of each tool
+ - default: Prompts on first use of each tool (` manual ` is an alias)
  - acceptEdits: Auto-accepts file edits
  - plan: Read-only mode
+ - auto: Auto-approves tool calls with background safety checks
+ - dontAsk: Auto-denies unless pre-approved via permissions
  - bypassPermissions: Skips all permission prompts
 
 
 
 *Type:*
-null or one of “default”, “acceptEdits”, “plan”, “bypassPermissions”
+null or one of “default”, “manual”, “acceptEdits”, “plan”, “auto”, “dontAsk”, “bypassPermissions”
 
 
 
@@ -2497,6 +2495,7 @@ null
 
 
 Security option to prevent the dangerous bypassPermissions mode.
+Written to ` settings.json ` as ` "disableBypassPermissionsMode": "disable" `.
 
 
 
@@ -2792,6 +2791,8 @@ list of anything
 
 ## containers.\<name>.fromImage
 
+
+
 An existing OCI base image to build on top of, built with nix2container’s pullImage.
 
 
@@ -2813,8 +2814,6 @@ null
 
 
 ## containers.\<name>.isBuilding
-
-
 
 Set to true when the environment is building this container.
 
@@ -6057,6 +6056,8 @@ null or string
 
 ## git-hooks.hooks.autoflake.settings.flags
 
+
+
 Flags passed to autoflake.
 
 
@@ -6078,8 +6079,6 @@ string
 
 
 ## git-hooks.hooks.biome
-
-
 
 biome hook
 
@@ -8330,6 +8329,8 @@ false
 
 ## git-hooks.hooks.isort
 
+
+
 isort hook
 
 
@@ -8343,8 +8344,6 @@ submodule
 
 
 ## git-hooks.hooks.isort.enable
-
-
 
 Whether to enable this pre-commit hook.
 
