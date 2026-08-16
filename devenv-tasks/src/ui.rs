@@ -108,6 +108,12 @@ impl TasksUi {
         // Phase 2: If processes are still running (e.g., devenv-tasks invoked by
         // process-compose), keep forwarding output and wait for them to exit.
         if !self.tasks.process_manager.list().await.is_empty() {
+            // Test cleanup after a UI error.
+            #[cfg(feature = "test-all")]
+            if std::env::var_os("DEVENV_TASKS_TEST_FAIL_UI_AFTER_PROCESS_START").is_some() {
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                return Err(Error::io("injected UI failure after process start"));
+            }
             if stop_processes {
                 // Stop processes so the caller regains control (e.g., enterTest
                 // tasks that pulled processes into the task graph).

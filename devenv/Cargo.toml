@@ -89,6 +89,7 @@ otlp-http-json = ["otlp", "opentelemetry-otlp/http-json"]
 test-all = [
   "test-mcp",
   "devenv-processes/test-all",
+  "devenv-tasks/test-all",
   "devenv-nix-backend/test-all",
   "devenv-reload/test-all",
   "devenv-shell/test-all",

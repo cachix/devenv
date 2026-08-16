@@ -99,14 +99,36 @@ enum TaskError {
 async fn main() -> Result<()> {
     let shutdown = Shutdown::new();
     shutdown.install_signals().await;
+    watch_parent(&shutdown);
 
     run_tasks(shutdown.clone()).await?;
 
     Ok(())
 }
+
+/// Request shutdown after this process is reparented.
+///
+/// Polling also works on macOS, which has no parent-death signal.
+#[cfg(unix)]
+fn watch_parent(shutdown: &Arc<Shutdown>) {
+    let shutdown = Arc::clone(shutdown);
+    let original_parent = nix::unistd::getppid();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
+        loop {
+            interval.tick().await;
+            if nix::unistd::getppid() != original_parent {
+                shutdown.handle_signal(tokio_shutdown::Signal::SIGTERM);
+                break;
+            }
+        }
+    });
+}
+
+#[cfg(not(unix))]
+fn watch_parent(_shutdown: &Arc<Shutdown>) {}
 async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
-    // Detect and handle sudo.
-    // Drop privileges immediately to avoid creating any files as root.
+    // Drop sudo privileges before creating files.
     let sudo_context = SudoContext::detect();
     if let Some(ref ctx) = sudo_context {
         ctx.drop_privileges()
@@ -115,10 +137,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
 
     let args = Args::parse();
 
-    // Determine verbosity level from DEVENV_CMDLINE
-    // TUI is on by default when there's a TTY, so we default to Quiet to avoid corrupting the TUI display.
-    // When there's no TTY (e.g., running under process-compose), we should show normal output since
-    // there's no TUI to corrupt and process-compose needs to capture our stdout/stderr for its logs.
+    // Hide plain output behind the TUI, but keep it for process-compose logs.
     let has_tty = is_tty();
     let mut verbosity = if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
         let cmdline = cmdline.to_lowercase();
@@ -127,18 +146,15 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
         } else if cmdline.contains("--verbose") || cmdline.contains(" -v ") {
             VerbosityLevel::Verbose
         } else if cmdline.contains("--no-tui") || !has_tty {
-            // TUI is disabled or there's no TTY, show normal output
             VerbosityLevel::Normal
         } else {
-            // TUI is on by default when there's a TTY, suppress output
             VerbosityLevel::Quiet
         }
     } else {
-        // No DEVENV_CMDLINE means we're likely running standalone, show output
         VerbosityLevel::Normal
     };
 
-    // Keeping backwards compatibility for existing scripts that might set DEVENV_TASKS_QUIET
+    // Keep support for the old quiet flag.
     if let Ok(quiet_var) = env::var("DEVENV_TASKS_QUIET")
         && (quiet_var == "true" || quiet_var == "1")
     {
@@ -156,7 +172,6 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
         } => {
             let mut tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
 
-            // If --show-output flag is present, enable output for all tasks
             if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
                 let cmdline = cmdline.to_lowercase();
                 if cmdline.contains("--show-output") {
@@ -186,22 +201,27 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 .build()
                 .await?;
 
-            // Initialize activity channel for TasksUi
             let (activity_rx, activity_handle) = devenv_activity::init();
             let _activity_guard = activity_handle.install();
 
             let tasks = Arc::new(tasks);
             let tasks_clone = Arc::clone(&tasks);
 
-            // Spawn task runner - UI will detect completion via JoinHandle
             let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
 
-            // Run UI - processes events and waits for run_handle
             let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
-            let (status, _) = ui.run(run_handle, false).await?;
+            let result = ui.run(run_handle, false).await;
+
+            // Always stop processes before returning.
+            let cleanup_result = tasks.process_manager().stop_all().await;
+            let (status, _) = result?;
+            cleanup_result.map_err(|e| {
+                TaskError::Other(format!(
+                    "Failed to stop processes during task shutdown: {e:?}"
+                ))
+            })?;
 
             if shutdown.last_signal().is_some() {
-                let _ = tasks.process_manager().stop_all().await;
                 shutdown.exit_process();
             }
 
