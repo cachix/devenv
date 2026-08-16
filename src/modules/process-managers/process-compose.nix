@@ -189,13 +189,11 @@ in
           processes = lib.mapAttrs
             (name: value:
               let
+                # Interactive processes need direct access to the process-compose PTY.
+                # They bypass `devenv-tasks`, including its task dependencies.
+                direct = !value.start.enable || (value.process-compose.is_interactive or false);
                 command =
-                  if !value.start.enable then value.exec
-                  # Interactive processes must be a direct child of the process-compose PTY.
-                  # Routing them through `devenv-tasks` pipes their stdout/stderr and breaks
-                  # interactivity (no prompt, block-buffered output). They therefore bypass
-                  # the task runner and lose before/after task-dependency handling.
-                  else if value.process-compose.is_interactive or false then value.exec
+                  if direct then value.exec
                   else if value.process-compose.is_elevated or false
                   then config.process.taskCommandsBase.${name}
                   else config.process.taskCommands.${name};
@@ -239,10 +237,21 @@ in
                 existingDepsOn = pcAttrs.depends_on or { };
                 mergedDepsOn = beforeDeps // existingDepsOn;
 
+                # Direct processes receive the configured signal. Wrapped processes
+                # receive SIGTERM, which devenv-tasks translates for the service.
+                # The timeout covers leader shutdown and session cleanup.
+                typedShutdown = {
+                  shutdown = {
+                    signal = if direct then value.shutdown.signal else 15;
+                    timeout_seconds = value.shutdown.grace * 2 + 5;
+                  };
+                };
+
                 # Derived process-compose attrs from devenv's abstractions.
                 derived = { inherit command; }
                   // typedAvailability
-                  // typedProbe;
+                  // typedProbe
+                  // typedShutdown;
 
                 # User leaves win over derived defaults at any depth.
                 # Without recursiveUpdate, setting `process-compose.readiness_probe.failure_threshold`

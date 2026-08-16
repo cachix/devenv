@@ -148,6 +148,29 @@ Control how processes restart when they exit:
 }
 ```
 
+## Shutdown
+
+!!! tip "New in version 2.2.2"
+
+Control how a process is stopped.
+`signal` is the Unix signal number sent for a graceful stop.
+`grace` is the number of seconds to wait before the process is killed with SIGKILL.
+The defaults are SIGTERM (15) and 5 seconds.
+
+```nix title="devenv.nix"
+{
+  processes.postgres = {
+    exec = "postgres -D $PGDATA";
+    shutdown = {
+      signal = 2;  # SIGINT: fast shutdown
+      grace = 10;
+    };
+  };
+}
+```
+
+The same signal and grace period apply to restarts, including restarts triggered by file watching and the watchdog.
+
 ## Ready Probes
 
 !!! tip "New in devenv 2.0"

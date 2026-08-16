@@ -214,7 +214,7 @@ use watchexec_supervisor::{
     job::{Job, start_job},
 };
 
-use crate::config::ProcessConfig;
+use crate::config::{ProcessConfig, ShutdownConfig};
 use crate::pid::{self, PidStatus};
 use crate::session_registry::SessionRegistrar;
 use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
@@ -373,6 +373,7 @@ struct StopParts {
     notify_forwarder: JoinHandle<()>,
     output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
     ports: Vec<u16>,
+    shutdown: ShutdownConfig,
 }
 
 /// Tear an `Active` handle out for stopping: always record the terminal
@@ -408,6 +409,7 @@ fn take_active_for_stop(
     } = resources;
 
     activity.set_status(ProcessStatus::Stopping);
+    let shutdown = config.shutdown.clone();
     processes.insert(
         name.to_string(),
         ProcessEntry::Stopped {
@@ -424,6 +426,7 @@ fn take_active_for_stop(
         notify_forwarder,
         output_readers,
         ports,
+        shutdown,
     }
 }
 
@@ -824,17 +827,21 @@ struct LaunchSetup {
     stdout_tailer: JoinHandle<()>,
     stderr_tailer: JoinHandle<()>,
     stderr_log: PathBuf,
+    shutdown: ShutdownConfig,
 }
 
 impl LaunchSetup {
     /// Tear down a launch that never settled to `Active`: abort the output
-    /// tailers and stop the spawned child with the standard grace period. Used
-    /// when shutdown raced the launch or the entry changed underneath it.
+    /// tailers and stop the spawned child with the configured grace period.
+    /// Used when shutdown raced the launch or the entry changed underneath it.
     async fn abort_and_stop(self) {
         self.stdout_tailer.abort();
         self.stderr_tailer.abort();
         self.job
-            .stop_with_signal(Signal::Terminate, Duration::from_secs(5))
+            .stop_with_signal(
+                Signal::from(self.shutdown.signal),
+                self.shutdown.grace_duration(),
+            )
             .await;
     }
 }
@@ -1506,6 +1513,7 @@ impl NativeProcessManager {
             stdout_tailer,
             stderr_tailer,
             stderr_log,
+            shutdown: config.shutdown.clone(),
         })
     }
 
@@ -1521,8 +1529,9 @@ impl NativeProcessManager {
             notify_forwarder,
             output_readers,
             ports,
+            shutdown,
         } = parts;
-        let grace_period = Duration::from_secs(5);
+        let grace_period = shutdown.grace_duration();
 
         // Abort the supervisor task first to prevent restarts
         supervisor_task.abort();
@@ -1534,8 +1543,9 @@ impl NativeProcessManager {
             stderr_reader.abort();
         }
 
-        // Send terminate signal with grace period
-        job.stop_with_signal(Signal::Terminate, grace_period).await;
+        // Send the configured graceful signal, then SIGKILL after the grace period
+        job.stop_with_signal(Signal::from(shutdown.signal), grace_period)
+            .await;
 
         if !ports.is_empty() {
             let release_status =
@@ -1814,10 +1824,11 @@ impl NativeProcessManager {
         } else {
             // Supervisor is still running — just restart the job.
             // The existing supervisor will continue monitoring with its current restart_count.
+            let shutdown = &handle.resources.config.shutdown;
             handle
                 .resources
                 .job
-                .restart_with_signal(Signal::Terminate, Duration::from_secs(2))
+                .restart_with_signal(Signal::from(shutdown.signal), shutdown.grace_duration())
                 .await;
         }
 

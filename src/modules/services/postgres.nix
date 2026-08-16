@@ -488,10 +488,8 @@ in
           failure_threshold = 5;
         };
 
-        process-compose = {
-          # SIGINT (= 2) for faster shutdown: https://www.postgresql.org/docs/current/server-shutdown.html
-          shutdown.signal = 2;
-        };
+        # SIGINT requests a fast shutdown: https://www.postgresql.org/docs/current/server-shutdown.html
+        shutdown.signal = 2;
       };
     })
   ];

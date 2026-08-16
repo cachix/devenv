@@ -233,6 +233,25 @@ let
                   description = "Process restart policy.";
                 };
 
+                shutdown = lib.mkOption {
+                  type = types.submodule {
+                    options = {
+                      signal = lib.mkOption {
+                        type = types.ints.between 1 31;
+                        default = 15;
+                        description = "Unix signal number used for graceful shutdown.";
+                      };
+                      grace = lib.mkOption {
+                        type = types.ints.unsigned;
+                        default = 5;
+                        description = "Seconds before shutdown escalates to SIGKILL.";
+                      };
+                    };
+                  };
+                  default = { };
+                  description = "Graceful shutdown signal and timeout.";
+                };
+
                 ports = lib.mkOption {
                   type = types.attrsOf types.port;
                   default = { };

@@ -185,18 +185,19 @@ exec myapp
 }
 ```
 
-The native manager sends SIGTERM. If your process needs a different signal, wrap it:
+Set the signal on the process itself.
+The setting applies to both the native manager and process-compose:
 
 ```nix title="After"
 {
-  processes.postgres.exec = ''
-    trap 'kill -INT "$PID"' TERM
-    postgres -D "$PGDATA" &
-    PID=$!
-    wait "$PID"
-  '';
+  processes.postgres.shutdown.signal = 2;  # SIGINT
 }
 ```
+
+!!! tip "New in version 2.2.2"
+
+    `processes.<name>.shutdown` was added in devenv 2.2.2.
+    Older 2.x versions send SIGTERM; wrap the process in a script that translates the signal if you need a different one.
 
 #### Elevated processes
 

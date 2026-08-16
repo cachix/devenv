@@ -41,6 +41,8 @@ pub fn spawn_supervisor(
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
     let job = resources.job.clone();
+    let graceful_signal = Signal::from(config.shutdown.signal);
+    let grace = config.shutdown.grace_duration();
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
@@ -254,7 +256,7 @@ pub fn spawn_supervisor(
                     }
                     match state.on_event(Event::FileChange, Instant::now()) {
                         Action::Restart => {
-                            job.stop_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            job.stop_with_signal(graceful_signal, grace).await;
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             job.start().await;
                             state.on_restart_complete(Instant::now());
@@ -301,7 +303,7 @@ pub fn spawn_supervisor(
                                     match state.on_event(Event::WatchdogTrigger, Instant::now()) {
                                         Action::Restart => {
                                             activity.error("Watchdog trigger - process signaled failure");
-                                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                                            job.restart_with_signal(graceful_signal, grace).await;
                                             state.on_restart_complete(Instant::now());
                                             let count = state.restart_count();
                                             let msg = format!("Restarted (attempt {count})");
@@ -365,7 +367,7 @@ pub fn spawn_supervisor(
                         now,
                     ) {
                         Action::Restart => {
-                            job.restart_with_signal(Signal::Terminate, Duration::from_secs(2)).await;
+                            job.restart_with_signal(graceful_signal, grace).await;
                             state.on_restart_complete(Instant::now());
                             let count = state.restart_count();
                             let msg = format!("Restarted (attempt {count})");

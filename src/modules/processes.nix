@@ -223,6 +223,25 @@ let
         };
       };
 
+      shutdown = lib.mkOption {
+        type = types.submodule {
+          options = {
+            signal = lib.mkOption {
+              type = types.ints.between 1 31;
+              default = 15;
+              description = "Unix signal number used for graceful shutdown";
+            };
+            grace = lib.mkOption {
+              type = types.ints.unsigned;
+              default = 5;
+              description = "Seconds before shutdown escalates to SIGKILL";
+            };
+          };
+        };
+        default = { };
+        description = "Graceful shutdown signal and timeout";
+      };
+
       linux = lib.mkOption {
         type = types.submodule {
           options = {
@@ -495,6 +514,7 @@ in
                   paths = map toString process.watch.paths;
                 };
                 watchdog = process.watchdog;
+                shutdown = process.shutdown;
                 linux = process.linux;
               };
             };
