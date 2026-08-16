@@ -10,14 +10,33 @@ let
   # Returns a list of all the entries in a folder
   listEntries = path: map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
+  # Outputs `mkShell` exposes for a package: it selects `dev` (falling back to
+  # `out`), whose setup hook propagates `bin`, `include` and `lib`.
+  shellOutputs = [
+    "out"
+    "bin"
+    "lib"
+    "dev"
+    "include"
+  ];
+
+  # An explicitly selected output (`pkgs.foo.dev`) is linked into the profile
+  # as-is; otherwise `meta.outputsToInstall` plus `shellOutputs` are.
   drvOrPackageToPaths =
     drvOrPackage:
     let
       outputs =
-        if drvOrPackage ? outputs then
-          builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
+        if drvOrPackage.outputSpecified or false || !(drvOrPackage ? outputs) then
+          [ drvOrPackage ]
         else
-          [ drvOrPackage ];
+          let
+            wanted = lib.unique ((drvOrPackage.meta.outputsToInstall or [ ]) ++ shellOutputs);
+            available = builtins.filter (output: builtins.elem output drvOrPackage.outputs) wanted;
+          in
+          if available == [ ] then
+            [ drvOrPackage ]
+          else
+            builtins.map (output: drvOrPackage.${output}) available;
       # Include transitive Python dependencies so they end up in the profile's
       # site-packages. Without this, packages added via `packages = [ pkgs.python3Packages.foo ]`
       # would be importable but their dependencies (propagatedBuildInputs) would not,
@@ -321,6 +340,20 @@ in
       inherit inputs pkgs;
       flakesIntegration = config.devenv.flakesIntegration;
     };
+
+    changelogs = [
+      {
+        date = "2026-08-16";
+        title = "The profile only links the outputs a package installs and the shell exposes";
+        description = ''
+          `$DEVENV_PROFILE` used to link every output of each package in `packages`, including `doc`, `debug` and `static` outputs, and outputs that collide with each other, such as the individual certificate files of `pkgs.cacert`.
+          It now links the outputs in the package's `meta.outputsToInstall` (what `nix profile install` would pick) plus the `out`, `bin`, `lib`, `dev` and `include` outputs the shell already exposes.
+          Selecting an output explicitly, such as `pkgs.sqlite.dev`, links only that output.
+
+          If you relied on another output being in the profile, add it to `packages` explicitly, for example `pkgs.openssl.doc`.
+        '';
+      }
+    ];
 
     assertions = [
       {

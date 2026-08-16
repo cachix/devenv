@@ -43,6 +43,7 @@ To relocate runtime files while keeping projects and profiles separate, set `$XD
 **Read-only.** Points to the Nix store path that has the final profile of
 packages/scripts provided by devenv.
 Useful for teaching other programs about `/bin`, `/etc`, `/var` folders.
+See [Package outputs](../packages.md#package-outputs) for which outputs of a package are linked into it.
 
 ### [`DEVENV_HOME`](#devenv_home)
 [added-in:2.1.3]

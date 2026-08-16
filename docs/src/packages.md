@@ -34,12 +34,31 @@ Entering shell ...
 jq-1.6
 ```
 
+## Package outputs
+
+Nixpkgs splits many packages into several outputs, such as `bin`, `dev`, `lib`, `man` or `doc`.
+Adding a package to `packages` gives the shell its `dev` output (or `out` when there is none) together with the `bin`, `lib` and `include` outputs it propagates, so headers, pkg-config files and libraries are available to compilers and linkers.
+Outputs like `doc`, `debug` and `static` are left out.
+
+To get exactly one output, select it explicitly:
+
+```nix title="devenv.nix"
+{ pkgs, ... }:
+
+{
+  packages = [
+    # Only the shared libraries, without the `openssl` command line tool.
+    pkgs.openssl.out
+  ];
+}
+```
+
 ## Installing a specific version
 
 Add the [nixpkgs-multiverse](https://github.com/fzakaria/nixpkgs-multiverse) input once:
 
 ```shell-session
-$ devenv inputs add nixpkgs-multiverse github:fzakaria/nixpkgs-multiverse
+devenv inputs add nixpkgs-multiverse github:fzakaria/nixpkgs-multiverse
 ```
 
 Packages are then available by their Nixpkgs attribute and version:
