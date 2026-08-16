@@ -7,7 +7,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ProcessManager};
+use devenv_processes::{ProcessConfig, ProcessManager, ShutdownConfig};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -441,6 +441,196 @@ wait'"#,
             unsafe { nix::libc::kill(child_pid, 0) },
             0,
             "Child process should be killed after parent is stopped"
+        );
+    })
+    .await
+    .expect("Test timed out");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_shutdown_during_restart_does_not_start_again() {
+    timeout(Duration::from_secs(15), async {
+        let ctx = TestContext::new();
+        let starts_file = ctx.temp_path().join("starts.txt");
+        let stopping_file = ctx.temp_path().join("stopping.txt");
+        let script = ctx
+            .create_script(
+                "slow-stop.sh",
+                r#"#!/bin/sh
+starts_file="$1"
+stopping_file="$2"
+
+echo started >> "$starts_file"
+trap 'touch "$stopping_file"; sleep 0.5; exit 0' TERM
+
+while true; do
+  sleep 1
+done
+"#,
+            )
+            .await;
+
+        let manager = Arc::new(ctx.create_manager());
+        let config = ProcessConfig {
+            name: "restart-during-shutdown".to_string(),
+            exec: format!(
+                "{} {} {}",
+                script.display(),
+                starts_file.display(),
+                stopping_file.display()
+            ),
+            shutdown: ShutdownConfig {
+                signal: 15,
+                grace: 2,
+            },
+            ..Default::default()
+        };
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("start process");
+        assert!(wait_for_file(&starts_file, STARTUP_TIMEOUT).await);
+
+        let restart_manager = Arc::clone(&manager);
+        let restart =
+            tokio::spawn(async move { restart_manager.restart("restart-during-shutdown").await });
+        assert!(
+            wait_for_file(&stopping_file, STARTUP_TIMEOUT).await,
+            "restart did not begin stopping the process"
+        );
+
+        manager.stop_all().await.expect("stop manager");
+        let restart_error = restart
+            .await
+            .expect("restart task")
+            .expect_err("restart should stop when manager shutdown begins");
+        assert!(format!("{restart_error:?}").contains("shutting down"));
+
+        let starts = tokio::fs::read_to_string(&starts_file)
+            .await
+            .expect("read starts file");
+        assert_eq!(
+            starts.lines().count(),
+            1,
+            "process started again after shutdown began"
+        );
+    })
+    .await
+    .expect("Test timed out");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stop_kills_private_process_groups_in_service_session() {
+    timeout(Duration::from_secs(15), async {
+        let ctx = TestContext::new();
+        let child_pid_file = ctx.temp_path().join("private-child.pid");
+        let ready_file = ctx.temp_path().join("private-child.ready");
+
+        let config = ProcessConfig {
+            name: "parent-with-private-group".to_string(),
+            // Bash monitor mode puts an asynchronous command in a distinct
+            // process group while retaining the service's session.
+            exec: format!(
+                r#"bash -c 'set -m
+sleep 3600 &
+echo $! > {}
+echo ready > {}
+wait'"#,
+                child_pid_file.display(),
+                ready_file.display()
+            ),
+            ..Default::default()
+        };
+
+        let manager = ctx.create_manager();
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+
+        assert!(
+            wait_for_file(&ready_file, STARTUP_TIMEOUT).await,
+            "Process should signal ready"
+        );
+
+        let child_pid: i32 = tokio::fs::read_to_string(&child_pid_file)
+            .await
+            .expect("Failed to read child PID")
+            .trim()
+            .parse()
+            .expect("Invalid child PID");
+
+        manager
+            .stop("parent-with-private-group")
+            .await
+            .expect("Failed to stop");
+
+        let child_exited = wait_for_condition(
+            || async { (unsafe { nix::libc::kill(child_pid, 0) }) != 0 },
+            Duration::from_secs(2),
+        )
+        .await;
+
+        if !child_exited {
+            // Do not leave the test process running after a failure.
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(child_pid),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
+
+        assert!(
+            child_exited,
+            "A descendant in a private process group survived service shutdown"
+        );
+    })
+    .await
+    .expect("Test timed out");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stop_uses_configured_signal_for_private_process_groups() {
+    timeout(Duration::from_secs(15), async {
+        let ctx = TestContext::new();
+        let marker = ctx.temp_path().join("private-child.interrupted");
+        let ready = ctx.temp_path().join("private-child.ready");
+
+        let config = ProcessConfig {
+            name: "configured-private-group-signal".to_string(),
+            exec: format!(
+                r#"bash -c 'set -m
+bash -c '\''trap "echo interrupted > {}; exit 0" INT; touch {}; while :; do sleep 1; done'\'' &
+wait'"#,
+                marker.display(),
+                ready.display(),
+            ),
+            shutdown: ShutdownConfig {
+                signal: 2,
+                grace: 2,
+            },
+            ..Default::default()
+        };
+
+        let manager = ctx.create_manager();
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+        assert!(
+            wait_for_file(&ready, STARTUP_TIMEOUT).await,
+            "private process group did not become ready"
+        );
+
+        manager
+            .stop("configured-private-group-signal")
+            .await
+            .expect("Failed to stop");
+
+        assert!(
+            wait_for_file(&marker, Duration::from_secs(2)).await,
+            "private process group did not receive configured SIGINT"
         );
     })
     .await

@@ -40,6 +40,7 @@ pub mod manager;
 pub mod pid;
 pub mod process_compose;
 pub mod pty;
+pub mod session;
 pub mod session_registry;
 pub mod socket_activation;
 pub mod supervisor;
