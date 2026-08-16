@@ -103,19 +103,21 @@ rec {
 
       pkgsBootstrap = mkPkgsForSystem targetSystem;
 
-      # Helper to import a path, trying .nix first then /devenv.nix
-      # Returns a list of modules, including devenv.local.nix when present
+      # Helper to resolve a path to a list of module files, trying .nix first then /devenv.nix.
+      # Includes devenv.local.nix when present.
+      # Keep the entries as unimported paths: the module system uses them as each module's
+      # file (for error locations) and key (for deduplication).
       tryImport =
         resolvedPath: basePath:
         if lib.hasSuffix ".nix" basePath then
-          [ (import resolvedPath) ]
+          [ resolvedPath ]
         else
           let
             devenvpath = resolvedPath + "/devenv.nix";
             localpath = resolvedPath + "/devenv.local.nix";
           in
           if builtins.pathExists devenvpath then
-            [ (import devenvpath) ] ++ lib.optional (builtins.pathExists localpath) (import localpath)
+            [ devenvpath ] ++ lib.optional (builtins.pathExists localpath) localpath
           else
             throw (basePath + "/devenv.nix file does not exist");
 
@@ -144,8 +146,8 @@ rec {
             paths = lib.splitString "/" path;
             name = builtins.head paths;
             input = inputs.${name} or (throw "Unknown input ${name}");
-            subpath = "/${lib.concatStringsSep "/" (builtins.tail paths)}";
-            devenvpath = input + subpath;
+            subpath = lib.concatStringsSep "/" (builtins.tail paths);
+            devenvpath = input + lib.optionalString (subpath != "") "/${subpath}";
           in
           tryImport devenvpath path;
 
@@ -224,7 +226,7 @@ rec {
             let
               localPath = devenv_root + "/devenv.local.nix";
             in
-            if builtins.pathExists localPath then import localPath else { }
+            if builtins.pathExists localPath then localPath else { }
           )
           cli_options
         ];
@@ -611,7 +613,7 @@ rec {
               }
             )
             (devenv.outPath + "/src/modules/top-level.nix")
-            (import devenvPath)
+            devenvPath
           ];
         };
       in
