@@ -12,8 +12,9 @@ use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use std::{
     env, fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, ExitCode, Stdio},
+    time::{Duration, Instant},
 };
 use tempfile::TempDir;
 
@@ -115,6 +116,23 @@ enum TestStatus {
 struct TestResult {
     name: String,
     status: TestStatus,
+    duration: Option<Duration>,
+    /// Closure size of the shell the test built, in bytes.
+    closure_size: Option<u64>,
+    /// Extra context shown next to the status, e.g. why a test failed.
+    note: Option<String>,
+}
+
+impl TestResult {
+    fn skipped(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            status: TestStatus::Skipped,
+            duration: None,
+            closure_size: None,
+            note: None,
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -141,6 +159,113 @@ struct TestConfig {
     /// Whether to run the test in a temporary directory (default: true)
     #[serde(default = "default_use_tmp_dir")]
     use_tmp_dir: bool,
+    /// Fail the test if the shell's closure is larger than this (e.g. "500 MB", "1.5 GiB")
+    #[serde(default, deserialize_with = "deserialize_size")]
+    max_closure_size: Option<u64>,
+}
+
+/// Accept a byte count or a string with a unit (`B`, `KB`, `MB`, `GB`, `TB`, `KiB`, `MiB`, `GiB`, `TiB`).
+fn deserialize_size<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Size {
+        Bytes(u64),
+        Text(String),
+    }
+
+    match Option::<Size>::deserialize(deserializer)? {
+        None => Ok(None),
+        Some(Size::Bytes(bytes)) => Ok(Some(bytes)),
+        Some(Size::Text(text)) => parse_size(&text)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+    }
+}
+
+fn parse_size(text: &str) -> std::result::Result<u64, String> {
+    let text = text.trim();
+    let split = text
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(text.len());
+    let (number, unit) = text.split_at(split);
+    let number: f64 = number
+        .parse()
+        .map_err(|_| format!("invalid size '{text}': expected a number followed by a unit"))?;
+    let multiplier: u64 = match unit.trim().to_ascii_lowercase().as_str() {
+        "" | "b" => 1,
+        "kb" => 1000,
+        "mb" => 1000_u64.pow(2),
+        "gb" => 1000_u64.pow(3),
+        "tb" => 1000_u64.pow(4),
+        "kib" => 1024,
+        "mib" => 1024_u64.pow(2),
+        "gib" => 1024_u64.pow(3),
+        "tib" => 1024_u64.pow(4),
+        other => return Err(format!("invalid size '{text}': unknown unit '{other}'")),
+    };
+    Ok((number * multiplier as f64) as u64)
+}
+
+fn format_size(bytes: u64) -> String {
+    const GB: f64 = 1e9;
+    const MB: f64 = 1e6;
+    let bytes = bytes as f64;
+    if bytes >= GB {
+        format!("{:.1} GB", bytes / GB)
+    } else {
+        format!("{:.0} MB", bytes / MB)
+    }
+}
+
+fn format_duration(duration: Duration) -> String {
+    let secs = duration.as_secs_f64();
+    if secs >= 60.0 {
+        format!("{}m{:02}s", (secs / 60.0) as u64, (secs % 60.0) as u64)
+    } else {
+        format!("{secs:.1}s")
+    }
+}
+
+/// Closure size in bytes of the shell behind the `shell` GC root, or `None` if no shell was built.
+async fn shell_closure_size(dot_gc: &Path) -> Result<Option<u64>> {
+    let gc_root = dot_gc.join("shell");
+    let store_path = match tokio::fs::canonicalize(&gc_root).await {
+        Ok(path) => path,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            return Err(miette::miette!(
+                "Failed to resolve shell GC root {}: {e}",
+                gc_root.display()
+            ));
+        }
+    };
+    let output = tokio::process::Command::new("nix")
+        .args(["--extra-experimental-features", "nix-command"])
+        .args(["path-info", "--closure-size"])
+        .arg(&store_path)
+        .stdin(Stdio::null())
+        .output()
+        .await
+        .into_diagnostic()
+        .wrap_err("Failed to run `nix path-info --closure-size`")?;
+    if !output.status.success() {
+        return Err(miette::miette!(
+            "`nix path-info --closure-size {}` failed: {}",
+            store_path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .last()
+        .and_then(|line| line.split_whitespace().last())
+        .and_then(|size| size.parse().ok())
+        .map(Some)
+        .ok_or_else(|| miette::miette!("Unexpected `nix path-info` output: {stdout}"))
 }
 
 fn default_git_init() -> bool {
@@ -163,6 +288,7 @@ impl Default for TestConfig {
             supported_systems: Vec::new(),
             broken_systems: Vec::new(),
             use_tmp_dir: default_use_tmp_dir(),
+            max_closure_size: None,
         }
     }
 }
@@ -333,10 +459,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
                 ActivityLevel::Info,
                 format!("Skipping {name} (unsupported system {current_system})"),
             );
-            test_results.push(TestResult {
-                name: name.clone(),
-                status: TestStatus::Skipped,
-            });
+            test_results.push(TestResult::skipped(name));
             return false;
         }
 
@@ -368,6 +491,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             ActivityLevel::Info,
             format!("[{current_test_num}/{total_tests}] Starting: {dir_name}"),
         );
+        let started = Instant::now();
 
         // Determine whether to use a temporary directory
         let (devenv_root, devenv_dotfile, _tmpdir) = if test_config.use_tmp_dir {
@@ -468,7 +592,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
                 nix_settings,
                 secret_settings,
                 devenv_root: Some(devenv_root.clone()),
-                devenv_dotfile: Some(devenv_dotfile),
+                devenv_dotfile: Some(devenv_dotfile.clone()),
                 ..Default::default()
             };
             let devenv = Devenv::new(options, devenv::tokio_shutdown::Shutdown::new()).await?;
@@ -516,29 +640,64 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             }
         };
 
-        // Queue status through the activity pipeline to preserve diagnostic ordering.
-        let test_status = if status.is_ok() {
-            devenv_activity::message(
-                ActivityLevel::Info,
-                format!("[{current_test_num}/{total_tests}] Passed: {dir_name}"),
-            );
-            TestStatus::Passed
-        } else {
-            devenv_activity::message(
-                ActivityLevel::Error,
-                format!("[{current_test_num}/{total_tests}] Failed: {dir_name}"),
-            );
-            if let Err(error) = &status {
-                devenv_activity::message(ActivityLevel::Error, format!("{error:?}"));
+        let duration = started.elapsed();
+
+        // `gc/shell` points at the last shell built in this directory.
+        let closure_size = match shell_closure_size(&devenv_dotfile.join("gc")).await {
+            Ok(size) => size,
+            Err(error) => {
+                devenv_activity::message(
+                    ActivityLevel::Warn,
+                    format!("Could not determine the shell closure size: {error}"),
+                );
+                None
             }
-            TestStatus::Failed
         };
 
-        let result = TestResult {
+        let status = match (status, test_config.max_closure_size, closure_size) {
+            (Ok(()), Some(limit), Some(size)) if size > limit => Err(miette::miette!(
+                "Shell closure is {}, exceeding max_closure_size of {}",
+                format_size(size),
+                format_size(limit)
+            )),
+            (Ok(()), Some(_), None) => Err(miette::miette!(
+                "max_closure_size is set but the shell closure size could not be determined"
+            )),
+            (status, _, _) => status,
+        };
+
+        let mut stats = vec![format_duration(duration)];
+        if let Some(size) = closure_size {
+            stats.push(format!("closure {}", format_size(size)));
+        }
+        let stats = stats.join(", ");
+
+        // Queue status through the activity pipeline to preserve diagnostic ordering.
+        let (test_status, note) = match status {
+            Ok(()) => {
+                devenv_activity::message(
+                    ActivityLevel::Info,
+                    format!("[{current_test_num}/{total_tests}] Passed: {dir_name} ({stats})"),
+                );
+                (TestStatus::Passed, None)
+            }
+            Err(error) => {
+                devenv_activity::message(
+                    ActivityLevel::Error,
+                    format!("[{current_test_num}/{total_tests}] Failed: {dir_name} ({stats})"),
+                );
+                devenv_activity::message(ActivityLevel::Error, format!("{error:?}"));
+                (TestStatus::Failed, Some(error.to_string()))
+            }
+        };
+
+        test_results.push(TestResult {
             name: dir_name.to_string(),
             status: test_status,
-        };
-        test_results.push(result);
+            duration: Some(duration),
+            closure_size,
+            note,
+        });
 
         // Restore the current directory
         env::set_current_dir(&cwd).into_diagnostic()?;
@@ -770,6 +929,39 @@ async fn execute_command(args: &Args) -> Result<()> {
     }
 }
 
+/// One line per test: status, name, duration and shell closure size.
+fn format_results_table(results: &[TestResult]) -> String {
+    let name_width = results.iter().map(|r| r.name.len()).max().unwrap_or(0);
+    results
+        .iter()
+        .map(|result| {
+            let status = match result.status {
+                TestStatus::Passed => "passed ",
+                TestStatus::Failed => "FAILED ",
+                TestStatus::Skipped => "skipped",
+            };
+            let duration = result
+                .duration
+                .map(format_duration)
+                .unwrap_or_else(|| "-".to_string());
+            let closure = result
+                .closure_size
+                .map(format_size)
+                .unwrap_or_else(|| "-".to_string());
+            let mut line = format!(
+                "{status}  {:<name_width$}  {duration:>8}  {closure:>9}",
+                result.name
+            );
+            if let Some(note) = &result.note {
+                line.push_str("  ");
+                line.push_str(note.lines().next().unwrap_or_default());
+            }
+            line
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 async fn run_tests(args: &RunArgs) -> Result<()> {
     let test_results = run_tests_in_directory(args).await?;
 
@@ -780,12 +972,17 @@ async fn run_tests(args: &RunArgs) -> Result<()> {
     for result in &test_results {
         match &result.status {
             TestStatus::Passed => num_passed += 1,
-            TestStatus::Failed => {
-                num_failed += 1;
-                devenv_activity::message(ActivityLevel::Error, format!("{}: Failed", result.name));
-            }
+            TestStatus::Failed => num_failed += 1,
             TestStatus::Skipped => num_skipped += 1,
         }
+    }
+
+    if !test_results.is_empty() {
+        devenv_activity::message_with_details(
+            ActivityLevel::Info,
+            "Test results:",
+            Some(format_results_table(&test_results)),
+        );
     }
 
     let num_ran = num_passed + num_failed;
@@ -820,4 +1017,37 @@ async fn generate_json(args: &GenerateJsonArgs) -> Result<()> {
     let json_output = serde_json::to_string(&test_metadata).into_diagnostic()?;
     println!("{json_output}");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_sizes_with_units() {
+        assert_eq!(parse_size("500 MB").unwrap(), 500_000_000);
+        assert_eq!(parse_size("1.5 GiB").unwrap(), 1_610_612_736);
+        assert_eq!(parse_size("2gb").unwrap(), 2_000_000_000);
+        assert_eq!(parse_size("1024").unwrap(), 1024);
+        assert!(parse_size("1 parsec").is_err());
+        assert!(parse_size("MB").is_err());
+    }
+
+    #[test]
+    fn test_config_accepts_size_strings_and_bytes() {
+        let config: TestConfig = serde_yaml::from_str("max_closure_size: 2 GB").unwrap();
+        assert_eq!(config.max_closure_size, Some(2_000_000_000));
+        let config: TestConfig = serde_yaml::from_str("max_closure_size: 4096").unwrap();
+        assert_eq!(config.max_closure_size, Some(4096));
+        let config: TestConfig = serde_yaml::from_str("use_shell: false").unwrap();
+        assert_eq!(config.max_closure_size, None);
+    }
+
+    #[test]
+    fn formats_sizes_and_durations() {
+        assert_eq!(format_size(361_000_000), "361 MB");
+        assert_eq!(format_size(1_700_000_000), "1.7 GB");
+        assert_eq!(format_duration(Duration::from_millis(6_240)), "6.2s");
+        assert_eq!(format_duration(Duration::from_secs(103)), "1m43s");
+    }
 }

@@ -84,7 +84,25 @@ supported_systems:
 # Mark systems where the test is known broken.
 broken_systems:
   - aarch64-linux
+
+# Fail the test if the closure of its shell is larger than this.
+# Accepts a byte count or a number with a unit (B, KB, MB, GB, TB, KiB, MiB, GiB, TiB).
+max_closure_size: 1 GB
 ```
+
+## Test results
+
+Every test reports its runtime and the closure size of the shell it built, both on the per-test `Passed`/`Failed` line and in the summary table printed at the end of the run:
+
+```
+• Test results:
+  passed   man-pages                  20.4s     361 MB
+  passed   postgresql-socket-only     31.2s     512 MB
+  FAILED   python-packages            48.0s     1.2 GB  Shell closure is 1.2 GB, exceeding max_closure_size of 1 GB
+  skipped  gpu-only                       -         -
+```
+
+The closure size is measured with `nix path-info --closure-size` on the `shell` GC root in the test's `.devenv/gc` directory, so it covers everything `devenv shell` needs to download for that test.
 
 ## Execution order
 
@@ -98,4 +116,5 @@ For each test directory:
 6. Run the test:
    - `use_shell: true` (default): runs `devenv test`
    - `use_shell: false`: runs `.test.sh` directly with bash
-7. Report pass/fail
+7. Measure the shell closure size and check it against `max_closure_size`
+8. Report pass/fail with runtime and closure size

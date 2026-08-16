@@ -1,0 +1,2 @@
+# PostgreSQL's dev output alone (LLVM, Perl, Python, Tcl) is about 2 GB and must stay out of the shell.
+max_closure_size: 2 GB

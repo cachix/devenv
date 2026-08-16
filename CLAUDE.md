@@ -80,6 +80,7 @@ Integration tests live in `tests/` and `examples/` directories. Each test is a d
   - `use_shell: false` - Run `.test.sh` directly, not in devenv shell
   - `git_init: false` - Don't initialize git repo in temp dir
   - `supported_systems` / `broken_systems` - Platform filtering
+  - `max_closure_size: 1 GB` - Fail the test if its shell closure is larger than this
 
 ### Cargo Feature Flags
 
