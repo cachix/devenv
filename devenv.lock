@@ -122,19 +122,19 @@
       },
       "parent": []
     },
-    "devenv-claude-agents": {
+    "devenv-ai-agents": {
       "flake": false,
       "locked": {
-        "lastModified": 1756414178,
-        "narHash": "sha256-HSfTLezvIpZqu1TAUWfBO77LQRHXEAf8xhVEzT96oc8=",
+        "lastModified": 1786887984,
+        "narHash": "sha256-xoA8C/CiTCBhoDJhgYG016yLG0b0eITcpZopOs3C058=",
         "owner": "cachix",
-        "repo": "devenv-claude-agents",
-        "rev": "4d5c8142461f6132e6aa0458e2a9661c2178db78",
+        "repo": "devenv-ai-agents",
+        "rev": "f5a15a76ee42385602e60d220e3d1f3838f5f132",
         "type": "github"
       },
       "original": {
         "owner": "cachix",
-        "repo": "devenv-claude-agents",
+        "repo": "devenv-ai-agents",
         "type": "github"
       }
     },
@@ -861,7 +861,7 @@
       "inputs": {
         "crate2nix": "crate2nix",
         "devenv": "devenv",
-        "devenv-claude-agents": "devenv-claude-agents",
+        "devenv-ai-agents": "devenv-ai-agents",
         "ghostty": "ghostty",
         "git-hooks": "git-hooks_3",
         "nix": "nix",

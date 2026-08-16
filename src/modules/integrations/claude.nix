@@ -349,15 +349,17 @@ in
     agents = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule {
+          imports = [
+            (lib.mkRemovedOptionModule [ "proactive" ] ''
+              Claude Code has no `proactive` frontmatter field, so `claude.code.agents.<name>.proactive` never had an effect.
+              To encourage automatic delegation, include a phrase like "use proactively" in the agent's `description`.
+            '')
+          ];
+
           options = {
             description = lib.mkOption {
               type = lib.types.str;
               description = "What the sub-agent does";
-            };
-            proactive = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "Whether Claude should use this sub-agent automatically";
             };
             tools = lib.mkOption {
               type = lib.types.listOf lib.types.str;
@@ -404,8 +406,7 @@ in
       example = lib.literalExpression ''
         {
           code-reviewer = {
-            description = "Expert code review specialist that checks for quality, security, and best practices";
-            proactive = true;
+            description = "Expert code review specialist that checks for quality, security, and best practices. Use proactively after code changes.";
             model = "opus";
             tools = [ "Read" "Grep" "TodoWrite" ];
             permissionMode = "plan";
@@ -423,7 +424,6 @@ in
 
           test-writer = {
             description = "Specialized in writing comprehensive test suites";
-            proactive = false;
             tools = [ "Read" "Write" "Edit" "Bash" ];
             prompt = '''
               You are a test writing specialist. Create comprehensive test suites that:
@@ -665,6 +665,16 @@ in
             The `claude.code.hooks.git-hooks-format` hook has been renamed to `claude.code.hooks.git-hooks-run`.
           '';
         }
+        {
+          date = "2026-08-16";
+          title = "claude.code.agents.<name>.proactive removed";
+          when = cfg.enable;
+          description = ''
+            `claude.code.agents.<name>.proactive` has been removed and setting it is now an error.
+            Claude Code has no `proactive` frontmatter field, so the option never had an effect.
+            To encourage automatic delegation, include a phrase like "use proactively" in the agent's `description`.
+          '';
+        }
       ];
     }
 
@@ -696,7 +706,6 @@ in
                 ---
                 name: ${name}
                 description: ${agent.description}
-                proactive: ${lib.boolToString agent.proactive}
                 ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
                 ${lib.optionalString (agent.model != null) "model: ${agent.model}"}
                 ${lib.optionalString (agent.effort != null) "effort: ${agent.effort}"}

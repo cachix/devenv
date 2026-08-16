@@ -209,8 +209,8 @@ Agents are specialized AI assistants that handle specific tasks with their own c
 {
   claude.code.agents = {
     code-reviewer = {
-      description = "Expert code review specialist that checks for quality, security, and best practices";
-      proactive = true;  # Claude will use this automatically when appropriate
+      # "Use proactively" tells Claude to delegate to this agent automatically when relevant
+      description = "Expert code review specialist that checks for quality, security, and best practices. Use proactively after code changes.";
       tools = [ "Read" "Grep" "TodoWrite" ];
       model = "opus";
       effort = "high";
@@ -228,7 +228,6 @@ Agents are specialized AI assistants that handle specific tasks with their own c
 
     test-writer = {
       description = "Specialized in writing comprehensive test suites";
-      proactive = false;  # Only invoked explicitly
       tools = [ "Read" "Write" "Edit" "Bash" ];
       prompt = ''
         You are a test writing specialist. Create comprehensive test suites that:
@@ -240,8 +239,7 @@ Agents are specialized AI assistants that handle specific tasks with their own c
     };
 
     docs-updater = {
-      description = "Updates project documentation based on code changes";
-      proactive = true;
+      description = "Updates project documentation based on code changes. Use proactively when code changes affect documentation.";
       tools = [ "Read" "Edit" "Grep" ];
       prompt = ''
         You specialize in keeping documentation up-to-date. When code changes:
@@ -274,13 +272,13 @@ This is reflected in `devenv info`, which reports a `Primary agent: <name>` line
 
 ### Properties
 
-- **description**: What the sub-agent does (shown in Claude's agent selection)
-- **proactive**: Whether Claude should use this sub-agent automatically when relevant
+- **description**: What the sub-agent does and when Claude should delegate to it.
+  Include a phrase like "use proactively" to have Claude invoke the agent automatically when relevant.
 - **tools**: List of tools the sub-agent can use (restricts access for safety)
-- **model**: Override the model for this agent (`opus`, `sonnet`, or `haiku`)
+- **model**: Override the model for this agent (`opus`, `sonnet`, `haiku`, `fable`, a full model ID, or `inherit`)
 - **effort**: Override the reasoning effort for this agent (`low`, `medium`, `high`, `xhigh`, or `max`)
 - **prompt**: The system prompt that defines the sub-agent's behavior
-- **permissionMode**: Permission mode for this specific sub-agent (`default`, `acceptEdits`, `plan`, or `bypassPermissions`)
+- **permissionMode**: Permission mode for this specific sub-agent (`default`, `acceptEdits`, `plan`, `auto`, `dontAsk`, or `bypassPermissions`)
 
 ### Available Tools
 
@@ -296,16 +294,18 @@ Common tools that can be assigned to agents:
 
 ### Usage
 
-**Proactive agents** (with `proactive: true`) are automatically invoked by Claude when their expertise is relevant. For example, the code-reviewer sub-agent will automatically review code after significant changes.
+Claude delegates to an agent based on its `description` and the task at hand.
+Agents whose description says to use them proactively are invoked automatically when their expertise is relevant.
+For example, the code-reviewer sub-agent above will review code after significant changes without being asked.
 
-**Non-proactive agents** (with `proactive: false`) must be explicitly requested. You can invoke them by asking Claude to use a specific agent or by describing a task that matches their expertise.
+Any agent can also be requested explicitly, by asking Claude to use it or by describing a task that matches its expertise.
 
 ### Best Practices
 
 1. **Limit tool access**: Only give agents the tools they need
 2. **Clear descriptions**: Help Claude understand when to use each agent
 3. **Focused prompts**: Keep agent prompts specific to their task
-4. **Use proactive mode carefully**: Only for agents that should run automatically
+4. **Ask for proactive use carefully**: Only say "use proactively" in the description of agents that should run automatically
 
 For more details on agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/sub-agents).
 
@@ -367,7 +367,7 @@ When MCP servers are configured, devenv generates a `.mcp.json` file that Claude
 
 ## Composable Specialized Agents
 
-The [devenv-claude-agents](https://github.com/cachix/devenv-claude-agents) repository provides a composable collection of specialized agents:
+The [devenv-ai-agents](https://github.com/cachix/devenv-ai-agents) repository provides a composable collection of specialized agents:
 
 - `code-reviewer`
 - `architecture-designer`

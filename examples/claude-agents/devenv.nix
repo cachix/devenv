@@ -209,7 +209,6 @@
         model = "sonnet";
         effort = "medium";
         permissionMode = "default";
-        proactive = true;
         tools = [
           "Read"
           "Grep"

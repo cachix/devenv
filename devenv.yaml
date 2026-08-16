@@ -34,12 +34,12 @@ inputs:
     # Kept in sync with flake.nix's ghostty input.
     url: github:ghostty-org/ghostty
 
-  devenv-claude-agents:
-    url: github:cachix/devenv-claude-agents
+  devenv-ai-agents:
+    url: github:cachix/devenv-ai-agents
     flake: false
 
 # Import devenv projects
 imports:
-  - devenv-claude-agents
-  - ./docs
+  - devenv-ai-agents
   - ./devenv-nix-backend
+  - ./docs
