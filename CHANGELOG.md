@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- Fixed `--from <flake-ref>` ignoring the external project's `devenv.yaml`. Its inputs and imports were dropped, so a project relying on an integration such as treefmt or git-hooks failed to evaluate. Flake references are now fetched before the configuration is read and merged exactly like `--from path:` sources. The reference itself is no longer recorded in `devenv.lock`; pin it with an explicit revision (`--from github:owner/repo/<rev>`) if you need it fixed.
+- Fixed `--from <flake-ref>` ignoring the external project's `devenv.yaml` and `devenv.lock`. Its inputs and imports were dropped, so a project relying on an integration such as treefmt or git-hooks failed to evaluate, and every input resolved afresh instead of using the revisions the source was tested with. Flake references are now fetched before the configuration is read and merged exactly like `--from path:` sources, and a working directory with no lock of its own starts from the source's. The reference itself is no longer recorded in `devenv.lock`; pin it with an explicit revision (`--from github:owner/repo/<rev>`) if you need it fixed.
 
 ### Improvements
 

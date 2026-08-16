@@ -67,6 +67,20 @@ echo "$out" | grep -q "from-flake-input" || fail "--from flake ref dropped the s
 echo "$out" | grep -q "from-flake-import" || fail "--from flake ref dropped the source's imports"
 ! echo "$out" | grep -q "python3" || fail "--from flake ref leaked local python3"
 
+step "--from seeds devenv.lock from the source"
+# from-flake pins flake-compat to an old revision in its lock while leaving it
+# unpinned in devenv.yaml. A project with no lock of its own starts from the
+# source's, so this must keep that revision instead of resolving the current
+# head of flake-compat.
+from_flake_dir="$(cd from-flake && pwd)"
+pinned_rev=$(sed -n 's/.*"rev": "\([0-9a-f]*\)".*/\1/p' from-flake/devenv.lock)
+[ -n "$pinned_rev" ] || fail "from-flake/devenv.lock has no pinned revision"
+mkdir -p test-from-seed && pushd test-from-seed >/dev/null
+devenv --from "git+file://$from_flake_dir" info >/dev/null
+grep -q "$pinned_rev" devenv.lock || fail "--from didn't seed devenv.lock from the source"
+popd >/dev/null
+rm -rf test-from-seed
+
 step "--from works in a directory without devenv.nix"
 mkdir -p test-from-only && pushd test-from-only >/dev/null
 out=$(devenv --from "path:$from_test_dir" info)

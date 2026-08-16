@@ -441,6 +441,13 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         _ => from_path,
     };
 
+    // The source's own lock seeds a project that has none, so the environment
+    // starts on the revisions the source was tested with.
+    let from_lock = from_dir
+        .as_deref()
+        .map(|dir| dir.join("devenv.lock"))
+        .filter(|lock| lock.exists());
+
     let mut config = Config::load_with_source(from_dir.as_deref())?;
     config.check_version(crate_version!())?;
 
@@ -503,6 +510,7 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         secret_settings,
         input_overrides,
         from_external: from_source.is_some(),
+        from_lock,
         require_version_match,
         devenv_root: None,
         devenv_dotfile: test_environment

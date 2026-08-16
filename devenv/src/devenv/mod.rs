@@ -125,6 +125,9 @@ pub struct DevenvOptions {
     pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
     pub from_external: bool,
+    /// `devenv.lock` of a `--from` source, used as the starting point for a
+    /// project that has none of its own. See [`Devenv::new`].
+    pub from_lock: Option<PathBuf>,
     pub require_version_match: bool,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
@@ -189,6 +192,7 @@ impl Default for DevenvOptions {
             secret_settings: SecretSettings::default(),
             input_overrides: InputOverrides::default(),
             from_external: false,
+            from_lock: None,
             require_version_match: false,
             devenv_root: None,
             devenv_dotfile: None,
@@ -533,6 +537,25 @@ impl Devenv {
         )
         .await?;
         devenv_core::paths::create_runtime_dir(&devenv_runtime)?;
+
+        // A `--from` source ships the revisions it was tested with. A project
+        // that has no lock of its own starts from those instead of resolving
+        // every input afresh; the seeded lock then belongs to this project, so
+        // `devenv update` moves it independently of the source. Locking runs
+        // next and reconciles it with the merged input set.
+        if let Some(source_lock) = &options.from_lock {
+            let lock = devenv_root.join("devenv.lock");
+            if !lock.exists()
+                && let Err(e) = seed_lock_from_source(source_lock, &lock).await
+            {
+                warn!(
+                    source = %source_lock.display(),
+                    error = %e,
+                    "failed to seed devenv.lock from the --from source, resolving inputs afresh"
+                );
+            }
+        }
+
         // A managed netrc holds the Cachix auth token, and outlives any
         // devenv that was killed before it could clean up after itself.
         devenv_core::cachix::reap_stale_netrc_files(&devenv_runtime);
@@ -3549,6 +3572,15 @@ fn build_bootstrap_args(
     };
 
     BootstrapArgs::from_serializable(&args)
+}
+
+/// Copy a `--from` source's lock file into the project as a starting point.
+///
+/// The contents are rewritten rather than copied so the result is writable even
+/// when the source is a read-only store path.
+async fn seed_lock_from_source(source: &Path, target: &Path) -> std::io::Result<()> {
+    let contents = fs::read(source).await?;
+    fs::write(target, contents).await
 }
 
 fn resolve_secretspec_into(
