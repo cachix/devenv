@@ -8342,7 +8342,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "resource" "signal" "term" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" ];
           }
           {
             name = "once_cell";
@@ -8674,7 +8674,7 @@ rec {
             name = "nix";
             packageId = "nix 0.31.3";
             target = { target, features }: (target."unix" or false);
-            features = [ "fs" "process" "resource" "signal" "term" "user" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" "user" ];
           }
           {
             name = "nix-conf-parser";
@@ -8973,7 +8973,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "resource" "signal" "term" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" ];
           }
           {
             name = "nix-bindings-bindgen-raw";
@@ -9138,7 +9138,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "resource" "signal" "term" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" ];
           }
           {
             name = "portable-pty";
@@ -9310,7 +9310,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "resource" "signal" "term" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" ];
           }
           {
             name = "portable-pty";
@@ -9555,7 +9555,7 @@ rec {
             name = "nix";
             packageId = "nix 0.31.3";
             target = { target, features }: (target."unix" or false);
-            features = [ "fs" "process" "resource" "signal" "term" "user" "signal" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" "user" "signal" ];
           }
           {
             name = "petgraph";
@@ -9611,7 +9611,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "resource" "signal" "term" "signal" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" "signal" ];
           }
           {
             name = "pretty_assertions";
@@ -33779,7 +33779,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "process" "resource" "signal" "term" "signal" "process" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" "signal" "process" ];
           }
           {
             name = "tokio";

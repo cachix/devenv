@@ -61,6 +61,7 @@ pub use manager::{
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;
 pub use pty::PtyProcess;
+pub use session::maybe_run_session_guardian;
 pub use socket_activation::{
     ActivatedSockets, ActivationSpec, ActivationSpecBuilder, SD_LISTEN_FDS_START,
     SocketActivationWrapper, activation_from_listen,

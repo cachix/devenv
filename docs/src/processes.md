@@ -169,7 +169,8 @@ The defaults are SIGTERM (15) and 5 seconds.
 }
 ```
 
-The same signal and grace period apply to restarts, including restarts triggered by file watching and the watchdog.
+The same settings apply to restarts from file watching or the watchdog.
+If `devenv` or `devenv-tasks` is killed, a guardian performs the shutdown.
 
 ## Ready Probes
 
