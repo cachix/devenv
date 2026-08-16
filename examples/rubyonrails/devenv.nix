@@ -16,6 +16,8 @@
     pkgs.git
     pkgs.curl
     pkgs.redis
+    # libpq headers and pkg-config file for building the `pg` gem
+    pkgs.libpq
   ];
 
   services.postgres.enable = true;

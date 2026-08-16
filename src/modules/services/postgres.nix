@@ -406,6 +406,18 @@ in
     {
       changelogs = [
         {
+          date = "2026-08-16";
+          title = "services.postgres: only PostgreSQL's binaries are added to the shell";
+          when = cfg.enable;
+          description = ''
+            `services.postgres` now adds only the output of `services.postgres.package` that holds the server and client binaries (`postgres`, `psql`, `pg_ctl`, ...) to the shell.
+            Previously the whole package was added, which made the shell pick up PostgreSQL's development output as well: about 2.4 GB of LLVM, Perl, Python and Tcl, and the libpq headers and `libpq.pc` on the shell's include and pkg-config paths.
+
+            If you build against or load the libpq client library yourself, for example with the Ruby `pg` gem, `psycopg2` built from source or pure-Python `psycopg`, add `pkgs.libpq` to `packages`.
+            Builds that need `pg_config` can use `pkgs.libpq.pg_config`.
+          '';
+        }
+        {
           date = "2026-03-16";
           title = "services.postgres: initialDatabases now sets database owner";
           when = cfg.enable;
@@ -429,7 +441,12 @@ in
         ])
         cfg.initialDatabases;
 
-      packages = [ postgresPkg startScript ];
+      # The `dev` output retains the toolchain PostgreSQL was built with
+      # (LLVM, Perl, Python, Tcl) through pgxs.
+      packages = [
+        (lib.getBin postgresPkg)
+        startScript
+      ];
 
       env.PGDATA = config.env.DEVENV_STATE + "/postgres";
       env.PGHOST =
