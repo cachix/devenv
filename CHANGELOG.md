@@ -2,6 +2,10 @@
 
 ## 2.2.3 (unreleased)
 
+### Bug Fixes
+
+- Fixed `--from <flake-ref>` ignoring the external project's `devenv.yaml`. Its inputs and imports were dropped, so a project relying on an integration such as treefmt or git-hooks failed to evaluate. Flake references are now fetched before the configuration is read and merged exactly like `--from path:` sources. The reference itself is no longer recorded in `devenv.lock`; pin it with an explicit revision (`--from github:owner/repo/<rev>`) if you need it fixed.
+
 ### Improvements
 
 - Reduced the size of the devenv closure from 528 MB to 376 MB. It no longer contains duplicate copies of glibc, OpenSSL, curl, Boost, ICU and the Nix libraries, which were pulled in by `cachix` and `nixd` being built against different package sets than devenv itself.

@@ -432,7 +432,16 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             fs::canonicalize(&full_path).unwrap_or(full_path)
         });
 
-    let mut config = Config::load_with_source(from_path.as_deref())?;
+    // Any other source (a flake ref, via --from or a persisted binding) is
+    // fetched into the store first, then merged from there like a `path:`
+    // source: its devenv.yaml only reaches the config loader if the source is
+    // already on disk when the config is read.
+    let from_dir = match (&from_source, &from_path) {
+        (Some(from), None) => Some(devenv_nix_backend::source::fetch(from)?),
+        _ => from_path,
+    };
+
+    let mut config = Config::load_with_source(from_dir.as_deref())?;
     config.check_version(crate_version!())?;
 
     let input_overrides = InputOverrides::from(cli.input_overrides);
@@ -443,24 +452,6 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         config
             .override_input_url(name, url)
             .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
-    }
-
-    // A non-path source (flake ref, via --from or a persisted binding) is
-    // fetched as the `from` input and its devenv.nix imported from the store.
-    // Its devenv.yaml is not merged (that needs a fetch before config load);
-    // `path:` sources get the full merge via Config::load_with_source above.
-    if from_path.is_none()
-        && let Some(from) = &from_source
-    {
-        let from_input = devenv_core::config::Input {
-            url: Some(from.clone()),
-            flake: false,
-            follows: None,
-            inputs: BTreeMap::new(),
-            overlays: Vec::new(),
-        };
-        config.inputs.insert("from".to_string(), from_input);
-        config.imports.push("from".to_string());
     }
 
     // --- Resolved settings ---

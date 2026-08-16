@@ -1,0 +1,6 @@
+inputs:
+  marker:
+    url: path:./marker
+    flake: false
+imports:
+  - ./module

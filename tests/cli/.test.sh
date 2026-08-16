@@ -55,6 +55,18 @@ for path in "path:$from_test_dir" "path:./from-test"; do
   ! echo "$out" | grep -q "python3" || fail "--from=$path leaked local python3"
 done
 
+step "--from a flake reference merges the source's devenv.yaml"
+# A non-path source is fetched into the store before the config is read, so its
+# devenv.yaml has to survive that round trip: from-flake declares an input its
+# devenv.nix uses and imports a directory that adds another package.
+git -C from-flake init -q --initial-branch=main
+git -C from-flake add -A
+git -C from-flake -c user.email=test@example.com -c user.name=test commit -qm from-flake
+out=$(devenv --from "git+file://$PWD/from-flake" info)
+echo "$out" | grep -q "from-flake-input" || fail "--from flake ref dropped the source's inputs"
+echo "$out" | grep -q "from-flake-import" || fail "--from flake ref dropped the source's imports"
+! echo "$out" | grep -q "python3" || fail "--from flake ref leaked local python3"
+
 step "--from works in a directory without devenv.nix"
 mkdir -p test-from-only && pushd test-from-only >/dev/null
 out=$(devenv --from "path:$from_test_dir" info)

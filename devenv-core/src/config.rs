@@ -483,7 +483,8 @@ impl Config {
     }
 
     /// Like [`Config::load`], but additionally merges the configuration of an
-    /// out-of-tree source directory (a `path:` `--from` source).
+    /// out-of-tree source directory (the directory behind `--from`: a `path:`
+    /// source, or a flake reference already fetched into the store).
     ///
     /// The source's `devenv.yaml` import graph merges at the lowest precedence
     /// (the project's own configuration wins), and the source's inputs and
