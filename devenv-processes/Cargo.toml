@@ -32,6 +32,8 @@ portable-pty.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 caps.workspace = true
 
+# Linux discovers session members through /proc and nix. macOS needs the raw
+# proc_listallpids/proc_pidinfo APIs, which nix does not expose.
 [target.'cfg(target_os = "macos")'.dependencies]
 libc.workspace = true
 

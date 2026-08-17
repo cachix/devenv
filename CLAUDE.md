@@ -85,7 +85,6 @@ Integration tests live in `tests/` and `examples/` directories. Each test is a d
 ### Cargo Feature Flags
 
 - **`devenv/test-all`** — Enables all feature-gated unit tests across the workspace.
-  Propagates to `devenv-processes/test-all`, `devenv-tasks/test-all`, `devenv-nix-backend/test-all`, `devenv-reload/test-all`, `devenv-shell/test-all`, and `devenv-tui/test-all`.
 - **`devenv/test-mcp`** — Enables MCP-related tests.
 - **`devenv/snix`** — Enables the experimental Snix backend.
 - **`devenv-shell/test-pty`** — Enables PTY-based session tests (requires a real terminal).

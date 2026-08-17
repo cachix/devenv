@@ -16,15 +16,19 @@
 - `devenv tasks list` now prints a more readable human tree: task names are colored (processes in cyan), descriptions are shown inline, and details like status checks and watched files are broken onto their own indented lines instead of being crammed into a single parenthetical.
 - Module errors now point at the `devenv.nix` (or imported module) that defined the offending option, instead of `<unknown-file>`.
 - Updated the bundled Nix from `v2.34.8` to `v2.35.2`.
+- Added `processes.<name>.shutdown.signal` and `.grace` for the native manager and process-compose. The same settings apply to restarts, and PostgreSQL now uses SIGINT for fast shutdown.
+
+### Bug Fixes
+
+- Fixed short-lived processes staying active under process-compose. External managers now own restart and readiness, while `devenv-tasks` runs the process once and exits when it settles ([#2879](https://github.com/cachix/devenv/issues/2879)).
+- Fixed services surviving a crash of `devenv-tasks` or the native process manager. A guardian now cleans abandoned service sessions, and the next manager reconciles them before starting the same process.
+- Fixed `devenv-tasks` leaving processes running after errors or parent death. It now stops processes before returning and when it loses its parent.
+- Fixed the native manager missing descendants in separate process groups. Stop and restart now clean the whole service session.
 
 ## 2.2.2 (2026-08-13)
 
 ### Bug Fixes
 
-- Fixed services surviving a crash of `devenv-tasks` or the native process manager. A guardian now cleans abandoned service sessions, and the next manager reconciles them before starting the same process.
-- Fixed `devenv-tasks` leaving processes running after errors or parent death. It now stops processes before returning and when it loses its parent.
-- Fixed the native manager missing descendants in separate process groups. Stop and restart now clean the whole service session.
-- Added `processes.<name>.shutdown.signal` and `.grace` for the native manager and process-compose. The same settings apply to restarts, and PostgreSQL now uses SIGINT for fast shutdown.
 - Fixed `devenv mcp` ignoring termination signals. A single SIGTERM or SIGINT now shuts the server down immediately, without waiting for further input on stdin; previously it kept running until it was killed forcefully or its client closed stdin ([#3065](https://github.com/cachix/devenv/issues/3065)).
 - Fixed `devenv mcp` ignoring most of the session's configuration; it previously fell back to default Nix, cache, and shell settings for everything except inputs and imports.
 

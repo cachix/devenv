@@ -352,6 +352,34 @@ async fn test_manual_restart_after_exit_reports_fresh_status() {
     .expect("Test timed out");
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_manual_restart_without_probe_stays_ready() {
+    timeout(TEST_TIMEOUT, async {
+        let ctx = TestContext::new();
+        let config = ProcessConfig {
+            name: "restart-ready".to_string(),
+            exec: "sleep 30".to_string(),
+            restart: RestartConfig {
+                on: RestartPolicy::Never,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let manager = ctx.create_manager();
+        manager.start_command(&config, None).await.unwrap();
+        manager.restart("restart-ready").await.unwrap();
+
+        assert_eq!(
+            manager.job_state("restart-ready").await.unwrap().phase,
+            SupervisorPhase::Ready
+        );
+        manager.stop("restart-ready").await.unwrap();
+    })
+    .await
+    .expect("Test timed out");
+}
+
 /// Test that max_restarts=None allows unlimited restarts (with manual stop)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_unlimited_restarts() {

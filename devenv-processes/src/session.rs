@@ -5,12 +5,22 @@
 //!
 //! # Crash guardians
 //!
-//! Supported executables re-exec themselves as a guardian for each service.
-//! The guardian watches a pipe held by the manager and cleans up on EOF. Its
-//! lease lets a later manager reclaim an abandoned session before relaunching
-//! the same process.
+//! Unix does not guarantee that descendants die with their parent, especially
+//! after they create private process groups. For every service spawn, supported
+//! devenv executables therefore re-exec themselves as a small guardian process
+//! outside the service session. The manager owns one end of a pipe and the
+//! guardian blocks on the other. Normal exit, a crash, or SIGKILL closes the
+//! manager end in the kernel; EOF tells the guardian to terminate every process
+//! group still in the recorded session.
+//!
+//! The guardian also writes a lease containing the session, owner, and guardian
+//! PIDs plus their start times. A later manager locks that lease before launch,
+//! verifies that the PIDs were not recycled, and either asks the old guardian
+//! to clean up or sweeps the abandoned session itself. This is the same general
+//! sidecar/watchdog pattern used by service supervisors, adapted here because
+//! devenv cannot rely on a platform-independent parent-death signal.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -19,9 +29,13 @@ use std::time::{Duration, Instant};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
-use watchexec_supervisor::Signal;
 use watchexec_supervisor::job::Job;
 
+#[cfg(not(unix))]
+use watchexec_supervisor::Signal;
+
+#[cfg(unix)]
+use nix::fcntl::{Flock, FlockArg};
 #[cfg(unix)]
 use nix::sys::signal::{self, Signal as NixSignal};
 #[cfg(unix)]
@@ -41,19 +55,23 @@ static GUARDIANS_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Sessions and guardians owned by one supervised process.
 #[derive(Debug, Default)]
-pub struct SessionRegistry {
+pub(crate) struct SessionRegistry {
     inner: Mutex<RegistryInner>,
 }
 
 #[derive(Debug, Default)]
 struct RegistryInner {
-    session_ids: BTreeSet<i32>,
+    sessions: BTreeMap<i32, Option<u64>>,
     guardians: Vec<SessionGuardian>,
 }
 
 impl SessionRegistry {
-    pub fn record(&self, session_id: i32) {
-        self.inner.lock().unwrap().session_ids.insert(session_id);
+    pub(crate) fn record(&self, session_id: i32) {
+        self.inner
+            .lock()
+            .unwrap()
+            .sessions
+            .insert(session_id, process_start_time(session_id));
     }
 
     fn attach(&self, guardian: SessionGuardian) {
@@ -61,21 +79,25 @@ impl SessionRegistry {
     }
 
     /// Stop all recorded sessions and retire their guardians.
-    pub async fn cleanup(&self, shutdown: &ShutdownConfig) {
-        let (session_ids, guardians) = {
+    pub(crate) async fn cleanup(&self, shutdown: &ShutdownConfig) {
+        let (sessions, guardians) = {
             let mut inner = self.inner.lock().unwrap();
             (
-                std::mem::take(&mut inner.session_ids),
+                std::mem::take(&mut inner.sessions),
                 std::mem::take(&mut inner.guardians),
             )
         };
+        let session_ids = sessions
+            .into_iter()
+            .filter_map(|(session_id, leader_start)| {
+                session_matches_start(session_id, leader_start).then_some(session_id)
+            })
+            .collect::<BTreeSet<_>>();
         if !session_ids.is_empty() {
             let signal = shutdown.signal;
             let grace = shutdown.grace_duration();
             let _ = tokio::task::spawn_blocking(move || {
-                for session_id in session_ids {
-                    terminate_session(session_id, signal, grace);
-                }
+                terminate_sessions(&session_ids, signal, grace);
             })
             .await;
         }
@@ -83,49 +105,106 @@ impl SessionRegistry {
     }
 }
 
-/// Stop a job with the configured signal and grace period, then reclaim
-/// every process group left in the sessions it created.
-pub async fn stop_job(job: &Job, registry: &SessionRegistry, shutdown: &ShutdownConfig) {
-    job.stop_with_signal(Signal::from(shutdown.signal), shutdown.grace_duration())
-        .await;
-    registry.cleanup(shutdown).await;
+/// Stop the job and its remaining session groups within one grace period.
+pub(crate) async fn stop_job(job: &Job, registry: &SessionRegistry, shutdown: &ShutdownConfig) {
+    #[cfg(unix)]
+    {
+        // The registry owns the complete session, including the leader's
+        // process group, so it must be the sole graceful signal source. Once
+        // every group is gone, stop the job handle to settle its task state.
+        registry.cleanup(shutdown).await;
+        job.stop().await;
+    }
+    #[cfg(not(unix))]
+    {
+        job.stop_with_signal(Signal::from(shutdown.signal), shutdown.grace_duration())
+            .await;
+        registry.cleanup(shutdown).await;
+    }
 }
 
 /// Stop the job, then restart it unless manager shutdown has begun.
-pub async fn restart_job(
+pub(crate) async fn restart_job(
     job: &Job,
     registry: &SessionRegistry,
     shutdown: &ShutdownConfig,
-    cancellation: &tokio_util::sync::CancellationToken,
+    manager_shutdown: &tokio_util::sync::CancellationToken,
+    process_stop: &tokio_util::sync::CancellationToken,
 ) -> bool {
     stop_job(job, registry, shutdown).await;
-    if cancellation.is_cancelled() {
+    if manager_shutdown.is_cancelled() || process_stop.is_cancelled() {
         return false;
     }
     job.start().await;
     true
 }
 
-/// Reconcile a lease left by a previous manager for `process_name` before a
-/// new launch. Fails if another live manager still owns the process.
-pub async fn reconcile_process(state_dir: &Path, process_name: &str) -> Result<()> {
-    let path = lease_path(state_dir, process_name);
-    if !path.exists() {
-        return Ok(());
+/// Keeps one manager responsible for a process across restarts.
+#[derive(Debug, Clone)]
+pub(crate) struct SessionTakeover {
+    #[cfg(unix)]
+    _lock: Arc<Flock<std::fs::File>>,
+}
+
+impl SessionTakeover {
+    #[cfg(unix)]
+    fn claim(state_dir: &Path, process_name: &str) -> Result<Self> {
+        let lock_path = takeover_lock_path(state_dir, process_name);
+        let lock_parent = lock_path
+            .parent()
+            .ok_or_else(|| miette::miette!("takeover lock path has no parent"))?;
+        std::fs::create_dir_all(lock_parent).into_diagnostic()?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .into_diagnostic()?;
+        let lock = Flock::lock(file, FlockArg::LockExclusiveNonblock).map_err(|(_, error)| {
+            if error == nix::errno::Errno::EWOULDBLOCK {
+                miette::miette!("process {process_name} is already managed")
+            } else {
+                miette::miette!("failed to lock {}: {error}", lock_path.display())
+            }
+        })?;
+
+        Ok(Self {
+            _lock: Arc::new(lock),
+        })
     }
-    tokio::task::spawn_blocking(move || reconcile_lease(&path))
-        .await
-        .into_diagnostic()?
+
+    #[cfg(not(unix))]
+    fn claim(_state_dir: &Path, _process_name: &str) -> Result<Self> {
+        Ok(Self {})
+    }
+}
+
+/// Reclaim stale state and return a manager-lifetime ownership guard.
+pub(crate) async fn reconcile_process(
+    state_dir: &Path,
+    process_name: &str,
+) -> Result<SessionTakeover> {
+    let state_dir = state_dir.to_path_buf();
+    let process_name = process_name.to_string();
+    tokio::task::spawn_blocking(move || {
+        let takeover = SessionTakeover::claim(&state_dir, &process_name)?;
+        reconcile_lease(&lease_path(&state_dir, &process_name))?;
+        Ok(takeover)
+    })
+    .await
+    .into_diagnostic()?
 }
 
 /// Process-wrap hook installed on every supervised spawn. The spawned child
 /// is a session leader, so its PID is the session id.
 #[derive(Debug, Clone)]
-pub struct SessionRegistrationWrapper {
-    pub state_dir: PathBuf,
-    pub process_name: String,
-    pub shutdown: ShutdownConfig,
-    pub registry: Arc<SessionRegistry>,
+pub(crate) struct SessionRegistrationWrapper {
+    pub(crate) state_dir: PathBuf,
+    pub(crate) process_name: String,
+    pub(crate) shutdown: ShutdownConfig,
+    pub(crate) registry: Arc<SessionRegistry>,
+    pub(crate) _takeover: SessionTakeover,
 }
 
 #[cfg(unix)]
@@ -182,17 +261,17 @@ impl CommandWrapper for SessionRegistrationWrapper {
 
 /// Identifies a guarded session and protects reconciliation from PID reuse.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionLease {
-    pub name: String,
-    pub session_id: i32,
+struct SessionLease {
+    name: String,
+    session_id: i32,
     /// Start time of the session leader; see [`process_start_time`].
-    pub leader_start: Option<u64>,
-    pub owner_pid: i32,
-    pub owner_start: Option<u64>,
-    pub guardian_pid: i32,
-    pub guardian_start: Option<u64>,
-    pub signal: i32,
-    pub grace_ms: u64,
+    leader_start: Option<u64>,
+    owner_pid: i32,
+    owner_start: Option<u64>,
+    guardian_pid: i32,
+    guardian_start: Option<u64>,
+    signal: i32,
+    grace_ms: u64,
 }
 
 impl SessionLease {
@@ -201,13 +280,8 @@ impl SessionLease {
     }
 }
 
-/// Manager-side handle for a guardian process.
-///
-/// Closing the pipe asks the guardian to stop the session. [`cleanup`] also
-/// waits for the guardian to exit.
-///
-/// [`cleanup`]: SessionGuardian::cleanup
-pub struct SessionGuardian {
+/// Guardian process owned by the manager.
+struct SessionGuardian {
     lease_path: PathBuf,
     write_end: Option<std::io::PipeWriter>,
     child: std::process::Child,
@@ -383,7 +457,9 @@ fn run_guardian(lease_path: PathBuf, lease_json: &str) -> Result<()> {
 
     wait_for_cleanup_request(&signal_read);
 
-    terminate_session(lease.session_id, lease.signal, lease.grace());
+    if session_matches_lease(&lease) {
+        terminate_session(lease.session_id, lease.signal, lease.grace());
+    }
     let _ = std::fs::remove_file(&lease_path);
     Ok(())
 }
@@ -483,7 +559,7 @@ fn reconcile_lease(path: &Path) -> Result<()> {
         );
     }
 
-    if process_matches(lease.guardian_pid, lease.guardian_start) {
+    if lease.guardian_start.is_some() && process_matches(lease.guardian_pid, lease.guardian_start) {
         signal::kill(Pid::from_raw(lease.guardian_pid), NixSignal::SIGUSR1).into_diagnostic()?;
         let deadline = Instant::now() + lease.grace() + GUARDIAN_EXIT_MARGIN;
         while Instant::now() < deadline {
@@ -515,8 +591,12 @@ fn reconcile_lease(_path: &Path) -> Result<()> {
 /// Check that the session ID was not reused after the service ended.
 #[cfg(unix)]
 fn session_matches_lease(lease: &SessionLease) -> bool {
-    match process_start_time(lease.session_id) {
-        Some(start) => Some(start) == lease.leader_start,
+    session_matches_start(lease.session_id, lease.leader_start)
+}
+
+fn session_matches_start(session_id: i32, leader_start: Option<u64>) -> bool {
+    match process_start_time(session_id) {
+        Some(start) => Some(start) == leader_start,
         None => true,
     }
 }
@@ -542,8 +622,11 @@ fn lease_path(state_dir: &Path, process_name: &str) -> PathBuf {
     guardian_dir(state_dir).join(format!("{}.json", lease_key(process_name)))
 }
 
-/// Stable FNV-1a hash of the process name: bounded file names, no collisions
-/// from punctuation replacement.
+fn takeover_lock_path(state_dir: &Path, process_name: &str) -> PathBuf {
+    guardian_dir(state_dir).join(format!("{}.lock", lease_key(process_name)))
+}
+
+/// Stable, bounded file name derived from the process name.
 fn lease_key(name: &str) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in name.as_bytes() {
@@ -568,36 +651,52 @@ fn write_atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
 /// `grace` for the session to empty, then SIGKILL whatever is left.
 #[cfg(unix)]
 pub(crate) fn terminate_session(session_id: i32, graceful_signal: i32, grace: Duration) {
+    terminate_sessions(&BTreeSet::from([session_id]), graceful_signal, grace);
+}
+
+#[cfg(unix)]
+fn terminate_sessions(session_ids: &BTreeSet<i32>, graceful_signal: i32, grace: Duration) {
     let graceful_signal = NixSignal::try_from(graceful_signal).unwrap_or(NixSignal::SIGTERM);
-    let groups = session_process_groups(session_id);
+    let groups = process_groups_in_sessions(session_ids);
     if groups.is_empty() {
         return;
     }
     debug!(
-        session_id,
+        ?session_ids,
         ?groups,
-        "terminating process groups left in session"
+        "terminating process groups left in sessions"
     );
     signal_session_groups(&groups, graceful_signal);
 
     let deadline = Instant::now() + grace;
     while Instant::now() < deadline {
-        if session_process_groups(session_id).is_empty() {
+        if process_groups_in_sessions(session_ids).is_empty() {
             return;
         }
         std::thread::sleep(Duration::from_millis(25));
     }
-    signal_session_groups(&session_process_groups(session_id), NixSignal::SIGKILL);
+    signal_session_groups(&process_groups_in_sessions(session_ids), NixSignal::SIGKILL);
 }
 
 #[cfg(not(unix))]
 pub(crate) fn terminate_session(_session_id: i32, _graceful_signal: i32, _grace: Duration) {}
+
+#[cfg(not(unix))]
+fn terminate_sessions(_session_ids: &BTreeSet<i32>, _graceful_signal: i32, _grace: Duration) {}
 
 #[cfg(unix)]
 fn signal_session_groups(groups: &BTreeSet<i32>, signal_value: NixSignal) {
     for pgid in groups {
         let _ = signal::killpg(Pid::from_raw(*pgid), signal_value);
     }
+}
+
+#[cfg(unix)]
+fn process_groups_in_sessions(session_ids: &BTreeSet<i32>) -> BTreeSet<i32> {
+    session_ids
+        .iter()
+        .flat_map(|session_id| session_process_groups(*session_id))
+        .collect()
 }
 
 /// Process group ids of every live process in `session_id`, excluding the
@@ -631,9 +730,7 @@ pub(crate) fn session_process_groups(session_id: i32) -> BTreeSet<i32> {
     groups
 }
 
-/// The fields of `/proc/<pid>/stat` after the parenthesised command name,
-/// so index 0 is the state, 2 the process group, 3 the session, and 19 the
-/// start time.
+/// Fields after the command name in `/proc/<pid>/stat`.
 #[cfg(target_os = "linux")]
 fn proc_stat_fields(pid: i32) -> Option<Vec<String>> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
@@ -832,6 +929,20 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn manager_cleanup_leaves_recycled_session_id_alone() {
+        let mut leader = spawn_session_leader();
+        let pid = pid_of(leader.as_ref());
+        let registry = SessionRegistry::default();
+        registry.inner.lock().unwrap().sessions.insert(pid, Some(1));
+
+        registry.cleanup(&ShutdownConfig::default()).await;
+
+        let alive = !exited(&mut leader, Duration::from_millis(500)).await;
+        let _ = Box::into_pin(leader.kill()).await;
+        assert!(alive, "manager cleanup killed a recycled session ID");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn reconcile_refuses_a_live_owner() {
         let dir = tempfile::tempdir().unwrap();
         let mut leader = spawn_session_leader();
@@ -857,6 +968,41 @@ mod tests {
             lease_path(dir.path(), "unit-test").exists(),
             "the live owner's lease was removed"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn reconcile_allows_only_one_active_manager_claimant() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut leader = spawn_session_leader();
+        let pid = pid_of(leader.as_ref());
+        let (lease, path) = lease_for(pid, dir.path());
+        write_atomic_json(&path, &lease).unwrap();
+
+        // The Job keeps a clone after launch setup returns.
+        let first = reconcile_process(dir.path(), "unit-test")
+            .await
+            .expect("first manager claims the stale lease");
+        let retained_by_job = first.clone();
+        drop(first);
+        assert!(
+            exited(&mut leader, Duration::from_secs(3)).await,
+            "session of a dead guardian was not reclaimed"
+        );
+
+        let second = tokio::time::timeout(
+            Duration::from_millis(250),
+            reconcile_process(dir.path(), "unit-test"),
+        )
+        .await
+        .expect("a second manager must not wait on an active owner")
+        .expect_err("a second manager must not claim an active process");
+        assert!(format!("{second:?}").contains("already managed"));
+
+        drop(retained_by_job);
+        let next = reconcile_process(dir.path(), "unit-test")
+            .await
+            .expect("a new manager claims after the first releases ownership");
+        drop(next);
     }
 
     #[test]

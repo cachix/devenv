@@ -211,7 +211,7 @@ in
                         // {
                           initial_delay_seconds = r.initial_delay;
                           period_seconds = r.period;
-                          timeout_seconds = r.timeout;
+                          timeout_seconds = r.probe_timeout;
                           inherit (r) success_threshold failure_threshold;
                         };
                     }
@@ -220,8 +220,11 @@ in
                 # Translate restart -> availability
                 typedAvailability = {
                   availability = {
-                    restart = if value.restart.on == "never" then "no" else value.restart.on;
-                  } // lib.optionalAttrs (value.restart.max != null) {
+                    restart =
+                      if value.supervisionMode == "native" then "no"
+                      else if value.restart.on == "never" then "no"
+                      else value.restart.on;
+                  } // lib.optionalAttrs (value.supervisionMode == "external" && value.restart.max != null) {
                     max_restarts = value.restart.max;
                   };
                 };
@@ -239,11 +242,11 @@ in
 
                 # Direct processes receive the configured signal. Wrapped processes
                 # receive SIGTERM, which devenv-tasks translates for the service.
-                # The timeout covers leader shutdown and session cleanup.
+                # Leave process-compose time to stop devenv-tasks after its grace period.
                 typedShutdown = {
                   shutdown = {
                     signal = if direct then value.shutdown.signal else 15;
-                    timeout_seconds = value.shutdown.grace * 2 + 5;
+                    timeout_seconds = value.shutdown.grace + 5;
                   };
                 };
 

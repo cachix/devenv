@@ -372,6 +372,7 @@ impl TaskState {
         &self,
         env: &std::collections::HashMap<String, String>,
         bash: &str,
+        supervisor: devenv_processes::SupervisionMode,
     ) -> Result<ProcessConfig> {
         let cmd = self
             .task
@@ -386,6 +387,7 @@ impl TaskState {
             name: process_name,
             exec: cmd.clone(),
             cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
+            supervisor,
             ..base
         };
 
@@ -862,6 +864,7 @@ mod tests {
             .build_process_config(
                 &std::collections::HashMap::new(),
                 "/nix/store/bash/bin/bash",
+                devenv_processes::SupervisionMode::Native,
             )
             .unwrap();
         assert_eq!(config.bash, "/nix/store/bash/bin/bash");
@@ -874,7 +877,11 @@ mod tests {
     fn build_process_config_keeps_default_bash_when_unresolved() {
         let ts = process_task_state();
         let config = ts
-            .build_process_config(&std::collections::HashMap::new(), "")
+            .build_process_config(
+                &std::collections::HashMap::new(),
+                "",
+                devenv_processes::SupervisionMode::Native,
+            )
             .unwrap();
         assert_eq!(config.bash, "bash");
     }

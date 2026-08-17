@@ -7,17 +7,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-/// Process type determining lifecycle behavior
+/// Process type.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProcessType {
-    /// Standard foreground process (default)
-    /// Ready immediately after start, can restart based on RestartPolicy
+    /// Standard foreground process.
     #[default]
     Foreground,
 }
 
-/// Process restart policy
+/// Process restart policy.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RestartPolicy {
@@ -30,7 +29,7 @@ pub enum RestartPolicy {
     OnFailure,
 }
 
-/// Type of listen socket
+/// Listen socket type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ListenKind {
@@ -38,7 +37,7 @@ pub enum ListenKind {
     UnixStream,
 }
 
-/// Specification for a listen socket
+/// Listen socket specification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListenSpec {
     pub name: String,
@@ -53,14 +52,14 @@ pub struct ListenSpec {
     pub mode: Option<u32>,
 }
 
-/// Socket activation configuration
+/// Socket activation configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SocketActivationConfig {
     #[serde(default)]
     pub listens: Vec<ListenSpec>,
 }
 
-/// Watch configuration for file-based process restarts
+/// File-watch configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WatchConfig {
     /// Paths to watch for changes (files or directories)
@@ -74,7 +73,7 @@ pub struct WatchConfig {
     pub ignore: Vec<String>,
 }
 
-/// Watchdog configuration for health monitoring
+/// Watchdog configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatchdogConfig {
     /// Watchdog interval in microseconds
@@ -88,7 +87,7 @@ fn default_true() -> bool {
     true
 }
 
-/// Readiness probe configuration
+/// Readiness probe configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadyConfig {
     /// Shell command to execute. Exit 0 = ready.
@@ -136,13 +135,13 @@ impl Default for ReadyConfig {
     }
 }
 
-/// HTTP probe configuration
+/// HTTP readiness probe configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpProbe {
     pub get: Option<HttpGetProbe>,
 }
 
-/// HTTP GET probe parameters
+/// HTTP GET probe parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpGetProbe {
     pub host: String,
@@ -151,7 +150,7 @@ pub struct HttpGetProbe {
     pub scheme: String,
 }
 
-/// Structured restart configuration
+/// Restart configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestartConfig {
     /// When to restart
@@ -195,7 +194,7 @@ fn default_failure() -> u32 {
     3
 }
 
-/// Linux-specific process configuration
+/// Linux-specific process configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LinuxConfig {
     /// Linux capabilities to add as ambient (e.g., "net_bind_service", "sys_ptrace")
@@ -238,7 +237,7 @@ impl ShutdownConfig {
     }
 }
 
-/// Auto-start configuration for a process
+/// Process auto-start configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StartConfig {
     #[serde(default = "default_true")]
@@ -251,7 +250,18 @@ impl Default for StartConfig {
     }
 }
 
-/// Process configuration
+/// Who owns automatic restart, readiness, watchdog, and file-watch policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SupervisionMode {
+    /// Run local restart, readiness, watchdog, and file-watch policy.
+    #[default]
+    Native,
+    /// Report lifecycle state while the host owns supervision policy.
+    External,
+}
+
+/// Process configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessConfig {
     #[serde(default)]
@@ -293,11 +303,17 @@ pub struct ProcessConfig {
     /// Linux-specific configuration
     #[serde(default)]
     pub linux: LinuxConfig,
+    /// Who runs the supervision loop for this process.
+    #[serde(default)]
+    pub supervisor: SupervisionMode,
 }
 
 impl ProcessConfig {
-    /// Whether this config has any readiness mechanism (probe, TCP listen, or allocated ports).
+    /// Whether the native supervisor should run a readiness probe.
     pub fn has_readiness_probe(&self) -> bool {
+        if self.supervisor == SupervisionMode::External {
+            return false;
+        }
         self.ready.is_some()
             || self.listen.iter().any(|spec| spec.kind == ListenKind::Tcp)
             || !self.ports.is_empty()
@@ -323,6 +339,7 @@ impl Default for ProcessConfig {
             watchdog: None,
             shutdown: ShutdownConfig::default(),
             linux: LinuxConfig::default(),
+            supervisor: SupervisionMode::default(),
         }
     }
 }

@@ -328,6 +328,31 @@ let
         '';
       };
 
+      supervisionMode = lib.mkOption {
+        type = types.enum [ "native" "external" ];
+        internal = true;
+        readOnly = true;
+        description = "Whether devenv or the selected process manager owns lifecycle policy.";
+        default =
+          let
+            readyIsExternal =
+              if config.ready == null then
+                config.ports == { }
+                && !lib.any (listen: listen.kind == "tcp") config.listen
+              else
+                !config.ready.notify
+                && config.ready.timeout == null
+                && (config.ready.exec != null || config.ready.http.get != null);
+            processComposeOwnsPolicy =
+              implementation == "process-compose"
+              && readyIsExternal
+              && config.restart.window == null
+              && config.watch.paths == [ ]
+              && config.watchdog == null;
+          in
+          if processComposeOwnsPolicy then "external" else "native";
+      };
+
     };
 
     config = lib.mkIf (implementation == "process-compose") {
@@ -526,10 +551,20 @@ in
         # Not used by the native manager (devenv 2.0+) which handles process tasks directly.
         process.taskCommandsBase =
           let
-            ignoreProcessDepsFlag = lib.optionalString (implementation != "native") " --ignore-process-deps";
+            commandLine = lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell;
           in
           lib.mapAttrs
-            (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime}${ignoreProcessDepsFlag} devenv:processes:${name}")
+            (name: process:
+              let
+                runArgs = commandLine { } {
+                  task-file = config.task.config;
+                  mode = "all";
+                  cache-dir = config.devenv.dotfile;
+                  runtime-dir = config.devenv.runtime;
+                  supervisor = process.supervisionMode;
+                };
+              in
+              "${config.task.package}/bin/devenv-tasks run ${runArgs} devenv:processes:${name}")
             enabledProcesses;
 
         # With exec prefix for proper signal handling (derived from base)

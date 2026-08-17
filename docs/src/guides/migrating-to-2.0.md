@@ -194,9 +194,9 @@ The setting applies to both the native manager and process-compose:
 }
 ```
 
-!!! tip "New in version 2.2.2"
+!!! tip "New in version 2.2.3"
 
-    `processes.<name>.shutdown` was added in devenv 2.2.2.
+    `processes.<name>.shutdown` was added in devenv 2.2.3.
     Older 2.x versions send SIGTERM; wrap the process in a script that translates the signal if you need a different one.
 
 #### Elevated processes

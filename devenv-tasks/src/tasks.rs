@@ -7,7 +7,9 @@ use crate::types::{
     TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
-use devenv_processes::{NativeProcessManager, ProcessConfig, ProcessPhase, StartOutcome};
+use devenv_processes::{
+    ExitStatus, NativeProcessManager, ProcessConfig, ProcessPhase, StartOutcome, SupervisionMode,
+};
 use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{EdgeRef, Reversed};
@@ -58,6 +60,15 @@ impl TasksBuilder {
 
     /// Build the Tasks instance
     pub async fn build(self) -> Result<Tasks, Error> {
+        let supervisor = self.config.supervisor;
+        // External managers own process ordering and invoke one wrapper per process.
+        let ignore_process_deps =
+            self.config.ignore_process_deps || supervisor == SupervisionMode::External;
+        let exit_on_idle = self
+            .config
+            .exit_on_idle
+            .unwrap_or(supervisor == SupervisionMode::External);
+
         let cache = if let Some(db_path) = self.db_path {
             TaskCache::with_db_path(db_path)
                 .await
@@ -71,6 +82,10 @@ impl TasksBuilder {
         // Create process manager for long-running process tasks
         let mut pm = NativeProcessManager::new(self.config.runtime_dir.clone())
             .map_err(|e| Error::io(format!("Failed to initialize process manager: {e}")))?;
+        if supervisor == SupervisionMode::External {
+            // External wrappers share the native manager's runtime directory.
+            pm.disown_runtime_files();
+        }
 
         let notify_finished = Arc::new(Notify::new());
         pm.set_task_notify(Arc::clone(&notify_finished));
@@ -118,11 +133,13 @@ impl TasksBuilder {
             env: self.config.env,
             bash: self.config.bash,
             refresh_task_cache: self.refresh_task_cache,
-            ignore_process_deps: self.config.ignore_process_deps,
+            ignore_process_deps,
             task_index_by_name: HashMap::new(),
             start_with_deps_lock: Mutex::new(()),
             scheduled_task_indices: Mutex::new(HashSet::new()),
             outputs: Arc::new(Mutex::new(Outputs::new())),
+            exit_on_idle,
+            supervisor,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -191,6 +208,10 @@ pub struct Tasks {
     /// scheduler lifetime so one-shots started dynamically share results with
     /// the cold run and with later dynamic dependency closures.
     pub(crate) outputs: Arc<Mutex<Outputs>>,
+    /// Exit after every process has settled when an outer manager owns lifecycle.
+    pub(crate) exit_on_idle: bool,
+    /// Selects native or external lifecycle policy for registered processes.
+    pub(crate) supervisor: devenv_processes::SupervisionMode,
 }
 
 /// One dependency's evaluation, produced by `Tasks::eval_dep` and shared
@@ -261,10 +282,21 @@ impl Tasks {
                         Some(ProcessPhase::NotStarted | ProcessPhase::Stopped) => {
                             status.skipped += 1
                         }
-                        Some(ProcessPhase::Exited) => status.succeeded += 1,
+                        Some(ProcessPhase::Exited) => {
+                            if self.process_manager.get_exit_status(pname).await
+                                == Some(ExitStatus::Failure)
+                            {
+                                status.failed += 1;
+                            } else {
+                                status.succeeded += 1;
+                            }
+                        }
                         Some(ProcessPhase::GaveUp) => status.failed += 1,
                         Some(
-                            ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready,
+                            ProcessPhase::Waiting
+                            | ProcessPhase::Starting
+                            | ProcessPhase::Ready
+                            | ProcessPhase::Stopping,
                         ) => status.running += 1,
                         None => status.pending += 1,
                     }
@@ -777,7 +809,7 @@ impl Tasks {
             // in a `devenv shell` daemon).
             let config = {
                 let ts = self.graph[index].read().await;
-                match ts.build_process_config(&self.env, &self.bash) {
+                match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                     Ok(mut config) => {
                         config.start.enable = true;
                         config
@@ -1418,7 +1450,7 @@ impl Tasks {
             if ts.task.r#type != TaskType::Process || ts.task.command.is_none() {
                 continue;
             }
-            match ts.build_process_config(&self.env, &self.bash) {
+            match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                 Ok(mut config) => {
                     has_process_tasks = true;
                     if scheduled.contains(&index) {
@@ -1457,10 +1489,13 @@ impl Tasks {
             }
         }
 
-        // Start the API server so `devenv processes wait` can connect.
-        // This must happen after pre-registration so the socket is available
-        // when external clients connect. Only start if there are process tasks.
-        if has_process_tasks && let Err(e) = self.process_manager.start_api_server() {
+        // The native runner owns the API socket used by `devenv processes`.
+        // External managers run several short-lived wrappers in the same
+        // runtime directory, so they must not publish or remove that socket.
+        if self.supervisor == SupervisionMode::Native
+            && has_process_tasks
+            && let Err(e) = self.process_manager.start_api_server()
+        {
             error!("Failed to start process manager API server: {}", e);
         }
 
@@ -2016,6 +2051,8 @@ mod schedule_tests {
             env: HashMap::new(),
             bash: String::new(),
             ignore_process_deps,
+            exit_on_idle: Some(false),
+            supervisor: devenv_processes::SupervisionMode::Native,
         };
 
         let shutdown = tokio_shutdown::Shutdown::new();
@@ -2055,6 +2092,80 @@ mod schedule_tests {
         names
     }
 
+    #[tokio::test]
+    async fn external_supervisor_enforces_builder_invariants() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config {
+            tasks: vec![
+                process_task("ns:process:root", vec!["ns:process:dependency@completed"]),
+                process_task("ns:process:dependency", vec![]),
+            ],
+            roots: vec!["ns:process:root".to_string()],
+            run_mode: RunMode::All,
+            runtime_dir: tmp.path().join("runtime"),
+            cache_dir: tmp.path().join("cache"),
+            sudo_context: None,
+            env: HashMap::new(),
+            bash: String::new(),
+            ignore_process_deps: false,
+            exit_on_idle: None,
+            supervisor: SupervisionMode::External,
+        };
+
+        let tasks = Tasks::builder(
+            config,
+            VerbosityLevel::Normal,
+            tokio_shutdown::Shutdown::new(),
+        )
+        .build()
+        .await
+        .unwrap();
+
+        assert!(tasks.exit_on_idle, "external runners must exit when idle");
+        assert!(
+            tasks.ignore_process_deps,
+            "external runners must leave process ordering to their manager"
+        );
+        assert_eq!(
+            task_names(&tasks).await,
+            vec!["ns:process:root"],
+            "external runners must not schedule non-root process dependencies"
+        );
+    }
+
+    #[tokio::test]
+    async fn external_supervisor_honors_explicit_idle_override() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config {
+            tasks: vec![],
+            roots: vec![],
+            run_mode: RunMode::All,
+            runtime_dir: tmp.path().join("runtime"),
+            cache_dir: tmp.path().join("cache"),
+            sudo_context: None,
+            env: HashMap::new(),
+            bash: String::new(),
+            ignore_process_deps: false,
+            exit_on_idle: Some(false),
+            supervisor: SupervisionMode::External,
+        };
+
+        let tasks = Tasks::builder(
+            config,
+            VerbosityLevel::Normal,
+            tokio_shutdown::Shutdown::new(),
+        )
+        .build()
+        .await
+        .unwrap();
+
+        assert!(tasks.ignore_process_deps);
+        assert!(
+            !tasks.exit_on_idle,
+            "an explicit external linger override must not be replaced by the default"
+        );
+    }
+
     /// A process task running `command`, keyed under the `devenv:processes:`
     /// prefix so `start_with_deps` (which strips that prefix) can find it.
     fn process_task_with_command(name: &str, after: Vec<&str>, command: &str) -> TaskConfig {
@@ -2080,6 +2191,65 @@ mod schedule_tests {
     /// drive a process to the `Exited` phase in tests.
     fn self_exit_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
         process_task_with_command(name, after, "echo")
+    }
+
+    #[tokio::test]
+    async fn external_process_exit_status_distinguishes_success_and_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let roots = vec![
+            format!("{PROCESS_TASK_PREFIX}ok"),
+            format!("{PROCESS_TASK_PREFIX}fail"),
+        ];
+        let config = Config {
+            tasks: vec![
+                process_task_with_command("ok", vec![], "exit 0"),
+                process_task_with_command("fail", vec![], "exit 7"),
+            ],
+            roots: roots.clone(),
+            run_mode: RunMode::All,
+            runtime_dir: tmp.path().join("runtime"),
+            cache_dir: tmp.path().join("cache"),
+            sudo_context: None,
+            env: HashMap::new(),
+            bash: String::new(),
+            ignore_process_deps: false,
+            exit_on_idle: None,
+            supervisor: SupervisionMode::External,
+        };
+        let tasks = Tasks::builder(
+            config,
+            VerbosityLevel::Normal,
+            tokio_shutdown::Shutdown::new(),
+        )
+        .build()
+        .await
+        .unwrap();
+        let parent = Arc::new(devenv_activity::start!(
+            devenv_activity::Activity::operation("test").parent(None)
+        ));
+
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tasks.run_with_parent_activity(parent),
+        )
+        .await
+        .expect("external processes did not settle");
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tasks.process_manager.run_foreground(
+                tokio_util::sync::CancellationToken::new(),
+                None,
+                devenv_processes::OnIdle::Exit,
+            ),
+        )
+        .await
+        .expect("external manager did not become idle")
+        .unwrap();
+
+        let status = tasks.get_completion_status().await;
+        assert_eq!(status.succeeded, 1);
+        assert_eq!(status.failed, 1);
+        tasks.process_manager.stop_all().await.unwrap();
     }
 
     /// Event-driven phase wait: wakes on `notify_finished` (the manager fires
@@ -2901,7 +3071,7 @@ mod schedule_tests {
         let d_cfg = tasks.graph[d_idx]
             .read()
             .await
-            .build_process_config(&tasks.env, &tasks.bash)
+            .build_process_config(&tasks.env, &tasks.bash, tasks.supervisor)
             .unwrap();
         tasks.process_manager.register_waiting(d_cfg, None).await;
         tasks.process_manager.cancel_waiting("d").await; // Waiting -> Stopped
@@ -2959,7 +3129,7 @@ mod schedule_tests {
         let p_cfg = tasks.graph[p_idx]
             .read()
             .await
-            .build_process_config(&tasks.env, &tasks.bash)
+            .build_process_config(&tasks.env, &tasks.bash, tasks.supervisor)
             .unwrap();
         tasks
             .process_manager

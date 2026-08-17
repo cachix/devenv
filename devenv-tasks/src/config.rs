@@ -68,11 +68,15 @@ pub struct Config {
     /// Path to the bash binary to use for probe commands
     #[serde(default)]
     pub bash: String,
-    /// When true, exclude non-root process-type tasks from the scheduled subgraph.
-    /// This prevents process duplication when process-compose manages process ordering
-    /// via depends_on while devenv-tasks handles non-process dependencies (migrations, etc).
+    /// Exclude non-root processes when an external manager owns their ordering.
     #[serde(default)]
     pub ignore_process_deps: bool,
+    /// Override whether the runner exits when all processes settle.
+    #[serde(default)]
+    pub exit_on_idle: Option<bool>,
+    /// Who owns process lifecycle policy.
+    #[serde(default)]
+    pub supervisor: devenv_processes::SupervisionMode,
 }
 
 impl TryFrom<serde_json::Value> for Config {

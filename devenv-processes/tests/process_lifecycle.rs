@@ -7,7 +7,9 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ProcessManager, ShutdownConfig};
+use devenv_processes::{
+    ProcessConfig, ProcessManager, ProcessPhase, RestartConfig, RestartPolicy, ShutdownConfig,
+};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -334,6 +336,76 @@ done
     .expect("Test timed out");
 }
 
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stop_reports_stopping_and_signals_leader_once() {
+    timeout(Duration::from_secs(15), async {
+        let ctx = TestContext::new();
+        let ready_file = ctx.temp_path().join("single-signal.ready");
+        let signal_file = ctx.temp_path().join("single-signal.count");
+        let script = ctx
+            .create_script(
+                "single-signal.sh",
+                r#"#!/bin/sh
+signal_file="$1"
+ready_file="$2"
+
+trap 'echo term >> "$signal_file"; sleep 0.3; exit 0' TERM
+touch "$ready_file"
+while :; do
+  sleep 1
+done
+"#,
+            )
+            .await;
+
+        let manager = Arc::new(ctx.create_manager());
+        let config = ProcessConfig {
+            name: "single-signal".to_string(),
+            exec: format!(
+                "{} {} {}",
+                script.display(),
+                signal_file.display(),
+                ready_file.display()
+            ),
+            shutdown: ShutdownConfig {
+                signal: 15,
+                grace: 2,
+            },
+            ..Default::default()
+        };
+        manager.start_command(&config, None).await.unwrap();
+        assert!(wait_for_file(&ready_file, STARTUP_TIMEOUT).await);
+
+        let stopping_manager = Arc::clone(&manager);
+        let stop = tokio::spawn(async move { stopping_manager.stop("single-signal").await });
+        assert!(wait_for_file(&signal_file, STARTUP_TIMEOUT).await);
+        assert_eq!(
+            manager.get_phase("single-signal").await,
+            Some(ProcessPhase::Stopping),
+            "the process must remain Stopping until its TERM cleanup completes"
+        );
+
+        manager
+            .stop_all()
+            .await
+            .expect("stop_all must wait for the in-flight stop");
+        assert_eq!(
+            manager.get_phase("single-signal").await,
+            Some(ProcessPhase::Stopped)
+        );
+        stop.await.unwrap().unwrap();
+        let signals = tokio::fs::read_to_string(&signal_file).await.unwrap();
+        assert_eq!(
+            signals.lines().count(),
+            1,
+            "the leader process group received the graceful signal more than once"
+        );
+    })
+    .await
+    .expect("Test timed out");
+}
+
 /// Test that is_running returns false initially
 #[tokio::test(flavor = "multi_thread")]
 async fn test_is_running_initially_false() {
@@ -521,6 +593,80 @@ done
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
+async fn test_stop_during_exit_cleanup_prevents_automatic_restart() {
+    timeout(Duration::from_secs(15), async {
+        let ctx = TestContext::new();
+        let starts_file = ctx.temp_path().join("auto-restart.starts");
+        let child_ready = ctx.temp_path().join("auto-restart.child-ready");
+        let cleanup_started = ctx.temp_path().join("auto-restart.cleanup-started");
+        let script = ctx
+            .create_script(
+                "crash-with-stubborn-child.sh",
+                r#"#!/bin/bash
+starts_file="$1"
+child_ready="$2"
+cleanup_started="$3"
+
+echo started >> "$starts_file"
+set -m
+stubborn_child() {
+  trap 'touch "$cleanup_started"' TERM
+  touch "$child_ready"
+  while :; do sleep 1; done
+}
+stubborn_child &
+while [ ! -e "$child_ready" ]; do sleep 0.01; done
+exit 1
+"#,
+            )
+            .await;
+
+        let manager = Arc::new(ctx.create_manager());
+        let config = ProcessConfig {
+            name: "stop-during-exit-cleanup".to_string(),
+            exec: format!(
+                "{} {} {} {}",
+                script.display(),
+                starts_file.display(),
+                child_ready.display(),
+                cleanup_started.display()
+            ),
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                ..Default::default()
+            },
+            shutdown: ShutdownConfig {
+                signal: 15,
+                grace: 2,
+            },
+            ..Default::default()
+        };
+        manager.start_command(&config, None).await.unwrap();
+        assert!(
+            wait_for_file(&cleanup_started, STARTUP_TIMEOUT).await,
+            "supervisor did not begin cleaning the crashed process session"
+        );
+
+        manager.stop("stop-during-exit-cleanup").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        let starts = tokio::fs::read_to_string(&starts_file).await.unwrap();
+        assert_eq!(
+            starts.lines().count(),
+            1,
+            "the process restarted after stop was requested during exit cleanup"
+        );
+        assert_eq!(
+            manager.get_phase("stop-during-exit-cleanup").await,
+            Some(ProcessPhase::Stopped)
+        );
+    })
+    .await
+    .expect("Test timed out");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_stop_kills_private_process_groups_in_service_session() {
     timeout(Duration::from_secs(15), async {
         let ctx = TestContext::new();
@@ -631,6 +777,59 @@ wait'"#,
         assert!(
             wait_for_file(&marker, Duration::from_secs(2)).await,
             "private process group did not receive configured SIGINT"
+        );
+    })
+    .await
+    .expect("Test timed out");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_shutdown_grace_is_shared_by_all_session_groups() {
+    timeout(Duration::from_secs(12), async {
+        let ctx = TestContext::new();
+        let ready = ctx.temp_path().join("shared-grace.ready");
+
+        let config = ProcessConfig {
+            name: "shared-shutdown-grace".to_string(),
+            exec: format!(
+                r#"bash -c 'set -m
+trap "" TERM
+bash -c '\''trap "" TERM; touch {}; while :; do sleep 1; done'\'' &
+wait'"#,
+                ready.display(),
+            ),
+            shutdown: ShutdownConfig {
+                signal: 15,
+                grace: 2,
+            },
+            ..Default::default()
+        };
+
+        let manager = ctx.create_manager();
+        manager
+            .start_command(&config, None)
+            .await
+            .expect("Failed to start");
+        assert!(
+            wait_for_file(&ready, STARTUP_TIMEOUT).await,
+            "private process group did not become ready"
+        );
+
+        let started = std::time::Instant::now();
+        manager
+            .stop("shared-shutdown-grace")
+            .await
+            .expect("Failed to stop");
+        let elapsed = started.elapsed();
+
+        assert!(
+            elapsed >= Duration::from_millis(1500),
+            "test processes did not exercise the grace period: {elapsed:?}"
+        );
+        assert!(
+            elapsed < Duration::from_millis(3500),
+            "shutdown applied the grace period more than once: {elapsed:?}"
         );
     })
     .await

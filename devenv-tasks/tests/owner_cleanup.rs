@@ -83,6 +83,17 @@ impl Fixture {
         )
     }
 
+    /// Keep both process groups alive through graceful shutdown so a second
+    /// signal exercises the force-exit hook and guardian together.
+    fn stubborn_leader_with_private_child(&self) -> String {
+        format!(
+            "bash -c 'trap \"\" TERM INT; set -m; echo $$ > {}; (trap \"\" TERM INT; while :; do sleep 1; done) & echo $! > {}; touch {}; wait'",
+            self.path("parent.pid").display(),
+            self.path("child.pid").display(),
+            self.path("ready").display(),
+        )
+    }
+
     fn write_task(&self, command: String, shutdown: ShutdownConfig) {
         let task = TaskConfig {
             name: self.task_name.clone(),
@@ -127,6 +138,12 @@ impl Fixture {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        command
+    }
+
+    fn owner_command_with_supervisor(&self, supervisor: &str) -> tokio::process::Command {
+        let mut command = self.owner_command();
+        command.arg("--supervisor").arg(supervisor);
         command
     }
 
@@ -252,15 +269,14 @@ async fn parent_death_reclaims_service_session() {
     assert!(child_exited, "private process group survived parent death");
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn sigkill_of_devenv_tasks_reclaims_service_session() {
-    let fixture = Fixture::new("orphan-test");
+async fn assert_sigkill_reclaims_service_session(supervisor: &str) {
+    let fixture = Fixture::new(&format!("{supervisor}-orphan-test"));
     fixture.write_task(
         fixture.leader_with_private_child(),
         ShutdownConfig::default(),
     );
 
-    let mut owner_command = fixture.owner_command();
+    let mut owner_command = fixture.owner_command_with_supervisor(supervisor);
     // Model the process group that process-compose gives its child.
     owner_command.process_group(0);
     let mut owner = owner_command.spawn().expect("spawn devenv-tasks");
@@ -278,6 +294,146 @@ async fn sigkill_of_devenv_tasks_reclaims_service_session() {
     kill_leftovers(&[parent_pid, child_pid]);
     assert!(parent_exited, "service leader survived owner SIGKILL");
     assert!(child_exited, "private process group survived owner SIGKILL");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sigkill_of_native_devenv_tasks_reclaims_service_session() {
+    assert_sigkill_reclaims_service_session("native").await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sigkill_of_external_devenv_tasks_reclaims_service_session() {
+    assert_sigkill_reclaims_service_session("external").await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn second_signal_reclaims_private_process_groups() {
+    let fixture = Fixture::new("second-signal-test");
+    fixture.write_task(
+        fixture.stubborn_leader_with_private_child(),
+        ShutdownConfig::default(),
+    );
+
+    let mut owner = fixture.owner_command().spawn().expect("spawn devenv-tasks");
+    let (parent_pid, child_pid) = fixture.wait_ready().await;
+    let owner_pid = Pid::from_raw(owner.id().expect("owner pid") as i32);
+
+    signal::kill(owner_pid, Signal::SIGINT).unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    signal::kill(owner_pid, Signal::SIGINT).unwrap();
+
+    let status = tokio::time::timeout(Duration::from_secs(3), owner.wait())
+        .await
+        .expect("devenv-tasks did not force-exit after the second signal")
+        .expect("wait for devenv-tasks");
+    assert!(
+        !status.success(),
+        "force-exited owner unexpectedly succeeded"
+    );
+
+    let parent_exited = wait_for_exit(parent_pid, Duration::from_secs(8)).await;
+    let child_exited = wait_for_exit(child_pid, Duration::from_secs(8)).await;
+    kill_leftovers(&[parent_pid, child_pid]);
+    assert!(parent_exited, "service leader survived the second signal");
+    assert!(
+        child_exited,
+        "private process group survived force-exit guardian cleanup"
+    );
+}
+
+async fn assert_native_api_socket_publishing(supervisor: &str, expected: bool) {
+    let fixture = Fixture::new(&format!("{supervisor}-socket-ownership"));
+    fixture.write_task(
+        fixture.leader_with_private_child(),
+        ShutdownConfig::default(),
+    );
+
+    let mut owner_command = fixture.owner_command_with_supervisor(supervisor);
+    owner_command.process_group(0);
+    let mut owner = owner_command.spawn().expect("spawn devenv-tasks");
+    let (parent_pid, child_pid) = fixture.wait_ready().await;
+
+    let socket = fixture.path("runtime/processes/native.sock");
+    let socket_published = wait_for_file(&socket, Duration::from_secs(1)).await;
+
+    signal::killpg(
+        Pid::from_raw(owner.id().expect("owner pid") as i32),
+        Signal::SIGKILL,
+    )
+    .unwrap();
+    let _ = owner.wait().await;
+    kill_leftovers(&[parent_pid, child_pid]);
+
+    assert_eq!(
+        socket_published,
+        expected,
+        "{supervisor} devenv-tasks unexpectedly {} the native manager API socket",
+        if expected {
+            "did not publish"
+        } else {
+            "published"
+        },
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn native_devenv_tasks_publishes_native_api_socket() {
+    assert_native_api_socket_publishing("native", true).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn external_devenv_tasks_does_not_publish_native_api_socket() {
+    assert_native_api_socket_publishing("external", false).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn external_devenv_tasks_does_not_remove_native_api_socket() {
+    let fixture = Fixture::new("external-socket-cleanup");
+    fixture.write_task("true".to_string(), ShutdownConfig::default());
+
+    // Model the native manager that owns the shared socket while an external
+    // wrapper runs and exits normally.
+    let socket = fixture.path("runtime/processes/native.sock");
+    std::fs::create_dir_all(socket.parent().expect("socket parent"))
+        .expect("create process runtime directory");
+    let _native_listener =
+        std::os::unix::net::UnixListener::bind(&socket).expect("bind native manager API socket");
+
+    let mut owner = fixture
+        .owner_command_with_supervisor("external")
+        .spawn()
+        .expect("spawn external devenv-tasks");
+    let status = tokio::time::timeout(Duration::from_secs(10), owner.wait())
+        .await
+        .expect("external devenv-tasks did not exit")
+        .expect("wait for external devenv-tasks");
+    assert!(status.success(), "external devenv-tasks failed: {status}");
+
+    assert!(
+        socket.exists(),
+        "external devenv-tasks removed the native manager API socket"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn external_devenv_tasks_propagates_failed_child_exit() {
+    let fixture = Fixture::new("external-failure");
+    fixture.write_task("exit 7".to_string(), ShutdownConfig::default());
+
+    let mut owner = fixture
+        .owner_command_with_supervisor("external")
+        .spawn()
+        .expect("spawn external devenv-tasks");
+    let status = tokio::time::timeout(Duration::from_secs(10), owner.wait())
+        .await
+        .expect("external devenv-tasks did not exit")
+        .expect("wait for external devenv-tasks");
+
+    assert_eq!(
+        status.code(),
+        Some(1),
+        "failed externally supervised process must fail its wrapper"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

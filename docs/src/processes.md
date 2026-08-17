@@ -150,7 +150,7 @@ Control how processes restart when they exit:
 
 ## Shutdown
 
-!!! tip "New in version 2.2.2"
+!!! tip "New in version 2.2.3"
 
 Control how a process is stopped.
 `signal` is the Unix signal number sent for a graceful stop.

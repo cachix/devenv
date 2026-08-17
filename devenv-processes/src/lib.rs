@@ -40,7 +40,7 @@ pub mod manager;
 pub mod pid;
 pub mod process_compose;
 pub mod pty;
-pub mod session;
+mod session;
 pub mod session_registry;
 pub mod socket_activation;
 pub mod supervisor;
@@ -49,15 +49,15 @@ pub mod supervisor_state;
 // Re-export config types at crate root
 pub use config::{
     HttpGetProbe, HttpProbe, ListenKind, ListenSpec, ProcessConfig, ProcessType, ReadyConfig,
-    RestartConfig, RestartPolicy, ShutdownConfig, SocketActivationConfig, WatchConfig,
-    WatchdogConfig,
+    RestartConfig, RestartPolicy, ShutdownConfig, SocketActivationConfig, SupervisionMode,
+    WatchConfig, WatchdogConfig,
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use devenv_mailbox::ProcessCommand;
 pub use manager::{
     ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, ManagerMode,
-    NativeProcessManager, PortInfo, ProcessInfo, ProcessPhase, ProcessResources, ProcessScheduler,
-    ProcessState, StartOutcome,
+    NativeProcessManager, OnIdle, PortInfo, ProcessInfo, ProcessPhase, ProcessResources,
+    ProcessScheduler, ProcessState, StartOutcome,
 };
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_compose::ProcessComposeManager;
@@ -68,7 +68,7 @@ pub use socket_activation::{
     ActivatedSockets, ActivationSpec, ActivationSpecBuilder, SD_LISTEN_FDS_START,
     SocketActivationWrapper, activation_from_listen,
 };
-pub use supervisor_state::{JobStatus, SupervisorPhase};
+pub use supervisor_state::{ExitStatus, JobStatus, SupervisorPhase};
 
 /// Options for starting processes
 #[derive(Debug, Clone, Default)]

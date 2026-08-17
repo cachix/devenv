@@ -1,43 +1,658 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use devenv_activity::ProcessStatus;
+use devenv_activity::{ActivityRef, ProcessStatus};
 use devenv_event_sources::{
-    ExecProbe, FileWatcher, FileWatcherConfig, HttpGetProbe, NotifyMessage, TcpProbe,
+    ExecProbe, FileWatcher, FileWatcherConfig, HttpGetProbe, NotifyMessage, NotifySocket, TcpProbe,
 };
 use futures::future::Either;
+use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
-
 use watchexec_supervisor::ProcessEnd;
-use watchexec_supervisor::job::CommandState;
+use watchexec_supervisor::job::{CommandState, Job};
 
-use crate::config::ListenKind;
+use crate::config::{ListenKind, ProcessConfig, SupervisionMode};
 use crate::manager::ProcessResources;
+use crate::session::SessionRegistry;
 use crate::supervisor_state::{
     Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
 };
 
-/// Handle a successful probe by marking the process as ready.
-fn handle_probe_success(
-    activity: &devenv_activity::ActivityRef,
-    state: &mut SupervisorState,
-    status_tx: &tokio::sync::watch::Sender<JobStatus>,
-    probe_name: &str,
-) {
-    activity.log(format!("{} probe succeeded - process ready", probe_name));
-    activity.set_status(ProcessStatus::Ready);
-    let _ = state.on_event(Event::Ready, Instant::now());
-    let _ = status_tx.send(state.status());
+/// Lifecycle requests serialized with automatic policy in the supervisor loop.
+pub enum SupervisorCommand {
+    /// Restart the job with a fresh restart budget.
+    Restart { ack: oneshot::Sender<()> },
+    /// Stop the job and end the supervisor task.
+    Stop { ack: oneshot::Sender<()> },
 }
 
-/// Spawn a supervision task that monitors a job and handles restarts.
-///
-/// Uses `SupervisorState` for all restart/watchdog decisions.
-/// The select loop maps I/O events to `Event`s and dispatches `Action`s.
+/// Counts a started process until it reaches a terminal phase.
+struct ActiveProcessGuard {
+    live: Arc<AtomicUsize>,
+    completion: Arc<Notify>,
+    active: AtomicBool,
+}
+
+impl ActiveProcessGuard {
+    fn new(live: Arc<AtomicUsize>, completion: Arc<Notify>) -> Self {
+        live.fetch_add(1, Ordering::SeqCst);
+        Self {
+            live,
+            completion,
+            active: AtomicBool::new(true),
+        }
+    }
+
+    fn reactivate(&self) {
+        if !self.active.swap(true, Ordering::SeqCst) {
+            self.live.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    fn settle(&self) {
+        if self.active.swap(false, Ordering::SeqCst) {
+            self.live.fetch_sub(1, Ordering::SeqCst);
+            self.completion.notify_one();
+        }
+    }
+}
+
+impl Drop for ActiveProcessGuard {
+    fn drop(&mut self) {
+        self.settle();
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ProbeKind {
+    Tcp,
+    Exec,
+    Http,
+}
+
+/// Readiness probe definitions and their currently running tasks.
+struct ProbeSet {
+    name: String,
+    tcp_addresses: Option<Vec<String>>,
+    exec_command: Option<String>,
+    http_url: Option<String>,
+    bash: String,
+    env: HashMap<String, String>,
+    initial_delay: Duration,
+    period: Duration,
+    timeout: Duration,
+    tcp: Option<TcpProbe>,
+    exec: Option<ExecProbe>,
+    http: Option<HttpGetProbe>,
+}
+
+impl ProbeSet {
+    fn new(config: &ProcessConfig) -> Self {
+        let enabled = config.supervisor == SupervisionMode::Native;
+        let uses_notifications = config.ready.as_ref().is_some_and(|ready| ready.notify);
+        let explicit_probes_enabled = enabled && !uses_notifications;
+        let exec_command = if explicit_probes_enabled {
+            config.ready.as_ref().and_then(|ready| ready.exec.clone())
+        } else {
+            None
+        };
+        let http_url = if explicit_probes_enabled {
+            config.ready.as_ref().and_then(|ready| {
+                ready.http.as_ref().and_then(|http| {
+                    http.get.as_ref().map(|get| {
+                        format!("{}://{}:{}{}", get.scheme, get.host, get.port, get.path)
+                    })
+                })
+            })
+        } else {
+            None
+        };
+
+        // TCP is the fallback when no explicit readiness probe is configured.
+        let tcp_addresses =
+            if explicit_probes_enabled && exec_command.is_none() && http_url.is_none() {
+                // Explicit listen socket: probe only the configured address.
+                // Allocated port: probe both IPv4 and IPv6 loopback since we don't
+                // know which interface the process will bind to (e.g. vite uses tcp6).
+                config
+                    .listen
+                    .iter()
+                    .find_map(|spec| {
+                        if spec.kind == ListenKind::Tcp {
+                            spec.address.clone().map(|address| vec![address])
+                        } else {
+                            None
+                        }
+                    })
+                    .or_else(|| {
+                        config
+                            .ports
+                            .values()
+                            .next()
+                            .map(|port| vec![format!("127.0.0.1:{port}"), format!("[::1]:{port}")])
+                    })
+            } else {
+                None
+            };
+
+        let mut probes = Self {
+            name: config.name.clone(),
+            tcp_addresses,
+            exec_command,
+            http_url,
+            bash: config.bash.clone(),
+            env: config.env.clone(),
+            initial_delay: Duration::from_secs(
+                config.ready.as_ref().map_or(0, |ready| ready.initial_delay),
+            ),
+            period: Duration::from_secs(config.ready.as_ref().map_or(1, |ready| ready.period)),
+            timeout: Duration::from_secs(
+                config.ready.as_ref().map_or(5, |ready| ready.probe_timeout),
+            ),
+            tcp: None,
+            exec: None,
+            http: None,
+        };
+        probes.respawn();
+        probes
+    }
+
+    fn respawn(&mut self) {
+        self.respawn_tcp();
+        self.exec = self.exec_command.as_ref().map(|command| {
+            ExecProbe::spawn(
+                command.clone(),
+                self.name.clone(),
+                self.bash.clone(),
+                self.env.clone(),
+                self.initial_delay,
+                self.period,
+                self.timeout,
+            )
+        });
+        self.http = self.http_url.as_ref().map(|url| {
+            HttpGetProbe::spawn(
+                url.clone(),
+                self.name.clone(),
+                self.initial_delay,
+                self.period,
+                self.timeout,
+            )
+        });
+    }
+
+    fn respawn_tcp(&mut self) {
+        self.tcp = self
+            .tcp_addresses
+            .as_ref()
+            .map(|addresses| TcpProbe::spawn(addresses.clone(), self.name.clone()));
+    }
+
+    async fn recv(&mut self) -> ProbeKind {
+        tokio::select! {
+            biased;
+            Some(()) = recv_tcp_probe(&mut self.tcp) => ProbeKind::Tcp,
+            Some(()) = recv_exec_probe(&mut self.exec) => ProbeKind::Exec,
+            Some(()) = recv_http_probe(&mut self.http) => ProbeKind::Http,
+        }
+    }
+
+    fn complete(&mut self, kind: ProbeKind) {
+        match kind {
+            ProbeKind::Tcp => self.tcp = None,
+            ProbeKind::Exec => self.exec = None,
+            ProbeKind::Http => self.http = None,
+        }
+    }
+}
+
+async fn recv_tcp_probe(probe: &mut Option<TcpProbe>) -> Option<()> {
+    match probe {
+        Some(probe) => probe.recv().await,
+        None => std::future::pending().await,
+    }
+}
+
+async fn recv_exec_probe(probe: &mut Option<ExecProbe>) -> Option<()> {
+    match probe {
+        Some(probe) => probe.recv().await,
+        None => std::future::pending().await,
+    }
+}
+
+async fn recv_http_probe(probe: &mut Option<HttpGetProbe>) -> Option<()> {
+    match probe {
+        Some(probe) => probe.recv().await,
+        None => std::future::pending().await,
+    }
+}
+
+enum SupervisorEvent {
+    Shutdown,
+    StopRequested,
+    Command(SupervisorCommand),
+    ProbeSucceeded(ProbeKind),
+    FileChanged { drained: usize },
+    Notifications(Vec<NotifyMessage>),
+    Deadline,
+    ProcessExit,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Continuation {
+    Continue,
+    Exit,
+}
+
+/// Mutable state and side effects for a single supervisor task.
+struct SupervisorRuntime {
+    config: ProcessConfig,
+    job: Arc<Job>,
+    sessions: Arc<SessionRegistry>,
+    activity: ActivityRef,
+    status_tx: watch::Sender<JobStatus>,
+    shutdown: CancellationToken,
+    stop_requested: CancellationToken,
+    active_process: ActiveProcessGuard,
+    state: SupervisorState,
+    probes: ProbeSet,
+}
+
+impl SupervisorRuntime {
+    fn name(&self) -> &str {
+        &self.config.name
+    }
+
+    fn next_deadline(&self) -> Option<Instant> {
+        self.state.next_deadline()
+    }
+
+    fn monitors_exit(&self) -> bool {
+        self.state.phase() != SupervisorPhase::Exited
+    }
+
+    fn refresh_deadline(
+        &self,
+        current_deadline: &mut Option<Instant>,
+        mut deadline_fut: Pin<&mut Either<tokio::time::Sleep, std::future::Pending<()>>>,
+    ) {
+        let new_deadline = self.state.next_deadline();
+        if new_deadline != *current_deadline {
+            *current_deadline = new_deadline;
+            deadline_fut.set(make_deadline_future(new_deadline));
+        }
+    }
+
+    fn publish_status(&self) {
+        let _ = self.status_tx.send(self.state.status());
+    }
+
+    fn give_up(&self, reason: &'static str) {
+        warn!("{}: {}", self.name(), reason);
+        self.activity.error(reason);
+        self.activity.fail();
+        self.publish_status();
+    }
+
+    async fn restart_job(&self) -> bool {
+        crate::session::restart_job(
+            &self.job,
+            &self.sessions,
+            &self.config.shutdown,
+            &self.shutdown,
+            &self.stop_requested,
+        )
+        .await
+    }
+
+    async fn handle_event(&mut self, event: SupervisorEvent) -> Continuation {
+        match event {
+            SupervisorEvent::Shutdown => {
+                debug!("Shutdown requested for {}", self.name());
+                Continuation::Exit
+            }
+            SupervisorEvent::StopRequested => self.handle_stop_requested(),
+            SupervisorEvent::Command(command) => self.handle_command(command).await,
+            SupervisorEvent::ProbeSucceeded(kind) => {
+                self.handle_probe_success(kind);
+                Continuation::Continue
+            }
+            SupervisorEvent::FileChanged { drained } => self.handle_file_change(drained).await,
+            SupervisorEvent::Notifications(messages) => {
+                for message in messages {
+                    if self.handle_notification(message).await == Continuation::Exit {
+                        return Continuation::Exit;
+                    }
+                }
+                Continuation::Continue
+            }
+            SupervisorEvent::Deadline => self.handle_deadline().await,
+            SupervisorEvent::ProcessExit => self.handle_exit().await,
+        }
+    }
+
+    fn handle_stop_requested(&mut self) -> Continuation {
+        debug!("Stop requested for {}", self.name());
+        let _ = self.state.on_event(Event::StopRequested, Instant::now());
+        self.publish_status();
+        Continuation::Exit
+    }
+
+    async fn handle_command(&mut self, command: SupervisorCommand) -> Continuation {
+        if self.shutdown.is_cancelled() {
+            return Continuation::Exit;
+        }
+
+        match command {
+            SupervisorCommand::Restart { ack } => {
+                self.activity.log("Restart requested");
+                self.active_process.reactivate();
+                if !self.restart_job().await {
+                    return Continuation::Exit;
+                }
+                self.state.reset_for_explicit_restart(Instant::now());
+                if !self.config.has_readiness_probe() {
+                    let _ = self.state.on_event(Event::Ready, Instant::now());
+                }
+                self.probes.respawn();
+                self.publish_status();
+                let _ = ack.send(());
+                Continuation::Continue
+            }
+            SupervisorCommand::Stop { ack } => {
+                self.activity.log("Stop requested");
+                // Publish Stopping before the tail-stop grace period.
+                let _ = self.state.on_event(Event::StopRequested, Instant::now());
+                self.publish_status();
+                let _ = ack.send(());
+                Continuation::Exit
+            }
+        }
+    }
+
+    fn handle_probe_success(&mut self, kind: ProbeKind) {
+        let probe_name = match kind {
+            ProbeKind::Tcp => "TCP",
+            ProbeKind::Exec => "Exec",
+            ProbeKind::Http => "HTTP",
+        };
+        self.activity
+            .log(format!("{probe_name} probe succeeded - process ready"));
+        self.activity.set_status(ProcessStatus::Ready);
+        let _ = self.state.on_event(Event::Ready, Instant::now());
+        self.publish_status();
+        self.probes.complete(kind);
+    }
+
+    async fn handle_file_change(&mut self, drained: usize) -> Continuation {
+        if self.shutdown.is_cancelled() {
+            return Continuation::Exit;
+        }
+
+        info!("File change detected for {}, restarting", self.name());
+        if drained == 0 {
+            self.activity.log("File change detected, restarting");
+        } else {
+            self.activity.log(format!(
+                "File change detected, drained {drained} queued watch event(s), restarting"
+            ));
+        }
+
+        match self.state.on_event(Event::FileChange, Instant::now()) {
+            Action::Restart => {
+                self.active_process.reactivate();
+                if !self.restart_job().await {
+                    return Continuation::Exit;
+                }
+                self.state.on_restart_complete(Instant::now());
+                let count = self.state.restart_count();
+                self.activity.log(format!("Restarted (attempt {count})"));
+                self.probes.respawn();
+            }
+            Action::GiveUp { reason } => {
+                self.give_up(reason);
+                return Continuation::Exit;
+            }
+            Action::None => {}
+        }
+        self.publish_status();
+        Continuation::Continue
+    }
+
+    async fn handle_notification(&mut self, message: NotifyMessage) -> Continuation {
+        match message {
+            NotifyMessage::Ready => {
+                info!("Process {} signaled ready", self.name());
+                self.activity.log("Process signaled ready");
+                self.activity.set_status(ProcessStatus::Ready);
+                let _ = self.state.on_event(Event::Ready, Instant::now());
+                self.publish_status();
+            }
+            NotifyMessage::Watchdog => {
+                trace!("Watchdog ping from {}", self.name());
+                let _ = self.state.on_event(Event::WatchdogPing, Instant::now());
+                self.publish_status();
+            }
+            NotifyMessage::WatchdogTrigger => {
+                if self.shutdown.is_cancelled() {
+                    return Continuation::Exit;
+                }
+                debug!("Watchdog trigger from {}", self.name());
+                match self.state.on_event(Event::WatchdogTrigger, Instant::now()) {
+                    Action::Restart => {
+                        self.activity
+                            .error("Watchdog trigger - process signaled failure");
+                        if !self.restart_job().await {
+                            return Continuation::Exit;
+                        }
+                        self.state.on_restart_complete(Instant::now());
+                        let count = self.state.restart_count();
+                        warn!(
+                            "Process {} watchdog trigger, restarted (attempt {})",
+                            self.name(),
+                            count
+                        );
+                        self.activity.log(format!("Restarted (attempt {count})"));
+                        // Notification-triggered restarts historically only
+                        // replace the fallback TCP probe.
+                        self.probes.respawn_tcp();
+                    }
+                    Action::GiveUp { reason } => {
+                        self.give_up(reason);
+                        return Continuation::Exit;
+                    }
+                    Action::None => {}
+                }
+                self.publish_status();
+            }
+            NotifyMessage::ExtendTimeout { usec } => {
+                trace!("Extend timeout from {}: {} usec", self.name(), usec);
+                let _ = self
+                    .state
+                    .on_event(Event::ExtendTimeout { usec }, Instant::now());
+                self.publish_status();
+            }
+            NotifyMessage::Status(status) => {
+                trace!("Status from {}: {}", self.name(), status);
+                self.activity.log(format!("Status: {status}"));
+            }
+            NotifyMessage::Stopping => {
+                debug!("Process {} signaled stopping", self.name());
+                self.activity.log("Process signaled stopping");
+            }
+            NotifyMessage::Reloading => {
+                debug!("Process {} signaled reloading", self.name());
+                self.activity.log("Process reloading configuration");
+            }
+            NotifyMessage::Unknown(message) => {
+                debug!("Unknown notify message from {}: {}", self.name(), message);
+            }
+        }
+        Continuation::Continue
+    }
+
+    async fn handle_deadline(&mut self) -> Continuation {
+        if self.shutdown.is_cancelled() {
+            return Continuation::Exit;
+        }
+
+        let now = Instant::now();
+        let is_startup = self.state.phase() == SupervisorPhase::Starting;
+        if is_startup {
+            warn!("Startup timeout for process {}", self.name());
+            self.activity
+                .error("Startup timeout - process did not become ready");
+        } else {
+            warn!("Watchdog timeout for process {}", self.name());
+            self.activity
+                .error("Watchdog timeout - no heartbeat received");
+        }
+
+        match self.state.on_event(
+            if is_startup {
+                Event::StartupTimeout
+            } else {
+                Event::WatchdogTimeout
+            },
+            now,
+        ) {
+            Action::Restart => {
+                if !self.restart_job().await {
+                    return Continuation::Exit;
+                }
+                self.state.on_restart_complete(Instant::now());
+                let count = self.state.restart_count();
+                info!("Restarted process {} (attempt {})", self.name(), count);
+                self.activity.log(format!("Restarted (attempt {count})"));
+                self.probes.respawn();
+            }
+            Action::GiveUp { reason } => {
+                self.give_up(reason);
+                return Continuation::Exit;
+            }
+            Action::None => {}
+        }
+        self.publish_status();
+        Continuation::Continue
+    }
+
+    async fn handle_exit(&mut self) -> Continuation {
+        if self.shutdown.is_cancelled() {
+            return Continuation::Exit;
+        }
+
+        // Ignore an exit notification queued by the replaced run.
+        if self.job.is_running() {
+            trace!("Ignoring stale exit notification for {}", self.name());
+            return Continuation::Continue;
+        }
+
+        let (tx, rx) = oneshot::channel();
+        self.job
+            .run_async(move |ctx| {
+                let status = if let CommandState::Finished { status, .. } = ctx.current {
+                    Some(if matches!(status, ProcessEnd::Success) {
+                        ExitStatus::Success
+                    } else {
+                        ExitStatus::Failure
+                    })
+                } else {
+                    None
+                };
+                Box::new(async move {
+                    let _ = tx.send(status);
+                })
+            })
+            .await;
+
+        let exit_status = match rx.await {
+            Ok(Some(status)) => status,
+            _ => {
+                debug!("Process {} exited (unknown status)", self.name());
+                return Continuation::Exit;
+            }
+        };
+
+        self.sessions.cleanup(&self.config.shutdown).await;
+
+        // A stop can arrive while cleanup waits for stubborn descendants. It
+        // must win over an automatic restart.
+        if self.shutdown.is_cancelled() || self.stop_requested.is_cancelled() {
+            return Continuation::Exit;
+        }
+
+        match self.state.on_event(
+            Event::ProcessExit {
+                status: exit_status,
+            },
+            Instant::now(),
+        ) {
+            Action::Restart => {
+                self.activity
+                    .log(format!("Process exited ({exit_status:?}), restarting"));
+                self.job.start().await;
+                self.state.on_restart_complete(Instant::now());
+                let count = self.state.restart_count();
+                info!("Restarted process {} (attempt {})", self.name(), count);
+                self.activity.log(format!("Restarted (attempt {count})"));
+                self.probes.respawn();
+            }
+            Action::GiveUp { reason } => {
+                self.give_up(reason);
+                return Continuation::Exit;
+            }
+            Action::None => {
+                self.active_process.settle();
+                debug!("Process {} exited, not restarting", self.name());
+                self.publish_status();
+                // Keep watching native one-shot processes for future changes.
+                if self.config.supervisor != SupervisionMode::Native
+                    || self.config.watch.paths.is_empty()
+                {
+                    return Continuation::Exit;
+                }
+                debug!(
+                    "Process {} parked after exit; watching {} path(s) for changes",
+                    self.name(),
+                    self.config.watch.paths.len()
+                );
+            }
+        }
+        self.publish_status();
+        Continuation::Continue
+    }
+
+    async fn finish(&mut self) {
+        // Shutdown uses the manager's Stopping/Stopped activity transition.
+        if !self.shutdown.is_cancelled()
+            && matches!(
+                self.state.phase(),
+                SupervisorPhase::Exited | SupervisorPhase::GaveUp
+            )
+        {
+            self.activity.set_status(match self.state.phase() {
+                SupervisorPhase::Exited => ProcessStatus::Exited,
+                SupervisorPhase::GaveUp => ProcessStatus::GaveUp,
+                _ => unreachable!("terminal phase checked above"),
+            });
+        }
+
+        crate::session::stop_job(&self.job, &self.sessions, &self.config.shutdown).await;
+        trace!("Supervision task for {} exiting", self.name());
+    }
+}
+
+/// Spawn a task that monitors a job and applies `SupervisorState` decisions.
 pub fn spawn_supervisor(
     resources: &ProcessResources,
     shutdown: CancellationToken,
+    mut cmd_rx: mpsc::Receiver<SupervisorCommand>,
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
     let job = resources.job.clone();
@@ -45,469 +660,105 @@ pub fn spawn_supervisor(
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
-    let name = config.name.clone();
-
-    // Probe timing from ready config
-    let initial_delay = Duration::from_secs(config.ready.as_ref().map_or(0, |r| r.initial_delay));
-    let probe_period = Duration::from_secs(config.ready.as_ref().map_or(1, |r| r.period));
-    let probe_timeout = Duration::from_secs(config.ready.as_ref().map_or(5, |r| r.probe_timeout));
-
-    // Exec probe command (from ready.exec, only when not using notify)
-    let exec_probe_cmd = if !config.ready.as_ref().is_some_and(|r| r.notify) {
-        config.ready.as_ref().and_then(|r| r.exec.clone())
-    } else {
-        None
-    };
-
-    // HTTP probe URL (from ready.http.get, only when not using notify)
-    let http_probe_url = if !config.ready.as_ref().is_some_and(|r| r.notify) {
-        config.ready.as_ref().and_then(|r| {
-            r.http.as_ref().and_then(|h| {
-                h.get
-                    .as_ref()
-                    .map(|get| format!("{}://{}:{}{}", get.scheme, get.host, get.port, get.path))
-            })
-        })
-    } else {
-        None
-    };
-
-    // TCP probe for readiness (listen sockets or allocated ports, without notify or exec/http)
-    // Only use TCP probe as fallback when no explicit exec or http probe is configured.
-    let tcp_probe_addresses: Option<Vec<String>> =
-        if !config.ready.as_ref().is_some_and(|r| r.notify)
-            && exec_probe_cmd.is_none()
-            && http_probe_url.is_none()
-        {
-            // Explicit listen socket: probe only the configured address.
-            // Allocated port: probe both IPv4 and IPv6 loopback since we don't
-            // know which interface the process will bind to (e.g. vite uses tcp6).
-            config
-                .listen
-                .iter()
-                .find_map(|spec| {
-                    if spec.kind == ListenKind::Tcp {
-                        spec.address.clone().map(|addr| vec![addr])
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| {
-                    config
-                        .ports
-                        .values()
-                        .next()
-                        .map(|port| vec![format!("127.0.0.1:{}", port), format!("[::1]:{}", port)])
-                })
-        } else {
-            None
-        };
+    let stop_requested = resources.stop_requested.clone();
+    let active_process =
+        ActiveProcessGuard::new(resources.live.clone(), resources.completion.clone());
 
     tokio::spawn(async move {
-        let mut state = SupervisorState::new(&config, Instant::now());
+        let state = SupervisorState::new(&config, Instant::now());
+        let probes = ProbeSet::new(&config);
+        let mut runtime = SupervisorRuntime {
+            config,
+            job: job.clone(),
+            sessions,
+            activity,
+            status_tx,
+            shutdown: shutdown.clone(),
+            stop_requested: stop_requested.clone(),
+            active_process,
+            state,
+            probes,
+        };
+        let mut file_watcher = spawn_file_watcher(&runtime.config).await;
 
-        // TCP probe: signals the supervisor loop when the port becomes reachable.
-        // The supervisor handles the Ready event so status is updated consistently.
-        let mut tcp_probe = tcp_probe_addresses
-            .as_ref()
-            .map(|addrs| TcpProbe::spawn(addrs.clone(), name.clone()));
-
-        // Exec probe: runs a shell command periodically until it exits 0
-        let process_env = config.env.clone();
-        let process_bash = config.bash.clone();
-        let mut exec_probe = exec_probe_cmd.as_ref().map(|cmd| {
-            ExecProbe::spawn(
-                cmd.clone(),
-                name.clone(),
-                process_bash.clone(),
-                process_env.clone(),
-                initial_delay,
-                probe_period,
-                probe_timeout,
-            )
-        });
-
-        // HTTP probe: sends GET requests until a 2xx response
-        let mut http_probe = http_probe_url.as_ref().map(|url| {
-            HttpGetProbe::spawn(
-                url.clone(),
-                name.clone(),
-                initial_delay,
-                probe_period,
-                probe_timeout,
-            )
-        });
-
-        let mut file_watcher = FileWatcher::new(
-            FileWatcherConfig {
-                paths: &config.watch.paths,
-                extensions: &config.watch.extensions,
-                ignore: &config.watch.ignore,
-                recursive: true,
-                ..Default::default()
-            },
-            &name,
-        )
-        .await;
-
-        // Pin the deadline future outside the loop so it survives across iterations.
-        // Recreate only when the deadline actually changes (after state transitions).
-        let mut current_deadline = state.next_deadline();
+        // Preserve the deadline across loop iterations.
+        let mut current_deadline = runtime.next_deadline();
         let deadline_fut = make_deadline_future(current_deadline);
         tokio::pin!(deadline_fut);
 
-        /// Refresh the pinned deadline future if the state machine's deadline changed.
-        macro_rules! refresh_deadline {
-            ($state:expr, $current_deadline:expr, $deadline_fut:expr) => {
-                let new_deadline = $state.next_deadline();
-                if new_deadline != $current_deadline {
-                    $current_deadline = new_deadline;
-                    $deadline_fut.set(make_deadline_future(new_deadline));
-                }
-            };
-        }
-
-        /// Respawn all readiness probes after a process restart.
-        macro_rules! respawn_probes {
-            () => {
-                if let Some(ref addrs) = tcp_probe_addresses {
-                    tcp_probe = Some(TcpProbe::spawn(addrs.clone(), name.clone()));
-                }
-                if let Some(ref cmd) = exec_probe_cmd {
-                    exec_probe = Some(ExecProbe::spawn(
-                        cmd.clone(),
-                        name.clone(),
-                        process_bash.clone(),
-                        process_env.clone(),
-                        initial_delay,
-                        probe_period,
-                        probe_timeout,
-                    ));
-                }
-                if let Some(ref url) = http_probe_url {
-                    http_probe = Some(HttpGetProbe::spawn(
-                        url.clone(),
-                        name.clone(),
-                        initial_delay,
-                        probe_period,
-                        probe_timeout,
-                    ));
-                }
-            };
-        }
-
-        'supervisor: loop {
-            tokio::select! {
+        loop {
+            let monitor_exit = runtime.monitors_exit();
+            let event = tokio::select! {
                 biased;
 
-                _ = shutdown.cancelled() => {
-                    debug!("Shutdown requested for {}", name);
-                    break;
+                _ = shutdown.cancelled() => SupervisorEvent::Shutdown,
+                _ = stop_requested.cancelled() => SupervisorEvent::StopRequested,
+                Some(command) = cmd_rx.recv() => SupervisorEvent::Command(command),
+                kind = runtime.probes.recv() => SupervisorEvent::ProbeSucceeded(kind),
+                drained = next_file_change(&mut file_watcher) => {
+                    SupervisorEvent::FileChanged { drained }
                 }
-
-                Some(()) = async {
-                    match &mut tcp_probe {
-                        Some(probe) => probe.recv().await,
-                        None => std::future::pending::<Option<()>>().await,
-                    }
-                } => {
-                    handle_probe_success(&activity, &mut state, &status_tx, "TCP");
-                    tcp_probe = None;
+                messages = recv_notifications(&notify_socket) => {
+                    SupervisorEvent::Notifications(messages)
                 }
+                _ = &mut deadline_fut => SupervisorEvent::Deadline,
+                // A parked exited job makes `to_wait()` ready immediately; skip it to avoid a busy loop.
+                _ = job.to_wait(), if monitor_exit => SupervisorEvent::ProcessExit,
+            };
 
-                Some(()) = async {
-                    match &mut exec_probe {
-                        Some(probe) => probe.recv().await,
-                        None => std::future::pending::<Option<()>>().await,
-                    }
-                } => {
-                    handle_probe_success(&activity, &mut state, &status_tx, "Exec");
-                    exec_probe = None;
-                }
-
-                Some(()) = async {
-                    match &mut http_probe {
-                        Some(probe) => probe.recv().await,
-                        None => std::future::pending::<Option<()>>().await,
-                    }
-                } => {
-                    handle_probe_success(&activity, &mut state, &status_tx, "HTTP");
-                    http_probe = None;
-                }
-
-                _ = file_watcher.recv() => {
-                    // Bail if shutdown fired while another select arm was executing.
-                    // The biased select catches it next iteration, but we skip
-                    // expensive restart work below.
-                    if shutdown.is_cancelled() { break 'supervisor; }
-                    let mut drained = 0usize;
-                    while file_watcher.try_recv().is_ok() {
-                        drained += 1;
-                    }
-                    info!("File change detected for {}, restarting", name);
-                    if drained == 0 {
-                        activity.log("File change detected, restarting");
-                    } else {
-                        activity.log(format!(
-                            "File change detected, drained {} queued watch event(s), restarting",
-                            drained
-                        ));
-                    }
-                    match state.on_event(Event::FileChange, Instant::now()) {
-                        Action::Restart => {
-                            crate::session::stop_job(&job, &sessions, &config.shutdown).await;
-                            tokio::select! {
-                                _ = shutdown.cancelled() => break 'supervisor,
-                                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
-                            }
-                            if shutdown.is_cancelled() { break 'supervisor; }
-                            job.start().await;
-                            state.on_restart_complete(Instant::now());
-                            let count = state.restart_count();
-                            activity.log(format!("Restarted (attempt {})", count));
-                            respawn_probes!();
-                        }
-                        Action::GiveUp { reason } => {
-                            warn!("{}: {}", name, reason);
-                            activity.error(reason);
-                            activity.fail();
-                            let _ = status_tx.send(state.status());
-                            break;
-                        }
-                        Action::None => {}
-                    }
-                    let _ = status_tx.send(state.status());
-                }
-
-                result = async {
-                    match &notify_socket {
-                        Some(socket) => socket.recv().await,
-                        None => std::future::pending().await,
-                    }
-                } => {
-                    if let Ok(messages) = result {
-                        for msg in messages {
-                            match msg {
-                                NotifyMessage::Ready => {
-                                    info!("Process {} signaled ready", name);
-                                    activity.log("Process signaled ready");
-                                    activity.set_status(ProcessStatus::Ready);
-                                    let _ = state.on_event(Event::Ready, Instant::now());
-                                    let _ = status_tx.send(state.status());
-                                }
-                                NotifyMessage::Watchdog => {
-                                    trace!("Watchdog ping from {}", name);
-                                    let _ = state.on_event(Event::WatchdogPing, Instant::now());
-                                    let _ = status_tx.send(state.status());
-                                }
-                                NotifyMessage::WatchdogTrigger => {
-                                    if shutdown.is_cancelled() { break 'supervisor; }
-                                    debug!("Watchdog trigger from {}", name);
-                                    match state.on_event(Event::WatchdogTrigger, Instant::now()) {
-                                        Action::Restart => {
-                                            activity.error("Watchdog trigger - process signaled failure");
-                                            if !crate::session::restart_job(
-                                                &job,
-                                                &sessions,
-                                                &config.shutdown,
-                                                &shutdown,
-                                            ).await {
-                                                break 'supervisor;
-                                            }
-                                            state.on_restart_complete(Instant::now());
-                                            let count = state.restart_count();
-                                            let msg = format!("Restarted (attempt {count})");
-                                            warn!("Process {} watchdog trigger, restarted (attempt {})", name, count);
-                                            activity.log(&msg);
-                                            if let Some(ref addrs) = tcp_probe_addresses {
-                                                tcp_probe = Some(TcpProbe::spawn(addrs.clone(), name.clone()));
-                                            }
-                                        }
-                                        Action::GiveUp { reason } => {
-                                            warn!("{}: {}", name, reason);
-                                            activity.error(reason);
-                                            activity.fail();
-                                            let _ = status_tx.send(state.status());
-                                            break 'supervisor;
-                                        }
-                                        Action::None => {}
-                                    }
-                                    let _ = status_tx.send(state.status());
-                                }
-                                NotifyMessage::ExtendTimeout { usec } => {
-                                    trace!("Extend timeout from {}: {} usec", name, usec);
-                                    let _ = state.on_event(Event::ExtendTimeout { usec }, Instant::now());
-                                    let _ = status_tx.send(state.status());
-                                    // Eagerly refresh deadline since ExtendTimeout changes it
-                                    refresh_deadline!(state, current_deadline, deadline_fut);
-                                }
-                                NotifyMessage::Status(status) => {
-                                    trace!("Status from {}: {}", name, status);
-                                    activity.log(format!("Status: {}", status));
-                                }
-                                NotifyMessage::Stopping => {
-                                    debug!("Process {} signaled stopping", name);
-                                    activity.log("Process signaled stopping");
-                                }
-                                NotifyMessage::Reloading => {
-                                    debug!("Process {} signaled reloading", name);
-                                    activity.log("Process reloading configuration");
-                                }
-                                NotifyMessage::Unknown(s) => {
-                                    debug!("Unknown notify message from {}: {}", name, s);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                _ = &mut deadline_fut => {
-                    if shutdown.is_cancelled() { break 'supervisor; }
-                    let now = Instant::now();
-                    let is_startup = state.phase() == SupervisorPhase::Starting;
-                    if is_startup {
-                        warn!("Startup timeout for process {}", name);
-                        activity.error("Startup timeout - process did not become ready");
-                    } else {
-                        warn!("Watchdog timeout for process {}", name);
-                        activity.error("Watchdog timeout - no heartbeat received");
-                    }
-                    match state.on_event(
-                        if is_startup { Event::StartupTimeout } else { Event::WatchdogTimeout },
-                        now,
-                    ) {
-                        Action::Restart => {
-                            if !crate::session::restart_job(
-                                &job,
-                                &sessions,
-                                &config.shutdown,
-                                &shutdown,
-                            ).await {
-                                break 'supervisor;
-                            }
-                            state.on_restart_complete(Instant::now());
-                            let count = state.restart_count();
-                            let msg = format!("Restarted (attempt {count})");
-                            info!("Restarted process {} (attempt {})", name, count);
-                            activity.log(&msg);
-                            respawn_probes!();
-                        }
-                        Action::GiveUp { reason } => {
-                            warn!("{}: {}", name, reason);
-                            activity.error(reason);
-                            activity.fail();
-                            let _ = status_tx.send(state.status());
-                            break;
-                        }
-                        Action::None => {}
-                    }
-                    let _ = status_tx.send(state.status());
-                }
-
-                // Skipped while parked in the Exited phase: `to_wait()` resolves
-                // immediately for a command that isn't running, which would
-                // busy-spin the loop. A parked process is only revived by a
-                // file change (handled by the `file_watcher` arm above).
-                _ = job.to_wait(), if state.phase() != SupervisorPhase::Exited => {
-                    if shutdown.is_cancelled() { break 'supervisor; }
-                    // Extract exit status from the job
-                    let (tx, rx) = tokio::sync::oneshot::channel();
-                    job.run_async(move |ctx| {
-                        let status = if let CommandState::Finished { status, .. } = ctx.current {
-                            Some(if matches!(status, ProcessEnd::Success) {
-                                ExitStatus::Success
-                            } else {
-                                ExitStatus::Failure
-                            })
-                        } else {
-                            None
-                        };
-                        Box::new(async move {
-                            let _ = tx.send(status);
-                        })
-                    }).await;
-
-                    let exit_status = match rx.await {
-                        Ok(Some(status)) => status,
-                        _ => {
-                            debug!("Process {} exited (unknown status)", name);
-                            break;
-                        }
-                    };
-
-                    // Clean the session before deciding whether to restart.
-                    sessions.cleanup(&config.shutdown).await;
-
-                    match state.on_event(Event::ProcessExit { status: exit_status }, Instant::now()) {
-                        Action::Restart => {
-                            activity.log(format!("Process exited ({exit_status:?}), restarting"));
-                            job.start().await;
-                            state.on_restart_complete(Instant::now());
-                            let count = state.restart_count();
-                            let msg = format!("Restarted (attempt {count})");
-                            info!("Restarted process {} (attempt {})", name, count);
-                            activity.log(&msg);
-                            respawn_probes!();
-                        }
-                        Action::GiveUp { reason } => {
-                            warn!("{}: {}", name, reason);
-                            activity.error(reason);
-                            activity.fail();
-                            let _ = status_tx.send(state.status());
-                            break;
-                        }
-                        Action::None => {
-                            debug!("Process {} exited, not restarting", name);
-                            let _ = status_tx.send(state.status());
-                            // When file watching is configured, keep the
-                            // supervisor alive after a clean exit so subsequent
-                            // file changes can re-run the process. This is what
-                            // makes `watch` usable with one-shot commands that
-                            // exit immediately, not just long-running ones.
-                            // The process is reported as Exited, so `@completed`
-                            // / `@started` dependencies are satisfied; the loop
-                            // simply parks until a file change arrives.
-                            if config.watch.paths.is_empty() {
-                                break;
-                            }
-                            debug!(
-                                "Process {} parked after exit; watching {} path(s) for changes",
-                                name,
-                                config.watch.paths.len()
-                            );
-                        }
-                    }
-                    let _ = status_tx.send(state.status());
-                }
+            if runtime.handle_event(event).await == Continuation::Exit {
+                break;
             }
-
-            // Refresh the pinned deadline future only when the deadline changed
-            refresh_deadline!(state, current_deadline, deadline_fut);
+            runtime.refresh_deadline(&mut current_deadline, deadline_fut.as_mut());
         }
 
-        // The supervisor loop has ended. If the process reached a terminal phase
-        // on its own — exited without a restart, or gave up after exhausting its
-        // restart budget — reflect that in the activity. The `status_tx` channel
-        // already carries the terminal phase to the manager/task system, but the
-        // activity status drives the TUI, and nothing else updates it here: leave
-        // it untouched and a self-exited process keeps showing as `running`.
-        // A shutdown-driven exit is skipped: the manager's stop path owns the
-        // `Stopping`/`Stopped` activity transition in that case.
-        if !shutdown.is_cancelled()
-            && matches!(
-                state.phase(),
-                SupervisorPhase::Exited | SupervisorPhase::GaveUp
-            )
-        {
-            activity.set_status(match state.phase() {
-                SupervisorPhase::Exited => ProcessStatus::Exited,
-                SupervisorPhase::GaveUp => ProcessStatus::GaveUp,
-                _ => unreachable!("terminal phase checked above"),
-            });
-        }
-
-        trace!("Supervision task for {} exiting", name);
+        runtime.finish().await;
     })
+}
+
+async fn spawn_file_watcher(config: &ProcessConfig) -> FileWatcher {
+    let empty_paths: Vec<PathBuf> = Vec::new();
+    let empty_strings: Vec<String> = Vec::new();
+    let supervise_locally = config.supervisor == SupervisionMode::Native;
+    FileWatcher::new(
+        FileWatcherConfig {
+            paths: if supervise_locally {
+                &config.watch.paths
+            } else {
+                &empty_paths
+            },
+            extensions: if supervise_locally {
+                &config.watch.extensions
+            } else {
+                &empty_strings
+            },
+            ignore: if supervise_locally {
+                &config.watch.ignore
+            } else {
+                &empty_strings
+            },
+            recursive: true,
+            ..Default::default()
+        },
+        &config.name,
+    )
+    .await
+}
+
+async fn next_file_change(file_watcher: &mut FileWatcher) -> usize {
+    file_watcher.recv().await;
+    let mut drained = 0;
+    while file_watcher.try_recv().is_ok() {
+        drained += 1;
+    }
+    drained
+}
+
+async fn recv_notifications(notify_socket: &Option<Arc<NotifySocket>>) -> Vec<NotifyMessage> {
+    match notify_socket {
+        Some(socket) => socket.recv().await.unwrap_or_default(),
+        None => std::future::pending().await,
+    }
 }
 
 /// Returns a future that completes at `deadline`, or pends forever if `None`.

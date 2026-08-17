@@ -121,7 +121,13 @@ impl TasksUi {
             } else {
                 let cancel = self.tasks.shutdown.cancellation_token();
                 let pm = Arc::clone(&self.tasks.process_manager);
-                let fg_handle = tokio::spawn(async move { pm.run_foreground(cancel, None).await });
+                let mode = if self.tasks.exit_on_idle {
+                    devenv_processes::OnIdle::Exit
+                } else {
+                    devenv_processes::OnIdle::Linger
+                };
+                let fg_handle =
+                    tokio::spawn(async move { pm.run_foreground(cancel, None, mode).await });
 
                 if let Err(e) = self
                     .consume_events_until(fg_handle)

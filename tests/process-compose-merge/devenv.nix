@@ -3,6 +3,8 @@ let
   pcProcesses = config.process.managers.process-compose.settings.processes;
   foo = pcProcesses.foo;
   bar = pcProcesses.bar;
+  nativeWatch = pcProcesses.nativeWatch;
+  nativePort = pcProcesses.nativePort;
 in
 {
   process.manager.implementation = "process-compose";
@@ -42,6 +44,21 @@ in
     };
   };
 
+  # File watching has no process-compose equivalent. Keep policy inside the
+  # devenv wrapper and prevent process-compose from adding a second restart.
+  processes.nativeWatch = {
+    exec = "sleep infinity";
+    restart.on = "always";
+    watch.paths = [ ./devenv.nix ];
+  };
+
+  # A declared port is a native TCP readiness fallback when no explicit probe
+  # is configured, so it also keeps lifecycle policy in devenv.
+  processes.nativePort = {
+    exec = "sleep infinity";
+    ports.http.allocate = 18080;
+  };
+
   assertions = [
     {
       assertion = (foo.readiness_probe.exec.command or null) == "true";
@@ -60,12 +77,28 @@ in
       message = "process-compose merge: user override of availability.max_restarts not applied. Got: ${toString (foo.availability.max_restarts or null)}";
     }
     {
-      assertion = foo.shutdown.signal == 2 && foo.shutdown.timeout_seconds == 11;
+      assertion = foo.shutdown.signal == 2 && foo.shutdown.timeout_seconds == 8;
       message = "process-compose merge: shutdown settings of a direct process were not translated. Got: ${builtins.toJSON (foo.shutdown or {})}";
     }
     {
-      assertion = bar.shutdown.signal == 15 && bar.shutdown.timeout_seconds == 7;
+      assertion = bar.shutdown.signal == 15 && bar.shutdown.timeout_seconds == 6;
       message = "process-compose merge: a devenv-tasks wrapped process must receive SIGTERM. Got: ${builtins.toJSON (bar.shutdown or {})}";
+    }
+    {
+      assertion = config.processes.bar.supervisionMode == "external"
+        && lib.hasInfix "external" config.process.taskCommandsBase.bar;
+      message = "process-compose merge: fully translated policy should use external supervision. Mode: ${config.processes.bar.supervisionMode}; command: ${config.process.taskCommandsBase.bar}";
+    }
+    {
+      assertion = config.processes.nativeWatch.supervisionMode == "native"
+        && nativeWatch.availability.restart == "no"
+        && lib.hasInfix "native" config.process.taskCommandsBase.nativeWatch;
+      message = "process-compose merge: unsupported watch policy must remain under native supervision. Mode: ${config.processes.nativeWatch.supervisionMode}; command: ${config.process.taskCommandsBase.nativeWatch}";
+    }
+    {
+      assertion = config.processes.nativePort.supervisionMode == "native"
+        && nativePort.availability.restart == "no";
+      message = "process-compose merge: implicit TCP readiness must remain under native supervision";
     }
   ];
 
