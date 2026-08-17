@@ -25859,6 +25859,78 @@ null
 
 
 
+## processes.\<name>.shutdown
+
+
+
+Graceful shutdown signal and timeout
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.shutdown.grace
+
+
+
+Seconds before shutdown escalates to SIGKILL
+
+
+
+*Type:*
+unsigned integer, meaning >=0
+
+
+
+*Default:*
+
+```nix
+5
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## processes.\<name>.shutdown.signal
+
+
+
+Unix signal number used for graceful shutdown
+
+
+
+*Type:*
+integer between 1 and 31 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+15
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.start
 
 
@@ -38655,6 +38727,78 @@ null or (unsigned integer, meaning >=0)
 
 ```nix
 null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.shutdown
+
+
+
+Graceful shutdown signal and timeout.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.shutdown.grace
+
+
+
+Seconds before shutdown escalates to SIGKILL.
+
+
+
+*Type:*
+unsigned integer, meaning >=0
+
+
+
+*Default:*
+
+```nix
+5
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.process.shutdown.signal
+
+
+
+Unix signal number used for graceful shutdown.
+
+
+
+*Type:*
+integer between 1 and 31 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+15
 ```
 
 *Declared by:*
