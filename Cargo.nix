@@ -9628,6 +9628,7 @@ rec {
           }
         ];
         features = {
+          "test-all" = [ "devenv-processes/test-all" ];
         };
         resolvedDefaultFeatures = [ "default" "test-all" ];
       };
