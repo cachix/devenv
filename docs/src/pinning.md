@@ -52,6 +52,24 @@ revision for each package. Those historical revisions are fetched only when refe
 remain reproducible. See [Installing a specific version](packages.md#installing-a-specific-version) for usage
 details and limitations.
 
+Each pin above resolves on its own, and the price of a pin is the nixpkgs revision behind it, so several pins can mean
+several revisions to fetch and evaluate. `multiverse.pins` resolves a whole set of versions through the fewest
+revisions that can serve them, at the same versions:
+
+```nix title="devenv.nix"
+{ multiverse, ... }:
+
+{
+  packages = multiverse.pins {
+    cmake = "3.26.4";
+    bun = "0.7.0";
+  };
+}
+```
+
+See [Pinning several packages](packages.md#pinning-several-packages) for what minimizing decides, and
+[the fewest nixpkgs](https://fzakaria.com/2026/08/17/nixpkgs-multiverse-the-fewest-nixpkgs) for why it is minimal.
+
 ## Pinning a nixpkgs revision
 
 Use `?rev=` in the input URL for an exact commit:

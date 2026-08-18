@@ -80,6 +80,38 @@ revisions providing packages you use are downloaded. The unmodified input remain
 `inputs."nixpkgs-multiverse"` for advanced use. See [Pinning an individual package version](pinning.md#pinning-an-individual-package-version)
 for the reproducibility and update workflow.
 
+### Pinning several packages
+
+!!! tip "New in version 2.2.3"
+
+    `multiverse.pins` needs a recent `nixpkgs-multiverse`.
+    Run `devenv update nixpkgs-multiverse` if you added the input earlier.
+
+A multiverse costs one fetch and one evaluation per Nixpkgs revision it touches, not per package. Each version above
+resolves to the newest revision that shipped it, so two pins from different years mean two Nixpkgs trees.
+
+`multiverse.pins` takes the whole set at once, resolves it through the fewest revisions that can serve it, and returns
+the packages:
+
+```nix title="devenv.nix"
+{ multiverse, ... }:
+
+{
+  packages = multiverse.pins {
+    cmake = "3.26.4";
+    bun = "0.7.0";
+  };
+}
+```
+
+Both packages come back at exactly the versions you asked for. What minimizing decides is which revision serves each,
+so a pin can land on an older build of the same version.
+
+The `mvs solve` command spells out the plan behind the answer from a terminal, and
+[the raw input](inputs.md) exposes it to Nix as data. See
+[the fewest nixpkgs](https://fzakaria.com/2026/08/17/nixpkgs-multiverse-the-fewest-nixpkgs) for how the plan is
+computed and why it is minimal.
+
 Multiverse indexes top-level package attributes from published Nixpkgs releases and `nixos-unstable` channel
 revisions. If a package or version is not indexed, you can still
 [fetch it from another nixpkgs input](recipes/nix.md).
