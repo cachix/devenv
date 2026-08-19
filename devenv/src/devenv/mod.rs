@@ -1910,7 +1910,10 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, outputs) = run_tasks(tasks, false).await?;
+        // Stop processes started as task dependencies. Without this they are
+        // orphaned: devenv spawns every process into its own session, so they
+        // survive the CLI's exit and are reparented to init.
+        let (status, outputs) = run_tasks(tasks, true).await?;
 
         if status.has_failures() {
             miette::bail!("Some tasks failed");

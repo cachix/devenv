@@ -771,8 +771,8 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
         tracing::info!("using project root {}", root.display());
     }
 
-    // TUI terminal setup: save state before raw mode, install restore hooks
-    // for panics and force-exit (second Ctrl+C)
+    // TUI terminal setup: save state before raw mode, install a restore hook
+    // for panics. Force-exit (second Ctrl+C) is handled below.
     if tui {
         devenv_tui::app::save_terminal_state();
 
@@ -781,9 +781,18 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
             devenv_tui::app::restore_terminal();
             prev_hook(info);
         }));
-
-        shutdown.set_pre_exit_hook(devenv_tui::app::restore_terminal);
     }
+
+    // Force-exit (second Ctrl+C) re-raises the signal, so neither the process
+    // manager's teardown nor any destructor runs. Processes live in their own
+    // session and would survive as orphans, so signal them here, then hand the
+    // terminal back before the process dies.
+    shutdown.set_pre_exit_hook(move || {
+        devenv_processes::kill_sessions();
+        if tui {
+            devenv_tui::app::restore_terminal();
+        }
+    });
 
     let (events_tx, events_rx) = mpsc::channel();
 

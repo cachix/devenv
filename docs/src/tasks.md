@@ -313,13 +313,19 @@ All processes defined in `processes` are automatically available as tasks with t
 
 When you run `devenv tasks run devenv:processes:web-server`, it will:
 1. First run any tasks that have `before = [ "devenv:processes:web-server" ]`
-2. Then execute the process itself
+2. Then start the process itself
 
 This is particularly useful for:
 
 - Running setup tasks before starting a process
 - Creating complex startup sequences
-- Testing individual processes without starting all of them
+- Checking that a single process reaches its ready state without starting all of them
+
+!!! note "Processes only live for the duration of the run"
+
+    `devenv tasks run` stops every process it started once the task graph finishes,
+    whether the process is a root or was pulled in as a dependency of another task.
+    Use [`devenv up`](processes.md) when you want a process to keep running.
 
 You can also run tasks after a process finishes by depending on its `@completed` state (see [Dependency states](#dependency-states)). The default suffix for a process dependency is `@ready`, which fires as soon as the process is healthy, so use `@completed` to wait for it to exit instead:
 

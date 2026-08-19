@@ -2,6 +2,11 @@
 
 ## 2.3.0 (unreleased)
 
+### Bug Fixes
+
+- Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
+- Interrupting devenv a second time no longer leaves processes running. The second Ctrl+C exits straight away instead of waiting for shutdown to finish, which used to abandon any process still shutting down. This was easy to hit, since a process that is slow to stop is given five seconds before it is killed.
+
 ### Improvements
 
 - Pinning several package versions no longer costs a separate nixpkgs fetch and evaluation for each one. `multiverse.pins { cmake = "3.26.4"; bun = "0.7.0"; }` resolves a whole set of versions, at exactly those versions, through the fewest nixpkgs revisions that can serve them and returns the packages.
