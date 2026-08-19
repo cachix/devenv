@@ -216,6 +216,7 @@ use watchexec_supervisor::{
 
 use crate::config::ProcessConfig;
 use crate::pid::{self, PidStatus};
+use crate::session_registry::SessionRegistrar;
 use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
 use crate::{ProcessManager, StartOptions};
 use devenv_event_sources::NotifySocket;
@@ -1469,6 +1470,11 @@ impl NativeProcessManager {
             if let Some((ref fds, ref capabilities)) = process_setup {
                 command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
             }
+
+            // Record the session so a force exit, which skips both teardown and
+            // destructors, can still reach processes that would otherwise be
+            // orphaned to init.
+            command_wrap.wrap(SessionRegistrar);
         });
 
         job.start().await;

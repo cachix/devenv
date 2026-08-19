@@ -99,6 +99,9 @@ enum TaskError {
 async fn main() -> Result<()> {
     let shutdown = Shutdown::new();
     shutdown.install_signals().await;
+    // A second signal force-exits without running teardown or destructors, and
+    // processes live in their own session, so they would outlive us.
+    shutdown.set_pre_exit_hook(devenv_processes::kill_sessions);
 
     run_tasks(shutdown.clone()).await?;
 
