@@ -52,9 +52,7 @@ revision for each package. Those historical revisions are fetched only when refe
 remain reproducible. See [Installing a specific version](packages.md#installing-a-specific-version) for usage
 details and limitations.
 
-Each pin above resolves on its own, and the price of a pin is the nixpkgs revision behind it, so several pins can mean
-several revisions to fetch and evaluate. `multiverse.pins` resolves a whole set of versions through the fewest
-revisions that can serve them, at the same versions:
+Each pin resolves independently, and multiple pins may require multiple nixpkgs revisions to be fetched and evaluated, adding overhead. `multiverse.pins` resolves the entire set using the fewest revisions possible.
 
 ```nix title="devenv.nix"
 { multiverse, ... }:
