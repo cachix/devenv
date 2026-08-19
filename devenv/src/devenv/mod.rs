@@ -1910,7 +1910,10 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, outputs) = run_tasks(tasks, false).await?;
+        // Stop processes started as task dependencies. Without this they are
+        // orphaned: processes like postgres set their own process group and
+        // survive the CLI's exit.
+        let (status, outputs) = run_tasks(tasks, true).await?;
 
         if status.has_failures() {
             miette::bail!("Some tasks failed");
