@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Pinning several package versions no longer costs a separate nixpkgs fetch and evaluation for each one. `multiverse.pins { cmake = "3.26.4"; bun = "0.7.0"; }` resolves a whole set of versions, at exactly those versions, through the fewest nixpkgs revisions that can serve them and returns the packages.
 - `devenv-run-tests` reports the runtime and shell closure size of every test and can fail a test whose closure exceeds `max_closure_size` in its `.test-config.yml`.
 - Reduced the size of the devenv closure from 528 MB to 376 MB. It no longer contains duplicate copies of glibc, OpenSSL, curl, Boost, ICU and the Nix libraries, which were pulled in by `cachix` and `nixd` being built against different package sets than devenv itself.
 - `devenv tasks list` now prints a more readable human tree: task names are colored (processes in cyan), descriptions are shown inline, and details like status checks and watched files are broken onto their own indented lines instead of being crammed into a single parenthetical.
