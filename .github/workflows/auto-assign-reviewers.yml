@@ -17,21 +17,19 @@ jobs:
 
     steps:
       # Check out the base branch, never the pull request's code: this job holds
-      # a writable token and must not run anything the PR author controls.
+      # a writable token and must not run anything the PR author controls. The
+      # action reads the changed lines from the pull request files API, so
+      # nothing from the pull request lands on disk at all.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0  # Required for git blame
           persist-credentials: false
 
-      # Make the PR head available as a git object to diff against. Nothing from
-      # it is checked out or executed.
-      - run: git fetch --no-tags origin +refs/pull/${{ github.event.pull_request.number }}/head
-
       # Pinned to a commit, not a branch: this job holds a writable token, so a
       # moving ref would let anyone with push access to the action repo run code
       # here.
-      - uses: cachix/git-blame-auto-reviewer@d1da8bb0ac7306da98262aec9c58d7d65ae939cc
+      - uses: cachix/git-blame-auto-reviewer@2d112d9bbd60c4feaf2b55e94a058e0e397ab0e0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           max-reviewers: 3
