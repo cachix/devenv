@@ -1171,10 +1171,8 @@ fn test_task_diamond_dependency() {
     insta::assert_snapshot!(output);
 }
 
-/// Test that when activities overflow a small terminal, the bottom content
-/// (running processes with logs) remains visible and the summary line is last.
 #[test]
-fn test_overflow_clips_top_keeps_bottom() {
+fn test_overflow_keeps_collapsed_process_visible() {
     let model = ActivityModel::new();
     let mut ui_state = UiState::new();
     // Use a very small terminal height to force overflow
@@ -1208,12 +1206,12 @@ fn test_overflow_clips_top_keeps_bottom() {
         last_non_empty
     );
 
-    // The process log should be visible
     assert!(
-        output.contains("Listening on port 3000"),
-        "Process log line should be visible in overflow output.\nFull output:\n{}",
+        output.contains("web-server"),
+        "Process should be visible in overflow output.\nFull output:\n{}",
         output
     );
+    assert!(!output.contains("Listening on port 3000"));
 
     // The very last line should be the summary (no trailing empty lines)
     let last_line = lines.last().unwrap();
@@ -1529,6 +1527,49 @@ fn test_processes_alphabetical_order() {
     );
 
     insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_process_logs_are_collapsed_until_explicitly_opened() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(process_start(1, "chatty-service"));
+    model.apply_activity_event(process_log(1, "seeding database", false));
+
+    ui_state.selected_activity = Some(1);
+    let selected = render_to_string(&model, &ui_state);
+    assert!(!selected.contains("seeding database"));
+
+    ui_state.toggle_inline_logs();
+    let opened = render_to_string(&model, &ui_state);
+    assert!(opened.contains("seeding database"));
+
+    ui_state.toggle_inline_logs();
+    let closed = render_to_string(&model, &ui_state);
+    assert!(!closed.contains("seeding database"));
+}
+
+#[test]
+fn test_process_search_matches_names_case_insensitively() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(process_start(1, "scope-api"));
+    model.apply_activity_event(process_start(2, "scope-consumer"));
+    model.apply_activity_event(build_start(3, "scope-api-build"));
+
+    assert_eq!(
+        model.get_matching_process_activity_ids(&ui_state, "API"),
+        vec![1]
+    );
+    assert_eq!(
+        model.get_matching_process_activity_ids(&ui_state, "scope"),
+        vec![1, 2]
+    );
+    assert!(
+        model
+            .get_matching_process_activity_ids(&ui_state, "missing")
+            .is_empty()
+    );
 }
 
 /// Test cachix push alongside other activities (build + push concurrent).

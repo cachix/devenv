@@ -27,13 +27,19 @@ impl UiEvent {
                     Down | Char('j') => {
                         let selectable = activity_model.get_selectable_activity_ids(ui_state);
                         ui_state.select_activity(&selectable, true);
+                        ui_state.inline_logs_activity = None;
                     }
                     Up | Char('k') => {
                         let selectable = activity_model.get_selectable_activity_ids(ui_state);
                         ui_state.select_activity(&selectable, false);
+                        ui_state.inline_logs_activity = None;
                     }
                     Esc => {
-                        ui_state.selected_activity = None;
+                        if ui_state.inline_logs_activity.is_some() {
+                            ui_state.inline_logs_activity = None;
+                        } else {
+                            ui_state.selected_activity = None;
+                        }
                     }
                     // Note: 'e' for expand is handled directly in TuiApp to trigger view switch
                     _ => {}
@@ -44,5 +50,25 @@ impl UiEvent {
                 ui_state.set_terminal_size(size.width, size.height);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escape_closes_inline_logs_before_clearing_selection() {
+        let model = ActivityModel::new();
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        ui_state.inline_logs_activity = Some(1);
+
+        UiEvent::KeyInput(KeyCode::Esc).apply(&model, &mut ui_state);
+        assert_eq!(ui_state.selected_activity, Some(1));
+        assert_eq!(ui_state.inline_logs_activity, None);
+
+        UiEvent::KeyInput(KeyCode::Esc).apply(&model, &mut ui_state);
+        assert_eq!(ui_state.selected_activity, None);
     }
 }

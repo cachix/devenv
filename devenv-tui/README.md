@@ -115,7 +115,7 @@ triage.
 
 ## Views
 
-**Main view**: Shows activity tree with inline log previews. Does not use alternate screen buffer, so terminal scrollback is preserved.
+**Main view**: Shows a stable activity tree with log previews collapsed by default. Does not use alternate screen buffer, so terminal scrollback is preserved.
 
 **Expanded logs**: Fullscreen view of logs for a single activity.
 
@@ -137,12 +137,14 @@ triage.
 
 ### Main View
 - `↑/↓` or `j/k`: Navigate activities
+- `Enter`: Toggle an inline log preview for the selected activity
 - `Ctrl+E`: Expand logs for selected activity
+- `/`: Search managed processes by name; use `↑/↓` to move through matches
 - `Ctrl+R`: Restart the selected managed process
 - `Ctrl+C`: Show the quit prompt without stopping managed processes
 - `c` or `Esc`: Keep running and clear the prompt
 - `q` or `Ctrl+C`: Quit from the interrupt prompt
-- `Esc`: Clear selection
+- `Esc`: Close the inline preview, clear the selection, or cancel search
 
 ### Expanded Logs
 Long lines wrap onto continuation rows so their full content stays readable.

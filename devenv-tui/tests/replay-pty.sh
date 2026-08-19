@@ -15,6 +15,7 @@ work_dir=$(mktemp -d)
 transcript="$work_dir/transcript"
 event_log="$work_dir/events.jsonl"
 export TUI_REPLAY_EVENT_LOG=$event_log
+export TUI_REPLAY_TRANSCRIPT=$transcript
 
 cleanup() {
   status=$?
@@ -48,12 +49,18 @@ expect:api
 expect:worker
 expect:disabled
 expect:stopped
-send:j
-expect:restart
+run:! grep -Fq 'processed deterministic job 1' "$TUI_REPLAY_TRANSCRIPT"
+send:/worker
+expect:Search processes: /worker
+send:\r
+send:\r
+expect:processed deterministic job 1
+send:\r
+send:/api
+expect:Search processes: /api
+send:\r
 resize:48x12
-expect:api
 resize:120x40
-expect:restart
 send:\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12
 expect:restarting
 expect:ready

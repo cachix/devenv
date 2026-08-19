@@ -9,4 +9,4 @@ expression: output
   └ ◐ mysql starting      [TIME]
   └ ◐ zookeeper starting  [TIME]
 
- 3 processes              ↑↓ nav
+ 3 processes   ↑↓ nav • / search

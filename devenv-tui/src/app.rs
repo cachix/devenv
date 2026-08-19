@@ -599,6 +599,89 @@ fn scroll_selected_into_view(
     }
 }
 
+fn update_process_search_selection(model: &ActivityModel, ui_state: &mut UiState) {
+    let Some(query) = ui_state
+        .process_search
+        .as_ref()
+        .map(|search| search.query.clone())
+    else {
+        return;
+    };
+    let matches = model.get_matching_process_activity_ids(ui_state, &query);
+    if !ui_state
+        .selected_activity
+        .is_some_and(|id| matches.contains(&id))
+    {
+        ui_state.selected_activity = matches.first().copied();
+    }
+}
+
+fn handle_process_search_key(
+    key_event: &KeyEvent,
+    model: &ActivityModel,
+    ui_state: &mut UiState,
+) -> bool {
+    if ui_state.process_search.is_none() {
+        return false;
+    }
+
+    match key_event.code {
+        KeyCode::Esc => {
+            ui_state.cancel_process_search();
+            if ui_state
+                .selected_activity
+                .is_some_and(|id| !model.is_selectable(id, ui_state))
+            {
+                ui_state.selected_activity = None;
+            }
+        }
+        KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            ui_state.cancel_process_search();
+            if ui_state
+                .selected_activity
+                .is_some_and(|id| !model.is_selectable(id, ui_state))
+            {
+                ui_state.selected_activity = None;
+            }
+        }
+        KeyCode::Enter => ui_state.finish_process_search(),
+        KeyCode::Backspace => {
+            if let Some(search) = &mut ui_state.process_search {
+                search.query.pop();
+            }
+            update_process_search_selection(model, ui_state);
+        }
+        KeyCode::Down | KeyCode::Up => {
+            let query = ui_state
+                .process_search
+                .as_ref()
+                .map(|search| search.query.as_str())
+                .unwrap_or_default();
+            let matches = model.get_matching_process_activity_ids(ui_state, query);
+            if !ui_state
+                .selected_activity
+                .is_some_and(|id| matches.contains(&id))
+            {
+                ui_state.selected_activity = None;
+            }
+            let forward = matches!(key_event.code, KeyCode::Down);
+            ui_state.select_activity(&matches, forward);
+        }
+        KeyCode::Char(character)
+            if !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
+        {
+            if let Some(search) = &mut ui_state.process_search {
+                search.query.push(character);
+            }
+            update_process_search_selection(model, ui_state);
+        }
+        _ => {}
+    }
+
+    true
+}
+
 /// Main TUI component (inline mode)
 #[component]
 fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -664,7 +747,34 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 && key_event.kind != KeyEventKind::Release
             {
                 debug!("Key event: {:?}", key_event);
-                if !handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown, event_tx.as_ref())
+                let search_handled = if let Ok(model) = activity_model.read()
+                    && let Ok(mut ui) = ui_state.write()
+                {
+                    let handled = handle_process_search_key(&key_event, &model, &mut ui);
+                    if handled
+                        && let Some(selected_id) = ui.selected_activity
+                        && *scroll_view_active.read()
+                    {
+                        let display = model.get_display_activities(&ui);
+                        let heights = activity_heights.read();
+                        scroll_selected_into_view(
+                            &mut scroll_handle.write(),
+                            &heights,
+                            &display,
+                            selected_id,
+                        );
+                    }
+                    handled
+                } else {
+                    false
+                };
+                if !search_handled
+                    && !handle_interrupt_prompt_key(
+                        &key_event,
+                        &ui_state,
+                        &shutdown,
+                        event_tx.as_ref(),
+                    )
                 {
                     match key_event.code {
                         KeyCode::Char('c')
@@ -741,7 +851,36 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                     && !model.is_selectable(id, &ui)
                                 {
                                     ui.selected_activity = None;
+                                    ui.inline_logs_activity = None;
                                 }
+                            }
+                        }
+                        KeyCode::Char('/')
+                            if !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
+                        {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                ui.start_process_search();
+                                update_process_search_selection(&model, &mut ui);
+                                if let Some(selected_id) = ui.selected_activity
+                                    && *scroll_view_active.read()
+                                {
+                                    let display = model.get_display_activities(&ui);
+                                    let heights = activity_heights.read();
+                                    scroll_selected_into_view(
+                                        &mut scroll_handle.write(),
+                                        &heights,
+                                        &display,
+                                        selected_id,
+                                    );
+                                }
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if let Ok(mut ui) = ui_state.write() {
+                                ui.toggle_inline_logs();
                             }
                         }
                         KeyCode::Down | KeyCode::Char('j') | KeyCode::Up | KeyCode::Char('k') => {
@@ -752,6 +891,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 let forward =
                                     matches!(key_event.code, KeyCode::Down | KeyCode::Char('j'));
                                 ui.select_activity(&selectable, forward);
+                                ui.inline_logs_activity = None;
                                 if let Some(selected_id) = ui.selected_activity
                                     && *scroll_view_active.read()
                                 {
@@ -768,9 +908,17 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         }
                         KeyCode::Esc => {
                             if let Ok(mut ui) = ui_state.write() {
-                                ui.selected_activity = None;
+                                if ui.inline_logs_activity.is_some() {
+                                    ui.inline_logs_activity = None;
+                                } else {
+                                    ui.selected_activity = None;
+                                }
                             }
-                            if *scroll_view_active.read() {
+                            if ui_state
+                                .read()
+                                .is_ok_and(|ui| ui.selected_activity.is_none())
+                                && *scroll_view_active.read()
+                            {
                                 scroll_handle.write().scroll_to_bottom();
                             }
                         }
@@ -957,6 +1105,7 @@ async fn run_view(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use devenv_activity::test_helpers::process_start;
     use tokio::sync::mpsc;
 
     #[test]
@@ -1040,5 +1189,53 @@ mod tests {
             rx.try_recv(),
             Ok(FrontendEvent::Process(ProcessCommand::StopManager))
         ));
+    }
+
+    #[test]
+    fn process_search_updates_selection_and_can_be_cancelled() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(process_start(1, "alpha"));
+        model.apply_activity_event(process_start(2, "beta"));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        ui_state.start_process_search();
+        update_process_search_selection(&model, &mut ui_state);
+
+        let e = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('e'));
+        assert!(handle_process_search_key(&e, &model, &mut ui_state));
+        assert_eq!(ui_state.selected_activity, Some(2));
+        assert_eq!(
+            ui_state
+                .process_search
+                .as_ref()
+                .map(|search| search.query.as_str()),
+            Some("e")
+        );
+
+        let escape = KeyEvent::new(KeyEventKind::Press, KeyCode::Esc);
+        assert!(handle_process_search_key(&escape, &model, &mut ui_state));
+        assert_eq!(ui_state.selected_activity, Some(1));
+        assert!(ui_state.process_search.is_none());
+    }
+
+    #[test]
+    fn process_search_arrows_cycle_matching_processes() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(process_start(1, "scope-api"));
+        model.apply_activity_event(process_start(2, "scope-consumer"));
+
+        let mut ui_state = UiState::new();
+        ui_state.start_process_search();
+        update_process_search_selection(&model, &mut ui_state);
+        assert_eq!(ui_state.selected_activity, Some(1));
+
+        let down = KeyEvent::new(KeyEventKind::Press, KeyCode::Down);
+        assert!(handle_process_search_key(&down, &model, &mut ui_state));
+        assert_eq!(ui_state.selected_activity, Some(2));
+
+        let up = KeyEvent::new(KeyEventKind::Press, KeyCode::Up);
+        assert!(handle_process_search_key(&up, &model, &mut ui_state));
+        assert_eq!(ui_state.selected_activity, Some(1));
     }
 }

@@ -159,6 +159,8 @@ pub struct Activity {
 pub struct UiState {
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
+    pub inline_logs_activity: Option<u64>,
+    pub process_search: Option<ProcessSearch>,
     pub hide_stopped_processes: bool,
     pub scroll: ScrollState,
     pub view_options: ViewOptions,
@@ -189,6 +191,8 @@ impl UiState {
                 activities_visible: 5,
             },
             selected_activity: None,
+            inline_logs_activity: None,
+            process_search: None,
             hide_stopped_processes: false,
             scroll: ScrollState {
                 log_offset: 0,
@@ -270,6 +274,33 @@ impl UiState {
             }
         }
     }
+
+    pub fn toggle_inline_logs(&mut self) {
+        self.inline_logs_activity = match self.selected_activity {
+            Some(id) if self.inline_logs_activity != Some(id) => Some(id),
+            _ => None,
+        };
+    }
+
+    pub fn start_process_search(&mut self) {
+        if self.process_search.is_none() {
+            self.process_search = Some(ProcessSearch {
+                query: String::new(),
+                original_selection: self.selected_activity,
+            });
+            self.inline_logs_activity = None;
+        }
+    }
+
+    pub fn finish_process_search(&mut self) {
+        self.process_search = None;
+    }
+
+    pub fn cancel_process_search(&mut self) {
+        if let Some(search) = self.process_search.take() {
+            self.selected_activity = search.original_selection;
+        }
+    }
 }
 
 impl Default for UiState {
@@ -301,6 +332,12 @@ pub struct ScrollState {
 #[derive(Debug)]
 pub struct ViewOptions {
     pub show_details: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessSearch {
+    pub query: String,
+    pub original_selection: Option<u64>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -1134,6 +1171,16 @@ impl ActivityModel {
                 let id = da.activity.id;
                 seen.insert(id).then_some(id)
             })
+            .collect()
+    }
+
+    pub fn get_matching_process_activity_ids(&self, ui_state: &UiState, query: &str) -> Vec<u64> {
+        let query = query.to_lowercase();
+        self.get_display_activities(ui_state)
+            .into_iter()
+            .filter(|da| matches!(da.activity.variant, ActivityVariant::Process(_)))
+            .filter(|da| da.activity.name.to_lowercase().contains(&query))
+            .map(|da| da.activity.id)
             .collect()
     }
 

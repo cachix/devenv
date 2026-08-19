@@ -52,11 +52,10 @@ pub fn view(
         .selected_activity
         .filter(|id| active_activities.iter().any(|da| da.activity.id == *id));
     let selected_activity = selected_id.and_then(|id| model.get_activity(id));
-    let selected_logs = selected_activity
-        .as_ref()
-        .and_then(|a| model.get_build_logs(a.id));
+    let inline_logs_id = ui_state
+        .inline_logs_activity
+        .filter(|id| active_activities.iter().any(|da| da.activity.id == *id));
 
-    // Show all activities (including the selected activity with inline logs)
     let activities_to_show: Vec<_> = active_activities.iter().collect();
 
     // Create owned activity elements, including hidden children indicators
@@ -65,11 +64,11 @@ pub fn view(
     for display_activity in activities_to_show.iter() {
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
+        let show_inline_logs = inline_logs_id.is_some_and(|id| activity.id == id);
 
         // Pass logs for activities that should display them:
         // - Tasks with show_output=true or failed: show logs inline
         // - Messages with details: always show details inline
-        // - Selected activities: show logs when selected
         let task_failed = matches!(
             (&activity.variant, &activity.state),
             (
@@ -99,10 +98,8 @@ pub fn view(
                 ActivityVariant::Message(msg_data) => msg_data.details.is_some(),
                 _ => false,
             };
-        let activity_logs = if show_activity_logs {
+        let activity_logs = if show_activity_logs || show_inline_logs {
             model.get_build_logs(activity.id).cloned()
-        } else if is_selected {
-            selected_logs.cloned()
         } else {
             None
         };
@@ -127,6 +124,7 @@ pub fn view(
                     activity: activity.clone(),
                     depth: display_activity.depth,
                     is_selected,
+                    show_inline_logs,
                     logs: activity_logs,
                     log_line_count: model.get_log_line_count(activity.id),
                     completed,
@@ -144,6 +142,14 @@ pub fn view(
 
     // Determine if navigation is possible
     let selectable_ids = model.get_selectable_activity_ids(ui_state);
+    let process_search_ids = model.get_matching_process_activity_ids(
+        ui_state,
+        ui_state
+            .process_search
+            .as_ref()
+            .map(|search| search.query.as_str())
+            .unwrap_or_default(),
+    );
     let (can_go_up, can_go_down) = if let Some(current_id) = selected_id {
         if let Some(pos) = selectable_ids.iter().position(|&id| id == current_id) {
             (pos > 0, pos + 1 < selectable_ids.len())
@@ -161,12 +167,20 @@ pub fn view(
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
             selected: selected_activity.cloned(),
-            showing_logs: selected_logs.is_some(),
+            showing_logs: inline_logs_id.is_some(),
             can_go_up,
             can_go_down,
             interrupt_prompt_active: ui_state.interrupt_prompt_active(),
             interrupt_prompt_attached: ui_state.interrupt_prompt_attached(),
             hide_stopped_processes: ui_state.hide_stopped_processes,
+            process_search: ui_state
+                .process_search
+                .as_ref()
+                .map(|search| search.query.clone()),
+            process_search_matches: process_search_ids.len(),
+            process_search_available: !model
+                .get_matching_process_activity_ids(ui_state, "")
+                .is_empty(),
         })) {
             SummaryView
         }
@@ -247,6 +261,7 @@ struct ActivityRenderContext {
     activity: Activity,
     depth: usize,
     is_selected: bool,
+    show_inline_logs: bool,
     logs: Option<Arc<VecDeque<String>>>,
     /// Total log line count (not affected by buffer rotation)
     log_line_count: usize,
@@ -321,6 +336,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         activity,
         depth,
         is_selected,
+        show_inline_logs,
         logs,
         log_line_count,
         completed,
@@ -359,8 +375,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 build_data.phase.clone()
             };
 
-            // For selected build activities, use custom multi-line rendering
-            if *is_selected {
+            if *show_inline_logs {
                 let prefix = build_activity_prefix(*depth, *completed, true);
 
                 let main_line = ActivityTextComponent::new(
@@ -446,7 +461,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // Show logs inline for tasks with show_output=true or failed tasks
             let task_failed = *completed == Some(false);
-            if (task_data.show_output || task_failed) && logs.is_some() {
+            if (task_data.show_output || task_failed || *show_inline_logs)
+                && (logs.is_some() || *show_inline_logs)
+            {
                 let empty_message = if completed.is_some() {
                     "  → no output"
                 } else {
@@ -457,7 +474,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .with_empty_message(empty_message);
                 if task_failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
-                } else if task_data.show_output && !is_selected {
+                } else if task_data.show_output && !show_inline_logs {
                     component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
                 }
                 return component.render_with_main_line(main_line);
@@ -590,9 +607,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
 
-            // Show logs when selected or when failed (so error details are visible)
             let failed = *completed == Some(false);
-            if (failed || *is_selected) && logs.is_some() {
+            if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
                     .with_empty_message("  → no files evaluated yet (press Ctrl-E to expand)");
@@ -666,9 +682,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
 
-            // Show logs when selected or when failed
             let failed = *completed == Some(false);
-            if (failed || *is_selected) && logs.is_some() {
+            if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
                     .with_empty_message("  → no output yet");
@@ -753,18 +768,16 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
 
-            // Show logs: always show LOG_VIEWPORT_SHOW_OUTPUT lines,
-            // expand when selected, show more when failed
             let process_failed = *completed == Some(false) || process_data.status.is_failed();
-            if logs.is_some() {
+            if *show_inline_logs
+                || (process_failed && *render_context == RenderContext::Final && logs.is_some())
+            {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
                     .with_depth(*depth)
-                    .with_empty_message("→ no output yet (press 'e' to expand)");
+                    .with_empty_message("→ no output yet");
                 if process_failed && *render_context == RenderContext::Final {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
-                } else if !is_selected {
-                    component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
                 }
 
                 let mut elements = vec![main_line];
@@ -954,6 +967,9 @@ struct SummaryViewContext {
     interrupt_prompt_active: bool,
     interrupt_prompt_attached: bool,
     hide_stopped_processes: bool,
+    process_search: Option<String>,
+    process_search_matches: usize,
+    process_search_available: bool,
 }
 
 /// Summary view component that adapts to terminal width
@@ -975,6 +991,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         interrupt_prompt_active,
         interrupt_prompt_attached,
         hide_stopped_processes,
+        process_search,
+        process_search_matches,
+        process_search_available,
     } = ctx;
     let selected = selected.as_ref();
     let showing_logs = *showing_logs;
@@ -983,6 +1002,8 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let interrupt_prompt_active = *interrupt_prompt_active;
     let interrupt_prompt_attached = *interrupt_prompt_attached;
     let hide_stopped_processes = *hide_stopped_processes;
+    let process_search_matches = *process_search_matches;
+    let process_search_available = *process_search_available;
 
     if interrupt_prompt_active {
         if interrupt_prompt_attached {
@@ -1045,6 +1066,38 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                 Text(content: if compact { ":quit " } else { " quit • " })
                 Text(content: "Ctrl-C", color: COLOR_INTERACTIVE)
                 Text(content: ":quit")
+            }
+        })
+        .into_any();
+    }
+
+    if let Some(query) = process_search {
+        let prompt = if query.is_empty() {
+            "Search processes: /".to_string()
+        } else {
+            format!("Search processes: /{query}")
+        };
+        let result = match process_search_matches {
+            0 => "no matches".to_string(),
+            1 => "1 match".to_string(),
+            count => format!("{count} matches"),
+        };
+        let hints = if terminal_width < 72 {
+            format!("{result}  Enter:select Esc:cancel")
+        } else {
+            format!("{result} • ↑↓ next • Enter select • Esc cancel")
+        };
+        return element!(View(
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            width: 100pct,
+            overflow: Overflow::Hidden,
+        ) {
+            View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                Text(content: prompt, color: COLOR_INTERACTIVE, weight: Weight::Bold)
+            }
+            View(flex_shrink: 0.0, margin_left: 2) {
+                Text(content: hints)
             }
         })
         .into_any();
@@ -1299,13 +1352,21 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         } else {
             help_children.push(element!(Text(content: " • ")).into_any());
         }
+        help_children.push(element!(Text(content: "Enter", color: COLOR_INTERACTIVE)).into_any());
+        if use_symbols {
+            help_children.push(element!(Text(content: " ▾ • ")).into_any());
+        } else if use_short_text {
+            help_children.push(element!(Text(content: " preview ")).into_any());
+        } else {
+            help_children.push(element!(Text(content: " preview logs • ")).into_any());
+        }
         help_children.push(element!(Text(content: if use_short_text { "^E" } else { "Ctrl-E" }, color: COLOR_INTERACTIVE)).into_any());
         if use_symbols {
             help_children.push(element!(Text(content: " ▼ • ")).into_any());
         } else if use_short_text {
-            help_children.push(element!(Text(content: " expand ")).into_any());
+            help_children.push(element!(Text(content: " logs ")).into_any());
         } else {
-            help_children.push(element!(Text(content: " expand logs • ")).into_any());
+            help_children.push(element!(Text(content: " full logs • ")).into_any());
         }
         if is_process {
             if is_stoppable {
@@ -1340,6 +1401,16 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                 help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped • " } else { " hide stopped • " })).into_any());
             }
         }
+        if process_search_available {
+            help_children.push(element!(Text(content: "/", color: COLOR_INTERACTIVE)).into_any());
+            if use_symbols {
+                help_children.push(element!(Text(content: " ")).into_any());
+            } else if use_short_text {
+                help_children.push(element!(Text(content: " search ")).into_any());
+            } else {
+                help_children.push(element!(Text(content: " search processes • ")).into_any());
+            }
+        }
         help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
         if showing_logs {
             if use_symbols {
@@ -1357,7 +1428,11 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         // Show navigate hint only when no selection (Ctrl-E requires selection)
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
-        let trail = if show_hide_toggle { " • " } else { "" };
+        let trail = if show_hide_toggle || process_search_available {
+            " • "
+        } else {
+            ""
+        };
         if !use_symbols {
             if use_short_text {
                 help_children.push(element!(Text(content: format!(" nav{trail}"))).into_any());
@@ -1371,6 +1446,15 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             help_children.push(element!(Text(content: if use_short_text { "^H" } else { "Ctrl-H" }, color: COLOR_INTERACTIVE)).into_any());
             if !use_symbols {
                 help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped" } else { " hide stopped" })).into_any());
+            }
+        }
+        if process_search_available {
+            if show_hide_toggle {
+                help_children.push(element!(Text(content: " • ")).into_any());
+            }
+            help_children.push(element!(Text(content: "/", color: COLOR_INTERACTIVE)).into_any());
+            if !use_symbols {
+                help_children.push(element!(Text(content: " search")).into_any());
             }
         }
     }
@@ -1455,6 +1539,9 @@ mod tests {
             interrupt_prompt_active,
             interrupt_prompt_attached: false,
             hide_stopped_processes,
+            process_search: None,
+            process_search_matches: 0,
+            process_search_available: false,
         }
     }
 
