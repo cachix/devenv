@@ -1,19 +1,37 @@
 name: Auto Assign Reviewers
 
+# `pull_request_target` runs this workflow from the base branch with a writable
+# token. On a plain `pull_request` event GITHUB_TOKEN is read-only for pull
+# requests from a fork, so the suggestion comment could never be posted there.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   assign-reviewers:
     runs-on: ubuntu-latest
 
     steps:
+      # Check out the base branch, never the pull request's code: this job holds
+      # a writable token and must not run anything the PR author controls.
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0  # Required for git blame
+          persist-credentials: false
 
-      - uses: cachix/git-blame-auto-reviewer@main
+      # Make the PR head available as a git object to diff against. Nothing from
+      # it is checked out or executed.
+      - run: git fetch --no-tags origin +refs/pull/${{ github.event.pull_request.number }}/head
+
+      # Pinned to a commit, not a branch: this job holds a writable token, so a
+      # moving ref would let anyone with push access to the action repo run code
+      # here.
+      - uses: cachix/git-blame-auto-reviewer@d1da8bb0ac7306da98262aec9c58d7d65ae939cc
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           max-reviewers: 3
