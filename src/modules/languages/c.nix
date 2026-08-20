@@ -20,7 +20,7 @@ in
     debugger = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default =
-        if pkgs.stdenv.isDarwin
+        if pkgs.stdenv.hostPlatform.isDarwin
         then pkgs.lldb
         else if lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gdb
         then pkgs.gdb
@@ -39,7 +39,7 @@ in
         {
           date = "2026-03-07";
           title = "languages.c.debugger defaults to lldb on macOS";
-          when = cfg.enable && pkgs.stdenv.isDarwin;
+          when = cfg.enable && pkgs.stdenv.hostPlatform.isDarwin;
           description = ''
             The default debugger for `languages.c` on macOS has been changed from `gdb` to `lldb`.
           '';

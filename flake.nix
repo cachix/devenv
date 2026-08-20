@@ -129,7 +129,7 @@
           default = self.packages.${system}.devenv;
           crate2nix = pkgs.crate2nix;
         }
-        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           devenv-image = import ./containers/devenv/image.nix {
             inherit pkgs;
             inherit (self.packages.${system}) devenv;

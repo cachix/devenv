@@ -344,7 +344,7 @@ in
             ":"
             (lib.makeLibraryPath libraries)
           ]
-          ++ lib.optionals pkgs.stdenv.isDarwin [
+          ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
             "--prefix"
             "DYLD_FALLBACK_LIBRARY_PATH"
             ":"

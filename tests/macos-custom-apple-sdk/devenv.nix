@@ -1,6 +1,6 @@
 { pkgs, lib, ... }:
 
-lib.mkIf pkgs.stdenv.isDarwin {
+lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
   apple.sdk = pkgs.apple-sdk;
 
   packages = [

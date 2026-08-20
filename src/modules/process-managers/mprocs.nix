@@ -46,7 +46,7 @@ in
         ${(lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } config.process.manager.args}
     '';
 
-    packages = [ cfg.package ] ++ lib.optionals pkgs.stdenv.isDarwin
+    packages = [ cfg.package ] ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin
       [ (makeImpurePackage "/usr/bin/pbcopy") ];
 
     process.managers.mprocs = {

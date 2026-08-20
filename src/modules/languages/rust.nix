@@ -128,8 +128,8 @@ in
 
     clangLinker.enable = lib.mkOption {
       type = lib.types.bool;
-      default = pkgs.stdenv.isLinux;
-      defaultText = lib.literalExpression "pkgs.stdenv.isLinux";
+      default = pkgs.stdenv.hostPlatform.isLinux;
+      defaultText = lib.literalExpression "pkgs.stdenv.hostPlatform.isLinux";
       description = ''
         Use Clang as the Rust linker driver on Linux.
 
@@ -332,7 +332,7 @@ in
             '';
           }
           {
-            assertion = cfg.wild.enable -> pkgs.stdenv.isLinux;
+            assertion = cfg.wild.enable -> pkgs.stdenv.hostPlatform.isLinux;
             message = ''
               `languages.rust.wild.enable` is only supported on Linux.
             '';
@@ -409,7 +409,7 @@ in
           ++ lib.optional cfg.lld.enable pkgs.llvmPackages.bintools
           ++ lib.optional cfg.wild.enable pkgs.wild
           ++ lib.optional cfg.clangLinker.enable pkgs.clang
-          ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv
+          ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin pkgs.libiconv
           ++ lib.optional cfg.lsp.enable cfg.lsp.package;
 
         # enable compiler tooling by default to expose things like cc
@@ -426,7 +426,7 @@ in
             # on aarch64-linux, so add the flag there (requires nightly on that target).
             wildFlags = lib.optionalString cfg.wild.enable (
               "-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin"
-              + lib.optionalString pkgs.stdenv.isAarch64 " -Z unstable-options"
+              + lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 " -Z unstable-options"
             );
             linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags lldFlags wildFlags ]);
             optionalEnv = cond: str: if cond then str else null;

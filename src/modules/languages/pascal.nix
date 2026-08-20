@@ -15,6 +15,6 @@ in
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       fpc
-    ] ++ lib.optional (cfg.lazarus.enable && pkgs.stdenv.isLinux) pkgs.lazarus;
+    ] ++ lib.optional (cfg.lazarus.enable && pkgs.stdenv.hostPlatform.isLinux) pkgs.lazarus;
   };
 }
