@@ -1,20 +1,43 @@
-{ config, lib, ... }:
+{ config
+, lib
+, options
+, ...
+}:
 
 let
   cfg = config.dotenv;
 
   normalizeFilenames = filenames: if lib.isList filenames then filenames else [ filenames ];
   cliOwnedNames = [ "SHELL" "DEVENV_CMDLINE" ];
-  devenvPrimops = config._module.args.devenvPrimops or { };
-  loadDotenv = devenvPrimops.loadDotenv or (
-    _filenames: _substitution:
-      throw ''
-        The dotenv integration requires the C-Nix devenv CLI. It is not
-        available through the flake integration or another standalone Nix evaluation.
-      ''
-  );
+  dotenvEnvModuleLocation = "devenv:dotenv-resolved";
+  dotenvEnvModule =
+    { config
+    , devenvPrimops ? { }
+    , lib
+    , ...
+    }:
+    let
+      loadDotenv = devenvPrimops.loadDotenv or (
+        _filenames: _substitution:
+          throw ''
+            The dotenv integration requires the C-Nix devenv CLI. It is not
+            available through the flake integration or another standalone Nix evaluation.
+          ''
+      );
+    in
+    {
+      _file = dotenvEnvModuleLocation;
+      config = lib.mkIf config.dotenv.enable {
+        dotenv.resolved = builtins.removeAttrs
+          (loadDotenv (normalizeFilenames config.dotenv.filename) config.dotenv.substitution)
+          cliOwnedNames;
+        env = lib.mapAttrs (_name: value: lib.mkDefault value) config.dotenv.resolved;
+      };
+    };
 in
 {
+  imports = [ dotenvEnvModule ];
+
   options.dotenv = {
     enable = lib.mkEnableOption ".env integration";
 
@@ -54,39 +77,29 @@ in
     };
   };
 
-  config = lib.mkMerge [
-    {
-      # Runtime loading happens again after enter-shell tasks. Reserve only
-      # values that differ from the dotenv defaults so newly generated dotenv
-      # files are not filtered merely because a later eval has discovered them.
-      dotenv.reservedNames = builtins.attrNames (
-        lib.filterAttrs
-          (
-            name: value:
-              !builtins.hasAttr name cfg.resolved
-              || !builtins.isString value
-              || value != cfg.resolved.${name}
+  config = {
+    # Runtime loading happens again after enter-shell tasks. Definitions from
+    # outside the dotenv injection module remain Nix-owned even when their
+    # values happen to equal the initial dotenv value.
+    dotenv.reservedNames = lib.unique (
+      lib.concatMap
+        (definition:
+          lib.optionals (definition.file != dotenvEnvModuleLocation) (
+            builtins.attrNames definition.value
           )
-          config.env
-      );
+        )
+        options.env.definitionsWithLocations
+    );
 
-      assertions = [
-        {
-          assertion = !(cfg.enable && config.devenv.flakesIntegration);
-          message = ''
-            The dotenv integration is loaded by the devenv CLI and is not
-            supported by the flake integration. Use `devenv shell`, or load the
-            file separately in your flake-based shell.
-          '';
-        }
-      ];
-    }
-
-    (lib.mkIf cfg.enable {
-      dotenv.resolved = builtins.removeAttrs
-        (loadDotenv (normalizeFilenames cfg.filename) cfg.substitution)
-        cliOwnedNames;
-      env = lib.mapAttrs (_name: value: lib.mkDefault value) cfg.resolved;
-    })
-  ];
+    assertions = [
+      {
+        assertion = !(cfg.enable && config.devenv.flakesIntegration);
+        message = ''
+          The dotenv integration is loaded by the devenv CLI and is not
+          supported by the flake integration. Use `devenv shell`, or load the
+          file separately in your flake-based shell.
+        '';
+      }
+    ];
+  };
 }

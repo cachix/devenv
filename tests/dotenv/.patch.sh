@@ -17,6 +17,7 @@ LITERAL_DOLLAR='\$2a\$10\$hash'
 DISABLED=dotenv
 MUTATED_BY_TASK=before
 REMOVED_BY_TASK=present
+NIX_OWNED_SAME=before
 SHELL=/dotenv/shell
 DEVENV_CMDLINE=dotenv
 PATH=/dotenv/bin

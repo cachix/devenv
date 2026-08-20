@@ -15,6 +15,7 @@ test "$LITERAL_DOLLAR" = '$2a$10$hash'
 test -z "${DISABLED+x}"
 test "$MUTATED_BY_TASK" = "after"
 test -z "${REMOVED_BY_TASK+x}"
+test "$NIX_OWNED_SAME" = "before"
 test "$SHELL" != "/dotenv/shell"
 test "$DEVENV_CMDLINE" != "dotenv"
 
@@ -33,6 +34,11 @@ devenv shell bash -- -c 'test "$FRESH" = second'
 printf '%s\n' 'MUTATED_BY_TASK=before' 'REMOVED_BY_TASK=present' >> .env
 devenv shell bash -- -c \
   'test "$MUTATED_BY_TASK" = after && test -z "${REMOVED_BY_TASK+x}"'
+
+# Without the eval cache, the post-task refresh must still discard the Nix
+# value that captured this variable before the task removed it.
+printf '%s\n' 'REMOVED_BY_TASK=present' >> .env
+devenv --no-eval-cache shell bash -- -c 'test -z "${REMOVED_BY_TASK+x}"'
 
 # Dotenv must not replace the caller PATH before Nix activation snapshots it.
 mkdir -p host-bin

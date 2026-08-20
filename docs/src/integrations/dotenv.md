@@ -26,6 +26,11 @@ status: deprecated
 
 [.env](https://github.com/motdotla/dotenv) files were introduced by Heroku in 2012.
 
+!!! tip "New in version 2.2.3"
+
+    Layered dotenv files, variable substitution, full dotenv syntax, and reloading
+    files after enter-shell tasks are supported starting in this version.
+
 If you have a `.env`, you'll see instructions how to enable integration:
 
 ```nix title="devenv.nix"

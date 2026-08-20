@@ -1555,6 +1555,10 @@ impl Devenv {
     }
 
     async fn refresh_dev_environment(&self) -> Result<()> {
+        // Enter-shell tasks may have changed inputs observed by Nix primops. Drop
+        // both the cached devenv value and its EvalState before evaluating again;
+        // without the eval cache there is no resource replay to invalidate them.
+        self.require_cnix()?.invalidate_eval_state()?;
         let env = self.get_dev_environment_inner(false).await?;
         self.cache_dev_environment(env);
         Ok(())
