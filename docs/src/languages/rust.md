@@ -236,7 +236,7 @@ boolean
 *Default:*
 
 ```nix
-pkgs.stdenv.isLinux
+pkgs.stdenv.hostPlatform.isLinux
 ```
 
 *Declared by:*
