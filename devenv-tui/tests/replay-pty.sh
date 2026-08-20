@@ -64,6 +64,11 @@ expect:processed deterministic job 1
 expect:hide preview
 send:h
 expect:focus
+send:/missing
+expect:Search processes: /missing
+expect:no matches
+send:\r
+expect:nav
 send:/api
 expect:Search processes: /api
 send:\r

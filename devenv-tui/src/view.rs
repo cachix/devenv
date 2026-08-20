@@ -11,8 +11,7 @@ use iocraft::Context;
 use iocraft::components::ContextProvider;
 use iocraft::hooks::UseComponentRect;
 use iocraft::prelude::*;
-use std::collections::HashMap;
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -152,6 +151,12 @@ pub fn view(
         .filter(|id| active_activities.iter().any(|da| da.activity.id == *id));
     let selected_activity = selected_id.and_then(|id| model.get_activity(id));
     let activities_to_show: Vec<_> = active_activities.iter().collect();
+    let process_search_match_ids = ui_state.process_search.as_ref().map(|search| {
+        model
+            .get_matching_process_activity_ids_from_display(&active_activities, &search.query)
+            .into_iter()
+            .collect::<HashSet<_>>()
+    });
 
     // Create owned activity elements, including hidden children indicators
     let mut activity_elements: Vec<AnyElement<'static>> = Vec::new();
@@ -159,6 +164,7 @@ pub fn view(
     for (display_activity, tree_position) in activities_to_show.iter().zip(tree_positions) {
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
+        let is_dimmed = activity_is_dimmed(activity, process_search_match_ids.as_ref());
         let show_inline_logs =
             activity_shows_inline_logs(model, ui_state, activity.id, process_previews_fit);
         let disclosure = model
@@ -228,6 +234,7 @@ pub fn view(
                     tree_position,
                     disclosure,
                     is_selected,
+                    is_dimmed,
                     show_inline_logs,
                     logs: activity_logs,
                     log_line_count: model.get_log_line_count(activity.id),
@@ -247,14 +254,6 @@ pub fn view(
     // Determine if navigation is possible
     let selectable_ids =
         model.get_selectable_activity_ids_from_display(&active_activities, ui_state);
-    let process_search_ids = model.get_matching_process_activity_ids_from_display(
-        &active_activities,
-        ui_state
-            .process_search
-            .as_ref()
-            .map(|search| search.query.as_str())
-            .unwrap_or_default(),
-    );
     let (can_go_up, can_go_down) = if let Some(current_id) = selected_id {
         if let Some(pos) = selectable_ids.iter().position(|&id| id == current_id) {
             (pos > 0, pos + 1 < selectable_ids.len())
@@ -284,7 +283,7 @@ pub fn view(
                 .process_search
                 .as_ref()
                 .map(|search| search.query.clone()),
-            process_search_matches: process_search_ids.len(),
+            process_search_matches: process_search_match_ids.as_ref().map_or(0, HashSet::len),
             process_search_available: active_activities
                 .iter()
                 .any(|display| matches!(display.activity.variant, ActivityVariant::Process(_))),
@@ -387,6 +386,7 @@ struct ActivityRenderContext {
     tree_position: TreePosition,
     disclosure: Option<ActivityDisclosure>,
     is_selected: bool,
+    is_dimmed: bool,
     show_inline_logs: bool,
     logs: Option<Arc<VecDeque<String>>>,
     /// Total log line count (not affected by buffer rotation)
@@ -401,6 +401,15 @@ struct ActivityRenderContext {
     shutting_down: bool,
     /// Number of direct children hidden by the `hide_stopped_processes` filter.
     hidden_children_count: usize,
+}
+
+fn activity_is_dimmed(
+    activity: &Activity,
+    process_search_match_ids: Option<&HashSet<u64>>,
+) -> bool {
+    process_search_match_ids.is_some_and(|matches| {
+        matches!(activity.variant, ActivityVariant::Process(_)) && !matches.contains(&activity.id)
+    })
 }
 
 fn disclosed_name(activity: &Activity, disclosure: Option<&ActivityDisclosure>) -> String {
@@ -517,6 +526,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         tree_position,
         disclosure,
         is_selected,
+        is_dimmed,
         show_inline_logs,
         logs,
         log_line_count,
@@ -938,6 +948,11 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // state; transient states pulse instead of animating a spinner.
             let (dot_glyph, dot_color, dot_pulse) =
                 process_status_dot(&process_data.status, *completed, *shutting_down);
+            let dot_color = if *is_dimmed {
+                COLOR_HIERARCHY
+            } else {
+                dot_color
+            };
             let prefix =
                 build_process_prefix(*depth, tree_position, dot_glyph, dot_color, dot_pulse);
 
@@ -958,6 +973,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             )
             .with_suffix(status_text)
             .with_selection(*is_selected)
+            .with_dimmed(*is_dimmed)
             .render(terminal_width, *depth, prefix);
 
             let process_failed = *completed == Some(false) || process_data.status.is_failed();
@@ -1289,6 +1305,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         } else {
             format!("{result} • ↑↓ next • Enter select • Esc cancel")
         };
+        let prompt_color = process_search_prompt_color(process_search_matches);
         return element!(View(
             flex_direction: FlexDirection::Row,
             justify_content: JustifyContent::SpaceBetween,
@@ -1296,7 +1313,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             overflow: Overflow::Hidden,
         ) {
             View(flex_grow: 1.0, flex_shrink: 0.0, min_width: 0, overflow: Overflow::Hidden) {
-                Text(content: prompt, color: COLOR_INTERACTIVE, weight: Weight::Bold)
+                Text(content: prompt, color: prompt_color, weight: Weight::Bold)
             }
             View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
                 Text(content: hints)
@@ -1754,6 +1771,14 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     }).into_any()
 }
 
+fn process_search_prompt_color(matches: usize) -> Color {
+    if matches == 0 {
+        COLOR_FAILED
+    } else {
+        COLOR_INTERACTIVE
+    }
+}
+
 /// Format a duration in a human-readable way
 pub fn format_duration(duration: Duration) -> String {
     if cfg!(feature = "deterministic-tui") {
@@ -1932,6 +1957,46 @@ mod tests {
             .to_string();
         assert!(output.contains("1 match"));
         assert!(output.contains("Esc cancel"));
+    }
+
+    #[test]
+    fn test_process_search_prompt_turns_red_without_matches() {
+        assert_eq!(process_search_prompt_color(0), COLOR_FAILED);
+        assert_eq!(process_search_prompt_color(1), COLOR_INTERACTIVE);
+    }
+
+    #[test]
+    fn test_process_search_dims_only_non_matching_processes() {
+        let mut model = ActivityModel::default();
+        let ui_state = UiState::new();
+
+        for (id, name) in [(1, "email-worker"), (2, "event-router")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: None,
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+
+        let matches: HashSet<_> = model
+            .get_matching_process_activity_ids(&ui_state, "ema")
+            .into_iter()
+            .collect();
+
+        assert!(!activity_is_dimmed(
+            model.get_activity(1).unwrap(),
+            Some(&matches)
+        ));
+        assert!(activity_is_dimmed(
+            model.get_activity(2).unwrap(),
+            Some(&matches)
+        ));
+        assert!(!activity_is_dimmed(model.get_activity(2).unwrap(), None));
     }
 
     #[test]

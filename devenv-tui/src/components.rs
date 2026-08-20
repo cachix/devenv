@@ -295,6 +295,7 @@ pub struct ActivityTextComponent {
     pub name: String,
     pub suffix: Option<String>,
     pub is_selected: bool,
+    pub is_dimmed: bool,
     pub elapsed: String,
     pub is_completed: bool,
     pub variant: ActivityVariant,
@@ -307,6 +308,7 @@ impl ActivityTextComponent {
             name,
             suffix: None,
             is_selected: false,
+            is_dimmed: false,
             elapsed,
             is_completed: false,
             variant,
@@ -329,9 +331,35 @@ impl ActivityTextComponent {
         self
     }
 
+    pub fn with_dimmed(mut self, is_dimmed: bool) -> Self {
+        self.is_dimmed = is_dimmed;
+        self
+    }
+
     pub fn with_completed(mut self, completed: bool) -> Self {
         self.is_completed = completed;
         self
+    }
+
+    fn colors(&self, depth: usize) -> (Color, Color, Color, Option<Color>) {
+        if self.is_selected {
+            (
+                Color::AnsiValue(232),
+                Color::AnsiValue(238),
+                Color::AnsiValue(238),
+                Some(Color::AnsiValue(250)),
+            )
+        } else if self.is_dimmed {
+            (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY, None)
+        } else if self.is_completed && depth == 0 {
+            (Color::Reset, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        } else if self.is_completed {
+            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        } else if depth == 0 || matches!(self.variant, ActivityVariant::Process(_)) {
+            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        } else {
+            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        }
     }
 
     pub fn render(
@@ -359,24 +387,7 @@ impl ActivityTextComponent {
             depth,
         );
 
-        // Colors: blue when active, green when completed
-        // Selected rows get inverted colors
-        let (name_color, suffix_color, elapsed_color, bg_color) = if self.is_selected {
-            (
-                Color::AnsiValue(232),       // Near-black text
-                Color::AnsiValue(238),       // Dark gray for suffix
-                Color::AnsiValue(238),       // Dark gray for elapsed
-                Some(Color::AnsiValue(250)), // Light gray background
-            )
-        } else if self.is_completed && depth == 0 {
-            (Color::Reset, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if self.is_completed {
-            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if depth == 0 || matches!(self.variant, ActivityVariant::Process(_)) {
-            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else {
-            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        };
+        let (name_color, suffix_color, elapsed_color, bg_color) = self.colors(depth);
 
         let mut final_prefix = prefix_children;
 
@@ -1130,6 +1141,34 @@ pub type BuildLogsComponent<'a> = ExpandedContentComponent<'a>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dimmed_activity_uses_hierarchy_colors() {
+        let component = ActivityTextComponent::name_only(
+            "email-worker".to_string(),
+            "1.0s".to_string(),
+            ActivityVariant::Process(crate::model::ProcessActivity {
+                status: ProcessStatus::Ready,
+                ports: vec![],
+                ready_probe: None,
+            }),
+        )
+        .with_dimmed(true);
+
+        assert_eq!(
+            component.colors(1),
+            (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY, None)
+        );
+        assert_eq!(
+            component.with_selection(true).colors(1),
+            (
+                Color::AnsiValue(232),
+                Color::AnsiValue(238),
+                Color::AnsiValue(238),
+                Some(Color::AnsiValue(250))
+            )
+        );
+    }
 
     #[test]
     fn process_status_dot_covers_every_lifecycle_phase() {
