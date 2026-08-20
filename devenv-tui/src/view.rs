@@ -1295,10 +1295,10 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             width: 100pct,
             overflow: Overflow::Hidden,
         ) {
-            View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+            View(flex_grow: 1.0, flex_shrink: 0.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(content: prompt, color: COLOR_INTERACTIVE, weight: Weight::Bold)
             }
-            View(flex_shrink: 0.0, margin_left: 2) {
+            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
                 Text(content: hints)
             }
         })
@@ -1908,6 +1908,30 @@ mod tests {
         assert!(!output.contains("hide stopped"));
         assert!(!output.contains("show stopped"));
         assert!(!output.contains("Ctrl-H"));
+    }
+
+    #[test]
+    fn test_process_search_keeps_query_visible_across_terminal_widths() {
+        let mut ctx = summary_ctx(false, false, 0);
+        ctx.process_search = Some("worker".to_string());
+        ctx.process_search_matches = 1;
+
+        for width in [32, 48, 72, 120] {
+            let output = build_summary_view_impl(&ctx, width)
+                .render(Some(width as usize))
+                .to_string();
+
+            assert!(
+                output.contains("Search processes: /worker"),
+                "search query was truncated at {width} columns: {output:?}"
+            );
+        }
+
+        let output = build_summary_view_impl(&ctx, 120)
+            .render(Some(120))
+            .to_string();
+        assert!(output.contains("1 match"));
+        assert!(output.contains("Esc cancel"));
     }
 
     #[test]

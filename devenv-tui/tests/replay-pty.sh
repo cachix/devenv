@@ -52,6 +52,7 @@ expect:processed deterministic job 1
 expect:disabled
 expect:stopped
 resize:48x6
+expect:^H
 send:/worker
 expect:Search processes: /worker
 send:\r
