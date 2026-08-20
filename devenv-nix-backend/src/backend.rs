@@ -2,7 +2,7 @@
 //!
 //! Owns the FFI primitives — store, eval state, settings, activity logger,
 //! GC registration — plus devenv's intra-process eval caching, the cached
-//! root devenv `Value`, and the port-allocator primop binding.
+//! root devenv `Value`, and the devenv-specific primop bindings.
 //!
 //! Cachix push, port-allocator allocation, and shutdown coordination live
 //! on `Devenv`, not here.
@@ -39,6 +39,7 @@ use devenv_cache_core::compute_string_hash;
 use devenv_core::bootstrap_args::BootstrapArgs;
 use devenv_core::cachix::{NetrcPreservation, preserve_netrc_file};
 use devenv_core::config::NixpkgsConfig;
+use devenv_core::dotenv::{DotenvTracker, load_dotenv_tracked};
 use devenv_core::evaluator::eval_cache_key_args;
 use devenv_core::evaluator::{
     BuildOptions, DevEnvOutput, Evaluator, NixMetadata, PackageSearchResult, SearchResults,
@@ -156,6 +157,7 @@ pub struct NixCBackend {
 
     bootstrap_args: Arc<BootstrapArgs>,
     port_allocator: Arc<PortAllocator>,
+    dotenv_tracker: Arc<DotenvTracker>,
 
     cached_devenv_value: Mutex<Option<nix_bindings_expr::value::Value>>,
     devenv_value_invalidated: Arc<AtomicBool>,
@@ -317,6 +319,7 @@ impl NixCBackend {
         let nix_log_bridge = logger_setup.bridge;
 
         let cnix_store = CNixStore::new(store);
+        let dotenv_tracker = Arc::new(DotenvTracker::default());
 
         // `EvalState` is neither `Send` nor `Sync`, but `NixCBackend` asserts
         // both (see the `unsafe impl`s above) and shares this handle across
@@ -334,6 +337,7 @@ impl NixCBackend {
             eval_cache_pool,
             bootstrap_args,
             port_allocator,
+            dotenv_tracker,
             cached_devenv_value: Mutex::new(None),
             devenv_value_invalidated: Arc::new(AtomicBool::new(false)),
             caching_eval_state: OnceCell::new(),
@@ -369,7 +373,10 @@ impl NixCBackend {
                 };
                 let service = CachingEvalService::with_config(pool.clone(), config.clone());
                 let invalidation_flag = self.devenv_value_invalidated.clone();
-                let resource_manager = Arc::new(ResourceManager::new(self.port_allocator.clone()));
+                let resource_manager = Arc::new(ResourceManager::with_dotenv_tracker(
+                    self.port_allocator.clone(),
+                    self.dotenv_tracker.clone(),
+                ));
                 CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
                     .with_resource_manager(resource_manager)
                     .with_on_resource_invalidation(Arc::new(move || {
@@ -464,7 +471,46 @@ impl NixCBackend {
             .to_miette()
             .wrap_err("Failed to evaluate bootstrap args")?;
 
-        let primops_attrset = if self.port_allocator.is_enabled() {
+        let dotenv_root = self.paths.root.clone();
+        let dotenv_tracker = self.dotenv_tracker.clone();
+        let dotenv_primop = PrimOp::new(
+            eval_state,
+            PrimOpMeta {
+                name: cstr!("loadDotenv"),
+                doc: cstr!("Load dotenv files without parsing them in Nix"),
+                args: [cstr!("filenames"), cstr!("substitution")],
+            },
+            Box::new(move |es, [filenames, substitution]| {
+                let filename_values = es.require_list_strict::<Vec<_>>(filenames)?;
+                let mut paths = Vec::with_capacity(filename_values.len());
+                for filename in filename_values {
+                    let filename = es.require_string(&filename)?;
+                    let path = Path::new(&filename);
+                    paths.push(if path.is_absolute() {
+                        path.to_path_buf()
+                    } else {
+                        dotenv_root.join(path)
+                    });
+                }
+                let substitution = es.require_bool(substitution)?;
+                let variables = load_dotenv_tracked(&paths, substitution, &dotenv_tracker)
+                    .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+                let mut attrs = Vec::with_capacity(variables.len());
+                for (name, value) in variables {
+                    attrs.push((name, es.new_value_str(&value)?));
+                }
+                es.new_value_attrs(attrs)
+            }),
+        )
+        .to_miette()
+        .wrap_err("Failed to create loadDotenv primop")?;
+        let dotenv_primop_value = eval_state
+            .new_value_primop(dotenv_primop)
+            .to_miette()
+            .wrap_err("Failed to create loadDotenv primop value")?;
+        let mut primop_values = vec![("loadDotenv".to_string(), dotenv_primop_value)];
+
+        if self.port_allocator.is_enabled() {
             let port_allocator = self.port_allocator.clone();
             let primop = PrimOp::new(
                 eval_state,
@@ -493,16 +539,12 @@ impl NixCBackend {
                 .new_value_primop(primop)
                 .to_miette()
                 .wrap_err("Failed to create primop value")?;
-            eval_state
-                .new_value_attrs(vec![("allocatePort".to_string(), primop_value)])
-                .to_miette()
-                .wrap_err("Failed to create primops attrset")?
-        } else {
-            eval_state
-                .new_value_attrs(vec![])
-                .to_miette()
-                .wrap_err("Failed to create empty primops attrset")?
-        };
+            primop_values.push(("allocatePort".to_string(), primop_value));
+        }
+        let primops_attrset = eval_state
+            .new_value_attrs(primop_values)
+            .to_miette()
+            .wrap_err("Failed to create primops attrset")?;
 
         let override_attrs = eval_state
             .new_value_attrs(vec![("primops".to_string(), primops_attrset)])
@@ -777,7 +819,7 @@ impl NixCBackend {
                                             && let Err(db_err) =
                                                 svc.invalidate_resource_dependent().await
                                         {
-                                            tracing::warn!(error = %db_err, "Failed to delete port-dependent cache entries");
+                                            tracing::warn!(error = %db_err, "Failed to delete resource-dependent cache entries");
                                         }
                                         caching_state.cached_eval().clear_resources();
                                         if let Ok(mut cached) = self.cached_devenv_value.lock() {
@@ -1306,7 +1348,7 @@ impl Evaluator for NixCBackend {
                                         if let Err(db_err) =
                                             service.invalidate_resource_dependent().await
                                         {
-                                            tracing::warn!(error = %db_err, "Failed to delete port-dependent cache entries");
+                                            tracing::warn!(error = %db_err, "Failed to delete resource-dependent cache entries");
                                         }
                                         caching_state.cached_eval().clear_resources();
                                         if let Ok(mut cached) = self.cached_devenv_value.lock() {

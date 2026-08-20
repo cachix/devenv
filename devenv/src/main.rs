@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
@@ -938,13 +940,15 @@ async fn run_backend(
         // Pre-compute shell environment while we still own Devenv directly.
         // This must happen while TUI is active since get_dev_environment has #[activity].
         let dotfile = devenv.dotfile().to_path_buf();
-        let initial_env_script = devenv.print_dev_env(false).await?;
         let bash_path = devenv.get_bash_path().await?;
         let clean = devenv.options().shell_settings.clean.clone();
         let shell = devenv.options().shell_settings.shell.clone();
         let shell_path = devenv.options().shell_settings.shell_path.clone();
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
+        // Load dotenv after enterShell tasks so a task that creates or updates the
+        // file affects this shell entry immediately.
+        let initial_env_script = devenv.print_dev_env(false).await?;
 
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
@@ -1370,7 +1374,6 @@ async fn dispatch_command(
             Ok(CommandResult::Print(output))
         }
         Commands::DirenvExport => {
-            let mut output = devenv.print_dev_env(false).await?;
             // Discard messages: direnv captures stdout as env var definitions,
             // so echo statements would corrupt the output.
             let task_exports = match devenv.run_enter_shell_tasks(None, verbosity).await {
@@ -1380,6 +1383,9 @@ async fn dispatch_command(
                     BTreeMap::new()
                 }
             };
+            // Re-read dotenv after tasks so generated files are exported on the
+            // same direnv activation.
+            let mut output = devenv.print_dev_env(false).await?;
             output.push_str(&devenv::format_shell_exports(&task_exports));
             Ok(CommandResult::Print(output))
         }

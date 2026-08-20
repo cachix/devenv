@@ -8658,6 +8658,11 @@ rec {
             packageId = "devenv-activity";
           }
           {
+            name = "dotenv-ng";
+            packageId = "dotenv-ng";
+            rename = "dotenv";
+          }
+          {
             name = "hex";
             packageId = "hex";
           }
@@ -10149,6 +10154,39 @@ rec {
         features = {
         };
         resolvedDefaultFeatures = [ "default" ];
+      };
+      "dotenv-ng" = rec {
+        crateName = "dotenv-ng";
+        version = "1.0.0";
+        edition = "2021";
+        crateBin = [];
+        sha256 = "1fwngpddi0qkpviix7v0xrsb016c0jqhc9qd8byarfaxgqpqr89b";
+        libName = "dotenv";
+        authors = [
+          "Domen Kožar <domen@cachix.org>"
+        ];
+        dependencies = [
+          {
+            name = "dotenv-ng-core";
+            packageId = "dotenv-ng-core";
+          }
+        ];
+        features = {
+          "cli" = [ "dep:clap" "dep:shell-words" ];
+          "macros" = [ "dep:dotenv-ng-macros" ];
+        };
+        resolvedDefaultFeatures = [ "default" ];
+      };
+      "dotenv-ng-core" = rec {
+        crateName = "dotenv-ng-core";
+        version = "1.0.0";
+        edition = "2021";
+        sha256 = "1jj3j7hvbp74fadabhy74193hw49ykk9yd07yw0bfxmy0xv2vkcn";
+        libName = "dotenv_ng_core";
+        authors = [
+          "Domen Kožar <domen@cachix.org>"
+        ];
+
       };
       "dotenvy" = rec {
         crateName = "dotenvy";

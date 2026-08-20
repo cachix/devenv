@@ -2511,6 +2511,7 @@ dependencies = [
  "async-trait",
  "clap",
  "devenv-activity",
+ "dotenv-ng",
  "hex",
  "miette",
  "netstat2",
@@ -2929,6 +2930,21 @@ checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
 ]
+
+[[package]]
+name = "dotenv-ng"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ba18c2f7e5db9acfc420d2706b104cc04b074ee609f1ee3be1383d8da7d96bb"
+dependencies = [
+ "dotenv-ng-core",
+]
+
+[[package]]
+name = "dotenv-ng-core"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96cd2d7607be76b700f707349fe6f48970385220c7c3a59a72e4dcb5e19143ca"
 
 [[package]]
 name = "dotenvy"

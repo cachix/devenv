@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use devenv_core::dotenv::{DotenvSpec, DotenvTracker};
 use devenv_core::ports::{PortAllocator, PortSpec};
 use devenv_core::resource::{ReplayError, ReplayableResource};
 
@@ -21,17 +22,30 @@ pub struct ResourceSpec {
 /// Manages multiple resource types for cache integration.
 ///
 /// Coordinates snapshotting after evaluation and replay on cache hit.
-/// Currently supports port allocations, but designed to be extensible
-/// to other resource types (temp dirs, unique IDs, etc.).
+/// Supports port allocations and dotenv input tracking, and is designed to be
+/// extensible to other resource types (temp dirs, unique IDs, etc.).
 pub struct ResourceManager {
     port_allocator: Arc<PortAllocator>,
-    // Future: temp_allocator: Arc<TempAllocator>,
+    dotenv_tracker: Arc<DotenvTracker>,
 }
 
 impl ResourceManager {
     /// Create a new resource manager.
     pub fn new(port_allocator: Arc<PortAllocator>) -> Self {
-        Self { port_allocator }
+        Self {
+            port_allocator,
+            dotenv_tracker: Arc::new(DotenvTracker::default()),
+        }
+    }
+
+    pub fn with_dotenv_tracker(
+        port_allocator: Arc<PortAllocator>,
+        dotenv_tracker: Arc<DotenvTracker>,
+    ) -> Self {
+        Self {
+            port_allocator,
+            dotenv_tracker,
+        }
     }
 
     /// Get a reference to the port allocator.
@@ -53,6 +67,15 @@ impl ResourceManager {
                 type_id: PortAllocator::TYPE_ID.to_string(),
                 data: serde_json::to_value(&port_spec)
                     .expect("PortSpec serialization should not fail"),
+            });
+        }
+
+        let dotenv_spec = self.dotenv_tracker.snapshot();
+        if !dotenv_spec.files.is_empty() {
+            specs.push(ResourceSpec {
+                type_id: DotenvTracker::TYPE_ID.to_string(),
+                data: serde_json::to_value(&dotenv_spec)
+                    .expect("DotenvSpec serialization should not fail"),
             });
         }
 
@@ -78,6 +101,11 @@ impl ResourceManager {
                         .map_err(|e| ReplayError::Serialization(e.to_string()))?;
                     self.port_allocator.replay(&port_spec)?;
                 }
+                "dotenv" => {
+                    let dotenv_spec: DotenvSpec = serde_json::from_value(spec.data.clone())
+                        .map_err(|e| ReplayError::Serialization(e.to_string()))?;
+                    self.dotenv_tracker.replay(&dotenv_spec)?;
+                }
                 other => {
                     return Err(ReplayError::Unavailable(format!(
                         "Unknown resource type: {}",
@@ -94,13 +122,13 @@ impl ResourceManager {
     /// Called after a replay failure to reset state before re-evaluation.
     pub fn clear_all(&self) {
         self.port_allocator.clear();
-        // Future: self.temp_allocator.clear();
+        self.dotenv_tracker.clear();
     }
 
     /// Check if any resources have been allocated.
     pub fn has_allocations(&self) -> bool {
         !self.port_allocator.snapshot().allocations.is_empty()
-        // Future: || !self.temp_allocator.snapshot().is_empty()
+            || !self.dotenv_tracker.snapshot().files.is_empty()
     }
 }
 
@@ -179,5 +207,27 @@ mod tests {
 
         manager.clear_all();
         assert!(!manager.has_allocations());
+    }
+
+    #[test]
+    fn test_dotenv_replay_detects_changes_without_storing_values() {
+        let root = tempfile::TempDir::new().unwrap();
+        let path = root.path().join(".env");
+        std::fs::write(&path, "SECRET=not-in-resource-spec\n").unwrap();
+
+        let allocator = Arc::new(PortAllocator::new());
+        let tracker = Arc::new(DotenvTracker::default());
+        devenv_core::dotenv::load_dotenv_tracked(std::slice::from_ref(&path), false, &tracker)
+            .unwrap();
+        let manager = ResourceManager::with_dotenv_tracker(allocator, tracker);
+        let specs = manager.snapshot_all();
+
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].type_id, "dotenv");
+        assert!(!specs[0].data.to_string().contains("not-in-resource-spec"));
+        assert!(manager.replay_all(&specs).is_ok());
+
+        std::fs::write(&path, "SECRET=changed\n").unwrap();
+        assert!(manager.replay_all(&specs).is_err());
     }
 }

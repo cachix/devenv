@@ -9,6 +9,7 @@ snix = []
 
 [dependencies]
 devenv-activity.workspace = true
+dotenv.workspace = true
 nix-conf-parser.workspace = true
 pathdiff.workspace = true
 regex.workspace = true

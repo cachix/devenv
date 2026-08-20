@@ -14,6 +14,7 @@ use devenv_core::config::Clean;
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect, create_dialect};
 use std::collections::BTreeMap;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 pub use owner::{DevenvClient, spawn_owner};
@@ -172,7 +173,9 @@ impl DevenvShellBuilder {
 
 fn write_file(path: &Path, content: &str, what: &str) -> Result<(), BuildError> {
     std::fs::write(path, content)
-        .map_err(|e| BuildError::new(format!("Failed to write {}: {}", what, e)))
+        .map_err(|e| BuildError::new(format!("Failed to write {}: {}", what, e)))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| BuildError::new(format!("Failed to secure {}: {}", what, e)))
 }
 
 fn set_reload_file_env(cmd_builder: &mut CommandBuilder, ctx: &BuildContext) {

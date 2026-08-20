@@ -1,8 +1,10 @@
 mod cachix;
 mod container;
+mod dotenv;
 mod gc;
 mod search;
 
+use self::dotenv::{DotenvConfig, DotenvEnvironment};
 use super::{processes, tasks, util};
 use crate::terminal::IsForegroundTerminal as _;
 use devenv_activity::{
@@ -372,8 +374,10 @@ pub struct Devenv {
     has_processes: OnceCell<bool>,
 
     // Cached DevEnv result from get_dev_environment_inner, used by up() to avoid
-    // redundant activity wrapping when prepare_shell is called later.
-    dev_env_cache: OnceCell<DevEnv>,
+    // redundant activity wrapping when prepare_shell is called later. Unlike the
+    // other one-time state, this must be replaceable after enter-shell tasks because
+    // those tasks can create or mutate inputs such as dotenv files.
+    dev_env_cache: std::sync::RwLock<Option<DevEnv>>,
 
     // Eval-cache pool (framework layer concern, used by backends)
     eval_cache_pool: Arc<OnceCell<SqlitePool>>,
@@ -716,7 +720,7 @@ impl Devenv {
             cachix_manager,
             cachix: OnceCell::new(),
             has_processes: OnceCell::new(),
-            dev_env_cache: OnceCell::new(),
+            dev_env_cache: std::sync::RwLock::new(None),
             eval_cache_pool,
             secretspec: secretspec_cell,
             port_allocator,
@@ -1520,8 +1524,65 @@ impl Devenv {
         let output = String::from_utf8(env.output.clone()).expect("Failed to convert env to utf-8");
         // Cache so that later callers (e.g. capture_shell_environment via
         // prepare_shell) reuse the result instead of re-evaluating.
-        let _ = self.dev_env_cache.set(env);
-        Ok(output)
+        if !json {
+            self.cache_dev_environment(env);
+        }
+        let dotenv = self.load_dotenv_environment().await?;
+        if json {
+            dotenv.merge_json(&output)
+        } else {
+            // Keep Nix activation first so it snapshots the caller's
+            // PATH/XDG_DATA_DIRS before the runtime dotenv layer changes either.
+            let mut activation = output;
+            activation.push_str(&dotenv.activation_script());
+            activation.push_str(&dotenv.message_script());
+            Ok(activation)
+        }
+    }
+
+    fn cache_dev_environment(&self, env: DevEnv) {
+        *self.dev_env_cache.write().unwrap() = Some(env);
+    }
+
+    async fn cached_dev_environment(&self) -> Result<DevEnv> {
+        if let Some(env) = self.dev_env_cache.read().unwrap().clone() {
+            return Ok(env);
+        }
+
+        let env = self.get_dev_environment(false).await?;
+        self.cache_dev_environment(env.clone());
+        Ok(env)
+    }
+
+    async fn refresh_dev_environment(&self) -> Result<()> {
+        // Enter-shell tasks may have changed inputs observed by Nix primops. Drop
+        // both the cached devenv value and its EvalState before evaluating again;
+        // without the eval cache there is no resource replay to invalidate them.
+        self.require_cnix()?.invalidate_eval_state()?;
+        let env = self.get_dev_environment_inner(false).await?;
+        self.cache_dev_environment(env);
+        Ok(())
+    }
+
+    async fn dotenv_config(&self) -> Result<DotenvConfig> {
+        let json = self
+            .backend
+            .eval_devenv(&["devenv.config.dotenv"])
+            .await
+            .wrap_err("Failed to evaluate dotenv configuration")?;
+        serde_json::from_str(&json)
+            .into_diagnostic()
+            .wrap_err("Failed to parse dotenv configuration")
+    }
+
+    pub(crate) async fn load_dotenv_environment(&self) -> Result<DotenvEnvironment> {
+        let config = self.dotenv_config().await?;
+        DotenvEnvironment::load(&self.devenv_root, &config)
+    }
+
+    pub(crate) async fn dotenv_watch_paths(&self) -> Result<Vec<PathBuf>> {
+        let config = self.dotenv_config().await?;
+        Ok(config.watch_paths(&self.devenv_root))
     }
 
     #[instrument(skip(self))]
@@ -1532,11 +1593,12 @@ impl Devenv {
     ) -> Result<process::Command> {
         // Reuse a DevEnv evaluated by `up()` phase 1 or an earlier
         // `prepare_shell` so we don't re-run "Configuring shell".
-        let cached = self
-            .dev_env_cache
-            .get_or_try_init(|| self.get_dev_environment(false))
-            .await?;
+        let cached = self.cached_dev_environment().await?;
         let output = &cached.output;
+
+        // Re-read the runtime dotenv layer after enter-shell tasks. The cached
+        // Nix activation has also been refreshed so removals are reflected.
+        let dotenv = self.load_dotenv_environment().await?;
 
         let bash = self.get_bash_path().await?;
 
@@ -1588,11 +1650,15 @@ impl Devenv {
             let messages = self.task_messages.lock().unwrap();
             BashDialect.format_task_messages(&messages)
         };
+        let dotenv_activation = dotenv.activation_script();
+        let dotenv_messages = dotenv.message_script();
 
         // For non-interactive commands, always use bash directly
         if cmd.is_some() {
             let mut script = bash_init_script(&shell_env);
+            script.push_str(&dotenv_activation);
             script.push_str(&task_exports);
+            script.push_str(&dotenv_messages);
 
             let command = format!(
                 "\nexec {} {}",
@@ -1612,8 +1678,10 @@ impl Devenv {
                 // Non-bash: write env script, generate bash wrapper that execs into target shell
                 let env_script_path = self.devenv_dotfile.join("shell-env.sh");
                 let mut env_content = shell_env;
+                env_content.push_str(&dotenv_activation);
                 env_content.push_str(&task_exports);
                 env_content.push_str(&task_messages);
+                env_content.push_str(&dotenv_messages);
                 std::fs::write(&env_script_path, &env_content)
                     .into_diagnostic()
                     .wrap_err("Failed to write env script")?;
@@ -1639,8 +1707,10 @@ impl Devenv {
             } else {
                 // Bash (default)
                 let mut script = bash_init_script(&shell_env);
+                script.push_str(&dotenv_activation);
                 script.push_str(&task_exports);
                 script.push_str(&task_messages);
+                script.push_str(&dotenv_messages);
                 write_executable_script(&self.devenv_dotfile, &script)
             };
 
@@ -1998,6 +2068,10 @@ impl Devenv {
         let ret = (status, exports.clone(), messages.clone());
         *self.task_exports.lock().unwrap() = exports;
         *self.task_messages.lock().unwrap() = messages;
+        // Shell configuration is captured before these tasks execute. Rebuild it so
+        // task-created, changed, and removed dotenv values reach subsequent shell
+        // preparation on the shell, test, and reload paths.
+        self.refresh_dev_environment().await?;
         Ok(ret)
     }
 
@@ -2116,7 +2190,7 @@ impl Devenv {
         let phase1 = devenv_activity::start!(Activity::operation("Configuring shell").parent(None));
         async {
             let dev_env = self.get_dev_environment_inner(false).await?;
-            let _ = self.dev_env_cache.set(dev_env);
+            self.cache_dev_environment(dev_env);
             self.capture_shell_environment().await
         }
         .in_activity(&phase1)
@@ -3136,9 +3210,14 @@ impl Devenv {
             );
         }
 
+        let mut input_paths = env.inputs.clone();
+        input_paths.extend(self.dotenv_watch_paths().await?);
+        input_paths.sort();
+        input_paths.dedup();
+
         util::write_file_with_lock(
             self.devenv_dotfile.join("input-paths.txt"),
-            env.inputs
+            input_paths
                 .iter()
                 .map(|path| path.to_string_lossy().into_owned())
                 .collect::<Vec<_>>()
@@ -3263,6 +3342,7 @@ pub fn resolve_shell_path(shell_name: &str) -> String {
         }
     }
 }
+#[derive(Clone)]
 pub struct DevEnv {
     output: Vec<u8>,
 }

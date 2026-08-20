@@ -7,6 +7,7 @@ pub mod backend;
 pub mod bootstrap_args;
 pub mod cachix;
 pub mod config;
+pub mod dotenv;
 pub mod eval_op;
 pub mod evaluator;
 pub mod internal_log;
@@ -25,6 +26,9 @@ pub use backend::Backend;
 pub use bootstrap_args::BootstrapArgs;
 pub use cachix::{CachixCacheInfo, CachixManager, CachixPaths};
 pub use config::Config;
+pub use dotenv::{
+    DotenvFileSpec, DotenvFileState, DotenvSpec, DotenvSubstitutionSpec, DotenvTracker,
+};
 pub use eval_op::{EvalOp, OpObserver};
 pub use evaluator::{
     BuildOptions, DevEnvOutput, Evaluator, NixMetadata, PackageSearchResult, SearchResults,
