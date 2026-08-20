@@ -2791,6 +2791,8 @@ list of anything
 
 ## containers.\<name>.fromImage
 
+
+
 An existing OCI base image to build on top of, built with nix2container’s pullImage.
 
 
