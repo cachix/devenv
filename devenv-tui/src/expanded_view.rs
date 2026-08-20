@@ -64,6 +64,48 @@ enum LogScrollAction {
     Bottom,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LogSearchCursor {
+    log_line: usize,
+    char_start: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LogSearchOrigin {
+    offset: usize,
+    scroll_mode: ScrollMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LogSearchState {
+    query: String,
+    current: Option<LogSearchCursor>,
+    editing: bool,
+    origin: LogSearchOrigin,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LogSearchMatch {
+    log_line: usize,
+    char_start: usize,
+    char_end: usize,
+}
+
+#[derive(Clone, Copy)]
+struct LogSearchView<'a> {
+    query: &'a str,
+    matches: &'a [LogSearchMatch],
+    current: Option<LogSearchCursor>,
+    editing: bool,
+}
+
+struct ExpandedViewUi<'a> {
+    selection: Option<&'a Selection>,
+    search: Option<LogSearchView<'a>>,
+    scroll_mode: ScrollMode,
+    interrupt_prompt: (bool, bool),
+}
+
 impl Selection {
     /// Create a selection from anchor and cursor, normalizing so start <= end.
     fn from_anchor_cursor(anchor: (usize, usize), cursor: (usize, usize)) -> Self {
@@ -130,6 +172,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let mut scroll_offset = hooks.use_state(|| 0usize);
     let mut follow_tail = hooks.use_state(|| true);
     let mut scroll_anchor = hooks.use_state(|| None::<ScrollAnchor>);
+    let mut log_search = hooks.use_state(|| None::<LogSearchState>);
 
     // Selection state. Coordinates are (log_line_idx, visual_col) where
     // visual_col is a logical character offset within the log line, regardless
@@ -178,6 +221,25 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         || Arc::new(build_visual_rows(&state.logs, content_width)),
         (Arc::as_ptr(&state.logs) as usize, content_width),
     );
+    let search_query = log_search
+        .read()
+        .as_ref()
+        .map(|search| search.query.clone())
+        .unwrap_or_default();
+    let search_matches: Arc<Vec<LogSearchMatch>> = hooks.use_memo(
+        || {
+            Arc::new(find_log_matches(
+                &state.logs,
+                state.buffer_start_line,
+                &search_query,
+            ))
+        },
+        (
+            Arc::as_ptr(&state.logs) as usize,
+            state.buffer_start_line,
+            search_query.clone(),
+        ),
+    );
     let total_visual_rows = visual_rows.len();
     let current_selection_anchor = selection_anchor.get();
     let current_selection_cursor = selection_cursor.get();
@@ -211,6 +273,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     &visual_rows_for_events,
                     total_visual_rows,
                     viewport_height,
+                    &mut log_search,
                     &mut SelectionState {
                         has_selection,
                         anchor: current_selection_anchor,
@@ -276,18 +339,28 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         .read()
         .map(|ui| (ui.interrupt_prompt_active(), ui.interrupt_prompt_attached()))
         .unwrap_or((false, false));
+    let search_state = log_search.read().clone();
+    let search = search_state.as_ref().map(|search| LogSearchView {
+        query: &search.query,
+        matches: &search_matches,
+        current: search.current,
+        editing: search.editing,
+    });
 
     render_expanded_view(
         &state,
         &visual_rows,
         width,
         height,
-        selection.as_ref(),
-        ScrollMode {
-            follow_tail: follow_tail.get(),
-            anchor: scroll_anchor.get(),
+        ExpandedViewUi {
+            selection: selection.as_ref(),
+            search,
+            scroll_mode: ScrollMode {
+                follow_tail: follow_tail.get(),
+                anchor: scroll_anchor.get(),
+            },
+            interrupt_prompt: (interrupt_prompt_active, interrupt_prompt_attached),
         },
-        (interrupt_prompt_active, interrupt_prompt_attached),
     )
 }
 
@@ -519,6 +592,317 @@ fn apply_scroll_action(
     }
 }
 
+fn folded_chars(value: &str) -> Vec<char> {
+    value.chars().flat_map(char::to_lowercase).collect()
+}
+
+fn case_insensitive_match_ranges(line: &str, query: &str) -> Vec<(usize, usize)> {
+    let needle = folded_chars(query);
+    if needle.is_empty() {
+        return vec![];
+    }
+
+    let haystack: Vec<_> = line
+        .chars()
+        .enumerate()
+        .flat_map(|(source_index, character)| {
+            character
+                .to_lowercase()
+                .map(move |folded| (folded, source_index))
+        })
+        .collect();
+    let mut ranges = Vec::new();
+    let mut index = 0;
+
+    while index + needle.len() <= haystack.len() {
+        if haystack[index..index + needle.len()]
+            .iter()
+            .map(|(character, _)| *character)
+            .eq(needle.iter().copied())
+        {
+            let range = (haystack[index].1, haystack[index + needle.len() - 1].1 + 1);
+            if ranges.last().copied() != Some(range) {
+                ranges.push(range);
+            }
+            index += needle.len();
+        } else {
+            index += 1;
+        }
+    }
+
+    ranges
+}
+
+fn find_log_matches(
+    logs: &VecDeque<String>,
+    buffer_start_line: usize,
+    query: &str,
+) -> Vec<LogSearchMatch> {
+    logs.iter()
+        .enumerate()
+        .flat_map(|(log_idx, line)| {
+            case_insensitive_match_ranges(line, query).into_iter().map(
+                move |(char_start, char_end)| LogSearchMatch {
+                    log_line: buffer_start_line + log_idx,
+                    char_start,
+                    char_end,
+                },
+            )
+        })
+        .collect()
+}
+
+fn search_cursor(search_match: LogSearchMatch) -> LogSearchCursor {
+    LogSearchCursor {
+        log_line: search_match.log_line,
+        char_start: search_match.char_start,
+    }
+}
+
+fn choose_search_match(
+    matches: &[LogSearchMatch],
+    current: Option<LogSearchCursor>,
+    current_scroll_offset: usize,
+    buffer_start_line: usize,
+    visual_rows: &[VisualRow],
+) -> Option<LogSearchMatch> {
+    if let Some(current) = current
+        && let Some(search_match) = matches
+            .iter()
+            .find(|search_match| search_cursor(**search_match) == current)
+    {
+        return Some(*search_match);
+    }
+
+    let visible_cursor = visual_rows
+        .get(current_scroll_offset)
+        .map(|row| LogSearchCursor {
+            log_line: buffer_start_line + row.log_idx,
+            char_start: row.char_start,
+        });
+
+    visible_cursor
+        .and_then(|cursor| {
+            matches.iter().find(|search_match| {
+                let candidate = search_cursor(**search_match);
+                (candidate.log_line, candidate.char_start) >= (cursor.log_line, cursor.char_start)
+            })
+        })
+        .copied()
+        .or_else(|| matches.first().copied())
+}
+
+fn adjacent_search_match(
+    matches: &[LogSearchMatch],
+    current: Option<LogSearchCursor>,
+    forward: bool,
+) -> Option<LogSearchMatch> {
+    if matches.is_empty() {
+        return None;
+    }
+
+    let index = current.and_then(|current| {
+        matches
+            .iter()
+            .position(|search_match| search_cursor(*search_match) == current)
+    });
+    let next = match (index, forward) {
+        (Some(index), true) => (index + 1) % matches.len(),
+        (Some(0), false) | (None, false) => matches.len() - 1,
+        (Some(index), false) => index - 1,
+        (None, true) => 0,
+    };
+    matches.get(next).copied()
+}
+
+fn visual_offset_for_search_match(
+    search_match: LogSearchMatch,
+    buffer_start_line: usize,
+    visual_rows: &[VisualRow],
+) -> Option<usize> {
+    let log_idx = search_match.log_line.checked_sub(buffer_start_line)?;
+    visual_rows.iter().position(|row| {
+        row.log_idx == log_idx
+            && row.char_start <= search_match.char_start
+            && search_match.char_start < row.char_end.max(row.char_start + 1)
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn focus_search_match(
+    search_match: LogSearchMatch,
+    viewport_height: usize,
+    max_offset: usize,
+    scroll_offset: &mut State<usize>,
+    follow_tail: &mut State<bool>,
+    scroll_anchor: &mut State<Option<ScrollAnchor>>,
+    buffer_start_line: usize,
+    visual_rows: &[VisualRow],
+) {
+    if let Some(match_offset) =
+        visual_offset_for_search_match(search_match, buffer_start_line, visual_rows)
+    {
+        let offset = match_offset
+            .saturating_sub(viewport_height / 2)
+            .min(max_offset);
+        pause_at_offset(
+            scroll_offset,
+            follow_tail,
+            scroll_anchor,
+            buffer_start_line,
+            visual_rows,
+            offset,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_log_search_key(
+    key_event: &KeyEvent,
+    log_search: &mut State<Option<LogSearchState>>,
+    logs: &VecDeque<String>,
+    buffer_start_line: usize,
+    visual_rows: &[VisualRow],
+    current_scroll_offset: usize,
+    viewport_height: usize,
+    max_offset: usize,
+    scroll_offset: &mut State<usize>,
+    follow_tail: &mut State<bool>,
+    scroll_anchor: &mut State<Option<ScrollAnchor>>,
+) -> bool {
+    let control = key_event.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = key_event.modifiers.contains(KeyModifiers::ALT);
+    let current_search = log_search.read().clone();
+
+    if let Some(mut search) = current_search.clone().filter(|search| search.editing) {
+        if matches!(key_event.code, KeyCode::Esc)
+            || matches!(key_event.code, KeyCode::Char('c')) && control
+        {
+            scroll_offset.set(search.origin.offset);
+            follow_tail.set(search.origin.scroll_mode.follow_tail);
+            scroll_anchor.set(search.origin.scroll_mode.anchor);
+            log_search.set(None);
+            return true;
+        }
+        match key_event.code {
+            KeyCode::Enter => {
+                if search.query.is_empty() {
+                    scroll_offset.set(search.origin.offset);
+                    follow_tail.set(search.origin.scroll_mode.follow_tail);
+                    scroll_anchor.set(search.origin.scroll_mode.anchor);
+                    log_search.set(None);
+                } else {
+                    search.editing = false;
+                    log_search.set(Some(search));
+                }
+            }
+            KeyCode::Backspace => {
+                search.query.pop();
+                let matches = find_log_matches(logs, buffer_start_line, &search.query);
+                let chosen = choose_search_match(
+                    &matches,
+                    search.current,
+                    current_scroll_offset,
+                    buffer_start_line,
+                    visual_rows,
+                );
+                search.current = chosen.map(search_cursor);
+                if let Some(chosen) = chosen {
+                    focus_search_match(
+                        chosen,
+                        viewport_height,
+                        max_offset,
+                        scroll_offset,
+                        follow_tail,
+                        scroll_anchor,
+                        buffer_start_line,
+                        visual_rows,
+                    );
+                }
+                log_search.set(Some(search));
+            }
+            KeyCode::Char(character) if !control && !alt => {
+                search.query.push(character);
+                let matches = find_log_matches(logs, buffer_start_line, &search.query);
+                let chosen = choose_search_match(
+                    &matches,
+                    search.current,
+                    current_scroll_offset,
+                    buffer_start_line,
+                    visual_rows,
+                );
+                search.current = chosen.map(search_cursor);
+                if let Some(chosen) = chosen {
+                    focus_search_match(
+                        chosen,
+                        viewport_height,
+                        max_offset,
+                        scroll_offset,
+                        follow_tail,
+                        scroll_anchor,
+                        buffer_start_line,
+                        visual_rows,
+                    );
+                }
+                log_search.set(Some(search));
+            }
+            _ => {}
+        }
+        return true;
+    }
+
+    if matches!(key_event.code, KeyCode::Char('/')) && !control && !alt {
+        log_search.set(Some(LogSearchState {
+            query: String::new(),
+            current: None,
+            editing: true,
+            origin: LogSearchOrigin {
+                offset: current_scroll_offset,
+                scroll_mode: ScrollMode {
+                    follow_tail: follow_tail.get(),
+                    anchor: scroll_anchor.get(),
+                },
+            },
+        }));
+        return true;
+    }
+
+    let Some(mut search) = current_search else {
+        return false;
+    };
+
+    match key_event.code {
+        KeyCode::Esc => {
+            log_search.set(None);
+            true
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') if !control && !alt => {
+            let matches = find_log_matches(logs, buffer_start_line, &search.query);
+            let chosen = adjacent_search_match(
+                &matches,
+                search.current,
+                matches!(key_event.code, KeyCode::Char('n')),
+            );
+            search.current = chosen.map(search_cursor);
+            if let Some(chosen) = chosen {
+                focus_search_match(
+                    chosen,
+                    viewport_height,
+                    max_offset,
+                    scroll_offset,
+                    follow_tail,
+                    scroll_anchor,
+                    buffer_start_line,
+                    visual_rows,
+                );
+            }
+            log_search.set(Some(search));
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Mutable selection state passed to event handlers.
 struct SelectionState<'a> {
     has_selection: bool,
@@ -554,6 +938,7 @@ fn handle_key_event(
     visual_rows: &[VisualRow],
     total_visual_rows: usize,
     viewport_height: usize,
+    log_search: &mut State<Option<LogSearchState>>,
     sel: &mut SelectionState<'_>,
 ) {
     if handle_interrupt_prompt_key(&key_event, ui_state, shutdown, command_tx) {
@@ -570,6 +955,22 @@ fn handle_key_event(
         total_visual_rows,
         viewport_height,
     );
+
+    if handle_log_search_key(
+        &key_event,
+        log_search,
+        sel.logs,
+        buffer_start_line,
+        visual_rows,
+        current_scroll_offset,
+        viewport_height,
+        max_offset,
+        scroll_offset,
+        follow_tail,
+        scroll_anchor,
+    ) {
+        return;
+    }
 
     if let Some(action) = keyboard_scroll_action(&key_event, viewport_height) {
         apply_scroll_action(
@@ -825,24 +1226,41 @@ fn text_for_yank(
     }
 }
 
+fn search_result_text(search: LogSearchView<'_>) -> String {
+    if search.query.is_empty() {
+        return "type to search".to_string();
+    }
+    if search.matches.is_empty() {
+        return "no matches".to_string();
+    }
+    let current = search.current.and_then(|current| {
+        search
+            .matches
+            .iter()
+            .position(|search_match| search_cursor(*search_match) == current)
+    });
+    match current {
+        Some(index) => format!("{}/{}", index + 1, search.matches.len()),
+        None => format!("{} matches", search.matches.len()),
+    }
+}
+
 /// Render the expanded view UI
 fn render_expanded_view(
     state: &ExpandedViewState,
     visual_rows: &[VisualRow],
     width: u16,
     height: u16,
-    selection: Option<&Selection>,
-    scroll_mode: ScrollMode,
-    interrupt_prompt: (bool, bool),
+    ui: ExpandedViewUi<'_>,
 ) -> AnyElement<'static> {
-    let (interrupt_prompt_active, interrupt_prompt_attached) = interrupt_prompt;
+    let (interrupt_prompt_active, interrupt_prompt_attached) = ui.interrupt_prompt;
     let viewport_height = calculate_viewport_height(height);
     let total_rows = visual_rows.len();
 
     let clamped_offset = resolved_scroll_offset(
         state.scroll_offset,
-        scroll_mode.follow_tail,
-        scroll_mode.anchor,
+        ui.scroll_mode.follow_tail,
+        ui.scroll_mode.anchor,
         state.buffer_start_line,
         visual_rows,
         total_rows,
@@ -857,7 +1275,8 @@ fn render_expanded_view(
         visible_rows,
         &state.logs,
         state.buffer_start_line,
-        selection,
+        ui.selection,
+        ui.search,
     );
     let padding_elements = build_padding_elements(visible_rows.len(), viewport_height);
 
@@ -865,15 +1284,14 @@ fn render_expanded_view(
     content_elements.extend(padding_elements);
 
     let progress = build_progress_indicator(clamped_offset, viewport_height, total_rows);
-    let follow_status = if scroll_mode.follow_tail {
+    let follow_status = if ui.scroll_mode.follow_tail {
         "FOLLOWING"
     } else {
         "PAUSED"
     };
 
-    // Build footer text - show copy hint when selection is active
-    let footer_text = if interrupt_prompt_active {
-        if interrupt_prompt_attached {
+    let footer = if interrupt_prompt_active {
+        let footer_text = if interrupt_prompt_attached {
             format!(
                 "{} \u{2502} {} \u{2502} Detach or stop the process manager?  Ctrl-C:detach  s:stop manager  Esc:keep watching",
                 follow_status, progress
@@ -888,17 +1306,86 @@ fn render_expanded_view(
                 "{} \u{2502} {} \u{2502} Quit devenv? Nothing has been stopped yet  c:keep running  q:quit  Ctrl-C:quit",
                 follow_status, progress
             )
-        }
-    } else if selection.is_some() {
-        format!(
-            "{} \u{2502} {} \u{2502} y:copy  j/k:line  ^D/^U:half  ^F/^B:page  g:top  G:follow  Ctrl-C:copy  Esc:deselect  q:back",
-            follow_status, progress
-        )
+        };
+        element!(Text(content: footer_text, color: Color::AnsiValue(245))).into_any()
+    } else if let Some(search) = ui.search.filter(|search| search.editing) {
+        let prompt = format!("Search logs: /{}", search.query);
+        let result = search_result_text(search);
+        let prompt_color = if search.matches.is_empty() && !search.query.is_empty() {
+            Color::AnsiValue(160)
+        } else {
+            Color::AnsiValue(220)
+        };
+        element!(View(
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            width: 100pct,
+            overflow: Overflow::Hidden,
+        ) {
+            View(flex_grow: 1.0, flex_shrink: 0.0, min_width: 0, overflow: Overflow::Hidden) {
+                Text(content: prompt, color: prompt_color, weight: Weight::Bold)
+            }
+            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
+                Text(content: format!("{result}  Enter:select Esc:cancel"), color: Color::AnsiValue(245))
+            }
+        }).into_any()
+    } else if let Some(search) = ui.search {
+        let result = search_result_text(search);
+        let search_color = if search.matches.is_empty() {
+            Color::AnsiValue(160)
+        } else {
+            Color::AnsiValue(220)
+        };
+        let search_text = if width < 90 {
+            format!(
+                "/{query}  {result}  n/N  /:new  Esc:clear",
+                query = search.query
+            )
+        } else {
+            format!(
+                "/{query}  {result}  n/N:match  /:new search  Esc:clear  q:back",
+                query = search.query
+            )
+        };
+        element!(View(
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            width: 100pct,
+            overflow: Overflow::Hidden,
+        ) {
+            View(flex_shrink: 0.0) {
+                Text(
+                    content: format!("{} \u{2502} {}", follow_status, progress),
+                    color: Color::AnsiValue(245)
+                )
+            }
+            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
+                Text(content: search_text, color: search_color, weight: Weight::Bold)
+            }
+        })
+        .into_any()
     } else {
-        format!(
-            "{} \u{2502} {} \u{2502} y:copy all  j/k:line  ^D/^U:half  ^F/^B:page  g:top  G:follow  q:back",
-            follow_status, progress
-        )
+        let copy_hint = if ui.selection.is_some() {
+            "y:copy  Ctrl-C:copy"
+        } else {
+            "y:copy all"
+        };
+        let footer_text = if width < 90 {
+            format!(
+                "{} \u{2502} {} \u{2502} {}  j/k  ^D/^U  ^F/^B  /  g/G  q",
+                follow_status, progress, copy_hint
+            )
+        } else {
+            format!(
+                "{} \u{2502} {} \u{2502} {}  j/k:line  ^D/^U:half  ^F/^B:page  /:search  g/G:top/follow  q:back",
+                follow_status, progress, copy_hint
+            )
+        };
+        element!(Text(
+            content: footer_text,
+            color: Color::AnsiValue(245)
+        ))
+        .into_any()
     };
 
     element! {
@@ -921,10 +1408,7 @@ fn render_expanded_view(
             }
             // Footer
             View(height: 1, padding_left: 1, padding_right: 1) {
-                Text(
-                    content: footer_text,
-                    color: Color::AnsiValue(245)
-                )
+                #(footer)
             }
         }
     }
@@ -941,6 +1425,7 @@ fn build_line_elements(
     logs: &VecDeque<String>,
     buffer_start_line: usize,
     selection: Option<&Selection>,
+    search: Option<LogSearchView<'_>>,
 ) -> Vec<AnyElement<'static>> {
     let mut elements = Vec::with_capacity(visible_rows.len());
 
@@ -972,6 +1457,25 @@ fn build_line_elements(
             let e = end_col.min(vrow.char_end);
             (e > s).then(|| (s - vrow.char_start, e - vrow.char_start))
         });
+        let search_ranges: Vec<_> = search
+            .into_iter()
+            .flat_map(|search| {
+                search.matches.iter().filter_map(move |search_match| {
+                    if search_match.log_line != absolute_line {
+                        return None;
+                    }
+                    let start = search_match.char_start.max(vrow.char_start);
+                    let end = search_match.char_end.min(vrow.char_end);
+                    (end > start).then(|| {
+                        (
+                            start - vrow.char_start,
+                            end - vrow.char_start,
+                            search.current == Some(search_cursor(*search_match)),
+                        )
+                    })
+                })
+            })
+            .collect();
 
         if let Some((start_col, end_col)) = sel_range {
             let before = char_slice(&display_segment, 0, start_col);
@@ -999,6 +1503,61 @@ fn build_line_elements(
                             content: after,
                             color: Color::AnsiValue(250)
                         )
+                    }
+                }
+                .into_any(),
+            );
+        } else if !search_ranges.is_empty() {
+            let mut cursor = 0;
+            let mut segments = Vec::new();
+            for (start, end, current) in search_ranges {
+                if start > cursor {
+                    segments.push(
+                        element!(Text(
+                            content: char_slice(&display_segment, cursor, start),
+                            color: Color::AnsiValue(250)
+                        ))
+                        .into_any(),
+                    );
+                }
+                let background = if current {
+                    Color::AnsiValue(220)
+                } else {
+                    Color::AnsiValue(58)
+                };
+                let foreground = if current {
+                    Color::AnsiValue(232)
+                } else {
+                    Color::AnsiValue(230)
+                };
+                segments.push(
+                    element!(View(background_color: background) {
+                        Text(
+                            content: char_slice(&display_segment, start, end),
+                            color: foreground
+                        )
+                    })
+                    .into_any(),
+                );
+                cursor = end;
+            }
+            if cursor < display_segment.chars().count() {
+                segments.push(
+                    element!(Text(
+                        content: char_slice(&display_segment, cursor, display_segment.chars().count()),
+                        color: Color::AnsiValue(250)
+                    ))
+                    .into_any(),
+                );
+            }
+            elements.push(
+                element! {
+                    View(height: 1, flex_direction: FlexDirection::Row) {
+                        Text(
+                            content: line_prefix,
+                            color: Color::AnsiValue(250)
+                        )
+                        #(segments)
                     }
                 }
                 .into_any(),
@@ -1101,6 +1660,65 @@ mod tests {
     }
 
     #[test]
+    fn test_log_search_matches_case_insensitively() {
+        assert_eq!(
+            case_insensitive_match_ranges("Error error ERROR", "eRrOr"),
+            vec![(0, 5), (6, 11), (12, 17)]
+        );
+        assert_eq!(
+            case_insensitive_match_ranges("Ärger ärger", "äR"),
+            vec![(0, 2), (6, 8)]
+        );
+
+        let logs = VecDeque::from(["ready".to_string(), "ERROR again".to_string()]);
+        assert_eq!(
+            find_log_matches(&logs, 20, "error"),
+            vec![LogSearchMatch {
+                log_line: 21,
+                char_start: 0,
+                char_end: 5,
+            }]
+        );
+    }
+
+    #[test]
+    fn test_log_search_navigation_wraps() {
+        let matches = [
+            LogSearchMatch {
+                log_line: 4,
+                char_start: 2,
+                char_end: 5,
+            },
+            LogSearchMatch {
+                log_line: 8,
+                char_start: 6,
+                char_end: 9,
+            },
+        ];
+
+        assert_eq!(
+            adjacent_search_match(&matches, Some(search_cursor(matches[0])), true),
+            Some(matches[1])
+        );
+        assert_eq!(
+            adjacent_search_match(&matches, Some(search_cursor(matches[1])), true),
+            Some(matches[0])
+        );
+        assert_eq!(
+            adjacent_search_match(&matches, Some(search_cursor(matches[0])), false),
+            Some(matches[1])
+        );
+        assert_eq!(
+            adjacent_search_match(&matches, None, true),
+            Some(matches[0])
+        );
+        assert_eq!(
+            adjacent_search_match(&matches, None, false),
+            Some(matches[1])
+        );
+    }
+
+    #[test]
     fn test_paused_anchor_survives_log_buffer_rotation() {
         let logs = VecDeque::from([
             "one".to_string(),
@@ -1144,12 +1762,15 @@ mod tests {
             &visual_rows,
             100,
             8,
-            None,
-            ScrollMode {
-                follow_tail: true,
-                anchor: None,
+            ExpandedViewUi {
+                selection: None,
+                search: None,
+                scroll_mode: ScrollMode {
+                    follow_tail: true,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
             },
-            (false, false),
         );
         let following_output = following.render(Some(100)).to_string();
         assert!(following_output.contains("FOLLOWING"));
@@ -1160,16 +1781,103 @@ mod tests {
             &visual_rows,
             100,
             8,
-            None,
-            ScrollMode {
-                follow_tail: false,
-                anchor: None,
+            ExpandedViewUi {
+                selection: None,
+                search: None,
+                scroll_mode: ScrollMode {
+                    follow_tail: false,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
             },
-            (false, false),
         );
         let paused_output = paused.render(Some(100)).to_string();
         assert!(paused_output.contains("PAUSED"));
-        assert!(paused_output.contains("G:follow"));
+        assert!(paused_output.contains("g/G:top/follow"));
+    }
+
+    #[test]
+    fn test_render_expanded_view_log_search() {
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(VecDeque::from(["Error here".to_string()])),
+            buffer_start_line: 10,
+        };
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(100));
+        let matches = find_log_matches(&state.logs, state.buffer_start_line, "error");
+
+        let mut editing = render_expanded_view(
+            &state,
+            &visual_rows,
+            100,
+            8,
+            ExpandedViewUi {
+                selection: None,
+                search: Some(LogSearchView {
+                    query: "error",
+                    matches: &matches,
+                    current: Some(search_cursor(matches[0])),
+                    editing: true,
+                }),
+                scroll_mode: ScrollMode {
+                    follow_tail: false,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
+            },
+        );
+        let editing_output = editing.render(Some(100)).to_string();
+        assert!(editing_output.contains("Search logs: /error"));
+        assert!(editing_output.contains("1/1"));
+
+        let mut selected = render_expanded_view(
+            &state,
+            &visual_rows,
+            100,
+            8,
+            ExpandedViewUi {
+                selection: None,
+                search: Some(LogSearchView {
+                    query: "error",
+                    matches: &matches,
+                    current: Some(search_cursor(matches[0])),
+                    editing: false,
+                }),
+                scroll_mode: ScrollMode {
+                    follow_tail: false,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
+            },
+        );
+        let selected_output = selected.render(Some(100)).to_string();
+        assert!(selected_output.contains("/error"));
+        assert!(selected_output.contains("n/N:match"));
+
+        let mut missing = render_expanded_view(
+            &state,
+            &visual_rows,
+            100,
+            8,
+            ExpandedViewUi {
+                selection: None,
+                search: Some(LogSearchView {
+                    query: "missing",
+                    matches: &[],
+                    current: None,
+                    editing: true,
+                }),
+                scroll_mode: ScrollMode {
+                    follow_tail: false,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
+            },
+        );
+        let missing_output = missing.render(Some(100)).to_string();
+        assert!(missing_output.contains("Search logs: /missing"));
+        assert!(missing_output.contains("no matches"));
     }
 
     #[test]
@@ -1196,12 +1904,15 @@ mod tests {
             &visual_rows,
             100,
             8,
-            None,
-            ScrollMode {
-                follow_tail: true,
-                anchor: None,
+            ExpandedViewUi {
+                selection: None,
+                search: None,
+                scroll_mode: ScrollMode {
+                    follow_tail: true,
+                    anchor: None,
+                },
+                interrupt_prompt: (true, false),
             },
-            (true, false),
         );
         let output = element.render(Some(100)).to_string();
 
@@ -1281,12 +1992,15 @@ mod tests {
             &visual_rows,
             width,
             (visual_rows.len() as u16) + 2,
-            None,
-            ScrollMode {
-                follow_tail: false,
-                anchor: None,
+            ExpandedViewUi {
+                selection: None,
+                search: None,
+                scroll_mode: ScrollMode {
+                    follow_tail: false,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
             },
-            (false, false),
         );
         let output = element.render(Some(width as usize)).to_string();
 
@@ -1329,12 +2043,15 @@ mod tests {
             &visual_rows,
             width,
             6,
-            Some(&selection),
-            ScrollMode {
-                follow_tail: false,
-                anchor: None,
+            ExpandedViewUi {
+                selection: Some(&selection),
+                search: None,
+                scroll_mode: ScrollMode {
+                    follow_tail: false,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
             },
-            (false, false),
         );
         let output = element.render(Some(width as usize)).to_string();
         assert!(output.contains("cdefghij"));

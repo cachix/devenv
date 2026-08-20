@@ -56,7 +56,6 @@ expect:^H
 send:/worker
 expect:Search processes: /worker
 send:\r
-expect:hide preview
 send:h
 expect:focus
 send:l
@@ -88,8 +87,17 @@ send:\x02
 expect:PAUSED
 send:\x06
 expect:FOLLOWING
+send:/t
+expect:Search logs: /t
+expect:1/3
+send:\r
+expect:/t  1/3
+send:n
+expect:2/3
 send:y
 expect:bGlzdGVuaW5nIG9uIGh0dHA6Ly8xMjcuMC4wLjE6ODA4MA==
+send:G
+expect:FOLLOWING
 send:g
 expect:PAUSED
 send:G
