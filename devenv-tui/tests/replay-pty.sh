@@ -46,6 +46,7 @@ command="\"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\"
 # process while that row is still being inserted can clear or move the selection.
 "$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
 expect:api
+expect:├
 expect:worker
 expect:disabled
 expect:stopped

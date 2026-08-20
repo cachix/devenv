@@ -32,6 +32,51 @@ pub struct ScrollState {
     pub display_activities: Vec<DisplayActivity>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct TreePosition {
+    ancestor_continuations: Vec<bool>,
+    is_last_sibling: bool,
+}
+
+fn tree_positions(activities: &[DisplayActivity]) -> Vec<TreePosition> {
+    let depths: Vec<_> = activities.iter().map(|activity| activity.depth).collect();
+    tree_positions_for_depths(&depths)
+}
+
+fn tree_positions_for_depths(depths: &[usize]) -> Vec<TreePosition> {
+    let mut positions = vec![TreePosition::default(); depths.len()];
+    let mut last_at_depth: Vec<Option<usize>> = Vec::new();
+
+    for (index, depth) in depths.iter().copied().enumerate() {
+        last_at_depth.truncate(depth + 1);
+        if last_at_depth.len() <= depth {
+            last_at_depth.resize(depth + 1, None);
+        }
+        if let Some(previous) = last_at_depth[depth].replace(index) {
+            positions[previous].is_last_sibling = false;
+        }
+        positions[index].is_last_sibling = true;
+    }
+
+    let last_siblings: Vec<_> = positions
+        .iter()
+        .map(|position| position.is_last_sibling)
+        .collect();
+    let mut ancestors: Vec<usize> = Vec::new();
+
+    for (index, depth) in depths.iter().copied().enumerate() {
+        ancestors.truncate(depth);
+        positions[index].ancestor_continuations = ancestors
+            .iter()
+            .skip(1)
+            .map(|ancestor| !last_siblings[*ancestor])
+            .collect();
+        ancestors.push(index);
+    }
+
+    positions
+}
+
 /// Main view function that creates the UI
 pub fn view(
     model: &ActivityModel,
@@ -47,6 +92,7 @@ pub fn view(
 
     let summary = model.calculate_summary();
     let terminal_size = ui_state.terminal_size;
+    let tree_positions = tree_positions(&active_activities);
 
     let selected_id = ui_state
         .selected_activity
@@ -61,7 +107,7 @@ pub fn view(
     // Create owned activity elements, including hidden children indicators
     let mut activity_elements: Vec<AnyElement<'static>> = Vec::new();
 
-    for display_activity in activities_to_show.iter() {
+    for (display_activity, tree_position) in activities_to_show.iter().zip(tree_positions) {
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
         let show_inline_logs = inline_logs_id.is_some_and(|id| activity.id == id);
@@ -123,6 +169,7 @@ pub fn view(
                 ContextProvider(value: Context::owned(ActivityRenderContext {
                     activity: activity.clone(),
                     depth: display_activity.depth,
+                    tree_position,
                     is_selected,
                     show_inline_logs,
                     logs: activity_logs,
@@ -260,6 +307,7 @@ pub fn view(
 struct ActivityRenderContext {
     activity: Activity,
     depth: usize,
+    tree_position: TreePosition,
     is_selected: bool,
     show_inline_logs: bool,
     logs: Option<Arc<VecDeque<String>>>,
@@ -282,10 +330,16 @@ struct ActivityRenderContext {
 /// - Nested (depth > 0): [HierarchyPrefix][StatusIndicator]
 fn build_activity_prefix(
     depth: usize,
+    tree_position: &TreePosition,
     completed: Option<bool>,
     show_spinner: bool,
 ) -> Vec<AnyElement<'static>> {
-    let mut prefix = HierarchyPrefixComponent::new(depth).render();
+    let mut prefix = HierarchyPrefixComponent::new(
+        depth,
+        &tree_position.ancestor_continuations,
+        tree_position.is_last_sibling,
+    )
+    .render();
 
     prefix.push(
         element!(View(margin_right: 1) {
@@ -301,11 +355,17 @@ fn build_activity_prefix(
 /// encodes the lifecycle state (see `process_status_dot`) instead of a spinner.
 fn build_process_prefix(
     depth: usize,
+    tree_position: &TreePosition,
     glyph: &'static str,
     color: Color,
     pulse: bool,
 ) -> Vec<AnyElement<'static>> {
-    let mut prefix = HierarchyPrefixComponent::new(depth).render();
+    let mut prefix = HierarchyPrefixComponent::new(
+        depth,
+        &tree_position.ancestor_continuations,
+        tree_position.is_last_sibling,
+    )
+    .render();
 
     prefix.push(
         element!(View(margin_right: 1) {
@@ -335,6 +395,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ActivityRenderContext {
         activity,
         depth,
+        tree_position,
         is_selected,
         show_inline_logs,
         logs,
@@ -376,7 +437,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
 
             if *show_inline_logs {
-                let prefix = build_activity_prefix(*depth, *completed, true);
+                let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
                 let main_line = ActivityTextComponent::new(
                     "building".to_string(),
@@ -396,7 +457,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
 
             // Non-selected build activities use normal rendering
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "building".to_string(),
@@ -447,7 +508,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     base_status
                 };
 
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             let main_line = ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -488,6 +549,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 (download_data.size_current, download_data.size_total)
             {
                 return DownloadActivityComponent::new(activity, *depth, *is_selected)
+                    .with_hierarchy(
+                        &tree_position.ancestor_continuations,
+                        tree_position.is_last_sibling,
+                    )
                     .with_completed(*completed)
                     .with_cached(*cached)
                     .render(terminal_width);
@@ -495,6 +560,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 // Use generic progress if available
                 if progress.total.unwrap_or(0) > 0 {
                     return DownloadActivityComponent::new(activity, *depth, *is_selected)
+                        .with_hierarchy(
+                            &tree_position.ancestor_continuations,
+                            tree_position.is_last_sibling,
+                        )
                         .with_completed(*completed)
                         .with_cached(*cached)
                         .render(terminal_width);
@@ -507,7 +576,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             progress.current.unwrap_or(0).human_count_bytes()
                         )
                     });
-                    let prefix = build_activity_prefix(*depth, *completed, true);
+                    let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
                     return ActivityTextComponent::new(
                         "downloading".to_string(),
@@ -526,7 +595,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .substituter
                     .as_ref()
                     .map(|s| format!("from {}", s));
-                let prefix = build_activity_prefix(*depth, *completed, true);
+                let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
                 return ActivityTextComponent::new(
                     "downloading".to_string(),
@@ -541,7 +610,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Copy => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "copying".to_string(),
@@ -559,7 +628,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .substituter
                 .as_ref()
                 .map(|s| format!("from {}", s));
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "querying".to_string(),
@@ -573,7 +642,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::FetchTree => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "fetching".to_string(),
@@ -595,7 +664,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.detail.clone()
             };
 
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             let main_line = ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -621,7 +690,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             return main_line;
         }
         ActivityVariant::UserOperation => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -633,7 +702,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Devenv => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             // Show line count as suffix when active or failed with logs
             let base_suffix = if *completed == Some(true) {
@@ -747,7 +816,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // state; transient states pulse instead of animating a spinner.
             let (dot_glyph, dot_color, dot_pulse) =
                 process_status_dot(&process_data.status, *completed, *shutting_down);
-            let prefix = build_process_prefix(*depth, dot_glyph, dot_color, dot_pulse);
+            let prefix =
+                build_process_prefix(*depth, tree_position, dot_glyph, dot_color, dot_pulse);
 
             // Hide elapsed time for not-started/stopped processes
             let process_elapsed = if matches!(process_data.status, ProcessStatus::NotStarted)
@@ -941,7 +1011,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Unknown => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "unknown".to_string(),
@@ -1521,6 +1591,39 @@ mod tests {
     use super::*;
     use crate::model::ActivityModel;
     use devenv_activity::{ActivityEvent, ActivityLevel, Operation, Process, Timestamp};
+
+    #[test]
+    fn tree_positions_connect_nested_siblings() {
+        assert_eq!(
+            tree_positions_for_depths(&[0, 1, 2, 2, 1, 2]),
+            vec![
+                TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: true,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: false,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![true],
+                    is_last_sibling: false,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![true],
+                    is_last_sibling: true,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: true,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![false],
+                    is_last_sibling: true,
+                },
+            ]
+        );
+    }
 
     fn summary_ctx(
         hide_stopped_processes: bool,

@@ -3,8 +3,8 @@ source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
 ⠋ test:parent      [TIME]
-  └ ⠋ test:child-a [TIME]
-  └ ⠋ test:child-b [TIME]
+  ├ ⠋ test:child-a [TIME]
+  ├ ⠋ test:child-b [TIME]
   └ ⠋ test:child-c [TIME]
 
  0 of 4 tasks      ↑↓ nav

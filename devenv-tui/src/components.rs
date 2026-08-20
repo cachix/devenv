@@ -253,11 +253,17 @@ pub fn format_elapsed_time(elapsed: Duration, high_resolution: bool) -> String {
 /// Only used for nested items (depth > 0). Top-level items don't need hierarchy rendering.
 pub struct HierarchyPrefixComponent {
     pub depth: usize,
+    pub ancestor_continuations: Vec<bool>,
+    pub is_last_sibling: bool,
 }
 
 impl HierarchyPrefixComponent {
-    pub fn new(depth: usize) -> Self {
-        Self { depth }
+    pub fn new(depth: usize, ancestor_continuations: &[bool], is_last_sibling: bool) -> Self {
+        Self {
+            depth,
+            ancestor_continuations: ancestor_continuations.to_vec(),
+            is_last_sibling,
+        }
     }
 
     /// Renders the hierarchy prefix: `[indent][branch]`
@@ -267,15 +273,16 @@ impl HierarchyPrefixComponent {
             return vec![];
         }
 
-        // Indentation: 2 spaces for status indicator width + 2 spaces per additional nesting level
-        let status_indicator_offset = 2;
-        let nesting_indent = "  ".repeat(self.depth - 1);
-        let total_indent = format!("{}{}", " ".repeat(status_indicator_offset), nesting_indent);
+        let mut total_indent = "  ".to_string();
+        for continues in &self.ancestor_continuations {
+            total_indent.push_str(if *continues { "│ " } else { "  " });
+        }
+        let branch = if self.is_last_sibling { "└" } else { "├" };
 
         vec![
-            element!(Text(content: total_indent)).into_any(),
+            element!(Text(content: total_indent, color: COLOR_HIERARCHY)).into_any(),
             element!(View(margin_right: 1) {
-                Text(content: "└", color: COLOR_HIERARCHY)
+                Text(content: branch, color: COLOR_HIERARCHY)
             })
             .into_any(),
         ]
@@ -554,6 +561,8 @@ pub struct DownloadActivityComponent<'a> {
     pub completed: Option<bool>,
     /// Whether this activity's result was cached
     pub cached: bool,
+    pub ancestor_continuations: Vec<bool>,
+    pub is_last_sibling: bool,
 }
 
 impl<'a> DownloadActivityComponent<'a> {
@@ -564,7 +573,19 @@ impl<'a> DownloadActivityComponent<'a> {
             is_selected,
             completed: None,
             cached: false,
+            ancestor_continuations: Vec::new(),
+            is_last_sibling: true,
         }
+    }
+
+    pub fn with_hierarchy(
+        mut self,
+        ancestor_continuations: &[bool],
+        is_last_sibling: bool,
+    ) -> Self {
+        self.ancestor_continuations = ancestor_continuations.to_vec();
+        self.is_last_sibling = is_last_sibling;
+        self
     }
 
     pub fn with_completed(mut self, completed: Option<bool>) -> Self {
@@ -591,7 +612,12 @@ impl<'a> DownloadActivityComponent<'a> {
         let mut elements = vec![];
 
         // First line: activity name with hierarchy prefix and status indicator
-        let mut prefix = HierarchyPrefixComponent::new(self.depth).render();
+        let mut prefix = HierarchyPrefixComponent::new(
+            self.depth,
+            &self.ancestor_continuations,
+            self.is_last_sibling,
+        )
+        .render();
         prefix.push(
             element!(View(margin_right: 1) {
                 StatusIndicator(completed: self.completed, show_spinner: true)
