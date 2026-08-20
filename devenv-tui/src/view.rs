@@ -77,6 +77,31 @@ fn tree_positions_for_depths(depths: &[usize]) -> Vec<TreePosition> {
     positions
 }
 
+pub(crate) fn process_previews_fit(
+    model: &ActivityModel,
+    activities: &[DisplayActivity],
+    terminal_size: TerminalSize,
+) -> bool {
+    let preview_rows: usize = activities
+        .iter()
+        .filter(|display| matches!(display.activity.variant, ActivityVariant::Process(_)))
+        .filter_map(|display| {
+            model
+                .get_build_logs(display.activity.id)
+                .filter(|logs| !logs.is_empty())
+                .map(|logs| {
+                    ExpandedContentComponent::new(Some(logs.as_ref()))
+                        .with_terminal_width(terminal_size.width)
+                        .with_border_indent(display.depth * 2)
+                        .visual_height()
+                })
+        })
+        .sum();
+    let available_rows = terminal_size.height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize;
+
+    preview_rows > 0 && activities.len() + preview_rows <= available_rows
+}
+
 /// Main view function that creates the UI
 pub fn view(
     model: &ActivityModel,
@@ -101,6 +126,8 @@ pub fn view(
     let inline_logs_id = ui_state
         .inline_logs_activity
         .filter(|id| active_activities.iter().any(|da| da.activity.id == *id));
+    let process_previews_fit = process_previews_fit(model, &active_activities, terminal_size);
+    let auto_expand_process_logs = inline_logs_id.is_none() && process_previews_fit;
 
     let activities_to_show: Vec<_> = active_activities.iter().collect();
 
@@ -110,7 +137,18 @@ pub fn view(
     for (display_activity, tree_position) in activities_to_show.iter().zip(tree_positions) {
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
-        let show_inline_logs = inline_logs_id.is_some_and(|id| activity.id == id);
+        let show_inline_logs = inline_logs_id.is_some_and(|id| activity.id == id)
+            || auto_expand_process_logs
+                && matches!(activity.variant, ActivityVariant::Process(_))
+                && model
+                    .get_build_logs(activity.id)
+                    .is_some_and(|logs| !logs.is_empty());
+        let disclosure = model
+            .is_activity_collapsible(activity.id, ui_state)
+            .then(|| ActivityDisclosure {
+                collapsed: model.is_activity_collapsed(activity.id, ui_state),
+                descendant_count: model.visible_descendant_count(activity.id, ui_state),
+            });
 
         // Pass logs for activities that should display them:
         // - Tasks with show_output=true or failed: show logs inline
@@ -170,6 +208,7 @@ pub fn view(
                     activity: activity.clone(),
                     depth: display_activity.depth,
                     tree_position,
+                    disclosure,
                     is_selected,
                     show_inline_logs,
                     logs: activity_logs,
@@ -228,6 +267,17 @@ pub fn view(
             process_search_available: !model
                 .get_matching_process_activity_ids(ui_state, "")
                 .is_empty(),
+            selected_disclosure: selected_id.and_then(|id| {
+                model
+                    .is_activity_collapsible(id, ui_state)
+                    .then(|| model.is_activity_collapsed(id, ui_state))
+            }),
+            selected_has_logs: selected_id.is_some_and(|id| {
+                model
+                    .get_build_logs(id)
+                    .is_some_and(|logs| !logs.is_empty())
+            }),
+            process_previews_fit,
         })) {
             SummaryView
         }
@@ -304,10 +354,17 @@ pub fn view(
 
 /// Context for activity rendering
 #[derive(Clone)]
+struct ActivityDisclosure {
+    collapsed: bool,
+    descendant_count: usize,
+}
+
+#[derive(Clone)]
 struct ActivityRenderContext {
     activity: Activity,
     depth: usize,
     tree_position: TreePosition,
+    disclosure: Option<ActivityDisclosure>,
     is_selected: bool,
     show_inline_logs: bool,
     logs: Option<Arc<VecDeque<String>>>,
@@ -323,6 +380,32 @@ struct ActivityRenderContext {
     shutting_down: bool,
     /// Number of direct children hidden by the `hide_stopped_processes` filter.
     hidden_children_count: usize,
+}
+
+fn disclosed_name(activity: &Activity, disclosure: Option<&ActivityDisclosure>) -> String {
+    match disclosure {
+        Some(disclosure) if disclosure.collapsed => format!("▸ {}", activity.name),
+        Some(_) => format!("▾ {}", activity.name),
+        None => activity.name.clone(),
+    }
+}
+
+fn disclosed_suffix(
+    suffix: Option<String>,
+    disclosure: Option<&ActivityDisclosure>,
+) -> Option<String> {
+    let Some(disclosure) = disclosure.filter(|disclosure| disclosure.collapsed) else {
+        return suffix;
+    };
+    let summary = if disclosure.descendant_count == 1 {
+        "1 step".to_string()
+    } else {
+        format!("{} steps", disclosure.descendant_count)
+    };
+    Some(match suffix {
+        Some(suffix) => format!("{summary} • {suffix}"),
+        None => summary,
+    })
 }
 
 /// Helper to build activity prefix with hierarchy and status indicator.
@@ -377,6 +460,21 @@ fn build_process_prefix(
     prefix
 }
 
+fn process_preview_prefix(depth: usize, tree_position: &TreePosition) -> String {
+    let mut prefix = "  ".to_string();
+    for continues in &tree_position.ancestor_continuations {
+        prefix.push_str(if *continues { "│ " } else { "  " });
+    }
+    if depth > 0 {
+        prefix.push_str(if tree_position.is_last_sibling {
+            "  "
+        } else {
+            "│ "
+        });
+    }
+    prefix
+}
+
 /// Render a single activity (owned version)
 #[component]
 fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -396,6 +494,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         activity,
         depth,
         tree_position,
+        disclosure,
         is_selected,
         show_inline_logs,
         logs,
@@ -663,11 +762,12 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             } else {
                 activity.detail.clone()
             };
+            let suffix = disclosed_suffix(suffix, disclosure.as_ref());
 
             let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             let main_line = ActivityTextComponent::name_only(
-                activity.name.clone(),
+                disclosed_name(activity, disclosure.as_ref()),
                 elapsed_str,
                 activity.variant.clone(),
             )
@@ -740,9 +840,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             } else {
                 base_suffix
             };
+            let suffix = disclosed_suffix(suffix, disclosure.as_ref());
 
             let main_line = ActivityTextComponent::name_only(
-                activity.name.clone(),
+                disclosed_name(activity, disclosure.as_ref()),
                 elapsed_str,
                 activity.variant.clone(),
             )
@@ -844,7 +945,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
-                    .with_depth(*depth)
+                    .with_border_indent(*depth * 2)
+                    .with_line_prefix(process_preview_prefix(*depth, tree_position))
                     .with_empty_message("→ no output yet");
                 if process_failed && *render_context == RenderContext::Final {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
@@ -1040,6 +1142,9 @@ struct SummaryViewContext {
     process_search: Option<String>,
     process_search_matches: usize,
     process_search_available: bool,
+    selected_disclosure: Option<bool>,
+    selected_has_logs: bool,
+    process_previews_fit: bool,
 }
 
 /// Summary view component that adapts to terminal width
@@ -1064,6 +1169,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         process_search,
         process_search_matches,
         process_search_available,
+        selected_disclosure,
+        selected_has_logs,
+        process_previews_fit,
     } = ctx;
     let selected = selected.as_ref();
     let showing_logs = *showing_logs;
@@ -1074,6 +1182,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let hide_stopped_processes = *hide_stopped_processes;
     let process_search_matches = *process_search_matches;
     let process_search_available = *process_search_available;
+    let selected_disclosure = *selected_disclosure;
+    let selected_has_logs = *selected_has_logs;
+    let process_previews_fit = *process_previews_fit;
 
     if interrupt_prompt_active {
         if interrupt_prompt_attached {
@@ -1422,21 +1533,71 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         } else {
             help_children.push(element!(Text(content: " • ")).into_any());
         }
-        help_children.push(element!(Text(content: "Enter", color: COLOR_INTERACTIVE)).into_any());
-        if use_symbols {
-            help_children.push(element!(Text(content: " ▾ • ")).into_any());
-        } else if use_short_text {
-            help_children.push(element!(Text(content: " preview ")).into_any());
-        } else {
-            help_children.push(element!(Text(content: " preview logs • ")).into_any());
+        let directional_open = selected_disclosure == Some(true) || is_process && !showing_logs;
+        let directional_close = selected_disclosure == Some(false) || is_process && showing_logs;
+        help_children.push(
+            element!(Text(
+                content: if directional_open && !use_short_text {
+                    "Enter/l/→"
+                } else if directional_close && !use_short_text {
+                    "Enter/h/←"
+                } else {
+                    "Enter"
+                },
+                color: COLOR_INTERACTIVE
+            ))
+            .into_any(),
+        );
+        match selected_disclosure {
+            Some(true) if use_symbols => {
+                help_children.push(element!(Text(content: " ▾ • ")).into_any());
+            }
+            Some(false) if use_symbols => {
+                help_children.push(element!(Text(content: " ▴ • ")).into_any());
+            }
+            Some(true) => {
+                help_children.push(element!(Text(content: " expand ")).into_any());
+            }
+            Some(false) => {
+                help_children.push(element!(Text(content: " collapse ")).into_any());
+            }
+            None if is_process && !showing_logs && process_previews_fit && use_symbols => {
+                help_children.push(element!(Text(content: " ◎ • ")).into_any());
+            }
+            None if is_process && showing_logs && process_previews_fit && use_symbols => {
+                help_children.push(element!(Text(content: " ▦ • ")).into_any());
+            }
+            None if is_process && showing_logs && use_symbols => {
+                help_children.push(element!(Text(content: " ▴ • ")).into_any());
+            }
+            None if use_symbols => {
+                help_children.push(element!(Text(content: " ▾ • ")).into_any());
+            }
+            None if is_process && !showing_logs && process_previews_fit => {
+                help_children.push(element!(Text(content: " focus ")).into_any());
+            }
+            None if is_process && showing_logs && process_previews_fit => {
+                help_children.push(element!(Text(content: " show all ")).into_any());
+            }
+            None if is_process && showing_logs => {
+                help_children.push(element!(Text(content: " hide preview ")).into_any());
+            }
+            None if use_short_text => {
+                help_children.push(element!(Text(content: " preview ")).into_any());
+            }
+            None => {
+                help_children.push(element!(Text(content: " preview logs • ")).into_any());
+            }
         }
-        help_children.push(element!(Text(content: if use_short_text { "^E" } else { "Ctrl-E" }, color: COLOR_INTERACTIVE)).into_any());
-        if use_symbols {
-            help_children.push(element!(Text(content: " ▼ • ")).into_any());
-        } else if use_short_text {
-            help_children.push(element!(Text(content: " logs ")).into_any());
-        } else {
-            help_children.push(element!(Text(content: " full logs • ")).into_any());
+        if selected_has_logs || is_process {
+            help_children.push(element!(Text(content: if use_short_text { "^E" } else { "Ctrl-E" }, color: COLOR_INTERACTIVE)).into_any());
+            if use_symbols {
+                help_children.push(element!(Text(content: " ▼ • ")).into_any());
+            } else if use_short_text {
+                help_children.push(element!(Text(content: " logs ")).into_any());
+            } else {
+                help_children.push(element!(Text(content: " full logs • ")).into_any());
+            }
         }
         if is_process {
             if is_stoppable {
@@ -1625,6 +1786,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn process_preview_prefix_matches_tree_position() {
+        assert_eq!(
+            process_preview_prefix(
+                1,
+                &TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: false,
+                },
+            ),
+            "  │ "
+        );
+        assert_eq!(
+            process_preview_prefix(
+                1,
+                &TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: true,
+                },
+            ),
+            "    "
+        );
+        assert_eq!(
+            process_preview_prefix(
+                2,
+                &TreePosition {
+                    ancestor_continuations: vec![true],
+                    is_last_sibling: false,
+                },
+            ),
+            "  │ │ "
+        );
+        assert_eq!(
+            process_preview_prefix(
+                2,
+                &TreePosition {
+                    ancestor_continuations: vec![false],
+                    is_last_sibling: true,
+                },
+            ),
+            "      "
+        );
+    }
+
     fn summary_ctx(
         hide_stopped_processes: bool,
         interrupt_prompt_active: bool,
@@ -1645,6 +1850,9 @@ mod tests {
             process_search: None,
             process_search_matches: 0,
             process_search_available: false,
+            selected_disclosure: None,
+            selected_has_logs: false,
+            process_previews_fit: false,
         }
     }
 

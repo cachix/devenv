@@ -1,0 +1,7 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+expression: collapsed
+---
+✓ ▸ Building shell 2 steps [TIME] 
+
+ ↑↓ nav Enter expand Esc clear

@@ -160,6 +160,7 @@ pub struct UiState {
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
     pub inline_logs_activity: Option<u64>,
+    pub expanded_activities: HashSet<u64>,
     pub process_search: Option<ProcessSearch>,
     pub hide_stopped_processes: bool,
     pub scroll: ScrollState,
@@ -192,6 +193,7 @@ impl UiState {
             },
             selected_activity: None,
             inline_logs_activity: None,
+            expanded_activities: HashSet::new(),
             process_search: None,
             hide_stopped_processes: false,
             scroll: ScrollState {
@@ -280,6 +282,12 @@ impl UiState {
             Some(id) if self.inline_logs_activity != Some(id) => Some(id),
             _ => None,
         };
+    }
+
+    pub fn toggle_activity_expansion(&mut self, activity_id: u64) {
+        if !self.expanded_activities.insert(activity_id) {
+            self.expanded_activities.remove(&activity_id);
+        }
     }
 
     pub fn start_process_search(&mut self) {
@@ -1162,6 +1170,7 @@ impl ActivityModel {
             .filter(|da| {
                 // Processes are always selectable (so disabled ones can be started)
                 matches!(da.activity.variant, ActivityVariant::Process(_))
+                    || self.is_activity_collapsible(da.activity.id, ui_state)
                     || self
                         .build_logs
                         .get(&da.activity.id)
@@ -1258,6 +1267,10 @@ impl ActivityModel {
                 });
             }
 
+            if activity_visible && self.is_activity_collapsed(activity_id, ui_state) {
+                return;
+            }
+
             // Recursively process children.
             // Even if this activity is filtered, still traverse to children
             // so we can find visible descendants (e.g., Info messages under Debug parents).
@@ -1322,6 +1335,77 @@ impl ActivityModel {
                 self.is_direct_child_of(a, parent_id) && self.is_hidden_process(a, ui_state)
             })
             .count()
+    }
+
+    fn is_completed_shell_activity(&self, activity: &Activity) -> bool {
+        if self.activities.values().any(|child| {
+            matches!(child.variant, ActivityVariant::Process(_))
+                && self.is_direct_child_of(child, activity.id)
+        }) {
+            return false;
+        }
+        let is_shell_activity = match activity.variant {
+            ActivityVariant::Evaluating(_) => true,
+            ActivityVariant::Devenv => {
+                activity.name.to_lowercase().contains("shell")
+                    || self.activities.values().any(|child| {
+                        matches!(child.variant, ActivityVariant::Evaluating(_))
+                            && self.is_direct_child_of(child, activity.id)
+                    })
+            }
+            _ => false,
+        };
+        is_shell_activity
+            && matches!(
+                activity.state,
+                NixActivityState::Completed { success: true, .. }
+            )
+    }
+
+    pub fn is_activity_collapsible(&self, activity_id: u64, ui_state: &UiState) -> bool {
+        self.activities.get(&activity_id).is_some_and(|activity| {
+            self.is_completed_shell_activity(activity)
+                && !activity
+                    .parent_id
+                    .and_then(|parent_id| self.activities.get(&parent_id))
+                    .is_some_and(|parent| self.is_completed_shell_activity(parent))
+                && self.visible_descendant_count(activity_id, ui_state) > 0
+        })
+    }
+
+    pub fn is_activity_collapsed(&self, activity_id: u64, ui_state: &UiState) -> bool {
+        self.is_activity_collapsible(activity_id, ui_state)
+            && !ui_state.expanded_activities.contains(&activity_id)
+    }
+
+    pub fn visible_descendant_count(&self, activity_id: u64, ui_state: &UiState) -> usize {
+        fn visit(
+            model: &ActivityModel,
+            activity_id: u64,
+            ui_state: &UiState,
+            visited: &mut HashSet<u64>,
+        ) -> usize {
+            model
+                .activities
+                .values()
+                .filter(|child| {
+                    !matches!(child.variant, ActivityVariant::UserOperation)
+                        && !model.is_hidden_process(child, ui_state)
+                        && model.is_direct_child_of(child, activity_id)
+                })
+                .map(|child| {
+                    if visited.insert(child.id) {
+                        usize::from(child.level <= model.config.filter_level)
+                            + visit(model, child.id, ui_state, visited)
+                    } else {
+                        0
+                    }
+                })
+                .sum()
+        }
+
+        let mut visited = HashSet::from([activity_id]);
+        visit(self, activity_id, ui_state, &mut visited)
     }
 
     pub fn calculate_summary(&self) -> ActivitySummary {

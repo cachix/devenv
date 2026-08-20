@@ -892,6 +892,8 @@ pub struct ExpandedContentComponent<'a> {
     pub max_lines: usize,
     pub depth: usize,
     pub terminal_width: Option<usize>,
+    border_indent: Option<usize>,
+    line_prefix: Option<String>,
 }
 
 impl<'a> ExpandedContentComponent<'a> {
@@ -902,6 +904,8 @@ impl<'a> ExpandedContentComponent<'a> {
             max_lines: LOG_VIEWPORT_COLLAPSED,
             depth: 0,
             terminal_width: None,
+            border_indent: None,
+            line_prefix: None,
         }
     }
 
@@ -925,6 +929,20 @@ impl<'a> ExpandedContentComponent<'a> {
         self
     }
 
+    pub fn with_border_indent(mut self, indent: usize) -> Self {
+        self.border_indent = Some(indent);
+        self
+    }
+
+    pub fn with_line_prefix(mut self, prefix: String) -> Self {
+        self.line_prefix = Some(prefix);
+        self
+    }
+
+    fn border_indent(&self) -> usize {
+        self.border_indent.unwrap_or(2 + self.depth * 2)
+    }
+
     /// The last `max_lines` logical log lines, preserving chronological order.
     /// Long unbroken strings are hard-wrapped here because a `Text` child's
     /// intrinsic width can otherwise expand its parent beyond the terminal.
@@ -944,23 +962,59 @@ impl<'a> ExpandedContentComponent<'a> {
         };
 
         // Left margin + border + the leading content space + right margin.
-        let width = terminal_width.saturating_sub(2 + self.depth * 2 + 3).max(1);
+        let width = terminal_width
+            .saturating_sub(self.border_indent() + 3)
+            .max(1);
         lines
             .into_iter()
             .flat_map(|line| hard_wrap(&line, width))
             .collect()
     }
 
+    pub fn visual_height(&self) -> usize {
+        self.visible_lines()
+            .len()
+            .max(1)
+            .min(INLINE_LOG_MAX_VISUAL_ROWS.saturating_sub(1) as usize)
+    }
+
     pub fn render(&self) -> Vec<AnyElement<'static>> {
-        let indent = 2 + (self.depth * 2);
+        let indent = self.border_indent();
 
         let lines = self.visible_lines();
         if !lines.is_empty() {
+            if let Some(prefix) = &self.line_prefix {
+                let line_elements: Vec<AnyElement<'static>> = lines
+                    .into_iter()
+                    .map(|line| {
+                        element! {
+                            View(flex_direction: FlexDirection::Row, padding_right: 1) {
+                                Text(content: prefix.clone(), color: COLOR_HIERARCHY)
+                                Text(content: line, color: Color::Reset)
+                            }
+                        }
+                        .into_any()
+                    })
+                    .collect();
+
+                return vec![
+                    element! {
+                    View(
+                        flex_direction: FlexDirection::Column,
+                        overflow: Overflow::Hidden,
+                    ) {
+                        #(line_elements)
+                        }
+                    }
+                    .into_any(),
+                ];
+            }
+
             let line_elements: Vec<AnyElement<'static>> = lines
                 .into_iter()
                 .map(|line| {
                     element! {
-                        Text(content: format!(" {line}"), color: Color::AnsiValue(245))
+                        Text(content: format!(" {line}"), color: Color::Reset)
                     }
                     .into_any()
                 })
@@ -975,7 +1029,7 @@ impl<'a> ExpandedContentComponent<'a> {
                         margin_right: 1,
                         border_style: BorderStyle::Single,
                         border_edges: Edges::Left,
-                        border_color: Color::AnsiValue(245),
+                        border_color: COLOR_HIERARCHY,
                     ) {
                         #(line_elements)
                     }
@@ -993,9 +1047,20 @@ impl<'a> ExpandedContentComponent<'a> {
                 hard_wrap(self.empty_message, budget).into_iter().next()
             })
             .unwrap_or_else(|| self.empty_message.to_string());
+        if let Some(prefix) = &self.line_prefix {
+            return vec![
+                element! {
+                    View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                        Text(content: prefix.clone(), color: COLOR_HIERARCHY)
+                        Text(content: empty_message, color: Color::Reset)
+                    }
+                }
+                .into_any(),
+            ];
+        }
         vec![element! {
             View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
-                Text(content: empty_message, color: Color::AnsiValue(245))
+                Text(content: empty_message, color: Color::Reset)
             }
         }
         .into_any()]
@@ -1356,5 +1421,21 @@ mod tests {
             "expected URL to appear intact in wrapped output:\n{}",
             out
         );
+    }
+
+    #[test]
+    fn expanded_content_supports_explicit_border_alignment() {
+        let logs = VecDeque::from(["one".to_string()]);
+        let elements = ExpandedContentComponent::new(Some(&logs))
+            .with_border_indent(2)
+            .render();
+        let mut element = element! {
+            View(width: 40u32, flex_direction: FlexDirection::Column) {
+                #(elements)
+            }
+        };
+        let rendered = element.render(Some(40)).to_string();
+
+        assert!(rendered.contains("  │ one"), "{rendered}");
     }
 }

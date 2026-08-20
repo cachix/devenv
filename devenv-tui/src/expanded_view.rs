@@ -108,6 +108,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // The offset is measured in visual rows (one per terminal row); a single
     // log line may span multiple visual rows when wrapped.
     let mut scroll_offset = hooks.use_state(|| 0usize);
+    let mut follow_tail = hooks.use_state(|| true);
 
     // Selection state. Coordinates are (log_line_idx, visual_col) where
     // visual_col is a logical character offset within the log line, regardless
@@ -157,6 +158,12 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         (Arc::as_ptr(&state.logs) as usize, content_width),
     );
     let total_visual_rows = visual_rows.len();
+    let current_scroll_offset = resolved_scroll_offset(
+        scroll_offset.get(),
+        follow_tail.get(),
+        total_visual_rows,
+        viewport_height,
+    );
 
     let current_selection_anchor = selection_anchor.get();
     let current_selection_cursor = selection_cursor.get();
@@ -184,6 +191,8 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     command_tx.as_ref(),
                     attached,
                     &mut scroll_offset,
+                    &mut follow_tail,
+                    current_scroll_offset,
                     total_visual_rows,
                     viewport_height,
                     &mut SelectionState {
@@ -199,7 +208,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 // Exit keys flip `view_mode` on `ui_state`, which iocraft can't
                 // observe; wake the render loop so leaving the view is prompt
                 // instead of waiting for the idle heartbeat (#2915).
-                notify.notify_waiters();
+                notify.notify_one();
             }
             TerminalEvent::FullscreenMouse(mouse_event) => {
                 let prompt_active = ui_state
@@ -210,6 +219,8 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     handle_mouse_event(
                         mouse_event,
                         &mut scroll_offset,
+                        &mut follow_tail,
+                        current_scroll_offset,
                         total_visual_rows,
                         viewport_height,
                         &visual_rows_for_events,
@@ -254,8 +265,8 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         width,
         height,
         selection.as_ref(),
-        interrupt_prompt_active,
-        interrupt_prompt_attached,
+        follow_tail.get(),
+        (interrupt_prompt_active, interrupt_prompt_attached),
     )
 }
 
@@ -345,6 +356,20 @@ fn calculate_viewport_height(terminal_height: u16) -> usize {
     (terminal_height as usize).saturating_sub(2) // header + footer
 }
 
+fn resolved_scroll_offset(
+    scroll_offset: usize,
+    follow_tail: bool,
+    total_visual_rows: usize,
+    viewport_height: usize,
+) -> usize {
+    let max_offset = total_visual_rows.saturating_sub(viewport_height);
+    if follow_tail {
+        max_offset
+    } else {
+        scroll_offset.min(max_offset)
+    }
+}
+
 /// Mutable selection state passed to event handlers.
 struct SelectionState<'a> {
     has_selection: bool,
@@ -373,6 +398,8 @@ fn handle_key_event(
     command_tx: Option<&ProcessCommandSender>,
     attached: bool,
     scroll_offset: &mut State<usize>,
+    follow_tail: &mut State<bool>,
+    current_scroll_offset: usize,
     total_visual_rows: usize,
     viewport_height: usize,
     sel: &mut SelectionState<'_>,
@@ -408,32 +435,54 @@ fn handle_key_event(
 
         // Scroll down one line
         KeyCode::Down | KeyCode::Char('j') => {
-            scroll_offset.set((scroll_offset.get() + 1).min(max_offset));
+            let next = (current_scroll_offset + 1).min(max_offset);
+            scroll_offset.set(next);
+            follow_tail.set(next == max_offset);
         }
 
         // Scroll up one line
         KeyCode::Up | KeyCode::Char('k') => {
-            scroll_offset.set(scroll_offset.get().saturating_sub(1));
+            scroll_offset.set(current_scroll_offset.saturating_sub(1));
+            follow_tail.set(false);
         }
 
         // Page down
         KeyCode::PageDown | KeyCode::Char(' ') => {
-            scroll_offset.set((scroll_offset.get() + viewport_height).min(max_offset));
+            let next = (current_scroll_offset + viewport_height).min(max_offset);
+            scroll_offset.set(next);
+            follow_tail.set(next == max_offset);
         }
 
         // Page up
         KeyCode::PageUp => {
-            scroll_offset.set(scroll_offset.get().saturating_sub(viewport_height));
+            scroll_offset.set(current_scroll_offset.saturating_sub(viewport_height));
+            follow_tail.set(false);
         }
 
         // Go to top
         KeyCode::Home | KeyCode::Char('g') => {
             scroll_offset.set(0);
+            follow_tail.set(false);
         }
 
         // Go to bottom
         KeyCode::End | KeyCode::Char('G') => {
             scroll_offset.set(max_offset);
+            follow_tail.set(true);
+        }
+
+        KeyCode::Char('y') => {
+            let selection = match (sel.anchor, sel.cursor) {
+                (Some(anchor), Some(cursor)) => Some(Selection::from_anchor_cursor(anchor, cursor)),
+                _ => None,
+            };
+            let text = text_for_yank(sel.logs, selection.as_ref());
+            if !text.is_empty() {
+                copy_to_clipboard(&text);
+            }
+            if sel.has_selection {
+                sel.clear();
+            }
         }
 
         // Ctrl+C: copy selection if active, otherwise open the quit prompt
@@ -461,6 +510,8 @@ fn handle_key_event(
 fn handle_mouse_event(
     mouse_event: FullscreenMouseEvent,
     scroll_offset: &mut State<usize>,
+    follow_tail: &mut State<bool>,
+    current_scroll_offset: usize,
     total_visual_rows: usize,
     viewport_height: usize,
     visual_rows: &[VisualRow],
@@ -476,7 +527,7 @@ fn handle_mouse_event(
     // log line, accounting for the wrap segment that was clicked.
     let map_to_logical = |row: usize, col: usize| -> Option<(usize, usize)> {
         let visible_row_idx = row.checked_sub(1)?;
-        let visual_row_idx = scroll_offset.get() + visible_row_idx;
+        let visual_row_idx = current_scroll_offset + visible_row_idx;
         let vrow = visual_rows.get(visual_row_idx)?;
         let col_in_segment = col.saturating_sub(LINE_NUM_PREFIX_WIDTH);
         Some((vrow.log_idx, vrow.char_start + col_in_segment))
@@ -499,6 +550,8 @@ fn handle_mouse_event(
             selection_anchor.set(Some(pos));
             selection_cursor.set(Some(pos));
             is_selecting.set(true);
+            scroll_offset.set(current_scroll_offset);
+            follow_tail.set(false);
         }
 
         MouseEventKind::Drag(MouseButton::Left) => {
@@ -531,10 +584,13 @@ fn handle_mouse_event(
         }
 
         MouseEventKind::ScrollDown => {
-            scroll_offset.set((scroll_offset.get() + scroll_lines).min(max_offset));
+            let next = (current_scroll_offset + scroll_lines).min(max_offset);
+            scroll_offset.set(next);
+            follow_tail.set(next == max_offset);
         }
         MouseEventKind::ScrollUp => {
-            scroll_offset.set(scroll_offset.get().saturating_sub(scroll_lines));
+            scroll_offset.set(current_scroll_offset.saturating_sub(scroll_lines));
+            follow_tail.set(false);
         }
         _ => {}
     }
@@ -566,6 +622,13 @@ fn extract_selected_text(logs: &VecDeque<String>, selection: &Selection) -> Stri
     lines.join("\n")
 }
 
+fn text_for_yank(logs: &VecDeque<String>, selection: Option<&Selection>) -> String {
+    match selection {
+        Some(selection) => extract_selected_text(logs, selection),
+        None => logs.iter().cloned().collect::<Vec<_>>().join("\n"),
+    }
+}
+
 /// Render the expanded view UI
 fn render_expanded_view(
     state: &ExpandedViewState,
@@ -573,14 +636,19 @@ fn render_expanded_view(
     width: u16,
     height: u16,
     selection: Option<&Selection>,
-    interrupt_prompt_active: bool,
-    interrupt_prompt_attached: bool,
+    follow_tail: bool,
+    interrupt_prompt: (bool, bool),
 ) -> AnyElement<'static> {
+    let (interrupt_prompt_active, interrupt_prompt_attached) = interrupt_prompt;
     let viewport_height = calculate_viewport_height(height);
     let total_rows = visual_rows.len();
 
-    let max_offset = total_rows.saturating_sub(viewport_height);
-    let clamped_offset = state.scroll_offset.min(max_offset);
+    let clamped_offset = resolved_scroll_offset(
+        state.scroll_offset,
+        follow_tail,
+        total_rows,
+        viewport_height,
+    );
 
     let start = clamped_offset.min(total_rows);
     let end = (start + viewport_height).min(total_rows);
@@ -593,34 +661,35 @@ fn render_expanded_view(
     content_elements.extend(padding_elements);
 
     let progress = build_progress_indicator(clamped_offset, viewport_height, total_rows);
+    let follow_status = if follow_tail { "FOLLOWING" } else { "PAUSED" };
 
     // Build footer text - show copy hint when selection is active
     let footer_text = if interrupt_prompt_active {
         if interrupt_prompt_attached {
             format!(
-                "{} \u{2502} Detach or stop the process manager?  Ctrl-C:detach  s:stop manager  Esc:keep watching",
-                progress
+                "{} \u{2502} {} \u{2502} Detach or stop the process manager?  Ctrl-C:detach  s:stop manager  Esc:keep watching",
+                follow_status, progress
             )
         } else if width < 88 {
             format!(
-                "{} \u{2502} Quit devenv?  c:keep running  q/Ctrl-C:quit",
-                progress
+                "{} \u{2502} {} \u{2502} Quit devenv?  c:keep running  q/Ctrl-C:quit",
+                follow_status, progress
             )
         } else {
             format!(
-                "{} \u{2502} Quit devenv? Nothing has been stopped yet  c:keep running  q:quit  Ctrl-C:quit",
-                progress
+                "{} \u{2502} {} \u{2502} Quit devenv? Nothing has been stopped yet  c:keep running  q:quit  Ctrl-C:quit",
+                follow_status, progress
             )
         }
     } else if selection.is_some() {
         format!(
-            "{} \u{2502} j/k:line  PgUp/PgDn:page  g/G:top/bottom  Ctrl-C:copy  Esc:deselect  q:back",
-            progress
+            "{} \u{2502} {} \u{2502} y:copy  j/k:line  PgUp/PgDn:page  g:top  G:follow  Ctrl-C:copy  Esc:deselect  q:back",
+            follow_status, progress
         )
     } else {
         format!(
-            "{} \u{2502} j/k:line  PgUp/PgDn:page  g/G:top/bottom  q:back",
-            progress
+            "{} \u{2502} {} \u{2502} y:copy all  j/k:line  PgUp/PgDn:page  g:top  G:follow  q:back",
+            follow_status, progress
         )
     };
 
@@ -777,6 +846,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_follow_mode_resolves_to_latest_rows() {
+        assert_eq!(resolved_scroll_offset(0, true, 100, 20), 80);
+        assert_eq!(resolved_scroll_offset(12, false, 100, 20), 12);
+        assert_eq!(resolved_scroll_offset(80, true, 140, 20), 120);
+        assert_eq!(resolved_scroll_offset(120, false, 60, 20), 40);
+    }
+
+    #[test]
+    fn test_render_expanded_view_shows_follow_state() {
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(VecDeque::from(["ready".to_string()])),
+        };
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(100));
+
+        let mut following =
+            render_expanded_view(&state, &visual_rows, 100, 8, None, true, (false, false));
+        let following_output = following.render(Some(100)).to_string();
+        assert!(following_output.contains("FOLLOWING"));
+        assert!(following_output.contains("y:copy all"));
+
+        let mut paused =
+            render_expanded_view(&state, &visual_rows, 100, 8, None, false, (false, false));
+        let paused_output = paused.render(Some(100)).to_string();
+        assert!(paused_output.contains("PAUSED"));
+        assert!(paused_output.contains("G:follow"));
+    }
+
+    #[test]
+    fn test_yank_uses_selection_or_complete_log_buffer() {
+        let logs = VecDeque::from(["first".to_string(), "second".to_string()]);
+        assert_eq!(text_for_yank(&logs, None), "first\nsecond");
+
+        let selection = Selection::from_anchor_cursor((0, 1), (1, 3));
+        assert_eq!(text_for_yank(&logs, Some(&selection)), "irst\nsec");
+    }
+
+    #[test]
     fn test_render_expanded_view_interrupt_prompt_footer() {
         let state = ExpandedViewState {
             activity_name: "api".to_string(),
@@ -785,7 +893,8 @@ mod tests {
         };
         let visual_rows = build_visual_rows(&state.logs, content_width_for(100));
 
-        let mut element = render_expanded_view(&state, &visual_rows, 100, 8, None, true, false);
+        let mut element =
+            render_expanded_view(&state, &visual_rows, 100, 8, None, true, (true, false));
         let output = element.render(Some(100)).to_string();
 
         assert!(output.contains("Quit devenv? Nothing has been stopped yet"));
@@ -865,7 +974,7 @@ mod tests {
             (visual_rows.len() as u16) + 2,
             None,
             false,
-            false,
+            (false, false),
         );
         let output = element.render(Some(width as usize)).to_string();
 
@@ -909,7 +1018,7 @@ mod tests {
             6,
             Some(&selection),
             false,
-            false,
+            (false, false),
         );
         let output = element.render(Some(width as usize)).to_string();
         assert!(output.contains("cdefghij"));

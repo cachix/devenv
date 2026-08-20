@@ -1181,7 +1181,7 @@ fn test_overflow_keeps_collapsed_process_visible() {
     let mut model = model;
 
     // Create several completed activities (these should get clipped at the top)
-    for i in 1..=5 {
+    for i in 1..=8 {
         model.apply_activity_event(build_start(i, format!("completed-build-{}", i)));
         model.apply_activity_event(build_complete(i, ActivityOutcome::Success));
     }
@@ -1530,23 +1530,146 @@ fn test_processes_alphabetical_order() {
 }
 
 #[test]
-fn test_process_logs_are_collapsed_until_explicitly_opened() {
+fn test_process_logs_follow_terminal_height_and_manual_focus() {
     let (mut model, mut ui_state) = new_test_model();
 
-    model.apply_activity_event(process_start(1, "chatty-service"));
+    model.apply_activity_event(operation_start(10, "Running processes"));
+    model.apply_activity_event(process_start_with(
+        1,
+        "chatty-service",
+        Some(10),
+        ActivityLevel::Info,
+    ));
     model.apply_activity_event(process_log(1, "seeding database", false));
 
     ui_state.selected_activity = Some(1);
-    let selected = render_to_string(&model, &ui_state);
-    assert!(!selected.contains("seeding database"));
+    let roomy = render_to_string(&model, &ui_state);
+    assert!(roomy.contains("seeding database"));
+    assert!(roomy.contains("Enter focus"));
+
+    ui_state.set_terminal_size(TEST_WIDTH, 3);
+    let crowded = render_to_string(&model, &ui_state);
+    assert!(!crowded.contains("seeding database"));
+    assert!(crowded.contains("Enter preview"));
 
     ui_state.toggle_inline_logs();
-    let opened = render_to_string(&model, &ui_state);
-    assert!(opened.contains("seeding database"));
+    let focused = render_to_string(&model, &ui_state);
+    assert!(focused.contains("seeding database"));
+    assert!(focused.contains("    seeding database"), "{focused}");
+    assert!(!focused.contains("│ seeding database"), "{focused}");
+    assert!(focused.contains("Enter hide preview"));
 
     ui_state.toggle_inline_logs();
-    let closed = render_to_string(&model, &ui_state);
-    assert!(!closed.contains("seeding database"));
+    let automatic = render_to_string(&model, &ui_state);
+    assert!(!automatic.contains("seeding database"));
+}
+
+#[test]
+fn test_process_preview_preserves_required_tree_continuation() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(10, "Running processes"));
+    model.apply_activity_event(process_start_with(
+        1,
+        "chatty-service",
+        Some(10),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_log(1, "seeding database", false));
+    model.apply_activity_event(process_start_with(
+        2,
+        "next-service",
+        Some(10),
+        ActivityLevel::Info,
+    ));
+
+    ui_state.set_terminal_size(TEST_WIDTH, 4);
+    ui_state.selected_activity = Some(1);
+    ui_state.toggle_inline_logs();
+    let rendered = render_to_string(&model, &ui_state);
+
+    assert!(rendered.contains("  │ seeding database"), "{rendered}");
+    assert!(rendered.contains("  └"), "{rendered}");
+}
+
+#[test]
+fn test_completed_shell_tree_collapses_into_expandable_summary() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Building shell"));
+    model.apply_activity_event(evaluate_start_with(
+        2,
+        "Evaluating Nix",
+        ActivityLevel::Info,
+        Some(1),
+    ));
+    model.apply_activity_event(build_start_with(3, "hello-2.12", Some(2)));
+    model.apply_activity_event(build_complete(3, ActivityOutcome::Success));
+    model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+    ui_state.selected_activity = Some(1);
+    let collapsed = render_to_string(&model, &ui_state);
+    assert!(collapsed.contains("▸ Building shell"));
+    assert!(collapsed.contains("2 steps"));
+    assert!(!collapsed.contains("Evaluating Nix"));
+    assert!(!collapsed.contains("hello-2.12"));
+    insta::assert_snapshot!("completed_shell_tree_collapsed", collapsed);
+
+    ui_state.toggle_activity_expansion(1);
+    let expanded = render_to_string(&model, &ui_state);
+    assert!(expanded.contains("▾ Building shell"));
+    assert!(expanded.contains("Evaluating Nix"));
+    assert!(expanded.contains("hello-2.12"));
+    insta::assert_snapshot!("completed_shell_tree_expanded", expanded);
+}
+
+#[test]
+fn test_failed_shell_tree_stays_expanded() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Building shell"));
+    model.apply_activity_event(build_start_with(2, "broken-build", Some(1)));
+    model.apply_activity_event(build_complete(2, ActivityOutcome::Failed));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Failed));
+
+    let rendered = render_to_string(&model, &ui_state);
+    assert!(!rendered.contains("▸ Building shell"));
+    assert!(rendered.contains("broken-build"));
+}
+
+#[test]
+fn test_completed_non_shell_operation_stays_expanded() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Pushing to cache"));
+    model.apply_activity_event(build_start_with(2, "cached-build", Some(1)));
+    model.apply_activity_event(build_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+    let rendered = render_to_string(&model, &ui_state);
+    assert!(!rendered.contains("▸ Pushing to cache"));
+    assert!(rendered.contains("cached-build"));
+}
+
+#[test]
+fn test_running_process_group_never_collapses() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Running processes"));
+    model.apply_activity_event(evaluate_start_with(
+        2,
+        "Evaluating Nix",
+        ActivityLevel::Info,
+        Some(1),
+    ));
+    model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(process_start_with(3, "api", Some(1), ActivityLevel::Info));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+    let rendered = render_to_string(&model, &ui_state);
+    assert!(!rendered.contains("▸ Running processes"));
+    assert!(rendered.contains("api"));
 }
 
 #[test]

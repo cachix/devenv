@@ -1,7 +1,7 @@
 use crate::{
     expanded_view::ExpandedLogView,
     model::{ActivityModel, RenderContext, UiState, ViewMode},
-    view::{ActivityHeights, SUMMARY_BAR_HEIGHT, ScrollState, view},
+    view::{ActivityHeights, SUMMARY_BAR_HEIGHT, ScrollState, process_previews_fit, view},
 };
 use crossterm::{
     cursor, event, execute,
@@ -682,6 +682,45 @@ fn handle_process_search_key(
     true
 }
 
+fn activate_selected_activity(model: &ActivityModel, ui_state: &mut UiState) {
+    if let Some(activity_id) = ui_state.selected_activity
+        && model.is_activity_collapsible(activity_id, ui_state)
+    {
+        ui_state.toggle_activity_expansion(activity_id);
+        ui_state.inline_logs_activity = None;
+    } else {
+        ui_state.toggle_inline_logs();
+    }
+}
+
+fn expand_selected_activity(model: &ActivityModel, ui_state: &mut UiState) {
+    let Some(activity_id) = ui_state.selected_activity else {
+        return;
+    };
+    if model.is_activity_collapsible(activity_id, ui_state) {
+        ui_state.expanded_activities.insert(activity_id);
+        ui_state.inline_logs_activity = None;
+    } else if model.get_activity(activity_id).is_some_and(|activity| {
+        matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+    }) {
+        ui_state.inline_logs_activity = Some(activity_id);
+    }
+}
+
+fn collapse_selected_activity(model: &ActivityModel, ui_state: &mut UiState) {
+    let Some(activity_id) = ui_state.selected_activity else {
+        return;
+    };
+    if model.is_activity_collapsible(activity_id, ui_state) {
+        ui_state.expanded_activities.remove(&activity_id);
+        ui_state.inline_logs_activity = None;
+    } else if model.get_activity(activity_id).is_some_and(|activity| {
+        matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+    }) {
+        ui_state.inline_logs_activity = None;
+    }
+}
+
 /// Main TUI component (inline mode)
 #[component]
 fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -879,8 +918,24 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             }
                         }
                         KeyCode::Enter => {
-                            if let Ok(mut ui) = ui_state.write() {
-                                ui.toggle_inline_logs();
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                activate_selected_activity(&model, &mut ui);
+                            }
+                        }
+                        KeyCode::Right | KeyCode::Char('l') => {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                expand_selected_activity(&model, &mut ui);
+                            }
+                        }
+                        KeyCode::Left | KeyCode::Char('h') => {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                collapse_selected_activity(&model, &mut ui);
                             }
                         }
                         KeyCode::Down | KeyCode::Char('j') | KeyCode::Up | KeyCode::Char('k') => {
@@ -930,7 +985,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 // prompt), which iocraft cannot observe on its own. Wake the
                 // render loop so the change is painted promptly instead of
                 // waiting for the idle heartbeat (#2915).
-                notify.notify_waiters();
+                notify.notify_one();
             }
         }
     });
@@ -955,6 +1010,8 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let is_shutting_down = shutdown.is_cancelled();
     let rendered = if let Ok(model_guard) = activity_model.read() {
         let display = model_guard.get_display_activities(&ui);
+        let auto_expand_process_logs = ui.inline_logs_activity.is_none()
+            && process_previews_fit(&model_guard, &display, ui.terminal_size);
 
         // Prune stale entries and compute total content height in a single lock
         let total_content_height: i32 = {
@@ -964,7 +1021,19 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             heights.retain(|id, _| active_ids.contains(id));
             display
                 .iter()
-                .map(|da| activity_height(&heights, da.activity.id))
+                .map(|da| {
+                    let process_is_expanded =
+                        auto_expand_process_logs || ui.inline_logs_activity == Some(da.activity.id);
+                    if matches!(
+                        da.activity.variant,
+                        crate::model::ActivityVariant::Process(_)
+                    ) && !process_is_expanded
+                    {
+                        1
+                    } else {
+                        activity_height(&heights, da.activity.id)
+                    }
+                })
                 .sum()
         };
 
@@ -1105,7 +1174,11 @@ async fn run_view(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devenv_activity::test_helpers::process_start;
+    use devenv_activity::test_helpers::{
+        build_complete, build_start_with, evaluate_complete, evaluate_start_with,
+        operation_complete, operation_start, process_start,
+    };
+    use devenv_activity::{ActivityLevel, ActivityOutcome};
     use tokio::sync::mpsc;
 
     #[test]
@@ -1237,5 +1310,84 @@ mod tests {
         let up = KeyEvent::new(KeyEventKind::Press, KeyCode::Up);
         assert!(handle_process_search_key(&up, &model, &mut ui_state));
         assert_eq!(ui_state.selected_activity, Some(1));
+    }
+
+    #[test]
+    fn enter_toggles_completed_shell_summary() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(operation_start(1, "Building shell"));
+        model.apply_activity_event(evaluate_start_with(
+            2,
+            "Evaluating Nix",
+            ActivityLevel::Info,
+            Some(1),
+        ));
+        model.apply_activity_event(build_start_with(3, "hello", Some(2)));
+        model.apply_activity_event(build_complete(3, ActivityOutcome::Success));
+        model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+        model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        ui_state.inline_logs_activity = Some(1);
+
+        activate_selected_activity(&model, &mut ui_state);
+        assert!(ui_state.expanded_activities.contains(&1));
+        assert_eq!(ui_state.inline_logs_activity, None);
+
+        activate_selected_activity(&model, &mut ui_state);
+        assert!(!ui_state.expanded_activities.contains(&1));
+    }
+
+    #[test]
+    fn directional_open_expands_shell_and_process() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(operation_start(1, "Building shell"));
+        model.apply_activity_event(evaluate_start_with(
+            2,
+            "Evaluating Nix",
+            ActivityLevel::Info,
+            Some(1),
+        ));
+        model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+        model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+        model.apply_activity_event(process_start(3, "api"));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        expand_selected_activity(&model, &mut ui_state);
+        expand_selected_activity(&model, &mut ui_state);
+        assert!(ui_state.expanded_activities.contains(&1));
+
+        ui_state.selected_activity = Some(3);
+        expand_selected_activity(&model, &mut ui_state);
+        assert_eq!(ui_state.inline_logs_activity, Some(3));
+    }
+
+    #[test]
+    fn directional_close_collapses_shell_and_process() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(operation_start(1, "Building shell"));
+        model.apply_activity_event(evaluate_start_with(
+            2,
+            "Evaluating Nix",
+            ActivityLevel::Info,
+            Some(1),
+        ));
+        model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+        model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+        model.apply_activity_event(process_start(3, "api"));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        ui_state.expanded_activities.insert(1);
+        collapse_selected_activity(&model, &mut ui_state);
+        collapse_selected_activity(&model, &mut ui_state);
+        assert!(!ui_state.expanded_activities.contains(&1));
+
+        ui_state.selected_activity = Some(3);
+        ui_state.inline_logs_activity = Some(3);
+        collapse_selected_activity(&model, &mut ui_state);
+        assert_eq!(ui_state.inline_logs_activity, None);
     }
 }

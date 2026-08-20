@@ -79,8 +79,8 @@ impl RedrawSink for State<u64> {
 /// the heartbeat.
 ///
 /// Throttling/coalescing: after any redraw we sleep at least `throttle` before
-/// the next one; notifications during that sleep are coalesced because `version`
-/// keeps climbing and is re-read on the next iteration.
+/// the next one; model notifications are retained by `version`, while input
+/// notifications retain a `Notify` permit for the next iteration.
 ///
 /// The `shutdown` notify bypasses everything: when fired the loop emits one
 /// final redraw and returns immediately, so cooperative-exit flags are observed
@@ -258,7 +258,7 @@ mod tests {
         let before = h.redraws();
 
         // Notify without bumping the version, as the key handlers do.
-        h.notify.notify_waiters();
+        h.notify.notify_one();
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         let after = h.redraws();
@@ -267,6 +267,23 @@ mod tests {
             "an input notify must trigger a redraw (before={before}, after={after})"
         );
 
+        h.stop().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn input_notify_during_throttle_is_not_lost() {
+        let h = Harness::spawn();
+        tokio::task::yield_now().await;
+        let before = h.redraws();
+
+        h.notify.notify_one();
+        tokio::time::sleep(Duration::from_millis(17)).await;
+
+        let after = h.redraws();
+        assert!(
+            after > before,
+            "input during the throttle window must redraw without waiting for the heartbeat"
+        );
         h.stop().await;
     }
 

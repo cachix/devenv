@@ -48,18 +48,36 @@ command="\"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\"
 expect:api
 expect:├
 expect:worker
+expect:processed deterministic job 1
 expect:disabled
 expect:stopped
-run:! grep -Fq 'processed deterministic job 1' "$TUI_REPLAY_TRANSCRIPT"
+resize:48x6
 send:/worker
 expect:Search processes: /worker
 send:\r
-send:\r
-expect:processed deterministic job 1
-send:\r
+expect:focus
+send:l
+expect:show all
+send:h
+expect:focus
 send:/api
 expect:Search processes: /api
 send:\r
+expect:focus
+send:\x1b[C
+expect:show all
+send:\x1b[D
+expect:focus
+send:\x05
+expect:FOLLOWING
+send:y
+expect:bGlzdGVuaW5nIG9uIGh0dHA6Ly8xMjcuMC4wLjE6ODA4MA==
+send:g
+expect:PAUSED
+send:G
+expect:FOLLOWING
+send:q
+expect:Running processes
 resize:48x12
 resize:120x40
 send:\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12
@@ -69,14 +87,14 @@ run:test "$(tail -n 1 "$TUI_REPLAY_EVENT_LOG")" = '{"kind":"status","process":"a
 send:\x18
 expect:stopping
 run:while ! tail -n 1 "$TUI_REPLAY_EVENT_LOG" | grep -Fq '"process":"api","status":"stopped"'; do sleep 0.02; done
-expect:restart
+expect:^R
 send:\x12
 expect:restarting
 expect:ready
 send:\x03
 expect:Detach
 send:c
-expect:restart
+expect:^R
 send:\x03
 expect:Detach
 send:s

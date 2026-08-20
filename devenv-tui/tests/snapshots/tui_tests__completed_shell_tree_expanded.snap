@@ -1,0 +1,9 @@
+---
+source: devenv-tui/tests/tui_tests.rs
+expression: expanded
+---
+✓ ▾ Building shell           [TIME] 
+  └ ✓ Evaluating Nix         [TIME]
+    └ ✓ Building  hello-2.12 [TIME]
+
+ ↑↓ nav Enter collapse Esc clear
