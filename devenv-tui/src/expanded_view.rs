@@ -56,6 +56,14 @@ struct ScrollMode {
     anchor: Option<ScrollAnchor>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogScrollAction {
+    Forward(usize),
+    Backward(usize),
+    Top,
+    Bottom,
+}
+
 impl Selection {
     /// Create a selection from anchor and cursor, normalizing so start <= end.
     fn from_anchor_cursor(anchor: (usize, usize), cursor: (usize, usize)) -> Self {
@@ -443,6 +451,74 @@ fn follow_at_bottom(
     scroll_anchor.set(None);
 }
 
+fn keyboard_scroll_action(key_event: &KeyEvent, viewport_height: usize) -> Option<LogScrollAction> {
+    let control = key_event.modifiers.contains(KeyModifiers::CONTROL);
+    let half_page = viewport_height.div_ceil(2).max(1);
+
+    match key_event.code {
+        KeyCode::Down | KeyCode::Char('j') => Some(LogScrollAction::Forward(1)),
+        KeyCode::Up | KeyCode::Char('k') => Some(LogScrollAction::Backward(1)),
+        KeyCode::PageDown | KeyCode::Char(' ') => Some(LogScrollAction::Forward(viewport_height)),
+        KeyCode::PageUp => Some(LogScrollAction::Backward(viewport_height)),
+        KeyCode::Char('d') if control => Some(LogScrollAction::Forward(half_page)),
+        KeyCode::Char('u') if control => Some(LogScrollAction::Backward(half_page)),
+        KeyCode::Char('f') if control => Some(LogScrollAction::Forward(viewport_height)),
+        KeyCode::Char('b') if control => Some(LogScrollAction::Backward(viewport_height)),
+        KeyCode::Home | KeyCode::Char('g') => Some(LogScrollAction::Top),
+        KeyCode::End | KeyCode::Char('G') => Some(LogScrollAction::Bottom),
+        _ => None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_scroll_action(
+    action: LogScrollAction,
+    current_scroll_offset: usize,
+    max_offset: usize,
+    scroll_offset: &mut State<usize>,
+    follow_tail: &mut State<bool>,
+    scroll_anchor: &mut State<Option<ScrollAnchor>>,
+    buffer_start_line: usize,
+    visual_rows: &[VisualRow],
+) {
+    match action {
+        LogScrollAction::Forward(lines) => {
+            let next = current_scroll_offset.saturating_add(lines).min(max_offset);
+            if next == max_offset {
+                follow_at_bottom(scroll_offset, follow_tail, scroll_anchor, max_offset);
+            } else {
+                pause_at_offset(
+                    scroll_offset,
+                    follow_tail,
+                    scroll_anchor,
+                    buffer_start_line,
+                    visual_rows,
+                    next,
+                );
+            }
+        }
+        LogScrollAction::Backward(lines) => pause_at_offset(
+            scroll_offset,
+            follow_tail,
+            scroll_anchor,
+            buffer_start_line,
+            visual_rows,
+            current_scroll_offset.saturating_sub(lines),
+        ),
+        LogScrollAction::Top => pause_at_offset(
+            scroll_offset,
+            follow_tail,
+            scroll_anchor,
+            buffer_start_line,
+            visual_rows,
+            0,
+        ),
+        LogScrollAction::Bottom => {
+            follow_at_bottom(scroll_offset, follow_tail, scroll_anchor, max_offset)
+        }
+    }
+}
+
 /// Mutable selection state passed to event handlers.
 struct SelectionState<'a> {
     has_selection: bool,
@@ -495,6 +571,20 @@ fn handle_key_event(
         viewport_height,
     );
 
+    if let Some(action) = keyboard_scroll_action(&key_event, viewport_height) {
+        apply_scroll_action(
+            action,
+            current_scroll_offset,
+            max_offset,
+            scroll_offset,
+            follow_tail,
+            scroll_anchor,
+            buffer_start_line,
+            visual_rows,
+        );
+        return;
+    }
+
     match key_event.code {
         // Esc: clear selection first, then exit
         KeyCode::Esc => {
@@ -516,81 +606,6 @@ fn handle_key_event(
             if let Ok(mut ui) = ui_state.write() {
                 ui.view_mode = ViewMode::Main;
             }
-        }
-
-        // Scroll down one line
-        KeyCode::Down | KeyCode::Char('j') => {
-            let next = (current_scroll_offset + 1).min(max_offset);
-            if next == max_offset {
-                follow_at_bottom(scroll_offset, follow_tail, scroll_anchor, max_offset);
-            } else {
-                pause_at_offset(
-                    scroll_offset,
-                    follow_tail,
-                    scroll_anchor,
-                    buffer_start_line,
-                    visual_rows,
-                    next,
-                );
-            }
-        }
-
-        // Scroll up one line
-        KeyCode::Up | KeyCode::Char('k') => {
-            pause_at_offset(
-                scroll_offset,
-                follow_tail,
-                scroll_anchor,
-                buffer_start_line,
-                visual_rows,
-                current_scroll_offset.saturating_sub(1),
-            );
-        }
-
-        // Page down
-        KeyCode::PageDown | KeyCode::Char(' ') => {
-            let next = (current_scroll_offset + viewport_height).min(max_offset);
-            if next == max_offset {
-                follow_at_bottom(scroll_offset, follow_tail, scroll_anchor, max_offset);
-            } else {
-                pause_at_offset(
-                    scroll_offset,
-                    follow_tail,
-                    scroll_anchor,
-                    buffer_start_line,
-                    visual_rows,
-                    next,
-                );
-            }
-        }
-
-        // Page up
-        KeyCode::PageUp => {
-            pause_at_offset(
-                scroll_offset,
-                follow_tail,
-                scroll_anchor,
-                buffer_start_line,
-                visual_rows,
-                current_scroll_offset.saturating_sub(viewport_height),
-            );
-        }
-
-        // Go to top
-        KeyCode::Home | KeyCode::Char('g') => {
-            pause_at_offset(
-                scroll_offset,
-                follow_tail,
-                scroll_anchor,
-                buffer_start_line,
-                visual_rows,
-                0,
-            );
-        }
-
-        // Go to bottom
-        KeyCode::End | KeyCode::Char('G') => {
-            follow_at_bottom(scroll_offset, follow_tail, scroll_anchor, max_offset);
         }
 
         KeyCode::Char('y')
@@ -876,12 +891,12 @@ fn render_expanded_view(
         }
     } else if selection.is_some() {
         format!(
-            "{} \u{2502} {} \u{2502} y:copy  j/k:line  PgUp/PgDn:page  g:top  G:follow  Ctrl-C:copy  Esc:deselect  q:back",
+            "{} \u{2502} {} \u{2502} y:copy  j/k:line  ^D/^U:half  ^F/^B:page  g:top  G:follow  Ctrl-C:copy  Esc:deselect  q:back",
             follow_status, progress
         )
     } else {
         format!(
-            "{} \u{2502} {} \u{2502} y:copy all  j/k:line  PgUp/PgDn:page  g:top  G:follow  q:back",
+            "{} \u{2502} {} \u{2502} y:copy all  j/k:line  ^D/^U:half  ^F/^B:page  g:top  G:follow  q:back",
             follow_status, progress
         )
     };
@@ -1046,6 +1061,43 @@ mod tests {
         assert_eq!(resolved_scroll_offset(12, false, None, 0, &[], 100, 20), 12);
         assert_eq!(resolved_scroll_offset(80, true, None, 0, &[], 140, 20), 120);
         assert_eq!(resolved_scroll_offset(120, false, None, 0, &[], 60, 20), 40);
+    }
+
+    #[test]
+    fn test_keyboard_scroll_shortcuts_use_vim_distances() {
+        let action = |code, control| {
+            let mut event = KeyEvent::new(KeyEventKind::Press, code);
+            if control {
+                event.modifiers = KeyModifiers::CONTROL;
+            }
+            keyboard_scroll_action(&event, 21)
+        };
+
+        assert_eq!(
+            action(KeyCode::Char('d'), true),
+            Some(LogScrollAction::Forward(11))
+        );
+        assert_eq!(
+            action(KeyCode::Char('u'), true),
+            Some(LogScrollAction::Backward(11))
+        );
+        assert_eq!(
+            action(KeyCode::Char('f'), true),
+            Some(LogScrollAction::Forward(21))
+        );
+        assert_eq!(
+            action(KeyCode::Char('b'), true),
+            Some(LogScrollAction::Backward(21))
+        );
+        assert_eq!(
+            action(KeyCode::PageDown, false),
+            Some(LogScrollAction::Forward(21))
+        );
+        assert_eq!(
+            action(KeyCode::PageUp, false),
+            Some(LogScrollAction::Backward(21))
+        );
+        assert_eq!(action(KeyCode::Char('d'), false), None);
     }
 
     #[test]

@@ -80,6 +80,14 @@ send:\x1b[D
 expect:focus
 send:\x05
 expect:FOLLOWING
+send:\x15
+expect:PAUSED
+send:\x04
+expect:FOLLOWING
+send:\x02
+expect:PAUSED
+send:\x06
+expect:FOLLOWING
 send:y
 expect:bGlzdGVuaW5nIG9uIGh0dHA6Ly8xMjcuMC4wLjE6ODA4MA==
 send:g
