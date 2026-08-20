@@ -674,7 +674,7 @@ null or package
 *Default:*
 
 ```nix
-if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null
+if pkgs.stdenv.hostPlatform.isDarwin then pkgs.apple-sdk else null
 ```
 
 
@@ -21577,7 +21577,7 @@ boolean
 *Default:*
 
 ```nix
-pkgs.stdenv.isLinux
+pkgs.stdenv.hostPlatform.isLinux
 ```
 
 *Declared by:*
