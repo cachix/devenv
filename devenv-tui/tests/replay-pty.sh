@@ -56,6 +56,7 @@ expect:^H
 send:/worker
 expect:Search processes: /worker
 send:\r
+expect:^E
 send:h
 expect:focus
 send:l
@@ -96,6 +97,7 @@ send:n
 expect:2/3
 send:y
 expect:bGlzdGVuaW5nIG9uIGh0dHA6Ly8xMjcuMC4wLjE6ODA4MA==
+expect:Copied 1 line
 send:G
 expect:FOLLOWING
 send:g

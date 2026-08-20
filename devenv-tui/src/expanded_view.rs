@@ -9,15 +9,19 @@ use crate::TuiConfig;
 use crate::app::{
     ExitFlag, ProcessCommandSender, handle_interrupt_prompt_key, request_interrupt_prompt,
 };
+use crate::components::COLOR_COMPLETED;
 use crate::model::{ActivityModel, UiState, ViewMode};
 use base64::Engine;
 use crossterm::event::MouseButton;
+use human_repr::HumanCount;
 use iocraft::prelude::*;
 use iocraft::{FullscreenMouseEvent, MouseEventKind};
 use std::collections::VecDeque;
 use std::io::Write as _;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use tokio::sync::Notify;
+use tokio::time::Instant;
 use tokio_shutdown::Shutdown;
 
 /// Width of the line-number field, e.g. "NNNNN".
@@ -27,6 +31,7 @@ const LINE_NUM_SEPARATOR: &str = " \u{2502} ";
 const LINE_NUM_SEPARATOR_WIDTH: usize = 3;
 /// Full prefix width, e.g. "NNNNN │ " = 8 columns.
 const LINE_NUM_PREFIX_WIDTH: usize = LINE_NUM_DIGITS + LINE_NUM_SEPARATOR_WIDTH;
+const COPY_NOTICE_DURATION: Duration = Duration::from_secs(2);
 
 /// Collect `s.chars()[start..end]` into a new `String`.
 fn char_slice(s: &str, start: usize, end: usize) -> String {
@@ -99,9 +104,16 @@ struct LogSearchView<'a> {
     editing: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CopyNotice {
+    lines: usize,
+    bytes: usize,
+}
+
 struct ExpandedViewUi<'a> {
     selection: Option<&'a Selection>,
     search: Option<LogSearchView<'a>>,
+    copy_notice: Option<CopyNotice>,
     scroll_mode: ScrollMode,
     interrupt_prompt: (bool, bool),
 }
@@ -173,6 +185,31 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let mut follow_tail = hooks.use_state(|| true);
     let mut scroll_anchor = hooks.use_state(|| None::<ScrollAnchor>);
     let mut log_search = hooks.use_state(|| None::<LogSearchState>);
+    let mut copy_notice = hooks.use_state(|| None::<CopyNotice>);
+    let mut copy_notice_deadline = hooks.use_ref(|| None::<Instant>);
+    let copy_notice_wake = hooks.use_ref(|| Arc::new(Notify::new()));
+
+    let copy_notice_wake_for_timer = copy_notice_wake.read().clone();
+    hooks.use_future(async move {
+        loop {
+            copy_notice_wake_for_timer.notified().await;
+            loop {
+                let Some(Some(deadline)) = copy_notice_deadline.try_get() else {
+                    break;
+                };
+                tokio::time::sleep_until(deadline).await;
+                let Some(latest_deadline) = copy_notice_deadline.try_get() else {
+                    return;
+                };
+                if latest_deadline.is_some_and(|latest| latest > Instant::now()) {
+                    continue;
+                }
+                copy_notice.set(None);
+                copy_notice_deadline.set(None);
+                break;
+            }
+        }
+    });
 
     // Selection state. Coordinates are (log_line_idx, visual_col) where
     // visual_col is a logical character offset within the log line, regardless
@@ -247,6 +284,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     let logs_for_copy = state.logs.clone();
     let visual_rows_for_events = visual_rows.clone();
+    let copy_notice_wake_for_events = copy_notice_wake.read().clone();
 
     // Handle keyboard and mouse events - NO MODEL LOCK, only local state updates
     hooks.use_terminal_events({
@@ -274,6 +312,11 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     total_visual_rows,
                     viewport_height,
                     &mut log_search,
+                    &mut CopyFeedbackState {
+                        notice: &mut copy_notice,
+                        deadline: &mut copy_notice_deadline,
+                        wake: &copy_notice_wake_for_events,
+                    },
                     &mut SelectionState {
                         has_selection,
                         anchor: current_selection_anchor,
@@ -355,6 +398,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ExpandedViewUi {
             selection: selection.as_ref(),
             search,
+            copy_notice: copy_notice.get(),
             scroll_mode: ScrollMode {
                 follow_tail: follow_tail.get(),
                 anchor: scroll_anchor.get(),
@@ -903,6 +947,47 @@ fn handle_log_search_key(
     }
 }
 
+impl CopyNotice {
+    fn from_text(text: &str) -> Option<Self> {
+        (!text.is_empty()).then(|| Self {
+            lines: text.split('\n').count(),
+            bytes: text.len(),
+        })
+    }
+
+    fn message(self) -> String {
+        let unit = if self.lines == 1 { "line" } else { "lines" };
+        format!(
+            "Copied {} {} ({})",
+            self.lines,
+            unit,
+            self.bytes.human_count_bytes()
+        )
+    }
+}
+
+struct CopyFeedbackState<'a> {
+    notice: &'a mut State<Option<CopyNotice>>,
+    deadline: &'a mut Ref<Option<Instant>>,
+    wake: &'a Arc<Notify>,
+}
+
+impl CopyFeedbackState<'_> {
+    fn show(&mut self, text: &str) {
+        if let Some(notice) = CopyNotice::from_text(text) {
+            self.notice.set(Some(notice));
+            self.deadline
+                .set(Some(Instant::now() + COPY_NOTICE_DURATION));
+            self.wake.notify_one();
+        }
+    }
+
+    fn clear(&mut self) {
+        self.notice.set(None);
+        self.deadline.set(None);
+    }
+}
+
 /// Mutable selection state passed to event handlers.
 struct SelectionState<'a> {
     has_selection: bool,
@@ -939,10 +1024,15 @@ fn handle_key_event(
     total_visual_rows: usize,
     viewport_height: usize,
     log_search: &mut State<Option<LogSearchState>>,
+    copy_feedback: &mut CopyFeedbackState<'_>,
     sel: &mut SelectionState<'_>,
 ) {
     if handle_interrupt_prompt_key(&key_event, ui_state, shutdown, command_tx) {
         return;
+    }
+
+    if copy_feedback.notice.get().is_some() {
+        copy_feedback.clear();
     }
 
     let max_offset = total_visual_rows.saturating_sub(viewport_height);
@@ -1020,6 +1110,7 @@ fn handle_key_event(
             let text = text_for_yank(sel.logs, sel.buffer_start_line, selection.as_ref());
             if !text.is_empty() {
                 copy_to_clipboard(&text);
+                copy_feedback.show(&text);
             }
             if sel.has_selection {
                 sel.clear();
@@ -1034,6 +1125,7 @@ fn handle_key_event(
                     let text = extract_selected_text(sel.logs, sel.buffer_start_line, &selection);
                     if !text.is_empty() {
                         copy_to_clipboard(&text);
+                        copy_feedback.show(&text);
                     }
                 }
                 sel.clear();
@@ -1329,6 +1421,18 @@ fn render_expanded_view(
                 Text(content: format!("{result}  Enter:select Esc:cancel"), color: Color::AnsiValue(245))
             }
         }).into_any()
+    } else if let Some(notice) = ui.copy_notice {
+        element!(Text(
+            content: format!(
+                "{} \u{2502} {} \u{2502} {}",
+                follow_status,
+                progress,
+                notice.message()
+            ),
+            color: COLOR_COMPLETED,
+            weight: Weight::Bold
+        ))
+        .into_any()
     } else if let Some(search) = ui.search {
         let result = search_result_text(search);
         let search_color = if search.matches.is_empty() {
@@ -1765,6 +1869,7 @@ mod tests {
             ExpandedViewUi {
                 selection: None,
                 search: None,
+                copy_notice: None,
                 scroll_mode: ScrollMode {
                     follow_tail: true,
                     anchor: None,
@@ -1784,6 +1889,7 @@ mod tests {
             ExpandedViewUi {
                 selection: None,
                 search: None,
+                copy_notice: None,
                 scroll_mode: ScrollMode {
                     follow_tail: false,
                     anchor: None,
@@ -1820,6 +1926,7 @@ mod tests {
                     current: Some(search_cursor(matches[0])),
                     editing: true,
                 }),
+                copy_notice: None,
                 scroll_mode: ScrollMode {
                     follow_tail: false,
                     anchor: None,
@@ -1844,6 +1951,7 @@ mod tests {
                     current: Some(search_cursor(matches[0])),
                     editing: false,
                 }),
+                copy_notice: None,
                 scroll_mode: ScrollMode {
                     follow_tail: false,
                     anchor: None,
@@ -1868,6 +1976,7 @@ mod tests {
                     current: None,
                     editing: true,
                 }),
+                copy_notice: None,
                 scroll_mode: ScrollMode {
                     follow_tail: false,
                     anchor: None,
@@ -1890,6 +1999,51 @@ mod tests {
     }
 
     #[test]
+    fn test_copy_notice_counts_and_renders_copied_text() {
+        assert_eq!(CopyNotice::from_text(""), None);
+        assert_eq!(
+            CopyNotice::from_text("first\nsecond"),
+            Some(CopyNotice {
+                lines: 2,
+                bytes: 12,
+            })
+        );
+        assert!(
+            CopyNotice::from_text("one")
+                .unwrap()
+                .message()
+                .contains("1 line")
+        );
+
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(VecDeque::from(["first".to_string(), "second".to_string()])),
+            buffer_start_line: 0,
+        };
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(100));
+        let mut element = render_expanded_view(
+            &state,
+            &visual_rows,
+            100,
+            8,
+            ExpandedViewUi {
+                selection: None,
+                search: None,
+                copy_notice: CopyNotice::from_text("first\nsecond"),
+                scroll_mode: ScrollMode {
+                    follow_tail: true,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
+            },
+        );
+        let output = element.render(Some(100)).to_string();
+        assert!(output.contains("Copied 2 lines"));
+        assert!(output.contains("12B"));
+    }
+
+    #[test]
     fn test_render_expanded_view_interrupt_prompt_footer() {
         let state = ExpandedViewState {
             activity_name: "api".to_string(),
@@ -1907,6 +2061,7 @@ mod tests {
             ExpandedViewUi {
                 selection: None,
                 search: None,
+                copy_notice: None,
                 scroll_mode: ScrollMode {
                     follow_tail: true,
                     anchor: None,
@@ -1995,6 +2150,7 @@ mod tests {
             ExpandedViewUi {
                 selection: None,
                 search: None,
+                copy_notice: None,
                 scroll_mode: ScrollMode {
                     follow_tail: false,
                     anchor: None,
@@ -2046,6 +2202,7 @@ mod tests {
             ExpandedViewUi {
                 selection: Some(&selection),
                 search: None,
+                copy_notice: None,
                 scroll_mode: ScrollMode {
                     follow_tail: false,
                     anchor: None,
