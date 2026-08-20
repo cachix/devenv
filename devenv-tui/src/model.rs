@@ -252,6 +252,10 @@ impl UiState {
     /// When `forward` is true, selects the next activity (or first if none selected).
     /// When `forward` is false, selects the previous activity (or last if none selected).
     pub fn select_activity(&mut self, selectable: &[u64], forward: bool) {
+        self.select_activity_by(selectable, 1, forward);
+    }
+
+    pub fn select_activity_by(&mut self, selectable: &[u64], steps: usize, forward: bool) {
         if selectable.is_empty() {
             return;
         }
@@ -266,11 +270,12 @@ impl UiState {
             Some(current_id) => {
                 if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
                     if forward {
-                        if current_pos + 1 < selectable.len() {
-                            self.selected_activity = Some(selectable[current_pos + 1]);
-                        }
-                    } else if current_pos > 0 {
-                        self.selected_activity = Some(selectable[current_pos - 1]);
+                        self.selected_activity = selectable
+                            .get(current_pos.saturating_add(steps).min(selectable.len() - 1))
+                            .copied();
+                    } else {
+                        self.selected_activity =
+                            selectable.get(current_pos.saturating_sub(steps)).copied();
                     }
                 } else {
                     self.selected_activity = selectable.first().copied();

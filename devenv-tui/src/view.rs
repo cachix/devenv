@@ -1339,7 +1339,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     );
 
     // Determine display mode based on terminal width
-    let use_symbols = terminal_width < 60; // Use unicode symbols for very narrow terminals
+    let use_symbols = terminal_width < 100;
 
     // Builds - only show if there are any builds (active, completed, or failed)
     if summary.active_builds > 0 || summary.completed_builds > 0 || summary.failed_builds > 0 {
@@ -1562,6 +1562,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         help_children.push(element!(Text(content: " j", color: down_arrow_color)).into_any());
         help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
         help_children.push(element!(Text(content: "k", color: up_arrow_color)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { " ^D" } else { " Ctrl-D" }, color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { "^U" } else { "Ctrl-U" }, color: up_arrow_color)).into_any());
         if !use_symbols {
             if use_short_text {
                 // Compact, single-space separators on narrow terminals (< 100
@@ -1697,6 +1700,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         help_children.push(element!(Text(content: " j", color: down_arrow_color)).into_any());
         help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
         help_children.push(element!(Text(content: "k", color: up_arrow_color)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { " ^D" } else { " Ctrl-D" }, color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { "^U" } else { "Ctrl-U" }, color: up_arrow_color)).into_any());
         let trail = if show_hide_toggle || process_search_available {
             " • "
         } else {
@@ -1954,6 +1960,11 @@ mod tests {
                 output.contains("↑↓ j/k"),
                 "missing navigation keys at {width}: {output:?}"
             );
+            if width < 160 {
+                assert!(output.contains("^D/^U"));
+            } else {
+                assert!(output.contains("Ctrl-D/Ctrl-U"));
+            }
         }
 
         let mut model = ActivityModel::default();
@@ -1973,7 +1984,7 @@ mod tests {
         let output = build_summary_view_impl(&ctx, 120)
             .render(Some(120))
             .to_string();
-        assert!(output.contains("↑↓ j/k nav"));
+        assert!(output.contains("↑↓ j/k ^D/^U nav"));
     }
 
     #[test]

@@ -56,7 +56,7 @@ expect:^H
 send:/worker
 expect:Search processes: /worker
 send:\r
-resize:80x8
+resize:120x12
 expect:restart
 send:l
 expect:processed deterministic job 1
@@ -91,7 +91,7 @@ send:/t
 expect:Search logs: /t
 expect:1/3
 send:\r
-expect:/t  1/3
+expect:n/N
 send:n
 expect:2/3
 send:y

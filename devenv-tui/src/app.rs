@@ -591,6 +591,22 @@ fn rendered_activity_height(
     }
 }
 
+fn activity_navigation_action(
+    key_event: &KeyEvent,
+    viewport_height: usize,
+) -> Option<(bool, usize)> {
+    let control = key_event.modifiers.contains(KeyModifiers::CONTROL);
+    let half_page = viewport_height.div_ceil(2).max(1);
+
+    match key_event.code {
+        KeyCode::Down | KeyCode::Char('j') => Some((true, 1)),
+        KeyCode::Up | KeyCode::Char('k') => Some((false, 1)),
+        KeyCode::Char('d') if control => Some((true, half_page)),
+        KeyCode::Char('u') if control => Some((false, half_page)),
+        _ => None,
+    }
+}
+
 /// Scroll the viewport so the selected activity is visible.
 fn scroll_selected_into_view(
     handle: &mut ScrollViewHandle,
@@ -1019,16 +1035,24 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 collapse_selected_activity(&model, &mut ui);
                             }
                         }
-                        KeyCode::Down | KeyCode::Char('j') | KeyCode::Up | KeyCode::Char('k') => {
+                        _ if activity_navigation_action(
+                            &key_event,
+                            terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize,
+                        )
+                        .is_some() =>
+                        {
                             if let Ok(model) = activity_model.read()
                                 && let Ok(mut ui) = ui_state.write()
                             {
                                 let display = model.get_display_activities(&ui);
                                 let selectable =
                                     model.get_selectable_activity_ids_from_display(&display, &ui);
-                                let forward =
-                                    matches!(key_event.code, KeyCode::Down | KeyCode::Char('j'));
-                                ui.select_activity(&selectable, forward);
+                                let (forward, steps) = activity_navigation_action(
+                                    &key_event,
+                                    terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize,
+                                )
+                                .unwrap();
+                                ui.select_activity_by(&selectable, steps, forward);
                                 ui.inline_logs_activity = None;
                                 if let Some(selected_id) = ui.selected_activity
                                     && *scroll_view_active.read()
@@ -1259,6 +1283,33 @@ mod tests {
     };
     use devenv_activity::{ActivityLevel, ActivityOutcome};
     use tokio::sync::mpsc;
+
+    #[test]
+    fn activity_navigation_supports_arrow_vim_and_half_page_keys() {
+        let action = |code, control| {
+            let mut event = KeyEvent::new(KeyEventKind::Press, code);
+            if control {
+                event.modifiers = KeyModifiers::CONTROL;
+            }
+            activity_navigation_action(&event, 21)
+        };
+
+        assert_eq!(action(KeyCode::Down, false), Some((true, 1)));
+        assert_eq!(action(KeyCode::Up, false), Some((false, 1)));
+        assert_eq!(action(KeyCode::Char('j'), false), Some((true, 1)));
+        assert_eq!(action(KeyCode::Char('k'), false), Some((false, 1)));
+        assert_eq!(action(KeyCode::Char('d'), true), Some((true, 11)));
+        assert_eq!(action(KeyCode::Char('u'), true), Some((false, 11)));
+        assert_eq!(action(KeyCode::Char('d'), false), None);
+
+        let selectable: Vec<_> = (1..=20).collect();
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(10);
+        ui_state.select_activity_by(&selectable, 6, true);
+        assert_eq!(ui_state.selected_activity, Some(16));
+        ui_state.select_activity_by(&selectable, 50, false);
+        assert_eq!(ui_state.selected_activity, Some(1));
+    }
 
     #[test]
     fn test_request_interrupt_prompt_requires_native_process_manager() {

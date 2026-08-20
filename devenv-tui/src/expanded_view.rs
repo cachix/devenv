@@ -9,7 +9,7 @@ use crate::TuiConfig;
 use crate::app::{
     ExitFlag, ProcessCommandSender, handle_interrupt_prompt_key, request_interrupt_prompt,
 };
-use crate::components::COLOR_COMPLETED;
+use crate::components::{COLOR_COMPLETED, COLOR_INTERACTIVE};
 use crate::model::{ActivityModel, UiState, ViewMode};
 use base64::Engine;
 use crossterm::event::MouseButton;
@@ -1337,6 +1337,10 @@ fn search_result_text(search: LogSearchView<'_>) -> String {
     }
 }
 
+fn expanded_footer_piece(content: impl Into<String>, color: Color) -> AnyElement<'static> {
+    element!(Text(content: content.into(), color: color)).into_any()
+}
+
 /// Render the expanded view UI
 fn render_expanded_view(
     state: &ExpandedViewState,
@@ -1383,23 +1387,54 @@ fn render_expanded_view(
     };
 
     let footer = if interrupt_prompt_active {
-        let footer_text = if interrupt_prompt_attached {
-            format!(
-                "{} \u{2502} {} \u{2502} Detach or stop the process manager?  Ctrl-C:detach  s:stop manager  Esc:keep watching",
-                follow_status, progress
-            )
-        } else if width < 88 {
-            format!(
-                "{} \u{2502} {} \u{2502} Quit devenv?  c:keep running  q/Ctrl-C:quit",
-                follow_status, progress
-            )
+        let mut footer_children = vec![expanded_footer_piece(
+            format!("{} \u{2502} {} \u{2502} ", follow_status, progress),
+            Color::AnsiValue(245),
+        )];
+        if interrupt_prompt_attached {
+            footer_children.push(expanded_footer_piece(
+                "Detach or stop the process manager?  ",
+                Color::AnsiValue(245),
+            ));
+            footer_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(":detach  ", Color::AnsiValue(245)));
+            footer_children.push(expanded_footer_piece("s", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(
+                ":stop manager  ",
+                Color::AnsiValue(245),
+            ));
+            footer_children.push(expanded_footer_piece("Esc", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(
+                ":keep watching",
+                Color::AnsiValue(245),
+            ));
         } else {
-            format!(
-                "{} \u{2502} {} \u{2502} Quit devenv? Nothing has been stopped yet  c:keep running  q:quit  Ctrl-C:quit",
-                follow_status, progress
-            )
-        };
-        element!(Text(content: footer_text, color: Color::AnsiValue(245))).into_any()
+            footer_children.push(expanded_footer_piece(
+                if width < 88 {
+                    "Quit devenv?  "
+                } else {
+                    "Quit devenv? Nothing has been stopped yet  "
+                },
+                Color::AnsiValue(245),
+            ));
+            footer_children.push(expanded_footer_piece("c", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(
+                ":keep running  ",
+                Color::AnsiValue(245),
+            ));
+            footer_children.push(expanded_footer_piece("q", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(":quit  ", Color::AnsiValue(245)));
+            footer_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(":quit", Color::AnsiValue(245)));
+        }
+        element!(View(
+            flex_direction: FlexDirection::Row,
+            width: 100pct,
+            overflow: Overflow::Hidden,
+        ) {
+            #(footer_children)
+        })
+        .into_any()
     } else if let Some(search) = ui.search.filter(|search| search.editing) {
         let prompt = format!("Search logs: /{}", search.query);
         let result = search_result_text(search);
@@ -1417,8 +1452,12 @@ fn render_expanded_view(
             View(flex_grow: 1.0, flex_shrink: 0.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(content: prompt, color: prompt_color, weight: Weight::Bold)
             }
-            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
-                Text(content: format!("{result}  Enter:select Esc:cancel"), color: Color::AnsiValue(245))
+            View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
+                Text(content: format!("{result}  "), color: Color::AnsiValue(245))
+                Text(content: "Enter", color: COLOR_INTERACTIVE)
+                Text(content: ":select ", color: Color::AnsiValue(245))
+                Text(content: "Esc", color: COLOR_INTERACTIVE)
+                Text(content: ":cancel", color: Color::AnsiValue(245))
             }
         }).into_any()
     } else if let Some(notice) = ui.copy_notice {
@@ -1440,17 +1479,30 @@ fn render_expanded_view(
         } else {
             Color::AnsiValue(220)
         };
-        let search_text = if width < 90 {
-            format!(
-                "/{query}  {result}  n/N  /:new  Esc:clear",
-                query = search.query
-            )
-        } else {
-            format!(
-                "/{query}  {result}  n/N:match  /:new search  Esc:clear  q:back",
-                query = search.query
-            )
-        };
+        let mut search_children = vec![
+            expanded_footer_piece(format!("/{}", search.query), search_color),
+            expanded_footer_piece(format!("  {result}  "), Color::AnsiValue(245)),
+            expanded_footer_piece("n/N", COLOR_INTERACTIVE),
+            expanded_footer_piece(
+                if width < 90 { "  " } else { ":match  " },
+                Color::AnsiValue(245),
+            ),
+            expanded_footer_piece("/", COLOR_INTERACTIVE),
+            expanded_footer_piece(
+                if width < 90 {
+                    ":new  "
+                } else {
+                    ":new search  "
+                },
+                Color::AnsiValue(245),
+            ),
+            expanded_footer_piece("Esc", COLOR_INTERACTIVE),
+            expanded_footer_piece(":clear", Color::AnsiValue(245)),
+        ];
+        if width >= 90 {
+            search_children.push(expanded_footer_piece("  q", COLOR_INTERACTIVE));
+            search_children.push(expanded_footer_piece(":back", Color::AnsiValue(245)));
+        }
         element!(View(
             flex_direction: FlexDirection::Row,
             justify_content: JustifyContent::SpaceBetween,
@@ -1463,32 +1515,61 @@ fn render_expanded_view(
                     color: Color::AnsiValue(245)
                 )
             }
-            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
-                Text(content: search_text, color: search_color, weight: Weight::Bold)
+            View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
+                #(search_children)
             }
         })
         .into_any()
     } else {
-        let copy_hint = if ui.selection.is_some() {
-            "y:copy  Ctrl-C:copy"
+        let mut footer_children = vec![expanded_footer_piece(
+            format!("{} \u{2502} {} \u{2502} ", follow_status, progress),
+            Color::AnsiValue(245),
+        )];
+        if ui.selection.is_some() {
+            footer_children.push(expanded_footer_piece("y", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(":copy  ", Color::AnsiValue(245)));
+            footer_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(":copy  ", Color::AnsiValue(245)));
         } else {
-            "y:copy all"
-        };
-        let footer_text = if width < 90 {
-            format!(
-                "{} \u{2502} {} \u{2502} {}  j/k  ^D/^U  ^F/^B  /  g/G  q",
-                follow_status, progress, copy_hint
-            )
-        } else {
-            format!(
-                "{} \u{2502} {} \u{2502} {}  j/k:line  ^D/^U:half  ^F/^B:page  /:search  g/G:top/follow  q:back",
-                follow_status, progress, copy_hint
-            )
-        };
-        element!(Text(
-            content: footer_text,
-            color: Color::AnsiValue(245)
-        ))
+            footer_children.push(expanded_footer_piece("y", COLOR_INTERACTIVE));
+            footer_children.push(expanded_footer_piece(":copy all  ", Color::AnsiValue(245)));
+        }
+        footer_children.push(expanded_footer_piece("↑↓ j/k", COLOR_INTERACTIVE));
+        footer_children.push(expanded_footer_piece(
+            if width < 90 { "  " } else { ":line  " },
+            Color::AnsiValue(245),
+        ));
+        footer_children.push(expanded_footer_piece("^D/^U", COLOR_INTERACTIVE));
+        footer_children.push(expanded_footer_piece(
+            if width < 90 { "  " } else { ":half  " },
+            Color::AnsiValue(245),
+        ));
+        footer_children.push(expanded_footer_piece("^F/^B", COLOR_INTERACTIVE));
+        footer_children.push(expanded_footer_piece(
+            if width < 90 { "  " } else { ":page  " },
+            Color::AnsiValue(245),
+        ));
+        footer_children.push(expanded_footer_piece("/", COLOR_INTERACTIVE));
+        footer_children.push(expanded_footer_piece(
+            if width < 90 { "  " } else { ":search  " },
+            Color::AnsiValue(245),
+        ));
+        footer_children.push(expanded_footer_piece("g/G", COLOR_INTERACTIVE));
+        footer_children.push(expanded_footer_piece(
+            if width < 90 { "  " } else { ":top/follow  " },
+            Color::AnsiValue(245),
+        ));
+        footer_children.push(expanded_footer_piece("q", COLOR_INTERACTIVE));
+        if width >= 90 {
+            footer_children.push(expanded_footer_piece(":back", Color::AnsiValue(245)));
+        }
+        element!(View(
+            flex_direction: FlexDirection::Row,
+            width: 100pct,
+            overflow: Overflow::Hidden,
+        ) {
+            #(footer_children)
+        })
         .into_any()
     };
 
@@ -1880,6 +1961,8 @@ mod tests {
         let following_output = following.render(Some(100)).to_string();
         assert!(following_output.contains("FOLLOWING"));
         assert!(following_output.contains("y:copy all"));
+        assert!(following_output.contains("↑↓ j/k:line"));
+        assert!(following_output.contains("^D/^U:half"));
 
         let mut paused = render_expanded_view(
             &state,
