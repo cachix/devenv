@@ -8,6 +8,7 @@ use devenv_activity::test_helpers::*;
 use devenv_activity::{ActivityLevel, ActivityOutcome, FetchKind, TaskInfo};
 use devenv_tui::{ActivityModel, RenderContext, UiState, view::view};
 use iocraft::prelude::*;
+use unicode_width::UnicodeWidthStr;
 
 const TEST_WIDTH: u16 = 80;
 const TEST_HEIGHT: u16 = 24;
@@ -1545,23 +1546,43 @@ fn test_process_logs_follow_terminal_height_and_manual_focus() {
     ui_state.selected_activity = Some(1);
     let roomy = render_to_string(&model, &ui_state);
     assert!(roomy.contains("seeding database"));
-    assert!(roomy.contains("Enter focus"));
+    assert!(roomy.contains("hide preview"));
+    let process_line = roomy
+        .lines()
+        .find(|line| line.contains("chatty-service"))
+        .unwrap();
+    let log_line = roomy
+        .lines()
+        .find(|line| line.contains("seeding database"))
+        .unwrap();
+    let process_column = process_line[..process_line.find("chatty-service").unwrap()].width();
+    let log_column = log_line[..log_line.find("seeding database").unwrap()].width();
+    assert_eq!(log_column, process_column, "{roomy}");
 
     ui_state.set_terminal_size(TEST_WIDTH, 3);
     let crowded = render_to_string(&model, &ui_state);
     assert!(!crowded.contains("seeding database"));
-    assert!(crowded.contains("Enter preview"));
+    assert!(crowded.contains("preview"));
 
-    ui_state.toggle_inline_logs();
+    ui_state.focus_inline_logs(1);
     let focused = render_to_string(&model, &ui_state);
     assert!(focused.contains("seeding database"));
-    assert!(focused.contains("    seeding database"), "{focused}");
-    assert!(!focused.contains("│ seeding database"), "{focused}");
-    assert!(focused.contains("Enter hide preview"));
+    assert!(focused.contains("hide preview"));
+    let focused_log_line = focused
+        .lines()
+        .find(|line| line.contains("seeding database"))
+        .unwrap();
+    let focused_log_column =
+        focused_log_line[..focused_log_line.find("seeding database").unwrap()].width();
+    assert_eq!(focused_log_column, process_column, "{focused}");
 
-    ui_state.toggle_inline_logs();
-    let automatic = render_to_string(&model, &ui_state);
-    assert!(!automatic.contains("seeding database"));
+    ui_state.hide_process_previews();
+    let hidden = render_to_string(&model, &ui_state);
+    assert!(!hidden.contains("seeding database"));
+
+    ui_state.focus_inline_logs(1);
+    let reopened = render_to_string(&model, &ui_state);
+    assert!(reopened.contains("seeding database"));
 }
 
 #[test]
@@ -1588,7 +1609,7 @@ fn test_process_preview_preserves_required_tree_continuation() {
     ui_state.toggle_inline_logs();
     let rendered = render_to_string(&model, &ui_state);
 
-    assert!(rendered.contains("  │ seeding database"), "{rendered}");
+    assert!(rendered.contains("  │   seeding database"), "{rendered}");
     assert!(rendered.contains("  └"), "{rendered}");
 }
 

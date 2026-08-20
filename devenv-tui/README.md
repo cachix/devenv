@@ -115,9 +115,9 @@ triage.
 
 ## Views
 
-**Main view**: Shows a stable activity tree with log previews collapsed by default. Does not use alternate screen buffer, so terminal scrollback is preserved.
+**Main view**: Shows a stable activity tree. Process logs are previewed automatically when the complete tree fits in the terminal and can always be opened or hidden explicitly. The main view does not use the alternate screen buffer, so terminal scrollback is preserved.
 
-**Expanded logs**: Fullscreen view of logs for a single activity.
+**Expanded logs**: Fullscreen view of logs for a single activity with follow mode, scrolling, selection, and clipboard copy.
 
 ## Activity Types
 
@@ -137,7 +137,9 @@ triage.
 
 ### Main View
 - `↑/↓` or `j/k`: Navigate activities
-- `Enter`: Toggle an inline log preview for the selected activity
+- `Enter`: Toggle the selected activity or process log preview
+- `→` or `l`: Expand the selected activity or show its process log preview
+- `←` or `h`: Collapse the selected activity or hide process log previews
 - `Ctrl+E`: Expand logs for selected activity
 - `/`: Search managed processes by name; use `↑/↓` to move through matches
 - `Ctrl+R`: Restart the selected managed process
@@ -151,7 +153,9 @@ Long lines wrap onto continuation rows so their full content stays readable.
 
 - `↑/↓` or `j/k`: Scroll one line
 - `PgUp/PgDn` or `Space`: Scroll page
-- `g/G`: Jump to top/bottom
+- `g` or `Home`: Jump to the top and pause following
+- `G` or `End`: Jump to the bottom and resume following
+- `y`: Copy the selection, or the complete retained log when nothing is selected
 - `Ctrl+C`: Copy the current selection, or show the quit prompt when no selection is active
 - `c` or `Esc`: Keep running and clear the prompt
 - `q` or `Ctrl+C`: Quit from the interrupt prompt

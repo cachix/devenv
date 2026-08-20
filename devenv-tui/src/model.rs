@@ -160,6 +160,7 @@ pub struct UiState {
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
     pub inline_logs_activity: Option<u64>,
+    pub process_previews_hidden: bool,
     pub expanded_activities: HashSet<u64>,
     pub process_search: Option<ProcessSearch>,
     pub hide_stopped_processes: bool,
@@ -193,6 +194,7 @@ impl UiState {
             },
             selected_activity: None,
             inline_logs_activity: None,
+            process_previews_hidden: false,
             expanded_activities: HashSet::new(),
             process_search: None,
             hide_stopped_processes: false,
@@ -282,6 +284,16 @@ impl UiState {
             Some(id) if self.inline_logs_activity != Some(id) => Some(id),
             _ => None,
         };
+    }
+
+    pub fn focus_inline_logs(&mut self, activity_id: u64) {
+        self.inline_logs_activity = Some(activity_id);
+        self.process_previews_hidden = true;
+    }
+
+    pub fn hide_process_previews(&mut self) {
+        self.inline_logs_activity = None;
+        self.process_previews_hidden = true;
     }
 
     pub fn toggle_activity_expansion(&mut self, activity_id: u64) {
@@ -1164,9 +1176,18 @@ impl ActivityModel {
     }
 
     pub fn get_selectable_activity_ids(&self, ui_state: &UiState) -> Vec<u64> {
+        let display = self.get_display_activities(ui_state);
+        self.get_selectable_activity_ids_from_display(&display, ui_state)
+    }
+
+    pub fn get_selectable_activity_ids_from_display(
+        &self,
+        display: &[DisplayActivity],
+        ui_state: &UiState,
+    ) -> Vec<u64> {
         let mut seen = HashSet::new();
-        self.get_display_activities(ui_state)
-            .into_iter()
+        display
+            .iter()
             .filter(|da| {
                 // Processes are always selectable (so disabled ones can be started)
                 matches!(da.activity.variant, ActivityVariant::Process(_))
@@ -1184,9 +1205,18 @@ impl ActivityModel {
     }
 
     pub fn get_matching_process_activity_ids(&self, ui_state: &UiState, query: &str) -> Vec<u64> {
+        let display = self.get_display_activities(ui_state);
+        self.get_matching_process_activity_ids_from_display(&display, query)
+    }
+
+    pub fn get_matching_process_activity_ids_from_display(
+        &self,
+        display: &[DisplayActivity],
+        query: &str,
+    ) -> Vec<u64> {
         let query = query.to_lowercase();
-        self.get_display_activities(ui_state)
-            .into_iter()
+        display
+            .iter()
             .filter(|da| matches!(da.activity.variant, ActivityVariant::Process(_)))
             .filter(|da| da.activity.name.to_lowercase().contains(&query))
             .map(|da| da.activity.id)
@@ -1338,12 +1368,6 @@ impl ActivityModel {
     }
 
     fn is_completed_shell_activity(&self, activity: &Activity) -> bool {
-        if self.activities.values().any(|child| {
-            matches!(child.variant, ActivityVariant::Process(_))
-                && self.is_direct_child_of(child, activity.id)
-        }) {
-            return false;
-        }
         let is_shell_activity = match activity.variant {
             ActivityVariant::Evaluating(_) => true,
             ActivityVariant::Devenv => {
@@ -1353,24 +1377,44 @@ impl ActivityModel {
                             && self.is_direct_child_of(child, activity.id)
                     })
             }
-            _ => false,
+            _ => return false,
         };
+        if !matches!(
+            activity.state,
+            NixActivityState::Completed { success: true, .. }
+        ) {
+            return false;
+        }
+        if self.activities.values().any(|child| {
+            matches!(child.variant, ActivityVariant::Process(_))
+                && self.is_direct_child_of(child, activity.id)
+        }) {
+            return false;
+        }
         is_shell_activity
-            && matches!(
-                activity.state,
-                NixActivityState::Completed { success: true, .. }
-            )
+    }
+
+    pub fn collapsible_descendant_count(
+        &self,
+        activity_id: u64,
+        ui_state: &UiState,
+    ) -> Option<usize> {
+        let activity = self.activities.get(&activity_id)?;
+        if !self.is_completed_shell_activity(activity)
+            || activity
+                .parent_id
+                .and_then(|parent_id| self.activities.get(&parent_id))
+                .is_some_and(|parent| self.is_completed_shell_activity(parent))
+        {
+            return None;
+        }
+        let descendant_count = self.visible_descendant_count(activity_id, ui_state);
+        (descendant_count > 0).then_some(descendant_count)
     }
 
     pub fn is_activity_collapsible(&self, activity_id: u64, ui_state: &UiState) -> bool {
-        self.activities.get(&activity_id).is_some_and(|activity| {
-            self.is_completed_shell_activity(activity)
-                && !activity
-                    .parent_id
-                    .and_then(|parent_id| self.activities.get(&parent_id))
-                    .is_some_and(|parent| self.is_completed_shell_activity(parent))
-                && self.visible_descendant_count(activity_id, ui_state) > 0
-        })
+        self.collapsible_descendant_count(activity_id, ui_state)
+            .is_some()
     }
 
     pub fn is_activity_collapsed(&self, activity_id: u64, ui_state: &UiState) -> bool {

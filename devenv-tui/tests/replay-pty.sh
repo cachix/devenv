@@ -55,9 +55,12 @@ resize:48x6
 send:/worker
 expect:Search processes: /worker
 send:\r
+expect:hide preview
+send:h
 expect:focus
 send:l
-expect:show all
+expect:processed deterministic job 1
+expect:hide preview
 send:h
 expect:focus
 send:/api
@@ -65,7 +68,8 @@ expect:Search processes: /api
 send:\r
 expect:focus
 send:\x1b[C
-expect:show all
+expect:listening on http://127.0.0.1:8080
+expect:hide preview
 send:\x1b[D
 expect:focus
 send:\x05

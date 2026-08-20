@@ -30,6 +30,7 @@ pub type ActivityHeights = Ref<HashMap<u64, i32>>;
 pub struct ScrollState {
     pub handle: Option<Ref<ScrollViewHandle>>,
     pub display_activities: Vec<DisplayActivity>,
+    pub process_previews_fit: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -102,6 +103,29 @@ pub(crate) fn process_previews_fit(
     preview_rows > 0 && activities.len() + preview_rows <= available_rows
 }
 
+pub(crate) fn activity_shows_inline_logs(
+    model: &ActivityModel,
+    ui_state: &UiState,
+    activity_id: u64,
+    process_previews_fit: bool,
+) -> bool {
+    if ui_state.inline_logs_activity == Some(activity_id) {
+        return true;
+    }
+    if ui_state.inline_logs_activity.is_some()
+        || ui_state.process_previews_hidden
+        || !process_previews_fit
+    {
+        return false;
+    }
+    model.get_activity(activity_id).is_some_and(|activity| {
+        matches!(activity.variant, ActivityVariant::Process(_))
+            && model
+                .get_build_logs(activity_id)
+                .is_some_and(|logs| !logs.is_empty())
+    })
+}
+
 /// Main view function that creates the UI
 pub fn view(
     model: &ActivityModel,
@@ -110,9 +134,13 @@ pub fn view(
     scroll: Option<ScrollState>,
     shutting_down: bool,
 ) -> impl Into<AnyElement<'static>> {
-    let (scroll_handle, active_activities) = match scroll {
-        Some(s) => (s.handle, s.display_activities),
-        None => (None, model.get_display_activities(ui_state)),
+    let (scroll_handle, active_activities, process_previews_fit) = match scroll {
+        Some(s) => (s.handle, s.display_activities, s.process_previews_fit),
+        None => {
+            let activities = model.get_display_activities(ui_state);
+            let previews_fit = process_previews_fit(model, &activities, ui_state.terminal_size);
+            (None, activities, previews_fit)
+        }
     };
 
     let summary = model.calculate_summary();
@@ -123,12 +151,6 @@ pub fn view(
         .selected_activity
         .filter(|id| active_activities.iter().any(|da| da.activity.id == *id));
     let selected_activity = selected_id.and_then(|id| model.get_activity(id));
-    let inline_logs_id = ui_state
-        .inline_logs_activity
-        .filter(|id| active_activities.iter().any(|da| da.activity.id == *id));
-    let process_previews_fit = process_previews_fit(model, &active_activities, terminal_size);
-    let auto_expand_process_logs = inline_logs_id.is_none() && process_previews_fit;
-
     let activities_to_show: Vec<_> = active_activities.iter().collect();
 
     // Create owned activity elements, including hidden children indicators
@@ -137,17 +159,13 @@ pub fn view(
     for (display_activity, tree_position) in activities_to_show.iter().zip(tree_positions) {
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
-        let show_inline_logs = inline_logs_id.is_some_and(|id| activity.id == id)
-            || auto_expand_process_logs
-                && matches!(activity.variant, ActivityVariant::Process(_))
-                && model
-                    .get_build_logs(activity.id)
-                    .is_some_and(|logs| !logs.is_empty());
+        let show_inline_logs =
+            activity_shows_inline_logs(model, ui_state, activity.id, process_previews_fit);
         let disclosure = model
-            .is_activity_collapsible(activity.id, ui_state)
-            .then(|| ActivityDisclosure {
-                collapsed: model.is_activity_collapsed(activity.id, ui_state),
-                descendant_count: model.visible_descendant_count(activity.id, ui_state),
+            .collapsible_descendant_count(activity.id, ui_state)
+            .map(|descendant_count| ActivityDisclosure {
+                collapsed: !ui_state.expanded_activities.contains(&activity.id),
+                descendant_count,
             });
 
         // Pass logs for activities that should display them:
@@ -227,9 +245,10 @@ pub fn view(
     }
 
     // Determine if navigation is possible
-    let selectable_ids = model.get_selectable_activity_ids(ui_state);
-    let process_search_ids = model.get_matching_process_activity_ids(
-        ui_state,
+    let selectable_ids =
+        model.get_selectable_activity_ids_from_display(&active_activities, ui_state);
+    let process_search_ids = model.get_matching_process_activity_ids_from_display(
+        &active_activities,
         ui_state
             .process_search
             .as_ref()
@@ -253,7 +272,9 @@ pub fn view(
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
             selected: selected_activity.cloned(),
-            showing_logs: inline_logs_id.is_some(),
+            showing_logs: selected_id.is_some_and(|id| {
+                activity_shows_inline_logs(model, ui_state, id, process_previews_fit)
+            }),
             can_go_up,
             can_go_down,
             interrupt_prompt_active: ui_state.interrupt_prompt_active(),
@@ -264,13 +285,13 @@ pub fn view(
                 .as_ref()
                 .map(|search| search.query.clone()),
             process_search_matches: process_search_ids.len(),
-            process_search_available: !model
-                .get_matching_process_activity_ids(ui_state, "")
-                .is_empty(),
+            process_search_available: active_activities
+                .iter()
+                .any(|display| matches!(display.activity.variant, ActivityVariant::Process(_))),
             selected_disclosure: selected_id.and_then(|id| {
                 model
-                    .is_activity_collapsible(id, ui_state)
-                    .then(|| model.is_activity_collapsed(id, ui_state))
+                    .collapsible_descendant_count(id, ui_state)
+                    .map(|_| !ui_state.expanded_activities.contains(&id))
             }),
             selected_has_logs: selected_id.is_some_and(|id| {
                 model
@@ -1564,9 +1585,6 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             None if is_process && !showing_logs && process_previews_fit && use_symbols => {
                 help_children.push(element!(Text(content: " ◎ • ")).into_any());
             }
-            None if is_process && showing_logs && process_previews_fit && use_symbols => {
-                help_children.push(element!(Text(content: " ▦ • ")).into_any());
-            }
             None if is_process && showing_logs && use_symbols => {
                 help_children.push(element!(Text(content: " ▴ • ")).into_any());
             }
@@ -1575,9 +1593,6 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             }
             None if is_process && !showing_logs && process_previews_fit => {
                 help_children.push(element!(Text(content: " focus ")).into_any());
-            }
-            None if is_process && showing_logs && process_previews_fit => {
-                help_children.push(element!(Text(content: " show all ")).into_any());
             }
             None if is_process && showing_logs => {
                 help_children.push(element!(Text(content: " hide preview ")).into_any());
@@ -1942,6 +1957,7 @@ mod tests {
             Some(ScrollState {
                 handle: None,
                 display_activities,
+                process_previews_fit: false,
             }),
             false,
         )
@@ -1996,6 +2012,7 @@ mod tests {
                 Some(ScrollState {
                     handle: None,
                     display_activities,
+                    process_previews_fit: false,
                 }),
                 false,
             )
@@ -2061,6 +2078,7 @@ mod tests {
             Some(ScrollState {
                 handle: None,
                 display_activities,
+                process_previews_fit: false,
             }),
             false,
         )
@@ -2126,6 +2144,7 @@ mod tests {
             Some(ScrollState {
                 handle: None,
                 display_activities,
+                process_previews_fit: false,
             }),
             false,
         )
@@ -2201,6 +2220,7 @@ mod tests {
             Some(ScrollState {
                 handle: None,
                 display_activities,
+                process_previews_fit: false,
             }),
             false,
         )

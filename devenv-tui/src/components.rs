@@ -961,10 +961,14 @@ impl<'a> ExpandedContentComponent<'a> {
             return lines;
         };
 
-        // Left margin + border + the leading content space + right margin.
-        let width = terminal_width
-            .saturating_sub(self.border_indent() + 3)
-            .max(1);
+        let occupied_width = self.line_prefix.as_ref().map_or_else(
+            || self.border_indent() + 3,
+            |prefix| {
+                use unicode_width::UnicodeWidthStr;
+                prefix.width() + 3
+            },
+        );
+        let width = terminal_width.saturating_sub(occupied_width).max(1);
         lines
             .into_iter()
             .flat_map(|line| hard_wrap(&line, width))
@@ -990,7 +994,7 @@ impl<'a> ExpandedContentComponent<'a> {
                         element! {
                             View(flex_direction: FlexDirection::Row, padding_right: 1) {
                                 Text(content: prefix.clone(), color: COLOR_HIERARCHY)
-                                Text(content: line, color: Color::Reset)
+                                Text(content: format!("  {line}"), color: Color::AnsiValue(245))
                             }
                         }
                         .into_any()
@@ -1014,7 +1018,7 @@ impl<'a> ExpandedContentComponent<'a> {
                 .into_iter()
                 .map(|line| {
                     element! {
-                        Text(content: format!(" {line}"), color: Color::Reset)
+                        Text(content: format!(" {line}"), color: Color::AnsiValue(245))
                     }
                     .into_any()
                 })
@@ -1052,7 +1056,7 @@ impl<'a> ExpandedContentComponent<'a> {
                 element! {
                     View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
                         Text(content: prefix.clone(), color: COLOR_HIERARCHY)
-                        Text(content: empty_message, color: Color::Reset)
+                        Text(content: format!("  {empty_message}"), color: Color::AnsiValue(245))
                     }
                 }
                 .into_any(),
@@ -1060,7 +1064,7 @@ impl<'a> ExpandedContentComponent<'a> {
         }
         vec![element! {
             View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
-                Text(content: empty_message, color: Color::Reset)
+                Text(content: empty_message, color: Color::AnsiValue(245))
             }
         }
         .into_any()]
