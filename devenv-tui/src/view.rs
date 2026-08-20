@@ -1559,6 +1559,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         // Show full navigation when something is selected
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: " j", color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
+        help_children.push(element!(Text(content: "k", color: up_arrow_color)).into_any());
         if !use_symbols {
             if use_short_text {
                 // Compact, single-space separators on narrow terminals (< 100
@@ -1691,6 +1694,9 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         // Show navigate hint only when no selection (Ctrl-E requires selection)
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: " j", color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
+        help_children.push(element!(Text(content: "k", color: up_arrow_color)).into_any());
         let trail = if show_hide_toggle || process_search_available {
             " • "
         } else {
@@ -1933,6 +1939,41 @@ mod tests {
         assert!(!output.contains("hide stopped"));
         assert!(!output.contains("show stopped"));
         assert!(!output.contains("Ctrl-H"));
+    }
+
+    #[test]
+    fn test_summary_navigation_shows_arrow_and_vim_keys() {
+        let mut ctx = summary_ctx(false, false, 0);
+        ctx.can_go_down = true;
+
+        for width in [48, 100, 180] {
+            let output = build_summary_view_impl(&ctx, width)
+                .render(Some(width as usize))
+                .to_string();
+            assert!(
+                output.contains("↑↓ j/k"),
+                "missing navigation keys at {width}: {output:?}"
+            );
+        }
+
+        let mut model = ActivityModel::default();
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id: 1,
+            name: "api".to_string(),
+            parent: None,
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+        ctx.selected = model.get_activity(1).cloned();
+        ctx.can_go_up = true;
+
+        let output = build_summary_view_impl(&ctx, 120)
+            .render(Some(120))
+            .to_string();
+        assert!(output.contains("↑↓ j/k nav"));
     }
 
     #[test]

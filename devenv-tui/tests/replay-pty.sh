@@ -56,9 +56,8 @@ expect:^H
 send:/worker
 expect:Search processes: /worker
 send:\r
-expect:^E
-send:h
-expect:focus
+resize:80x8
+expect:restart
 send:l
 expect:processed deterministic job 1
 expect:hide preview
