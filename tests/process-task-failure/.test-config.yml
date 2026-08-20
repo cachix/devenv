@@ -1,0 +1,3 @@
+# Run outside the shell because the test invokes `devenv test` itself and
+# verifies its exit code.
+use_shell: false

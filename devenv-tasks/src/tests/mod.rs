@@ -3469,6 +3469,64 @@ async fn test_run_mode_all_excludes_unrelated_entry_points() -> Result<(), Error
     Ok(())
 }
 
+/// RunMode::All must include every prerequisite of a dependent selected from
+/// the root's downstream graph, without pulling in unrelated dependents of a
+/// shared prerequisite.
+#[tokio::test]
+async fn test_run_mode_all_includes_selected_dependents_prerequisites() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["devenv:processes:server"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "devenv:processes:server"
+                },
+                {
+                    "name": "web:build"
+                },
+                {
+                    "name": "browser:test",
+                    "after": ["web:build", "devenv:processes:server"]
+                },
+                {
+                    "name": "unrelated:test",
+                    "after": ["web:build"]
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    let mut scheduled_task_names = Vec::new();
+    for index in &tasks.tasks_order {
+        scheduled_task_names.push(tasks.graph[*index].read().await.task.name.clone());
+    }
+
+    assert!(
+        scheduled_task_names.contains(&"web:build".to_string()),
+        "the selected browser task's build prerequisite must be scheduled"
+    );
+    assert!(
+        scheduled_task_names.contains(&"browser:test".to_string()),
+        "the process-dependent browser task must be scheduled"
+    );
+    assert!(
+        !scheduled_task_names.contains(&"unrelated:test".to_string()),
+        "an unrelated dependent of the build prerequisite must stay excluded"
+    );
+
+    Ok(())
+}
+
 /// Test that @completed dependency does NOT propagate failure (soft dependency)
 #[tokio::test]
 async fn test_complete_dependency_no_failure_propagation() -> Result<(), Error> {

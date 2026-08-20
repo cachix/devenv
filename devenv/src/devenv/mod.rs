@@ -2507,7 +2507,15 @@ impl Devenv {
             let _outputs = tasks_runner
                 .run_with_parent_activity(Arc::new(phase4))
                 .await;
+            let task_status = tasks_runner.get_completion_status().await;
             trace!("devenv.up: process tasks completed");
+
+            if task_status.has_failures() {
+                // A caller such as `devenv test` must not leave successfully
+                // started process siblings behind when another task fails.
+                let _ = tasks_runner.process_manager().stop_all().await;
+                bail!("Process tasks failed");
+            }
 
             // API server is started inside run_internal() so it's available
             // while processes are still starting up.

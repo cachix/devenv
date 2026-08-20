@@ -586,6 +586,23 @@ impl Tasks {
                         }
                     }
                 }
+
+                // A selected dependent may have prerequisites other than the root that
+                // brought it into the schedule. Include those prerequisites without
+                // traversing back out from them, which preserves the no-direction-
+                // bouncing behavior above while ensuring every scheduled task has its
+                // complete dependency closure.
+                to_visit.extend(visited.iter().copied());
+                while let Some(node) = to_visit.pop() {
+                    for neighbor in self
+                        .graph
+                        .neighbors_directed(node, petgraph::Direction::Incoming)
+                    {
+                        if visited.insert(neighbor) {
+                            to_visit.push(neighbor);
+                        }
+                    }
+                }
             }
         }
 
