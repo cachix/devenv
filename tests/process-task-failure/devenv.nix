@@ -7,9 +7,10 @@ in
   processes.server = {
     exec = ''
       mkdir -p ${markerDir}
-      echo "$$" > ${markerDir}/server.pid
+      sleep 300 &
+      echo "$!" > ${markerDir}/server.pid
       touch ${markerDir}/server.ready
-      exec sleep 300
+      wait
     '';
     ready.exec = "test -f ${markerDir}/server.ready";
     restart.on = "never";
