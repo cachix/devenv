@@ -10,7 +10,7 @@
     # `_github-runner` user used by our self-hosted CI). RabbitMQ's default
     # memory monitor shells to `ps` and crashes the `rabbitmq_management_agent`
     # plugin during boot. Use Erlang's allocator accounting instead.
-    configItems = lib.mkIf pkgs.stdenv.isDarwin {
+    configItems = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
       "vm_memory_calculation_strategy" = "allocated";
     };
   };

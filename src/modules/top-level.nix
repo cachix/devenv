@@ -139,7 +139,7 @@ in
       # Allow users to specify an optional SDK in `apple.sdk`.
       apply =
         stdenv:
-        if stdenv.isDarwin then
+        if stdenv.hostPlatform.isDarwin then
           stdenv.override
             (prev: {
               extraBuildInputs = builtins.filter (x: !(x ? sdkroot)) prev.extraBuildInputs;
@@ -157,8 +157,8 @@ in
 
           If set to `null`, the system SDK can be used if the shell allows access to external environment variables.
         '';
-        default = if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null;
-        defaultText = lib.literalExpression "if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null";
+        default = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.apple-sdk else null;
+        defaultText = lib.literalExpression "if pkgs.stdenv.hostPlatform.isDarwin then pkgs.apple-sdk else null";
         example = lib.literalExpression "pkgs.apple-sdk_15";
       };
     };
@@ -405,7 +405,7 @@ in
       fi
 
       # set path to locales on non-NixOS Linux hosts
-      ${lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
+      ${lib.optionalString (pkgs.stdenv.hostPlatform.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
         if [ -z "''${LOCALE_ARCHIVE-}" ]; then
           export LOCALE_ARCHIVE=${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive
         fi
@@ -438,7 +438,7 @@ in
         # On macOS, route apple-sdk packages (identified by `passthru.sdkroot`) into `buildInputs`
         # so they participate in the SDK version comparison done by stdenv's setup hooks.
         partitioned =
-          if pkgs.stdenv.isDarwin then
+          if pkgs.stdenv.hostPlatform.isDarwin then
             builtins.partition (pkg: pkg ? sdkroot) config.packages
           else
             {

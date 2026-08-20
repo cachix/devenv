@@ -69,7 +69,7 @@ let
 
   # Override for crates needing dbus (Linux only)
   dbusOverride = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ lib.optional stdenv.isLinux dbus;
+    buildInputs = (attrs.buildInputs or [ ]) ++ lib.optional stdenv.hostPlatform.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
 
@@ -82,7 +82,7 @@ let
         libghostty-vt
       ]
       ++ nixLibs
-      ++ lib.optional stdenv.isLinux dbus;
+      ++ lib.optional stdenv.hostPlatform.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
       pkg-config
       protobuf

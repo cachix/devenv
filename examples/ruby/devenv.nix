@@ -24,5 +24,5 @@
   # part of the Xcode command line developer tools, in which case they can be
   # removed.
   # For more information, see the `--install` flag in `man xcode-select`.
-  ++ lib.optionals pkgs.stdenv.isDarwin [ pkgs.libllvm ];
+  ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ pkgs.libllvm ];
 }

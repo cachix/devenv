@@ -1,6 +1,6 @@
 { pkgs, lib, ... }:
 
-lib.mkIf pkgs.stdenv.isDarwin {
+lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
   apple.sdk = null;
 
   # Test that there is no default SDK set on macOS.

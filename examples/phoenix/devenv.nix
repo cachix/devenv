@@ -11,7 +11,7 @@
 {
   packages = [
     pkgs.git
-  ] ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.inotify-tools ];
+  ] ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.inotify-tools ];
 
   languages.elixir.enable = true;
 
