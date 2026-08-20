@@ -3734,7 +3734,7 @@ false
 
 
 
-Whether to enable .env integration, doesn’t support comments or multiline values…
+Whether to enable .env integration.
 
 
 
@@ -3766,7 +3766,7 @@ true
 
 
 
-Disable the hint that are printed when the dotenv module is not enabled, but .env is present.
+Disable the hint printed when a dotenv file is present but the integration is not enabled.
 
 
 
@@ -3790,7 +3790,7 @@ false
 
 
 
-The name of the dotenv file to load, or a list of dotenv files to load in order of precedence.
+The path of the dotenv file to load, or a list of dotenv files to load in order of precedence.
 
 
 
@@ -3803,6 +3803,32 @@ string or list of string
 
 ```nix
 ".env"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix)
+
+
+
+## dotenv.substitution
+
+
+
+Whether to expand variable references such as ` $NAME `, ` ${NAME} `, and
+` ${NAME:-default} ` in dotenv values. Disabled by default so dollar signs
+in passwords, hashes, and tokens remain literal.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
 ```
 
 *Declared by:*
@@ -6056,8 +6082,6 @@ null or string
 
 ## git-hooks.hooks.autoflake.settings.flags
 
-
-
 Flags passed to autoflake.
 
 
@@ -6079,6 +6103,8 @@ string
 
 
 ## git-hooks.hooks.biome
+
+
 
 biome hook
 
@@ -8329,8 +8355,6 @@ false
 
 ## git-hooks.hooks.isort
 
-
-
 isort hook
 
 
@@ -8344,6 +8368,8 @@ submodule
 
 
 ## git-hooks.hooks.isort.enable
+
+
 
 Whether to enable this pre-commit hook.
 
