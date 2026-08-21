@@ -849,7 +849,7 @@ impl Devenv {
             bash,
             ignore_process_deps: false,
             exit_on_idle: Some(false),
-            supervisor: devenv_processes::Supervisor::Native,
+            supervisor: devenv_processes::SupervisionMode::Native,
         })
     }
 
@@ -2066,7 +2066,7 @@ impl Devenv {
             bash,
             ignore_process_deps: false,
             exit_on_idle: Some(false),
-            supervisor: devenv_processes::Supervisor::Native,
+            supervisor: devenv_processes::SupervisionMode::Native,
         };
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
