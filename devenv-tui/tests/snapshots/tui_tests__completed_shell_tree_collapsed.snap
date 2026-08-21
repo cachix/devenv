@@ -2,6 +2,6 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: collapsed
 ---
-✓ ▸ Building shell 2 steps   [TIME] 
+✓ ▸ Building shell 2 steps              [TIME] 
 
- ↑↓ j/k ^D/^U • Enter ▾ • Esc clear
+ 1/1 builds ↑↓ j/k ^D/^U • Enter ▾ • Esc clear

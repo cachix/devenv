@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: expanded
 ---
-✓ ▾ Building shell           [TIME] 
-  └ ✓ Evaluating Nix         [TIME]
-    └ ✓ Building  hello-2.12 [TIME]
+✓ ▾ Building shell                      [TIME] 
+  └ ✓ Evaluating Nix                    [TIME]
+    └ ✓ Building  hello-2.12            [TIME]
 
- ↑↓ j/k ^D/^U • Enter ▴ • Esc clear
+ 1/1 builds ↑↓ j/k ^D/^U • Enter ▴ • Esc clear

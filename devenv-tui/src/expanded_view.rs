@@ -1385,123 +1385,180 @@ fn render_expanded_view(
     } else {
         "PAUSED"
     };
+    let compact_follow_status = if ui.scroll_mode.follow_tail { "F" } else { "P" };
 
     let footer = if interrupt_prompt_active {
-        let mut footer_children = vec![expanded_footer_piece(
-            format!("{} \u{2502} {} \u{2502} ", follow_status, progress),
-            Color::AnsiValue(245),
-        )];
-        if interrupt_prompt_attached {
-            footer_children.push(expanded_footer_piece(
+        let compact = width < 120;
+        let status = if width < 60 {
+            format!("{compact_follow_status} ")
+        } else {
+            format!("{} \u{2502} {} \u{2502} ", follow_status, progress)
+        };
+        let mut action_children = Vec::new();
+        if interrupt_prompt_attached && compact {
+            action_children.push(expanded_footer_piece("Detach? ", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("^C", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":detach ", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("s", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":stop ", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("Esc", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":watch", Color::AnsiValue(245)));
+        } else if interrupt_prompt_attached {
+            action_children.push(expanded_footer_piece(
                 "Detach or stop the process manager?  ",
                 Color::AnsiValue(245),
             ));
-            footer_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(":detach  ", Color::AnsiValue(245)));
-            footer_children.push(expanded_footer_piece("s", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(
+            action_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":detach  ", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("s", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(
                 ":stop manager  ",
                 Color::AnsiValue(245),
             ));
-            footer_children.push(expanded_footer_piece("Esc", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(
+            action_children.push(expanded_footer_piece("Esc", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(
                 ":keep watching",
                 Color::AnsiValue(245),
             ));
+        } else if compact {
+            action_children.push(expanded_footer_piece("Quit? ", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("c", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":run ", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("q", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":quit ", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("^C", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":quit", Color::AnsiValue(245)));
         } else {
-            footer_children.push(expanded_footer_piece(
-                if width < 88 {
-                    "Quit devenv?  "
-                } else {
-                    "Quit devenv? Nothing has been stopped yet  "
-                },
+            action_children.push(expanded_footer_piece(
+                "Quit devenv? Nothing has been stopped yet  ",
                 Color::AnsiValue(245),
             ));
-            footer_children.push(expanded_footer_piece("c", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(
+            action_children.push(expanded_footer_piece("c", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(
                 ":keep running  ",
                 Color::AnsiValue(245),
             ));
-            footer_children.push(expanded_footer_piece("q", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(":quit  ", Color::AnsiValue(245)));
-            footer_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(":quit", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("q", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":quit  ", Color::AnsiValue(245)));
+            action_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece(":quit", Color::AnsiValue(245)));
         }
         element!(View(
             flex_direction: FlexDirection::Row,
             width: 100pct,
             overflow: Overflow::Hidden,
         ) {
-            #(footer_children)
+            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                Text(content: status, color: Color::AnsiValue(245))
+            }
+            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                #(action_children)
+            }
         })
         .into_any()
     } else if let Some(search) = ui.search.filter(|search| search.editing) {
-        let prompt = format!("Search logs: /{}", search.query);
+        let compact = width < 60;
+        let prompt = if compact {
+            format!("/{}", search.query)
+        } else {
+            format!("Search logs: /{}", search.query)
+        };
         let result = search_result_text(search);
         let prompt_color = if search.matches.is_empty() && !search.query.is_empty() {
             Color::AnsiValue(160)
         } else {
             Color::AnsiValue(220)
         };
+        let mut action_children = vec![expanded_footer_piece(
+            format!("{result}  "),
+            Color::AnsiValue(245),
+        )];
+        action_children.push(expanded_footer_piece("Enter", COLOR_INTERACTIVE));
+        if !compact {
+            action_children.push(expanded_footer_piece(":select  ", Color::AnsiValue(245)));
+        } else {
+            action_children.push(expanded_footer_piece("  ", Color::AnsiValue(245)));
+        }
+        action_children.push(expanded_footer_piece("Esc", COLOR_INTERACTIVE));
+        if !compact {
+            action_children.push(expanded_footer_piece(":cancel", Color::AnsiValue(245)));
+        }
         element!(View(
             flex_direction: FlexDirection::Row,
             justify_content: JustifyContent::SpaceBetween,
             width: 100pct,
             overflow: Overflow::Hidden,
         ) {
-            View(flex_grow: 1.0, flex_shrink: 0.0, min_width: 0, overflow: Overflow::Hidden) {
+            View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(content: prompt, color: prompt_color, weight: Weight::Bold)
             }
-            View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
-                Text(content: format!("{result}  "), color: Color::AnsiValue(245))
-                Text(content: "Enter", color: COLOR_INTERACTIVE)
-                Text(content: ":select ", color: Color::AnsiValue(245))
-                Text(content: "Esc", color: COLOR_INTERACTIVE)
-                Text(content: ":cancel", color: Color::AnsiValue(245))
+            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 1) {
+                #(action_children)
             }
-        }).into_any()
-    } else if let Some(notice) = ui.copy_notice {
-        element!(Text(
-            content: format!(
-                "{} \u{2502} {} \u{2502} {}",
-                follow_status,
-                progress,
-                notice.message()
-            ),
-            color: COLOR_COMPLETED,
-            weight: Weight::Bold
-        ))
+        })
         .into_any()
+    } else if let Some(notice) = ui.copy_notice {
+        if width < 60 {
+            element!(Text(
+                content: notice.message(),
+                color: COLOR_COMPLETED,
+                weight: Weight::Bold
+            ))
+            .into_any()
+        } else {
+            element!(View(
+                flex_direction: FlexDirection::Row,
+                width: 100pct,
+                overflow: Overflow::Hidden,
+            ) {
+                View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    Text(
+                        content: format!("{} \u{2502} {} \u{2502} ", follow_status, progress),
+                        color: COLOR_COMPLETED,
+                        weight: Weight::Bold
+                    )
+                }
+                View(flex_shrink: 0.0) {
+                    Text(
+                        content: notice.message(),
+                        color: COLOR_COMPLETED,
+                        weight: Weight::Bold
+                    )
+                }
+            })
+            .into_any()
+        }
     } else if let Some(search) = ui.search {
         let result = search_result_text(search);
+        let compact = width < 90;
         let search_color = if search.matches.is_empty() {
             Color::AnsiValue(160)
         } else {
             Color::AnsiValue(220)
         };
-        let mut search_children = vec![
-            expanded_footer_piece(format!("/{}", search.query), search_color),
+        let mut action_children = vec![
             expanded_footer_piece(format!("  {result}  "), Color::AnsiValue(245)),
             expanded_footer_piece("n/N", COLOR_INTERACTIVE),
-            expanded_footer_piece(
-                if width < 90 { "  " } else { ":match  " },
-                Color::AnsiValue(245),
-            ),
-            expanded_footer_piece("/", COLOR_INTERACTIVE),
-            expanded_footer_piece(
-                if width < 90 {
-                    ":new  "
-                } else {
-                    ":new search  "
-                },
-                Color::AnsiValue(245),
-            ),
-            expanded_footer_piece("Esc", COLOR_INTERACTIVE),
-            expanded_footer_piece(":clear", Color::AnsiValue(245)),
         ];
-        if width >= 90 {
-            search_children.push(expanded_footer_piece("  q", COLOR_INTERACTIVE));
-            search_children.push(expanded_footer_piece(":back", Color::AnsiValue(245)));
+        if compact {
+            action_children.push(expanded_footer_piece("  ", Color::AnsiValue(245)));
+        } else {
+            action_children.push(expanded_footer_piece(":match  ", Color::AnsiValue(245)));
+        }
+        action_children.push(expanded_footer_piece("/", COLOR_INTERACTIVE));
+        action_children.push(expanded_footer_piece(
+            if compact { "  " } else { ":new search  " },
+            Color::AnsiValue(245),
+        ));
+        action_children.push(expanded_footer_piece("Esc", COLOR_INTERACTIVE));
+        if compact {
+            action_children.push(expanded_footer_piece("  ", Color::AnsiValue(245)));
+        } else {
+            action_children.push(expanded_footer_piece(":clear  ", Color::AnsiValue(245)));
+        }
+        action_children.push(expanded_footer_piece("q", COLOR_INTERACTIVE));
+        if !compact {
+            action_children.push(expanded_footer_piece(":back", Color::AnsiValue(245)));
         }
         element!(View(
             flex_direction: FlexDirection::Row,
@@ -1509,66 +1566,77 @@ fn render_expanded_view(
             width: 100pct,
             overflow: Overflow::Hidden,
         ) {
-            View(flex_shrink: 0.0) {
+            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(
-                    content: format!("{} \u{2502} {}", follow_status, progress),
+                    content: if width < 60 {
+                        format!("{compact_follow_status} ")
+                    } else {
+                        format!("{} \u{2502} {}  ", follow_status, progress)
+                    },
                     color: Color::AnsiValue(245)
                 )
             }
-            View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
-                #(search_children)
+            View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                Text(content: format!("/{}", search.query), color: search_color)
+            }
+            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                #(action_children)
             }
         })
         .into_any()
     } else {
-        let mut footer_children = vec![expanded_footer_piece(
-            format!("{} \u{2502} {} \u{2502} ", follow_status, progress),
-            Color::AnsiValue(245),
-        )];
-        if ui.selection.is_some() {
-            footer_children.push(expanded_footer_piece("y", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(":copy  ", Color::AnsiValue(245)));
-            footer_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(":copy  ", Color::AnsiValue(245)));
+        let compact = width < 120;
+        let status = if width < 60 {
+            format!("{compact_follow_status} ")
         } else {
-            footer_children.push(expanded_footer_piece("y", COLOR_INTERACTIVE));
-            footer_children.push(expanded_footer_piece(":copy all  ", Color::AnsiValue(245)));
-        }
-        footer_children.push(expanded_footer_piece("↑↓ j/k", COLOR_INTERACTIVE));
-        footer_children.push(expanded_footer_piece(
-            if width < 90 { "  " } else { ":line  " },
-            Color::AnsiValue(245),
-        ));
-        footer_children.push(expanded_footer_piece("^D/^U", COLOR_INTERACTIVE));
-        footer_children.push(expanded_footer_piece(
-            if width < 90 { "  " } else { ":half  " },
-            Color::AnsiValue(245),
-        ));
-        footer_children.push(expanded_footer_piece("^F/^B", COLOR_INTERACTIVE));
-        footer_children.push(expanded_footer_piece(
-            if width < 90 { "  " } else { ":page  " },
-            Color::AnsiValue(245),
-        ));
-        footer_children.push(expanded_footer_piece("/", COLOR_INTERACTIVE));
-        footer_children.push(expanded_footer_piece(
-            if width < 90 { "  " } else { ":search  " },
-            Color::AnsiValue(245),
-        ));
-        footer_children.push(expanded_footer_piece("g/G", COLOR_INTERACTIVE));
-        footer_children.push(expanded_footer_piece(
-            if width < 90 { "  " } else { ":top/follow  " },
-            Color::AnsiValue(245),
-        ));
-        footer_children.push(expanded_footer_piece("q", COLOR_INTERACTIVE));
-        if width >= 90 {
-            footer_children.push(expanded_footer_piece(":back", Color::AnsiValue(245)));
+            format!("{} \u{2502} {} \u{2502} ", follow_status, progress)
+        };
+        let mut action_children = Vec::new();
+        if compact {
+            action_children.push(expanded_footer_piece(
+                if ui.selection.is_some() {
+                    if width < 60 { "y/^C " } else { "y/Ctrl-C " }
+                } else {
+                    "y "
+                },
+                COLOR_INTERACTIVE,
+            ));
+            for key in ["↑↓ j/k ", "^D/^U ", "^F/^B ", "/ ", "g/G ", "q"] {
+                action_children.push(expanded_footer_piece(key, COLOR_INTERACTIVE));
+            }
+        } else {
+            if ui.selection.is_some() {
+                action_children.push(expanded_footer_piece("y", COLOR_INTERACTIVE));
+                action_children.push(expanded_footer_piece(":copy  ", Color::AnsiValue(245)));
+                action_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
+                action_children.push(expanded_footer_piece(":copy  ", Color::AnsiValue(245)));
+            } else {
+                action_children.push(expanded_footer_piece("y", COLOR_INTERACTIVE));
+                action_children.push(expanded_footer_piece(":copy all  ", Color::AnsiValue(245)));
+            }
+            for (key, label) in [
+                ("↑↓ j/k", ":line  "),
+                ("^D/^U", ":half  "),
+                ("^F/^B", ":page  "),
+                ("/", ":search  "),
+                ("g/G", ":top/follow  "),
+                ("q", ":back"),
+            ] {
+                action_children.push(expanded_footer_piece(key, COLOR_INTERACTIVE));
+                action_children.push(expanded_footer_piece(label, Color::AnsiValue(245)));
+            }
         }
         element!(View(
             flex_direction: FlexDirection::Row,
             width: 100pct,
             overflow: Overflow::Hidden,
         ) {
-            #(footer_children)
+            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                Text(content: status, color: Color::AnsiValue(245))
+            }
+            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                #(action_children)
+            }
         })
         .into_any()
     };
@@ -1798,6 +1866,26 @@ fn build_progress_indicator(offset: usize, viewport_height: usize, total_lines: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use unicode_width::UnicodeWidthStr;
+
+    fn expanded_ui<'a>(
+        selection: Option<&'a Selection>,
+        search: Option<LogSearchView<'a>>,
+        copy_notice: Option<CopyNotice>,
+        follow_tail: bool,
+        interrupt_prompt: (bool, bool),
+    ) -> ExpandedViewUi<'a> {
+        ExpandedViewUi {
+            selection,
+            search,
+            copy_notice,
+            scroll_mode: ScrollMode {
+                follow_tail,
+                anchor: None,
+            },
+            interrupt_prompt,
+        }
+    }
 
     #[test]
     fn test_follow_mode_resolves_to_latest_rows() {
@@ -1940,12 +2028,12 @@ mod tests {
             logs: Arc::new(VecDeque::from(["ready".to_string()])),
             buffer_start_line: 0,
         };
-        let visual_rows = build_visual_rows(&state.logs, content_width_for(100));
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(120));
 
         let mut following = render_expanded_view(
             &state,
             &visual_rows,
-            100,
+            120,
             8,
             ExpandedViewUi {
                 selection: None,
@@ -1958,7 +2046,7 @@ mod tests {
                 interrupt_prompt: (false, false),
             },
         );
-        let following_output = following.render(Some(100)).to_string();
+        let following_output = following.render(Some(120)).to_string();
         assert!(following_output.contains("FOLLOWING"));
         assert!(following_output.contains("y:copy all"));
         assert!(following_output.contains("↑↓ j/k:line"));
@@ -1967,7 +2055,7 @@ mod tests {
         let mut paused = render_expanded_view(
             &state,
             &visual_rows,
-            100,
+            120,
             8,
             ExpandedViewUi {
                 selection: None,
@@ -1980,9 +2068,147 @@ mod tests {
                 interrupt_prompt: (false, false),
             },
         );
-        let paused_output = paused.render(Some(100)).to_string();
+        let paused_output = paused.render(Some(120)).to_string();
         assert!(paused_output.contains("PAUSED"));
         assert!(paused_output.contains("g/G:top/follow"));
+    }
+
+    #[test]
+    fn expanded_footer_preserves_actions_across_widths() {
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new((0..1234).map(|line| format!("line {line}")).collect()),
+            buffer_start_line: 0,
+        };
+        let matches = find_log_matches(&state.logs, state.buffer_start_line, "line");
+        let selection = Selection::from_anchor_cursor((0, 0), (0, 1));
+
+        for width in 40u16..=240 {
+            let visual_rows = build_visual_rows(&state.logs, content_width_for(width));
+            let compact_controls = "↑↓ j/k ^D/^U ^F/^B / g/G q";
+            let normal_controls = if width < 120 {
+                compact_controls
+            } else {
+                "↑↓ j/k:line  ^D/^U:half  ^F/^B:page  /:search  g/G:top/follow  q:back"
+            };
+            let selection_copy = if width < 60 {
+                "y/^C"
+            } else if width < 120 {
+                "y/Ctrl-C"
+            } else {
+                "y:copy  Ctrl-C:copy"
+            };
+            let search_edit_actions = if width < 60 {
+                "Enter  Esc"
+            } else {
+                "Enter:select  Esc:cancel"
+            };
+            let search_actions = if width < 90 {
+                "n/N  /  Esc  q"
+            } else {
+                "n/N:match  /:new search  Esc:clear  q:back"
+            };
+            let quit_actions = if width < 120 {
+                "c:run q:quit ^C:quit"
+            } else {
+                "c:keep running  q:quit  Ctrl-C:quit"
+            };
+            let detach_actions = if width < 120 {
+                "^C:detach s:stop Esc:watch"
+            } else {
+                "Ctrl-C:detach  s:stop manager  Esc:keep watching"
+            };
+
+            for (name, ui, expected) in [
+                (
+                    "normal",
+                    expanded_ui(None, None, None, true, (false, false)),
+                    normal_controls,
+                ),
+                (
+                    "selection",
+                    expanded_ui(Some(&selection), None, None, false, (false, false)),
+                    selection_copy,
+                ),
+                (
+                    "search-editing",
+                    expanded_ui(
+                        None,
+                        Some(LogSearchView {
+                            query: "a-very-long-search-query",
+                            matches: &matches,
+                            current: Some(search_cursor(matches[0])),
+                            editing: true,
+                        }),
+                        None,
+                        false,
+                        (false, false),
+                    ),
+                    search_edit_actions,
+                ),
+                (
+                    "search",
+                    expanded_ui(
+                        None,
+                        Some(LogSearchView {
+                            query: "a-very-long-search-query",
+                            matches: &matches,
+                            current: Some(search_cursor(matches[0])),
+                            editing: false,
+                        }),
+                        None,
+                        false,
+                        (false, false),
+                    ),
+                    search_actions,
+                ),
+                (
+                    "copy",
+                    expanded_ui(
+                        None,
+                        None,
+                        CopyNotice::from_text("ready"),
+                        true,
+                        (false, false),
+                    ),
+                    "Copied 1 line (5B)",
+                ),
+                (
+                    "quit",
+                    expanded_ui(None, None, None, true, (true, false)),
+                    quit_actions,
+                ),
+                (
+                    "detach",
+                    expanded_ui(None, None, None, true, (true, true)),
+                    detach_actions,
+                ),
+            ] {
+                let mut element = render_expanded_view(&state, &visual_rows, width, 8, ui);
+                let output = element.render(Some(width as usize)).to_string();
+                let widest = output
+                    .lines()
+                    .map(UnicodeWidthStr::width)
+                    .max()
+                    .unwrap_or(0);
+                assert!(
+                    widest <= width as usize,
+                    "{name} width {widest} exceeds terminal width {width}:\n{output}"
+                );
+                let footer = output.lines().last().unwrap_or_default();
+                assert!(
+                    footer.contains(expected),
+                    "{name} footer lost actions at width {width}:\n{output}"
+                );
+                if name == "selection" {
+                    assert!(
+                        footer.contains(normal_controls),
+                        "selected footer lost navigation at width {width}:\n{output}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -1993,13 +2219,13 @@ mod tests {
             logs: Arc::new(VecDeque::from(["Error here".to_string()])),
             buffer_start_line: 10,
         };
-        let visual_rows = build_visual_rows(&state.logs, content_width_for(100));
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(120));
         let matches = find_log_matches(&state.logs, state.buffer_start_line, "error");
 
         let mut editing = render_expanded_view(
             &state,
             &visual_rows,
-            100,
+            120,
             8,
             ExpandedViewUi {
                 selection: None,
@@ -2134,12 +2360,12 @@ mod tests {
             logs: Arc::new(VecDeque::new()),
             buffer_start_line: 0,
         };
-        let visual_rows = build_visual_rows(&state.logs, content_width_for(100));
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(120));
 
         let mut element = render_expanded_view(
             &state,
             &visual_rows,
-            100,
+            120,
             8,
             ExpandedViewUi {
                 selection: None,
@@ -2152,7 +2378,7 @@ mod tests {
                 interrupt_prompt: (true, false),
             },
         );
-        let output = element.render(Some(100)).to_string();
+        let output = element.render(Some(120)).to_string();
 
         assert!(output.contains("Quit devenv? Nothing has been stopped yet"));
         assert!(output.contains("c:keep running"));

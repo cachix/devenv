@@ -297,6 +297,8 @@ pub fn view(
                     .get_build_logs(id)
                     .is_some_and(|logs| !logs.is_empty())
             }),
+            selected_preview_focused: selected_id
+                .is_some_and(|id| ui_state.inline_logs_activity == Some(id)),
             process_previews_fit,
         })) {
             SummaryView
@@ -1181,6 +1183,7 @@ struct SummaryViewContext {
     process_search_available: bool,
     selected_disclosure: Option<bool>,
     selected_has_logs: bool,
+    selected_preview_focused: bool,
     process_previews_fit: bool,
 }
 
@@ -1208,6 +1211,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         process_search_available,
         selected_disclosure,
         selected_has_logs,
+        selected_preview_focused,
         process_previews_fit,
     } = ctx;
     let selected = selected.as_ref();
@@ -1221,6 +1225,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let process_search_available = *process_search_available;
     let selected_disclosure = *selected_disclosure;
     let selected_has_logs = *selected_has_logs;
+    let selected_preview_focused = *selected_preview_focused;
     let process_previews_fit = *process_previews_fit;
 
     if interrupt_prompt_active {
@@ -1339,7 +1344,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     );
 
     // Determine display mode based on terminal width
-    let use_symbols = terminal_width < 100;
+    let use_symbols = terminal_width < if has_selection { 120 } else { 100 };
 
     // Builds - only show if there are any builds (active, completed, or failed)
     if summary.active_builds > 0 || summary.completed_builds > 0 || summary.failed_builds > 0 {
@@ -1541,7 +1546,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     // The verbose process vocabulary can exceed even a 120-column terminal
     // once summary counts and the hide-stopped action are present. Keep the
     // compact tier through 159 columns; very narrow terminals use keys only.
-    let use_short_text = terminal_width < 160;
+    let use_short_text = terminal_width < if has_selection { 200 } else { 160 };
     let show_hide_toggle = summary.stopped_processes > 0 || hide_stopped_processes;
 
     let up_arrow_color = if can_go_up {
@@ -1616,6 +1621,13 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             }
             None if is_process && !showing_logs && process_previews_fit => {
                 help_children.push(element!(Text(content: " focus ")).into_any());
+            }
+            None if is_process
+                && showing_logs
+                && process_previews_fit
+                && !selected_preview_focused =>
+            {
+                help_children.push(element!(Text(content: " hide previews ")).into_any());
             }
             None if is_process && showing_logs => {
                 help_children.push(element!(Text(content: " hide preview ")).into_any());
@@ -1734,20 +1746,54 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         }
     }
 
-    if has_selection {
-        if terminal_width < 60 {
-            return element!(View(
-                flex_direction: FlexDirection::Row,
-                width: terminal_width.saturating_sub(2) as u32,
-                overflow: Overflow::Hidden
-            ) {
-                #(help_children)
-            })
-            .into_any();
+    if has_selection && terminal_width < 60 {
+        let mut compact_help_children = vec![
+            element!(Text(content: "↑", color: up_arrow_color)).into_any(),
+            element!(Text(content: "↓", color: down_arrow_color)).into_any(),
+            element!(Text(content: " j", color: down_arrow_color)).into_any(),
+            element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any(),
+            element!(Text(content: "k", color: up_arrow_color)).into_any(),
+            element!(Text(content: " ^D", color: down_arrow_color)).into_any(),
+            element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any(),
+            element!(Text(content: "^U", color: up_arrow_color)).into_any(),
+            element!(Text(content: " Enter", color: COLOR_INTERACTIVE)).into_any(),
+        ];
+        if selected_has_logs || is_process {
+            compact_help_children
+                .push(element!(Text(content: " ^E", color: COLOR_INTERACTIVE)).into_any());
         }
+        if is_stoppable {
+            compact_help_children
+                .push(element!(Text(content: " ^X", color: COLOR_INTERACTIVE)).into_any());
+        }
+        if is_restartable {
+            compact_help_children
+                .push(element!(Text(content: " ^R", color: COLOR_INTERACTIVE)).into_any());
+        }
+        if show_hide_toggle {
+            compact_help_children
+                .push(element!(Text(content: " ^H", color: COLOR_INTERACTIVE)).into_any());
+        }
+        if process_search_available {
+            compact_help_children
+                .push(element!(Text(content: " /", color: COLOR_INTERACTIVE)).into_any());
+        }
+        compact_help_children
+            .push(element!(Text(content: " Esc", color: COLOR_INTERACTIVE)).into_any());
         return element!(View(
             flex_direction: FlexDirection::Row,
-            width: 100pct,
+            width: terminal_width.saturating_sub(2) as u32,
+            overflow: Overflow::Hidden
+        ) {
+            #(compact_help_children)
+        })
+        .into_any();
+    }
+
+    if has_selection && terminal_width < 72 {
+        return element!(View(
+            flex_direction: FlexDirection::Row,
+            width: terminal_width.saturating_sub(2) as u32,
             overflow: Overflow::Hidden
         ) {
             #(help_children)
@@ -1904,6 +1950,7 @@ mod tests {
             process_search_available: false,
             selected_disclosure: None,
             selected_has_logs: false,
+            selected_preview_focused: false,
             process_previews_fit: false,
         }
     }
@@ -1980,11 +2027,46 @@ mod tests {
         }));
         ctx.selected = model.get_activity(1).cloned();
         ctx.can_go_up = true;
+        ctx.summary.running_processes = 1;
+        ctx.summary.total_processes = 1;
 
         let output = build_summary_view_impl(&ctx, 120)
             .render(Some(120))
             .to_string();
         assert!(output.contains("↑↓ j/k ^D/^U nav"));
+        assert!(output.contains("1 process"));
+    }
+
+    #[test]
+    fn test_summary_process_preview_action_matches_scope() {
+        let mut model = ActivityModel::default();
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id: 1,
+            name: "api".to_string(),
+            parent: None,
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        let mut ctx = summary_ctx(false, false, 0);
+        ctx.selected = model.get_activity(1).cloned();
+        ctx.showing_logs = true;
+        ctx.process_previews_fit = true;
+
+        let automatic = build_summary_view_impl(&ctx, 120)
+            .render(Some(120))
+            .to_string();
+        assert!(automatic.contains("hide previews"));
+
+        ctx.selected_preview_focused = true;
+        let focused = build_summary_view_impl(&ctx, 120)
+            .render(Some(120))
+            .to_string();
+        assert!(focused.contains("hide preview"));
+        assert!(!focused.contains("hide previews"));
     }
 
     #[test]
@@ -2308,7 +2390,7 @@ mod tests {
     fn process_view_renders_every_status_label_and_gave_up_affordance() {
         let mut model = ActivityModel::default();
         let mut ui_state = UiState::new();
-        ui_state.set_terminal_size(160, 30);
+        ui_state.set_terminal_size(200, 30);
 
         model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
             id: 100,
@@ -2366,7 +2448,7 @@ mod tests {
             false,
         )
         .into();
-        let rendered = element.render(Some(160)).to_string();
+        let rendered = element.render(Some(200)).to_string();
 
         for label in [
             "auto start off",
