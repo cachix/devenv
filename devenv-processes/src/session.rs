@@ -697,7 +697,7 @@ fn remaining_process_groups(
     let mut groups = known_groups
         .iter()
         .copied()
-        .filter(|group| signal::killpg(Pid::from_raw(*group), None).is_ok())
+        .filter(|group| process_group_alive(*group))
         .collect::<BTreeSet<_>>();
     groups.extend(
         session_ids
@@ -705,6 +705,33 @@ fn remaining_process_groups(
             .flat_map(|session_id| session_process_groups(*session_id)),
     );
     groups
+}
+
+/// Whether a process group still contains work that can respond to signals.
+///
+/// `killpg(group, 0)` reports zombie-only groups as present on Linux. Waiting
+/// for those groups would consume the entire shutdown grace period because the
+/// caller cannot reap a child while `terminate_sessions` is running.
+#[cfg(target_os = "linux")]
+fn process_group_alive(group: i32) -> bool {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return signal::killpg(Pid::from_raw(group), None).is_ok();
+    };
+    entries.flatten().any(|entry| {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<i32>() else {
+            return false;
+        };
+        let Some(fields) = proc_stat_fields(pid) else {
+            return false;
+        };
+        fields.first().is_some_and(|state| state != "Z")
+            && fields.get(2).and_then(|field| field.parse::<i32>().ok()) == Some(group)
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn process_group_alive(group: i32) -> bool {
+    signal::killpg(Pid::from_raw(group), None).is_ok()
 }
 
 /// Process group ids of every live process in `session_id`, excluding the
@@ -725,6 +752,9 @@ pub(crate) fn session_process_groups(session_id: i32) -> BTreeSet<i32> {
         let Some(fields) = proc_stat_fields(pid) else {
             continue;
         };
+        if fields.first().is_some_and(|state| state == "Z") {
+            continue;
+        }
         let (Some(pgid), Some(sid)) = (
             fields.get(2).and_then(|f| f.parse::<i32>().ok()),
             fields.get(3).and_then(|f| f.parse::<i32>().ok()),
