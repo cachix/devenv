@@ -16,6 +16,30 @@ in
       internal = true;
     };
 
+    capabilities = lib.mkOption {
+      type = lib.types.attrsOf lib.types.bool;
+      internal = true;
+      readOnly = true;
+      description = "Capabilities provided by the native process manager.";
+      default = {
+        background_start = true;
+        devenv_attach = true;
+        wait_ready = true;
+        individual_control = true;
+        subset_start = true;
+        requires_tty = false;
+        semantic_shutdown = true;
+      };
+    };
+
+    shutdownScript = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      internal = true;
+      readOnly = true;
+      default = null;
+      description = "Manager-specific graceful shutdown script, if one is available.";
+    };
+
   };
 
   config = lib.mkIf cfg.enable {

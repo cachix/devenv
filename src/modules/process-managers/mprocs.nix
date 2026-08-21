@@ -36,6 +36,30 @@ in
       '';
       default = { };
     };
+
+    capabilities = lib.mkOption {
+      type = lib.types.attrsOf lib.types.bool;
+      internal = true;
+      readOnly = true;
+      description = "Capabilities provided by the mprocs process manager.";
+      default = {
+        background_start = false;
+        devenv_attach = false;
+        wait_ready = false;
+        individual_control = false;
+        subset_start = false;
+        requires_tty = true;
+        semantic_shutdown = false;
+      };
+    };
+
+    shutdownScript = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      internal = true;
+      readOnly = true;
+      default = null;
+      description = "Manager-specific graceful shutdown script, if one is available.";
+    };
   };
 
   config = lib.mkIf cfg.enable {

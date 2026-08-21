@@ -107,6 +107,30 @@ in
           "process_completed_successfully";
       };
     };
+
+    capabilities = lib.mkOption {
+      type = lib.types.attrsOf lib.types.bool;
+      internal = true;
+      readOnly = true;
+      description = "Capabilities provided by the process-compose process manager.";
+      default = {
+        background_start = true;
+        devenv_attach = false;
+        wait_ready = false;
+        individual_control = false;
+        subset_start = true;
+        requires_tty = false;
+        semantic_shutdown = false;
+      };
+    };
+
+    shutdownScript = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      internal = true;
+      readOnly = true;
+      default = null;
+      description = "Manager-specific graceful shutdown script, if one is available.";
+    };
   };
 
   config = lib.mkMerge [

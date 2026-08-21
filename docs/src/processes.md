@@ -25,7 +25,7 @@ To start the processes, run:
 $ devenv up
 ```
 
-To stop detached processes:
+To stop processes started in the background:
 
 ```shell-session
 $ devenv down
@@ -35,7 +35,7 @@ $ devenv down
 
     `devenv down` is a shorthand for `devenv processes down`.
 
-To wait for all processes to become ready (useful in CI):
+With the native process manager, wait for all processes to become ready (useful in CI):
 
 ```shell-session
 $ devenv processes wait --timeout 120
@@ -47,7 +47,13 @@ The default timeout is 120 seconds.
 
 !!! tip "New in devenv 2.2"
 
-When processes are already running in the background (started with `devenv up -d`), a second `devenv up` attaches to them instead of failing. It starts any processes that are enabled but not currently running, honoring their `after`/`before` dependencies, and streams a live view of process status and logs. Press Ctrl-C to detach, leaving the processes running.
+This section describes the native process manager. External managers can run in the background when they advertise that
+capability, but devenv cannot attach its own live view or issue individual process-control commands to them.
+
+When native-managed processes are already running in the background (started with `devenv up -d`), a second
+`devenv up` attaches to them instead of failing. It starts any processes that are enabled but not currently running,
+honoring their `after`/`before` dependencies, and streams a live view of process status and logs. Press Ctrl-C to
+detach, leaving the processes running.
 
 An attaching `devenv up` reports which processes it scheduled and which were already running, and exits nonzero when nothing could be started.
 
@@ -429,7 +435,7 @@ This is useful when you need deterministic port assignments and want to be notif
 
 ## Alternative Process Managers
 
-By default, devenv uses its native process manager. You can switch to alternative implementations:
+By default, devenv uses its native process manager. You can select an alternative implementation:
 
 - [process-compose](supported-process-managers/process-compose.md) - Feature-rich external process manager with TUI
 - [overmind](supported-process-managers/overmind.md) - Procfile-based with tmux integration
@@ -444,3 +450,36 @@ To switch:
   process.manager.implementation = "process-compose";
 }
 ```
+
+Selecting a manager does not imply that it supports every process command. Each manager declares the lifecycle
+capabilities that devenv may use, and the CLI rejects unsupported operations before starting the manager.
+
+| Manager | Background | Attach | Wait ready | Individual control | Subset start | Requires TTY | Manager-aware stop |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| native | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| process-compose | Yes | No | No | No | Yes | No | No |
+| Overmind | Yes | No | No | No | Yes | No | Yes |
+| Honcho | Yes | No | No | No | Yes | No | No |
+| Hivemind | Yes | No | No | No | No | No | No |
+| mprocs | No | No | No | No | No | Yes | No |
+
+The columns mean:
+
+- **Background**: `devenv up -d` can return while the manager and its processes remain running.
+- **Attach**: `devenv processes attach`, and devenv's live attach behavior when `devenv up` finds a running manager.
+- **Wait ready**: `devenv processes wait` can query readiness through that manager.
+- **Individual control**: `devenv processes start`, `stop`, and `restart` can control an existing manager by
+  process name.
+- **Subset start**: a new manager can be started with selected names, for example `devenv up -d api worker`.
+- **Requires TTY**: the manager needs a terminal while it runs. mprocs is therefore supported in the foreground, but
+  `devenv up -d` rejects it before spawning anything.
+- **Manager-aware stop**: devenv has a dedicated graceful-shutdown adapter for the manager.
+
+`devenv down` is supported for every manager in the table that supports background start. A manager-aware stop is
+used when available. Otherwise, devenv terminates the recorded operating-system process scope and verifies that the
+manager and its descendants have exited. Therefore, **Manager-aware stop** describes the graceful strategy; a “No”
+in that column does not mean that `devenv down` is unavailable.
+
+These capabilities are internal implementation data rather than additional public Nix options. When a newer CLI is
+used with older devenv Nix modules that do not declare them, the CLI uses an embedded compatibility declaration for
+the known managers above. Unknown managers receive no optional capabilities implicitly.

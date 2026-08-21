@@ -4,6 +4,39 @@ let
   listenType = import ./lib/listen.nix { inherit lib; };
   readyType = import ./lib/ready.nix { inherit lib; };
 
+  managerCapabilitiesType = types.submodule {
+    options = {
+      background_start = lib.mkOption {
+        type = types.bool;
+        description = "Whether the manager can remain running after the launching client exits.";
+      };
+      devenv_attach = lib.mkOption {
+        type = types.bool;
+        description = "Whether devenv can attach its interactive client to an existing manager.";
+      };
+      wait_ready = lib.mkOption {
+        type = types.bool;
+        description = "Whether devenv can wait for process readiness through the manager.";
+      };
+      individual_control = lib.mkOption {
+        type = types.bool;
+        description = "Whether devenv can start, stop, and restart individual processes through the manager.";
+      };
+      subset_start = lib.mkOption {
+        type = types.bool;
+        description = "Whether the manager can initially start a named subset of processes.";
+      };
+      requires_tty = lib.mkOption {
+        type = types.bool;
+        description = "Whether the manager requires a controlling terminal while it is running.";
+      };
+      semantic_shutdown = lib.mkOption {
+        type = types.bool;
+        description = "Whether devenv has a manager-specific graceful shutdown mechanism.";
+      };
+    };
+  };
+
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
   devenvPrimops = config._module.args.devenvPrimops or { };
@@ -433,6 +466,20 @@ in
           Additional arguments to pass to the process manager.
         '';
       };
+
+      capabilities = lib.mkOption {
+        type = managerCapabilitiesType;
+        internal = true;
+        readOnly = true;
+        description = "Capabilities of the selected process manager.";
+      };
+
+      shutdownScript = lib.mkOption {
+        type = types.nullOr types.package;
+        internal = true;
+        readOnly = true;
+        description = "Manager-specific graceful shutdown script, if one is available.";
+      };
     };
 
     # INTERNAL
@@ -510,6 +557,8 @@ in
       ];
 
       process.managers.${implementation}.enable = lib.mkDefault true;
+      process.manager.capabilities = config.process.managers.${implementation}.capabilities;
+      process.manager.shutdownScript = config.process.managers.${implementation}.shutdownScript;
     }
 
     (lib.mkIf options.processes.isDefined (
