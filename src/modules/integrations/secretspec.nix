@@ -38,7 +38,7 @@ in
       type = lib.types.nullOr lib.types.str;
       default = if secretspecData != null then secretspecData.provider else null;
       readOnly = true;
-      description = "The secretspec provider that was used to load secrets (read-only)";
+      description = "The explicit secretspec provider override selected through devenv, if any (read-only)";
     };
 
     secrets = lib.mkOption {

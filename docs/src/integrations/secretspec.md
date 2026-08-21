@@ -22,9 +22,17 @@ $ secretspec run -- npm start
 
 The `secretspec` command is included with devenv, so no separate installation is
 needed. When the integration is enabled, devenv also exports the resolved profile
-and provider as `SECRETSPEC_PROFILE` and `SECRETSPEC_PROVIDER`. Consequently,
-`secretspec run` uses the same configuration that devenv used while evaluating
-`devenv.nix`.
+as `SECRETSPEC_PROFILE`. If you explicitly select a provider through devenv, it
+also exports that override as `SECRETSPEC_PROVIDER`. Consequently,
+`secretspec run` uses the same explicit overrides that devenv used while evaluating
+`devenv.nix`. When no provider override is selected, SecretSpec commands remain
+free to use the per-secret provider routes from `secretspec.toml`.
+
+!!! tip "New in version 2.2.2"
+
+    devenv no longer infers `SECRETSPEC_PROVIDER` from the provider that happened
+    to resolve secrets during evaluation. It only exports an explicitly selected
+    provider override, preserving per-secret provider and fallback chains.
 
 This approach:
 
@@ -62,9 +70,11 @@ secretspec:
 
 CLI flags take precedence over `devenv.yaml` values.
 
-The selected profile and provider apply both while evaluating `devenv.nix` and
-to `secretspec` commands run inside the development shell. You can access the
-resolved secrets in `devenv.nix`:
+The resolved profile applies both while evaluating `devenv.nix` and to
+`secretspec` commands run inside the development shell. An explicitly selected
+provider does too. If you omit the provider, SecretSpec uses the provider
+configuration in `secretspec.toml` for both. You can access the resolved secrets
+in `devenv.nix`:
 
 ```nix title="devenv.nix"
 { config, ... }:
