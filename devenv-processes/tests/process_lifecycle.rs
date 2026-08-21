@@ -602,7 +602,7 @@ async fn test_stop_during_exit_cleanup_prevents_automatic_restart() {
         let script = ctx
             .create_script(
                 "crash-with-stubborn-child.sh",
-                r#"#!/bin/bash
+                r#"#!/usr/bin/env bash
 starts_file="$1"
 child_ready="$2"
 cleanup_started="$3"
