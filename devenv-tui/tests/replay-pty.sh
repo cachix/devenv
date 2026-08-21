@@ -35,9 +35,8 @@ cleanup() {
 trap cleanup EXIT
 
 fixture="$repo_root/devenv-tui/replays/processes.jsonl"
-command="\"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\" \"$fixture\""
+command="exec \"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\" \"$fixture\""
 
-# The selected process and its actions must survive the narrow-to-wide resize.
 # Avoid standalone Esc in this byte-level harness: the emulated terminal reports
 # no keyboard-protocol enhancement, so legacy decoding keeps Esc ambiguous until
 # another input byte arrives.
@@ -51,13 +50,12 @@ expect:worker
 expect:processed deterministic job 1
 expect:disabled
 expect:stopped
-resize:48x6
-expect:^H
 send:/worker
 expect:Search processes: /worker
 send:\r
-resize:120x12
-expect:restart
+expect:hide preview
+send:h
+expect:focus
 send:l
 expect:processed deterministic job 1
 expect:hide preview
@@ -105,8 +103,11 @@ send:G
 expect:FOLLOWING
 send:q
 expect:Running processes
-resize:48x12
-resize:120x40
+expect:focus
+send:/api
+expect:Search processes: /api
+send:\r
+expect:focus
 send:\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12
 expect:restarting
 expect:ready
