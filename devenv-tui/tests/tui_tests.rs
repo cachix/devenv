@@ -8,6 +8,7 @@ use devenv_activity::test_helpers::*;
 use devenv_activity::{ActivityLevel, ActivityOutcome, FetchKind, TaskInfo};
 use devenv_tui::{ActivityModel, RenderContext, UiState, view::view};
 use iocraft::prelude::*;
+use unicode_width::UnicodeWidthStr;
 
 const TEST_WIDTH: u16 = 80;
 const TEST_HEIGHT: u16 = 24;
@@ -1171,10 +1172,8 @@ fn test_task_diamond_dependency() {
     insta::assert_snapshot!(output);
 }
 
-/// Test that when activities overflow a small terminal, the bottom content
-/// (running processes with logs) remains visible and the summary line is last.
 #[test]
-fn test_overflow_clips_top_keeps_bottom() {
+fn test_overflow_keeps_collapsed_process_visible() {
     let model = ActivityModel::new();
     let mut ui_state = UiState::new();
     // Use a very small terminal height to force overflow
@@ -1183,7 +1182,7 @@ fn test_overflow_clips_top_keeps_bottom() {
     let mut model = model;
 
     // Create several completed activities (these should get clipped at the top)
-    for i in 1..=5 {
+    for i in 1..=8 {
         model.apply_activity_event(build_start(i, format!("completed-build-{}", i)));
         model.apply_activity_event(build_complete(i, ActivityOutcome::Success));
     }
@@ -1203,17 +1202,17 @@ fn test_overflow_clips_top_keeps_bottom() {
     let lines: Vec<&str> = output.lines().collect();
     let last_non_empty = lines.iter().rev().find(|l| !l.trim().is_empty()).unwrap();
     assert!(
-        last_non_empty.contains("nav"),
+        last_non_empty.contains("↑↓ j/k"),
         "Last line should be the summary status line, got: {:?}",
         last_non_empty
     );
 
-    // The process log should be visible
     assert!(
-        output.contains("Listening on port 3000"),
-        "Process log line should be visible in overflow output.\nFull output:\n{}",
+        output.contains("web-server"),
+        "Process should be visible in overflow output.\nFull output:\n{}",
         output
     );
+    assert!(!output.contains("Listening on port 3000"));
 
     // The very last line should be the summary (no trailing empty lines)
     let last_line = lines.last().unwrap();
@@ -1529,6 +1528,192 @@ fn test_processes_alphabetical_order() {
     );
 
     insta::assert_snapshot!(output);
+}
+
+#[test]
+fn test_process_logs_follow_terminal_height_and_manual_focus() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(10, "Running processes"));
+    model.apply_activity_event(process_start_with(
+        1,
+        "chatty-service",
+        Some(10),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_log(1, "seeding database", false));
+
+    ui_state.selected_activity = Some(1);
+    let roomy = render_to_string(&model, &ui_state);
+    assert!(roomy.contains("seeding database"));
+    assert!(roomy.contains("Enter ▴"));
+    let process_line = roomy
+        .lines()
+        .find(|line| line.contains("chatty-service"))
+        .unwrap();
+    let log_line = roomy
+        .lines()
+        .find(|line| line.contains("seeding database"))
+        .unwrap();
+    let process_column = process_line[..process_line.find("chatty-service").unwrap()].width();
+    let log_column = log_line[..log_line.find("seeding database").unwrap()].width();
+    assert_eq!(log_column, process_column, "{roomy}");
+
+    ui_state.set_terminal_size(TEST_WIDTH, 3);
+    let crowded = render_to_string(&model, &ui_state);
+    assert!(!crowded.contains("seeding database"));
+    assert!(crowded.contains("Enter ▾"));
+
+    ui_state.focus_inline_logs(1);
+    let focused = render_to_string(&model, &ui_state);
+    assert!(focused.contains("seeding database"));
+    assert!(focused.contains("Enter ▴"));
+    let focused_log_line = focused
+        .lines()
+        .find(|line| line.contains("seeding database"))
+        .unwrap();
+    let focused_log_column =
+        focused_log_line[..focused_log_line.find("seeding database").unwrap()].width();
+    assert_eq!(focused_log_column, process_column, "{focused}");
+
+    ui_state.hide_process_previews();
+    let hidden = render_to_string(&model, &ui_state);
+    assert!(!hidden.contains("seeding database"));
+
+    ui_state.focus_inline_logs(1);
+    let reopened = render_to_string(&model, &ui_state);
+    assert!(reopened.contains("seeding database"));
+}
+
+#[test]
+fn test_process_preview_preserves_required_tree_continuation() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(10, "Running processes"));
+    model.apply_activity_event(process_start_with(
+        1,
+        "chatty-service",
+        Some(10),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_log(1, "seeding database", false));
+    model.apply_activity_event(process_start_with(
+        2,
+        "next-service",
+        Some(10),
+        ActivityLevel::Info,
+    ));
+
+    ui_state.set_terminal_size(TEST_WIDTH, 4);
+    ui_state.selected_activity = Some(1);
+    ui_state.toggle_inline_logs();
+    let rendered = render_to_string(&model, &ui_state);
+
+    assert!(rendered.contains("  │   seeding database"), "{rendered}");
+    assert!(rendered.contains("  └"), "{rendered}");
+}
+
+#[test]
+fn test_completed_shell_tree_collapses_into_expandable_summary() {
+    let (mut model, mut ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Building shell"));
+    model.apply_activity_event(evaluate_start_with(
+        2,
+        "Evaluating Nix",
+        ActivityLevel::Info,
+        Some(1),
+    ));
+    model.apply_activity_event(build_start_with(3, "hello-2.12", Some(2)));
+    model.apply_activity_event(build_complete(3, ActivityOutcome::Success));
+    model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+    ui_state.selected_activity = Some(1);
+    let collapsed = render_to_string(&model, &ui_state);
+    assert!(collapsed.contains("▸ Building shell"));
+    assert!(collapsed.contains("2 steps"));
+    assert!(!collapsed.contains("Evaluating Nix"));
+    assert!(!collapsed.contains("hello-2.12"));
+    insta::assert_snapshot!("completed_shell_tree_collapsed", collapsed);
+
+    ui_state.toggle_activity_expansion(1);
+    let expanded = render_to_string(&model, &ui_state);
+    assert!(expanded.contains("▾ Building shell"));
+    assert!(expanded.contains("Evaluating Nix"));
+    assert!(expanded.contains("hello-2.12"));
+    insta::assert_snapshot!("completed_shell_tree_expanded", expanded);
+}
+
+#[test]
+fn test_failed_shell_tree_stays_expanded() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Building shell"));
+    model.apply_activity_event(build_start_with(2, "broken-build", Some(1)));
+    model.apply_activity_event(build_complete(2, ActivityOutcome::Failed));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Failed));
+
+    let rendered = render_to_string(&model, &ui_state);
+    assert!(!rendered.contains("▸ Building shell"));
+    assert!(rendered.contains("broken-build"));
+}
+
+#[test]
+fn test_completed_non_shell_operation_stays_expanded() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Pushing to cache"));
+    model.apply_activity_event(build_start_with(2, "cached-build", Some(1)));
+    model.apply_activity_event(build_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+    let rendered = render_to_string(&model, &ui_state);
+    assert!(!rendered.contains("▸ Pushing to cache"));
+    assert!(rendered.contains("cached-build"));
+}
+
+#[test]
+fn test_running_process_group_never_collapses() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Running processes"));
+    model.apply_activity_event(evaluate_start_with(
+        2,
+        "Evaluating Nix",
+        ActivityLevel::Info,
+        Some(1),
+    ));
+    model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(process_start_with(3, "api", Some(1), ActivityLevel::Info));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+    let rendered = render_to_string(&model, &ui_state);
+    assert!(!rendered.contains("▸ Running processes"));
+    assert!(rendered.contains("api"));
+}
+
+#[test]
+fn test_process_search_matches_names_case_insensitively() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(process_start(1, "scope-api"));
+    model.apply_activity_event(process_start(2, "scope-consumer"));
+    model.apply_activity_event(build_start(3, "scope-api-build"));
+
+    assert_eq!(
+        model.get_matching_process_activity_ids(&ui_state, "API"),
+        vec![1]
+    );
+    assert_eq!(
+        model.get_matching_process_activity_ids(&ui_state, "scope"),
+        vec![1, 2]
+    );
+    assert!(
+        model
+            .get_matching_process_activity_ids(&ui_state, "missing")
+            .is_empty()
+    );
 }
 
 /// Test cachix push alongside other activities (build + push concurrent).

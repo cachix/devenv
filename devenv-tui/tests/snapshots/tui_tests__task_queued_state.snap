@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ test:first    [TIME]
+⠋ test:first     [TIME]
 ⠋ test:second pending
 ⠋ test:third pending
 
- 0 of 3 tasks   ↑↓ nav
+ 0/3 tasks ↑↓ j/k ^D/^U

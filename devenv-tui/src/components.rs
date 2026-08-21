@@ -253,11 +253,17 @@ pub fn format_elapsed_time(elapsed: Duration, high_resolution: bool) -> String {
 /// Only used for nested items (depth > 0). Top-level items don't need hierarchy rendering.
 pub struct HierarchyPrefixComponent {
     pub depth: usize,
+    pub ancestor_continuations: Vec<bool>,
+    pub is_last_sibling: bool,
 }
 
 impl HierarchyPrefixComponent {
-    pub fn new(depth: usize) -> Self {
-        Self { depth }
+    pub fn new(depth: usize, ancestor_continuations: &[bool], is_last_sibling: bool) -> Self {
+        Self {
+            depth,
+            ancestor_continuations: ancestor_continuations.to_vec(),
+            is_last_sibling,
+        }
     }
 
     /// Renders the hierarchy prefix: `[indent][branch]`
@@ -267,15 +273,16 @@ impl HierarchyPrefixComponent {
             return vec![];
         }
 
-        // Indentation: 2 spaces for status indicator width + 2 spaces per additional nesting level
-        let status_indicator_offset = 2;
-        let nesting_indent = "  ".repeat(self.depth - 1);
-        let total_indent = format!("{}{}", " ".repeat(status_indicator_offset), nesting_indent);
+        let mut total_indent = "  ".to_string();
+        for continues in &self.ancestor_continuations {
+            total_indent.push_str(if *continues { "│ " } else { "  " });
+        }
+        let branch = if self.is_last_sibling { "└" } else { "├" };
 
         vec![
-            element!(Text(content: total_indent)).into_any(),
+            element!(Text(content: total_indent, color: COLOR_HIERARCHY)).into_any(),
             element!(View(margin_right: 1) {
-                Text(content: "└", color: COLOR_HIERARCHY)
+                Text(content: branch, color: COLOR_HIERARCHY)
             })
             .into_any(),
         ]
@@ -288,6 +295,7 @@ pub struct ActivityTextComponent {
     pub name: String,
     pub suffix: Option<String>,
     pub is_selected: bool,
+    pub is_dimmed: bool,
     pub elapsed: String,
     pub is_completed: bool,
     pub variant: ActivityVariant,
@@ -300,6 +308,7 @@ impl ActivityTextComponent {
             name,
             suffix: None,
             is_selected: false,
+            is_dimmed: false,
             elapsed,
             is_completed: false,
             variant,
@@ -322,9 +331,35 @@ impl ActivityTextComponent {
         self
     }
 
+    pub fn with_dimmed(mut self, is_dimmed: bool) -> Self {
+        self.is_dimmed = is_dimmed;
+        self
+    }
+
     pub fn with_completed(mut self, completed: bool) -> Self {
         self.is_completed = completed;
         self
+    }
+
+    fn colors(&self, depth: usize) -> (Color, Color, Color, Option<Color>) {
+        if self.is_selected {
+            (
+                Color::AnsiValue(232),
+                Color::AnsiValue(238),
+                Color::AnsiValue(238),
+                Some(Color::AnsiValue(250)),
+            )
+        } else if self.is_dimmed {
+            (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY, None)
+        } else if self.is_completed && depth == 0 {
+            (Color::Reset, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        } else if self.is_completed {
+            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        } else if depth == 0 || matches!(self.variant, ActivityVariant::Process(_)) {
+            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        } else {
+            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        }
     }
 
     pub fn render(
@@ -352,24 +387,7 @@ impl ActivityTextComponent {
             depth,
         );
 
-        // Colors: blue when active, green when completed
-        // Selected rows get inverted colors
-        let (name_color, suffix_color, elapsed_color, bg_color) = if self.is_selected {
-            (
-                Color::AnsiValue(232),       // Near-black text
-                Color::AnsiValue(238),       // Dark gray for suffix
-                Color::AnsiValue(238),       // Dark gray for elapsed
-                Some(Color::AnsiValue(250)), // Light gray background
-            )
-        } else if self.is_completed && depth == 0 {
-            (Color::Reset, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if self.is_completed {
-            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if depth == 0 || matches!(self.variant, ActivityVariant::Process(_)) {
-            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else {
-            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        };
+        let (name_color, suffix_color, elapsed_color, bg_color) = self.colors(depth);
 
         let mut final_prefix = prefix_children;
 
@@ -554,6 +572,8 @@ pub struct DownloadActivityComponent<'a> {
     pub completed: Option<bool>,
     /// Whether this activity's result was cached
     pub cached: bool,
+    pub ancestor_continuations: Vec<bool>,
+    pub is_last_sibling: bool,
 }
 
 impl<'a> DownloadActivityComponent<'a> {
@@ -564,7 +584,19 @@ impl<'a> DownloadActivityComponent<'a> {
             is_selected,
             completed: None,
             cached: false,
+            ancestor_continuations: Vec::new(),
+            is_last_sibling: true,
         }
+    }
+
+    pub fn with_hierarchy(
+        mut self,
+        ancestor_continuations: &[bool],
+        is_last_sibling: bool,
+    ) -> Self {
+        self.ancestor_continuations = ancestor_continuations.to_vec();
+        self.is_last_sibling = is_last_sibling;
+        self
     }
 
     pub fn with_completed(mut self, completed: Option<bool>) -> Self {
@@ -591,7 +623,12 @@ impl<'a> DownloadActivityComponent<'a> {
         let mut elements = vec![];
 
         // First line: activity name with hierarchy prefix and status indicator
-        let mut prefix = HierarchyPrefixComponent::new(self.depth).render();
+        let mut prefix = HierarchyPrefixComponent::new(
+            self.depth,
+            &self.ancestor_continuations,
+            self.is_last_sibling,
+        )
+        .render();
         prefix.push(
             element!(View(margin_right: 1) {
                 StatusIndicator(completed: self.completed, show_spinner: true)
@@ -866,6 +903,8 @@ pub struct ExpandedContentComponent<'a> {
     pub max_lines: usize,
     pub depth: usize,
     pub terminal_width: Option<usize>,
+    border_indent: Option<usize>,
+    line_prefix: Option<String>,
 }
 
 impl<'a> ExpandedContentComponent<'a> {
@@ -876,6 +915,8 @@ impl<'a> ExpandedContentComponent<'a> {
             max_lines: LOG_VIEWPORT_COLLAPSED,
             depth: 0,
             terminal_width: None,
+            border_indent: None,
+            line_prefix: None,
         }
     }
 
@@ -899,6 +940,20 @@ impl<'a> ExpandedContentComponent<'a> {
         self
     }
 
+    pub fn with_border_indent(mut self, indent: usize) -> Self {
+        self.border_indent = Some(indent);
+        self
+    }
+
+    pub fn with_line_prefix(mut self, prefix: String) -> Self {
+        self.line_prefix = Some(prefix);
+        self
+    }
+
+    fn border_indent(&self) -> usize {
+        self.border_indent.unwrap_or(2 + self.depth * 2)
+    }
+
     /// The last `max_lines` logical log lines, preserving chronological order.
     /// Long unbroken strings are hard-wrapped here because a `Text` child's
     /// intrinsic width can otherwise expand its parent beyond the terminal.
@@ -917,19 +972,59 @@ impl<'a> ExpandedContentComponent<'a> {
             return lines;
         };
 
-        // Left margin + border + the leading content space + right margin.
-        let width = terminal_width.saturating_sub(2 + self.depth * 2 + 3).max(1);
+        let occupied_width = self.line_prefix.as_ref().map_or_else(
+            || self.border_indent() + 3,
+            |prefix| {
+                use unicode_width::UnicodeWidthStr;
+                prefix.width() + 3
+            },
+        );
+        let width = terminal_width.saturating_sub(occupied_width).max(1);
         lines
             .into_iter()
             .flat_map(|line| hard_wrap(&line, width))
             .collect()
     }
 
+    pub fn visual_height(&self) -> usize {
+        self.visible_lines()
+            .len()
+            .max(1)
+            .min(INLINE_LOG_MAX_VISUAL_ROWS.saturating_sub(1) as usize)
+    }
+
     pub fn render(&self) -> Vec<AnyElement<'static>> {
-        let indent = 2 + (self.depth * 2);
+        let indent = self.border_indent();
 
         let lines = self.visible_lines();
         if !lines.is_empty() {
+            if let Some(prefix) = &self.line_prefix {
+                let line_elements: Vec<AnyElement<'static>> = lines
+                    .into_iter()
+                    .map(|line| {
+                        element! {
+                            View(flex_direction: FlexDirection::Row, padding_right: 1) {
+                                Text(content: prefix.clone(), color: COLOR_HIERARCHY)
+                                Text(content: format!("  {line}"), color: Color::AnsiValue(245))
+                            }
+                        }
+                        .into_any()
+                    })
+                    .collect();
+
+                return vec![
+                    element! {
+                    View(
+                        flex_direction: FlexDirection::Column,
+                        overflow: Overflow::Hidden,
+                    ) {
+                        #(line_elements)
+                        }
+                    }
+                    .into_any(),
+                ];
+            }
+
             let line_elements: Vec<AnyElement<'static>> = lines
                 .into_iter()
                 .map(|line| {
@@ -949,7 +1044,7 @@ impl<'a> ExpandedContentComponent<'a> {
                         margin_right: 1,
                         border_style: BorderStyle::Single,
                         border_edges: Edges::Left,
-                        border_color: Color::AnsiValue(245),
+                        border_color: COLOR_HIERARCHY,
                     ) {
                         #(line_elements)
                     }
@@ -967,6 +1062,17 @@ impl<'a> ExpandedContentComponent<'a> {
                 hard_wrap(self.empty_message, budget).into_iter().next()
             })
             .unwrap_or_else(|| self.empty_message.to_string());
+        if let Some(prefix) = &self.line_prefix {
+            return vec![
+                element! {
+                    View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
+                        Text(content: prefix.clone(), color: COLOR_HIERARCHY)
+                        Text(content: format!("  {empty_message}"), color: Color::AnsiValue(245))
+                    }
+                }
+                .into_any(),
+            ];
+        }
         vec![element! {
             View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
                 Text(content: empty_message, color: Color::AnsiValue(245))
@@ -1035,6 +1141,34 @@ pub type BuildLogsComponent<'a> = ExpandedContentComponent<'a>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dimmed_activity_uses_hierarchy_colors() {
+        let component = ActivityTextComponent::name_only(
+            "email-worker".to_string(),
+            "1.0s".to_string(),
+            ActivityVariant::Process(crate::model::ProcessActivity {
+                status: ProcessStatus::Ready,
+                ports: vec![],
+                ready_probe: None,
+            }),
+        )
+        .with_dimmed(true);
+
+        assert_eq!(
+            component.colors(1),
+            (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY, None)
+        );
+        assert_eq!(
+            component.with_selection(true).colors(1),
+            (
+                Color::AnsiValue(232),
+                Color::AnsiValue(238),
+                Color::AnsiValue(238),
+                Some(Color::AnsiValue(250))
+            )
+        );
+    }
 
     #[test]
     fn process_status_dot_covers_every_lifecycle_phase() {
@@ -1330,5 +1464,21 @@ mod tests {
             "expected URL to appear intact in wrapped output:\n{}",
             out
         );
+    }
+
+    #[test]
+    fn expanded_content_supports_explicit_border_alignment() {
+        let logs = VecDeque::from(["one".to_string()]);
+        let elements = ExpandedContentComponent::new(Some(&logs))
+            .with_border_indent(2)
+            .render();
+        let mut element = element! {
+            View(width: 40u32, flex_direction: FlexDirection::Column) {
+                #(elements)
+            }
+        };
+        let rendered = element.render(Some(40)).to_string();
+
+        assert!(rendered.contains("  │ one"), "{rendered}");
     }
 }

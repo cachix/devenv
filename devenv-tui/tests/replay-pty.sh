@@ -15,6 +15,7 @@ work_dir=$(mktemp -d)
 transcript="$work_dir/transcript"
 event_log="$work_dir/events.jsonl"
 export TUI_REPLAY_EVENT_LOG=$event_log
+export TUI_REPLAY_TRANSCRIPT=$transcript
 
 cleanup() {
   status=$?
@@ -34,9 +35,8 @@ cleanup() {
 trap cleanup EXIT
 
 fixture="$repo_root/devenv-tui/replays/processes.jsonl"
-command="\"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\" \"$fixture\""
+command="exec \"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\" \"$fixture\""
 
-# The selected process and its actions must survive the narrow-to-wide resize.
 # Avoid standalone Esc in this byte-level harness: the emulated terminal reports
 # no keyboard-protocol enhancement, so legacy decoding keeps Esc ambiguous until
 # another input byte arrives.
@@ -45,15 +45,69 @@ command="\"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\"
 # process while that row is still being inserted can clear or move the selection.
 "$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
 expect:api
+expect:├
 expect:worker
+expect:processed deterministic job 1
 expect:disabled
 expect:stopped
-send:j
-expect:restart
-resize:48x12
-expect:api
-resize:120x40
-expect:restart
+send:/worker
+expect:Search processes: /worker
+send:\r
+expect:hide preview
+send:h
+expect:focus
+send:l
+expect:processed deterministic job 1
+expect:hide preview
+send:h
+expect:focus
+send:/missing
+expect:Search processes: /missing
+expect:no matches
+send:\r
+expect:nav
+send:/api
+expect:Search processes: /api
+send:\r
+expect:focus
+send:\x1b[C
+expect:listening on http://127.0.0.1:8080
+expect:hide preview
+send:\x1b[D
+expect:focus
+send:\x05
+expect:FOLLOWING
+send:\x15
+expect:PAUSED
+send:\x04
+expect:FOLLOWING
+send:\x02
+expect:PAUSED
+send:\x06
+expect:FOLLOWING
+send:/t
+expect:Search logs: /t
+expect:1/3
+send:\r
+expect:n/N
+send:n
+expect:2/3
+send:y
+expect:bGlzdGVuaW5nIG9uIGh0dHA6Ly8xMjcuMC4wLjE6ODA4MA==
+expect:Copied 1 line
+send:G
+expect:FOLLOWING
+send:g
+expect:PAUSED
+send:G
+expect:FOLLOWING
+send:q
+expect:Running processes
+expect:focus
+send:/api
+expect:Search processes: /api
+send:\r
+expect:focus
 send:\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12
 expect:restarting
 expect:ready
@@ -61,14 +115,14 @@ run:test "$(tail -n 1 "$TUI_REPLAY_EVENT_LOG")" = '{"kind":"status","process":"a
 send:\x18
 expect:stopping
 run:while ! tail -n 1 "$TUI_REPLAY_EVENT_LOG" | grep -Fq '"process":"api","status":"stopped"'; do sleep 0.02; done
-expect:restart
+expect:^R
 send:\x12
 expect:restarting
 expect:ready
 send:\x03
 expect:Detach
 send:c
-expect:restart
+expect:^R
 send:\x03
 expect:Detach
 send:s

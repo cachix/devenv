@@ -115,9 +115,9 @@ triage.
 
 ## Views
 
-**Main view**: Shows activity tree with inline log previews. Does not use alternate screen buffer, so terminal scrollback is preserved.
+**Main view**: Shows a stable activity tree. Process logs are previewed automatically when the complete tree fits in the terminal and can always be opened or hidden explicitly. The main view does not use the alternate screen buffer, so terminal scrollback is preserved.
 
-**Expanded logs**: Fullscreen view of logs for a single activity.
+**Expanded logs**: Fullscreen view of logs for a single activity with follow mode, scrolling, selection, and clipboard copy.
 
 ## Activity Types
 
@@ -137,19 +137,31 @@ triage.
 
 ### Main View
 - `↑/↓` or `j/k`: Navigate activities
+- `Ctrl+D/Ctrl+U`: Navigate half a page
+- `Enter`: Toggle the selected activity or process log preview
+- `→` or `l`: Expand the selected activity or show its process log preview
+- `←` or `h`: Collapse the selected activity or hide process log previews
 - `Ctrl+E`: Expand logs for selected activity
+- `/`: Search managed processes by name; use `↑/↓` to move through matches
 - `Ctrl+R`: Restart the selected managed process
+- `Ctrl+X`: Stop the selected managed process
+- `Ctrl+H`: Hide or show stopped processes
 - `Ctrl+C`: Show the quit prompt without stopping managed processes
 - `c` or `Esc`: Keep running and clear the prompt
 - `q` or `Ctrl+C`: Quit from the interrupt prompt
-- `Esc`: Clear selection
+- `Esc`: Close the inline preview, clear the selection, or cancel search
 
 ### Expanded Logs
 Long lines wrap onto continuation rows so their full content stays readable.
 
 - `↑/↓` or `j/k`: Scroll one line
+- `Ctrl+D/Ctrl+U`: Scroll half a page
+- `Ctrl+F/Ctrl+B`: Scroll a full page
 - `PgUp/PgDn` or `Space`: Scroll page
-- `g/G`: Jump to top/bottom
+- `g` or `Home`: Jump to the top and pause following
+- `G` or `End`: Jump to the bottom and resume following
+- `/`: Search logs; use `n/N` to move through matches
+- `y`: Copy the selection, or the complete retained log when nothing is selected
 - `Ctrl+C`: Copy the current selection, or show the quit prompt when no selection is active
 - `c` or `Esc`: Keep running and clear the prompt
 - `q` or `Ctrl+C`: Quit from the interrupt prompt

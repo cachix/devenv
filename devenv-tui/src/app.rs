@@ -1,7 +1,10 @@
 use crate::{
     expanded_view::ExpandedLogView,
     model::{ActivityModel, RenderContext, UiState, ViewMode},
-    view::{ActivityHeights, SUMMARY_BAR_HEIGHT, ScrollState, view},
+    view::{
+        ActivityHeights, SUMMARY_BAR_HEIGHT, ScrollState, activity_shows_inline_logs,
+        process_previews_fit, view,
+    },
 };
 use crossterm::{
     cursor, event, execute,
@@ -570,12 +573,49 @@ fn activity_height(heights: &std::collections::HashMap<u64, i32>, id: u64) -> i3
     heights.get(&id).copied().unwrap_or(1)
 }
 
+fn rendered_activity_height(
+    heights: &std::collections::HashMap<u64, i32>,
+    model: &ActivityModel,
+    ui_state: &UiState,
+    display: &crate::model::DisplayActivity,
+    previews_fit: bool,
+) -> i32 {
+    if matches!(
+        display.activity.variant,
+        crate::model::ActivityVariant::Process(_)
+    ) && !activity_shows_inline_logs(model, ui_state, display.activity.id, previews_fit)
+    {
+        1
+    } else {
+        activity_height(heights, display.activity.id)
+    }
+}
+
+fn activity_navigation_action(
+    key_event: &KeyEvent,
+    viewport_height: usize,
+) -> Option<(bool, usize)> {
+    let control = key_event.modifiers.contains(KeyModifiers::CONTROL);
+    let half_page = viewport_height.div_ceil(2).max(1);
+
+    match key_event.code {
+        KeyCode::Down | KeyCode::Char('j') => Some((true, 1)),
+        KeyCode::Up | KeyCode::Char('k') => Some((false, 1)),
+        KeyCode::Char('d') if control => Some((true, half_page)),
+        KeyCode::Char('u') if control => Some((false, half_page)),
+        _ => None,
+    }
+}
+
 /// Scroll the viewport so the selected activity is visible.
 fn scroll_selected_into_view(
     handle: &mut ScrollViewHandle,
     heights: &std::collections::HashMap<u64, i32>,
+    model: &ActivityModel,
+    ui_state: &UiState,
     display_activities: &[crate::model::DisplayActivity],
     selected_id: u64,
+    previews_fit: bool,
 ) {
     let Some(position) = display_activities
         .iter()
@@ -586,9 +626,12 @@ fn scroll_selected_into_view(
 
     let offset: i32 = display_activities[..position]
         .iter()
-        .map(|da| activity_height(heights, da.activity.id))
+        .map(|display| rendered_activity_height(heights, model, ui_state, display, previews_fit))
         .sum();
-    let target_height = activity_height(heights, selected_id);
+    let target_height = display_activities
+        .get(position)
+        .map(|display| rendered_activity_height(heights, model, ui_state, display, previews_fit))
+        .unwrap_or(1);
 
     let vp = handle.viewport_height() as i32;
     let current = handle.scroll_offset();
@@ -597,6 +640,163 @@ fn scroll_selected_into_view(
     } else if offset + target_height > current + vp {
         handle.scroll_to(offset + target_height - vp);
     }
+}
+
+fn update_process_search_selection(
+    model: &ActivityModel,
+    display: &[crate::model::DisplayActivity],
+    ui_state: &mut UiState,
+) {
+    let Some(query) = ui_state
+        .process_search
+        .as_ref()
+        .map(|search| search.query.clone())
+    else {
+        return;
+    };
+    let matches = model.get_matching_process_activity_ids_from_display(display, &query);
+    if !ui_state
+        .selected_activity
+        .is_some_and(|id| matches.contains(&id))
+    {
+        ui_state.selected_activity = matches.first().copied();
+    }
+}
+
+fn handle_process_search_key(
+    key_event: &KeyEvent,
+    model: &ActivityModel,
+    display: &[crate::model::DisplayActivity],
+    ui_state: &mut UiState,
+) -> bool {
+    if ui_state.process_search.is_none() {
+        return false;
+    }
+    match key_event.code {
+        KeyCode::Esc => {
+            ui_state.cancel_process_search();
+            if ui_state
+                .selected_activity
+                .is_some_and(|id| !model.is_selectable(id, ui_state))
+            {
+                ui_state.selected_activity = None;
+            }
+        }
+        KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            ui_state.cancel_process_search();
+            if ui_state
+                .selected_activity
+                .is_some_and(|id| !model.is_selectable(id, ui_state))
+            {
+                ui_state.selected_activity = None;
+            }
+        }
+        KeyCode::Enter => ui_state.finish_process_search(),
+        KeyCode::Backspace => {
+            if let Some(search) = &mut ui_state.process_search {
+                search.query.pop();
+            }
+            update_process_search_selection(model, display, ui_state);
+        }
+        KeyCode::Down | KeyCode::Up => {
+            let query = ui_state
+                .process_search
+                .as_ref()
+                .map(|search| search.query.as_str())
+                .unwrap_or_default();
+            let matches = model.get_matching_process_activity_ids_from_display(display, query);
+            if !ui_state
+                .selected_activity
+                .is_some_and(|id| matches.contains(&id))
+            {
+                ui_state.selected_activity = None;
+            }
+            let forward = matches!(key_event.code, KeyCode::Down);
+            ui_state.select_activity(&matches, forward);
+        }
+        KeyCode::Char(character)
+            if !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
+        {
+            if let Some(search) = &mut ui_state.process_search {
+                search.query.push(character);
+            }
+            update_process_search_selection(model, display, ui_state);
+        }
+        _ => {}
+    }
+
+    true
+}
+
+fn activate_selected_activity(model: &ActivityModel, ui_state: &mut UiState, previews_fit: bool) {
+    if let Some(activity_id) = ui_state.selected_activity
+        && model.is_activity_collapsible(activity_id, ui_state)
+    {
+        ui_state.toggle_activity_expansion(activity_id);
+        ui_state.inline_logs_activity = None;
+    } else if let Some(activity_id) = ui_state.selected_activity
+        && model.get_activity(activity_id).is_some_and(|activity| {
+            matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+        })
+    {
+        if activity_shows_inline_logs(model, ui_state, activity_id, previews_fit) {
+            ui_state.hide_process_previews();
+        } else {
+            ui_state.focus_inline_logs(activity_id);
+        }
+    } else {
+        ui_state.toggle_inline_logs();
+    }
+}
+
+fn expand_selected_activity(model: &ActivityModel, ui_state: &mut UiState) {
+    let Some(activity_id) = ui_state.selected_activity else {
+        return;
+    };
+    if model.is_activity_collapsible(activity_id, ui_state) {
+        ui_state.expanded_activities.insert(activity_id);
+        ui_state.inline_logs_activity = None;
+    } else if model.get_activity(activity_id).is_some_and(|activity| {
+        matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+    }) {
+        ui_state.focus_inline_logs(activity_id);
+    }
+}
+
+fn collapse_selected_activity(model: &ActivityModel, ui_state: &mut UiState) {
+    let Some(activity_id) = ui_state.selected_activity else {
+        return;
+    };
+    if model.is_activity_collapsible(activity_id, ui_state) {
+        ui_state.expanded_activities.remove(&activity_id);
+        ui_state.inline_logs_activity = None;
+    } else if model.get_activity(activity_id).is_some_and(|activity| {
+        matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+    }) {
+        ui_state.hide_process_previews();
+    }
+}
+
+fn hide_selected_preview(
+    model: &ActivityModel,
+    ui_state: &mut UiState,
+    previews_fit: bool,
+) -> bool {
+    let Some(activity_id) = ui_state.selected_activity else {
+        return false;
+    };
+    if !activity_shows_inline_logs(model, ui_state, activity_id, previews_fit) {
+        return false;
+    }
+    if model.get_activity(activity_id).is_some_and(|activity| {
+        matches!(activity.variant, crate::model::ActivityVariant::Process(_))
+    }) {
+        ui_state.hide_process_previews();
+    } else {
+        ui_state.inline_logs_activity = None;
+    }
+    true
 }
 
 /// Main TUI component (inline mode)
@@ -664,7 +864,39 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 && key_event.kind != KeyEventKind::Release
             {
                 debug!("Key event: {:?}", key_event);
-                if !handle_interrupt_prompt_key(&key_event, &ui_state, &shutdown, event_tx.as_ref())
+                let search_handled = if let Ok(model) = activity_model.read()
+                    && let Ok(mut ui) = ui_state.write()
+                    && ui.process_search.is_some()
+                {
+                    let display = model.get_display_activities(&ui);
+                    let handled = handle_process_search_key(&key_event, &model, &display, &mut ui);
+                    if handled
+                        && let Some(selected_id) = ui.selected_activity
+                        && *scroll_view_active.read()
+                    {
+                        let previews_fit = process_previews_fit(&model, &display, ui.terminal_size);
+                        let heights = activity_heights.read();
+                        scroll_selected_into_view(
+                            &mut scroll_handle.write(),
+                            &heights,
+                            &model,
+                            &ui,
+                            &display,
+                            selected_id,
+                            previews_fit,
+                        );
+                    }
+                    handled
+                } else {
+                    false
+                };
+                if !search_handled
+                    && !handle_interrupt_prompt_key(
+                        &key_event,
+                        &ui_state,
+                        &shutdown,
+                        event_tx.as_ref(),
+                    )
                 {
                     match key_event.code {
                         KeyCode::Char('c')
@@ -741,36 +973,121 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                     && !model.is_selectable(id, &ui)
                                 {
                                     ui.selected_activity = None;
+                                    ui.inline_logs_activity = None;
                                 }
                             }
                         }
-                        KeyCode::Down | KeyCode::Char('j') | KeyCode::Up | KeyCode::Char('k') => {
+                        KeyCode::Char('/')
+                            if !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
+                        {
                             if let Ok(model) = activity_model.read()
                                 && let Ok(mut ui) = ui_state.write()
                             {
-                                let selectable = model.get_selectable_activity_ids(&ui);
-                                let forward =
-                                    matches!(key_event.code, KeyCode::Down | KeyCode::Char('j'));
-                                ui.select_activity(&selectable, forward);
+                                ui.start_process_search();
+                                let display = model.get_display_activities(&ui);
+                                update_process_search_selection(&model, &display, &mut ui);
                                 if let Some(selected_id) = ui.selected_activity
                                     && *scroll_view_active.read()
                                 {
-                                    let display = model.get_display_activities(&ui);
+                                    let previews_fit =
+                                        process_previews_fit(&model, &display, ui.terminal_size);
                                     let heights = activity_heights.read();
                                     scroll_selected_into_view(
                                         &mut scroll_handle.write(),
                                         &heights,
+                                        &model,
+                                        &ui,
                                         &display,
                                         selected_id,
+                                        previews_fit,
+                                    );
+                                }
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                let display = model.get_display_activities(&ui);
+                                let previews_fit =
+                                    process_previews_fit(&model, &display, ui.terminal_size);
+                                activate_selected_activity(&model, &mut ui, previews_fit);
+                            }
+                        }
+                        KeyCode::Right | KeyCode::Char('l')
+                            if !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
+                        {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                expand_selected_activity(&model, &mut ui);
+                            }
+                        }
+                        KeyCode::Left | KeyCode::Char('h')
+                            if !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
+                        {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                collapse_selected_activity(&model, &mut ui);
+                            }
+                        }
+                        _ if activity_navigation_action(
+                            &key_event,
+                            terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize,
+                        )
+                        .is_some() =>
+                        {
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                let display = model.get_display_activities(&ui);
+                                let selectable =
+                                    model.get_selectable_activity_ids_from_display(&display, &ui);
+                                let (forward, steps) = activity_navigation_action(
+                                    &key_event,
+                                    terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize,
+                                )
+                                .unwrap();
+                                ui.select_activity_by(&selectable, steps, forward);
+                                ui.inline_logs_activity = None;
+                                if let Some(selected_id) = ui.selected_activity
+                                    && *scroll_view_active.read()
+                                {
+                                    let previews_fit =
+                                        process_previews_fit(&model, &display, ui.terminal_size);
+                                    let heights = activity_heights.read();
+                                    scroll_selected_into_view(
+                                        &mut scroll_handle.write(),
+                                        &heights,
+                                        &model,
+                                        &ui,
+                                        &display,
+                                        selected_id,
+                                        previews_fit,
                                     );
                                 }
                             }
                         }
                         KeyCode::Esc => {
-                            if let Ok(mut ui) = ui_state.write() {
-                                ui.selected_activity = None;
+                            if let Ok(model) = activity_model.read()
+                                && let Ok(mut ui) = ui_state.write()
+                            {
+                                let display = model.get_display_activities(&ui);
+                                let previews_fit =
+                                    process_previews_fit(&model, &display, ui.terminal_size);
+                                if !hide_selected_preview(&model, &mut ui, previews_fit) {
+                                    ui.selected_activity = None;
+                                }
                             }
-                            if *scroll_view_active.read() {
+                            if ui_state
+                                .read()
+                                .is_ok_and(|ui| ui.selected_activity.is_none())
+                                && *scroll_view_active.read()
+                            {
                                 scroll_handle.write().scroll_to_bottom();
                             }
                         }
@@ -782,7 +1099,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 // prompt), which iocraft cannot observe on its own. Wake the
                 // render loop so the change is painted promptly instead of
                 // waiting for the idle heartbeat (#2915).
-                notify.notify_waiters();
+                notify.notify_one();
             }
         }
     });
@@ -807,6 +1124,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let is_shutting_down = shutdown.is_cancelled();
     let rendered = if let Ok(model_guard) = activity_model.read() {
         let display = model_guard.get_display_activities(&ui);
+        let previews_fit = process_previews_fit(&model_guard, &display, ui.terminal_size);
 
         // Prune stale entries and compute total content height in a single lock
         let total_content_height: i32 = {
@@ -816,7 +1134,9 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             heights.retain(|id, _| active_ids.contains(id));
             display
                 .iter()
-                .map(|da| activity_height(&heights, da.activity.id))
+                .map(|display| {
+                    rendered_activity_height(&heights, &model_guard, &ui, display, previews_fit)
+                })
                 .sum()
         };
 
@@ -832,7 +1152,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         element! {
             ContextProvider(value: iocraft::Context::owned(activity_heights)) {
                 View(width: terminal_width) {
-                    #(vec![view(&model_guard, &ui, RenderContext::Normal, Some(ScrollState { handle: scroll_handle_opt, display_activities: display }), is_shutting_down).into()])
+                    #(vec![view(&model_guard, &ui, RenderContext::Normal, Some(ScrollState { handle: scroll_handle_opt, display_activities: display, process_previews_fit: previews_fit }), is_shutting_down).into()])
                 }
             }
         }
@@ -957,7 +1277,39 @@ async fn run_view(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use devenv_activity::test_helpers::{
+        build_complete, build_start_with, evaluate_complete, evaluate_start_with,
+        operation_complete, operation_start, process_start,
+    };
+    use devenv_activity::{ActivityLevel, ActivityOutcome};
     use tokio::sync::mpsc;
+
+    #[test]
+    fn activity_navigation_supports_arrow_vim_and_half_page_keys() {
+        let action = |code, control| {
+            let mut event = KeyEvent::new(KeyEventKind::Press, code);
+            if control {
+                event.modifiers = KeyModifiers::CONTROL;
+            }
+            activity_navigation_action(&event, 21)
+        };
+
+        assert_eq!(action(KeyCode::Down, false), Some((true, 1)));
+        assert_eq!(action(KeyCode::Up, false), Some((false, 1)));
+        assert_eq!(action(KeyCode::Char('j'), false), Some((true, 1)));
+        assert_eq!(action(KeyCode::Char('k'), false), Some((false, 1)));
+        assert_eq!(action(KeyCode::Char('d'), true), Some((true, 11)));
+        assert_eq!(action(KeyCode::Char('u'), true), Some((false, 11)));
+        assert_eq!(action(KeyCode::Char('d'), false), None);
+
+        let selectable: Vec<_> = (1..=20).collect();
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(10);
+        ui_state.select_activity_by(&selectable, 6, true);
+        assert_eq!(ui_state.selected_activity, Some(16));
+        ui_state.select_activity_by(&selectable, 50, false);
+        assert_eq!(ui_state.selected_activity, Some(1));
+    }
 
     #[test]
     fn test_request_interrupt_prompt_requires_native_process_manager() {
@@ -1040,5 +1392,204 @@ mod tests {
             rx.try_recv(),
             Ok(FrontendEvent::Process(ProcessCommand::StopManager))
         ));
+    }
+
+    #[test]
+    fn process_search_updates_selection_and_can_be_cancelled() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(process_start(1, "alpha"));
+        model.apply_activity_event(process_start(2, "beta"));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        ui_state.start_process_search();
+        let display = model.get_display_activities(&ui_state);
+        update_process_search_selection(&model, &display, &mut ui_state);
+
+        let e = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('e'));
+        assert!(handle_process_search_key(
+            &e,
+            &model,
+            &display,
+            &mut ui_state
+        ));
+        assert_eq!(ui_state.selected_activity, Some(2));
+        assert_eq!(
+            ui_state
+                .process_search
+                .as_ref()
+                .map(|search| search.query.as_str()),
+            Some("e")
+        );
+
+        let escape = KeyEvent::new(KeyEventKind::Press, KeyCode::Esc);
+        assert!(handle_process_search_key(
+            &escape,
+            &model,
+            &display,
+            &mut ui_state
+        ));
+        assert_eq!(ui_state.selected_activity, Some(1));
+        assert!(ui_state.process_search.is_none());
+    }
+
+    #[test]
+    fn process_search_arrows_cycle_matching_processes() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(process_start(1, "scope-api"));
+        model.apply_activity_event(process_start(2, "scope-consumer"));
+
+        let mut ui_state = UiState::new();
+        ui_state.start_process_search();
+        let display = model.get_display_activities(&ui_state);
+        update_process_search_selection(&model, &display, &mut ui_state);
+        assert_eq!(ui_state.selected_activity, Some(1));
+
+        let down = KeyEvent::new(KeyEventKind::Press, KeyCode::Down);
+        assert!(handle_process_search_key(
+            &down,
+            &model,
+            &display,
+            &mut ui_state
+        ));
+        assert_eq!(ui_state.selected_activity, Some(2));
+
+        let up = KeyEvent::new(KeyEventKind::Press, KeyCode::Up);
+        assert!(handle_process_search_key(
+            &up,
+            &model,
+            &display,
+            &mut ui_state
+        ));
+        assert_eq!(ui_state.selected_activity, Some(1));
+    }
+
+    #[test]
+    fn enter_toggles_completed_shell_summary() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(operation_start(1, "Building shell"));
+        model.apply_activity_event(evaluate_start_with(
+            2,
+            "Evaluating Nix",
+            ActivityLevel::Info,
+            Some(1),
+        ));
+        model.apply_activity_event(build_start_with(3, "hello", Some(2)));
+        model.apply_activity_event(build_complete(3, ActivityOutcome::Success));
+        model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+        model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        ui_state.inline_logs_activity = Some(1);
+
+        activate_selected_activity(&model, &mut ui_state, false);
+        assert!(ui_state.expanded_activities.contains(&1));
+        assert_eq!(ui_state.inline_logs_activity, None);
+
+        activate_selected_activity(&model, &mut ui_state, false);
+        assert!(!ui_state.expanded_activities.contains(&1));
+    }
+
+    #[test]
+    fn directional_open_expands_shell_and_process() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(operation_start(1, "Building shell"));
+        model.apply_activity_event(evaluate_start_with(
+            2,
+            "Evaluating Nix",
+            ActivityLevel::Info,
+            Some(1),
+        ));
+        model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+        model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+        model.apply_activity_event(process_start(3, "api"));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        expand_selected_activity(&model, &mut ui_state);
+        expand_selected_activity(&model, &mut ui_state);
+        assert!(ui_state.expanded_activities.contains(&1));
+
+        ui_state.selected_activity = Some(3);
+        expand_selected_activity(&model, &mut ui_state);
+        assert_eq!(ui_state.inline_logs_activity, Some(3));
+    }
+
+    #[test]
+    fn directional_close_collapses_shell_and_process() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(operation_start(1, "Building shell"));
+        model.apply_activity_event(evaluate_start_with(
+            2,
+            "Evaluating Nix",
+            ActivityLevel::Info,
+            Some(1),
+        ));
+        model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+        model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+        model.apply_activity_event(process_start(3, "api"));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        ui_state.expanded_activities.insert(1);
+        collapse_selected_activity(&model, &mut ui_state);
+        collapse_selected_activity(&model, &mut ui_state);
+        assert!(!ui_state.expanded_activities.contains(&1));
+
+        ui_state.selected_activity = Some(3);
+        ui_state.inline_logs_activity = Some(3);
+        collapse_selected_activity(&model, &mut ui_state);
+        assert_eq!(ui_state.inline_logs_activity, None);
+        assert!(ui_state.process_previews_hidden);
+    }
+
+    #[test]
+    fn automatic_process_preview_can_be_hidden_and_focused_again() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(process_start(1, "api"));
+        model.apply_activity_event(devenv_activity::test_helpers::process_log(
+            1, "ready", false,
+        ));
+
+        let mut ui_state = UiState::new();
+        ui_state.selected_activity = Some(1);
+        assert!(activity_shows_inline_logs(&model, &ui_state, 1, true));
+
+        assert!(hide_selected_preview(&model, &mut ui_state, true));
+        assert_eq!(ui_state.selected_activity, Some(1));
+        assert!(ui_state.process_previews_hidden);
+        assert!(!activity_shows_inline_logs(&model, &ui_state, 1, true));
+
+        expand_selected_activity(&model, &mut ui_state);
+        assert!(ui_state.process_previews_hidden);
+        assert!(activity_shows_inline_logs(&model, &ui_state, 1, true));
+
+        collapse_selected_activity(&model, &mut ui_state);
+        assert!(!activity_shows_inline_logs(&model, &ui_state, 1, true));
+
+        expand_selected_activity(&model, &mut ui_state);
+        assert!(activity_shows_inline_logs(&model, &ui_state, 1, true));
+    }
+
+    #[test]
+    fn collapsed_process_uses_row_height_before_the_next_render() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(process_start(1, "api"));
+        let display = model.get_display_activities(&UiState::new()).remove(0);
+        let heights = std::collections::HashMap::from([(1, 11)]);
+
+        let mut ui_state = UiState::new();
+        ui_state.process_previews_hidden = true;
+        assert_eq!(
+            rendered_activity_height(&heights, &model, &ui_state, &display, true),
+            1
+        );
+
+        ui_state.focus_inline_logs(1);
+        assert_eq!(
+            rendered_activity_height(&heights, &model, &ui_state, &display, true),
+            11
+        );
     }
 }

@@ -159,6 +159,10 @@ pub struct Activity {
 pub struct UiState {
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
+    pub inline_logs_activity: Option<u64>,
+    pub process_previews_hidden: bool,
+    pub expanded_activities: HashSet<u64>,
+    pub process_search: Option<ProcessSearch>,
     pub hide_stopped_processes: bool,
     pub scroll: ScrollState,
     pub view_options: ViewOptions,
@@ -189,6 +193,10 @@ impl UiState {
                 activities_visible: 5,
             },
             selected_activity: None,
+            inline_logs_activity: None,
+            process_previews_hidden: false,
+            expanded_activities: HashSet::new(),
+            process_search: None,
             hide_stopped_processes: false,
             scroll: ScrollState {
                 log_offset: 0,
@@ -244,6 +252,10 @@ impl UiState {
     /// When `forward` is true, selects the next activity (or first if none selected).
     /// When `forward` is false, selects the previous activity (or last if none selected).
     pub fn select_activity(&mut self, selectable: &[u64], forward: bool) {
+        self.select_activity_by(selectable, 1, forward);
+    }
+
+    pub fn select_activity_by(&mut self, selectable: &[u64], steps: usize, forward: bool) {
         if selectable.is_empty() {
             return;
         }
@@ -258,16 +270,60 @@ impl UiState {
             Some(current_id) => {
                 if let Some(current_pos) = selectable.iter().position(|&id| id == current_id) {
                     if forward {
-                        if current_pos + 1 < selectable.len() {
-                            self.selected_activity = Some(selectable[current_pos + 1]);
-                        }
-                    } else if current_pos > 0 {
-                        self.selected_activity = Some(selectable[current_pos - 1]);
+                        self.selected_activity = selectable
+                            .get(current_pos.saturating_add(steps).min(selectable.len() - 1))
+                            .copied();
+                    } else {
+                        self.selected_activity =
+                            selectable.get(current_pos.saturating_sub(steps)).copied();
                     }
                 } else {
                     self.selected_activity = selectable.first().copied();
                 }
             }
+        }
+    }
+
+    pub fn toggle_inline_logs(&mut self) {
+        self.inline_logs_activity = match self.selected_activity {
+            Some(id) if self.inline_logs_activity != Some(id) => Some(id),
+            _ => None,
+        };
+    }
+
+    pub fn focus_inline_logs(&mut self, activity_id: u64) {
+        self.inline_logs_activity = Some(activity_id);
+        self.process_previews_hidden = true;
+    }
+
+    pub fn hide_process_previews(&mut self) {
+        self.inline_logs_activity = None;
+        self.process_previews_hidden = true;
+    }
+
+    pub fn toggle_activity_expansion(&mut self, activity_id: u64) {
+        if !self.expanded_activities.insert(activity_id) {
+            self.expanded_activities.remove(&activity_id);
+        }
+    }
+
+    pub fn start_process_search(&mut self) {
+        if self.process_search.is_none() {
+            self.process_search = Some(ProcessSearch {
+                query: String::new(),
+                original_selection: self.selected_activity,
+            });
+            self.inline_logs_activity = None;
+        }
+    }
+
+    pub fn finish_process_search(&mut self) {
+        self.process_search = None;
+    }
+
+    pub fn cancel_process_search(&mut self) {
+        if let Some(search) = self.process_search.take() {
+            self.selected_activity = search.original_selection;
         }
     }
 }
@@ -301,6 +357,12 @@ pub struct ScrollState {
 #[derive(Debug)]
 pub struct ViewOptions {
     pub show_details: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessSearch {
+    pub query: String,
+    pub original_selection: Option<u64>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -1119,12 +1181,22 @@ impl ActivityModel {
     }
 
     pub fn get_selectable_activity_ids(&self, ui_state: &UiState) -> Vec<u64> {
+        let display = self.get_display_activities(ui_state);
+        self.get_selectable_activity_ids_from_display(&display, ui_state)
+    }
+
+    pub fn get_selectable_activity_ids_from_display(
+        &self,
+        display: &[DisplayActivity],
+        ui_state: &UiState,
+    ) -> Vec<u64> {
         let mut seen = HashSet::new();
-        self.get_display_activities(ui_state)
-            .into_iter()
+        display
+            .iter()
             .filter(|da| {
                 // Processes are always selectable (so disabled ones can be started)
                 matches!(da.activity.variant, ActivityVariant::Process(_))
+                    || self.is_activity_collapsible(da.activity.id, ui_state)
                     || self
                         .build_logs
                         .get(&da.activity.id)
@@ -1134,6 +1206,25 @@ impl ActivityModel {
                 let id = da.activity.id;
                 seen.insert(id).then_some(id)
             })
+            .collect()
+    }
+
+    pub fn get_matching_process_activity_ids(&self, ui_state: &UiState, query: &str) -> Vec<u64> {
+        let display = self.get_display_activities(ui_state);
+        self.get_matching_process_activity_ids_from_display(&display, query)
+    }
+
+    pub fn get_matching_process_activity_ids_from_display(
+        &self,
+        display: &[DisplayActivity],
+        query: &str,
+    ) -> Vec<u64> {
+        let query = query.to_lowercase();
+        display
+            .iter()
+            .filter(|da| matches!(da.activity.variant, ActivityVariant::Process(_)))
+            .filter(|da| da.activity.name.to_lowercase().contains(&query))
+            .map(|da| da.activity.id)
             .collect()
     }
 
@@ -1211,6 +1302,10 @@ impl ActivityModel {
                 });
             }
 
+            if activity_visible && self.is_activity_collapsed(activity_id, ui_state) {
+                return;
+            }
+
             // Recursively process children.
             // Even if this activity is filtered, still traverse to children
             // so we can find visible descendants (e.g., Info messages under Debug parents).
@@ -1275,6 +1370,91 @@ impl ActivityModel {
                 self.is_direct_child_of(a, parent_id) && self.is_hidden_process(a, ui_state)
             })
             .count()
+    }
+
+    fn is_completed_shell_activity(&self, activity: &Activity) -> bool {
+        let is_shell_activity = match activity.variant {
+            ActivityVariant::Evaluating(_) => true,
+            ActivityVariant::Devenv => {
+                activity.name.to_lowercase().contains("shell")
+                    || self.activities.values().any(|child| {
+                        matches!(child.variant, ActivityVariant::Evaluating(_))
+                            && self.is_direct_child_of(child, activity.id)
+                    })
+            }
+            _ => return false,
+        };
+        if !matches!(
+            activity.state,
+            NixActivityState::Completed { success: true, .. }
+        ) {
+            return false;
+        }
+        if self.activities.values().any(|child| {
+            matches!(child.variant, ActivityVariant::Process(_))
+                && self.is_direct_child_of(child, activity.id)
+        }) {
+            return false;
+        }
+        is_shell_activity
+    }
+
+    pub fn collapsible_descendant_count(
+        &self,
+        activity_id: u64,
+        ui_state: &UiState,
+    ) -> Option<usize> {
+        let activity = self.activities.get(&activity_id)?;
+        if !self.is_completed_shell_activity(activity)
+            || activity
+                .parent_id
+                .and_then(|parent_id| self.activities.get(&parent_id))
+                .is_some_and(|parent| self.is_completed_shell_activity(parent))
+        {
+            return None;
+        }
+        let descendant_count = self.visible_descendant_count(activity_id, ui_state);
+        (descendant_count > 0).then_some(descendant_count)
+    }
+
+    pub fn is_activity_collapsible(&self, activity_id: u64, ui_state: &UiState) -> bool {
+        self.collapsible_descendant_count(activity_id, ui_state)
+            .is_some()
+    }
+
+    pub fn is_activity_collapsed(&self, activity_id: u64, ui_state: &UiState) -> bool {
+        self.is_activity_collapsible(activity_id, ui_state)
+            && !ui_state.expanded_activities.contains(&activity_id)
+    }
+
+    pub fn visible_descendant_count(&self, activity_id: u64, ui_state: &UiState) -> usize {
+        fn visit(
+            model: &ActivityModel,
+            activity_id: u64,
+            ui_state: &UiState,
+            visited: &mut HashSet<u64>,
+        ) -> usize {
+            model
+                .activities
+                .values()
+                .filter(|child| {
+                    !matches!(child.variant, ActivityVariant::UserOperation)
+                        && !model.is_hidden_process(child, ui_state)
+                        && model.is_direct_child_of(child, activity_id)
+                })
+                .map(|child| {
+                    if visited.insert(child.id) {
+                        usize::from(child.level <= model.config.filter_level)
+                            + visit(model, child.id, ui_state, visited)
+                    } else {
+                        0
+                    }
+                })
+                .sum()
+        }
+
+        let mut visited = HashSet::from([activity_id]);
+        visit(self, activity_id, ui_state, &mut visited)
     }
 
     pub fn calculate_summary(&self) -> ActivitySummary {

@@ -363,12 +363,10 @@ fn max_line_width(out: &str) -> usize {
     out.lines().map(UnicodeWidthStr::width).max().unwrap_or(0)
 }
 
-/// Regression for the bottom navigation/help bar overflow on standard-width
-/// terminals. The richest short-text state (a process selected, with the
-/// hide-stopped toggle showing) must fit a normal ~80-column terminal.
-///
+/// A selected process keeps complete controls at every usable width and keeps
+/// its status summary whenever both can fit without fragmentation.
 #[test]
-fn navbar_fits_standard_widths() {
+fn selected_navbar_preserves_status_and_fits_usable_widths() {
     let mut m = ActivityModel::new();
     m.apply_activity_event(process_start(1, "web"));
     m.apply_activity_event(process_status(1, ProcessStatus::Running));
@@ -376,7 +374,7 @@ fn navbar_fits_standard_widths() {
     m.apply_activity_event(process_start(2, "db"));
     m.apply_activity_event(process_complete(2, ActivityOutcome::Success));
 
-    for w in 76u16..=99 {
+    for w in 40u16..=240 {
         let mut ui = UiState::new();
         ui.set_terminal_size(w, 24);
         ui.selected_activity = Some(1);
@@ -386,6 +384,42 @@ fn navbar_fits_standard_widths() {
             widest <= w as usize,
             "nav bar width {widest} exceeds terminal width {w}:\n{out}"
         );
+        if w < 60 {
+            assert!(
+                out.contains("↑↓ j/k ^D/^U Enter ^E ^X ^R ^H / Esc"),
+                "ultra-compact controls are incomplete at width {w}:\n{out}"
+            );
+        } else if w < 120 {
+            assert!(
+                out.contains("↑↓ j/k ^D/^U • Enter ▾ • ^E ▼ • ^X ^R ^H / Esc clear"),
+                "symbol controls are incomplete at width {w}:\n{out}"
+            );
+        } else if w < 200 {
+            assert!(
+                out.contains(
+                    "↑↓ j/k ^D/^U nav Enter preview ^E logs ^X stop ^R restart ^H hide / search Esc clear"
+                ),
+                "compact controls are incomplete at width {w}:\n{out}"
+            );
+        } else {
+            assert!(
+                out.contains(
+                    "↑↓ j/k Ctrl-D/Ctrl-U navigate • Enter/l/→ preview logs • Ctrl-E full logs • Ctrl-X stop process • Ctrl-R (re)start process • Ctrl-H hide stopped • / search processes • Esc clear"
+                ),
+                "wide controls are incomplete at width {w}:\n{out}"
+            );
+        }
+        if w >= 72 {
+            let status = if w < 120 {
+                "1/2 processes"
+            } else {
+                "1 of 2 processes"
+            };
+            assert!(
+                out.contains(status),
+                "selected footer lost process status at width {w}:\n{out}"
+            );
+        }
     }
 }
 

@@ -74,7 +74,7 @@ const processStates = extract((s: State): Record<ProcessName, VisibleStatus> => 
 type View = "main" | "expanded" | "prompt" | "unknown";
 const currentView = (): View => {
   const markers: [View, number][] = [
-    ["main", screen.current.lastIndexOf("↑↓ nav")],
+    ["main", screen.current.lastIndexOf("↑↓ j/k")],
     ["expanded", screen.current.lastIndexOf("j/k:line")],
     ["prompt", screen.current.lastIndexOf("Detach or stop")],
   ];
@@ -147,6 +147,8 @@ export const drive = weighted([
   [8, whenReady(k("\x1b[B"))], // Down
   [6, whenReady(k("j"))],
   [6, whenReady(k("k"))],
+  [4, whenMain(k("/api\r"))],
+  [4, whenMain(k("\r"))],
   [6, whenMain(k("\x05"))], // Ctrl+E  expand logs
   [4, restartProcess], // Ctrl+R  (re)start process
   [4, stopProcess], // Ctrl+X  stop process
