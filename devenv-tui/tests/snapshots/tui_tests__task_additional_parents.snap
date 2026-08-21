@@ -7,4 +7,4 @@ expression: output
 ⠋ test:integration [TIME]
   └ ⠋ build        [TIME]
 
- 0 of 3 tasks      ↑↓ nav
+ 0/3 tasks   ↑↓ j/k ^D/^U

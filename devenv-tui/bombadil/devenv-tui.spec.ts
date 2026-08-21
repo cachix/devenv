@@ -74,7 +74,7 @@ const processStates = extract((s: State): Record<ProcessName, VisibleStatus> => 
 type View = "main" | "expanded" | "prompt" | "unknown";
 const currentView = (): View => {
   const markers: [View, number][] = [
-    ["main", screen.current.lastIndexOf("↑↓ nav")],
+    ["main", screen.current.lastIndexOf("↑↓ j/k")],
     ["expanded", screen.current.lastIndexOf("j/k:line")],
     ["prompt", screen.current.lastIndexOf("Detach or stop")],
   ];

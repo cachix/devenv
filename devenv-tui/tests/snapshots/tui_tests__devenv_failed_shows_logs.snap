@@ -7,4 +7,4 @@ expression: output
   │ error: command 'foo' not found
   │ hint: did you mean 'bar'?
 
-                            ↑↓ nav
+                      ↑↓ j/k ^D/^U

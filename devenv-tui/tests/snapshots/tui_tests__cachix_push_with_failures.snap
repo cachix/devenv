@@ -6,4 +6,4 @@ expression: output
   │ openssl-3.0.0: HTTP 403: Access Denied
   │ glibc-2.37: HTTP 500: Internal Server Error
 
-                                         ↑↓ nav
+                                   ↑↓ j/k ^D/^U

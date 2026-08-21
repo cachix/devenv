@@ -6,4 +6,4 @@ expression: expanded
   └ ✓ Evaluating Nix         [TIME]
     └ ✓ Building  hello-2.12 [TIME]
 
- ↑↓ nav Enter collapse Esc clear
+ ↑↓ j/k ^D/^U • Enter ▴ • Esc clear

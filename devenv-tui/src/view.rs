@@ -1714,7 +1714,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             } else {
                 help_children.push(element!(Text(content: format!(" navigate{trail}"))).into_any());
             }
-        } else if show_hide_toggle {
+        } else if show_hide_toggle || process_search_available {
             help_children.push(element!(Text(content: " • ")).into_any());
         }
         if show_hide_toggle {

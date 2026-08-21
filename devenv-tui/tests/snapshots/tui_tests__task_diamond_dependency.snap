@@ -8,4 +8,4 @@ expression: output
   └ ⠋ test:branch-b [TIME]
     └ ⠋ test:shared [TIME]
 
- 0 of 4 tasks       ↑↓ nav
+ 0/4 tasks    ↑↓ j/k ^D/^U

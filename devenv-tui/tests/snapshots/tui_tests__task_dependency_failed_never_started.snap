@@ -5,4 +5,4 @@ expression: output
 ✗ test:dependent failed [TIME]
   └ ✗ test:dep failed   [TIME]
 
- 0 of 2 tasks           ↑↓ nav
+ 0/2 tasks        ↑↓ j/k ^D/^U

@@ -7,4 +7,4 @@ expression: output
     └ ⠋ test:level2   [TIME]
       └ ⠋ test:level3 [TIME]
 
- 0 of 4 tasks         ↑↓ nav
+ 0/4 tasks      ↑↓ j/k ^D/^U

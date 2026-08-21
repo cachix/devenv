@@ -1202,7 +1202,7 @@ fn test_overflow_keeps_collapsed_process_visible() {
     let lines: Vec<&str> = output.lines().collect();
     let last_non_empty = lines.iter().rev().find(|l| !l.trim().is_empty()).unwrap();
     assert!(
-        last_non_empty.contains("nav"),
+        last_non_empty.contains("↑↓ j/k"),
         "Last line should be the summary status line, got: {:?}",
         last_non_empty
     );
@@ -1546,7 +1546,7 @@ fn test_process_logs_follow_terminal_height_and_manual_focus() {
     ui_state.selected_activity = Some(1);
     let roomy = render_to_string(&model, &ui_state);
     assert!(roomy.contains("seeding database"));
-    assert!(roomy.contains("hide preview"));
+    assert!(roomy.contains("Enter ▴"));
     let process_line = roomy
         .lines()
         .find(|line| line.contains("chatty-service"))
@@ -1562,12 +1562,12 @@ fn test_process_logs_follow_terminal_height_and_manual_focus() {
     ui_state.set_terminal_size(TEST_WIDTH, 3);
     let crowded = render_to_string(&model, &ui_state);
     assert!(!crowded.contains("seeding database"));
-    assert!(crowded.contains("preview"));
+    assert!(crowded.contains("Enter ▾"));
 
     ui_state.focus_inline_logs(1);
     let focused = render_to_string(&model, &ui_state);
     assert!(focused.contains("seeding database"));
-    assert!(focused.contains("hide preview"));
+    assert!(focused.contains("Enter ▴"));
     let focused_log_line = focused
         .lines()
         .find(|line| line.contains("seeding database"))

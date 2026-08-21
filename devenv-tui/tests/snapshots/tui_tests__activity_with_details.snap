@@ -4,4 +4,4 @@ expression: output
 ---
 ⠋ Building shell → nix eval --json .#devenv.config [TIME]
 
-                                                   ↑↓ nav
+                                             ↑↓ j/k ^D/^U
