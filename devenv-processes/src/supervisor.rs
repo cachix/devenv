@@ -117,9 +117,8 @@ impl ProbeSet {
         // TCP is the fallback when no explicit readiness probe is configured.
         let tcp_addresses =
             if explicit_probes_enabled && exec_command.is_none() && http_url.is_none() {
-                // Explicit listen socket: probe only the configured address.
-                // Allocated port: probe both IPv4 and IPv6 loopback since we don't
-                // know which interface the process will bind to (e.g. vite uses tcp6).
+                // Allocated ports may bind either loopback address; declared sockets
+                // have an exact address.
                 config
                     .listen
                     .iter()
@@ -459,8 +458,6 @@ impl SupervisorRuntime {
                             count
                         );
                         self.activity.log(format!("Restarted (attempt {count})"));
-                        // Notification-triggered restarts historically only
-                        // replace the fallback TCP probe.
                         self.probes.respawn_tcp();
                     }
                     Action::GiveUp { reason } => {
@@ -611,7 +608,6 @@ impl SupervisorRuntime {
                 self.active_process.settle();
                 debug!("Process {} exited, not restarting", self.name());
                 self.publish_status();
-                // Keep watching native one-shot processes for future changes.
                 if self.config.supervisor != SupervisionMode::Native
                     || self.config.watch.paths.is_empty()
                 {
@@ -681,7 +677,6 @@ pub fn spawn_supervisor(
         };
         let mut file_watcher = spawn_file_watcher(&runtime.config).await;
 
-        // Preserve the deadline across loop iterations.
         let mut current_deadline = runtime.next_deadline();
         let deadline_fut = make_deadline_future(current_deadline);
         tokio::pin!(deadline_fut);
@@ -702,7 +697,7 @@ pub fn spawn_supervisor(
                     SupervisorEvent::Notifications(messages)
                 }
                 _ = &mut deadline_fut => SupervisorEvent::Deadline,
-                // A parked exited job makes `to_wait()` ready immediately; skip it to avoid a busy loop.
+                // A parked job keeps `to_wait()` ready and would spin this loop.
                 _ = job.to_wait(), if monitor_exit => SupervisorEvent::ProcessExit,
             };
 

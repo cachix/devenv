@@ -9,10 +9,7 @@ in
 {
   process.manager.implementation = "process-compose";
 
-  # Process with derived `ready` + `restart`, plus user overrides at leaf level
-  # under `process-compose.*`. The bug being tested: shallow `//` used to drop
-  # `exec.command` (from `ready.exec`) and the derived `restart` value when the
-  # user set any sibling under `readiness_probe` / `availability`.
+  # User leaves must override derived process-compose policy without replacing siblings.
   processes.foo = {
     # Disabled: we only care about eval-time merge correctness, not runtime.
     start.enable = false;
@@ -44,16 +41,14 @@ in
     };
   };
 
-  # File watching has no process-compose equivalent. Keep policy inside the
-  # devenv wrapper and prevent process-compose from adding a second restart.
+  # File-watch policy remains under native supervision.
   processes.nativeWatch = {
     exec = "sleep infinity";
     restart.on = "always";
     watch.paths = [ ./devenv.nix ];
   };
 
-  # A declared port is a native TCP readiness fallback when no explicit probe
-  # is configured, so it also keeps lifecycle policy in devenv.
+  # Implicit TCP readiness remains under native supervision.
   processes.nativePort = {
     exec = "sleep infinity";
     ports.http.allocate = 18080;

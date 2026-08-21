@@ -675,8 +675,7 @@ async fn test_stop_kills_private_process_groups_in_service_session() {
 
         let config = ProcessConfig {
             name: "parent-with-private-group".to_string(),
-            // Bash monitor mode puts an asynchronous command in a distinct
-            // process group while retaining the service's session.
+            // Monitor mode creates a private group inside the service session.
             exec: format!(
                 r#"bash -c 'set -m
 sleep 3600 &
@@ -719,7 +718,6 @@ wait'"#,
         .await;
 
         if !child_exited {
-            // Do not leave the test process running after a failure.
             let _ = nix::sys::signal::kill(
                 nix::unistd::Pid::from_raw(child_pid),
                 nix::sys::signal::Signal::SIGKILL,

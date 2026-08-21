@@ -83,8 +83,7 @@ impl Fixture {
         )
     }
 
-    /// Keep both process groups alive through graceful shutdown so a second
-    /// signal exercises the force-exit hook and guardian together.
+    /// Ignore graceful signals in both process groups.
     fn stubborn_leader_with_private_child(&self) -> String {
         format!(
             "bash -c 'trap \"\" TERM INT; set -m; echo $$ > {}; (trap \"\" TERM INT; while :; do sleep 1; done) & echo $! > {}; touch {}; wait'",
@@ -234,7 +233,7 @@ async fn parent_death_reclaims_service_session() {
         },
     );
 
-    // Killing this wrapper reparents devenv-tasks without signaling it.
+    // Killing only the wrapper forces parent-death detection.
     let owner_pid_file = fixture.path("owner.pid");
     let wrapper_command = format!(
         "{} {} >/dev/null 2>&1 & echo $! > {}; wait",
@@ -391,8 +390,7 @@ async fn external_devenv_tasks_does_not_remove_native_api_socket() {
     let fixture = Fixture::new("external-socket-cleanup");
     fixture.write_task("true".to_string(), ShutdownConfig::default());
 
-    // Model the native manager that owns the shared socket while an external
-    // wrapper runs and exits normally.
+    // Simulate the native owner of the shared socket.
     let socket = fixture.path("runtime/processes/native.sock");
     std::fs::create_dir_all(socket.parent().expect("socket parent"))
         .expect("create process runtime directory");
@@ -444,8 +442,7 @@ async fn restart_reconciles_previous_session_before_launch() {
         grace: 1,
     };
 
-    // The old service ignores SIGTERM, so only the guardian's SIGKILL
-    // escalation ends it.
+    // Force reconciliation through guardian escalation.
     let old_pid_file = fixture.path("old.pid");
     let old_ready = fixture.path("old.ready");
     fixture.write_task(

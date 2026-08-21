@@ -285,7 +285,7 @@ pub enum ProcessPhase {
     Starting,
     /// Readiness probe passed.
     Ready,
-    /// User-requested teardown in progress.
+    /// Teardown in progress.
     Stopping,
     /// Process exited and will not be restarted.
     Exited,
@@ -329,8 +329,7 @@ impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
     }
 }
 
-/// Gets initial process state, processes with no readiness mechanism are
-/// immediately `Ready`, everything else is `Starting` until a probe or notify fires.
+/// Initial phase before readiness observation begins.
 fn initial_phase(config: &ProcessConfig) -> crate::supervisor_state::SupervisorPhase {
     if config.has_readiness_probe() {
         crate::supervisor_state::SupervisorPhase::Starting
@@ -339,21 +338,14 @@ fn initial_phase(config: &ProcessConfig) -> crate::supervisor_state::SupervisorP
     }
 }
 
-/// Clear any leftover log files for a process that is being registered but not
-/// yet launched, so an attach backlog/tail can't surface output written by a
-/// previous manager session (log paths are deterministic and persist across
-/// runs). A process that later launches truncates these again in
-/// `launch_setup`; one that never launches stays empty.
+/// Prevent a registered process from exposing logs from an earlier manager.
 fn clear_stale_logs(state_dir: &Path, name: &str) {
     let (stdout_path, stderr_path) = crate::command::log_paths(state_dir, name);
     let _ = std::fs::write(&stdout_path, "");
     let _ = std::fs::write(&stderr_path, "");
 }
 
-/// The terminal process phase to preserve when stopping: a process that had
-/// already exited or given up on its own keeps that outcome after teardown
-/// (run summaries and dependents still see it); a still-starting or running
-/// process has no terminal phase yet.
+/// Preserve terminal phases reached before teardown.
 fn terminal_phase_of(phase: crate::supervisor_state::SupervisorPhase) -> Option<ProcessPhase> {
     match ProcessPhase::from(phase) {
         p @ (ProcessPhase::Exited | ProcessPhase::GaveUp) => Some(p),
@@ -361,10 +353,7 @@ fn terminal_phase_of(phase: crate::supervisor_state::SupervisorPhase) -> Option<
     }
 }
 
-/// The phase to *display* for a `Stopped` entry (lists, run summaries, the
-/// TUI). An explicit user stop reads as a plain `Stopped`, even if the process
-/// had exited on its own — the user's stop is its final word. Otherwise the
-/// terminal phase it reached (if any) is surfaced.
+/// Explicit stops override the terminal phase in user-facing status.
 fn display_phase(terminal_phase: Option<ProcessPhase>, user_stopped: bool) -> ProcessPhase {
     if user_stopped {
         ProcessPhase::Stopped
@@ -373,22 +362,12 @@ fn display_phase(terminal_phase: Option<ProcessPhase>, user_stopped: bool) -> Pr
     }
 }
 
-/// The phase a *dependent* should be judged against for a `Stopped` entry: the
-/// furthest *terminal* phase (`Exited`/`GaveUp`) the process reached on its
-/// own, regardless of who stopped it, else `Stopped`. A process that ran to a
-/// terminal state did start (and complete), so an explicit stop afterwards does
-/// not un-satisfy a dependent on `<proc>@started`/`@completed`. This is
-/// deliberately narrower than "any phase it ever reached": a process stopped
-/// while still `Starting`/`Ready` has no terminal phase recorded and reads as a
-/// plain `Stopped`, so a dependent on `@started` waits for it to be (re)started
-/// rather than treating the interrupted run as satisfying — see the
-/// `dependency_parked_judges_live_and_transitive` test.
+/// Preserve terminal history for dependency evaluation after a stop.
 fn lifecycle_phase(terminal_phase: Option<ProcessPhase>) -> ProcessPhase {
     terminal_phase.unwrap_or(ProcessPhase::Stopped)
 }
 
-/// The pieces of a torn-down `Active` handle that [`Manager::finish_stop`] needs
-/// to abort the supervisor, kill the job, and release ports.
+/// Resources consumed by [`NativeProcessManager::finish_stop`].
 struct StopParts {
     job: Arc<Job>,
     cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
@@ -400,16 +379,8 @@ struct StopParts {
     sessions: Arc<crate::session::SessionRegistry>,
 }
 
-/// Tear an `Active` handle out for stopping: always record the terminal
-/// supervisor phase it reached, drop a `Stopped` placeholder into the map under
-/// the same lock (so the entry never vanishes mid-teardown), and return the
-/// pieces `finish_stop` needs.
-///
-/// `user_stopped` marks an explicit user stop (`devenv processes stop`, Ctrl-X)
-/// vs. shutdown teardown. It controls only how the entry is *displayed*
-/// ([`display_phase`]): the terminal phase is recorded either way, so a process
-/// the user stops after it had exited shows `Stopped` in `devenv processes
-/// list` and run summaries without un-satisfying a dependent on `@started`.
+/// Replace an active entry with an atomic teardown placeholder.
+/// `user_stopped` affects display only; terminal history is always retained.
 fn take_active_for_stop(
     handle: JobHandle,
     name: &str,
@@ -1660,7 +1631,6 @@ impl NativeProcessManager {
             stderr_reader.abort();
         }
 
-        // Stop the leader and every process group in its sessions.
         crate::session::stop_job(&job, &sessions, &shutdown).await;
 
         if !ports.is_empty() {
@@ -1756,9 +1726,7 @@ impl NativeProcessManager {
     /// terminal phase. Either way the terminal phase is recorded, so dependents
     /// still observe that the process ran.
     async fn stop_inner(&self, name: &str, user_stopped: bool) -> Result<()> {
-        // Extract the handle and immediately insert a Stopping entry so the process
-        // stays visible in the map during teardown. Without this, concurrent API
-        // queries (list, status) would see "not found" during the teardown window.
+        // Keep a Stopping entry visible throughout teardown.
         let parts = {
             let mut processes = self.processes.write().await;
 
@@ -1862,8 +1830,7 @@ impl NativeProcessManager {
             if !teardown_in_flight {
                 break;
             }
-            // A launch or another caller's stop is settling; both publish a
-            // final map transition and fire entries_changed.
+            // Both paths publish a final map transition.
             notified.await;
         }
 
@@ -2083,33 +2050,12 @@ impl NativeProcessManager {
         }
     }
 
-    /// Settled rule for `ApiRequest::Wait`: respond once no process can make
-    /// further startup progress on its own. A process counts as settled when
-    /// it is
-    /// - Active with a supervisor phase of Ready, Exited, or GaveUp,
-    /// - NotStarted or Stopped (terminal until a user starts it),
-    /// - Waiting and the owning scheduler judges it dependency-parked: its
-    ///   dependency chain is blocked on a stopped/not-started (or transitively
-    ///   parked) dependency, which only external action can unblock. Without
-    ///   this, a `Wait` against e.g. `up <name>` whose dependency was stopped
-    ///   would block forever.
-    ///
-    /// Not settled: Launching, Active still Starting, and Waiting whose
-    /// dependencies are live and progressing (about to start). `Wait` remains
-    /// a legitimately long-blocking request.
+    /// Wait until every process is terminal, ready, or dependency-parked.
     async fn handle_wait(&self) -> ApiResponse {
-        // Event-driven: every relevant transition fires `entries_changed`
-        // (map transitions via notify_lifecycle, supervisor phase changes via
-        // the per-process forwarder). The settled judgment also depends on
-        // graph-owned oneshot task statuses (via the scheduler's
-        // `dependency_parked`), whose completions fire only `task_notify`,
-        // so register on both. Register before checking so a transition
-        // between the check and the await cannot be missed.
+        // Register both notifiers before checking to avoid missed transitions.
         let task_notify = self
             .task_notify
             .clone()
-            // No scheduler-side notifier: a dummy that never fires, so the
-            // loop wakes via `entries_changed` alone.
             .unwrap_or_else(|| Arc::new(Notify::new()));
         loop {
             let entries_notified = self.entries_changed.notified();
@@ -2127,14 +2073,8 @@ impl NativeProcessManager {
         }
     }
 
-    /// True when every entry is settled per the `Wait` rule documented on
-    /// `handle_wait`. Public as a test/diagnostic surface.
-    ///
-    /// `Waiting` entries are judged live by the owning scheduler
-    /// ([`ProcessScheduler::dependency_parked`]); with no scheduler registered
-    /// or one already dropped (e.g. a `devenv test`-owned manager after its
-    /// run), `Waiting` is never settled, preserving the historical `Wait`
-    /// semantics.
+    /// Whether every entry satisfies the `Wait` rule.
+    /// Without a scheduler, `Waiting` remains unsettled.
     pub async fn wait_settled(&self) -> bool {
         // Snapshot Waiting names under the map read lock and drop the guard
         // before consulting the scheduler: dependency_parked re-enters
@@ -2862,7 +2802,6 @@ impl NativeProcessManager {
         info!("Manager event loop started (foreground)");
         let mut queued_command = None;
 
-        // Exit mode returns after every started process reaches a terminal phase.
         let done = || mode == OnIdle::Exit && self.live.load(Ordering::SeqCst) == 0;
         if done() {
             trace!("run_foreground: all processes already settled, returning");
@@ -2897,7 +2836,6 @@ impl NativeProcessManager {
                             .filter(|queued| !same_process_command(&command, queued));
                     }
                 }
-                // Linger keeps native supervisors, including parked file watchers, alive.
                 _ = self.completion.notified() => {}
             }
 
@@ -3266,7 +3204,7 @@ mod tests {
     fn long_running_config(name: &str) -> ProcessConfig {
         ProcessConfig {
             name: name.to_string(),
-            exec: "sleep 100".to_string(),
+            exec: "exec tail -f /dev/null".to_string(),
             restart: crate::config::RestartConfig {
                 on: RestartPolicy::Never,
                 max: Some(5),
@@ -3458,7 +3396,6 @@ mod tests {
             .await
             .unwrap();
 
-        // The timeout bounds an event-driven wait for supervisor status changes.
         tokio::time::timeout(Duration::from_secs(60), async {
             loop {
                 let notified = notify.notified();
@@ -3691,7 +3628,6 @@ mod tests {
         let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
         let config = long_running_config("relaunch-me");
 
-        // Launch, then stop-and-keep so the entry becomes Stopped.
         manager.register_waiting(config.clone(), None).await;
         manager.launch_waiting("relaunch-me").await.unwrap();
         manager.stop_and_keep("relaunch-me").await.unwrap();
@@ -3700,8 +3636,6 @@ mod tests {
             Some(ProcessPhase::Stopped)
         );
 
-        // Re-arm and relaunch — mirrors `Tasks::start_with_deps` bringing a
-        // stopped process back up on an attaching `devenv up`.
         manager.rearm_waiting(config).await;
         assert_eq!(
             manager.get_phase("relaunch-me").await,
@@ -4052,8 +3986,6 @@ mod tests {
             ..test_config("ports-proc")
         };
 
-        // A listen spec shadows a same-named declared port; the result is
-        // sorted, so both the daemon TUI and attach views agree.
         assert_eq!(display_ports(&config), vec!["db:5432", "web:8080"]);
     }
 
@@ -4091,18 +4023,14 @@ mod tests {
         let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
         manager.set_scheduler(Arc::downgrade(&scheduler));
 
-        // Empty map settles trivially.
         assert!(manager.wait_settled().await);
 
-        // Waiting with progressing dependencies: not settled.
         manager.register_waiting(test_config("waiter"), None).await;
         assert!(!manager.wait_settled().await);
 
-        // Waiting and dependency-parked: settled.
         stub.parked.store(true, Ordering::SeqCst);
         assert!(manager.wait_settled().await);
 
-        // A Launching entry is never settled, even with everything parked.
         let config = test_config("mid-launch");
         let activity = manager.create_process_activity(&config, None);
         manager.processes.write().await.insert(
@@ -4112,8 +4040,7 @@ mod tests {
         assert!(!manager.wait_settled().await);
         manager.processes.write().await.remove("mid-launch");
 
-        // NotStarted and Stopped are terminal until a user starts them:
-        // settled without consulting the scheduler.
+        // Inactive processes do not consult the scheduler.
         stub.parked.store(false, Ordering::SeqCst);
         manager
             .register_waiting(auto_start_off_config("idle"), None)
@@ -5079,7 +5006,7 @@ mod tests {
         // attach, exercising backlog or live tail respectively.
         let config = ProcessConfig {
             name: "attach-proc".to_string(),
-            exec: "echo attach-line; sleep 100".to_string(),
+            exec: "echo attach-line; exec tail -f /dev/null".to_string(),
             restart: crate::config::RestartConfig {
                 on: RestartPolicy::Never,
                 max: Some(0),

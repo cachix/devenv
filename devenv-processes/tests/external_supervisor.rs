@@ -1,7 +1,4 @@
-//! Integration tests for `SupervisionMode::External` mode.
-//!
-//! External mode reports lifecycle state but leaves restart, readiness,
-//! watchdog, and file-watch policy to the host manager.
+//! External supervision lifecycle integration tests.
 
 mod common;
 

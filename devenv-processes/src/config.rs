@@ -231,7 +231,6 @@ impl Default for ShutdownConfig {
 }
 
 impl ShutdownConfig {
-    /// Grace period as a [`Duration`].
     pub fn grace_duration(&self) -> Duration {
         Duration::from_secs(self.grace)
     }

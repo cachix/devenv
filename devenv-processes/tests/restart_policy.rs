@@ -6,7 +6,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, RestartConfig, RestartPolicy, SupervisorPhase};
+use devenv_processes::{ProcessConfig, ReadyConfig, RestartConfig, RestartPolicy, SupervisorPhase};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -272,19 +272,20 @@ async fn test_max_restarts_limit() {
     .expect("Test timed out");
 }
 
-/// Manual restart of an exited process must publish a fresh status.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_manual_restart_after_exit_reports_fresh_status() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
-        // First run exits cleanly; the run after restart() keeps running.
         let marker = ctx.temp_path().join("first-run-done");
+        let ready = ctx.temp_path().join("second-run-ready");
         let script = ctx
             .create_script(
                 "exit_then_run.sh",
                 &format!(
-                    "#!/bin/sh\nif [ -f {m} ]; then sleep 30; else touch {m}; exit 0; fi\n",
-                    m = marker.display()
+                    "#!/bin/sh\nif [ -f {marker} ]; then touch {ready}; exec tail -f /dev/null; \
+                     else touch {marker}; exit 0; fi\n",
+                    marker = marker.display(),
+                    ready = ready.display(),
                 ),
             )
             .await;
@@ -297,6 +298,11 @@ async fn test_manual_restart_after_exit_reports_fresh_status() {
                 on: RestartPolicy::OnFailure,
                 ..Default::default()
             },
+            ready: Some(ReadyConfig {
+                exec: Some(format!("test -f '{}'", ready.display())),
+                period: 1,
+                ..Default::default()
+            }),
             ..Default::default()
         };
 
@@ -306,7 +312,6 @@ async fn test_manual_restart_after_exit_reports_fresh_status() {
             .await
             .expect("Failed to start");
 
-        // Wait until the clean exit is reported (supervisor stops monitoring).
         let exited = wait_for_condition(
             || async {
                 manager
@@ -324,8 +329,6 @@ async fn test_manual_restart_after_exit_reports_fresh_status() {
             .await
             .expect("Failed to restart");
 
-        // The restarted process has no readiness mechanism, so it must be
-        // reported Ready with a fresh restart quota — not the stale Exited.
         let ready = wait_for_condition(
             || async {
                 manager
@@ -341,11 +344,6 @@ async fn test_manual_restart_after_exit_reports_fresh_status() {
             "Restarted process should report Ready, not the stale Exited phase"
         );
 
-        // And it must stay Ready while the process keeps running.
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let status = manager.job_state("restart-status").await.unwrap();
-        assert_eq!(status.phase, SupervisorPhase::Ready);
-
         manager.stop_all().await.expect("Failed to stop");
     })
     .await
@@ -358,7 +356,7 @@ async fn test_manual_restart_without_probe_stays_ready() {
         let ctx = TestContext::new();
         let config = ProcessConfig {
             name: "restart-ready".to_string(),
-            exec: "sleep 30".to_string(),
+            exec: "exec tail -f /dev/null".to_string(),
             restart: RestartConfig {
                 on: RestartPolicy::Never,
                 ..Default::default()

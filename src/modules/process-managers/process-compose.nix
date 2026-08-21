@@ -189,8 +189,7 @@ in
           processes = lib.mapAttrs
             (name: value:
               let
-                # Interactive processes need direct access to the process-compose PTY.
-                # They bypass `devenv-tasks`, including its task dependencies.
+                # Interactive and disabled processes bypass the task wrapper.
                 direct = !value.start.enable || (value.process-compose.is_interactive or false);
                 command =
                   if direct then value.exec
@@ -240,9 +239,8 @@ in
                 existingDepsOn = pcAttrs.depends_on or { };
                 mergedDepsOn = beforeDeps // existingDepsOn;
 
-                # Direct processes receive the configured signal. Wrapped processes
-                # receive SIGTERM, which devenv-tasks translates for the service.
-                # Leave process-compose time to stop devenv-tasks after its grace period.
+                # Wrapped processes receive SIGTERM; devenv-tasks translates it and
+                # needs an outer margin beyond the service grace period.
                 typedShutdown = {
                   shutdown = {
                     signal = if direct then value.shutdown.signal else 15;

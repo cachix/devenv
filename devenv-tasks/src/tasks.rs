@@ -61,7 +61,7 @@ impl TasksBuilder {
     /// Build the Tasks instance
     pub async fn build(self) -> Result<Tasks, Error> {
         let supervisor = self.config.supervisor;
-        // External managers own process ordering and invoke one wrapper per process.
+        // External managers own ordering and invoke one wrapper per process.
         let ignore_process_deps =
             self.config.ignore_process_deps || supervisor == SupervisionMode::External;
         let exit_on_idle = self
@@ -83,7 +83,6 @@ impl TasksBuilder {
         let mut pm = NativeProcessManager::new(self.config.runtime_dir.clone())
             .map_err(|e| Error::io(format!("Failed to initialize process manager: {e}")))?;
         if supervisor == SupervisionMode::External {
-            // External wrappers share the native manager's runtime directory.
             pm.disown_runtime_files();
         }
 
@@ -145,10 +144,7 @@ impl TasksBuilder {
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
         tasks.scheduled_task_indices = Mutex::new(tasks.tasks_order.iter().copied().collect());
-        // schedule() narrows what runs (`tasks_order`) but keeps the full graph,
-        // so this lookup covers every configured task. start_with_deps relies on
-        // that: a process this run did not bring up can still be found and
-        // scheduled later instead of being rejected as unknown.
+        // Dynamic starts address nodes outside the initial schedule.
         for index in tasks.graph.node_indices() {
             let name = tasks.graph[index].read().await.task.name.clone();
             tasks.task_index_by_name.insert(name, index);
@@ -188,25 +184,14 @@ pub struct Tasks {
     pub(crate) refresh_task_cache: bool,
     /// When true, exclude non-root process-type tasks from the scheduled subgraph
     pub(crate) ignore_process_deps: bool,
-    /// Full task name -> graph node index. Covers every configured task:
-    /// `schedule()` narrows what runs (`tasks_order`) but keeps the full graph,
-    /// so a process not brought up by this run is still addressable here and can
-    /// be scheduled later by `start_with_deps`.
+    /// Full task name to full-graph node index.
     pub(crate) task_index_by_name: HashMap<String, NodeIndex>,
-    /// Serializes `start_with_deps` calls. Two concurrent `up`s for the same
-    /// stopped process would otherwise both observe the pre-re-arm phase and
-    /// spawn duplicate dependency waiters whose launch-race loser records a
-    /// false `Failed` launch outcome in the graph node.
+    /// Prevents concurrent dynamic starts from duplicating dependency waiters.
     pub(crate) start_with_deps_lock: Mutex<()>,
-    /// Nodes that already have an execution driver. Seeded from the cold
-    /// schedule and extended when a dynamic process start discovers unseen
-    /// one-shot dependencies. `TaskStatus::Pending` cannot represent this:
-    /// both an unscheduled one-shot and a scheduled one-shot waiting on its
-    /// own dependencies are Pending.
+    /// Nodes with an execution driver; `Pending` alone does not distinguish
+    /// scheduled from unscheduled one-shots.
     pub(crate) scheduled_task_indices: Mutex<HashSet<NodeIndex>>,
-    /// Outputs and exported environment from one-shot tasks. Kept for the
-    /// scheduler lifetime so one-shots started dynamically share results with
-    /// the cold run and with later dynamic dependency closures.
+    /// Shared outputs from cold and dynamic one-shot runs.
     pub(crate) outputs: Arc<Mutex<Outputs>>,
     /// Exit after every process has settled when an outer manager owns lifecycle.
     pub(crate) exit_on_idle: bool,
@@ -214,32 +199,18 @@ pub struct Tasks {
     pub(crate) supervisor: devenv_processes::SupervisionMode,
 }
 
-/// One dependency's evaluation, produced by `Tasks::eval_dep` and shared
-/// between the dependency waiter and the parked judgment so the dependency
-/// waiter and the manager's `Wait` settled rule can never diverge.
+/// Shared dependency evaluation for waiting and parked-state checks.
 struct DepEval {
     /// Full task name of the dependency (e.g. `devenv:processes:db`).
     task_name: String,
     sat: DepSatisfaction,
-    /// Live manager phase for process-type dependencies (`None` for oneshot
-    /// dependencies and for process dependencies without a manager entry).
+    /// Live phase for a registered process dependency.
     live_phase: Option<ProcessPhase>,
-    /// True when this dependency is itself actively in flight: a oneshot whose
-    /// command is currently running. Such a dependency is progressing on its
-    /// own, so a process waiting on it is never dependency-parked — its
-    /// (possibly since-regressed) dependencies are irrelevant now that it has
-    /// launched. Always false for process dependencies, whose progress is read
-    /// from `live_phase`.
+    /// Whether a one-shot dependency is currently executing.
     dep_in_flight: bool,
 }
 
-/// Terminal outcome from waiting for a task's dependencies.
-///
-/// This used to be represented as a `(cancelled, dependency_failed)` tuple,
-/// which allowed an invalid `(true, true)` state and made precedence at call
-/// sites easy to get wrong. Shutdown deliberately wins over a dependency
-/// failure observed at the same time: once the whole run is being cancelled,
-/// every task that has not launched should report `Cancelled` consistently.
+/// Dependency wait result; cancellation takes precedence over failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DependencyWaitOutcome {
     Ready,
@@ -287,11 +258,19 @@ impl Tasks {
                                 == Some(ExitStatus::Failure)
                             {
                                 status.failed += 1;
+                                if self.is_soft_failure(index, &scheduled) {
+                                    status.soft_failed += 1;
+                                }
                             } else {
                                 status.succeeded += 1;
                             }
                         }
-                        Some(ProcessPhase::GaveUp) => status.failed += 1,
+                        Some(ProcessPhase::GaveUp) => {
+                            status.failed += 1;
+                            if self.is_soft_failure(index, &scheduled) {
+                                status.soft_failed += 1;
+                            }
+                        }
                         Some(
                             ProcessPhase::Waiting
                             | ProcessPhase::Starting
@@ -619,11 +598,8 @@ impl Tasks {
                     }
                 }
 
-                // A selected dependent may have prerequisites other than the root that
-                // brought it into the schedule. Include those prerequisites without
-                // traversing back out from them, which preserves the no-direction-
-                // bouncing behavior above while ensuring every scheduled task has its
-                // complete dependency closure.
+                // Include every selected task's prerequisites without traversing
+                // outward from those prerequisites.
                 to_visit.extend(visited.iter().copied());
                 while let Some(node) = to_visit.pop() {
                     for neighbor in self
@@ -638,9 +614,7 @@ impl Tasks {
             }
         }
 
-        // When ignore_process_deps is set, remove non-root process-type tasks
-        // from the visited set. This prevents process duplication when process-compose
-        // manages process ordering via depends_on.
+        // External managers own ordering for non-root process tasks.
         if self.ignore_process_deps {
             let root_set: HashSet<NodeIndex> = self.roots.iter().cloned().collect();
             let mut to_remove = Vec::new();
@@ -674,17 +648,12 @@ impl Tasks {
             }
         }
 
-        // The subgraph exists only to order the scheduled set. Keep the full
-        // graph as `self.graph` so every configured task stays addressable and
-        // `task_index_by_name` (built right after) covers all of them; a later
-        // `start_with_deps` can then find and schedule a process this run did
-        // not bring up instead of rejecting it as unknown. `self.roots` keeps
-        // its full-graph indices for the same reason (no remap).
+        // Retain the full graph for dynamic starts; the subgraph only determines
+        // the initial order.
         let full_by_sub: HashMap<NodeIndex, NodeIndex> =
             node_map.iter().map(|(&full, &sub)| (sub, full)).collect();
 
-        // Topologically sort the scheduled subgraph, then map the order back
-        // onto the retained full graph.
+        // Map the scheduled order back to full-graph indices.
         match toposort(&subgraph, None) {
             Ok(order) => Ok(order.into_iter().map(|sub| full_by_sub[&sub]).collect()),
             Err(cycle) => Err(Error::CycleDetected(
@@ -695,8 +664,6 @@ impl Tasks {
 
     #[instrument(skip(self))]
     pub async fn run(&self, is_process_mode: bool) -> Outputs {
-        // Create an orchestration-level Operation activity to track overall progress
-        // Using Operation (not Task) so it doesn't count in the task summary
         let (label, item_type) = if is_process_mode {
             ("Running processes", "processes")
         } else {
@@ -715,58 +682,32 @@ impl Tasks {
             .await
     }
 
-    /// Run with a caller-provided parent activity instead of creating a new top-level one.
-    /// Used by `up()` Phase 4 to nest process execution under "Running processes".
+    /// Run process tasks under a caller-provided activity.
     #[instrument(skip(self, parent_activity))]
     pub async fn run_with_parent_activity(&self, parent_activity: Arc<Activity>) -> Outputs {
         self.run_internal(parent_activity, true).await
     }
 
-    /// Start a subset of already-built process tasks, honouring their
-    /// `after`/`before` dependencies via the same engine as the initial run.
+    /// Schedule named process tasks and their dependencies against the live graph.
     ///
-    /// Used when a long-lived manager is already running (e.g. a daemon started
-    /// by `devenv up -d` or `devenv shell`) and a later `devenv up [names]`
-    /// wants to bring up more processes. Rather than the CLI re-deriving the
-    /// dependency order and force-launching each process over the control
-    /// socket, the daemon drives them through `wait_for_task_deps` +
-    /// `run_process` — so out-of-subset and already-running dependencies are
-    /// resolved against the live task graph exactly like the cold-start path.
-    ///
-    /// `names` are process names without the `devenv:processes:` prefix. An
-    /// empty `names` is a no-op. Every requested name is classified into
-    /// exactly one [`StartOutcome`] bucket:
-    /// - `scheduled`: re-armed `Waiting` and handed to the dependency-driven
-    ///   launch path;
-    /// - `skipped`: already running, starting, or pending on a dependency —
-    ///   left untouched (already-running ones count as satisfied
-    ///   dependencies);
-    /// - `unknown`: not present in this scheduler's task graph (the manager
-    ///   was started with a different configuration or a subset);
-    /// - `failed`: known but could not be scheduled (e.g. building the
-    ///   process config failed).
-    ///
-    /// Returns once the processes have been *scheduled*, not once they are
-    /// ready: each one launches in a detached task that waits for its
-    /// dependencies in the background. A process whose dependency is never
-    /// satisfied simply stays `Waiting` in the manager (visible in the TUI),
-    /// rather than blocking the caller — so an attaching `devenv up` never
-    /// hangs on a dependent it cannot complete.
-    pub async fn start_with_deps(&self, names: &[String]) -> StartOutcome {
-        // Serialized: concurrent calls for the same stopped name would both
-        // read the pre-re-arm phase and spawn duplicate dependency waiters
-        // (see the field doc on `start_with_deps_lock`). The loop never
-        // awaits long work — launches are detached — so the hold is short.
+    /// Names omit the `devenv:processes:` prefix. The result classifies each
+    /// unique name as scheduled, skipped, unknown, or failed. This returns after
+    /// scheduling; dependencies may keep a process `Waiting` in the background.
+    pub async fn start_with_deps<I, S>(&self, names: I) -> StartOutcome
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        // Prevent concurrent calls from spawning duplicate dependency waiters.
         let _serialize = self.start_with_deps_lock.lock().await;
         let mut outcome = StartOutcome::default();
 
-        // Dedup while preserving order: a name requested twice (e.g. `devenv up
-        // foo foo`) would otherwise be re-armed on the first pass (scheduled)
-        // and seen Waiting on the second (skipped), landing in two buckets.
+        // Deduplicate without changing result order.
         let mut seen = std::collections::HashSet::new();
-        let names: Vec<&String> = names.iter().filter(|n| seen.insert(n.as_str())).collect();
-
-        for name in names {
+        for name in names.into_iter().map(Into::into) {
+            if !seen.insert(name.clone()) {
+                continue;
+            }
             let task_name = format!("{PROCESS_TASK_PREFIX}{name}");
             let Some(&index) = self.task_index_by_name.get(&task_name) else {
                 tracing::debug!(process = %name, "up requested for a process not in the task graph");
@@ -774,39 +715,26 @@ impl Tasks {
                 continue;
             };
 
-            match self.process_manager.get_phase(name).await {
-                // Already running, or already scheduled and waiting on a
-                // dependency: a live dep-waiter (or the process itself) is in
-                // flight, so leave it. Re-arming a `Waiting` process would spawn
-                // a second waiter that later errors when it loses the launch
-                // race; already-running ones count as satisfied dependencies.
-                // A mid-launch `Launching` entry reports `Starting`, so an
-                // in-flight launch is skipped here too.
+            match self.process_manager.get_phase(&name).await {
+                // Preserve the existing driver for active and scheduled processes.
                 Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::Waiting) => {
                     outcome.skipped.push(name.clone());
                     continue;
                 }
-                // Exited or gave up on its own: the manager entry is still
-                // `Active` (only an explicit stop produces `Stopped`), and
-                // `rearm_waiting` refuses to touch an `Active` entry. Normalize
-                // it to `Stopped` first — `stop_and_keep` aborts the dead
-                // supervisor and tailers, releases its ports, and keeps the TUI
-                // row — so the re-arm + launch path below can relaunch it.
+                // `rearm_waiting` only replaces inactive manager entries.
                 Some(ProcessPhase::Exited | ProcessPhase::GaveUp) => {
-                    if let Err(e) = self.process_manager.stop_and_keep(name).await {
-                        tracing::warn!(process = %name, "failed to reset exited process before relaunch: {e}");
+                    if let Err(e) = self.process_manager.stop_and_keep(&name).await {
+                        tracing::warn!(
+                            process = %name,
+                            error = %e,
+                            "failed to reset exited process before relaunch"
+                        );
                     }
                 }
                 _ => {}
             }
 
-            // Names arriving here were explicitly chosen (by the user or by
-            // the client's up-enabled default set, see
-            // `Devenv::resolve_launch_processes`); an explicitly requested
-            // process always starts, so force `start.enable` on for the
-            // launch — `run_process`'s `launch_waiting` then launches it even
-            // if it was registered auto-start-off (e.g. a non-shell process
-            // in a `devenv shell` daemon).
+            // Explicit selection overrides `start.enable`.
             let config = {
                 let ts = self.graph[index].read().await;
                 match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
@@ -815,22 +743,20 @@ impl Tasks {
                         config
                     }
                     Err(e) => {
-                        tracing::error!(process = %name, "failed to build process config: {e}");
+                        tracing::error!(
+                            process = %name,
+                            error = %e,
+                            "failed to build process config"
+                        );
                         outcome.failed.push(name.clone());
                         continue;
                     }
                 }
             };
-            // A cold subset may have left one-shot predecessors outside
-            // `tasks_order`. Give those nodes an execution driver before this
-            // process starts waiting on them; otherwise their Pending status
-            // can never advance.
+            // Cold subsets leave unseen one-shot predecessors without a driver.
             self.schedule_unseen_oneshot_dependencies(index).await;
-            // The re-armed Waiting entry holds the config `launch_waiting` will
-            // launch; `run_process` (below) only reads name/probe off its copy.
             self.process_manager.rearm_waiting(config.clone()).await;
-            // Clear a stale launch outcome so dependents fall back to the
-            // manager's Waiting phase rather than a dead Completed status.
+            // Make the manager's re-armed phase authoritative again.
             {
                 let mut ts = self.graph[index].write().await;
                 ts.status = TaskStatus::Pending;
@@ -846,10 +772,7 @@ impl Tasks {
             let shutdown = Arc::clone(&self.shutdown);
             let process_name = name.clone();
 
-            // Detached: wait for deps and launch in the background so a
-            // never-satisfiable dependency leaves this process `Waiting` instead
-            // of blocking the `Start` reply. Mirrors how the cold-start path spawns
-            // per-process dependency checkers.
+            // Detached waiters keep unsatisfied starts visible without blocking replies.
             tokio::spawn(async move {
                 match Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown)
                     .await
@@ -857,12 +780,7 @@ impl Tasks {
                     DependencyWaitOutcome::Ready => {}
                     outcome => {
                         process_manager.cancel_waiting(&process_name).await;
-                        // Dynamic starts do not have the cold runner's
-                        // `mark_task_skipped` wrapper, so record the terminal graph
-                        // outcome here before waking downstream dependency
-                        // waiters. Otherwise the manager says Stopped while the
-                        // task remains Pending forever, stranding transitive
-                        // dependents and `processes wait`.
+                        // Publish the graph outcome before waking transitive waiters.
                         task_state.write().await.status = TaskStatus::Completed(match outcome {
                             DependencyWaitOutcome::Cancelled => TaskCompleted::Cancelled(None),
                             DependencyWaitOutcome::DependencyFailed => {
@@ -875,17 +793,18 @@ impl Tasks {
                     }
                 }
 
-                // The read guard must drop before the failure path takes the
-                // write lock below; an `if let` scrutinee guard lives through
-                // the then-block and would self-deadlock.
+                // Scope the read guard before the failure-path write lock.
                 let launch_result = {
                     let ts = task_state.read().await;
                     ts.run_process(&process_manager, config).await
                 };
                 if let Err(e) = launch_result {
-                    tracing::error!(process = %process_name, "failed to start process: {e}");
-                    // Launch outcome is graph-owned: record it so dependents
-                    // see NeverSatisfiable while the manager has a Stopped entry.
+                    tracing::error!(
+                        process = %process_name,
+                        error = %e,
+                        "failed to start process"
+                    );
+                    // Dependents read launch failures from the graph.
                     let mut ts = task_state.write().await;
                     ts.status = TaskStatus::Completed(TaskCompleted::Failed(
                         std::time::Duration::ZERO,
@@ -898,16 +817,13 @@ impl Tasks {
                     drop(ts);
                     notify_finished.notify_waiters();
                 }
-                // Success or auto-start-off: the manager owns the phase from here.
             });
         }
 
         outcome
     }
 
-    /// Increment the completed counter, update the orchestration progress bar, and
-    /// notify the dependency and UI loops. Every task must call this exactly once
-    /// when its work (success, failure, skip) is done.
+    /// Publish one task's terminal progress and wake observers.
     fn signal_task_done(
         completed_tasks: &std::sync::atomic::AtomicU64,
         total_tasks: u64,
@@ -921,7 +837,7 @@ impl Tasks {
         notify_ui.notify_one();
     }
 
-    /// Mark a task as cancelled or dependency_failed, update progress, and notify.
+    /// Publish a cancelled or dependency-failed task.
     async fn mark_task_skipped(
         task_state: &Arc<RwLock<TaskState>>,
         task_activity_id: u64,
@@ -969,9 +885,7 @@ impl Tasks {
             .collect()
     }
 
-    /// Dependencies visible to the cold runner. Before the full graph was
-    /// retained, excluded nodes and their edges disappeared with the scheduled
-    /// subgraph; preserve that behavior for run modes such as `Single`.
+    /// Dependencies inside the cold schedule.
     fn collect_scheduled_deps(
         &self,
         index: NodeIndex,
@@ -984,13 +898,8 @@ impl Tasks {
             .collect()
     }
 
-    /// Start every previously unseen one-shot in `index`'s transitive
-    /// dependency closure. The cold scheduler already owns nodes in
-    /// `tasks_order`; dynamic starts claim the remaining nodes exactly once.
-    ///
-    /// Process dependencies are deliberately not launched here. They retain
-    /// the existing dynamic-start semantics: a stopped or not-started process
-    /// parks its dependents until the user explicitly starts it.
+    /// Start unseen one-shots in a dynamic dependency closure exactly once.
+    /// Process dependencies still require explicit starts.
     async fn schedule_unseen_oneshot_dependencies(&self, index: NodeIndex) {
         let mut stack = vec![index];
         let mut visited = HashSet::new();
@@ -1115,7 +1024,7 @@ impl Tasks {
             {
                 Ok(result) => result,
                 Err(e) => {
-                    error!("Task failed with error: {}", e);
+                    error!(error = %e, "task failed");
                     TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
@@ -1146,7 +1055,11 @@ impl Tasks {
                             )
                             .await
                         {
-                            tracing::warn!("Failed to store task output for {}: {}", task_name, e);
+                            tracing::warn!(
+                                task = %task_name,
+                                error = %e,
+                                "failed to store task output"
+                            );
                         }
                     }
                 }
@@ -1168,7 +1081,11 @@ impl Tasks {
                             )
                             .await
                         {
-                            tracing::warn!("Failed to store task output for {}: {}", task_name, e);
+                            tracing::warn!(
+                                task = %task_name,
+                                error = %e,
+                                "failed to store task output"
+                            );
                         }
                     }
                 }
@@ -1181,13 +1098,8 @@ impl Tasks {
         notify_ui.notify_one();
     }
 
-    /// Evaluate one dependency edge. Shared verbatim between the dependency
-    /// waiter loop (`wait_for_task_deps`) and the parked judgment
-    /// (`dependency_parked`) so the two can never diverge.
-    ///
-    /// Process dependencies are evaluated against the manager's live phase;
-    /// the graph node is only consulted for graph-owned launch outcomes.
-    /// The dep's read guard is held only for the duration of this call.
+    /// Evaluate an edge consistently for waiting and parked-state checks.
+    /// Live manager phases override graph state except for launch outcomes.
     async fn eval_dep(
         dep_state: &Arc<RwLock<TaskState>>,
         dep_kind: &DependencyKind,
@@ -1202,13 +1114,10 @@ impl Tasks {
         );
         if dep_guard.task.r#type == TaskType::Process {
             let pname = crate::types::process_name(&dep_guard.task.name);
-            // The dependency phase, not the displayed phase: a process the user
-            // explicitly stopped after it had exited still satisfies
-            // `<proc>@started` (it did run), so a dependent is not stranded.
+            // Preserve terminal history hidden by an explicit stop.
             let live_phase = process_manager.get_dependency_phase(pname).await;
             let sat = match live_phase {
-                // A live manager phase wins: it cannot go stale and a
-                // re-armed Waiting entry outranks a dead Completed node.
+                // Live phases outrank stale terminal graph state.
                 Some(
                     phase @ (ProcessPhase::Waiting
                     | ProcessPhase::Starting
@@ -1216,11 +1125,7 @@ impl Tasks {
                     | ProcessPhase::Exited
                     | ProcessPhase::GaveUp),
                 ) => crate::types::is_process_dep_satisfied(phase, dep_kind),
-                // No entry, NotStarted, or Stopped: a terminal node
-                // status is the graph-owned launch outcome (launch
-                // failure, dependency failure, cancellation) and is
-                // conclusive; otherwise fall back to the phase itself
-                // so e.g. an auto-start-off dep satisfies @completed.
+                // Graph-owned launch outcomes are conclusive for inactive entries.
                 phase => match &dep_guard.status {
                     TaskStatus::Completed(_) => {
                         crate::types::is_dep_satisfied(&dep_guard.status, dep_kind)
@@ -1250,30 +1155,14 @@ impl Tasks {
         }
     }
 
-    /// Whether the named `Waiting` process is dependency-parked: it has at
-    /// least one unsatisfied dependency, and every unsatisfied dependency is
-    /// blocked on external action — a stopped or not-started process, or
-    /// transitively another parked `Waiting` process. Judged live against the
-    /// task graph and the manager's phases at call time (consulted by the
-    /// manager's `Wait` settled rule via [`devenv_processes::ProcessScheduler`]),
-    /// so it can never act on stale state.
-    ///
-    /// Anything else still in flight (a starting/launching dependency, a
-    /// running oneshot, a missing manager entry) counts as progressing —
-    /// conservative, so `Wait` keeps blocking. A process with no unsatisfied
-    /// dependencies is not parked (it is about to launch), and unknown names
-    /// are not parked.
+    /// Whether every unsatisfied dependency needs external action.
+    /// Running and unknown dependencies are conservatively treated as progressing.
     pub async fn dependency_parked(&self, process_name: &str) -> bool {
         let task_name = format!("{PROCESS_TASK_PREFIX}{process_name}");
         self.task_dependency_parked(&task_name).await
     }
 
-    /// Recursive core of [`Self::dependency_parked`], keyed by full task
-    /// name. The graph is an acyclic toposorted DAG (cycles are rejected at
-    /// build time), so recursing over `Waiting` dependencies terminates.
-    /// Boxed because async recursion needs a sized future. `eval_dep` drops
-    /// the dependency's read guard before any recursion below, so no node
-    /// lock is held across a relock (Edition 2024 scrutinee rule).
+    /// Recursive parked-state check over the validated acyclic graph.
     fn task_dependency_parked<'a>(
         &'a self,
         task_name: &'a str,
@@ -1285,9 +1174,7 @@ impl Tasks {
             let mut any_blocker = false;
             for (dep_state, dep_kind) in self.collect_deps(index) {
                 let eval = Self::eval_dep(&dep_state, &dep_kind, &self.process_manager).await;
-                // NeverSatisfiable deps are not blockers: external action is
-                // already required either way, and the dependency waiter will
-                // conclude (cancel_waiting) once its evaluation reaches them.
+                // Terminal failures settle the waiter; only unresolved edges can park it.
                 if eval.sat != DepSatisfaction::NotYet {
                     continue;
                 }
@@ -1297,17 +1184,8 @@ impl Tasks {
                     Some(ProcessPhase::Waiting) => {
                         self.task_dependency_parked(&eval.task_name).await
                     }
-                    // Starting/Ready processes are genuinely in flight.
                     Some(_) => false,
-                    // A currently-running oneshot is progressing on its own —
-                    // it has already launched, so whatever it depended on (even
-                    // a since-stopped process) no longer blocks it. Not parked.
                     None if eval.dep_in_flight => false,
-                    // A oneshot that has NOT launched yet (or any non-process
-                    // dep) is parked iff its own unsatisfied dependencies are
-                    // all parked: recurse so a process blocked transitively
-                    // through a oneshot that itself waits on a
-                    // stopped/not-started process is still judged parked.
                     None => self.task_dependency_parked(&eval.task_name).await,
                 };
                 if !parked {
@@ -1318,11 +1196,7 @@ impl Tasks {
         })
     }
 
-    /// Wait for task dependencies to be satisfied in the background.
-    /// Each dependency is evaluated via [`Self::eval_dep`].
-    /// Shutdown takes precedence over a dependency failure observed
-    /// concurrently, so an interrupted run reports a consistent cancellation
-    /// across the remaining dependency closure.
+    /// Wait for dependencies; concurrent shutdown takes precedence over failure.
     async fn wait_for_task_deps(
         deps: &[(Arc<RwLock<TaskState>>, DependencyKind)],
         process_manager: &Arc<NativeProcessManager>,
@@ -1425,16 +1299,8 @@ impl Tasks {
         let outputs = Arc::clone(&self.outputs);
         let mut running_tasks = self.shutdown.join_set();
 
-        // Long-lived process runners pre-register every configured process, not
-        // only the cold schedule. A subset start launches only its requested
-        // closure, but the retained daemon must still list and later start the
-        // other configured processes. Nodes outside `scheduled` are registered
-        // as NotStarted; an explicit dynamic start re-arms them as Waiting.
-        //
-        // Ordinary task runners only register scheduled processes. In
-        // particular, the transient enterShell runner receives the full task
-        // graph but must not publish unrelated processes as auto-start-off
-        // before `devenv up` starts the real process runner.
+        // Long-lived runners register the full graph for later dynamic starts.
+        // Transient task runners expose only their cold schedule.
         let mut process_configs: HashMap<NodeIndex, ProcessConfig> = HashMap::new();
         let mut has_process_tasks = false;
         let process_indices: Vec<_> = if register_unscheduled_processes {
@@ -1466,8 +1332,9 @@ impl Tasks {
                             .await
                         {
                             error!(
-                                "Failed to register unscheduled process {}: {}",
-                                config.name, e
+                                process = %config.name,
+                                error = %e,
+                                "failed to register unscheduled process"
                             );
                         }
                     }
@@ -1476,7 +1343,7 @@ impl Tasks {
                     let name = ts.task.name.clone();
                     drop(ts);
                     let mut ts = self.graph[index].write().await;
-                    error!("Failed to build process config for {}: {}", name, e);
+                    error!(task = %name, error = %e, "failed to build process config");
                     ts.status = TaskStatus::Completed(TaskCompleted::Failed(
                         std::time::Duration::ZERO,
                         TaskFailure {
@@ -1489,14 +1356,12 @@ impl Tasks {
             }
         }
 
-        // The native runner owns the API socket used by `devenv processes`.
-        // External managers run several short-lived wrappers in the same
-        // runtime directory, so they must not publish or remove that socket.
+        // External wrappers share a runtime directory and cannot own its API socket.
         if self.supervisor == SupervisionMode::Native
             && has_process_tasks
             && let Err(e) = self.process_manager.start_api_server()
         {
-            error!("Failed to start process manager API server: {}", e);
+            error!(error = %e, "failed to start process manager API server");
         }
 
         for index in &self.tasks_order {
@@ -1563,9 +1428,9 @@ impl Tasks {
                     async move {
                         // Wait for dependencies in background
                         tracing::debug!(
-                            "Process task {}: waiting for {} dependencies",
-                            config.name,
-                            deps.len()
+                            process = %config.name,
+                            dependency_count = deps.len(),
+                            "waiting for process dependencies"
                         );
                         let dep_outcome = Self::wait_for_task_deps(
                             &deps,
@@ -1575,9 +1440,9 @@ impl Tasks {
                         )
                         .await;
                         tracing::debug!(
-                            "Process task {}: deps done, outcome={:?}",
-                            config.name,
-                            dep_outcome,
+                            process = %config.name,
+                            outcome = ?dep_outcome,
+                            "process dependencies resolved"
                         );
 
                         if dep_outcome != DependencyWaitOutcome::Ready {
@@ -1612,8 +1477,9 @@ impl Tasks {
                             Err(e) => {
                                 let mut task_state = task_state_clone.write().await;
                                 error!(
-                                    "Failed to start process task {}: {}",
-                                    task_state.task.name, e
+                                    task = %task_state.task.name,
+                                    error = %e,
+                                    "failed to start process task"
                                 );
                                 task_state.status = TaskStatus::Completed(TaskCompleted::Failed(
                                     std::time::Duration::ZERO,
@@ -1791,7 +1657,7 @@ impl Tasks {
 #[async_trait::async_trait]
 impl devenv_processes::ProcessScheduler for Tasks {
     async fn start(&self, names: Vec<String>) -> StartOutcome {
-        self.start_with_deps(&names).await
+        self.start_with_deps(names).await
     }
 
     async fn dependency_parked(&self, process_name: &str) -> bool {
@@ -2020,8 +1886,7 @@ mod schedule_tests {
     use crate::config::TaskConfig;
     use std::os::unix::fs::PermissionsExt;
 
-    /// Helper to build a minimal Tasks struct for testing schedule().
-    /// Returns the TempDir alongside Tasks to keep the directory alive for the test.
+    // Keep the TempDir alive with the runtime and cache paths that use it.
     async fn build_test_tasks(
         task_configs: Vec<TaskConfig>,
         roots: Vec<String>,
@@ -2083,7 +1948,46 @@ mod schedule_tests {
         }
     }
 
-    /// Collect task names from the scheduled tasks_order.
+    fn executable_script(dir: &std::path::Path, name: &str, body: &str) -> std::path::PathBuf {
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    fn named_pipe(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+        let path = dir.join(name);
+        nix::unistd::mkfifo(
+            &path,
+            nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
+        )
+        .unwrap_or_else(|error| panic!("failed to create {}: {error}", path.display()));
+        path
+    }
+
+    fn listen_for_pipe_signal(
+        path: std::path::PathBuf,
+    ) -> tokio::task::JoinHandle<std::io::Result<()>> {
+        tokio::task::spawn_blocking(move || {
+            use std::io::Read;
+
+            let mut pipe = std::fs::File::open(path)?;
+            let mut signal = [0_u8; 1];
+            pipe.read_exact(&mut signal)
+        })
+    }
+
+    async fn wait_for_pipe_signal(
+        listener: tokio::task::JoinHandle<std::io::Result<()>>,
+        context: &str,
+    ) {
+        tokio::time::timeout(std::time::Duration::from_secs(10), listener)
+            .await
+            .unwrap_or_else(|_| panic!("timed out waiting for {context}"))
+            .expect("pipe listener panicked")
+            .unwrap_or_else(|error| panic!("failed waiting for {context}: {error}"));
+    }
+
     async fn task_names(tasks: &Tasks) -> Vec<String> {
         let mut names = Vec::new();
         for idx in &tasks.tasks_order {
@@ -2181,16 +2085,136 @@ mod schedule_tests {
         }
     }
 
-    /// A long-running process task.
     fn long_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
-        process_task_with_command(name, after, "sleep 100")
+        process_task_with_command(name, after, "exec tail -f /dev/null")
     }
 
-    /// A process task that exits successfully on its own and is not restarted
-    /// (the default restart policy is `OnFailure`, and `echo` exits 0). Used to
-    /// drive a process to the `Exited` phase in tests.
     fn self_exit_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
         process_task_with_command(name, after, "echo")
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum ProcessDependency {
+        Default,
+        Started,
+        Ready,
+        Completed,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum OneshotDependency {
+        Default,
+        Started,
+        Succeeded,
+        Completed,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum TestDependency {
+        Process(ProcessDependency),
+        Oneshot(OneshotDependency),
+    }
+
+    impl TestDependency {
+        fn task_type(self) -> TaskType {
+            match self {
+                Self::Process(_) => TaskType::Process,
+                Self::Oneshot(_) => TaskType::Oneshot,
+            }
+        }
+
+        fn kind(self) -> DependencyKind {
+            match self {
+                Self::Process(ProcessDependency::Default | ProcessDependency::Ready) => {
+                    DependencyKind::Ready
+                }
+                Self::Process(ProcessDependency::Started)
+                | Self::Oneshot(OneshotDependency::Started) => DependencyKind::Started,
+                Self::Process(ProcessDependency::Completed)
+                | Self::Oneshot(OneshotDependency::Completed) => DependencyKind::Completed,
+                Self::Oneshot(OneshotDependency::Default | OneshotDependency::Succeeded) => {
+                    DependencyKind::Succeeded
+                }
+            }
+        }
+
+        fn suffix(self) -> Option<&'static str> {
+            match self {
+                Self::Process(ProcessDependency::Default)
+                | Self::Oneshot(OneshotDependency::Default) => None,
+                _ => Some(match self.kind() {
+                    DependencyKind::Started => "started",
+                    DependencyKind::Ready => "ready",
+                    DependencyKind::Succeeded => "succeeded",
+                    DependencyKind::Completed => "completed",
+                }),
+            }
+        }
+
+        fn allows_dependent(self, exit: TestExit) -> bool {
+            matches!(
+                self.kind(),
+                DependencyKind::Started | DependencyKind::Completed
+            ) || exit == TestExit::Success
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum TestExit {
+        Success,
+        Failure,
+    }
+
+    impl TestExit {
+        fn code(self) -> i32 {
+            match self {
+                Self::Success => 0,
+                Self::Failure => 7,
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct DependencyCase {
+        dependency: TestDependency,
+        exit: TestExit,
+    }
+
+    const PROCESS_DEPENDENCIES: &[TestDependency] = &[
+        TestDependency::Process(ProcessDependency::Default),
+        TestDependency::Process(ProcessDependency::Started),
+        TestDependency::Process(ProcessDependency::Ready),
+        TestDependency::Process(ProcessDependency::Completed),
+    ];
+
+    const ONESHOT_DEPENDENCIES: &[TestDependency] = &[
+        TestDependency::Oneshot(OneshotDependency::Default),
+        TestDependency::Oneshot(OneshotDependency::Started),
+        TestDependency::Oneshot(OneshotDependency::Succeeded),
+        TestDependency::Oneshot(OneshotDependency::Completed),
+    ];
+
+    const TEST_EXITS: &[TestExit] = &[TestExit::Success, TestExit::Failure];
+
+    fn dependency_name(name: &str, suffix: Option<&str>) -> String {
+        suffix.map_or_else(|| name.to_string(), |suffix| format!("{name}@{suffix}"))
+    }
+
+    fn no_restart_process_config(
+        ready_marker: Option<&std::path::Path>,
+    ) -> devenv_processes::ProcessConfig {
+        devenv_processes::ProcessConfig {
+            ready: ready_marker.map(|marker| devenv_processes::ReadyConfig {
+                exec: Some(format!("test -f '{}'", marker.to_string_lossy())),
+                period: 1,
+                ..Default::default()
+            }),
+            restart: devenv_processes::RestartConfig {
+                on: devenv_processes::RestartPolicy::Never,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
     }
 
     #[tokio::test]
@@ -2224,19 +2248,12 @@ mod schedule_tests {
         .build()
         .await
         .unwrap();
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(true))
+            .await
+            .expect("external processes did not settle");
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            tasks.run_with_parent_activity(parent),
-        )
-        .await
-        .expect("external processes did not settle");
-        tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            tasks.process_manager.run_foreground(
+            tasks.process_manager().run_foreground(
                 tokio_util::sync::CancellationToken::new(),
                 None,
                 devenv_processes::OnIdle::Exit,
@@ -2249,21 +2266,1202 @@ mod schedule_tests {
         let status = tasks.get_completion_status().await;
         assert_eq!(status.succeeded, 1);
         assert_eq!(status.failed, 1);
-        tasks.process_manager.stop_all().await.unwrap();
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
-    /// Event-driven phase wait: wakes on `notify_finished` (the manager fires
-    /// it on every lifecycle and supervisor transition) and re-reads the
-    /// manager phase. The timeout is a failure bound, never a poll interval.
-    /// A missing manager entry keeps waiting until the failure bound: entries
-    /// must never vanish mid-lifecycle.
+    async fn run_cold_dependency_case(case: DependencyCase) {
+        let case_name = format!("{case:?}");
+        let files = tempfile::tempdir().unwrap();
+        let source_started = files.path().join("source-started");
+        let source_ready = files.path().join("source-ready");
+        let source_finished = files.path().join("source-finished");
+        let downstream_ran = files.path().join("downstream-ran");
+        let release_gate = named_pipe(files.path(), "release-gate");
+        let process_hold = named_pipe(files.path(), "process-hold");
+
+        let (source, downstream, source_name, downstream_name) = match case.dependency.task_type() {
+            TaskType::Process => {
+                let source_name = format!("{PROCESS_TASK_PREFIX}source");
+                let downstream_name = "test:downstream".to_string();
+                let source_body = match (
+                    case.dependency.kind(),
+                    case.dependency.allows_dependent(case.exit),
+                ) {
+                    (DependencyKind::Started, _) => format!(
+                        "touch '{started}'\nread _ < '{gate}'\n\
+                         touch '{finished}'\nexit {exit}",
+                        started = source_started.to_string_lossy(),
+                        gate = release_gate.to_string_lossy(),
+                        finished = source_finished.to_string_lossy(),
+                        exit = case.exit.code(),
+                    ),
+                    (DependencyKind::Ready, true) => format!(
+                        "touch '{started}'\ntouch '{ready}'\nread _ < '{gate}'\n\
+                         touch '{finished}'\nread _ < '{hold}'",
+                        started = source_started.to_string_lossy(),
+                        ready = source_ready.to_string_lossy(),
+                        gate = release_gate.to_string_lossy(),
+                        finished = source_finished.to_string_lossy(),
+                        hold = process_hold.to_string_lossy(),
+                    ),
+                    (DependencyKind::Ready, false) | (DependencyKind::Completed, _) => format!(
+                        "touch '{started}'\ntouch '{finished}'\nexit {exit}",
+                        started = source_started.to_string_lossy(),
+                        finished = source_finished.to_string_lossy(),
+                        exit = case.exit.code(),
+                    ),
+                    (DependencyKind::Succeeded, _) => unreachable!(),
+                };
+                let source_script = executable_script(files.path(), "process-source", &source_body);
+                let mut source =
+                    process_task_with_command("source", vec![], &source_script.to_string_lossy());
+                source.process = Some(no_restart_process_config(
+                    (case.dependency.kind() == DependencyKind::Ready)
+                        .then_some(source_ready.as_path()),
+                ));
+
+                let required = match case.dependency.kind() {
+                    DependencyKind::Started => None,
+                    DependencyKind::Ready => Some(&source_ready),
+                    DependencyKind::Completed => Some(&source_finished),
+                    DependencyKind::Succeeded => unreachable!(),
+                };
+                let validate = required.map_or_else(String::new, |required| {
+                    format!("test -f '{}' || exit 91\n", required.to_string_lossy())
+                });
+                let release = matches!(
+                    case.dependency.kind(),
+                    DependencyKind::Started | DependencyKind::Ready
+                )
+                .then(|| {
+                    format!(
+                        "printf 'released\\n' > '{}'\n",
+                        release_gate.to_string_lossy()
+                    )
+                })
+                .unwrap_or_default();
+                let downstream_script = executable_script(
+                    files.path(),
+                    "task-downstream",
+                    &format!(
+                        "{validate}touch '{ran}'\n{release}",
+                        ran = downstream_ran.to_string_lossy(),
+                    ),
+                );
+                let mut downstream = oneshot_task(&downstream_name, vec![]);
+                downstream.after = vec![dependency_name(&source_name, case.dependency.suffix())];
+                downstream.command = Some(downstream_script.to_string_lossy().into_owned());
+
+                (source, downstream, source_name, downstream_name)
+            }
+            TaskType::Oneshot => {
+                let source_name = "test:source".to_string();
+                let downstream_name = format!("{PROCESS_TASK_PREFIX}downstream");
+                let source_body = match case.dependency.kind() {
+                    DependencyKind::Started => format!(
+                        "touch '{started}'\nread _ < '{gate}'\n\
+                         touch '{finished}'\nexit {exit}",
+                        started = source_started.to_string_lossy(),
+                        gate = release_gate.to_string_lossy(),
+                        finished = source_finished.to_string_lossy(),
+                        exit = case.exit.code(),
+                    ),
+                    DependencyKind::Succeeded | DependencyKind::Completed => format!(
+                        "touch '{started}'\ntouch '{finished}'\nexit {exit}",
+                        started = source_started.to_string_lossy(),
+                        finished = source_finished.to_string_lossy(),
+                        exit = case.exit.code(),
+                    ),
+                    DependencyKind::Ready => unreachable!(),
+                };
+                let source_script = executable_script(files.path(), "oneshot-source", &source_body);
+                let mut source = oneshot_task(&source_name, vec![]);
+                source.command = Some(source_script.to_string_lossy().into_owned());
+
+                let required = match case.dependency.kind() {
+                    DependencyKind::Started => None,
+                    DependencyKind::Succeeded | DependencyKind::Completed => Some(&source_finished),
+                    DependencyKind::Ready => unreachable!(),
+                };
+                let validate = required.map_or_else(String::new, |required| {
+                    format!("test -f '{}' || exit 92\n", required.to_string_lossy())
+                });
+                let release = if case.dependency.kind() == DependencyKind::Started {
+                    format!(
+                        "printf 'released\\n' > '{}'\n",
+                        release_gate.to_string_lossy()
+                    )
+                } else {
+                    String::new()
+                };
+                let downstream_script = executable_script(
+                    files.path(),
+                    "process-downstream",
+                    &format!(
+                        "{validate}touch '{ran}'\n{release}read _ < '{hold}'",
+                        ran = downstream_ran.to_string_lossy(),
+                        hold = process_hold.to_string_lossy(),
+                    ),
+                );
+                let mut downstream = process_task_with_command(
+                    "downstream",
+                    vec![],
+                    &downstream_script.to_string_lossy(),
+                );
+                downstream.after = vec![dependency_name(&source_name, case.dependency.suffix())];
+                downstream.process = Some(no_restart_process_config(Some(&downstream_ran)));
+
+                (source, downstream, source_name, downstream_name)
+            }
+        };
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![source, downstream, long_process_task("unrelated", vec![])],
+            vec![downstream_name.clone()],
+            false,
+        )
+        .await;
+        let scheduled = task_names(&tasks).await;
+        assert_eq!(
+            scheduled.len(),
+            2,
+            "{}: root closure must contain exactly the heterogeneous edge",
+            case_name
+        );
+        assert!(
+            scheduled.contains(&source_name),
+            "{}: source missing",
+            case_name
+        );
+        assert!(
+            scheduled.contains(&downstream_name),
+            "{}: downstream missing",
+            case_name
+        );
+        assert!(
+            !scheduled.contains(&format!("{PROCESS_TASK_PREFIX}unrelated")),
+            "{}: unrelated process entered the root closure",
+            case_name
+        );
+
+        let run_result =
+            tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(true)).await;
+        if run_result.is_err() {
+            let source_status = tasks.graph[tasks.task_index_by_name[&source_name]]
+                .read()
+                .await
+                .status
+                .clone();
+            let downstream_status = tasks.graph[tasks.task_index_by_name[&downstream_name]]
+                .read()
+                .await
+                .status
+                .clone();
+            let source_phase = tasks.process_manager().get_phase("source").await;
+            let downstream_phase = tasks.process_manager().get_phase("downstream").await;
+            tasks.process_manager().stop_all().await.unwrap();
+            panic!(
+                "{}: heterogeneous run did not settle; markers=({},{},{},{}), \
+                 statuses=({source_status:?},{downstream_status:?}), \
+                 phases=({source_phase:?},{downstream_phase:?})",
+                case_name,
+                source_started.exists(),
+                source_ready.exists(),
+                source_finished.exists(),
+                downstream_ran.exists(),
+            );
+        }
+
+        let downstream_status = tasks.graph[tasks.task_index_by_name[&downstream_name]]
+            .read()
+            .await
+            .status
+            .clone();
+        let completion = tasks.get_completion_status().await;
+        let downstream_phase = if case.dependency.task_type() == TaskType::Oneshot {
+            tasks.process_manager().get_phase("downstream").await
+        } else {
+            None
+        };
+
+        tasks.process_manager().stop_all().await.unwrap();
+
+        assert_eq!(
+            downstream_ran.exists(),
+            case.dependency.allows_dependent(case.exit),
+            "{}: downstream execution disagreed with dependency semantics; \
+             status={downstream_status:?}, phase={downstream_phase:?}, completion={completion:?}",
+            case_name,
+        );
+        if case.dependency.allows_dependent(case.exit) {
+            if case.dependency.task_type() == TaskType::Oneshot {
+                assert_eq!(
+                    downstream_phase,
+                    Some(ProcessPhase::Ready),
+                    "{}: downstream process never became ready",
+                    case_name
+                );
+            } else {
+                assert!(
+                    matches!(
+                        downstream_status,
+                        TaskStatus::Completed(TaskCompleted::Success(_, _))
+                    ),
+                    "{}: expected downstream success, got {downstream_status:?}",
+                    case_name
+                );
+            }
+        } else {
+            assert!(
+                matches!(
+                    downstream_status,
+                    TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                ),
+                "{}: hard dependency failure did not propagate: {downstream_status:?}",
+                case_name
+            );
+            assert!(
+                completion.has_failures(),
+                "{}: failure was hidden",
+                case_name
+            );
+        }
+
+        if case.dependency.kind() == DependencyKind::Completed && case.exit.code() != 0 {
+            assert!(
+                !completion.has_failures(),
+                "{}: @completed must keep its source failure soft",
+                case_name
+            );
+        }
+        if case.dependency.task_type() == TaskType::Oneshot {
+            assert_eq!(
+                tasks.process_manager().get_phase("downstream").await,
+                Some(ProcessPhase::Stopped),
+                "{}: downstream process was not cleaned up",
+                case_name
+            );
+        } else {
+            let phase = tasks.process_manager().get_phase("source").await;
+            assert!(
+                matches!(phase, Some(ProcessPhase::Stopped | ProcessPhase::Exited)),
+                "{}: source process did not reach a terminal phase: {phase:?}",
+                case_name
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn cold_start_covers_every_process_dependency_condition() {
+        for &dependency in PROCESS_DEPENDENCIES {
+            for &exit in TEST_EXITS {
+                run_cold_dependency_case(DependencyCase { dependency, exit }).await;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn cold_start_covers_every_oneshot_dependency_condition() {
+        for &dependency in ONESHOT_DEPENDENCIES {
+            for &exit in TEST_EXITS {
+                run_cold_dependency_case(DependencyCase { dependency, exit }).await;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn completed_process_that_gives_up_is_a_soft_failure() {
+        let files = tempfile::tempdir().unwrap();
+        let downstream_ran = files.path().join("downstream-ran");
+        let source_script = executable_script(files.path(), "source", "exit 7");
+        let downstream_script = executable_script(
+            files.path(),
+            "downstream",
+            &format!("touch '{}'", downstream_ran.to_string_lossy()),
+        );
+
+        let mut source =
+            process_task_with_command("source", vec![], &source_script.to_string_lossy());
+        source.process = Some(devenv_processes::ProcessConfig {
+            restart: devenv_processes::RestartConfig {
+                on: devenv_processes::RestartPolicy::OnFailure,
+                max: Some(0),
+                window: None,
+            },
+            ..Default::default()
+        });
+        let downstream_name = "test:downstream";
+        let mut downstream = oneshot_task(downstream_name, vec![]);
+        downstream.after = vec![format!("{PROCESS_TASK_PREFIX}source@completed")];
+        downstream.command = Some(downstream_script.to_string_lossy().into_owned());
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![source, downstream],
+            vec![downstream_name.to_string()],
+            false,
+        )
+        .await;
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(true))
+            .await
+            .expect("gave-up @completed dependency did not settle");
+
+        assert!(downstream_ran.exists());
+        assert_eq!(
+            tasks.process_manager().get_phase("source").await,
+            Some(ProcessPhase::GaveUp)
+        );
+        let completion = tasks.get_completion_status().await;
+        assert_eq!(completion.failed, 1);
+        assert_eq!(completion.soft_failed, 1);
+        assert!(!completion.has_failures());
+        tasks.process_manager().stop_all().await.unwrap();
+    }
+
+    async fn run_dynamic_oneshot_dependency_case(case: DependencyCase) {
+        let case_name = format!("{case:?}");
+        assert_eq!(case.dependency.task_type(), TaskType::Oneshot);
+        let files = tempfile::tempdir().unwrap();
+        let source_started = files.path().join("source-started");
+        let source_finished = files.path().join("source-finished");
+        let downstream_ran = files.path().join("downstream-ran");
+        let source_gate = named_pipe(files.path(), "source-gate");
+        let alpha_hold = named_pipe(files.path(), "alpha-hold");
+        let downstream_hold = named_pipe(files.path(), "downstream-hold");
+
+        let alpha_script = executable_script(
+            files.path(),
+            "alpha",
+            &format!("read _ < '{}'", alpha_hold.to_string_lossy()),
+        );
+        let alpha = process_task_with_command("alpha", vec![], &alpha_script.to_string_lossy());
+
+        let source_name = "test:source";
+        let source_body = match case.dependency.kind() {
+            DependencyKind::Started => format!(
+                "touch '{started}'\nread _ < '{gate}'\n\
+                 touch '{finished}'\nexit {exit}",
+                started = source_started.to_string_lossy(),
+                gate = source_gate.to_string_lossy(),
+                finished = source_finished.to_string_lossy(),
+                exit = case.exit.code(),
+            ),
+            DependencyKind::Succeeded | DependencyKind::Completed => format!(
+                "touch '{started}'\ntouch '{finished}'\nexit {exit}",
+                started = source_started.to_string_lossy(),
+                finished = source_finished.to_string_lossy(),
+                exit = case.exit.code(),
+            ),
+            DependencyKind::Ready => unreachable!(),
+        };
+        let source_script = executable_script(files.path(), "source", &source_body);
+        let mut source = oneshot_task(source_name, vec![]);
+        source.command = Some(source_script.to_string_lossy().into_owned());
+
+        let required = match case.dependency.kind() {
+            DependencyKind::Started => None,
+            DependencyKind::Succeeded | DependencyKind::Completed => Some(&source_finished),
+            DependencyKind::Ready => unreachable!(),
+        };
+        let validate = required.map_or_else(String::new, |required| {
+            format!("test -f '{}' || exit 92\n", required.to_string_lossy())
+        });
+        let release = if case.dependency.kind() == DependencyKind::Started {
+            format!(
+                "printf 'released\\n' > '{}'\n",
+                source_gate.to_string_lossy()
+            )
+        } else {
+            String::new()
+        };
+        let downstream_script = executable_script(
+            files.path(),
+            "downstream",
+            &format!(
+                "{validate}touch '{ran}'\n{release}read _ < '{hold}'",
+                ran = downstream_ran.to_string_lossy(),
+                hold = downstream_hold.to_string_lossy(),
+            ),
+        );
+        let mut downstream =
+            process_task_with_command("downstream", vec![], &downstream_script.to_string_lossy());
+        downstream.after = vec![dependency_name(source_name, case.dependency.suffix())];
+        downstream.process = Some(no_restart_process_config(Some(&downstream_ran)));
+
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![alpha, source, downstream],
+            vec![format!("{PROCESS_TASK_PREFIX}alpha")],
+            RunMode::Before,
+            false,
+        )
+        .await;
+        let tasks = Arc::new(tasks);
+        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
+        tasks
+            .process_manager()
+            .set_scheduler(Arc::downgrade(&scheduler));
+
+        tasks.run(true).await;
+        wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
+        assert!(
+            !tasks
+                .tasks_order
+                .contains(&tasks.task_index_by_name[source_name]),
+            "{}: source must begin outside the cold schedule",
+            case_name
+        );
+
+        let outcome = tasks.start_with_deps(["downstream"]).await;
+        assert_eq!(
+            outcome.scheduled,
+            ["downstream"],
+            "{}: dynamic root was not scheduled",
+            case_name
+        );
+
+        wait_task_completed(&tasks, source_name).await;
+        if case.dependency.allows_dependent(case.exit) {
+            wait_phase(&tasks, "downstream", ProcessPhase::Ready).await;
+        } else {
+            wait_task_completed(&tasks, &format!("{PROCESS_TASK_PREFIX}downstream")).await;
+        }
+
+        let source_status = tasks.graph[tasks.task_index_by_name[source_name]]
+            .read()
+            .await
+            .status
+            .clone();
+        let downstream_status = tasks.graph
+            [tasks.task_index_by_name[&format!("{PROCESS_TASK_PREFIX}downstream")]]
+            .read()
+            .await
+            .status
+            .clone();
+        tasks.process_manager().stop_all().await.unwrap();
+
+        assert_eq!(
+            downstream_ran.exists(),
+            case.dependency.allows_dependent(case.exit),
+            "{}: dynamic downstream disagreed with dependency semantics",
+            case_name
+        );
+        if case.exit.code() == 0 {
+            assert!(matches!(
+                source_status,
+                TaskStatus::Completed(TaskCompleted::Success(_, _))
+            ));
+        } else {
+            assert!(matches!(
+                source_status,
+                TaskStatus::Completed(TaskCompleted::Failed(_, _))
+            ));
+        }
+        if case.dependency.allows_dependent(case.exit) {
+            assert_eq!(
+                tasks.process_manager().get_phase("downstream").await,
+                Some(ProcessPhase::Stopped),
+                "{}: dynamic downstream was not cleaned up",
+                case_name
+            );
+        } else {
+            assert!(
+                matches!(
+                    downstream_status,
+                    TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                ),
+                "{}: dynamic dependency failure did not propagate: {downstream_status:?}",
+                case_name
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn dynamic_start_covers_every_oneshot_dependency_condition() {
+        for &dependency in ONESHOT_DEPENDENCIES {
+            for &exit in TEST_EXITS {
+                run_dynamic_oneshot_dependency_case(DependencyCase { dependency, exit }).await;
+            }
+        }
+    }
+
+    async fn run_dynamic_process_dependency_case(case: DependencyCase) {
+        let case_name = format!("{case:?}");
+        assert_eq!(case.dependency.task_type(), TaskType::Process);
+        let files = tempfile::tempdir().unwrap();
+        let source_started = files.path().join("source-started");
+        let source_ready = files.path().join("source-ready");
+        let source_finished = files.path().join("source-finished");
+        let bridge_ran = files.path().join("bridge-ran");
+        let downstream_ran = files.path().join("downstream-ran");
+        let source_gate = named_pipe(files.path(), "source-gate");
+        let alpha_hold = named_pipe(files.path(), "alpha-hold");
+        let source_hold = named_pipe(files.path(), "source-hold");
+        let downstream_hold = named_pipe(files.path(), "downstream-hold");
+
+        let alpha_script = executable_script(
+            files.path(),
+            "alpha",
+            &format!("read _ < '{}'", alpha_hold.to_string_lossy()),
+        );
+        let alpha = process_task_with_command("alpha", vec![], &alpha_script.to_string_lossy());
+
+        let source_body = match (
+            case.dependency.kind(),
+            case.dependency.allows_dependent(case.exit),
+        ) {
+            (DependencyKind::Started, _) => format!(
+                "touch '{started}'\nread _ < '{gate}'\n\
+                 touch '{finished}'\nexit {exit}",
+                started = source_started.to_string_lossy(),
+                gate = source_gate.to_string_lossy(),
+                finished = source_finished.to_string_lossy(),
+                exit = case.exit.code(),
+            ),
+            (DependencyKind::Ready, true) => format!(
+                "touch '{started}'\ntouch '{ready}'\nread _ < '{gate}'\n\
+                 touch '{finished}'\nread _ < '{hold}'",
+                started = source_started.to_string_lossy(),
+                ready = source_ready.to_string_lossy(),
+                gate = source_gate.to_string_lossy(),
+                finished = source_finished.to_string_lossy(),
+                hold = source_hold.to_string_lossy(),
+            ),
+            (DependencyKind::Ready, false) | (DependencyKind::Completed, _) => format!(
+                "touch '{started}'\ntouch '{finished}'\nexit {exit}",
+                started = source_started.to_string_lossy(),
+                finished = source_finished.to_string_lossy(),
+                exit = case.exit.code(),
+            ),
+            (DependencyKind::Succeeded, _) => unreachable!(),
+        };
+        let source_script = executable_script(files.path(), "source", &source_body);
+        let mut source =
+            process_task_with_command("source", vec![], &source_script.to_string_lossy());
+        source.process = Some(no_restart_process_config(
+            (case.dependency.kind() == DependencyKind::Ready).then_some(source_ready.as_path()),
+        ));
+
+        let source_stays_not_started =
+            case.dependency.kind() == DependencyKind::Completed && case.exit.code() == 0;
+        let source_name = format!("{PROCESS_TASK_PREFIX}source");
+        let bridge_name = "test:bridge";
+        let required = match case.dependency.kind() {
+            DependencyKind::Started => None,
+            DependencyKind::Ready => Some(&source_ready),
+            DependencyKind::Completed if source_stays_not_started => None,
+            DependencyKind::Completed => Some(&source_finished),
+            DependencyKind::Succeeded => unreachable!(),
+        };
+        let validate = required.map_or_else(String::new, |required| {
+            format!("test -f '{}' || exit 91\n", required.to_string_lossy())
+        });
+        let release = matches!(
+            case.dependency.kind(),
+            DependencyKind::Started | DependencyKind::Ready
+        )
+        .then(|| {
+            format!(
+                "printf 'released\\n' > '{}'\n",
+                source_gate.to_string_lossy()
+            )
+        })
+        .unwrap_or_default();
+        let bridge_script = executable_script(
+            files.path(),
+            "bridge",
+            &format!(
+                "{validate}touch '{bridge}'\n{release}",
+                bridge = bridge_ran.to_string_lossy(),
+            ),
+        );
+        let mut bridge = oneshot_task(bridge_name, vec![]);
+        bridge.after = vec![dependency_name(&source_name, case.dependency.suffix())];
+        bridge.command = Some(bridge_script.to_string_lossy().into_owned());
+
+        let downstream_script = executable_script(
+            files.path(),
+            "downstream",
+            &format!(
+                "test -f '{bridge}' || exit 92\ntouch '{ran}'\nread _ < '{hold}'",
+                bridge = bridge_ran.to_string_lossy(),
+                ran = downstream_ran.to_string_lossy(),
+                hold = downstream_hold.to_string_lossy(),
+            ),
+        );
+        let downstream_name = format!("{PROCESS_TASK_PREFIX}downstream");
+        let mut downstream =
+            process_task_with_command("downstream", vec![], &downstream_script.to_string_lossy());
+        downstream.after = vec![format!("{bridge_name}@succeeded")];
+        downstream.process = Some(no_restart_process_config(Some(&downstream_ran)));
+
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![alpha, source, bridge, downstream],
+            vec![format!("{PROCESS_TASK_PREFIX}alpha")],
+            RunMode::Before,
+            false,
+        )
+        .await;
+        let tasks = Arc::new(tasks);
+        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
+        tasks
+            .process_manager()
+            .set_scheduler(Arc::downgrade(&scheduler));
+
+        tasks.run(true).await;
+        wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
+
+        if case.dependency.kind() == DependencyKind::Completed && !source_stays_not_started {
+            let outcome = tasks.start_with_deps(["source"]).await;
+            assert_eq!(outcome.scheduled, ["source"]);
+            wait_phase(&tasks, "source", ProcessPhase::Exited).await;
+        }
+
+        let outcome = tasks.start_with_deps(["downstream"]).await;
+        assert_eq!(
+            outcome.scheduled,
+            ["downstream"],
+            "{}: dynamic root was not scheduled",
+            case_name
+        );
+
+        if case.dependency.kind() != DependencyKind::Completed {
+            assert_eq!(
+                tasks.process_manager().get_phase("downstream").await,
+                Some(ProcessPhase::Waiting),
+                "{}: downstream must wait while its process predecessor is not started",
+                case_name
+            );
+            let outcome = tasks.start_with_deps(["source"]).await;
+            assert_eq!(outcome.scheduled, ["source"]);
+        }
+
+        wait_task_completed(&tasks, bridge_name).await;
+        if case.dependency.allows_dependent(case.exit) {
+            wait_phase(&tasks, "downstream", ProcessPhase::Ready).await;
+        } else {
+            wait_task_completed(&tasks, &downstream_name).await;
+        }
+
+        let bridge_status = tasks.graph[tasks.task_index_by_name[bridge_name]]
+            .read()
+            .await
+            .status
+            .clone();
+        let downstream_status = tasks.graph[tasks.task_index_by_name[&downstream_name]]
+            .read()
+            .await
+            .status
+            .clone();
+        let source_phase = tasks.process_manager().get_phase("source").await;
+        tasks.process_manager().stop_all().await.unwrap();
+
+        assert_eq!(
+            downstream_ran.exists(),
+            case.dependency.allows_dependent(case.exit),
+            "{}: dynamic mixed chain disagreed with dependency semantics",
+            case_name
+        );
+        if case.dependency.allows_dependent(case.exit) {
+            assert!(
+                matches!(
+                    bridge_status,
+                    TaskStatus::Completed(TaskCompleted::Success(_, _))
+                ),
+                "{}: bridge did not succeed: {bridge_status:?}",
+                case_name
+            );
+            assert_eq!(
+                tasks.process_manager().get_phase("downstream").await,
+                Some(ProcessPhase::Stopped),
+                "{}: downstream was not cleaned up",
+                case_name
+            );
+            if source_stays_not_started {
+                assert_eq!(
+                    source_phase,
+                    Some(ProcessPhase::NotStarted),
+                    "{}: @completed should not force-start its process dependency",
+                    case_name
+                );
+            }
+        } else {
+            assert!(matches!(
+                bridge_status,
+                TaskStatus::Completed(TaskCompleted::DependencyFailed)
+            ));
+            assert!(matches!(
+                downstream_status,
+                TaskStatus::Completed(TaskCompleted::DependencyFailed)
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn dynamic_start_covers_every_process_dependency_condition() {
+        for &dependency in PROCESS_DEPENDENCIES {
+            for &exit in TEST_EXITS {
+                run_dynamic_process_dependency_case(DependencyCase { dependency, exit }).await;
+            }
+        }
+    }
+
+    async fn run_heterogeneous_diamond(dynamic: bool) {
+        let files = tempfile::tempdir().unwrap();
+        let source_ready = files.path().join("source-ready");
+        let left_runs = files.path().join("left-runs");
+        let right_runs = files.path().join("right-runs");
+        let backend_ran = files.path().join("backend-ran");
+        let unrelated_ran = files.path().join("unrelated-ran");
+        let source_hold = named_pipe(files.path(), "source-hold");
+        let backend_hold = named_pipe(files.path(), "backend-hold");
+        let alpha_hold = named_pipe(files.path(), "alpha-hold");
+
+        let source_script = executable_script(
+            files.path(),
+            "source",
+            &format!(
+                "touch '{ready}'\nread _ < '{hold}'",
+                ready = source_ready.to_string_lossy(),
+                hold = source_hold.to_string_lossy(),
+            ),
+        );
+        let mut source =
+            process_task_with_command("source", vec![], &source_script.to_string_lossy());
+        source.process = Some(no_restart_process_config(Some(&source_ready)));
+
+        let mut left = oneshot_task("test:left", vec![]);
+        left.after = vec![format!("{PROCESS_TASK_PREFIX}source@ready")];
+        left.command = Some(
+            executable_script(
+                files.path(),
+                "left",
+                &format!("printf 'left\\n' >> '{}'", left_runs.to_string_lossy()),
+            )
+            .to_string_lossy()
+            .into_owned(),
+        );
+        let mut right = oneshot_task("test:right", vec![]);
+        right.after = vec![format!("{PROCESS_TASK_PREFIX}source")];
+        right.command = Some(
+            executable_script(
+                files.path(),
+                "right",
+                &format!("printf 'right\\n' >> '{}'", right_runs.to_string_lossy()),
+            )
+            .to_string_lossy()
+            .into_owned(),
+        );
+
+        let backend_script = executable_script(
+            files.path(),
+            "backend",
+            &format!(
+                "test -f '{left}' || exit 91\n\
+                 test -f '{right}' || exit 92\n\
+                 touch '{ran}'\nread _ < '{hold}'",
+                left = left_runs.to_string_lossy(),
+                right = right_runs.to_string_lossy(),
+                ran = backend_ran.to_string_lossy(),
+                hold = backend_hold.to_string_lossy(),
+            ),
+        );
+        let mut backend =
+            process_task_with_command("backend", vec![], &backend_script.to_string_lossy());
+        backend.after = vec![
+            "test:left@succeeded".to_string(),
+            "test:right@succeeded".to_string(),
+        ];
+        backend.process = Some(no_restart_process_config(Some(&backend_ran)));
+
+        let unrelated_script = executable_script(
+            files.path(),
+            "unrelated",
+            &format!("touch '{}'", unrelated_ran.to_string_lossy()),
+        );
+        let unrelated =
+            process_task_with_command("unrelated", vec![], &unrelated_script.to_string_lossy());
+
+        let mut configs = vec![source, left, right, backend, unrelated];
+        if dynamic {
+            let alpha_script = executable_script(
+                files.path(),
+                "alpha",
+                &format!("read _ < '{}'", alpha_hold.to_string_lossy()),
+            );
+            configs.push(process_task_with_command(
+                "alpha",
+                vec![],
+                &alpha_script.to_string_lossy(),
+            ));
+        }
+        let root = if dynamic { "alpha" } else { "backend" };
+        let run_mode = if dynamic {
+            RunMode::Before
+        } else {
+            RunMode::All
+        };
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            configs,
+            vec![format!("{PROCESS_TASK_PREFIX}{root}")],
+            run_mode,
+            false,
+        )
+        .await;
+        let tasks = Arc::new(tasks);
+        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
+        tasks
+            .process_manager()
+            .set_scheduler(Arc::downgrade(&scheduler));
+
+        if !dynamic {
+            let scheduled = task_names(&tasks).await;
+            assert_eq!(scheduled.len(), 4);
+            assert!(!scheduled.contains(&format!("{PROCESS_TASK_PREFIX}unrelated")));
+        }
+
+        tasks.run(true).await;
+        if dynamic {
+            wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
+            let outcome = tasks.start_with_deps(["backend"]).await;
+            assert_eq!(outcome.scheduled, ["backend"]);
+            assert_eq!(
+                tasks.process_manager().get_phase("backend").await,
+                Some(ProcessPhase::Waiting)
+            );
+            let outcome = tasks.start_with_deps(["source"]).await;
+            assert_eq!(outcome.scheduled, ["source"]);
+        }
+        wait_phase(&tasks, "backend", ProcessPhase::Ready).await;
+
+        tasks.process_manager().stop_all().await.unwrap();
+        assert_eq!(std::fs::read_to_string(&left_runs).unwrap(), "left\n");
+        assert_eq!(std::fs::read_to_string(&right_runs).unwrap(), "right\n");
+        assert!(backend_ran.exists());
+        assert!(!unrelated_ran.exists());
+        for process in ["source", "backend"] {
+            assert_eq!(
+                tasks.process_manager().get_phase(process).await,
+                Some(ProcessPhase::Stopped),
+                "{process} was not cleaned up"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn heterogeneous_diamond_is_deduplicated_on_cold_and_dynamic_start() {
+        run_heterogeneous_diamond(false).await;
+        run_heterogeneous_diamond(true).await;
+    }
+
+    #[tokio::test]
+    async fn shutdown_cancels_cold_heterogeneous_closure() {
+        let files = tempfile::tempdir().unwrap();
+        let source_hold = named_pipe(files.path(), "source-hold");
+        let bridge_hold = named_pipe(files.path(), "bridge-hold");
+        let bridge_started = named_pipe(files.path(), "bridge-started");
+        let backend_hold = named_pipe(files.path(), "backend-hold");
+        let source_ready = files.path().join("source-ready");
+        let source_script = executable_script(
+            files.path(),
+            "source",
+            &format!(
+                "touch '{ready}'\nread _ < '{hold}'",
+                ready = source_ready.to_string_lossy(),
+                hold = source_hold.to_string_lossy(),
+            ),
+        );
+        let mut source =
+            process_task_with_command("source", vec![], &source_script.to_string_lossy());
+        source.process = Some(no_restart_process_config(Some(&source_ready)));
+
+        let mut bridge = oneshot_task("test:bridge", vec![]);
+        bridge.after = vec![format!("{PROCESS_TASK_PREFIX}source@ready")];
+        bridge.command = Some(
+            executable_script(
+                files.path(),
+                "bridge",
+                &format!(
+                    "printf x > '{started}'\nread _ < '{hold}'",
+                    started = bridge_started.to_string_lossy(),
+                    hold = bridge_hold.to_string_lossy(),
+                ),
+            )
+            .to_string_lossy()
+            .into_owned(),
+        );
+        let backend_script = executable_script(
+            files.path(),
+            "backend",
+            &format!("read _ < '{}'", backend_hold.to_string_lossy()),
+        );
+        let mut backend =
+            process_task_with_command("backend", vec![], &backend_script.to_string_lossy());
+        backend.after = vec!["test:bridge@succeeded".to_string()];
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![source, bridge, backend],
+            vec![format!("{PROCESS_TASK_PREFIX}backend")],
+            false,
+        )
+        .await;
+        let tasks = Arc::new(tasks);
+        let bridge_listener = listen_for_pipe_signal(bridge_started);
+        let running = Arc::clone(&tasks);
+        let run = tokio::spawn(async move { running.run(true).await });
+
+        wait_for_pipe_signal(bridge_listener, "bridge command to start").await;
+        assert_eq!(
+            tasks.process_manager().get_phase("source").await,
+            Some(ProcessPhase::Ready)
+        );
+        assert_eq!(
+            tasks.process_manager().get_phase("backend").await,
+            Some(ProcessPhase::Waiting)
+        );
+        tasks.shutdown.shutdown();
+        tokio::time::timeout(std::time::Duration::from_secs(10), run)
+            .await
+            .expect("cancelled heterogeneous run did not settle")
+            .expect("heterogeneous run task panicked");
+
+        for name in [
+            format!("{PROCESS_TASK_PREFIX}source"),
+            "test:bridge".to_string(),
+            format!("{PROCESS_TASK_PREFIX}backend"),
+        ] {
+            let status = tasks.graph[tasks.task_index_by_name[&name]]
+                .read()
+                .await
+                .status
+                .clone();
+            assert!(
+                matches!(status, TaskStatus::Completed(TaskCompleted::Cancelled(_))),
+                "{name} did not record cancellation: {status:?}"
+            );
+        }
+        tasks.process_manager().stop_all().await.unwrap();
+        for process in ["source", "backend"] {
+            assert_eq!(
+                tasks.process_manager().get_phase(process).await,
+                Some(ProcessPhase::Stopped)
+            );
+        }
+        assert!(tasks.process_manager().wait_settled().await);
+    }
+
+    #[tokio::test]
+    async fn cold_start_runs_process_oneshot_process_chain_in_order() {
+        let scripts = tempfile::tempdir().unwrap();
+        let source_ready = scripts.path().join("source-ready");
+        let bridge_ran = scripts.path().join("bridge-ran");
+        let backend_ran = scripts.path().join("backend-ran");
+        let ordering_violation = scripts.path().join("ordering-violation");
+        let source_hold = named_pipe(scripts.path(), "source-hold");
+        let backend_hold = named_pipe(scripts.path(), "backend-hold");
+
+        let source_script = executable_script(
+            scripts.path(),
+            "source",
+            &format!(
+                "touch '{ready}'\nread _ < '{hold}'",
+                ready = source_ready.to_string_lossy(),
+                hold = source_hold.to_string_lossy(),
+            ),
+        );
+        let bridge_script = executable_script(
+            scripts.path(),
+            "bridge",
+            &format!(
+                "test -f '{}' || {{ touch '{}'; exit 21; }}\ntouch '{}'",
+                source_ready.to_string_lossy(),
+                ordering_violation.to_string_lossy(),
+                bridge_ran.to_string_lossy()
+            ),
+        );
+        let backend_script = executable_script(
+            scripts.path(),
+            "backend",
+            &format!(
+                "test -f '{}' || {{ touch '{}'; exit 22; }}\n\
+                 touch '{}'\nread _ < '{}'",
+                bridge_ran.to_string_lossy(),
+                ordering_violation.to_string_lossy(),
+                backend_ran.to_string_lossy(),
+                backend_hold.to_string_lossy(),
+            ),
+        );
+
+        let mut source =
+            process_task_with_command("source", vec![], &source_script.to_string_lossy());
+        source.process = Some(devenv_processes::ProcessConfig {
+            ready: Some(devenv_processes::ReadyConfig {
+                exec: Some(format!("test -f '{}'", source_ready.to_string_lossy())),
+                period: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        let bridge_name = "devenv:tasks:bridge";
+        let mut bridge = oneshot_task(bridge_name, vec![]);
+        bridge.after = vec![format!("{PROCESS_TASK_PREFIX}source@ready")];
+        bridge.command = Some(bridge_script.to_string_lossy().into_owned());
+
+        let mut backend =
+            process_task_with_command("backend", vec![], &backend_script.to_string_lossy());
+        backend.after = vec![format!("{bridge_name}@succeeded")];
+        backend.process = Some(devenv_processes::ProcessConfig {
+            ready: Some(devenv_processes::ReadyConfig {
+                exec: Some(format!("test -f '{}'", backend_ran.to_string_lossy())),
+                period: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![
+                source,
+                bridge,
+                backend,
+                long_process_task("unrelated", vec![]),
+            ],
+            vec![format!("{PROCESS_TASK_PREFIX}backend")],
+            false,
+        )
+        .await;
+
+        let scheduled = task_names(&tasks).await;
+        assert_eq!(scheduled.len(), 3);
+        assert!(scheduled.contains(&format!("{PROCESS_TASK_PREFIX}source")));
+        assert!(scheduled.contains(&bridge_name.to_string()));
+        assert!(scheduled.contains(&format!("{PROCESS_TASK_PREFIX}backend")));
+        assert!(!scheduled.contains(&format!("{PROCESS_TASK_PREFIX}unrelated")));
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(true))
+            .await
+            .expect("mixed process/task chain did not settle");
+
+        assert!(source_ready.exists(), "source never became ready");
+        assert!(bridge_ran.exists(), "bridge task never ran");
+        assert!(backend_ran.exists(), "backend process never launched");
+        assert!(
+            !ordering_violation.exists(),
+            "a downstream node ran before its dependency"
+        );
+        assert_eq!(
+            tasks.process_manager().get_phase("source").await,
+            Some(ProcessPhase::Ready)
+        );
+        assert_eq!(
+            tasks.process_manager().get_phase("backend").await,
+            Some(ProcessPhase::Ready)
+        );
+        assert!(matches!(
+            &tasks.graph[tasks.task_index_by_name[bridge_name]]
+                .read()
+                .await
+                .status,
+            TaskStatus::Completed(TaskCompleted::Success(_, _))
+        ));
+
+        tasks.process_manager().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cold_start_blocks_process_after_failing_oneshot() {
+        let scripts = tempfile::tempdir().unwrap();
+        let bridge_ran = scripts.path().join("failing-bridge-ran");
+        let backend_ran = scripts.path().join("blocked-backend-ran");
+        let source_hold = named_pipe(scripts.path(), "source-hold");
+        let backend_hold = named_pipe(scripts.path(), "backend-hold");
+
+        let source_script = executable_script(
+            scripts.path(),
+            "failure-source",
+            &format!("read _ < '{}'", source_hold.to_string_lossy()),
+        );
+        let bridge_script = executable_script(
+            scripts.path(),
+            "failing-bridge",
+            &format!("touch '{}'\nexit 23", bridge_ran.to_string_lossy()),
+        );
+        let backend_script = executable_script(
+            scripts.path(),
+            "blocked-backend",
+            &format!(
+                "touch '{}'\nread _ < '{}'",
+                backend_ran.to_string_lossy(),
+                backend_hold.to_string_lossy(),
+            ),
+        );
+
+        let mut source =
+            process_task_with_command("failure-source", vec![], &source_script.to_string_lossy());
+        source.process = Some(devenv_processes::ProcessConfig {
+            ready: Some(devenv_processes::ReadyConfig {
+                exec: Some("true".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        let bridge_name = "devenv:tasks:failing-bridge";
+        let mut bridge = oneshot_task(bridge_name, vec![]);
+        bridge.after = vec![format!("{PROCESS_TASK_PREFIX}failure-source@ready")];
+        bridge.command = Some(bridge_script.to_string_lossy().into_owned());
+
+        let mut backend =
+            process_task_with_command("blocked-backend", vec![], &backend_script.to_string_lossy());
+        backend.after = vec![format!("{bridge_name}@succeeded")];
+
+        let backend_name = format!("{PROCESS_TASK_PREFIX}blocked-backend");
+        let (tasks, _tmp) = build_test_tasks(
+            vec![source, bridge, backend],
+            vec![backend_name.clone()],
+            false,
+        )
+        .await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(true))
+            .await
+            .expect("failing mixed process/task chain did not settle");
+
+        assert!(bridge_ran.exists(), "failing bridge task never ran");
+        assert!(
+            !backend_ran.exists(),
+            "backend launched despite a failed task dependency"
+        );
+        assert!(matches!(
+            &tasks.graph[tasks.task_index_by_name[bridge_name]]
+                .read()
+                .await
+                .status,
+            TaskStatus::Completed(TaskCompleted::Failed(_, _))
+        ));
+        assert!(matches!(
+            &tasks.graph[tasks.task_index_by_name[&backend_name]]
+                .read()
+                .await
+                .status,
+            TaskStatus::Completed(TaskCompleted::DependencyFailed)
+        ));
+        assert_eq!(
+            tasks.process_manager().get_phase("blocked-backend").await,
+            Some(ProcessPhase::Stopped)
+        );
+        assert!(tasks.get_completion_status().await.has_failures());
+
+        tasks.process_manager().stop_all().await.unwrap();
+    }
+
+    /// Wait for a lifecycle notification that publishes the requested phase.
     async fn wait_phase(tasks: &Tasks, name: &str, want: ProcessPhase) {
         tokio::time::timeout(std::time::Duration::from_secs(60), async {
             loop {
                 let notified = tasks.notify_finished.notified();
                 tokio::pin!(notified);
                 notified.as_mut().enable();
-                if tasks.process_manager.get_phase(name).await == Some(want) {
+                if tasks.process_manager().get_phase(name).await == Some(want) {
                     return;
                 }
                 notified.await;
@@ -2334,8 +3532,6 @@ mod schedule_tests {
 
     #[tokio::test]
     async fn start_with_deps_relaunches_stopped_process() {
-        // A single up-enabled long-running process, started by the cold run,
-        // then stopped, then brought back by start_with_deps (the attach path).
         let (tasks, _tmp) = build_test_tasks(
             vec![long_process_task("web", vec![])],
             vec![format!("{PROCESS_TASK_PREFIX}web")],
@@ -2343,131 +3539,103 @@ mod schedule_tests {
         )
         .await;
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
 
-        // The process should be running after the cold start.
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        tasks.process_manager.stop_and_keep("web").await.unwrap();
+        tasks.process_manager().stop_and_keep("web").await.unwrap();
         assert_eq!(
-            tasks.process_manager.get_phase("web").await,
+            tasks.process_manager().get_phase("web").await,
             Some(ProcessPhase::Stopped)
         );
 
-        // Attach path: bring the stopped process back up.
-        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        let outcome = tasks.start_with_deps(["web"]).await;
         assert_eq!(outcome.scheduled, vec!["web".to_string()]);
-        // start_with_deps must relaunch the stopped process.
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
     async fn start_with_deps_relaunches_exited_process() {
-        // Regression: a process that exits on its own stays `Active` with phase
-        // `Exited` (only an explicit stop produces `Stopped`), and the manager
-        // refuses to re-arm an `Active` entry. The attach path must normalize it
-        // back to a launchable state, rather than no-op'ing the re-arm and then
-        // bailing in `launch_waiting`.
-        //
-        // The process exits cleanly on its first run but sleeps on the second,
-        // so reaching `Ready` after `start_with_deps` proves it was actually
-        // relaunched (not merely left in its original `Exited` state).
         let marker_dir = tempfile::tempdir().unwrap();
         let marker = marker_dir.path().join("ran");
+        let relaunched = marker_dir.path().join("relaunched");
+        let hold = named_pipe(marker_dir.path(), "hold");
         let exec = format!(
-            "if [ -e '{m}' ]; then sleep 100; else : > '{m}'; fi",
-            m = marker.display()
+            "if [ -e '{marker}' ]; then touch '{relaunched}'; read _ < '{hold}'; \
+             else touch '{marker}'; fi",
+            marker = marker.display(),
+            relaunched = relaunched.display(),
+            hold = hold.display(),
         );
         let task = TaskConfig {
             name: format!("{PROCESS_TASK_PREFIX}web"),
             r#type: TaskType::Process,
             command: Some(exec),
+            process: Some(no_restart_process_config(Some(&relaunched))),
             ..Default::default()
         };
 
         let (tasks, _tmp) =
             build_test_tasks(vec![task], vec![format!("{PROCESS_TASK_PREFIX}web")], false).await;
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
 
-        // First run exits cleanly -> entry stays Active with phase Exited.
         wait_phase(&tasks, "web", ProcessPhase::Exited).await;
 
-        // Attach path: relaunch the self-exited process. The second run sleeps,
-        // so reaching Ready proves start_with_deps actually relaunched it.
-        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        let outcome = tasks.start_with_deps(["web"]).await;
         assert_eq!(outcome.scheduled, vec!["web".to_string()]);
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
     async fn start_with_deps_relaunches_gave_up_process() {
         let marker_dir = tempfile::tempdir().unwrap();
         let marker = marker_dir.path().join("runs");
+        let ready = marker_dir.path().join("ready");
+        let hold = named_pipe(marker_dir.path(), "hold");
         let exec = format!(
             "count=$(cat '{m}' 2>/dev/null || echo 0); \
              count=$((count + 1)); echo \"$count\" > '{m}'; \
-             if [ \"$count\" -le 2 ]; then exit 1; fi; sleep 100",
-            m = marker.display()
+             if [ \"$count\" -le 2 ]; then exit 1; fi; \
+             touch '{ready}'; read _ < '{hold}'",
+            m = marker.display(),
+            ready = ready.display(),
+            hold = hold.display(),
         );
+        let mut process = no_restart_process_config(Some(&ready));
+        process.restart = devenv_processes::config::RestartConfig {
+            on: devenv_processes::config::RestartPolicy::OnFailure,
+            max: Some(1),
+            window: None,
+        };
         let task = TaskConfig {
             name: format!("{PROCESS_TASK_PREFIX}web"),
             r#type: TaskType::Process,
             command: Some(exec),
-            process: Some(devenv_processes::config::ProcessConfig {
-                restart: devenv_processes::config::RestartConfig {
-                    on: devenv_processes::config::RestartPolicy::OnFailure,
-                    max: Some(1),
-                    window: None,
-                },
-                ..Default::default()
-            }),
+            process: Some(process),
             ..Default::default()
         };
 
         let (tasks, _tmp) =
             build_test_tasks(vec![task], vec![format!("{PROCESS_TASK_PREFIX}web")], false).await;
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         wait_phase(&tasks, "web", ProcessPhase::GaveUp).await;
 
-        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        let outcome = tasks.start_with_deps(["web"]).await;
         assert_eq!(outcome.scheduled, vec!["web".to_string()]);
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
-        tokio::time::timeout(std::time::Duration::from_secs(60), async {
-            loop {
-                if std::fs::read_to_string(&marker)
-                    .ok()
-                    .is_some_and(|count| count.trim() == "3")
-                {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .expect("relaunch after GaveUp must execute a fresh process");
+        assert_eq!(std::fs::read_to_string(&marker).unwrap().trim(), "3");
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
     async fn start_with_deps_waits_for_unsatisfied_dependency() {
-        // beta after gamma@started; gamma is stopped. Attaching `up beta` must
-        // NOT launch beta (its dependency is unmet) and must not hang.
         let (tasks, _tmp) = build_test_tasks(
             vec![
                 long_process_task("gamma", vec![]),
@@ -2481,27 +3649,18 @@ mod schedule_tests {
         )
         .await;
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
-        // Stop both; gamma is now an unmet dependency for beta.
-        tasks.process_manager.stop_and_keep("beta").await.unwrap();
-        tasks.process_manager.stop_and_keep("gamma").await.unwrap();
+        tasks.process_manager().stop_and_keep("beta").await.unwrap();
+        tasks
+            .process_manager()
+            .stop_and_keep("gamma")
+            .await
+            .unwrap();
 
-        // Attach `up beta`: beta must stay waiting (gamma is stopped).
-        let outcome = tasks.start_with_deps(&["beta".to_string()]).await;
+        let outcome = tasks.start_with_deps(["beta"]).await;
         assert_eq!(outcome.scheduled, vec!["beta".to_string()]);
-
-        // Drive the detached dep waiter on this current-thread test runtime:
-        // wake it explicitly and yield so it evaluates its dependencies. Yields
-        // hand control to ready tasks; no wall-clock timing involved.
-        for _ in 0..64 {
-            tasks.notify_finished.notify_waiters();
-            tokio::task::yield_now().await;
-        }
 
         let phase = tasks
             .process_manager
@@ -2522,17 +3681,15 @@ mod schedule_tests {
             "beta must not have an active supervisor while gamma is down"
         );
 
-        // Now bring gamma up; beta should follow automatically.
-        let _ = tasks.start_with_deps(&["gamma".to_string()]).await;
+        let outcome = tasks.start_with_deps(["gamma"]).await;
+        assert_eq!(outcome.scheduled, ["gamma"]);
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
     async fn start_with_deps_runs_unseen_oneshot_dependency_closure() {
-        // Cold-start only alpha. Beta and both of its one-shot predecessors
-        // remain in the retained full graph but outside tasks_order.
         let prepare = "devenv:tasks:prepare";
         let setup = "devenv:tasks:setup";
         let scripts = tempfile::tempdir().unwrap();
@@ -2567,10 +3724,7 @@ mod schedule_tests {
             .process_manager()
             .set_scheduler(Arc::downgrade(&scheduler));
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
 
         for name in [prepare, setup] {
@@ -2585,7 +3739,7 @@ mod schedule_tests {
             );
         }
 
-        let outcome = tasks.start_with_deps(&["beta".to_string()]).await;
+        let outcome = tasks.start_with_deps(["beta"]).await;
         assert_eq!(outcome.scheduled, vec!["beta".to_string()]);
 
         for name in [prepare, setup] {
@@ -2599,11 +3753,11 @@ mod schedule_tests {
         }
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
         assert!(
-            tasks.process_manager.wait_settled().await,
+            tasks.process_manager().wait_settled().await,
             "processes wait must settle after the dynamic closure completes"
         );
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -2647,15 +3801,10 @@ mod schedule_tests {
             .process_manager()
             .set_scheduler(Arc::downgrade(&scheduler));
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
 
-        let outcome = tasks
-            .start_with_deps(&["beta".to_string(), "gamma".to_string()])
-            .await;
+        let outcome = tasks.start_with_deps(["beta", "gamma"]).await;
         assert_eq!(outcome.scheduled, ["beta", "gamma"]);
 
         for name in [
@@ -2694,34 +3843,40 @@ mod schedule_tests {
                 "{name} must record DependencyFailed, got {status:?}"
             );
             assert_eq!(
-                tasks.process_manager.get_phase(name).await,
+                tasks.process_manager().get_phase(name).await,
                 Some(ProcessPhase::Stopped),
                 "{name} must leave Waiting when its dependency fails"
             );
         }
         assert!(
-            tasks.process_manager.wait_settled().await,
+            tasks.process_manager().wait_settled().await,
             "no dynamically scheduled node may remain pending or waiting"
         );
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
     async fn shutdown_cancels_dynamic_process_closure() {
         let setup = "devenv:tasks:long-setup";
         let scripts = tempfile::tempdir().unwrap();
-        let setup_script = scripts.path().join("long-setup");
-        let setup_started = scripts.path().join("long-setup-started");
-        std::fs::write(
-            &setup_script,
-            format!(
-                "#!/bin/sh\ntouch '{}'\nsleep 100\n",
-                setup_started.to_string_lossy()
+        let setup_hold = named_pipe(scripts.path(), "setup-hold");
+        let setup_started = named_pipe(scripts.path(), "setup-started");
+        let alpha_hold = named_pipe(scripts.path(), "alpha-hold");
+        let setup_script = executable_script(
+            scripts.path(),
+            "long-setup",
+            &format!(
+                "printf x > '{started}'\nread _ < '{hold}'",
+                started = setup_started.to_string_lossy(),
+                hold = setup_hold.to_string_lossy(),
             ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&setup_script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        );
+        let alpha_script = executable_script(
+            scripts.path(),
+            "alpha",
+            &format!("read _ < '{}'", alpha_hold.to_string_lossy()),
+        );
 
         let mut long_setup = oneshot_task(setup, vec![]);
         long_setup.command = Some(setup_script.to_string_lossy().into_owned());
@@ -2737,36 +3892,31 @@ mod schedule_tests {
         let gamma = long_process_task("gamma", vec!["beta@ready"]);
 
         let (tasks, _tmp) = build_test_tasks_with_run_mode(
-            vec![long_process_task("alpha", vec![]), long_setup, beta, gamma],
+            vec![
+                process_task_with_command("alpha", vec![], &alpha_script.to_string_lossy()),
+                long_setup,
+                beta,
+                gamma,
+            ],
             vec![format!("{PROCESS_TASK_PREFIX}alpha")],
             RunMode::Before,
             false,
         )
         .await;
         let tasks = Arc::new(tasks);
+        let setup_listener = listen_for_pipe_signal(setup_started);
         let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
         tasks
             .process_manager()
             .set_scheduler(Arc::downgrade(&scheduler));
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
 
-        let outcome = tasks
-            .start_with_deps(&["beta".to_string(), "gamma".to_string()])
-            .await;
+        let outcome = tasks.start_with_deps(["beta", "gamma"]).await;
         assert_eq!(outcome.scheduled, ["beta", "gamma"]);
 
-        tokio::time::timeout(std::time::Duration::from_secs(60), async {
-            while !setup_started.exists() {
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .expect("long setup must begin before shutdown");
+        wait_for_pipe_signal(setup_listener, "dynamic setup command to start").await;
 
         tasks.shutdown.shutdown();
 
@@ -2788,13 +3938,13 @@ mod schedule_tests {
         }
         for name in ["beta", "gamma"] {
             assert_eq!(
-                tasks.process_manager.get_phase(name).await,
+                tasks.process_manager().get_phase(name).await,
                 Some(ProcessPhase::Stopped)
             );
         }
-        assert!(tasks.process_manager.wait_settled().await);
+        assert!(tasks.process_manager().wait_settled().await);
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -2806,33 +3956,27 @@ mod schedule_tests {
         )
         .await;
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        // Already running: untouched.
-        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        let outcome = tasks.start_with_deps(["web"]).await;
         assert_eq!(outcome.skipped, vec!["web".to_string()]);
         assert!(outcome.scheduled.is_empty());
         assert!(outcome.unknown.is_empty());
         assert!(outcome.failed.is_empty());
 
-        // Not in the task graph: unknown.
-        let outcome = tasks.start_with_deps(&["nosuch".to_string()]).await;
+        let outcome = tasks.start_with_deps(["nosuch"]).await;
         assert_eq!(outcome.unknown, vec!["nosuch".to_string()]);
         assert!(outcome.scheduled.is_empty());
         assert!(outcome.skipped.is_empty());
 
-        // Stopped: re-armed and scheduled.
-        tasks.process_manager.stop_and_keep("web").await.unwrap();
-        let outcome = tasks.start_with_deps(&["web".to_string()]).await;
+        tasks.process_manager().stop_and_keep("web").await.unwrap();
+        let outcome = tasks.start_with_deps(["web"]).await;
         assert_eq!(outcome.scheduled, vec!["web".to_string()]);
         assert!(outcome.skipped.is_empty());
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -2860,18 +4004,23 @@ mod schedule_tests {
         let mut beta = process_task_with_command(
             "beta",
             vec![],
-            &format!("echo beta >> '{}'; sleep 100", beta_count.to_string_lossy()),
+            &format!(
+                "echo beta >> '{}'; exec tail -f /dev/null",
+                beta_count.to_string_lossy()
+            ),
         );
         beta.after = vec![setup_name.to_string()];
+        beta.process = Some(no_restart_process_config(Some(&beta_count)));
         let mut gamma = process_task_with_command(
             "gamma",
             vec![],
             &format!(
-                "echo gamma >> '{}'; sleep 100",
+                "echo gamma >> '{}'; exec tail -f /dev/null",
                 gamma_count.to_string_lossy()
             ),
         );
         gamma.after = vec![setup_name.to_string()];
+        gamma.process = Some(no_restart_process_config(Some(&gamma_count)));
 
         let (tasks, _tmp) = build_test_tasks_with_run_mode(
             vec![long_process_task("alpha", vec![]), setup, beta, gamma],
@@ -2886,21 +4035,14 @@ mod schedule_tests {
             .process_manager()
             .set_scheduler(Arc::downgrade(&scheduler));
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
 
         let first_tasks = Arc::clone(&tasks);
         let second_tasks = Arc::clone(&tasks);
         let (first, second) = tokio::join!(
-            async move {
-                first_tasks
-                    .start_with_deps(&["beta".to_string(), "gamma".to_string(), "beta".to_string()])
-                    .await
-            },
-            async move { second_tasks.start_with_deps(&["beta".to_string()]).await },
+            async move { first_tasks.start_with_deps(["beta", "gamma", "beta"]).await },
+            async move { second_tasks.start_with_deps(["beta"]).await },
         );
 
         let beta_scheduled = first
@@ -2937,13 +4079,6 @@ mod schedule_tests {
             (&beta_count, "beta"),
             (&gamma_count, "gamma"),
         ] {
-            tokio::time::timeout(std::time::Duration::from_secs(60), async {
-                while !path.exists() {
-                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                }
-            })
-            .await
-            .unwrap_or_else(|_| panic!("{} was not created", path.display()));
             let contents = std::fs::read_to_string(path).unwrap();
             assert_eq!(
                 contents.lines().collect::<Vec<_>>(),
@@ -2953,13 +4088,11 @@ mod schedule_tests {
             );
         }
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
     async fn dependency_parked_judges_live_and_transitive() {
-        // Chain: beta after gamma@started, gamma after delta@started. The
-        // parked judgment must be live (no stored flag) and transitive.
         let (tasks, _tmp) = build_test_tasks(
             vec![
                 long_process_task("delta", vec![]),
@@ -2975,35 +4108,35 @@ mod schedule_tests {
         )
         .await;
         let tasks = Arc::new(tasks);
-        // Register the scheduler as the daemon does, so the manager's Wait
-        // settled rule can consult the live parked judgment.
         let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
         tasks
             .process_manager()
             .set_scheduler(Arc::downgrade(&scheduler));
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         wait_phase(&tasks, "delta", ProcessPhase::Ready).await;
         wait_phase(&tasks, "gamma", ProcessPhase::Ready).await;
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
-        // All Ready: nothing is parked, and Wait is settled.
         assert!(!tasks.dependency_parked("beta").await);
-        assert!(tasks.process_manager.wait_settled().await);
+        assert!(tasks.process_manager().wait_settled().await);
 
-        // Stop the whole chain, then schedule only beta: its gamma dependency
-        // is Stopped, so beta is parked and Wait settles instead of hanging.
-        tasks.process_manager.stop_and_keep("beta").await.unwrap();
-        tasks.process_manager.stop_and_keep("gamma").await.unwrap();
-        tasks.process_manager.stop_and_keep("delta").await.unwrap();
+        tasks.process_manager().stop_and_keep("beta").await.unwrap();
+        tasks
+            .process_manager()
+            .stop_and_keep("gamma")
+            .await
+            .unwrap();
+        tasks
+            .process_manager()
+            .stop_and_keep("delta")
+            .await
+            .unwrap();
 
-        let outcome = tasks.start_with_deps(&["beta".to_string()]).await;
+        let outcome = tasks.start_with_deps(["beta"]).await;
         assert_eq!(outcome.scheduled, vec!["beta".to_string()]);
         assert_eq!(
-            tasks.process_manager.get_phase("beta").await,
+            tasks.process_manager().get_phase("beta").await,
             Some(ProcessPhase::Waiting)
         );
         assert!(
@@ -3011,13 +4144,11 @@ mod schedule_tests {
             "beta must be parked: gamma is stopped"
         );
         assert!(
-            tasks.process_manager.wait_settled().await,
+            tasks.process_manager().wait_settled().await,
             "a parked Waiting process must settle Wait"
         );
 
-        // Schedule gamma too: it parks on stopped delta, and beta is now
-        // transitively parked through gamma's Waiting entry.
-        let outcome = tasks.start_with_deps(&["gamma".to_string()]).await;
+        let outcome = tasks.start_with_deps(["gamma"]).await;
         assert_eq!(outcome.scheduled, vec!["gamma".to_string()]);
         assert!(
             tasks.dependency_parked("gamma").await,
@@ -3027,29 +4158,19 @@ mod schedule_tests {
             tasks.dependency_parked("beta").await,
             "beta must be transitively parked through waiting gamma"
         );
-        assert!(tasks.process_manager.wait_settled().await);
+        assert!(tasks.process_manager().wait_settled().await);
 
-        // Unpark the chain: once delta runs, gamma and beta follow and the
-        // judgment flips back to progressing/launched.
-        let outcome = tasks.start_with_deps(&["delta".to_string()]).await;
+        let outcome = tasks.start_with_deps(["delta"]).await;
         assert_eq!(outcome.scheduled, vec!["delta".to_string()]);
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
         assert!(!tasks.dependency_parked("beta").await);
         assert!(!tasks.dependency_parked("gamma").await);
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
     async fn dependency_parked_does_not_park_on_running_oneshot() {
-        // Regression: a Waiting process `p` depends on a oneshot `migrate`
-        // (@succeeded); the oneshot in turn depends on a process `d` (@started).
-        // `d` started, the oneshot launched and is still running, then `d` was
-        // stopped. The oneshot is *progressing* (it will finish and let `p`
-        // launch), so `p` must NOT be judged dependency-parked — otherwise
-        // `devenv processes wait` settles early while the migration is still
-        // in flight. The bug recurses into the running oneshot's now-stale
-        // dependencies and wrongly concludes it is parked on stopped `d`.
         let mut migrate = oneshot_task("devenv:tasks:migrate", vec![]);
         migrate.after = vec![format!("{PROCESS_TASK_PREFIX}d@started")];
         let mut p = long_process_task("p", vec![]);
@@ -3066,26 +4187,23 @@ mod schedule_tests {
         )
         .await;
 
-        // `d`: registered then stopped, so its live manager phase is Stopped.
         let d_idx = tasks.task_index_by_name[&format!("{PROCESS_TASK_PREFIX}d")];
         let d_cfg = tasks.graph[d_idx]
             .read()
             .await
             .build_process_config(&tasks.env, &tasks.bash, tasks.supervisor)
             .unwrap();
-        tasks.process_manager.register_waiting(d_cfg, None).await;
-        tasks.process_manager.cancel_waiting("d").await; // Waiting -> Stopped
+        tasks.process_manager().register_waiting(d_cfg, None).await;
+        tasks.process_manager().cancel_waiting("d").await;
         assert_eq!(
-            tasks.process_manager.get_phase("d").await,
+            tasks.process_manager().get_phase("d").await,
             Some(ProcessPhase::Stopped)
         );
 
-        // The oneshot is still running (mirrors a long migration mid-flight).
         let o_idx = tasks.task_index_by_name["devenv:tasks:migrate"];
         tasks.graph[o_idx].write().await.status =
             TaskStatus::Oneshot(OneshotStatus::Running(tokio::time::Instant::now()));
 
-        // `p` waits on a *running* oneshot, so it is progressing, not parked.
         assert!(
             !tasks.dependency_parked("p").await,
             "a process waiting on a running oneshot must not be judged parked, \
@@ -3095,21 +4213,6 @@ mod schedule_tests {
 
     #[tokio::test]
     async fn dependency_on_started_survives_explicit_stop_of_self_exited_process() {
-        // Regression (code-review finding #1): process `p` starts and exits on
-        // its own (reaching `Exited`). A dependent `d` declares
-        // `after = ["p@started"]`. A process that exited *did* start, so
-        // `p@started` is satisfied and `d` is not dependency-parked. The user
-        // then explicitly stops `p` (`devenv processes stop p` / Ctrl-X).
-        // Because `p` already started, `p@started` must REMAIN satisfied and
-        // `d` must still not be parked.
-        //
-        // This currently FAILS: an explicit stop reports a plain `Stopped`
-        // (terminal_phase = None), erasing the `Exited` phase that satisfied
-        // `p@started`. `is_process_dep_satisfied(Stopped, Started)` is `NotYet`,
-        // so `d` is wrongly judged dependency-parked and `devenv processes wait`
-        // settles early while `d` never launches. (Shutdown teardown via
-        // `stop_all` preserves `Exited`, so this only affects mid-session
-        // explicit stops.)
         let p = self_exit_process_task("p", vec![]);
         let mut d = long_process_task("d", vec![]);
         d.after = vec![format!("{PROCESS_TASK_PREFIX}p@started")];
@@ -3124,7 +4227,6 @@ mod schedule_tests {
         )
         .await;
 
-        // Launch `p` for real and let it exit on its own.
         let p_idx = tasks.task_index_by_name[&format!("{PROCESS_TASK_PREFIX}p")];
         let p_cfg = tasks.graph[p_idx]
             .read()
@@ -3137,32 +4239,26 @@ mod schedule_tests {
             .await
             .unwrap();
 
-        // Wait until `p` has exited on its own.
         wait_phase(&tasks, "p", ProcessPhase::Exited).await;
 
-        // Sanity: while `p` is `Exited`, `p@started` is satisfied, so `d` is
-        // not parked. (This passes today.)
         assert!(
             !tasks.dependency_parked("d").await,
             "an exited process satisfies @started, so d must not be parked"
         );
 
-        // The user explicitly stops `p`.
-        tasks.process_manager.stop_and_keep("p").await.unwrap();
+        tasks.process_manager().stop_and_keep("p").await.unwrap();
         assert_eq!(
-            tasks.process_manager.get_phase("p").await,
+            tasks.process_manager().get_phase("p").await,
             Some(ProcessPhase::Stopped),
         );
 
-        // `p` already started, so `d`'s `p@started` must remain satisfied and
-        // `d` must NOT be judged dependency-parked. FAILS on current code.
         assert!(
             !tasks.dependency_parked("d").await,
             "a process that started then exited still satisfies @started after \
              an explicit stop; d must not be judged dependency-parked"
         );
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3179,10 +4275,10 @@ mod schedule_tests {
         )
         .await;
 
-        let _ = tasks.run(false).await;
+        tasks.run(false).await;
 
         assert_eq!(
-            tasks.process_manager.get_phase("docs").await,
+            tasks.process_manager().get_phase("docs").await,
             None,
             "an unscheduled process must not leak into a transient task runner"
         );
@@ -3190,10 +4286,6 @@ mod schedule_tests {
 
     #[tokio::test]
     async fn subset_cold_start_keeps_unrelated_processes_known() {
-        // A subset cold start runs only the requested closure, but the
-        // scheduler must keep every configured process addressable so a later
-        // `start_with_deps` (a `devenv processes start <other>` or a plain
-        // `devenv up` attach) finds it instead of rejecting it as unknown.
         let api = format!("{PROCESS_TASK_PREFIX}api");
         let db = format!("{PROCESS_TASK_PREFIX}db");
         let worker = format!("{PROCESS_TASK_PREFIX}worker");
@@ -3212,7 +4304,6 @@ mod schedule_tests {
         )
         .await;
 
-        // Only the requested closure runs.
         let scheduled = task_names(&tasks).await;
         assert!(scheduled.contains(&api), "requested process must run");
         assert!(scheduled.contains(&db), "its dependency must run");
@@ -3225,7 +4316,6 @@ mod schedule_tests {
             "an unrelated dependency must not run on a subset start"
         );
 
-        // ...but every configured process stays known, so a later start finds it.
         for name in [&api, &db, &worker, &blocked] {
             assert!(
                 tasks.task_index_by_name.contains_key(name),
@@ -3233,19 +4323,16 @@ mod schedule_tests {
             );
         }
 
-        let parent = Arc::new(devenv_activity::start!(
-            devenv_activity::Activity::operation("test").parent(None)
-        ));
-        let _ = tasks.run_with_parent_activity(parent).await;
+        tasks.run(true).await;
         for name in ["worker", "blocked"] {
             assert_eq!(
-                tasks.process_manager.get_phase(name).await,
+                tasks.process_manager().get_phase(name).await,
                 Some(ProcessPhase::NotStarted),
                 "{name} must be visible to the retained manager without launching"
             );
         }
 
-        let _ = tasks.process_manager.stop_all().await;
+        tasks.process_manager().stop_all().await.unwrap();
     }
 
     #[tokio::test]

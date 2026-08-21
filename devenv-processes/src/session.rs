@@ -1,24 +1,8 @@
-//! Tracks the Unix sessions created by managed processes.
+//! Tracks and cleans Unix sessions created by managed processes.
 //!
-//! A service may create more process groups inside its session. Stopping only
-//! the leader's group would miss them, so cleanup scans the whole session.
-//!
-//! # Crash guardians
-//!
-//! Unix does not guarantee that descendants die with their parent, especially
-//! after they create private process groups. For every service spawn, supported
-//! devenv executables therefore re-exec themselves as a small guardian process
-//! outside the service session. The manager owns one end of a pipe and the
-//! guardian blocks on the other. Normal exit, a crash, or SIGKILL closes the
-//! manager end in the kernel; EOF tells the guardian to terminate every process
-//! group still in the recorded session.
-//!
-//! The guardian also writes a lease containing the session, owner, and guardian
-//! PIDs plus their start times. A later manager locks that lease before launch,
-//! verifies that the PIDs were not recycled, and either asks the old guardian
-//! to clean up or sweeps the abandoned session itself. This is the same general
-//! sidecar/watchdog pattern used by service supervisors, adapted here because
-//! devenv cannot rely on a platform-independent parent-death signal.
+//! A guardian outside each service session watches the manager through a pipe.
+//! On EOF it terminates every process group recorded in the session. Leases
+//! include process start times to prevent cleanup after PID reuse.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -50,7 +34,7 @@ const GUARDIAN_READY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Extra time for a guardian to finish after the service grace period.
 const GUARDIAN_EXIT_MARGIN: Duration = Duration::from_secs(5);
 
-/// Whether this executable handles guardian mode.
+/// Set once the normal entry point enables guardian spawning.
 static GUARDIANS_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Sessions and guardians owned by one supervised process.
@@ -109,9 +93,7 @@ impl SessionRegistry {
 pub(crate) async fn stop_job(job: &Job, registry: &SessionRegistry, shutdown: &ShutdownConfig) {
     #[cfg(unix)]
     {
-        // The registry owns the complete session, including the leader's
-        // process group, so it must be the sole graceful signal source. Once
-        // every group is gone, stop the job handle to settle its task state.
+        // Session cleanup is the sole signal source; job.stop only settles state.
         registry.cleanup(shutdown).await;
         job.stop().await;
     }
@@ -196,8 +178,7 @@ pub(crate) async fn reconcile_process(
     .into_diagnostic()?
 }
 
-/// Process-wrap hook installed on every supervised spawn. The spawned child
-/// is a session leader, so its PID is the session id.
+/// Registers the session created for each supervised spawn.
 #[derive(Debug, Clone)]
 pub(crate) struct SessionRegistrationWrapper {
     pub(crate) state_dir: PathBuf,
@@ -670,12 +651,15 @@ fn terminate_sessions(session_ids: &BTreeSet<i32>, graceful_signal: i32, grace: 
 
     let deadline = Instant::now() + grace;
     while Instant::now() < deadline {
-        if process_groups_in_sessions(session_ids).is_empty() {
+        if remaining_process_groups(session_ids, &groups).is_empty() {
             return;
         }
         std::thread::sleep(Duration::from_millis(25));
     }
-    signal_session_groups(&process_groups_in_sessions(session_ids), NixSignal::SIGKILL);
+    signal_session_groups(
+        &remaining_process_groups(session_ids, &groups),
+        NixSignal::SIGKILL,
+    );
 }
 
 #[cfg(not(unix))]
@@ -693,10 +677,34 @@ fn signal_session_groups(groups: &BTreeSet<i32>, signal_value: NixSignal) {
 
 #[cfg(unix)]
 fn process_groups_in_sessions(session_ids: &BTreeSet<i32>) -> BTreeSet<i32> {
-    session_ids
+    // The session ID is also its leader's process-group ID. Preserve that
+    // signal target when process-table enumeration misses it.
+    let mut groups = session_ids.clone();
+    groups.extend(
+        session_ids
+            .iter()
+            .flat_map(|session_id| session_process_groups(*session_id)),
+    );
+    groups
+}
+
+/// Live known groups plus groups created after shutdown began.
+#[cfg(unix)]
+fn remaining_process_groups(
+    session_ids: &BTreeSet<i32>,
+    known_groups: &BTreeSet<i32>,
+) -> BTreeSet<i32> {
+    let mut groups = known_groups
         .iter()
-        .flat_map(|session_id| session_process_groups(*session_id))
-        .collect()
+        .copied()
+        .filter(|group| signal::killpg(Pid::from_raw(*group), None).is_ok())
+        .collect::<BTreeSet<_>>();
+    groups.extend(
+        session_ids
+            .iter()
+            .flat_map(|session_id| session_process_groups(*session_id)),
+    );
+    groups
 }
 
 /// Process group ids of every live process in `session_id`, excluding the
@@ -940,6 +948,37 @@ mod tests {
         let alive = !exited(&mut leader, Duration::from_millis(500)).await;
         let _ = Box::into_pin(leader.kill()).await;
         assert!(alive, "manager cleanup killed a recycled session ID");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cleanup_targets_the_known_group_without_waiting_after_exit() {
+        let mut leader = spawn_session_leader();
+        let pid = pid_of(leader.as_ref());
+        let session_ids = BTreeSet::from([pid]);
+
+        assert!(
+            process_groups_in_sessions(&session_ids).contains(&pid),
+            "the session leader's known process group must not depend on process-table discovery"
+        );
+
+        let started = Instant::now();
+        terminate_session(pid, 15, Duration::from_secs(3));
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "cleanup waited for the grace period after the process group exited"
+        );
+        let gone = exited(&mut leader, Duration::from_secs(3)).await;
+        let _ = Box::into_pin(leader.kill()).await;
+        assert!(gone, "known session leader group was not terminated");
+
+        let dead_pid = dead_pid();
+        let dead_sessions = BTreeSet::from([dead_pid]);
+        let known_groups = process_groups_in_sessions(&dead_sessions);
+        assert!(known_groups.contains(&dead_pid));
+        assert!(
+            remaining_process_groups(&dead_sessions, &known_groups).is_empty(),
+            "a known process group must stop being live after its last process exits"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

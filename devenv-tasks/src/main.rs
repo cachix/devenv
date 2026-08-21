@@ -132,7 +132,6 @@ enum TaskError {
 }
 
 fn main() -> Result<()> {
-    // Handle the guardian re-exec before starting the runtime.
     if let Some(code) = devenv_processes::maybe_run_session_guardian() {
         std::process::exit(code);
     }
@@ -155,9 +154,8 @@ async fn async_main() -> Result<()> {
     Ok(())
 }
 
-/// Request shutdown after this process is reparented.
-///
-/// Polling also works on macOS, which has no parent-death signal.
+/// Request shutdown when Unix reparents this process.
+/// Polling supports macOS, which lacks a parent-death signal.
 #[cfg(unix)]
 fn watch_parent(shutdown: &Arc<Shutdown>) {
     let shutdown = Arc::clone(shutdown);
@@ -271,7 +269,6 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
             let result = ui.run(run_handle, false).await;
 
-            // Always stop processes before returning.
             let cleanup_result = tasks.process_manager().stop_all().await;
             let (status, _) = result?;
             cleanup_result.map_err(|e| {

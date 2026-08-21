@@ -80,14 +80,7 @@ impl TasksUi {
         }
     }
 
-    /// Run the UI, processing activity events until task runner completes.
-    ///
-    /// If `stop_processes` is false and processes are still running after the
-    /// task runner finishes, continues forwarding process output until all
-    /// processes exit or shutdown is signaled.
-    ///
-    /// If `stop_processes` is true, any processes started during task execution
-    /// are stopped once all tasks complete, so the caller regains control.
+    /// Run through task completion, then stop or follow remaining processes.
     pub async fn run(
         mut self,
         run_handle: tokio::task::JoinHandle<Outputs>,
@@ -108,7 +101,6 @@ impl TasksUi {
         // Phase 2: If processes are still running (e.g., devenv-tasks invoked by
         // process-compose), keep forwarding output and wait for them to exit.
         if !self.tasks.process_manager.list().await.is_empty() {
-            // Test cleanup after a UI error.
             #[cfg(feature = "test-all")]
             if std::env::var_os("DEVENV_TASKS_TEST_FAIL_UI_AFTER_PROCESS_START").is_some() {
                 tokio::time::sleep(std::time::Duration::from_millis(250)).await;

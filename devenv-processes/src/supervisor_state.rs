@@ -1053,7 +1053,6 @@ mod tests {
         let config = config_with_policy(RestartPolicy::Always);
         let mut state = SupervisorState::new(&config, now);
 
-        // Drive into GaveUp.
         for i in 0..5 {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
@@ -1081,7 +1080,6 @@ mod tests {
         assert_eq!(state.restart_count(), 0);
         assert!(state.restart_timestamps.is_empty());
 
-        // GaveUp recovery: a fresh failure restarts instead of staying GaveUp.
         let action = state.on_event(
             Event::ProcessExit {
                 status: ExitStatus::Failure,
@@ -1097,7 +1095,6 @@ mod tests {
         let config = config_with_watchdog(1_000_000, false);
         let mut state = SupervisorState::new(&config, now);
 
-        // Move into Ready and clear startup deadline.
         let _ = state.on_event(Event::Ready, now);
         assert_eq!(state.phase(), SupervisorPhase::Ready);
 
@@ -1118,7 +1115,6 @@ mod tests {
         let config = config_with_watchdog(1_000_000, true);
         let mut state = SupervisorState::new(&config, now);
 
-        // Reach Ready so watchdog is armed.
         let _ = state.on_event(Event::Ready, now);
         assert!(state.watchdog_armed);
 
@@ -1136,7 +1132,6 @@ mod tests {
         let config = config_with_startup_timeout(7);
         let mut state = SupervisorState::new(&config, now);
 
-        // Clear startup deadline by going Ready.
         let _ = state.on_event(Event::Ready, now);
         assert!(state.startup_deadline.is_none());
 
@@ -1191,7 +1186,6 @@ mod tests {
         let config = config_with_policy(RestartPolicy::Always);
         let mut state = SupervisorState::new(&config, now);
 
-        // Drive into GaveUp.
         for i in 0..5 {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
@@ -1211,7 +1205,6 @@ mod tests {
         );
         assert_eq!(state.phase(), SupervisorPhase::GaveUp);
 
-        // Stop still wins from GaveUp.
         let action = state.on_event(Event::StopRequested, t);
         assert_eq!(action, Action::None);
         assert_eq!(state.phase(), SupervisorPhase::Stopping);
@@ -1244,7 +1237,6 @@ mod tests {
         let _ = state.on_event(Event::StopRequested, now);
         assert_eq!(state.phase(), SupervisorPhase::Stopping);
 
-        // Lifecycle events absorbed; phase pinned.
         assert_eq!(state.on_event(Event::Ready, now), Action::None);
         assert_eq!(state.phase(), SupervisorPhase::Stopping);
 
@@ -1272,7 +1264,6 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         assert_eq!(state.on_event(Event::StopRequested, now), Action::None);
-        // Second StopRequested: phase pinned, still no action emitted.
         assert_eq!(state.on_event(Event::StopRequested, now), Action::None);
         assert_eq!(state.phase(), SupervisorPhase::Stopping);
     }

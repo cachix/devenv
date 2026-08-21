@@ -37,7 +37,6 @@ const DEVENV_CALLER: &str = "_DEVENV_CALLER";
 const DEVENV_SHELL_HINT: &str = "_DEVENV_SHELL_HINT";
 
 fn main() {
-    // Handle the guardian re-exec before parsing arguments.
     if let Some(code) = devenv_processes::maybe_run_session_guardian() {
         process::exit(code);
     }

@@ -16,27 +16,19 @@ pub enum TaskType {
     Process,
 }
 
-/// Dependency kind: controls when a dependency is considered satisfied.
+/// Condition that satisfies a dependency edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(Default)]
 pub enum DependencyKind {
-    /// Wait for task to begin execution (hard dependency).
-    /// Satisfied once the task is running or completed.
+    /// Satisfied once execution begins; later exit status is ignored.
     Started,
-    /// Wait for task to be ready/healthy (default, hard dependency).
-    /// - For oneshot tasks: wait for successful completion
-    /// - For process tasks: wait for Ready state
-    ///
-    /// Propagates failure: if the dependency fails, this task fails too.
+    /// Satisfied when a process reaches Ready; the default for process edges.
     #[default]
     Ready,
-    /// Wait for task to exit successfully (hard dependency).
-    /// Satisfied only when the task completes with exit code 0 (or is skipped).
+    /// Satisfied when a one-shot succeeds; the default for one-shot edges.
     Succeeded,
-    /// Wait for task to complete/shutdown (soft dependency).
-    /// Satisfied when the task finishes, regardless of exit code.
-    /// Does NOT propagate failure: if the dependency fails, this task still runs.
+    /// Satisfied by any terminal outcome without propagating failure.
     Completed,
 }
 
@@ -326,8 +318,7 @@ pub fn is_process_dep_satisfied(phase: ProcessPhase, kind: &DependencyKind) -> D
         (ProcessPhase::GaveUp, DependencyKind::Completed) => DepSatisfaction::Satisfied,
         (ProcessPhase::GaveUp, _) => DepSatisfaction::NeverSatisfiable,
 
-        // Stopping: teardown is still in progress. The process did start, but
-        // @completed must wait until session cleanup and port settling finish.
+        // Completion waits for teardown; started remains historical fact.
         (ProcessPhase::Stopping, DependencyKind::Started) => DepSatisfaction::Satisfied,
         (ProcessPhase::Stopping, DependencyKind::Completed) => DepSatisfaction::NotYet,
         (ProcessPhase::Stopping, _) => DepSatisfaction::NeverSatisfiable,
@@ -533,7 +524,6 @@ mod tests {
             (ProcessPhase::GaveUp, ready, NeverSatisfiable),
             (ProcessPhase::GaveUp, succeeded, NeverSatisfiable),
             (ProcessPhase::GaveUp, completed, Satisfied),
-            // Stopping
             (ProcessPhase::Stopping, started, Satisfied),
             (ProcessPhase::Stopping, ready, NeverSatisfiable),
             (ProcessPhase::Stopping, succeeded, NeverSatisfiable),

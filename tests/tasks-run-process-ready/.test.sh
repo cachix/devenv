@@ -1,65 +1,128 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Regression test for two `devenv tasks run` bugs on the same code path.
-#
-# https://github.com/cachix/devenv/issues/3030
-#
-# `devenv tasks run` built its task config without resolving the bash path, so
-# exec readiness probes were spawned via an empty program name and failed with
-# ENOENT on every attempt. The process started but never reached Ready, so any
-# task gated on it via @ready waited forever.
-#
-# The timeout is a liveness guard, not a timing assertion: the regression makes
-# this command hang indefinitely, and without it the suite would block rather
-# than report a failure.
-#
-# https://github.com/cachix/devenv/issues/3102
-#
-# A process pulled into the graph as a dependency was never stopped once the
-# graph finished. Processes are spawned in their own session, so they survived
-# the CLI's exit and were reparented to init, holding their ports and data
-# directories. The pid check below fails if that comes back.
+# End-to-end coverage for issues #3030, #3102, and #2037.
+# Timeouts bound deadlocks; PID checks detect leaked forked children.
 
 state=".devenv/state"
-rm -f "$state/after-ready-ran" "$state/probe-target-ready" "$state/probe-target.pid"
+rm -f \
+  "$state/after-ready-ran" \
+  "$state/blocked-backend-started" \
+  "$state/chain-backend.pid" \
+  "$state/chain-backend-started" \
+  "$state/failing-bridge-ran" \
+  "$state/failure-source.pid" \
+  "$state/failure-source-ready" \
+  "$state/probe-target.pid" \
+  "$state/probe-target-ready" \
+  "$state/probe-target-started" \
+  "$state/success-ordering-violation" \
+  "$state/unrelated-started"
+
+assert_stopped() {
+  pid_file=$1
+  label=$2
+
+  if [ ! -f "$pid_file" ]; then
+    echo "FAIL: $label never recorded its pid"
+    exit 1
+  fi
+
+  pid=$(cat "$pid_file")
+  # Allow init to reap a killed orphan before treating its PID as live.
+  for _ in $(seq 1 50); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  ps -o pid,ppid,pgid,stat,etime,command -p "$pid" >&2 || true
+  kill -9 "$pid" 2>/dev/null || true
+  echo "FAIL: $label process $pid outlived devenv tasks run"
+  exit 1
+}
 
 status=0
-timeout 120 devenv tasks run test:after-ready || status=$?
+timeout 120 devenv tasks run devenv:processes:chain-backend || status=$?
 
 if [ "$status" -eq 124 ]; then
-  echo "FAIL: devenv tasks run hung waiting on the readiness probe"
+  echo "FAIL: mixed process/task chain hung"
   exit 1
 fi
 
 if [ "$status" -ne 0 ]; then
-  echo "FAIL: devenv tasks run exited with $status"
+  echo "FAIL: successful mixed process/task chain exited with $status"
+  exit 1
+fi
+
+if [ ! -f "$state/probe-target-started" ]; then
+  echo "FAIL: source process never started"
   exit 1
 fi
 
 if [ ! -f "$state/probe-target-ready" ]; then
-  echo "FAIL: the process never started"
+  echo "FAIL: source process never became ready"
   exit 1
 fi
 
 if [ ! -f "$state/after-ready-ran" ]; then
-  echo "FAIL: task gated on the readiness probe did not run"
+  echo "FAIL: intermediary task did not run"
   exit 1
 fi
 
-if [ ! -f "$state/probe-target.pid" ]; then
-  echo "FAIL: the process never recorded its pid"
+if [ ! -f "$state/chain-backend-started" ]; then
+  echo "FAIL: downstream process did not start"
   exit 1
 fi
 
-# stop_all() awaits each process's teardown before `devenv tasks run` returns,
-# so a live pid here means the process was orphaned, not that it is still
-# winding down.
-pid=$(cat "$state/probe-target.pid")
-if kill -0 "$pid" 2>/dev/null; then
-  kill -9 "$pid" 2>/dev/null || true
-  echo "FAIL: process $pid outlived devenv tasks run"
+if [ -f "$state/success-ordering-violation" ]; then
+  echo "FAIL: a mixed-chain node ran before its dependency"
   exit 1
 fi
 
-echo "PASS: task depending on a process readiness probe ran, and the process was stopped"
+if [ -f "$state/unrelated-started" ]; then
+  echo "FAIL: an unrelated process ran outside the requested root closure"
+  exit 1
+fi
+
+assert_stopped "$state/probe-target.pid" "source"
+assert_stopped "$state/chain-backend.pid" "downstream"
+
+failure_status=0
+timeout 120 devenv tasks run devenv:processes:blocked-backend \
+  >failure-output.txt 2>&1 || failure_status=$?
+
+if [ "$failure_status" -eq 124 ]; then
+  echo "FAIL: failing mixed process/task chain hung"
+  cat failure-output.txt
+  exit 1
+fi
+
+if [ "$failure_status" -eq 0 ]; then
+  echo "FAIL: failed intermediary task did not fail the command"
+  cat failure-output.txt
+  exit 1
+fi
+
+if [ ! -f "$state/failure-source-ready" ]; then
+  echo "FAIL: failure source never became ready"
+  cat failure-output.txt
+  exit 1
+fi
+
+if [ ! -f "$state/failing-bridge-ran" ]; then
+  echo "FAIL: failing intermediary task never ran"
+  cat failure-output.txt
+  exit 1
+fi
+
+if [ -f "$state/blocked-backend-started" ]; then
+  echo "FAIL: downstream process launched after its task dependency failed"
+  cat failure-output.txt
+  exit 1
+fi
+
+assert_stopped "$state/failure-source.pid" "failure source"
+
+echo "PASS: mixed process/task chains preserve ordering, failure propagation, root selection, and cleanup"

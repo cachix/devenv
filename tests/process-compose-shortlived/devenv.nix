@@ -1,8 +1,5 @@
 { pkgs, lib, config, ... }:
-# Regression test for https://github.com/cachix/devenv/issues/2879
-#
-# process-compose runs each command through `devenv-tasks`. The wrapper must
-# exit with the command so process-compose can mark it Completed.
+# #2879: the task wrapper must exit so process-compose reports Completed.
 let
   pcBin = lib.getExe config.process.managers.process-compose.package;
 in
@@ -15,8 +12,7 @@ in
     exec = "echo hello-from-shortlived";
   };
 
-  # Long-lived process kept around so process-compose itself stays up while
-  # we assert on the short-lived one's status.
+  # Keep process-compose alive while the short-lived status is inspected.
   processes.keepalive = {
     exec = "sleep 60";
   };
@@ -24,7 +20,6 @@ in
   enterTest = ''
     set -euo pipefail
 
-    # Poll process-compose's typed `process get` API until shortlived settles.
     # `process get` returns a one-element array.
     deadline=$((SECONDS + 30))
     while (( SECONDS < deadline )); do
