@@ -23765,6 +23765,71 @@ attribute set of (submodule)
 
 
 
+## machines.\<name>.hardware
+
+
+
+Hardware detection settings for this machine.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.hardware.facter
+
+
+
+Path to the [nixos-facter](https://github.com/nix-community/nixos-facter) hardware report for this machine.
+
+Accepts either a Nix path literal or a string path relative to the devenv project root.
+Defaults to ` .machines/<name>/facter.json `, which ` devenv machines install ` generates
+on first run by probing the target over SSH. The report must be committed to git so that
+teammates and CI can build the machine closure without reaching the target.
+
+Set to ` null ` to opt this machine out of facter, for example when it carries a hand written
+` hardware-configuration.nix ` instead. Only applies to machines with a ` nixos ` module set;
+` nix-darwin ` and ` home-manager ` entries ignore this option.
+
+
+
+*Type:*
+null or absolute path or string
+
+
+
+*Default:*
+
+```nix
+".machines/${name}/facter.json"
+```
+
+
+
+*Example:*
+
+```nix
+./hardware/web1.json
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
 ## machines.\<name>.home-manager
 
 
@@ -23795,6 +23860,577 @@ null
   programs.git.enable = true;
 }
 
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install
+
+
+
+Install-time settings for ` devenv machines install `.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.copyHostKeys
+
+
+
+Copy ` /etc/ssh/ssh_host_* ` from the live installer into the
+installed system before reboot. This keeps the SSH identity
+stable between the post-kexec installer and the first boot, so
+that identity’s ` known_hosts ` entry keeps working.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.encryptionKeys
+
+
+
+Keyfiles dropped onto the installer **before disko runs**, so LUKS
+layouts with ` passwordFile = "/tmp/luks.key" ` can unlock. Attribute
+names are absolute target paths on the installer; values are local
+source paths (string, absolute or relative to the devenv project root)
+on the host running ` devenv machines install `. Strings — not Nix path
+literals — so LUKS keys never enter ` /nix/store `.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  "/tmp/luks.key" = "secrets/luks.key";
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.extraFiles
+
+
+
+Files to copy onto the installed system after ` nixos-install ` but
+before reboot. Attribute names are absolute target paths (e.g.
+` "/var/lib/secret-age-key" `). Use this for age/sops master keys,
+SSH host keys, or ` /var/lib/* ` seeds that need to exist on first boot.
+Matches nixos-anywhere’s ` --extra-files ` and ` --chown `.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  "/var/lib/secret-age-key" = {
+    source = "secrets/age.key";
+    owner = "0:0";
+    mode = "0600";
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.extraFiles.\<name>.mode
+
+
+
+File mode applied via chmod on the target.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"0644"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.extraFiles.\<name>.owner
+
+
+
+Numeric owner in ` uid:gid ` format applied via chown on the target.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"0:0"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.extraFiles.\<name>.source
+
+
+
+Local path to the file to copy onto the installed system.
+Accepts an absolute path or a path relative to the devenv project root.
+Must be a string (not a Nix path literal) so secrets stay on the host
+running ` devenv machines install ` and never enter ` /nix/store `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.kexec
+
+
+
+Kexec override settings for ` devenv machines install `.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.kexec.image
+
+
+
+Override the default nixos-images kexec tarball URL. Set this for
+custom installer images, non-standard architectures, or VPN-enabled
+installers. Must be an HTTP(S) URL fetched on the remote target.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+"https://example.com/custom-kexec-aarch64.tar.gz"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.kexec.postSshPort
+
+
+
+SSH port to reconnect to after kexec lands in the installer. Set
+this when the live sshd on the target listens on a non-22 port. All
+subsequent install phases (facter, disko, nixos-install) use this
+port.
+
+
+
+*Type:*
+null or 16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+2222
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secrets
+
+
+
+Bootstrap files populated from the active SecretSpec profile
+after ` nixos-install ` and before reboot. Attribute names are
+absolute paths in the installed system. Local execution streams
+values over strictly authenticated SSH; target execution sends
+only a self-contained declaration manifest and fetches values
+on the installer.
+Both modes atomically install files without placing values in
+` /nix/store `.
+
+Local execution requires SecretSpec to be enabled in
+` devenv.yaml `; use the global ` --secretspec-provider ` and
+` --secretspec-profile ` flags to select its source. Target
+execution only requires ` secretspec.toml ` and leaves provider
+and profile selection to the target unless explicitly overridden
+by ` install.secretspec `.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  "/var/lib/sops-nix/key.txt" = {
+    secret = "WEB1_AGE_KEY";
+    owner = "0:0";
+    mode = "0600";
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secrets.\<name>.mode
+
+
+
+File mode applied via chmod on the target. Special and
+execute bits, group write, and every permission for
+other users are rejected. Modes such as 0400, 0600, and
+0640 are accepted.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"0600"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secrets.\<name>.owner
+
+
+
+Numeric owner in ` uid:gid ` format applied via chown on the target.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"0:0"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secrets.\<name>.secret
+
+
+
+Name of the secret in the active SecretSpec profile. The
+value is resolved at install time according to
+` install.secretspec.execution ` and is never included in
+machine metadata or a Nix store path.
+
+
+
+*Type:*
+string
+
+
+
+*Example:*
+
+```nix
+"WEB1_AGE_KEY"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec
+
+
+
+How install-time SecretSpec bootstrap values are resolved.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec.execution
+
+
+
+Where SecretSpec resolves bootstrap values. ` local `
+resolves on the workstation and streams values over SSH.
+` target ` sends only a self-contained SecretSpec manifest and
+resolves through the provider on the installer machine.
+
+
+
+*Type:*
+one of “local”, “target”
+
+
+
+*Default:*
+
+```nix
+"local"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec.extraPackages
+
+
+
+Function selecting additional target-architecture packages
+required by the chosen SecretSpec providers, such as ` sops `
+or ` pass `. These packages are included in a private resolver
+runtime for target execution, not the system-wide command
+namespace.
+
+
+
+*Type:*
+function that evaluates to a(n) list of package
+
+
+
+*Default:*
+
+```nix
+_targetPkgs: [ ]
+```
+
+
+
+*Example:*
+
+```nix
+targetPkgs: [ targetPkgs.sops targetPkgs.pass ]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec.profile
+
+
+
+Explicit target-side profile override. When unset, devenv
+does not pass ` --profile `; SecretSpec selects the profile
+from the target environment or target-global configuration,
+falling back to ` default `. The workstation profile is never
+inherited.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.install.secretspec.provider
+
+
+
+Explicit target-side provider override. When unset, devenv
+does not pass ` --provider `; SecretSpec selects providers
+from the manifest, target environment, and target-global
+configuration. The workstation provider is never inherited.
+Provider credentials must be available independently on the
+installer and are never forwarded by devenv. This option is
+non-secret metadata and must not contain credentials; use a
+provider alias or target-global configuration instead.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
 ```
 
 *Declared by:*
@@ -23902,6 +24538,102 @@ pkgs.stdenv.system
 
 ```nix
 "x86_64-linux"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.target
+
+
+
+SSH destination for install and deploy. See the ` target.host ` and ` target.sshOpts ` suboptions.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.target.host
+
+
+
+SSH destination used by ` devenv machines install ` and ` devenv machines deploy `.
+Accepts ` user@host `, ` user@host:port `, or a full ` ssh://user@host:port ` URI.
+Leave unset to activate in process on the current host; this is only valid for ` home-manager `.
+Setting it to ` "localhost" ` is not the same as omitting it: ` "localhost" ` still routes through SSH.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+"root@laptop.local"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.target.sshOpts
+
+
+
+Extra ` ssh -o ` options applied before devenv’s defaults
+(` StrictHostKeyChecking=accept-new ` and a bounded ` ConnectTimeout `).
+OpenSSH keeps the first value for most settings, so this list
+overrides the defaults. Installs that transmit SecretSpec bootstrap
+values, encryption keys, or extra files force stricter
+non-overridable SSH settings.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[ "-o" "IdentitiesOnly=yes" "-o" "ConnectTimeout=10" ]
 ```
 
 *Declared by:*
