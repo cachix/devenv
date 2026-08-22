@@ -141,6 +141,7 @@ export default defineConfig({
             { label: 'Profiles', slug: 'profiles' },
             { label: 'Extending', slug: 'extending' },
             { label: 'Containers', slug: 'containers' },
+            { label: 'Machines', slug: 'machines' },
             { label: 'Outputs', slug: 'outputs' },
             { label: 'Binary Caching', slug: 'binary-caching' },
             { label: 'Garbage Collection', slug: 'garbage-collection' },
