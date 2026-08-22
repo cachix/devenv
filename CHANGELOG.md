@@ -33,6 +33,10 @@
 - Fixed `devenv mcp` ignoring most of the session's configuration; it previously fell back to default Nix, cache, and shell settings for everything except inputs and imports.
 - Fixed devenv exporting an inferred SecretSpec provider into the development shell when no provider override was configured, which replaced per-secret provider fallback chains for commands run inside the shell.
 
+### Bug Fixes
+
+- Fixed allocated ports resolving to the declared base port in every command except `devenv up` and `devenv tasks run`. `devenv shell`, `direnv-export` and the other evaluating commands seed port allocations from a running process manager again ([#2710](https://github.com/cachix/devenv/issues/2710)).
+
 ## 2.2.1 (2026-08-02)
 
 ### Bug Fixes

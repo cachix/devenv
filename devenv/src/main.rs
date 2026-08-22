@@ -938,6 +938,11 @@ async fn run_backend(
 
     let devenv = Devenv::new(devenv_options, shutdown.clone()).await?;
 
+    // Seed port allocations from a running process manager before anything
+    // evaluates, so allocated ports resolve for every command rather than only
+    // `up` and `tasks run`. No-op when no manager is running.
+    devenv.reserve_running_ports().await;
+
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd: None, args } = command {
         // Pre-compute shell environment while we still own Devenv directly.
