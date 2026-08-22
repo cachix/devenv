@@ -11,8 +11,8 @@ use std::env;
 use std::io::ErrorKind;
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::sync::OnceCell;
 use tracing::{debug, warn};
 
@@ -46,13 +46,16 @@ pub struct CachixManager {
     /// path is initialized earlier, before the Nix store opens, so the
     /// backend can preserve credentials from Nix's existing netrc first.
     netrc_populated: Arc<OnceCell<()>>,
-    /// Auth token supplied out of band (e.g. resolved from secretspec),
-    /// used when `CACHIX_AUTH_TOKEN` is absent from the environment.
-    auth_token_override: Option<String>,
-    /// Memoized result of [`CachixManager::resolve_auth_token`]. Resolution
-    /// can read and Dhall-evaluate the cachix config from disk, and runs
-    /// from several call sites per invocation; cache it once.
-    resolved_token: OnceLock<Option<String>>,
+    /// Auth token supplied out of band (e.g. resolved from secretspec), plus
+    /// its memoized resolution. Resolution can Dhall-evaluate cachix config,
+    /// while a deferred machine-install override must invalidate the result.
+    auth_token: Mutex<AuthTokenState>,
+    deferred_auth: AtomicBool,
+}
+
+struct AuthTokenState {
+    override_token: Option<String>,
+    resolved: Option<Option<String>>,
 }
 
 impl CachixManager {
@@ -66,9 +69,29 @@ impl CachixManager {
             paths,
             netrc_path: Arc::new(OnceCell::new()),
             netrc_populated: Arc::new(OnceCell::new()),
-            auth_token_override,
-            resolved_token: OnceLock::new(),
+            auth_token: Mutex::new(AuthTokenState {
+                override_token: auth_token_override,
+                resolved: None,
+            }),
+            deferred_auth: AtomicBool::new(false),
         }
+    }
+
+    /// Keep the managed netrc available for a token supplied after the Nix
+    /// store opens. This is intentionally opt-in for deferred machine installs.
+    pub fn enable_deferred_auth(&self) {
+        self.deferred_auth.store(true, Ordering::Release);
+    }
+
+    /// Replace the out-of-band token and invalidate token resolution.
+    ///
+    /// Machine installs use this after their execution mode is known: local
+    /// installs can then contribute an opportunistic project SecretSpec token
+    /// without making target-only installs contact a workstation provider.
+    pub fn set_auth_token_override(&self, auth_token_override: Option<String>) {
+        let mut state = self.auth_token.lock().unwrap_or_else(|e| e.into_inner());
+        state.override_token = auth_token_override;
+        state.resolved = None;
     }
 
     /// Resolve the Cachix auth token used for authenticating pulls
@@ -87,20 +110,24 @@ impl CachixManager {
     /// lifetime of an invocation, so we resolve once and reuse it across
     /// the (several) call sites.
     pub fn resolve_auth_token(&self) -> Option<String> {
-        self.resolved_token
-            .get_or_init(|| self.resolve_auth_token_uncached())
-            .clone()
+        let mut state = self.auth_token.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(resolved) = &state.resolved {
+            return resolved.clone();
+        }
+        let resolved = Self::resolve_auth_token_uncached(state.override_token.as_deref());
+        state.resolved = Some(resolved.clone());
+        resolved
     }
 
-    fn resolve_auth_token_uncached(&self) -> Option<String> {
+    fn resolve_auth_token_uncached(auth_token_override: Option<&str>) -> Option<String> {
         if let Ok(token) = env::var(CACHIX_AUTH_TOKEN_ENV)
             && !token.is_empty()
         {
             return Some(token);
         }
-        if let Some(token) = self.auth_token_override.as_ref().filter(|t| !t.is_empty()) {
+        if let Some(token) = auth_token_override.filter(|token| !token.is_empty()) {
             debug!("cachix: CACHIX_AUTH_TOKEN unset, using token from secretspec");
-            return Some(token.clone());
+            return Some(token.to_string());
         }
         let token = read_dhall_auth_token();
         if token.is_some() {
@@ -247,19 +274,19 @@ impl CachixManager {
         }
 
         // Initialize and advertise the managed netrc whenever a token is
-        // resolvable. The backend preserves credentials from Nix's current
-        // netrc in this file before it changes the global `netrc-file`
-        // setting and opens the store. Project Cachix entries are added later,
-        // once their names have been evaluated.
+        // resolvable, or when a machine install opted into deferred auth. In
+        // the latter case the already-open store must point at the file that
+        // will receive credentials after execution-mode evaluation.
         if let Some(path) = self.netrc_path.get() {
             settings.netrc_path = Some(PathBuf::from(path));
-        } else if self.resolve_auth_token().is_some() {
+        } else if self.resolve_auth_token().is_some() || self.deferred_auth.load(Ordering::Acquire)
+        {
             // A netrc we cannot write costs authentication, not the cache
             // itself: leaving `netrc_path` unset degrades to unauthenticated
             // pulls, whereas failing here would take the substituters
             // resolved above down with it.
-            match self.ensure_netrc_file(&[]).await {
-                Ok(()) => settings.netrc_path = self.netrc_path.get().map(PathBuf::from),
+            match self.ensure_netrc_path().await {
+                Ok(path) => settings.netrc_path = Some(PathBuf::from(path)),
                 Err(e) => warn!(
                     error = %e,
                     "cachix: failed to prepare the netrc, private caches may fail to authenticate"
@@ -939,5 +966,39 @@ password global-token
 
         drop(manager);
         assert!(!managed_path.exists());
+    }
+
+    #[tokio::test]
+    async fn deferred_auth_token_populates_the_netrc_opened_with_the_store() {
+        let root = tempfile::tempdir().unwrap();
+        let managed_path = root.path().join("managed-netrc");
+        let manager = CachixManager::new(
+            CachixPaths {
+                trusted_keys: root.path().join("trusted-keys.json"),
+                netrc: managed_path.clone(),
+                daemon_socket: None,
+            },
+            None,
+        );
+        manager.enable_deferred_auth();
+
+        let initial = manager.store_settings(None).await.unwrap();
+        assert_eq!(initial.netrc_path.as_deref(), Some(managed_path.as_path()));
+        assert_eq!(std::fs::read(&managed_path).unwrap(), b"");
+
+        manager.set_auth_token_override(Some("late-project-token".to_string()));
+        let info = CachixCacheInfo {
+            caches: Cachix {
+                pull: vec!["project".to_string()],
+                push: None,
+            },
+            known_keys: BTreeMap::new(),
+        };
+        manager.store_settings(Some(&info)).await.unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&managed_path).unwrap(),
+            "machine project.cachix.org\nlogin token\npassword late-project-token\n\n"
+        );
     }
 }

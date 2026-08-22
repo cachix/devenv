@@ -1,0 +1,9 @@
+inputs:
+  disko:
+    url: github:nix-community/disko
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+
+secretspec:
+  enable: false
