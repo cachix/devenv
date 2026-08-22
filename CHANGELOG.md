@@ -7,6 +7,10 @@
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
 - Interrupting devenv a second time no longer leaves processes running. The second Ctrl+C exits straight away instead of waiting for shutdown to finish, which used to abandon any process still shutting down. This was easy to hit, since a process that is slow to stop is given five seconds before it is killed.
 
+### Bug Fixes
+
+- Fixed `--from <flake-ref>` ignoring the external project's `devenv.yaml` and `devenv.lock`. Its inputs and imports were dropped, so a project relying on an integration such as treefmt or git-hooks failed to evaluate, and every input resolved afresh instead of using the revisions the source was tested with. Flake references are now fetched before the configuration is read and merged exactly like `--from path:` sources, and a working directory with no lock of its own starts from the source's. The reference itself is no longer recorded in `devenv.lock`; pin it with an explicit revision (`--from github:owner/repo/<rev>`) if you need it fixed.
+
 ### Improvements
 
 - Pinning several package versions no longer costs a separate nixpkgs fetch and evaluation for each one. `multiverse.pins { cmake = "3.26.4"; bun = "0.7.0"; }` resolves a whole set of versions, at exactly those versions, through the fewest nixpkgs revisions that can serve them and returns the packages.

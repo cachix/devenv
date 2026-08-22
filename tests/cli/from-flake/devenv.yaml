@@ -1,0 +1,12 @@
+inputs:
+  marker:
+    url: path:./marker
+    flake: false
+  # Deliberately unpinned here and pinned to an old revision in devenv.lock, so
+  # a project seeded from this source can be told apart from one that resolved
+  # the input itself. See the "--from seeds devenv.lock" step in .test.sh.
+  flake-compat:
+    url: github:edolstra/flake-compat
+    flake: false
+imports:
+  - ./module

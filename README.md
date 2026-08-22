@@ -158,9 +158,9 @@ Commands:
 
 Input overrides:
       --from <FROM>
-          Source for devenv.nix.
+          Source for devenv.nix and devenv.yaml.
 
-          Can be either a filesystem path (with path: prefix) or a flake input reference.
+          Can be either a filesystem path (with path: prefix) or a flake input reference. A flake reference is fetched on every run; add a revision to pin it.
 
           Examples:
             --from github:cachix/devenv

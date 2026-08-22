@@ -685,8 +685,8 @@ pub struct Cli {
         long,
         global = true,
         help_heading = "Input overrides",
-        help = "Source for devenv.nix (flake input reference or path)",
-        long_help = "Source for devenv.nix.\n\nCan be either a filesystem path (with path: prefix) or a flake input reference.\n\nExamples:\n  --from github:cachix/devenv\n  --from github:cachix/devenv?dir=examples/simple\n  --from path:/absolute/path/to/project\n  --from path:./relative/path"
+        help = "Source for devenv.nix and devenv.yaml (flake input reference or path)",
+        long_help = "Source for devenv.nix and devenv.yaml.\n\nCan be either a filesystem path (with path: prefix) or a flake input reference. A flake reference is fetched on every run; add a revision to pin it.\n\nExamples:\n  --from github:cachix/devenv\n  --from github:cachix/devenv?dir=examples/simple\n  --from path:/absolute/path/to/project\n  --from path:./relative/path"
     )]
     pub from: Option<String>,
 
