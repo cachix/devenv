@@ -2454,6 +2454,7 @@ dependencies = [
  "tokio",
  "tokio-shutdown",
  "tokio-stream",
+ "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-opentelemetry 0.33.0",
  "tracing-subscriber",

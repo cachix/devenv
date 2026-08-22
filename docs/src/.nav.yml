@@ -31,6 +31,7 @@ nav:
       - Tasks: tasks.md
       - Profiles: profiles.md
       - Overlays: overlays.md
+      - Machines: machines.md
     - Writing devenv.yaml:
       - Inputs: inputs.md
       - Outputs: outputs.md

@@ -8431,6 +8431,10 @@ rec {
             packageId = "tokio-stream";
           }
           {
+            name = "toml";
+            packageId = "toml 0.9.12+spec-1.1.0";
+          }
+          {
             name = "tracing";
             packageId = "tracing";
             features = [ "valuable" ];

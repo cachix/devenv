@@ -304,7 +304,7 @@ pub fn parse_cli_options(raw_options: &[String]) -> Result<Vec<CliOption>> {
 #[derive(Debug, Clone, Serialize)]
 pub struct SecretspecData {
     /// The profile that was used to load secrets
-    pub profile: String,
+    pub profile: Option<String>,
 
     /// An explicit provider override selected through devenv
     pub provider: Option<String>,
@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn secretspec_provider_override_serializes_as_optional() {
         let without_override = SecretspecData {
-            profile: "production".to_string(),
+            profile: Some("production".to_string()),
             provider: None,
             secrets: BTreeMap::new(),
         };
