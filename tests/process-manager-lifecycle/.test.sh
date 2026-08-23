@@ -112,7 +112,10 @@ assert_detached_lifecycle() {
   ACTIVE_MANAGER=$manager
   ACTIVE_PORT=$port
 
-  run_devenv "$manager" up -d >"$log" 2>&1
+  if ! run_devenv "$manager" up -d >"$log" 2>&1; then
+    cat "$log" >&2
+    return 1
+  fi
   wait_for_port "$port"
 
   # Reaching the service after `up -d` returned proves it outlived the client.
@@ -127,17 +130,22 @@ assert_detached_lifecycle() {
 
 echo "Checking selected capability declarations"
 assert_capabilities native \
-  '{"background_start":true,"devenv_attach":true,"wait_ready":true,"individual_control":true,"subset_start":true,"requires_tty":false,"semantic_shutdown":true}'
+  '{"background_start":true,"devenv_attach":true,"wait_ready":true,"individual_control":true,"subset_start":true,"requires_tty":false,"manager_aware_stop":true}'
 assert_capabilities process-compose \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"semantic_shutdown":false}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"manager_aware_stop":false}'
 assert_capabilities overmind \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"semantic_shutdown":true}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"manager_aware_stop":true}'
 assert_capabilities honcho \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"semantic_shutdown":false}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"manager_aware_stop":false}'
 assert_capabilities hivemind \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":false,"requires_tty":false,"semantic_shutdown":false}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":false,"requires_tty":false,"manager_aware_stop":false}'
 assert_capabilities mprocs \
-  '{"background_start":false,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":false,"requires_tty":true,"semantic_shutdown":false}'
+  '{"background_start":false,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":false,"requires_tty":true,"manager_aware_stop":false}'
+
+if [ "$(uname -s)" = Darwin ]; then
+  echo "Checking mprocs shell uses the native macOS clipboard provider"
+  test "$(run_devenv mprocs shell -- bash -c 'command -v pbcopy')" = /usr/bin/pbcopy
+fi
 
 assert_detached_lifecycle process-compose 18771
 assert_detached_lifecycle honcho 18772

@@ -2,12 +2,6 @@
 let
   cfg = config.process.managers.mprocs;
   settingsFormat = pkgs.formats.yaml { };
-  makeImpurePackage = impurePath:
-    pkgs.runCommandLocal
-      "${lib.strings.sanitizeDerivationName impurePath}-impure"
-      {
-        __impureHostDeps = [ impurePath ];
-      } "mkdir -p $out/bin && ln -s ${impurePath} $out/bin";
 in
 {
   options.process.managers.mprocs = {
@@ -49,7 +43,7 @@ in
         individual_control = false;
         subset_start = false;
         requires_tty = true;
-        semantic_shutdown = false;
+        manager_aware_stop = false;
       };
     };
 
@@ -70,8 +64,7 @@ in
         ${(lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } config.process.manager.args}
     '';
 
-    packages = [ cfg.package ] ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin
-      [ (makeImpurePackage "/usr/bin/pbcopy") ];
+    packages = [ cfg.package ];
 
     process.managers.mprocs = {
       configFile =

@@ -160,7 +160,7 @@ impl Fixture {
 
 #[cfg(feature = "test-all")]
 #[tokio::test(flavor = "multi_thread")]
-async fn recoverable_owner_error_reclaims_service_session() {
+async fn recoverable_owner_error_reclaims_service_scope() {
     let fixture = Fixture::new("error-test");
     fixture.write_task(
         fixture.leader_with_private_child(),
@@ -195,7 +195,7 @@ async fn recoverable_owner_error_reclaims_service_session() {
 
 #[cfg(feature = "test-all")]
 #[tokio::test(flavor = "multi_thread")]
-async fn guardian_start_failure_stops_service_session() {
+async fn guardian_start_failure_stops_service_scope() {
     let fixture = Fixture::new("guardian-start-failure");
     fixture.write_task(
         fixture.leader_with_private_child(),
@@ -223,7 +223,7 @@ async fn guardian_start_failure_stops_service_session() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn parent_death_reclaims_service_session() {
+async fn parent_death_reclaims_service_scope() {
     let fixture = Fixture::new("parent-death-test");
     fixture.write_task(
         fixture.leader_with_private_child(),
@@ -268,7 +268,7 @@ async fn parent_death_reclaims_service_session() {
     assert!(child_exited, "private process group survived parent death");
 }
 
-async fn assert_sigkill_reclaims_service_session(supervisor: &str) {
+async fn assert_sigkill_reclaims_service_scope(supervisor: &str) {
     let fixture = Fixture::new(&format!("{supervisor}-orphan-test"));
     fixture.write_task(
         fixture.leader_with_private_child(),
@@ -296,13 +296,13 @@ async fn assert_sigkill_reclaims_service_session(supervisor: &str) {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn sigkill_of_native_devenv_tasks_reclaims_service_session() {
-    assert_sigkill_reclaims_service_session("native").await;
+async fn sigkill_of_native_devenv_tasks_reclaims_service_scope() {
+    assert_sigkill_reclaims_service_scope("native").await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn sigkill_of_external_devenv_tasks_reclaims_service_session() {
-    assert_sigkill_reclaims_service_session("external").await;
+async fn sigkill_of_external_devenv_tasks_reclaims_service_scope() {
+    assert_sigkill_reclaims_service_scope("external").await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -435,7 +435,7 @@ async fn external_devenv_tasks_propagates_failed_child_exit() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn restart_reconciles_previous_session_before_launch() {
+async fn restart_reconciles_previous_scope_before_launch() {
     let fixture = Fixture::new("reconcile-test");
     let shutdown = ShutdownConfig {
         signal: 15,
@@ -496,11 +496,11 @@ async fn restart_reconciles_previous_session_before_launch() {
 
     assert!(
         new_started,
-        "new service did not launch after lease reconciliation"
+        "new service did not launch after recovery-record reconciliation"
     );
     assert!(
         old_exited,
-        "new service launched before the previous session was reclaimed"
+        "new service launched before the previous scope was reclaimed"
     );
     assert!(new_exited, "new service survived owner shutdown");
 }

@@ -19,7 +19,7 @@ use watchexec_supervisor::job::{CommandState, Job};
 
 use crate::config::{ListenKind, ProcessConfig, SupervisionMode};
 use crate::manager::ProcessResources;
-use crate::session::SessionRegistry;
+use crate::process_guardian::ProcessScopeRegistry;
 use crate::supervisor_state::{
     Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
 };
@@ -253,7 +253,7 @@ enum Continuation {
 struct SupervisorRuntime {
     config: ProcessConfig,
     job: Arc<Job>,
-    sessions: Arc<SessionRegistry>,
+    scopes: Arc<ProcessScopeRegistry>,
     activity: ActivityRef,
     status_tx: watch::Sender<JobStatus>,
     shutdown: CancellationToken,
@@ -300,9 +300,9 @@ impl SupervisorRuntime {
     }
 
     async fn restart_job(&self) -> bool {
-        crate::session::restart_job(
+        crate::process_guardian::restart_job(
             &self.job,
-            &self.sessions,
+            &self.scopes,
             &self.config.shutdown,
             &self.shutdown,
             &self.stop_requested,
@@ -576,7 +576,7 @@ impl SupervisorRuntime {
             }
         };
 
-        self.sessions.cleanup(&self.config.shutdown).await;
+        self.scopes.cleanup(&self.config.shutdown).await;
 
         // A stop can arrive while cleanup waits for stubborn descendants. It
         // must win over an automatic restart.
@@ -639,7 +639,7 @@ impl SupervisorRuntime {
             });
         }
 
-        crate::session::stop_job(&self.job, &self.sessions, &self.config.shutdown).await;
+        crate::process_guardian::stop_job(&self.job, &self.scopes, &self.config.shutdown).await;
         trace!("Supervision task for {} exiting", self.name());
     }
 }
@@ -652,7 +652,7 @@ pub fn spawn_supervisor(
 ) -> JoinHandle<()> {
     let config = resources.config.clone();
     let job = resources.job.clone();
-    let sessions = resources.sessions.clone();
+    let scopes = resources.scopes.clone();
     let activity = resources.activity.ref_handle();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
@@ -666,7 +666,7 @@ pub fn spawn_supervisor(
         let mut runtime = SupervisorRuntime {
             config,
             job: job.clone(),
-            sessions,
+            scopes,
             activity,
             status_tx,
             shutdown: shutdown.clone(),

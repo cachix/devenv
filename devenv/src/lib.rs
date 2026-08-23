@@ -21,9 +21,9 @@ mod util;
 pub use devenv_snix_backend;
 
 pub use devenv::{
-    DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessMode, ProcessOptions, RunMode,
-    SecretsNeedPrompting, SecretsPromptSource, ShellCommand, format_shell_exports, is_ai_agent,
-    load_cachix_secretspec,
+    ClientRunMode, DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessOptions,
+    ProcessStartOutcome, SecretsNeedPrompting, SecretsPromptSource, ShellCommand,
+    format_shell_exports, is_ai_agent, load_cachix_secretspec,
 };
 pub use devenv_tasks as tasks;
 

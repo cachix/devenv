@@ -11,6 +11,17 @@ pub struct ExecutionResult {
     pub error: Option<String>,
 }
 
+impl ExecutionResult {
+    fn failed(error: impl Into<String>) -> Self {
+        Self {
+            success: false,
+            stdout_lines: Vec::new(),
+            stderr_lines: Vec::new(),
+            error: Some(error.into()),
+        }
+    }
+}
+
 /// Context for executing a task command.
 pub struct ExecutionContext<'a> {
     /// The command to execute (path to script).
@@ -41,12 +52,6 @@ impl<'a> ExecutionContext<'a> {
         };
 
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-        // Cancellation signals the entire command tree with killpg(child_pid).
-        // Make the spawned command the leader of that process group so the
-        // signal reaches both the task script and any children it started.
-        #[cfg(unix)]
-        command.process_group(0);
 
         if let Some(cwd) = self.cwd {
             command.current_dir(cwd);
@@ -86,47 +91,57 @@ pub async fn execute(
     callback: &dyn OutputCallback,
     cancellation: CancellationToken,
 ) -> ExecutionResult {
-    use nix::sys::signal::{self as nix_signal, Signal};
-    use nix::unistd::Pid;
+    use nix::sys::signal::Signal;
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tracing::error;
 
     let mut command = ctx.build_command();
+    let prepared_scope = match devenv_processes::PreparedProcessScope::prepare_tokio(&mut command) {
+        Ok(spawn) => spawn,
+        Err(error) => {
+            return ExecutionResult::failed(format!("Failed to isolate task process: {error}"));
+        }
+    };
 
     // Spawn the process
     let mut child = match command.spawn() {
         Ok(c) => c,
         Err(e) => {
-            return ExecutionResult {
-                success: false,
-                stdout_lines: Vec::new(),
-                stderr_lines: Vec::new(),
-                error: Some(format!("Failed to spawn command for {}: {e}", ctx.command)),
-            };
+            return ExecutionResult::failed(format!(
+                "Failed to spawn command for {}: {e}",
+                ctx.command
+            ));
         }
     };
+
+    let Some(child_pid) = child.id() else {
+        let _ = child.start_kill();
+        let _ = child.wait().await;
+        return ExecutionResult::failed("Spawned task has no process ID");
+    };
+    let process_scope = match prepared_scope.capture(child_pid) {
+        Ok(scope) => scope,
+        Err(error) => {
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            return ExecutionResult::failed(format!(
+                "Failed to capture task process scope: {error}"
+            ));
+        }
+    };
+    let _tracked_scope = devenv_processes::track_process_scope(process_scope.clone());
 
     let stdout = match child.stdout.take() {
         Some(stdout) => stdout,
         None => {
-            return ExecutionResult {
-                success: false,
-                stdout_lines: Vec::new(),
-                stderr_lines: Vec::new(),
-                error: Some("Failed to capture stdout".to_string()),
-            };
+            return ExecutionResult::failed("Failed to capture stdout");
         }
     };
 
     let stderr = match child.stderr.take() {
         Some(stderr) => stderr,
         None => {
-            return ExecutionResult {
-                success: false,
-                stdout_lines: Vec::new(),
-                stderr_lines: Vec::new(),
-                error: Some("Failed to capture stderr".to_string()),
-            };
+            return ExecutionResult::failed("Failed to capture stderr");
         }
     };
 
@@ -205,21 +220,27 @@ pub async fn execute(
                 }
             }
             _ = cancellation.cancelled() => {
-                // Kill the child process and its process group
-                if let Some(pid) = child.id() {
-                    // Send SIGTERM to the process group first for graceful shutdown
-                    let _ = nix_signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM);
-
-                    tokio::select! {
-                        _ = child.wait() => {
-                            // Process exited gracefully
-                        }
-                        _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                            // Grace period expired, send SIGKILL
-                            let _ = nix_signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL);
-                            let _ = child.wait().await;
-                        }
-                    }
+                // Scope cleanup handles the whole session and escalates after
+                // one grace period. Wait for it alongside the direct child so
+                // Tokio remains the process responsible for reaping that child.
+                let cleanup_scope = process_scope.clone();
+                let cleanup = tokio::task::spawn_blocking(move || {
+                    devenv_processes::stop_process_scopes(
+                        [cleanup_scope],
+                        devenv_processes::StopPolicy {
+                            signal: Signal::SIGTERM as i32,
+                            grace: Duration::from_secs(5),
+                        },
+                    )
+                });
+                let (wait_result, cleanup_result) = tokio::join!(child.wait(), cleanup);
+                if let Err(error) = wait_result {
+                    error!(%error, "Error waiting for cancelled task");
+                }
+                match cleanup_result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => error!(%error, "Failed to clean up task process scope"),
+                    Err(error) => error!(%error, "Task process-scope cleanup task failed"),
                 }
 
                 return ExecutionResult {

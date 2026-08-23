@@ -1,14 +1,21 @@
-//! Process management for devenv
+//! Process management for devenv.
 //!
-//! This crate provides process management with two backends:
-//! - Native: Using watchexec-supervisor with socket activation, PTY support, restart policies
-//! - ProcessCompose: Using the external process-compose tool
+//! The crate separates three concerns:
 //!
-//! Both backends implement the `ProcessManager` trait for a unified interface.
+//! - A **manager** supervises configured processes. The native manager does so
+//!   directly; an external manager is launched from a script built by Nix.
+//! - [`ManagerCapabilities`] describes which CLI operations devenv may use with
+//!   the selected manager. Current Nix modules declare these capabilities, with
+//!   embedded compatibility data for older modules.
+//! - [`ProcessScope`] identifies the operating-system process set used for
+//!   liveness and final cleanup. It is independent of manager implementation.
+//!
+//! Running managers implement the minimum [`ProcessManagerControl`] boundary.
+//! Sharing that trait does not imply support for every presentation or control
+//! operation; callers must validate the selected manager's capabilities first.
 
 use async_trait::async_trait;
 use miette::Result;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Subdirectory name for process manager state
@@ -35,13 +42,15 @@ pub fn get_process_runtime_dir(runtime_dir: &Path) -> Result<PathBuf> {
 
 pub mod command;
 pub mod config;
+pub mod external_manager;
+pub mod force_exit_registry;
 pub mod log_tailer;
 pub mod manager;
+pub mod manager_capabilities;
 pub mod pid;
-pub mod process_compose;
+mod process_guardian;
+pub mod process_scope;
 pub mod pty;
-mod session;
-pub mod session_registry;
 pub mod socket_activation;
 pub mod supervisor;
 pub mod supervisor_state;
@@ -54,45 +63,45 @@ pub use config::{
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use devenv_mailbox::ProcessCommand;
+pub use external_manager::ExternalManager;
+pub use force_exit_registry::{kill_process_scopes, track_process_scope, tracked_process_scopes};
 pub use manager::{
-    ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, ManagerMode,
+    ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, ManagerResidence,
     NativeProcessManager, OnIdle, PortInfo, ProcessInfo, ProcessPhase, ProcessResources,
     ProcessScheduler, ProcessState, StartOutcome,
 };
+pub use manager_capabilities::{
+    CapabilitySource, ManagerCapabilities, ManagerDescriptor, fallback_capabilities,
+};
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
-pub use process_compose::ProcessComposeManager;
+pub use process_guardian::maybe_run_process_guardian;
+pub use process_scope::{PreparedProcessScope, ProcessScope, StopPolicy, stop_process_scopes};
 pub use pty::PtyProcess;
-pub use session::maybe_run_session_guardian;
-pub use session_registry::{SessionRegistrar, kill_sessions, tracked_sessions};
 pub use socket_activation::{
     ActivatedSockets, ActivationSpec, ActivationSpecBuilder, SD_LISTEN_FDS_START,
     SocketActivationWrapper, activation_from_listen,
 };
 pub use supervisor_state::{ExitStatus, JobStatus, SupervisorPhase};
 
-/// Options for starting processes
+/// Request to start an external manager in the background.
 #[derive(Debug, Clone, Default)]
-pub struct StartOptions {
-    /// Process configurations to start
-    pub process_configs: HashMap<String, ProcessConfig>,
+pub struct BackgroundStartRequest {
     /// Specific processes to start (empty = all)
     pub processes: Vec<String>,
-    /// Run in background (detached from terminal)
-    pub detach: bool,
-    /// Log output to file instead of terminal (only for detached mode)
+    /// Log output to file instead of inheriting the terminal streams.
     pub log_to_file: bool,
     /// Environment variables to pass to processes
-    pub env: HashMap<String, String>,
-    /// Cancellation token for graceful shutdown coordination
-    pub cancellation_token: Option<tokio_util::sync::CancellationToken>,
+    pub env: std::collections::HashMap<String, String>,
 }
 
-/// Common interface for process managers
+/// Runtime control shared by already-started native and external managers.
+///
+/// Startup deliberately is not part of this trait: the native manager is
+/// assembled from the task scheduler, while an external manager is launched
+/// from a Nix-built adapter. [`ManagerCapabilities`] describes which optional
+/// operations those adapters support.
 #[async_trait]
-pub trait ProcessManager: Send + Sync {
-    /// Start processes with the given options
-    async fn start(&self, options: StartOptions) -> Result<()>;
-
+pub trait ProcessManagerControl: Send + Sync {
     /// Stop all running processes
     async fn stop(&self) -> Result<()>;
 

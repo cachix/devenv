@@ -795,13 +795,15 @@ pub enum Commands {
     )]
     Info {},
 
-    #[command(about = "Start processes in the foreground. https://devenv.sh/processes/")]
+    #[command(about = "Start processes. https://devenv.sh/processes/")]
     Up {
         #[command(flatten)]
         up_args: UpArgs,
     },
 
-    #[command(about = "Stop processes running in the background. https://devenv.sh/processes/")]
+    #[command(
+        about = "Stop the running process manager and its processes. https://devenv.sh/processes/"
+    )]
     Down {},
 
     Processes {
@@ -1017,7 +1019,7 @@ pub struct UpArgs {
 #[derive(Subcommand, Clone)]
 #[clap(about = "Start or stop processes. https://devenv.sh/processes/")]
 pub enum ProcessesCommand {
-    #[command(about = "Start processes in the foreground.")]
+    #[command(about = "Start processes.")]
     Up {
         #[command(flatten)]
         up_args: UpArgs,
@@ -1028,7 +1030,7 @@ pub enum ProcessesCommand {
     )]
     Attach {},
 
-    #[command(about = "Stop processes running in the background.")]
+    #[command(about = "Stop the running process manager and its processes.")]
     Down {},
 
     #[command(about = "Wait for all processes to be ready.")]

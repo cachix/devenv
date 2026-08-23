@@ -132,7 +132,7 @@ enum TaskError {
 }
 
 fn main() -> Result<()> {
-    if let Some(code) = devenv_processes::maybe_run_session_guardian() {
+    if let Some(code) = devenv_processes::maybe_run_process_guardian() {
         std::process::exit(code);
     }
     tokio::runtime::Builder::new_multi_thread()
@@ -145,8 +145,8 @@ async fn async_main() -> Result<()> {
     let shutdown = Shutdown::new();
     shutdown.install_signals().await;
     // A second signal force-exits without running teardown or destructors, and
-    // processes live in their own session, so they would outlive us.
-    shutdown.set_pre_exit_hook(devenv_processes::kill_sessions);
+    // processes live in isolated process scopes, so they would outlive us.
+    shutdown.set_pre_exit_hook(devenv_processes::kill_process_scopes);
     watch_parent(&shutdown);
 
     run_tasks(shutdown.clone()).await?;

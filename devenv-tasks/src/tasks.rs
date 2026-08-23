@@ -1587,7 +1587,7 @@ impl Tasks {
         // Wait for all tasks to complete
         running_tasks.wait_all().await;
 
-        // wait_all() aborts spawned futures on shutdown so that run_foreground()
+        // wait_all() aborts spawned futures on shutdown so that run_event_loop()
         // can proceed to stop_all(). Aborted futures never write back their
         // completion status, so sweep any still-Running tasks to Cancelled.
         if self.shutdown.is_cancelled() {
@@ -2253,7 +2253,7 @@ mod schedule_tests {
             .expect("external processes did not settle");
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            tasks.process_manager().run_foreground(
+            tasks.process_manager().run_event_loop(
                 tokio_util::sync::CancellationToken::new(),
                 None,
                 devenv_processes::OnIdle::Exit,

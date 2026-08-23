@@ -1,10 +1,10 @@
-//! Tracks and cleans Unix sessions created by managed processes.
+//! Guards and recovers process scopes created by managed processes.
 //!
-//! A guardian outside each service session watches the manager through a pipe.
-//! On EOF it terminates every process group recorded in the session. Leases
-//! include process start times to prevent cleanup after PID reuse.
+//! A guardian outside each service scope watches the manager through a pipe.
+//! On EOF it terminates the recorded scope. Recovery records include process
+//! start times to prevent cleanup after PID reuse.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -28,6 +28,9 @@ use nix::unistd::Pid;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, CommandWrapper};
 
 use crate::config::ShutdownConfig;
+use crate::process_scope::{
+    PreparedProcessScope, ProcessScope, StopPolicy, process_start_time, stop_process_scopes,
+};
 
 const GUARDIAN_ARG: &str = "--devenv-session-guardian";
 const GUARDIAN_READY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -37,63 +40,62 @@ const GUARDIAN_EXIT_MARGIN: Duration = Duration::from_secs(5);
 /// Set once the normal entry point enables guardian spawning.
 static GUARDIANS_ENABLED: AtomicBool = AtomicBool::new(false);
 
-/// Sessions and guardians owned by one supervised process.
+/// Process scopes and guardians owned by one supervised process.
 #[derive(Debug, Default)]
-pub(crate) struct SessionRegistry {
+pub(crate) struct ProcessScopeRegistry {
     inner: Mutex<RegistryInner>,
 }
 
 #[derive(Debug, Default)]
 struct RegistryInner {
-    sessions: BTreeMap<i32, Option<u64>>,
-    guardians: Vec<SessionGuardian>,
+    scopes: BTreeSet<ProcessScope>,
+    guardians: Vec<ProcessGuardian>,
 }
 
-impl SessionRegistry {
-    pub(crate) fn record(&self, session_id: i32) {
-        self.inner
-            .lock()
-            .unwrap()
-            .sessions
-            .insert(session_id, process_start_time(session_id));
+impl ProcessScopeRegistry {
+    pub(crate) fn record(&self, scope: ProcessScope) {
+        self.inner.lock().unwrap().scopes.insert(scope);
     }
 
-    fn attach(&self, guardian: SessionGuardian) {
+    fn attach(&self, guardian: ProcessGuardian) {
         self.inner.lock().unwrap().guardians.push(guardian);
     }
 
-    /// Stop all recorded sessions and retire their guardians.
+    /// Stop all recorded scopes and retire their guardians.
     pub(crate) async fn cleanup(&self, shutdown: &ShutdownConfig) {
-        let (sessions, guardians) = {
+        let (scopes, guardians) = {
             let mut inner = self.inner.lock().unwrap();
             (
-                std::mem::take(&mut inner.sessions),
+                std::mem::take(&mut inner.scopes),
                 std::mem::take(&mut inner.guardians),
             )
         };
-        let session_ids = sessions
-            .into_iter()
-            .filter_map(|(session_id, leader_start)| {
-                session_matches_start(session_id, leader_start).then_some(session_id)
-            })
-            .collect::<BTreeSet<_>>();
-        if !session_ids.is_empty() {
+        if !scopes.is_empty() {
             let signal = shutdown.signal;
             let grace = shutdown.grace_duration();
-            let _ = tokio::task::spawn_blocking(move || {
-                terminate_sessions(&session_ids, signal, grace);
+            match tokio::task::spawn_blocking(move || {
+                stop_process_scopes(scopes, StopPolicy { signal, grace })
             })
-            .await;
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => tracing::warn!(%error, "failed to clean up scopes"),
+                Err(error) => tracing::warn!(%error, "scope cleanup task failed"),
+            }
         }
-        futures::future::join_all(guardians.into_iter().map(SessionGuardian::cleanup)).await;
+        futures::future::join_all(guardians.into_iter().map(ProcessGuardian::cleanup)).await;
     }
 }
 
-/// Stop the job and its remaining session groups within one grace period.
-pub(crate) async fn stop_job(job: &Job, registry: &SessionRegistry, shutdown: &ShutdownConfig) {
+/// Stop the job and its remaining scope groups within one grace period.
+pub(crate) async fn stop_job(
+    job: &Job,
+    registry: &ProcessScopeRegistry,
+    shutdown: &ShutdownConfig,
+) {
     #[cfg(unix)]
     {
-        // Session cleanup is the sole signal source; job.stop only settles state.
+        // Scope cleanup is the sole signal source; job.stop only settles state.
         registry.cleanup(shutdown).await;
         job.stop().await;
     }
@@ -108,7 +110,7 @@ pub(crate) async fn stop_job(job: &Job, registry: &SessionRegistry, shutdown: &S
 /// Stop the job, then restart it unless manager shutdown has begun.
 pub(crate) async fn restart_job(
     job: &Job,
-    registry: &SessionRegistry,
+    registry: &ProcessScopeRegistry,
     shutdown: &ShutdownConfig,
     manager_shutdown: &tokio_util::sync::CancellationToken,
     process_stop: &tokio_util::sync::CancellationToken,
@@ -123,18 +125,18 @@ pub(crate) async fn restart_job(
 
 /// Keeps one manager responsible for a process across restarts.
 #[derive(Debug, Clone)]
-pub(crate) struct SessionTakeover {
+pub(crate) struct ProcessClaim {
     #[cfg(unix)]
     _lock: Arc<Flock<std::fs::File>>,
 }
 
-impl SessionTakeover {
+impl ProcessClaim {
     #[cfg(unix)]
     fn claim(state_dir: &Path, process_name: &str) -> Result<Self> {
-        let lock_path = takeover_lock_path(state_dir, process_name);
+        let lock_path = process_claim_lock_path(state_dir, process_name);
         let lock_parent = lock_path
             .parent()
-            .ok_or_else(|| miette::miette!("takeover lock path has no parent"))?;
+            .ok_or_else(|| miette::miette!("claim lock path has no parent"))?;
         std::fs::create_dir_all(lock_parent).into_diagnostic()?;
         let file = std::fs::OpenOptions::new()
             .read(true)
@@ -163,71 +165,100 @@ impl SessionTakeover {
 }
 
 /// Reclaim stale state and return a manager-lifetime ownership guard.
-pub(crate) async fn reconcile_process(
+pub(crate) async fn recover_and_claim_process(
     state_dir: &Path,
     process_name: &str,
-) -> Result<SessionTakeover> {
+) -> Result<ProcessClaim> {
     let state_dir = state_dir.to_path_buf();
     let process_name = process_name.to_string();
     tokio::task::spawn_blocking(move || {
-        let takeover = SessionTakeover::claim(&state_dir, &process_name)?;
-        reconcile_lease(&lease_path(&state_dir, &process_name))?;
-        Ok(takeover)
+        let claim = ProcessClaim::claim(&state_dir, &process_name)?;
+        reconcile_recovery_record(&recovery_record_path(&state_dir, &process_name))?;
+        Ok(claim)
     })
     .await
     .into_diagnostic()?
 }
 
-/// Registers the session created for each supervised spawn.
-#[derive(Debug, Clone)]
-pub(crate) struct SessionRegistrationWrapper {
+/// Registers the scope created for each supervised spawn.
+#[derive(Debug)]
+pub(crate) struct ProcessScopeRegistrationWrapper {
     pub(crate) state_dir: PathBuf,
     pub(crate) process_name: String,
     pub(crate) shutdown: ShutdownConfig,
-    pub(crate) registry: Arc<SessionRegistry>,
-    pub(crate) _takeover: SessionTakeover,
+    pub(crate) registry: Arc<ProcessScopeRegistry>,
+    pub(crate) _claim: ProcessClaim,
+    pub(crate) prepared_scope: Option<PreparedProcessScope>,
+    pub(crate) spawned_scope: Option<ProcessScope>,
+}
+
+impl Clone for ProcessScopeRegistrationWrapper {
+    fn clone(&self) -> Self {
+        Self {
+            state_dir: self.state_dir.clone(),
+            process_name: self.process_name.clone(),
+            shutdown: self.shutdown.clone(),
+            registry: Arc::clone(&self.registry),
+            _claim: self._claim.clone(),
+            prepared_scope: None,
+            spawned_scope: None,
+        }
+    }
 }
 
 #[cfg(unix)]
-impl CommandWrapper for SessionRegistrationWrapper {
+impl CommandWrapper for ProcessScopeRegistrationWrapper {
+    fn pre_spawn(
+        &mut self,
+        command: &mut tokio::process::Command,
+        _core: &CommandWrap,
+    ) -> std::io::Result<()> {
+        self.prepared_scope = Some(PreparedProcessScope::prepare_tokio(command)?);
+        Ok(())
+    }
+
     fn post_spawn(
         &mut self,
         _command: &mut tokio::process::Command,
         child: &mut tokio::process::Child,
         _core: &CommandWrap,
     ) -> std::io::Result<()> {
-        let session_id = child
+        let child_pid = child
             .id()
-            .ok_or_else(|| std::io::Error::other("spawned service has no PID"))?
-            as i32;
-
+            .ok_or_else(|| std::io::Error::other("spawned service has no PID"))?;
+        let scope = self
+            .prepared_scope
+            .take()
+            .ok_or_else(|| std::io::Error::other("scope was not prepared"))?
+            .capture(child_pid)?;
         if GUARDIANS_ENABLED.load(Ordering::Relaxed) {
-            let (guardian, ready) = match SessionGuardian::spawn(
+            let (guardian, ready) = match ProcessGuardian::spawn(
                 &self.state_dir,
                 &self.process_name,
-                session_id,
+                &scope,
                 &self.shutdown,
             ) {
                 Ok(result) => result,
                 Err(error) => {
-                    kill_unprotected_session(child, session_id);
+                    kill_unprotected_scope(child, &scope);
                     return Err(std::io::Error::other(format!(
-                        "failed to start session guardian for {}: {error:?}",
+                        "failed to start scope guardian for {}: {error:?}",
                         self.process_name
                     )));
                 }
             };
             if !guardian_became_ready(ready, GUARDIAN_READY_TIMEOUT) {
                 guardian.abort();
-                kill_unprotected_session(child, session_id);
+                kill_unprotected_scope(child, &scope);
                 return Err(std::io::Error::other(format!(
-                    "session guardian for {} did not become ready",
+                    "scope guardian for {} did not become ready",
                     self.process_name
                 )));
             }
             self.registry.attach(guardian);
         }
-        self.registry.record(session_id);
+        self.registry.record(scope.clone());
+        self.spawned_scope = Some(scope);
         Ok(())
     }
 
@@ -236,16 +267,26 @@ impl CommandWrapper for SessionRegistrationWrapper {
         inner: Box<dyn ChildWrapper>,
         _core: &CommandWrap,
     ) -> std::io::Result<Box<dyn ChildWrapper>> {
-        Ok(inner)
+        let scope = self
+            .spawned_scope
+            .take()
+            .ok_or_else(|| std::io::Error::other("spawned scope was not captured"))?;
+        Ok(crate::force_exit_registry::track_child(inner, scope))
     }
 }
 
-/// Identifies a guarded session and protects reconciliation from PID reuse.
+/// Identifies a guarded scope and protects reconciliation from PID reuse.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SessionLease {
+struct ProcessRecoveryRecord {
     name: String,
-    session_id: i32,
-    /// Start time of the session leader; see [`process_start_time`].
+    /// Serialized identity of the guarded process set.
+    // Preserve the existing record format while using precise Rust vocabulary.
+    #[serde(default, rename = "tree")]
+    scope: Option<ProcessScope>,
+    /// Compatibility with recovery records that stored only a Unix session.
+    #[serde(default)]
+    session_id: Option<i32>,
+    #[serde(default)]
     leader_start: Option<u64>,
     owner_pid: i32,
     owner_start: Option<u64>,
@@ -255,36 +296,44 @@ struct SessionLease {
     grace_ms: u64,
 }
 
-impl SessionLease {
+impl ProcessRecoveryRecord {
     fn grace(&self) -> Duration {
         Duration::from_millis(self.grace_ms)
+    }
+
+    fn scope(&self) -> Option<ProcessScope> {
+        self.scope.clone().or_else(|| {
+            self.session_id.and_then(|session_id| {
+                ProcessScope::unix_session_with_start(session_id, self.leader_start).ok()
+            })
+        })
     }
 }
 
 /// Guardian process owned by the manager.
-struct SessionGuardian {
-    lease_path: PathBuf,
+struct ProcessGuardian {
+    recovery_record_path: PathBuf,
     write_end: Option<std::io::PipeWriter>,
     child: std::process::Child,
     grace: Duration,
 }
 
-impl std::fmt::Debug for SessionGuardian {
+impl std::fmt::Debug for ProcessGuardian {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SessionGuardian")
-            .field("lease_path", &self.lease_path)
+        f.debug_struct("ProcessGuardian")
+            .field("recovery_record_path", &self.recovery_record_path)
             .field("pid", &self.child.id())
             .finish()
     }
 }
 
-impl SessionGuardian {
+impl ProcessGuardian {
     /// Start a guardian and return its handle and readiness pipe.
     #[cfg(unix)]
     fn spawn(
         state_dir: &Path,
         process_name: &str,
-        session_id: i32,
+        scope: &ProcessScope,
         shutdown: &ShutdownConfig,
     ) -> Result<(Self, std::process::ChildStdout)> {
         use std::os::unix::process::CommandExt;
@@ -293,16 +342,17 @@ impl SessionGuardian {
         #[cfg(feature = "test-all")]
         if std::env::var_os("DEVENV_TASKS_TEST_FAIL_SESSION_GUARDIAN_START").is_some() {
             std::thread::sleep(Duration::from_millis(250));
-            bail!("injected session guardian startup failure");
+            bail!("injected scope guardian startup failure");
         }
 
-        let lease_path = lease_path(state_dir, process_name);
-        std::fs::create_dir_all(guardian_dir(state_dir)).into_diagnostic()?;
+        let recovery_record_path = recovery_record_path(state_dir, process_name);
+        std::fs::create_dir_all(guardian_state_dir(state_dir)).into_diagnostic()?;
         let owner_pid = std::process::id() as i32;
-        let lease = SessionLease {
+        let record = ProcessRecoveryRecord {
             name: process_name.to_string(),
-            session_id,
-            leader_start: process_start_time(session_id),
+            scope: Some(scope.clone()),
+            session_id: None,
+            leader_start: None,
             owner_pid,
             owner_start: process_start_time(owner_pid),
             guardian_pid: 0,
@@ -316,15 +366,15 @@ impl SessionGuardian {
         let log = std::fs::OpenOptions::new()
             .append(true)
             .create(true)
-            .open(lease_path.with_extension("log"))
+            .open(recovery_record_path.with_extension("log"))
             .map(Stdio::from)
             .unwrap_or_else(|_| Stdio::null());
 
         let mut command = Command::new(std::env::current_exe().into_diagnostic()?);
         command
             .arg(GUARDIAN_ARG)
-            .arg(&lease_path)
-            .arg(serde_json::to_string(&lease).into_diagnostic()?)
+            .arg(&recovery_record_path)
+            .arg(serde_json::to_string(&record).into_diagnostic()?)
             .stdin(Stdio::from(read_end))
             .stdout(Stdio::piped())
             .stderr(log);
@@ -333,11 +383,11 @@ impl SessionGuardian {
         let mut child = command
             .spawn()
             .into_diagnostic()
-            .wrap_err_with(|| format!("failed to start session guardian for {process_name}"))?;
+            .wrap_err_with(|| format!("failed to start scope guardian for {process_name}"))?;
 
         let ready = child.stdout.take().expect("guardian stdout is piped");
         let guardian = Self {
-            lease_path,
+            recovery_record_path,
             write_end: Some(write_end),
             child,
             grace: shutdown.grace_duration(),
@@ -349,13 +399,13 @@ impl SessionGuardian {
     fn spawn(
         _state_dir: &Path,
         _process_name: &str,
-        _session_id: i32,
+        _scope: &ProcessScope,
         _shutdown: &ShutdownConfig,
     ) -> Result<(Self, std::process::ChildStdout)> {
-        bail!("session guardians require Unix")
+        bail!("scope guardians require Unix")
     }
 
-    /// Close the pipe, wait for the guardian, and remove its lease.
+    /// Close the pipe, wait for the guardian, and remove its record.
     async fn cleanup(mut self) {
         self.write_end.take();
 
@@ -370,20 +420,20 @@ impl SessionGuardian {
             let _ = self.child.kill();
             let _ = self.child.wait();
         }
-        let _ = std::fs::remove_file(&self.lease_path);
+        let _ = std::fs::remove_file(&self.recovery_record_path);
     }
 
     fn abort(mut self) {
         self.write_end.take();
         let _ = self.child.kill();
         let _ = self.child.wait();
-        let _ = std::fs::remove_file(&self.lease_path);
+        let _ = std::fs::remove_file(&self.recovery_record_path);
     }
 }
 
 #[cfg(unix)]
-fn kill_unprotected_session(child: &mut tokio::process::Child, session_id: i32) {
-    terminate_session(session_id, NixSignal::SIGKILL as i32, Duration::ZERO);
+fn kill_unprotected_scope(child: &mut tokio::process::Child, scope: &ProcessScope) {
+    let _ = scope.force_kill();
     let _ = child.start_kill();
     let deadline = Instant::now() + Duration::from_secs(1);
     while Instant::now() < deadline {
@@ -394,37 +444,40 @@ fn kill_unprotected_session(child: &mut tokio::process::Child, session_id: i32) 
     }
 }
 
-/// Run guardian mode if this process was started as a session guardian.
+/// Run guardian mode if this process was started as a scope guardian.
 ///
 /// Call this before argument parsing. A guardian invocation returns an exit
 /// code; a normal invocation enables guardians and returns `None`.
-pub fn maybe_run_session_guardian() -> Option<i32> {
+pub fn maybe_run_process_guardian() -> Option<i32> {
     let mut args = std::env::args_os().skip(1);
     if args.next().as_deref() != Some(std::ffi::OsStr::new(GUARDIAN_ARG)) {
         GUARDIANS_ENABLED.store(true, Ordering::Relaxed);
         return None;
     }
-    let (Some(lease_path), Some(lease_json)) = (args.next(), args.next()) else {
-        eprintln!("devenv session guardian: usage: {GUARDIAN_ARG} <lease-path> <lease-json>");
+    let (Some(recovery_record_path), Some(record_json)) = (args.next(), args.next()) else {
+        eprintln!("devenv scope guardian: usage: {GUARDIAN_ARG} <record-path> <record-json>");
         return Some(2);
     };
-    match run_guardian(PathBuf::from(lease_path), &lease_json.to_string_lossy()) {
+    match run_process_guardian(
+        PathBuf::from(recovery_record_path),
+        &record_json.to_string_lossy(),
+    ) {
         Ok(()) => Some(0),
         Err(error) => {
-            eprintln!("devenv session guardian: {error:?}");
+            eprintln!("devenv scope guardian: {error:?}");
             Some(1)
         }
     }
 }
 
 #[cfg(unix)]
-fn run_guardian(lease_path: PathBuf, lease_json: &str) -> Result<()> {
+fn run_process_guardian(recovery_record_path: PathBuf, record_json: &str) -> Result<()> {
     use std::io::Write;
 
-    let mut lease: SessionLease = serde_json::from_str(lease_json).into_diagnostic()?;
-    lease.guardian_pid = std::process::id() as i32;
-    lease.guardian_start = process_start_time(lease.guardian_pid);
-    write_atomic_json(&lease_path, &lease)?;
+    let mut record: ProcessRecoveryRecord = serde_json::from_str(record_json).into_diagnostic()?;
+    record.guardian_pid = std::process::id() as i32;
+    record.guardian_start = process_start_time(record.guardian_pid);
+    write_atomic_json(&recovery_record_path, &record)?;
 
     // EOF means the owner exited. SIGUSR1 means a new manager took over.
     let (signal_read, signal_write) = std::io::pipe().into_diagnostic()?;
@@ -438,16 +491,25 @@ fn run_guardian(lease_path: PathBuf, lease_json: &str) -> Result<()> {
 
     wait_for_cleanup_request(&signal_read);
 
-    if session_matches_lease(&lease) {
-        terminate_session(lease.session_id, lease.signal, lease.grace());
+    if let Some(scope) = record.scope().filter(ProcessScope::matches_identity) {
+        let result = stop_process_scopes(
+            [scope],
+            StopPolicy {
+                signal: record.signal,
+                grace: record.grace(),
+            },
+        );
+        let _ = std::fs::remove_file(&recovery_record_path);
+        result.into_diagnostic()?;
+        return Ok(());
     }
-    let _ = std::fs::remove_file(&lease_path);
+    let _ = std::fs::remove_file(&recovery_record_path);
     Ok(())
 }
 
 #[cfg(not(unix))]
-fn run_guardian(_lease_path: PathBuf, _lease_json: &str) -> Result<()> {
-    bail!("session guardians require Unix")
+fn run_process_guardian(_recovery_record_path: PathBuf, _record_json: &str) -> Result<()> {
+    bail!("scope guardians require Unix")
 }
 
 /// Block until the owner's pipe on stdin reaches EOF or SIGUSR1 arrives.
@@ -480,7 +542,7 @@ fn wait_for_cleanup_request(signal_read: &std::io::PipeReader) {
     }
 }
 
-/// Wait for the guardian to report that its lease is on disk.
+/// Wait for the guardian to report that its record is on disk.
 #[cfg(unix)]
 fn guardian_became_ready(mut ready: std::process::ChildStdout, timeout: Duration) -> bool {
     use std::io::Read;
@@ -510,39 +572,41 @@ fn wait_readable(fd: &impl std::os::fd::AsFd, timeout: Duration) -> bool {
     }
 }
 
-/// Reconcile a lease left by an earlier manager.
+/// Reconcile a record left by an earlier manager.
 ///
 /// - The owner is alive: fail; the process is running under another manager.
-/// - The guardian is alive: ask it to terminate the session and wait.
-/// - Otherwise sweep the session directly, unless its id was recycled by an
-///   unrelated session leader since the lease was written.
+/// - The guardian is alive: ask it to terminate the scope and wait.
+/// - Otherwise sweep the scope directly, unless its id was recycled by an
+///   unrelated scope leader since the record was written.
 #[cfg(unix)]
-fn reconcile_lease(path: &Path) -> Result<()> {
+fn reconcile_recovery_record(path: &Path) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
-    let lease: SessionLease = match std::fs::read(path)
+    let record: ProcessRecoveryRecord = match std::fs::read(path)
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
     {
-        Some(lease) => lease,
+        Some(record) => record,
         None => {
             let _ = std::fs::remove_file(path);
             return Ok(());
         }
     };
 
-    if process_matches(lease.owner_pid, lease.owner_start) {
+    if process_matches(record.owner_pid, record.owner_start) {
         bail!(
             "process {} is already running under devenv process {}",
-            lease.name,
-            lease.owner_pid
+            record.name,
+            record.owner_pid
         );
     }
 
-    if lease.guardian_start.is_some() && process_matches(lease.guardian_pid, lease.guardian_start) {
-        signal::kill(Pid::from_raw(lease.guardian_pid), NixSignal::SIGUSR1).into_diagnostic()?;
-        let deadline = Instant::now() + lease.grace() + GUARDIAN_EXIT_MARGIN;
+    if record.guardian_start.is_some()
+        && process_matches(record.guardian_pid, record.guardian_start)
+    {
+        signal::kill(Pid::from_raw(record.guardian_pid), NixSignal::SIGUSR1).into_diagnostic()?;
+        let deadline = Instant::now() + record.grace() + GUARDIAN_EXIT_MARGIN;
         while Instant::now() < deadline {
             if !path.exists() {
                 return Ok(());
@@ -550,36 +614,30 @@ fn reconcile_lease(path: &Path) -> Result<()> {
             std::thread::sleep(Duration::from_millis(25));
         }
         bail!(
-            "previous session guardian {} for {} did not stop",
-            lease.guardian_pid,
-            lease.name
+            "previous scope guardian {} for {} did not stop",
+            record.guardian_pid,
+            record.name
         )
     }
 
-    if session_matches_lease(&lease) {
-        debug!(name = %lease.name, session_id = lease.session_id, "reclaiming session left by a previous manager");
-        terminate_session(lease.session_id, lease.signal, lease.grace());
+    if let Some(scope) = record.scope().filter(ProcessScope::matches_identity) {
+        debug!(name = %record.name, leader_pid = scope.leader_pid(), "reclaiming scope left by a previous manager");
+        stop_process_scopes(
+            [scope],
+            StopPolicy {
+                signal: record.signal,
+                grace: record.grace(),
+            },
+        )
+        .into_diagnostic()?;
     }
     let _ = std::fs::remove_file(path);
     Ok(())
 }
 
 #[cfg(not(unix))]
-fn reconcile_lease(_path: &Path) -> Result<()> {
+fn reconcile_recovery_record(_path: &Path) -> Result<()> {
     Ok(())
-}
-
-/// Check that the session ID was not reused after the service ended.
-#[cfg(unix)]
-fn session_matches_lease(lease: &SessionLease) -> bool {
-    session_matches_start(lease.session_id, lease.leader_start)
-}
-
-fn session_matches_start(session_id: i32, leader_start: Option<u64>) -> bool {
-    match process_start_time(session_id) {
-        Some(start) => Some(start) == leader_start,
-        None => true,
-    }
 }
 
 /// Whether `pid` is alive and is the process that was recorded with `start`.
@@ -595,20 +653,20 @@ fn process_matches(pid: i32, start: Option<u64>) -> bool {
     }
 }
 
-fn guardian_dir(state_dir: &Path) -> PathBuf {
+fn guardian_state_dir(state_dir: &Path) -> PathBuf {
     state_dir.join("guardians")
 }
 
-fn lease_path(state_dir: &Path, process_name: &str) -> PathBuf {
-    guardian_dir(state_dir).join(format!("{}.json", lease_key(process_name)))
+fn recovery_record_path(state_dir: &Path, process_name: &str) -> PathBuf {
+    guardian_state_dir(state_dir).join(format!("{}.json", recovery_record_key(process_name)))
 }
 
-fn takeover_lock_path(state_dir: &Path, process_name: &str) -> PathBuf {
-    guardian_dir(state_dir).join(format!("{}.lock", lease_key(process_name)))
+fn process_claim_lock_path(state_dir: &Path, process_name: &str) -> PathBuf {
+    guardian_state_dir(state_dir).join(format!("{}.lock", recovery_record_key(process_name)))
 }
 
 /// Stable, bounded file name derived from the process name.
-fn lease_key(name: &str) -> String {
+fn recovery_record_key(name: &str) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in name.as_bytes() {
         hash ^= u64::from(*byte);
@@ -620,252 +678,12 @@ fn lease_key(name: &str) -> String {
 fn write_atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| miette::miette!("lease path has no parent"))?;
+        .ok_or_else(|| miette::miette!("record path has no parent"))?;
     std::fs::create_dir_all(parent).into_diagnostic()?;
     let mut temp = tempfile::NamedTempFile::new_in(parent).into_diagnostic()?;
     serde_json::to_writer(&mut temp, value).into_diagnostic()?;
     temp.persist(path).into_diagnostic()?;
     Ok(())
-}
-
-/// Send `graceful_signal` to every process group in the session, wait up to
-/// `grace` for the session to empty, then SIGKILL whatever is left.
-#[cfg(unix)]
-pub(crate) fn terminate_session(session_id: i32, graceful_signal: i32, grace: Duration) {
-    terminate_sessions(&BTreeSet::from([session_id]), graceful_signal, grace);
-}
-
-#[cfg(unix)]
-fn terminate_sessions(session_ids: &BTreeSet<i32>, graceful_signal: i32, grace: Duration) {
-    let graceful_signal = NixSignal::try_from(graceful_signal).unwrap_or(NixSignal::SIGTERM);
-    let groups = process_groups_in_sessions(session_ids);
-    if groups.is_empty() {
-        return;
-    }
-    debug!(
-        ?session_ids,
-        ?groups,
-        "terminating process groups left in sessions"
-    );
-    signal_session_groups(&groups, graceful_signal);
-
-    let deadline = Instant::now() + grace;
-    while Instant::now() < deadline {
-        if remaining_process_groups(session_ids, &groups).is_empty() {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(25));
-    }
-    signal_session_groups(
-        &remaining_process_groups(session_ids, &groups),
-        NixSignal::SIGKILL,
-    );
-}
-
-#[cfg(not(unix))]
-pub(crate) fn terminate_session(_session_id: i32, _graceful_signal: i32, _grace: Duration) {}
-
-#[cfg(not(unix))]
-fn terminate_sessions(_session_ids: &BTreeSet<i32>, _graceful_signal: i32, _grace: Duration) {}
-
-#[cfg(unix)]
-fn signal_session_groups(groups: &BTreeSet<i32>, signal_value: NixSignal) {
-    for pgid in groups {
-        let _ = signal::killpg(Pid::from_raw(*pgid), signal_value);
-    }
-}
-
-#[cfg(unix)]
-fn process_groups_in_sessions(session_ids: &BTreeSet<i32>) -> BTreeSet<i32> {
-    // The session ID is also its leader's process-group ID. Preserve that
-    // signal target when process-table enumeration misses it.
-    let mut groups = session_ids.clone();
-    groups.extend(
-        session_ids
-            .iter()
-            .flat_map(|session_id| session_process_groups(*session_id)),
-    );
-    groups
-}
-
-/// Live known groups plus groups created after shutdown began.
-#[cfg(unix)]
-fn remaining_process_groups(
-    session_ids: &BTreeSet<i32>,
-    known_groups: &BTreeSet<i32>,
-) -> BTreeSet<i32> {
-    let mut groups = known_groups
-        .iter()
-        .copied()
-        .filter(|group| process_group_alive(*group))
-        .collect::<BTreeSet<_>>();
-    groups.extend(
-        session_ids
-            .iter()
-            .flat_map(|session_id| session_process_groups(*session_id)),
-    );
-    groups
-}
-
-/// Whether a process group still contains work that can respond to signals.
-///
-/// `killpg(group, 0)` reports zombie-only groups as present on Linux. Waiting
-/// for those groups would consume the entire shutdown grace period because the
-/// caller cannot reap a child while `terminate_sessions` is running.
-#[cfg(target_os = "linux")]
-fn process_group_alive(group: i32) -> bool {
-    let Ok(entries) = std::fs::read_dir("/proc") else {
-        return signal::killpg(Pid::from_raw(group), None).is_ok();
-    };
-    entries.flatten().any(|entry| {
-        let Ok(pid) = entry.file_name().to_string_lossy().parse::<i32>() else {
-            return false;
-        };
-        let Some(fields) = proc_stat_fields(pid) else {
-            return false;
-        };
-        fields.first().is_some_and(|state| state != "Z")
-            && fields.get(2).and_then(|field| field.parse::<i32>().ok()) == Some(group)
-    })
-}
-
-#[cfg(target_os = "macos")]
-fn process_group_alive(group: i32) -> bool {
-    signal::killpg(Pid::from_raw(group), None).is_ok()
-}
-
-/// Process group ids of every live process in `session_id`, excluding the
-/// calling process.
-#[cfg(target_os = "linux")]
-pub(crate) fn session_process_groups(session_id: i32) -> BTreeSet<i32> {
-    let mut groups = BTreeSet::new();
-    let Ok(entries) = std::fs::read_dir("/proc") else {
-        return groups;
-    };
-    for entry in entries.flatten() {
-        let Ok(pid) = entry.file_name().to_string_lossy().parse::<i32>() else {
-            continue;
-        };
-        if pid == std::process::id() as i32 {
-            continue;
-        }
-        let Some(fields) = proc_stat_fields(pid) else {
-            continue;
-        };
-        if fields.first().is_some_and(|state| state == "Z") {
-            continue;
-        }
-        let (Some(pgid), Some(sid)) = (
-            fields.get(2).and_then(|f| f.parse::<i32>().ok()),
-            fields.get(3).and_then(|f| f.parse::<i32>().ok()),
-        ) else {
-            continue;
-        };
-        if sid == session_id {
-            groups.insert(pgid);
-        }
-    }
-    groups
-}
-
-/// Fields after the command name in `/proc/<pid>/stat`.
-#[cfg(target_os = "linux")]
-fn proc_stat_fields(pid: i32) -> Option<Vec<String>> {
-    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    let (_, after_comm) = stat.rsplit_once(") ")?;
-    Some(after_comm.split_whitespace().map(str::to_string).collect())
-}
-
-/// Start time of `pid` in a platform-specific unit, stable for the lifetime
-/// of the process. `None` if the process does not exist or cannot be read.
-#[cfg(target_os = "linux")]
-pub(crate) fn process_start_time(pid: i32) -> Option<u64> {
-    proc_stat_fields(pid)?.get(19)?.parse().ok()
-}
-
-#[cfg(target_os = "macos")]
-pub(crate) fn session_process_groups(session_id: i32) -> BTreeSet<i32> {
-    let mut groups = BTreeSet::new();
-    let session = Pid::from_raw(session_id);
-    for pid in all_pids() {
-        if pid == std::process::id() as i32 {
-            continue;
-        }
-        let pid = Pid::from_raw(pid);
-        if nix::unistd::getsid(Some(pid)) != Ok(session) {
-            continue;
-        }
-        if let Ok(pgid) = nix::unistd::getpgid(Some(pid)) {
-            groups.insert(pgid.as_raw());
-        }
-    }
-    groups
-}
-
-/// Every PID on the system. `proc_listallpids` has no safe wrapper in `nix`.
-#[cfg(target_os = "macos")]
-fn all_pids() -> Vec<i32> {
-    let count = unsafe { libc::proc_listallpids(std::ptr::null_mut(), 0) };
-    if count <= 0 {
-        return Vec::new();
-    }
-    let mut capacity = count as usize + 64;
-    loop {
-        let mut pids = vec![0_i32; capacity];
-        let Some(buffer_size) = pids
-            .len()
-            .checked_mul(std::mem::size_of::<i32>())
-            .and_then(|size| libc::c_int::try_from(size).ok())
-        else {
-            return Vec::new();
-        };
-        let count = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast(), buffer_size) };
-        if count <= 0 {
-            return Vec::new();
-        }
-        if (count as usize) < capacity {
-            pids.truncate(count as usize);
-            pids.retain(|pid| *pid > 0);
-            return pids;
-        }
-        let Some(next_capacity) = capacity.checked_mul(2) else {
-            return Vec::new();
-        };
-        capacity = next_capacity;
-    }
-}
-
-/// Start time in microseconds since the epoch. `proc_pidinfo` has no safe
-/// wrapper in `nix`.
-#[cfg(target_os = "macos")]
-pub(crate) fn process_start_time(pid: i32) -> Option<u64> {
-    let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
-    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::uninit();
-    let written = unsafe {
-        libc::proc_pidinfo(
-            pid,
-            libc::PROC_PIDTBSDINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            size,
-        )
-    };
-    if written != size {
-        return None;
-    }
-    let info = unsafe { info.assume_init() };
-    Some(info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
-}
-
-/// Portable fallback: only the session leader's own process group is known.
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub(crate) fn session_process_groups(session_id: i32) -> BTreeSet<i32> {
-    BTreeSet::from([session_id])
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub(crate) fn process_start_time(_pid: i32) -> Option<u64> {
-    None
 }
 
 #[cfg(all(test, unix))]
@@ -883,7 +701,7 @@ mod tests {
                 .stderr(std::process::Stdio::null());
         });
         command.wrap(ProcessSession);
-        command.spawn().expect("spawn session leader")
+        command.spawn().expect("spawn scope leader")
     }
 
     fn dead_pid() -> i32 {
@@ -895,10 +713,11 @@ mod tests {
         pid
     }
 
-    fn lease_for(session_id: i32, dir: &Path) -> (SessionLease, PathBuf) {
-        let lease = SessionLease {
+    fn recovery_record_for(session_id: i32, dir: &Path) -> (ProcessRecoveryRecord, PathBuf) {
+        let record = ProcessRecoveryRecord {
             name: "unit-test".to_string(),
-            session_id,
+            scope: None,
+            session_id: Some(session_id),
             leader_start: process_start_time(session_id),
             owner_pid: dead_pid(),
             owner_start: None,
@@ -907,7 +726,48 @@ mod tests {
             signal: 15,
             grace_ms: 1_000,
         };
-        (lease, lease_path(dir, "unit-test"))
+        (record, recovery_record_path(dir, "unit-test"))
+    }
+
+    #[test]
+    fn reads_legacy_session_recovery_record() {
+        let json = format!(
+            r#"{{"name":"legacy","session_id":{},"leader_start":null,"owner_pid":1,"owner_start":null,"guardian_pid":2,"guardian_start":null,"signal":15,"grace_ms":1000}}"#,
+            std::process::id()
+        );
+        let record: ProcessRecoveryRecord =
+            serde_json::from_str(&json).expect("deserialize legacy record");
+        let scope = record.scope().expect("restore legacy scope");
+        assert_eq!(scope.leader_pid(), std::process::id() as i32);
+    }
+
+    #[test]
+    fn recovery_record_keeps_existing_serialized_field_names() {
+        let (record, _) = recovery_record_for(std::process::id() as i32, Path::new("unused"));
+        let value = serde_json::to_value(record).expect("serialize record");
+        assert!(value.get("tree").is_some());
+        assert!(value.get("session_id").is_some());
+        assert!(value.get("scope").is_none());
+    }
+
+    #[test]
+    fn guardian_compatibility_names_and_paths_remain_stable() {
+        assert_eq!(GUARDIAN_ARG, "--devenv-session-guardian");
+
+        let state = Path::new("/state");
+        assert_eq!(guardian_state_dir(state), state.join("guardians"));
+        let record = recovery_record_path(state, "unit-test");
+        let claim = process_claim_lock_path(state, "unit-test");
+        assert_eq!(record.parent(), Some(state.join("guardians").as_path()));
+        assert_eq!(record.file_stem(), claim.file_stem());
+        assert_eq!(
+            record.extension().and_then(|value| value.to_str()),
+            Some("json")
+        );
+        assert_eq!(
+            claim.extension().and_then(|value| value.to_str()),
+            Some("lock")
+        );
     }
 
     fn pid_of(child: &dyn ChildWrapper) -> i32 {
@@ -921,24 +781,24 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn reconcile_sweeps_session_of_dead_guardian() {
+    async fn reconcile_sweeps_scope_of_dead_guardian() {
         let dir = tempfile::tempdir().unwrap();
         let mut leader = spawn_session_leader();
         let pid = pid_of(leader.as_ref());
-        let (lease, path) = lease_for(pid, dir.path());
-        write_atomic_json(&path, &lease).unwrap();
+        let (record, path) = recovery_record_for(pid, dir.path());
+        write_atomic_json(&path, &record).unwrap();
 
-        let result = tokio::task::spawn_blocking(move || reconcile_lease(&path))
+        let result = tokio::task::spawn_blocking(move || reconcile_recovery_record(&path))
             .await
             .unwrap();
         let gone = exited(&mut leader, Duration::from_secs(3)).await;
         let _ = Box::into_pin(leader.kill()).await;
 
         result.expect("reconcile succeeds");
-        assert!(gone, "session of a dead guardian was not reclaimed");
+        assert!(gone, "scope of a dead guardian was not reclaimed");
         assert!(
-            !lease_path(dir.path(), "unit-test").exists(),
-            "lease not removed"
+            !recovery_record_path(dir.path(), "unit-test").exists(),
+            "record not removed"
         );
     }
 
@@ -947,22 +807,22 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut leader = spawn_session_leader();
         let pid = pid_of(leader.as_ref());
-        let (mut lease, path) = lease_for(pid, dir.path());
+        let (mut record, path) = recovery_record_for(pid, dir.path());
         // A different start time means the PID now belongs to someone else.
-        lease.leader_start = Some(1);
-        write_atomic_json(&path, &lease).unwrap();
+        record.leader_start = Some(1);
+        write_atomic_json(&path, &record).unwrap();
 
-        let result = tokio::task::spawn_blocking(move || reconcile_lease(&path))
+        let result = tokio::task::spawn_blocking(move || reconcile_recovery_record(&path))
             .await
             .unwrap();
         let alive = !exited(&mut leader, Duration::from_millis(500)).await;
         let _ = Box::into_pin(leader.kill()).await;
 
         result.expect("reconcile succeeds");
-        assert!(alive, "an unrelated session leader was killed");
+        assert!(alive, "an unrelated scope leader was killed");
         assert!(
-            !lease_path(dir.path(), "unit-test").exists(),
-            "stale lease not removed"
+            !recovery_record_path(dir.path(), "unit-test").exists(),
+            "stale record not removed"
         );
     }
 
@@ -970,44 +830,55 @@ mod tests {
     async fn manager_cleanup_leaves_recycled_session_id_alone() {
         let mut leader = spawn_session_leader();
         let pid = pid_of(leader.as_ref());
-        let registry = SessionRegistry::default();
-        registry.inner.lock().unwrap().sessions.insert(pid, Some(1));
+        let registry = ProcessScopeRegistry::default();
+        registry
+            .inner
+            .lock()
+            .unwrap()
+            .scopes
+            .insert(ProcessScope::unix_session_with_start(pid, Some(1)).expect("capture scope"));
 
         registry.cleanup(&ShutdownConfig::default()).await;
 
         let alive = !exited(&mut leader, Duration::from_millis(500)).await;
         let _ = Box::into_pin(leader.kill()).await;
-        assert!(alive, "manager cleanup killed a recycled session ID");
+        assert!(alive, "manager cleanup killed a recycled scope ID");
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn cleanup_targets_the_known_group_without_waiting_after_exit() {
         let mut leader = spawn_session_leader();
         let pid = pid_of(leader.as_ref());
-        let session_ids = BTreeSet::from([pid]);
+        let scope = ProcessScope::unix_session(pid).expect("capture scope");
 
         assert!(
-            process_groups_in_sessions(&session_ids).contains(&pid),
-            "the session leader's known process group must not depend on process-table discovery"
+            scope.is_alive(),
+            "the scope leader must be visible through its scope handle"
         );
 
         let started = Instant::now();
-        terminate_session(pid, 15, Duration::from_secs(3));
+        stop_process_scopes(
+            [scope],
+            StopPolicy {
+                signal: NixSignal::SIGTERM as i32,
+                grace: Duration::from_secs(3),
+            },
+        )
+        .expect("terminate process scope");
         assert!(
             started.elapsed() < Duration::from_secs(1),
             "cleanup waited for the grace period after the process group exited"
         );
         let gone = exited(&mut leader, Duration::from_secs(3)).await;
         let _ = Box::into_pin(leader.kill()).await;
-        assert!(gone, "known session leader group was not terminated");
+        assert!(gone, "known scope leader group was not terminated");
 
         let dead_pid = dead_pid();
-        let dead_sessions = BTreeSet::from([dead_pid]);
-        let known_groups = process_groups_in_sessions(&dead_sessions);
-        assert!(known_groups.contains(&dead_pid));
         assert!(
-            remaining_process_groups(&dead_sessions, &known_groups).is_empty(),
-            "a known process group must stop being live after its last process exits"
+            !ProcessScope::unix_session(dead_pid)
+                .expect("capture scope")
+                .is_alive(),
+            "a scope must stop being live after its last process exits"
         );
     }
 
@@ -1016,12 +887,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut leader = spawn_session_leader();
         let pid = pid_of(leader.as_ref());
-        let (mut lease, path) = lease_for(pid, dir.path());
-        lease.owner_pid = std::process::id() as i32;
-        lease.owner_start = process_start_time(lease.owner_pid);
-        write_atomic_json(&path, &lease).unwrap();
+        let (mut record, path) = recovery_record_for(pid, dir.path());
+        record.owner_pid = std::process::id() as i32;
+        record.owner_start = process_start_time(record.owner_pid);
+        write_atomic_json(&path, &record).unwrap();
 
-        let result = tokio::task::spawn_blocking(move || reconcile_lease(&path))
+        let result = tokio::task::spawn_blocking(move || reconcile_recovery_record(&path))
             .await
             .unwrap();
         let alive = !exited(&mut leader, Duration::from_millis(500)).await;
@@ -1034,8 +905,8 @@ mod tests {
         );
         assert!(alive, "the running service was killed");
         assert!(
-            lease_path(dir.path(), "unit-test").exists(),
-            "the live owner's lease was removed"
+            recovery_record_path(dir.path(), "unit-test").exists(),
+            "the live owner's record was removed"
         );
     }
 
@@ -1044,23 +915,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut leader = spawn_session_leader();
         let pid = pid_of(leader.as_ref());
-        let (lease, path) = lease_for(pid, dir.path());
-        write_atomic_json(&path, &lease).unwrap();
+        let (record, path) = recovery_record_for(pid, dir.path());
+        write_atomic_json(&path, &record).unwrap();
 
         // The Job keeps a clone after launch setup returns.
-        let first = reconcile_process(dir.path(), "unit-test")
+        let first = recover_and_claim_process(dir.path(), "unit-test")
             .await
-            .expect("first manager claims the stale lease");
+            .expect("first manager claims the stale record");
         let retained_by_job = first.clone();
         drop(first);
         assert!(
             exited(&mut leader, Duration::from_secs(3)).await,
-            "session of a dead guardian was not reclaimed"
+            "scope of a dead guardian was not reclaimed"
         );
 
         let second = tokio::time::timeout(
             Duration::from_millis(250),
-            reconcile_process(dir.path(), "unit-test"),
+            recover_and_claim_process(dir.path(), "unit-test"),
         )
         .await
         .expect("a second manager must not wait on an active owner")
@@ -1068,7 +939,7 @@ mod tests {
         assert!(format!("{second:?}").contains("already managed"));
 
         drop(retained_by_job);
-        let next = reconcile_process(dir.path(), "unit-test")
+        let next = recover_and_claim_process(dir.path(), "unit-test")
             .await
             .expect("a new manager claims after the first releases ownership");
         drop(next);
@@ -1081,11 +952,5 @@ mod tests {
         assert!(first.is_some(), "own start time must be readable");
         assert_eq!(first, process_start_time(me));
         assert_eq!(process_start_time(dead_pid()), None);
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn all_pids_includes_init() {
-        assert!(all_pids().contains(&1));
     }
 }

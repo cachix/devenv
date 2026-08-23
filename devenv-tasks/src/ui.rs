@@ -119,7 +119,7 @@ impl TasksUi {
                     devenv_processes::OnIdle::Linger
                 };
                 let fg_handle =
-                    tokio::spawn(async move { pm.run_foreground(cancel, None, mode).await });
+                    tokio::spawn(async move { pm.run_event_loop(cancel, None, mode).await });
 
                 if let Err(e) = self
                     .consume_events_until(fg_handle)

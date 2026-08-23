@@ -8,7 +8,8 @@ mod common;
 
 use common::*;
 use devenv_processes::{
-    ProcessConfig, ProcessManager, ProcessPhase, RestartConfig, RestartPolicy, ShutdownConfig,
+    ProcessConfig, ProcessManagerControl, ProcessPhase, RestartConfig, RestartPolicy,
+    ShutdownConfig,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -644,7 +645,7 @@ exit 1
         manager.start_command(&config, None).await.unwrap();
         assert!(
             wait_for_file(&cleanup_started, STARTUP_TIMEOUT).await,
-            "supervisor did not begin cleaning the crashed process session"
+            "supervisor did not begin cleaning the crashed process scope"
         );
 
         manager.stop("stop-during-exit-cleanup").await.unwrap();
@@ -667,7 +668,7 @@ exit 1
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_stop_kills_private_process_groups_in_service_session() {
+async fn test_stop_kills_private_process_groups_in_service_scope() {
     timeout(Duration::from_secs(15), async {
         let ctx = TestContext::new();
         let child_pid_file = ctx.temp_path().join("private-child.pid");
@@ -675,7 +676,7 @@ async fn test_stop_kills_private_process_groups_in_service_session() {
 
         let config = ProcessConfig {
             name: "parent-with-private-group".to_string(),
-            // Monitor mode creates a private group inside the service session.
+            // Monitor mode creates a private group inside the service scope.
             exec: format!(
                 r#"bash -c 'set -m
 sleep 3600 &
@@ -783,7 +784,7 @@ wait'"#,
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_shutdown_grace_is_shared_by_all_session_groups() {
+async fn test_shutdown_grace_is_shared_by_all_scope_process_groups() {
     timeout(Duration::from_secs(12), async {
         let ctx = TestContext::new();
         let ready = ctx.temp_path().join("shared-grace.ready");

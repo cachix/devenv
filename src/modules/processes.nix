@@ -30,7 +30,7 @@ let
         type = types.bool;
         description = "Whether the manager requires a controlling terminal while it is running.";
       };
-      semantic_shutdown = lib.mkOption {
+      manager_aware_stop = lib.mkOption {
         type = types.bool;
         description = "Whether devenv has a manager-specific graceful shutdown mechanism.";
       };

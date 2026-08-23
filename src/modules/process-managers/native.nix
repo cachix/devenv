@@ -28,7 +28,7 @@ in
         individual_control = true;
         subset_start = true;
         requires_tty = false;
-        semantic_shutdown = true;
+        manager_aware_stop = true;
       };
     };
 

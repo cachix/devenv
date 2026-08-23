@@ -3,7 +3,7 @@
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
-    CacheSettings, Config, Devenv, InputOverrides, NixSettings, ProcessMode, RunMode,
+    CacheSettings, ClientRunMode, Config, Devenv, InputOverrides, NixSettings, ProcessStartOutcome,
     SecretSettings, ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel},
     cli::{
@@ -37,7 +37,7 @@ const DEVENV_CALLER: &str = "_DEVENV_CALLER";
 const DEVENV_SHELL_HINT: &str = "_DEVENV_SHELL_HINT";
 
 fn main() {
-    if let Some(code) = devenv_processes::maybe_run_session_guardian() {
+    if let Some(code) = devenv_processes::maybe_run_process_guardian() {
         process::exit(code);
     }
     // Handle shell completion requests (COMPLETE=bash devenv)
@@ -790,10 +790,10 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
 
     // Force-exit (second Ctrl+C) re-raises the signal, so neither the process
     // manager's teardown nor any destructor runs. Processes live in their own
-    // session and would survive as orphans, so signal them here, then hand the
+    // process scopes and would survive as orphans, so signal them here, then hand the
     // terminal back before the process dies.
     shutdown.set_pre_exit_hook(move || {
-        devenv_processes::kill_sessions();
+        devenv_processes::kill_process_scopes();
         if tui {
             devenv_tui::app::restore_terminal();
         }
@@ -1087,7 +1087,7 @@ impl CommandResult {
     }
 }
 
-/// Start processes and map the run mode to a command result.
+/// Start processes and map the outcome to CLI control flow.
 async fn run_up(
     devenv: &Devenv,
     processes: Vec<String>,
@@ -1096,18 +1096,18 @@ async fn run_up(
     verbosity: VerbosityLevel,
 ) -> Result<CommandResult> {
     match devenv.up(processes, mode, options, verbosity).await? {
-        RunMode::Detached => Ok(CommandResult::Done),
-        RunMode::Foreground(shell_command) => Ok(CommandResult::Exec(shell_command.command)),
+        ProcessStartOutcome::Completed => Ok(CommandResult::Done),
+        ProcessStartOutcome::Exec(shell_command) => Ok(CommandResult::Exec(shell_command.command)),
     }
 }
 
 fn process_options(
-    mode: ProcessMode,
+    mode: ClientRunMode,
     strict_ports: bool,
     frontend_event_rx: Option<tokio_mpsc::Receiver<FrontendEvent>>,
     frontend_command_tx: tokio_mpsc::Sender<FrontendCommand>,
 ) -> devenv::ProcessOptions {
-    let detached = mode == ProcessMode::Detached;
+    let detached = mode == ClientRunMode::ReturnAfterStart;
     devenv::ProcessOptions {
         mode,
         log_to_file: detached,
@@ -1130,9 +1130,9 @@ async fn run_up_args(
     let strict_ports = devenv_core::settings::flag(up_args.strict_ports, up_args.no_strict_ports)
         .unwrap_or(config_strict_ports);
     let mode = if up_args.detach {
-        ProcessMode::Detached
+        ClientRunMode::ReturnAfterStart
     } else {
-        ProcessMode::Foreground
+        ClientRunMode::Follow
     };
     let options = process_options(mode, strict_ports, frontend_event_rx, frontend_command_tx);
     run_up(devenv, up_args.processes, up_args.mode, options, verbosity).await
@@ -1262,9 +1262,9 @@ async fn dispatch_command(
             }
             ProcessesCommand::Start { name: None, detach } => {
                 let mode = if detach {
-                    ProcessMode::Detached
+                    ClientRunMode::ReturnAfterStart
                 } else {
-                    ProcessMode::Foreground
+                    ClientRunMode::Follow
                 };
                 let options = process_options(
                     mode,
@@ -1284,17 +1284,19 @@ async fn dispatch_command(
             ProcessesCommand::Start {
                 name: Some(name), ..
             } => {
-                if devenv.native_manager_running().await || devenv.processes_pid().exists() {
-                    // A process-compose PID must also take the control-command
+                if devenv.native_manager_running().await
+                    || devenv.external_process_manager_state_exists()
+                {
+                    // Detached external-manager state must also take the control-command
                     // path: `processes_start` then reports that named starts
                     // require the native manager. Treating it like "no manager"
                     // would attempt a second cold `up -d` and disturb the
-                    // already-running process-compose session.
+                    // already-running external-manager instance.
                     devenv.processes_start(&name).await?;
                     Ok(CommandResult::Done)
                 } else {
                     let options = process_options(
-                        ProcessMode::Detached,
+                        ClientRunMode::ReturnAfterStart,
                         config_strict_ports,
                         frontend_event_rx,
                         frontend_command_tx,

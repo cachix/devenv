@@ -35,10 +35,7 @@ in
   profiles.overmind.module = managerProfile "overmind" 18774;
 
   profiles.mprocs.module = lib.recursiveUpdate (managerProfile "mprocs" 18775) {
-    # Suppress mprocs' Darwin-only impure pbcopy shell dependency. The fake is
-    # still referenced directly by process.manager.command, but `up -d` must
-    # reject the launch before realizing or executing that command.
-    packages = lib.mkForce testPackages;
+    # `up -d` must reject the launch before invoking this executable.
     process.managers.mprocs.package = fakeMprocs;
   };
 }

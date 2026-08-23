@@ -83,10 +83,7 @@ pub fn build_command(
 
     let command = Arc::new(Command {
         program,
-        options: SpawnOptions {
-            session: true,
-            ..Default::default()
-        },
+        options: SpawnOptions::default(),
     });
 
     Ok(BuiltCommand {

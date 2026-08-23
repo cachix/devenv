@@ -8,7 +8,12 @@ export DEVENV_RUNTIME="$PWD/.runtime"
 export DEVENV_NO_AI_AGENT=1
 
 PORT=18661
+TREE_FILE="$DEVENV_RUNTIME/processes/external-manager.tree.json"
 PID_FILE="$PWD/.devenv/processes.pid"
+
+manager_pid() {
+  jq -r '.scope.leader.pid' "$STATE_FILE"
+}
 
 reachable() {
   curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:$PORT/" 2>/dev/null
@@ -51,8 +56,10 @@ trap cleanup EXIT INT TERM
 
 devenv up -d
 wait_for_port
-test -s "$PID_FILE"
-MANAGER_PID=$(sed -n '1p' "$PID_FILE")
+test -s "$TREE_FILE"
+test -L "$PID_FILE"
+MANAGER_PID=$(manager_pid)
+test "$(sed -n '1p' "$PID_FILE")" = "$MANAGER_PID"
 kill -0 "$MANAGER_PID"
 
 if devenv processes attach >attach.txt 2>&1; then
@@ -75,7 +82,7 @@ do
     exit 1
   fi
   grep -q "only supported with the native process manager" native-only.txt
-  test "$(sed -n '1p' "$PID_FILE")" = "$MANAGER_PID"
+  test "$(manager_pid)" = "$MANAGER_PID"
   kill -0 "$MANAGER_PID"
   reachable
 done
@@ -84,8 +91,8 @@ if devenv processes wait >wait.txt 2>&1; then
   echo "process-compose wait unexpectedly succeeded" >&2
   exit 1
 fi
-grep -q "not yet supported for the process-compose backend" wait.txt
-test "$(sed -n '1p' "$PID_FILE")" = "$MANAGER_PID"
+grep -q "not supported for external process-manager backends" wait.txt
+test "$(manager_pid)" = "$MANAGER_PID"
 reachable
 
 devenv processes down

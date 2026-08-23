@@ -3,7 +3,8 @@
 //!
 //! Invoked by `devenv up -d` via re-exec to avoid fork-safety issues in
 //! multithreaded programs. The parent serializes the task config to a JSON
-//! file and spawns this process with `setsid` for full detachment.
+//! file, disconnects its standard streams, and spawns it in a separate process
+//! group. The implementation does not create a new Unix session.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -63,12 +64,12 @@ pub fn run(config_file: &Path) -> Result<()> {
         tasks_runner
             .process_manager()
             .set_scheduler(Arc::downgrade(&scheduler));
-        // Declare this as a daemon session before the run, so a `Mode` query
+        // Declare daemon residence before the run, so a `Mode` query
         // arriving during startup (the API socket accepts as soon as processes
         // are pre-registered) is answered correctly.
         tasks_runner
             .process_manager()
-            .set_mode(crate::processes::ManagerMode::Daemon);
+            .set_residence(crate::processes::ManagerResidence::Daemon);
 
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 
@@ -79,7 +80,7 @@ pub fn run(config_file: &Path) -> Result<()> {
 
         let result = tasks_runner
             .process_manager()
-            .run_foreground(
+            .run_event_loop(
                 shutdown.cancellation_token(),
                 None,
                 crate::processes::OnIdle::Linger,

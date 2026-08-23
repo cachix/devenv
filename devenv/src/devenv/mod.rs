@@ -28,7 +28,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
-use processes::ProcessManager as _;
+use processes::ProcessManagerControl as _;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 use sqlx::SqlitePool;
@@ -204,8 +204,8 @@ impl Default for DevenvOptions {
 
 #[derive(Default, Debug)]
 pub struct ProcessOptions {
-    /// Whether processes run in the foreground or detached.
-    pub mode: ProcessMode,
+    /// Whether the client follows the manager or returns after startup.
+    pub mode: ClientRunMode,
     /// Whether the process should be logged to a file.
     pub log_to_file: bool,
     /// When true, fail if a port is in use instead of auto-allocating the next available.
@@ -220,20 +220,23 @@ pub struct ProcessOptions {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ProcessMode {
+pub enum ClientRunMode {
     #[default]
-    Foreground,
-    Detached,
+    Follow,
+    ReturnAfterStart,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AttachSession {
+enum ClientInteractivity {
     Interactive,
     NonInteractive,
 }
 
-fn should_attach_to_running_manager(mode: ProcessMode, session: AttachSession) -> bool {
-    mode == ProcessMode::Foreground && session == AttachSession::Interactive
+fn should_attach_to_running_manager(
+    mode: ClientRunMode,
+    interactivity: ClientInteractivity,
+) -> bool {
+    mode == ClientRunMode::Follow && interactivity == ClientInteractivity::Interactive
 }
 
 /// A shell command ready to be executed.
@@ -243,16 +246,13 @@ pub struct ShellCommand {
     pub command: std::process::Command,
 }
 
-/// How processes should be run after `up`.
+/// Result of starting a configured process manager.
 #[derive(Debug)]
-pub enum RunMode {
-    /// Processes started in detached mode (background)
-    ///
-    /// NOTE: detached mode currently starts processes in the library
-    /// This should be changed closer to 2.0 release
-    Detached,
-    /// Process command ready to be exec'd (foreground mode)
-    Foreground(ShellCommand),
+pub enum ProcessStartOutcome {
+    /// Startup and any requested client view completed in-process.
+    Completed,
+    /// A follow-mode command is ready to replace the CLI process.
+    Exec(ShellCommand),
 }
 
 /// Error indicating that secrets need to be prompted for interactively.
@@ -744,20 +744,26 @@ impl Devenv {
         self.devenv_dotfile.join("processes.log")
     }
 
+    /// Legacy external-manager PID marker retained for compatibility.
     pub fn processes_pid(&self) -> PathBuf {
         self.devenv_dotfile.join("processes.pid")
     }
 
+    pub fn external_process_manager_state_exists(&self) -> bool {
+        processes::ExternalManager::state_exists(
+            &self.devenv_dotfile,
+            &self.devenv_runtime.join(processes::PROCESSES_DIR),
+        )
+    }
+
     async fn processes_running(&self) -> bool {
-        if self.processes_pid().exists()
-            && let Ok(pid_str) = fs::read_to_string(self.processes_pid()).await
-            && let Ok(pid) = pid_str.trim().parse::<i32>()
-        {
-            match signal::kill(Pid::from_raw(pid), None) {
-                Ok(_) => return true,
-                Err(nix::errno::Errno::EPERM) => return true,
-                Err(nix::errno::Errno::ESRCH) => {}
-                Err(_) => {}
+        if self.external_process_manager_state_exists() {
+            let manager = processes::ExternalManager::control(
+                self.devenv_dotfile.clone(),
+                self.devenv_runtime.join(processes::PROCESSES_DIR),
+            );
+            if manager.is_running().await {
+                return true;
             }
         }
 
@@ -1161,7 +1167,7 @@ impl Devenv {
     /// (processes keep running); a stream EOF or error means the daemon went
     /// away and is an error. TUI restart/stop keybindings arrive on
     /// `frontend_event_rx` and are forwarded to the daemon as one-shot requests.
-    async fn run_attached_foreground(
+    async fn run_attached_view(
         &self,
         parent: &Activity,
         mut frontend_event_rx: Option<tokio::sync::mpsc::Receiver<FrontendEvent>>,
@@ -1432,17 +1438,17 @@ impl Devenv {
         let pid_file = self.native_manager_pid_file();
         let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await
         else {
-            if self.processes_pid().exists() {
+            if self.external_process_manager_state_exists() {
                 bail!(
                     "`devenv processes attach` is only supported by the native process manager; \
-                     the configured process-compose session was left running"
+                     the configured external process manager was left running"
                 );
             }
             bail!("No processes running. Start them with: devenv up -d");
         };
         info!(%pid, "attached to running process manager");
         let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
-        self.run_attached_foreground(&parent, frontend_event_rx, frontend_command_tx)
+        self.run_attached_view(&parent, frontend_event_rx, frontend_command_tx)
             .await
     }
 
@@ -2269,7 +2275,7 @@ impl Devenv {
         // ── Phase 4: Starting processes (if needed) ─────────────────
         if has_processes {
             let options = ProcessOptions {
-                mode: ProcessMode::Detached,
+                mode: ClientRunMode::ReturnAfterStart,
                 ..Default::default()
             };
             self.start_processes(vec![], devenv_tasks::RunMode::All, envs, options, None)
@@ -2421,7 +2427,7 @@ impl Devenv {
         task_mode: devenv_tasks::RunMode,
         options: ProcessOptions,
         verbosity: VerbosityLevel,
-    ) -> Result<RunMode> {
+    ) -> Result<ProcessStartOutcome> {
         // Set strict port mode before backend init triggers port allocation.
         self.port_allocator.set_strict(options.strict_ports);
         self.port_allocator.set_enabled(true);
@@ -2464,26 +2470,75 @@ impl Devenv {
         envs: HashMap<String, String>,
         mut options: ProcessOptions,
         preloaded_tasks: Option<Vec<tasks::TaskConfig>>,
-    ) -> Result<RunMode> {
+    ) -> Result<ProcessStartOutcome> {
         // Release port reservations so processes can bind their allocated ports.
         // The port allocator holds TcpListeners during Nix evaluation to prevent
         // race conditions; dropping them here makes the ports available.
         drop(self.port_allocator.take_reservations());
 
         let phase4 = devenv_activity::start!(Activity::operation("Running processes").parent(None));
-        let impl_result = async {
-            self.backend
+        let manager_descriptor = async {
+            let implementation_json = self
+                .backend
                 .eval_devenv(&["devenv.config.process.manager.implementation"])
+                .await?;
+            let implementation = serde_json::from_str::<String>(&implementation_json)
+                .unwrap_or_else(|_| implementation_json.trim().trim_matches('"').to_string());
+
+            // Capability declarations were added after devenv 2.2. A newer
+            // CLI may still be paired with older Nix modules, so absence of
+            // this attribute selects the Rust compatibility declaration for
+            // managers known to this binary.
+            let declared = match self
+                .backend
+                .eval_devenv(&["devenv.config.process.manager.capabilities"])
                 .await
+            {
+                Ok(json) => Some(
+                    serde_json::from_str::<processes::ManagerCapabilities>(&json).map_err(
+                        |error| {
+                            miette!(
+                                "Invalid capability declaration for process manager '{}': {}",
+                                implementation,
+                                error
+                            )
+                        },
+                    )?,
+                ),
+                Err(error) => {
+                    debug!(
+                        manager = %implementation,
+                        %error,
+                        "process-manager capabilities unavailable; using Rust compatibility data"
+                    );
+                    None
+                }
+            };
+            Ok::<_, miette::Report>(processes::ManagerDescriptor::resolve(
+                implementation,
+                declared,
+            ))
         }
         .in_activity(&phase4)
-        .await?
-        .trim()
-        .trim_matches('"')
-        .to_string();
+        .await?;
+
+        if options.mode == ClientRunMode::ReturnAfterStart
+            && !manager_descriptor.capabilities.background_start
+        {
+            bail!(
+                "process manager '{}' does not support background start",
+                manager_descriptor.id
+            );
+        }
+        if !processes.is_empty() && !manager_descriptor.capabilities.subset_start {
+            bail!(
+                "process manager '{}' does not support starting a process subset",
+                manager_descriptor.id
+            );
+        }
 
         // Create appropriate manager based on implementation
-        if impl_result == "native" {
+        if manager_descriptor.is_native() {
             info!("Using native process manager with task-based dependency ordering");
 
             let mut task_configs = match preloaded_tasks {
@@ -2526,15 +2581,15 @@ impl Devenv {
             {
                 // Detached callers must not take ownership of another manager,
                 // and unattended callers must not enter a long-running attach.
-                let session = if std::env::var_os("CI").is_none()
+                let interactivity = if std::env::var_os("CI").is_none()
                     && !is_ai_agent()
                     && std::io::stderr().is_foreground_terminal()
                 {
-                    AttachSession::Interactive
+                    ClientInteractivity::Interactive
                 } else {
-                    AttachSession::NonInteractive
+                    ClientInteractivity::NonInteractive
                 };
-                if !should_attach_to_running_manager(options.mode, session) {
+                if !should_attach_to_running_manager(options.mode, interactivity) {
                     bail!(
                         "Processes already running with PID {}. Stop them first with: devenv processes down",
                         pid
@@ -2543,13 +2598,13 @@ impl Devenv {
 
                 self.attach_start_up_processes(&launch_names).await?;
                 info!(names = ?launch_names, "attached to running process manager");
-                self.run_attached_foreground(
+                self.run_attached_view(
                     &phase4,
                     options.frontend_event_rx.take(),
                     options.frontend_command_tx.take(),
                 )
                 .await?;
-                return Ok(RunMode::Detached);
+                return Ok(ProcessStartOutcome::Completed);
             }
 
             let tasks_runner = Arc::new(
@@ -2574,12 +2629,12 @@ impl Devenv {
                 .set_scheduler(Arc::downgrade(&scheduler));
             // This in-process manager (interactive foreground `up`, or a
             // detached owner like `devenv test`) is owned by a live devenv
-            // process: mark it Foreground so a `devenv up -d` from another
+            // process: mark it InProcess so a `devenv up -d` from another
             // terminal refuses to schedule into it. Set before the run so a
-            // `Mode` query during startup is answered correctly.
+            // residence query during startup is answered correctly.
             tasks_runner
                 .process_manager()
-                .set_mode(processes::ManagerMode::Foreground);
+                .set_residence(processes::ManagerResidence::InProcess);
 
             // Start command processing before task execution so that
             // Ctrl-R works even while tasks are still running (e.g. when
@@ -2613,21 +2668,21 @@ impl Devenv {
                 .await
                 .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
 
-            if options.mode == ProcessMode::Foreground {
+            if options.mode == ClientRunMode::Follow {
                 trace!(
-                    "devenv.up: calling run_foreground (native manager, detach=false), global_token_cancelled={}",
+                    "devenv.up: calling run_event_loop (native manager, following client), global_token_cancelled={}",
                     self.shutdown.is_cancelled()
                 );
                 let result = tasks_runner
                     .process_manager()
-                    .run_foreground(
+                    .run_event_loop(
                         self.shutdown.cancellation_token(),
                         None,
                         processes::OnIdle::Linger,
                     )
                     .await
                     .map_err(|e| miette!("Process manager error: {}", e));
-                trace!("devenv.up: run_foreground returned");
+                trace!("devenv.up: run_event_loop returned");
 
                 let _ = tokio::fs::remove_file(&pid_file).await;
                 result?;
@@ -2638,11 +2693,11 @@ impl Devenv {
                     .set(Arc::clone(tasks_runner.process_manager()));
             }
 
-            return Ok(RunMode::Detached);
+            return Ok(ProcessStartOutcome::Completed);
         }
 
-        // Non-native manager (process-compose)
-        let procfile_script = async {
+        // External manager selected by the Nix configuration.
+        let launcher_script = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
             let paths = self
                 .backend()
@@ -2658,8 +2713,45 @@ impl Devenv {
         .in_activity(&phase4)
         .await?;
 
-        let manager =
-            processes::ProcessComposeManager::new(procfile_script, self.devenv_dotfile.clone());
+        let shutdown_script = if manager_descriptor.capabilities.manager_aware_stop {
+            let build = async {
+                let gc_root = self.devenv_dot_gc.join("process-manager-shutdown");
+                self.backend()
+                    .build_devenv(
+                        &["devenv.config.process.manager.shutdownScript"],
+                        BuildOptions {
+                            gc_root: Some(gc_root),
+                        },
+                    )
+                    .await
+            }
+            .in_activity(&phase4)
+            .await;
+            match build {
+                Ok(paths) => paths.first().map(|path| path.as_path().to_path_buf()),
+                Err(error) => {
+                    // Older Nix modules have no shutdownScript attribute. The
+                    // embedded capabilities still allow background startup;
+                    // down then uses the durable process-scope fallback.
+                    debug!(
+                        manager = %manager_descriptor.id,
+                        %error,
+                        "manager-aware shutdown adapter unavailable; using process-scope cleanup"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let manager = processes::ExternalManager::new(
+            manager_descriptor,
+            launcher_script,
+            shutdown_script,
+            self.devenv_dotfile.clone(),
+            self.process_runtime_dir()?.clone(),
+        );
 
         // Pre-initialize the task cache so the per-process `devenv-tasks`
         // invocations that the process manager spawns concurrently don't race to
@@ -2671,22 +2763,17 @@ impl Devenv {
             warn!(error = %e, "failed to pre-initialize task cache");
         }
 
-        if options.mode == ProcessMode::Detached {
-            let start_options = processes::StartOptions {
-                process_configs: HashMap::new(),
+        if options.mode == ClientRunMode::ReturnAfterStart {
+            let start_request = processes::BackgroundStartRequest {
                 processes,
-                detach: true,
                 log_to_file: options.log_to_file,
                 env: envs,
-                cancellation_token: Some(self.shutdown.cancellation_token()),
             };
-            manager.start(start_options).await?;
-            Ok(RunMode::Detached)
+            manager.start_background(start_request).await?;
+            Ok(ProcessStartOutcome::Completed)
         } else {
-            let command = manager
-                .prepare_foreground_command(&processes, &envs)
-                .await?;
-            Ok(RunMode::Foreground(ShellCommand { command }))
+            let command = manager.prepare_follow_command(&processes, &envs).await?;
+            Ok(ProcessStartOutcome::Exec(ShellCommand { command }))
         }
     }
 
@@ -2694,12 +2781,13 @@ impl Devenv {
     ///
     /// Instead of fork (which is unsafe in multithreaded programs), this
     /// re-execs the current binary with a hidden `daemon-processes` subcommand.
-    /// The daemon runs in a new session (`setsid`) so it survives the parent.
+    /// Standard input/output are disconnected and the daemon is placed in its
+    /// own process group. This does not create a new Unix session.
     async fn spawn_daemon_processes(
         &self,
         config: tasks::Config,
         launch_names: &[String],
-    ) -> Result<RunMode> {
+    ) -> Result<ProcessStartOutcome> {
         let pid_file = self.native_manager_pid_file();
 
         // Serialize the check-and-spawn sequence across concurrent CLI
@@ -2744,26 +2832,28 @@ impl Devenv {
             processes::check_pid_file(&pid_file).await,
             Ok(processes::PidStatus::Running(_))
         ) {
-            // A foreground `devenv up` session in another terminal owns its
+            // A foreground `devenv up` invocation in another terminal owns its
             // processes: scheduling into it from here would silently mutate a
-            // session the user is watching, and its exit would tear the
-            // processes down anyway. The running manager answers its own mode
-            // over the control socket, so a live foreground session is always
-            // detected. `None` (an older daemon that predates the `Mode`
+            // view the user is watching, and its exit would tear the
+            // processes down anyway. The running manager answers its own
+            // residence over the control socket, so an in-process manager is
+            // always detected. `None` (an older daemon that predates the mode
             // request) is treated as a daemon and attached, preserving the
             // previous behavior.
             if matches!(
-                processes::NativeProcessManager::query_manager_mode(&self.native_socket_path())
-                    .await,
-                Some(processes::ManagerMode::Foreground)
+                processes::NativeProcessManager::query_manager_residence(
+                    &self.native_socket_path()
+                )
+                .await,
+                Some(processes::ManagerResidence::InProcess)
             ) {
                 bail!(
-                    "Processes are already running in a foreground `devenv up` session. Attach with plain `devenv up`, or stop it first with `devenv processes down`"
+                    "Processes are already owned by a foreground `devenv up`. Attach with plain `devenv up`, or stop them first with `devenv processes down`"
                 );
             }
             self.attach_start_up_processes(launch_names).await?;
             info!(names = ?launch_names, "attached to running process manager");
-            return Ok(RunMode::Detached);
+            return Ok(ProcessStartOutcome::Completed);
         }
 
         // Serialize the task config for the daemon
@@ -2843,7 +2933,7 @@ impl Devenv {
         info!("Wait with: devenv processes wait");
         info!("Stop with: devenv processes down");
 
-        Ok(RunMode::Detached)
+        Ok(ProcessStartOutcome::Completed)
     }
 
     pub async fn down(&self) -> Result<()> {
@@ -2854,24 +2944,24 @@ impl Devenv {
         }
 
         // Determine which manager is running and create appropriate instance
-        let manager: Box<dyn processes::ProcessManager> = if self.native_manager_pid_file().exists()
-        {
-            // Native process manager is running — create a control client
-            // that won't delete the daemon's runtime files on drop
-            let runtime_dir = self.process_runtime_dir()?.clone();
-            let mut manager = processes::NativeProcessManager::new(runtime_dir)?;
-            manager.set_control_client();
-            Box::new(manager)
-        } else if self.processes_pid().exists() {
-            // Process-compose is running
-            // We don't need the procfile_script for stopping, just use a dummy path
-            Box::new(processes::ProcessComposeManager::new(
-                PathBuf::new(),
-                self.devenv_dotfile.clone(),
-            ))
-        } else {
-            bail!("No process manager is running. Start processes first with `devenv up -d`")
-        };
+        let manager: Box<dyn processes::ProcessManagerControl> =
+            if self.native_manager_pid_file().exists() {
+                // Native process manager is running — create a control client
+                // that won't delete the daemon's runtime files on drop
+                let runtime_dir = self.process_runtime_dir()?.clone();
+                let mut manager = processes::NativeProcessManager::new(runtime_dir)?;
+                manager.set_control_client();
+                Box::new(manager)
+            } else if self.external_process_manager_state_exists() {
+                // A detached external process manager is running.
+                // Stopping does not invoke the launcher, so a dummy path is sufficient.
+                Box::new(processes::ExternalManager::control(
+                    self.devenv_dotfile.clone(),
+                    self.devenv_runtime.join(processes::PROCESSES_DIR),
+                ))
+            } else {
+                bail!("No process manager is running. Start processes first with `devenv up -d`")
+            };
 
         manager.stop().await
     }
@@ -2899,8 +2989,8 @@ impl Devenv {
                     }
                 }
             }
-        } else if self.processes_pid().exists() {
-            bail!("'devenv processes wait' is not yet supported for the process-compose backend")
+        } else if self.external_process_manager_state_exists() {
+            bail!("'devenv processes wait' is not supported for external process-manager backends")
         } else {
             bail!("No process manager is running. Start processes first with `devenv up -d`")
         }
@@ -2930,7 +3020,7 @@ impl Devenv {
     }
 
     /// One-shot request with a failure-bound timeout; a wedged daemon (accepts
-    /// connections but never replies) must not hang the attach session. Not
+    /// connections but never replies) must not hang the attached client. Not
     /// for `Wait`, which blocks legitimately.
     async fn native_api_request_timeout(
         &self,
@@ -2973,7 +3063,7 @@ impl Devenv {
     fn require_native_manager(&self) -> Result<std::path::PathBuf> {
         if self.native_manager_pid_file().exists() {
             Ok(self.native_socket_path())
-        } else if self.processes_pid().exists() {
+        } else if self.external_process_manager_state_exists() {
             bail!("This subcommand is only supported with the native process manager")
         } else {
             bail!("No process manager is running. Start processes first with `devenv up -d`")
@@ -3996,20 +4086,26 @@ mod tests {
     }
 
     #[test]
-    fn attach_requires_foreground_mode_and_an_interactive_session() {
+    fn attach_requires_follow_mode_and_an_interactive_client() {
         assert!(should_attach_to_running_manager(
-            ProcessMode::Foreground,
-            AttachSession::Interactive
+            ClientRunMode::Follow,
+            ClientInteractivity::Interactive
         ));
 
-        for (mode, session) in [
-            (ProcessMode::Foreground, AttachSession::NonInteractive),
-            (ProcessMode::Detached, AttachSession::Interactive),
-            (ProcessMode::Detached, AttachSession::NonInteractive),
+        for (mode, interactivity) in [
+            (ClientRunMode::Follow, ClientInteractivity::NonInteractive),
+            (
+                ClientRunMode::ReturnAfterStart,
+                ClientInteractivity::Interactive,
+            ),
+            (
+                ClientRunMode::ReturnAfterStart,
+                ClientInteractivity::NonInteractive,
+            ),
         ] {
             assert!(
-                !should_attach_to_running_manager(mode, session),
-                "{mode:?}, {session:?}"
+                !should_attach_to_running_manager(mode, interactivity),
+                "{mode:?}, {interactivity:?}"
             );
         }
     }

@@ -120,7 +120,7 @@ in
         individual_control = false;
         subset_start = true;
         requires_tty = false;
-        semantic_shutdown = false;
+        manager_aware_stop = false;
       };
     };
 
@@ -168,6 +168,10 @@ in
       };
 
       process.manager.command = lib.mkDefault ''
+        if [[ "''${DEVENV_PROCESS_MANAGER_BACKGROUND:-}" == 1 ]]; then
+          export PC_TUI_ENABLED=0
+        fi
+
         # Ensure the log directory exists
         mkdir -p "${config.devenv.state}/process-compose"
 

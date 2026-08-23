@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use devenv_activity::{Activity, ProcessStatus, activity};
+use devenv_activity::{Activity, ProcessStatus};
 use devenv_mailbox::{FrontendEvent, ProcessCommand};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
@@ -83,22 +83,24 @@ pub enum ApiRequest {
     /// status changes, log lines) until the client disconnects or the
     /// manager shuts down.
     Attach,
-    /// Ask the running manager how its session was started (foreground vs
-    /// daemon). Answered authoritatively by the live manager itself.
-    Mode,
+    /// Ask whether the running manager resides in this process or a daemon.
+    /// Answered authoritatively by the live manager itself.
+    #[serde(rename = "mode")]
+    Residence,
 }
 
-/// How the running native manager session was started. The manager answers
-/// this over its control socket ([`ApiRequest::Mode`]), so the live process is
-/// the single source of truth for its own mode.
+/// Where the running native manager resides. The manager answers this over its
+/// control socket ([`ApiRequest::Residence`]), so the live process is the
+/// single source of truth for its residence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ManagerMode {
-    /// An interactive `devenv up` (or an in-process detached manager such as
-    /// `devenv test`) owns the session from a live devenv process. A
+pub enum ManagerResidence {
+    /// A live devenv process owns the manager, whether following it
+    /// interactively or retaining it for a command such as `devenv test`. A
     /// `devenv up -d` from another terminal must not schedule into it.
-    Foreground,
-    /// A detached daemon spawned by `devenv up -d` owns the session; a later
+    #[serde(rename = "foreground")]
+    InProcess,
+    /// A detached daemon spawned by `devenv up -d` owns the manager; a later
     /// `devenv up` attaches and schedules into it.
     Daemon,
 }
@@ -142,8 +144,12 @@ pub enum ApiResponse {
     PortAllocations { ports: Vec<PortInfo> },
     /// Result of a `Start` request: how each requested name was classified.
     Start { outcome: StartOutcome },
-    /// How the running manager's session was started.
-    Mode { mode: ManagerMode },
+    /// Where the running manager resides.
+    #[serde(rename = "mode")]
+    Residence {
+        #[serde(rename = "mode")]
+        residence: ManagerResidence,
+    },
 }
 
 /// Outcome of starting a set of processes via the owning scheduler.
@@ -213,11 +219,10 @@ impl Drop for AttachStream {
 
 use watchexec_supervisor::job::{Job, start_job};
 
+use crate::ProcessManagerControl;
 use crate::config::{ProcessConfig, ShutdownConfig};
 use crate::pid::{self, PidStatus};
-use crate::session_registry::SessionRegistrar;
 use crate::socket_activation::{ProcessSetupWrapper, activation_from_listen};
-use crate::{ProcessManager, StartOptions};
 use devenv_event_sources::NotifySocket;
 
 /// State file for persisting process information
@@ -242,8 +247,8 @@ pub struct ProcessResources {
     pub notify_socket: Option<Arc<NotifySocket>>,
     pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     pub stderr_log: PathBuf,
-    /// Sessions created by this process across restarts.
-    pub(crate) sessions: Arc<crate::session::SessionRegistry>,
+    /// Process scopes created by this process across restarts.
+    pub(crate) scopes: Arc<crate::process_guardian::ProcessScopeRegistry>,
     /// Shared count of started processes that have not reached a terminal phase.
     pub(crate) live: Arc<AtomicUsize>,
     /// Notified after a process reaches a terminal phase.
@@ -308,7 +313,7 @@ impl std::fmt::Display for ProcessPhase {
     }
 }
 
-/// Controls [`NativeProcessManager::run_foreground`] after all processes settle.
+/// Controls [`NativeProcessManager::run_event_loop`] after all processes settle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OnIdle {
     /// Stay alive until shutdown.
@@ -376,7 +381,7 @@ struct StopParts {
     output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
     ports: Vec<u16>,
     shutdown: ShutdownConfig,
-    sessions: Arc<crate::session::SessionRegistry>,
+    scopes: Arc<crate::process_guardian::ProcessScopeRegistry>,
 }
 
 /// Replace an active entry with an atomic teardown placeholder.
@@ -405,7 +410,7 @@ fn take_active_for_stop(
         config,
         activity,
         job,
-        sessions,
+        scopes,
         ..
     } = resources;
 
@@ -430,7 +435,7 @@ fn take_active_for_stop(
         output_readers,
         ports,
         shutdown,
-        sessions,
+        scopes,
     }
 }
 
@@ -535,7 +540,6 @@ pub struct NativeProcessManager {
     state_dir: PathBuf,
     shutdown: CancellationToken,
     /// Parent activity for grouping all processes under "Starting processes"
-    processes_activity: Arc<RwLock<Option<Activity>>>,
     /// Optional notify handle fired when a process lifecycle changes (e.g. not-started
     /// process is manually started). The task system uses this to re-check dependencies.
     task_notify: Option<Arc<Notify>>,
@@ -553,12 +557,11 @@ pub struct NativeProcessManager {
     /// Set once, after the manager is wrapped in an `Arc`; unset on managers
     /// without an owning scheduler.
     scheduler: std::sync::OnceLock<std::sync::Weak<dyn ProcessScheduler>>,
-    /// How this session was started, reported over `ApiRequest::Mode`. Set once
-    /// by the CLI that owns the manager (foreground `devenv up` vs `up -d`
-    /// daemon). An unset manager answers `Foreground` — the conservative
+    /// Where this manager resides, reported over `ApiRequest::Residence`. Set
+    /// once by the owning CLI. An unset manager answers `InProcess` — the conservative
     /// default: another terminal's `up -d` will refuse to schedule into a
     /// manager that has not declared itself a daemon.
-    mode: std::sync::OnceLock<ManagerMode>,
+    residence: std::sync::OnceLock<ManagerResidence>,
 }
 
 /// Owner-side scheduler hooks. Implemented by the task scheduler that owns
@@ -861,7 +864,7 @@ struct LaunchSetup {
     stderr_tailer: JoinHandle<()>,
     stderr_log: PathBuf,
     shutdown: ShutdownConfig,
-    sessions: Arc<crate::session::SessionRegistry>,
+    scopes: Arc<crate::process_guardian::ProcessScopeRegistry>,
 }
 
 impl LaunchSetup {
@@ -871,7 +874,7 @@ impl LaunchSetup {
     async fn abort_and_stop(self) {
         self.stdout_tailer.abort();
         self.stderr_tailer.abort();
-        crate::session::stop_job(&self.job, &self.sessions, &self.shutdown).await;
+        crate::process_guardian::stop_job(&self.job, &self.scopes, &self.shutdown).await;
     }
 }
 
@@ -912,28 +915,30 @@ impl NativeProcessManager {
             processes: Arc::new(RwLock::new(HashMap::new())),
             state_dir,
             shutdown: CancellationToken::new(),
-            processes_activity: Arc::new(RwLock::new(None)),
             task_notify: None,
             entries_changed: Arc::new(Notify::new()),
             live: Arc::new(AtomicUsize::new(0)),
             completion: Arc::new(Notify::new()),
             owns_runtime_files: true,
             scheduler: std::sync::OnceLock::new(),
-            mode: std::sync::OnceLock::new(),
+            residence: std::sync::OnceLock::new(),
         })
     }
 
-    /// Declare how this manager's session was started, so it can answer
-    /// `ApiRequest::Mode` authoritatively. Set once by the owning CLI; ignored
-    /// if already set.
-    pub fn set_mode(&self, mode: ManagerMode) {
-        let _ = self.mode.set(mode);
+    /// Declare where this manager resides, so it can answer
+    /// `ApiRequest::Residence` authoritatively. Set once by the owning CLI;
+    /// ignored if already set.
+    pub fn set_residence(&self, residence: ManagerResidence) {
+        let _ = self.residence.set(residence);
     }
 
-    /// This manager's declared session mode. Defaults to `Foreground` when
+    /// This manager's declared residence. Defaults to `InProcess` when
     /// unset (the conservative choice: do not auto-schedule into it).
-    pub fn mode(&self) -> ManagerMode {
-        self.mode.get().copied().unwrap_or(ManagerMode::Foreground)
+    pub fn residence(&self) -> ManagerResidence {
+        self.residence
+            .get()
+            .copied()
+            .unwrap_or(ManagerResidence::InProcess)
     }
 
     /// Register the owning task scheduler that services `ApiRequest::Start` and
@@ -1383,7 +1388,7 @@ impl NativeProcessManager {
                             notify_socket: setup.notify_socket,
                             status_tx: setup.status_tx,
                             stderr_log: setup.stderr_log,
-                            sessions: setup.sessions,
+                            scopes: setup.scopes,
                             live: Arc::clone(&live),
                             completion: Arc::clone(&completion),
                             stop_requested: CancellationToken::new(),
@@ -1440,8 +1445,9 @@ impl NativeProcessManager {
         config: &ProcessConfig,
         activity: &devenv_activity::ActivityRef,
     ) -> Result<LaunchSetup> {
-        // A previous manager may have left this process's session behind.
-        let takeover = crate::session::reconcile_process(state_dir, &config.name).await?;
+        // A previous manager may have left this process's scope behind.
+        let claim =
+            crate::process_guardian::recover_and_claim_process(state_dir, &config.name).await?;
 
         let supervise_locally = config.supervisor == crate::config::SupervisionMode::Native;
         let uses_notify = supervise_locally && config.ready.as_ref().is_some_and(|r| r.notify);
@@ -1475,7 +1481,7 @@ impl NativeProcessManager {
 
         let (job, _task) = start_job(proc_cmd.command);
         let job = Arc::new(job);
-        let sessions = Arc::new(crate::session::SessionRegistry::default());
+        let scopes = Arc::new(crate::process_guardian::ProcessScopeRegistry::default());
 
         // watchexec-supervisor reports spawn failures only through its error
         // handler. Without one, the start ticket completes successfully even
@@ -1531,12 +1537,14 @@ impl NativeProcessManager {
         let spawn_cwd = proc_cmd.cwd;
         let spawn_stdout = proc_cmd.stdout_log.clone();
         let spawn_stderr = proc_cmd.stderr_log.clone();
-        let registration = crate::session::SessionRegistrationWrapper {
+        let registration = crate::process_guardian::ProcessScopeRegistrationWrapper {
             state_dir: state_dir.to_path_buf(),
             process_name: config.name.clone(),
             shutdown: config.shutdown.clone(),
-            registry: Arc::clone(&sessions),
-            _takeover: takeover.clone(),
+            registry: Arc::clone(&scopes),
+            _claim: claim.clone(),
+            prepared_scope: None,
+            spawned_scope: None,
         };
 
         job.set_spawn_hook(move |command_wrap, _ctx| {
@@ -1560,16 +1568,14 @@ impl NativeProcessManager {
             // Inject OTEL trace context so instrumented subprocesses join the trace.
             cmd.envs(devenv_activity::trace_propagation_env());
 
+            // Record the scope so a force exit, which skips both teardown and
+            // destructors, can still reach processes that would otherwise be
+            // orphaned to init.
             command_wrap.wrap(registration.clone());
 
             if let Some((ref fds, ref capabilities)) = process_setup {
                 command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
             }
-
-            // Record the session so a force exit, which skips both teardown and
-            // destructors, can still reach processes that would otherwise be
-            // orphaned to init.
-            command_wrap.wrap(SessionRegistrar);
         });
 
         job.start().await;
@@ -1602,7 +1608,7 @@ impl NativeProcessManager {
             stderr_tailer,
             stderr_log,
             shutdown: config.shutdown.clone(),
-            sessions,
+            scopes,
         })
     }
 
@@ -1620,7 +1626,7 @@ impl NativeProcessManager {
             output_readers,
             ports,
             shutdown,
-            sessions,
+            scopes,
         } = parts;
 
         stop_via_supervisor(&cmd_tx, supervisor_task).await;
@@ -1631,7 +1637,7 @@ impl NativeProcessManager {
             stderr_reader.abort();
         }
 
-        crate::session::stop_job(&job, &sessions, &shutdown).await;
+        crate::process_guardian::stop_job(&job, &scopes, &shutdown).await;
 
         if !ports.is_empty() {
             let release_status =
@@ -1679,7 +1685,7 @@ impl NativeProcessManager {
             }
         }
 
-        // Publish Stopped only after child/session cleanup and port settling.
+        // Publish Stopped only after child/scope cleanup and port settling.
         let mut processes = self.processes.write().await;
         if let Some(entry) = processes.remove(name) {
             match entry {
@@ -1920,9 +1926,9 @@ impl NativeProcessManager {
             );
             let old_task = std::mem::replace(&mut handle.supervisor_task, tokio::spawn(async {}));
             let _ = old_task.await;
-            if !crate::session::restart_job(
+            if !crate::process_guardian::restart_job(
                 &handle.resources.job,
-                &handle.resources.sessions,
+                &handle.resources.scopes,
                 &handle.resources.config.shutdown,
                 &self.shutdown,
                 &handle.resources.stop_requested,
@@ -2281,8 +2287,8 @@ impl NativeProcessManager {
                     message: "this manager has no process scheduler to handle `start`".to_string(),
                 },
             },
-            Ok(ApiRequest::Mode) => ApiResponse::Mode {
-                mode: manager.mode(),
+            Ok(ApiRequest::Residence) => ApiResponse::Residence {
+                residence: manager.residence(),
             },
             Ok(ApiRequest::Stop { name }) => match manager.stop(&name).await {
                 Ok(()) => ApiResponse::Ok,
@@ -2592,14 +2598,14 @@ impl NativeProcessManager {
         Self::read_api_response(stream).await
     }
 
-    /// Ask a running manager how its session was started. `None` means the
-    /// manager could not be reached or did not answer with a mode (e.g. a
-    /// daemon predating `ApiRequest::Mode`); callers treat that as `Daemon`
-    /// for backward compatibility. A live foreground manager always answers
-    /// `Foreground`, so it can never be misread.
-    pub async fn query_manager_mode(socket_path: &Path) -> Option<ManagerMode> {
-        match Self::api_request(socket_path, &ApiRequest::Mode).await {
-            Ok(ApiResponse::Mode { mode }) => Some(mode),
+    /// Ask where a running manager resides. `None` means the manager could not
+    /// be reached or did not answer (e.g. a daemon predating the residence
+    /// request); callers treat that as `Daemon` for backward compatibility. A
+    /// live in-process manager always answers `InProcess`, so it cannot be
+    /// misread.
+    pub async fn query_manager_residence(socket_path: &Path) -> Option<ManagerResidence> {
+        match Self::api_request(socket_path, &ApiRequest::Residence).await {
+            Ok(ApiResponse::Residence { residence }) => Some(residence),
             _ => None,
         }
     }
@@ -2677,45 +2683,6 @@ impl NativeProcessManager {
         }
     }
 
-    /// Run the manager event loop (keeps processes alive)
-    /// This should be called when running in detached mode
-    pub async fn run(self: Arc<Self>) -> Result<()> {
-        use futures::stream::StreamExt;
-        use signal_hook::consts::signal::*;
-        use signal_hook_tokio::Signals;
-
-        info!("Manager event loop started");
-
-        // Set up signal handling for graceful shutdown
-        let signals = Signals::new([SIGTERM, SIGINT]).into_diagnostic()?;
-        let mut signals = signals.fuse();
-
-        loop {
-            tokio::select! {
-                Some(signal) = signals.next() => {
-                    match signal {
-                        SIGTERM | SIGINT => {
-                            info!("Received shutdown signal, stopping all processes");
-                            self.stop_all().await?;
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-                // Add a small sleep to avoid busy loop
-                _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                    if self.processes.read().await.is_empty() {
-                        trace!("No jobs running, exiting");
-                        break;
-                    }
-                }
-            }
-        }
-
-        info!("Manager event loop stopped");
-        Ok(())
-    }
-
     /// Handle a single process command (restart, start not-started, etc.).
     pub async fn handle_command(&self, cmd: ProcessCommand) {
         match cmd {
@@ -2756,7 +2723,7 @@ impl NativeProcessManager {
                     warn!(process = %name, error = ?e, "failed to stop process");
                 }
             }
-            // Only the attach client (run_attached_foreground) services this;
+            // Only the attached client view services this;
             // an in-process manager's interrupt prompt offers quit instead of
             // detach/stop, so it is never sent here.
             ProcessCommand::StopManager => {
@@ -2788,14 +2755,14 @@ impl NativeProcessManager {
     /// Note: This method relies on the cancellation token for shutdown signals.
     /// Signal handling (SIGINT/SIGTERM) is done by tokio-shutdown in the main app,
     /// which cancels the token when a signal is received.
-    pub async fn run_foreground(
+    pub async fn run_event_loop(
         &self,
         cancellation_token: tokio_util::sync::CancellationToken,
         mut frontend_event_rx: Option<mpsc::Receiver<FrontendEvent>>,
         mode: OnIdle,
     ) -> Result<()> {
         trace!(
-            "run_foreground: ENTERED, mode={:?}, token_cancelled={}",
+            "run_event_loop: ENTERED, mode={:?}, token_cancelled={}",
             mode,
             cancellation_token.is_cancelled()
         );
@@ -2804,7 +2771,7 @@ impl NativeProcessManager {
 
         let done = || mode == OnIdle::Exit && self.live.load(Ordering::SeqCst) == 0;
         if done() {
-            trace!("run_foreground: all processes already settled, returning");
+            trace!("run_event_loop: all processes already settled, returning");
             info!("Manager event loop stopped");
             return Ok(());
         }
@@ -2813,10 +2780,10 @@ impl NativeProcessManager {
             tokio::select! {
                 biased;
                 _ = cancellation_token.cancelled() => {
-                    trace!("run_foreground: cancellation detected, calling stop_all");
+                    trace!("run_event_loop: cancellation detected, calling stop_all");
                     info!("Shutdown requested, stopping all processes");
                     self.stop_all().await?;
-                    trace!("run_foreground: stop_all completed");
+                    trace!("run_event_loop: stop_all completed");
                     break;
                 }
                 Some(event) = async {
@@ -2862,60 +2829,6 @@ impl NativeProcessManager {
         let pid_str = std::fs::read_to_string(pid_path).into_diagnostic()?;
         let pid = pid_str.trim().parse::<u32>().into_diagnostic()?;
         Ok(pid)
-    }
-
-    /// Start processes from the given configs, filtering by name if specified.
-    ///
-    /// Processes with dependencies (`after`) are registered in the TUI as "waiting"
-    /// and launched concurrently once their dependencies are satisfied.
-    async fn start_processes(
-        &self,
-        configs: &HashMap<String, ProcessConfig>,
-        process_names: &[String],
-        env: &HashMap<String, String>,
-    ) -> Result<()> {
-        let mut names_to_start: Vec<_> = if process_names.is_empty() {
-            configs.keys().cloned().collect()
-        } else {
-            process_names.to_vec()
-        };
-        names_to_start.sort();
-
-        let configs_to_start: Vec<ProcessConfig> = {
-            let mut result = Vec::new();
-            for name in &names_to_start {
-                let Some(process_config) = configs.get(name) else {
-                    bail!("Process '{}' not found in configuration", name);
-                };
-                let mut config = process_config.clone();
-                // Global env is the baseline; per-process values win
-                let mut merged_env = env.clone();
-                merged_env.extend(config.env);
-                config.env = merged_env;
-                result.push(config);
-            }
-            result
-        };
-
-        // Create parent activity for grouping all processes
-        let parent_activity = activity!(INFO, operation, "Running processes");
-        let parent_id = parent_activity.id();
-
-        // Store the parent activity to keep it alive
-        {
-            let mut guard = self.processes_activity.write().await;
-            *guard = Some(parent_activity);
-        }
-
-        // Start each process (lock is released, so start_command can write)
-        for config in &configs_to_start {
-            info!("Starting process: {}", config.name);
-            self.start_command(config, Some(parent_id))
-                .await
-                .wrap_err_with(|| format!("Failed to start process '{}'", config.name))?;
-        }
-
-        Ok(())
     }
 
     /// Stop the manager daemon by sending SIGTERM
@@ -3008,46 +2921,7 @@ impl NativeProcessManager {
 }
 
 #[async_trait]
-impl ProcessManager for NativeProcessManager {
-    async fn start(&self, options: StartOptions) -> Result<()> {
-        // Check if already running
-        match pid::check_pid_file(&self.manager_pid_file()).await? {
-            PidStatus::Running(pid) => {
-                bail!(
-                    "Native process manager already running with PID {}. Stop it first with: devenv processes down",
-                    pid
-                );
-            }
-            PidStatus::NotFound | PidStatus::StaleRemoved => {}
-        }
-
-        // Detach mode is handled at the CLI level via re-exec
-        // (see `devenv daemon-processes`). This trait method only supports
-        // foreground mode.
-        if options.detach {
-            bail!("Native process manager detach is handled by the CLI via re-exec");
-        }
-
-        // Start requested processes
-        self.start_processes(&options.process_configs, &options.processes, &options.env)
-            .await?;
-
-        // Foreground mode - run the event loop
-        info!("All processes started. Press Ctrl+C to stop.");
-
-        // Save PID for tracking
-        pid::write_pid(&self.manager_pid_file(), std::process::id()).await?;
-
-        // Run the event loop (shutdown via cancellation token from tokio-shutdown)
-        let token = options.cancellation_token.unwrap_or_default();
-        let result = self.run_foreground(token, None, OnIdle::Linger).await;
-
-        // Clean up PID file
-        let _ = tokio::fs::remove_file(&self.manager_pid_file()).await;
-
-        result
-    }
-
+impl ProcessManagerControl for NativeProcessManager {
     async fn stop(&self) -> Result<()> {
         // Check if there's a manager daemon running
         let manager_pid_file = self.manager_pid_file();
@@ -4291,18 +4165,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn manager_mode_round_trips_over_socket() {
+    async fn manager_residence_round_trips_over_socket() {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
-        manager.set_mode(ManagerMode::Daemon);
+        manager.set_residence(ManagerResidence::Daemon);
         manager.start_api_server().unwrap();
         assert_eq!(
-            NativeProcessManager::query_manager_mode(&manager.api_socket_path()).await,
-            Some(ManagerMode::Daemon),
+            NativeProcessManager::query_manager_residence(&manager.api_socket_path()).await,
+            Some(ManagerResidence::Daemon),
             "a daemon-declared manager must report Daemon over the socket"
         );
 
-        // An undeclared manager defaults to Foreground (fail-closed): another
+        // An undeclared manager defaults to InProcess (fail-closed): another
         // terminal's `up -d` refuses to schedule into a manager that has not
         // declared itself a daemon, instead of the old None=Daemon fail-open.
         let temp_dir2 = tempfile::tempdir().unwrap();
@@ -4310,10 +4184,44 @@ mod tests {
             Arc::new(NativeProcessManager::new(temp_dir2.path().to_path_buf()).unwrap());
         undeclared.start_api_server().unwrap();
         assert_eq!(
-            NativeProcessManager::query_manager_mode(&undeclared.api_socket_path()).await,
-            Some(ManagerMode::Foreground),
-            "an undeclared manager must default to Foreground"
+            NativeProcessManager::query_manager_residence(&undeclared.api_socket_path()).await,
+            Some(ManagerResidence::InProcess),
+            "an undeclared manager must default to InProcess"
         );
+    }
+
+    #[test]
+    fn manager_residence_preserves_the_existing_mode_wire_schema() {
+        assert_eq!(
+            serde_json::to_value(ManagerResidence::InProcess).unwrap(),
+            serde_json::json!("foreground")
+        );
+        assert_eq!(
+            serde_json::to_value(ManagerResidence::Daemon).unwrap(),
+            serde_json::json!("daemon")
+        );
+
+        let request = serde_json::to_value(ApiRequest::Residence).unwrap();
+        assert_eq!(request, serde_json::json!({ "command": "mode" }));
+        assert!(matches!(
+            serde_json::from_value::<ApiRequest>(request).unwrap(),
+            ApiRequest::Residence
+        ));
+
+        let response = serde_json::to_value(ApiResponse::Residence {
+            residence: ManagerResidence::InProcess,
+        })
+        .unwrap();
+        assert_eq!(
+            response,
+            serde_json::json!({ "status": "mode", "mode": "foreground" })
+        );
+        assert!(matches!(
+            serde_json::from_value::<ApiResponse>(response).unwrap(),
+            ApiResponse::Residence {
+                residence: ManagerResidence::InProcess
+            }
+        ));
     }
 
     #[tokio::test]
