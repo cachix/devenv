@@ -22,7 +22,11 @@ use devenv_processes::ProcessConfig;
 use std::time::Duration;
 use tokio::time::timeout;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// Backstop for a whole test. A test performs several `WATCH_TIMEOUT` waits in
+/// sequence, so this must exceed their sum: sharing one budget makes a slow
+/// first wait expire the test itself rather than failing its own assertion.
+const TEST_TIMEOUT: Duration = Duration::from_secs(120);
+/// Bound on one wait for the OS watcher to deliver an event.
 const WATCH_TIMEOUT: Duration = Duration::from_secs(30);
 
 // ============================================================================
@@ -231,12 +235,14 @@ sleep 3600
         tokio::fs::write(watch_dir.join("debug.log"), "log content")
             .await
             .expect("Failed to create log file");
-        tokio::fs::write(watch_dir.join("trigger.txt"), "trigger")
-            .await
-            .expect("Failed to create trigger file");
-
-        let count =
-            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
+        let count = wait_for_restart_after(
+            &watch_dir.join("trigger.txt"),
+            &counter_file,
+            "started",
+            baseline,
+            WATCH_TIMEOUT,
+        )
+        .await;
 
         assert!(
             count > baseline,
@@ -310,12 +316,14 @@ sleep 3600
         tokio::fs::write(watch_dir.join(".hidden"), "hidden content")
             .await
             .expect("Failed to create hidden file");
-        tokio::fs::write(watch_dir.join("trigger.txt"), "trigger")
-            .await
-            .expect("Failed to create trigger file");
-
-        let count =
-            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
+        let count = wait_for_restart_after(
+            &watch_dir.join("trigger.txt"),
+            &counter_file,
+            "started",
+            baseline,
+            WATCH_TIMEOUT,
+        )
+        .await;
 
         assert!(
             count > baseline,
@@ -389,12 +397,14 @@ sleep 3600
         tokio::fs::write(watch_dir.join("readme.txt"), "hello")
             .await
             .expect("Failed to create .txt file");
-        tokio::fs::write(watch_dir.join("trigger.rs"), "fn test() {}")
-            .await
-            .expect("Failed to create trigger .rs file");
-
-        let count =
-            wait_for_line_count(&counter_file, "started", baseline + 1, WATCH_TIMEOUT).await;
+        let count = wait_for_restart_after(
+            &watch_dir.join("trigger.rs"),
+            &counter_file,
+            "started",
+            baseline,
+            WATCH_TIMEOUT,
+        )
+        .await;
 
         assert!(
             count > baseline,

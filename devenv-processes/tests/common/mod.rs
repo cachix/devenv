@@ -339,6 +339,44 @@ pub const SOCKET_TIMEOUT: Duration = Duration::from_secs(5);
 /// OS watcher is actually ready. This helper replaces fixed sleeps by writing
 /// to `probe_path` every 500 ms until `counter_file` shows more than
 /// `current_count` lines matching `pattern`.
+/// Seconds of quiet FSEvents delivery that mark the watcher settled.
+#[cfg(target_os = "macos")]
+const MACOS_SETTLE_ATTEMPTS: usize = 8;
+
+/// Rewrite `trigger_path` until a restart past `baseline` is observed, and
+/// return the resulting count.
+///
+/// A single write can be missed: the watcher is re-established around the
+/// preceding restart and is briefly not yet listening, which a loaded machine
+/// widens enough to lose the event. Repeating the write applies the same canary
+/// discipline [`wait_for_watcher_ready`] uses for its probe. It does not weaken
+/// the assertion, because the trigger stays the only non-ignored path written.
+pub async fn wait_for_restart_after(
+    trigger_path: &Path,
+    counter_file: &Path,
+    pattern: &str,
+    baseline: usize,
+    timeout: Duration,
+) -> usize {
+    let deadline = Instant::now() + timeout;
+    let mut attempt = 0u64;
+
+    while Instant::now() < deadline {
+        attempt += 1;
+        tokio::fs::write(trigger_path, format!("trigger {attempt}"))
+            .await
+            .expect("Failed to write trigger file");
+
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let poll_time = Duration::from_millis(500).min(remaining);
+        let count = wait_for_line_count(counter_file, pattern, baseline + 1, poll_time).await;
+        if count > baseline {
+            return count;
+        }
+    }
+    baseline
+}
+
 pub async fn wait_for_watcher_ready(
     probe_path: &Path,
     counter_file: &Path,
@@ -365,7 +403,11 @@ pub async fn wait_for_watcher_ready(
             #[cfg(target_os = "macos")]
             {
                 let mut stable = count;
-                loop {
+                // Settling gets its own budget rather than the caller's
+                // remaining deadline: it must always run at least once, or the
+                // baseline is captured mid-restart, and it must not run away
+                // when a busy machine keeps delivering coalesced events.
+                for _ in 0..MACOS_SETTLE_ATTEMPTS {
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     let now =
                         wait_for_line_count(counter_file, pattern, 1, Duration::from_millis(100))
