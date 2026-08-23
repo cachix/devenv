@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 use crate::config::{ProcessConfig, RestartPolicy};
 
 const DEFAULT_RESTART_LIMIT_BURST: usize = 5;
-const DEFAULT_RESTART_LIMIT_INTERVAL: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SupervisorPhase {
@@ -96,11 +95,11 @@ impl JobStatus {
 /// Pure per-process supervision state machine with no I/O.
 #[derive(Debug)]
 pub struct SupervisorState {
-    // Sliding-window restart rate limit.
+    // Restart rate limiting; restart_limit_interval = None means a lifetime limit (no window).
     restart_timestamps: VecDeque<Instant>,
     restart_count: usize,
     restart_limit_burst: usize,
-    restart_limit_interval: Duration,
+    restart_limit_interval: Option<Duration>,
 
     watchdog_armed: bool,
     watchdog_deadline: Option<Instant>,
@@ -143,11 +142,7 @@ impl SupervisorState {
             config.restart.on
         };
         let restart_limit_burst = config.restart.max.unwrap_or(DEFAULT_RESTART_LIMIT_BURST);
-        let restart_limit_interval = config
-            .restart
-            .window
-            .map(Duration::from_secs)
-            .unwrap_or(DEFAULT_RESTART_LIMIT_INTERVAL);
+        let restart_limit_interval = config.restart.window.map(Duration::from_secs);
 
         let mut state = Self {
             restart_timestamps: VecDeque::new(),
@@ -309,11 +304,14 @@ impl SupervisorState {
         }
     }
 
-    /// Check and record a restart against the sliding-window rate limit.
+    /// Check and record a restart against the rate limit. A window (`Some`) expires old
+    /// timestamps so the budget refills; a lifetime limit (`None`) never does.
     fn can_restart(&mut self, now: Instant) -> bool {
-        let cutoff = now - self.restart_limit_interval;
-        while self.restart_timestamps.front().is_some_and(|&t| t < cutoff) {
-            self.restart_timestamps.pop_front();
+        if let Some(interval) = self.restart_limit_interval {
+            let cutoff = now - interval;
+            while self.restart_timestamps.front().is_some_and(|&t| t < cutoff) {
+                self.restart_timestamps.pop_front();
+            }
         }
         if self.restart_timestamps.len() >= self.restart_limit_burst {
             return false;
@@ -721,7 +719,15 @@ mod tests {
     #[test]
     fn healthy_service_can_crash_and_restart_again() {
         let now = Instant::now();
-        let config = config_with_policy(RestartPolicy::Always);
+        // Needs an explicit window; the default is now a lifetime limit.
+        let config = ProcessConfig {
+            restart: RestartConfig {
+                on: RestartPolicy::Always,
+                window: Some(10),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let mut state = SupervisorState::new(&config, now);
 
         // Exhaust the burst limit
@@ -745,6 +751,36 @@ mod tests {
             much_later,
         );
         assert_eq!(action, Action::Restart);
+    }
+
+    #[test]
+    fn lifetime_limit_never_refills_regardless_of_elapsed_time() {
+        let now = Instant::now();
+        // Default config: max = 5, window = None (lifetime limit).
+        let config = config_with_policy(RestartPolicy::Always);
+        let mut state = SupervisorState::new(&config, now);
+
+        // Exhaust the lifetime budget of 5 restarts
+        for i in 0..5 {
+            let t = now + Duration::from_millis(i * 10);
+            let _ = state.on_event(
+                Event::ProcessExit {
+                    status: ExitStatus::Failure,
+                },
+                t,
+            );
+            state.on_restart_complete(t);
+        }
+
+        // Even after a long wait the budget never refills — the process gives up.
+        let much_later = now + Duration::from_secs(60);
+        let action = state.on_event(
+            Event::ProcessExit {
+                status: ExitStatus::Failure,
+            },
+            much_later,
+        );
+        assert!(matches!(action, Action::GiveUp { .. }));
     }
 
     #[test]
