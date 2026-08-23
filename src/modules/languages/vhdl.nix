@@ -11,6 +11,10 @@ let
     ghdl-mcode = pkgs.ghdl-mcode;
     nvc = pkgs.nvc;
   };
+  defaultPackageText =
+    if pkgs.stdenv.isDarwin
+    then "pkgs.ghdl-llvm"
+    else "pkgs.ghdl-gcc";
 in
 {
   options.languages.vhdl = {
@@ -32,7 +36,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = compilerPackages.${cfg.compiler};
-      defaultText = lib.literalExpression "pkgs.\${cfg.compiler}";
+      defaultText = lib.literalExpression defaultPackageText;
       description = "The VHDL package to use (automatically set based on compiler).";
     };
 
@@ -43,7 +47,7 @@ in
         default = pkgs.vhdl-ls;
         defaultText = lib.literalExpression "pkgs.vhdl-ls";
         description = ''
-          The VHDL language server package to use.
+          The VHDL language server package to use (automatically set based on compiler).
 
           You can see this example of [vhdl-ls configuration](https://github.com/VHDL-LS/rust_hdl#example-vhdl_lstoml--quickstart) to start.
         '';
