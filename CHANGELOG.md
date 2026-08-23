@@ -17,6 +17,8 @@
 - Module errors now point at the `devenv.nix` (or imported module) that defined the offending option, instead of `<unknown-file>`.
 - Updated the bundled Nix from `v2.34.8` to `v2.35.2`.
 - Added `processes.<name>.shutdown.signal` and `.grace` for the native manager and process-compose. The same settings apply to restarts, and PostgreSQL now uses SIGINT for fast shutdown.
+- Added process-manager capability checks. Detached mode is supported by process-compose, Honcho, Hivemind, and Overmind; unsupported operations now fail before launch, and mprocs remains foreground-only.
+- Process-manager metadata is compatible with older CLIs and Nix modules; no public Nix options changed.
 
 ### Bug Fixes
 
@@ -24,6 +26,9 @@
 - Fixed services surviving a crash of `devenv-tasks` or the native process manager. A guardian now cleans abandoned service sessions, and the next manager reconciles them before starting the same process.
 - Fixed `devenv-tasks` leaving processes running after errors or parent death. It now stops processes before returning and when it loses its parent.
 - Fixed the native manager missing descendants in separate process groups. Stop and restart now clean the whole service session.
+- Fixed `devenv down` leaving external-manager descendants running. Shutdown now tracks the complete process scope and gracefully stops Overmind before cleanup.
+- Fixed external-manager start/stop races, false-positive detached starts, and process names containing shell metacharacters.
+- Fixed mprocs on macOS trying to wrap `/usr/bin/pbcopy` as an impure Nix package.
 
 ## 2.2.2 (2026-08-13)
 
