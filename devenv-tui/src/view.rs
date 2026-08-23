@@ -82,6 +82,10 @@ pub(crate) fn process_previews_fit(
     activities: &[DisplayActivity],
     terminal_size: TerminalSize,
 ) -> bool {
+    let activity_rows: usize = activities
+        .iter()
+        .map(|display| non_process_activity_height(model, display, terminal_size))
+        .sum();
     let preview_rows: usize = activities
         .iter()
         .filter(|display| matches!(display.activity.variant, ActivityVariant::Process(_)))
@@ -99,7 +103,73 @@ pub(crate) fn process_previews_fit(
         .sum();
     let available_rows = terminal_size.height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize;
 
-    preview_rows > 0 && activities.len() + preview_rows <= available_rows
+    preview_rows > 0 && activity_rows + preview_rows <= available_rows
+}
+
+/// Height of an activity before automatic process log previews are added.
+///
+/// Process rows are always one line at this stage. For other activities, this
+/// mirrors the multi-line layouts in `ActivityItem` so the preview preflight
+/// does not enable previews that would immediately require scrolling.
+fn non_process_activity_height(
+    model: &ActivityModel,
+    display: &DisplayActivity,
+    terminal_size: TerminalSize,
+) -> usize {
+    let activity = &display.activity;
+    let expanded_content_height = |max_lines| {
+        model
+            .get_build_logs(activity.id)
+            .map(|logs| {
+                1 + ExpandedContentComponent::new(Some(logs.as_ref()))
+                    .with_terminal_width(terminal_size.width)
+                    .with_max_lines(max_lines)
+                    .visual_height()
+            })
+            .unwrap_or(1)
+    };
+
+    match &activity.variant {
+        ActivityVariant::Process(_) => 1,
+        ActivityVariant::Task(task_data) => {
+            let failed = matches!(
+                &activity.state,
+                NixActivityState::Completed { success: false, .. }
+            );
+            if failed {
+                expanded_content_height(LOG_VIEWPORT_FAILED)
+            } else if task_data.show_output {
+                expanded_content_height(LOG_VIEWPORT_SHOW_OUTPUT)
+            } else {
+                1
+            }
+        }
+        ActivityVariant::Download(download_data) => {
+            if download_data.size_current.is_some() && download_data.size_total.is_some()
+                || activity
+                    .progress
+                    .as_ref()
+                    .is_some_and(|progress| progress.total.unwrap_or(0) > 0)
+            {
+                2
+            } else {
+                1
+            }
+        }
+        ActivityVariant::Evaluating(_) | ActivityVariant::Devenv
+            if matches!(
+                &activity.state,
+                NixActivityState::Completed { success: false, .. }
+            ) =>
+        {
+            expanded_content_height(LOG_VIEWPORT_FAILED)
+        }
+        ActivityVariant::Message(message_data) if message_data.details.is_some() => model
+            .get_build_logs(activity.id)
+            .map(|logs| 1 + logs.len().min(LOG_VIEWPORT_FAILED))
+            .unwrap_or(1),
+        _ => 1,
+    }
 }
 
 pub(crate) fn activity_shows_inline_logs(
@@ -1849,7 +1919,10 @@ pub fn format_duration(duration: Duration) -> String {
 mod tests {
     use super::*;
     use crate::model::ActivityModel;
-    use devenv_activity::{ActivityEvent, ActivityLevel, Operation, Process, Timestamp};
+    use devenv_activity::{
+        ActivityEvent, ActivityLevel, Operation, Process, Timestamp,
+        test_helpers::{process_log, process_start, task_hierarchy_single, task_log, task_start},
+    };
 
     #[test]
     fn tree_positions_connect_nested_siblings() {
@@ -1926,6 +1999,33 @@ mod tests {
             ),
             "      "
         );
+    }
+
+    #[test]
+    fn process_previews_do_not_fit_beside_multiline_task_output() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(task_hierarchy_single(1, "build", None, true, false));
+        model.apply_activity_event(task_start(1));
+        model.apply_activity_event(task_log(1, "line one", false));
+        model.apply_activity_event(task_log(1, "line two", false));
+        model.apply_activity_event(task_log(1, "line three", false));
+        model.apply_activity_event(process_start(2, "server"));
+        model.apply_activity_event(process_log(2, "listening", false));
+
+        let ui_state = UiState::new();
+        let display = model.get_display_activities(&ui_state);
+
+        // The task occupies four rows (its main row plus three output rows),
+        // and the process with its preview occupies two more. The five-row
+        // viewport therefore cannot show automatic previews without scrolling.
+        assert!(!process_previews_fit(
+            &model,
+            &display,
+            TerminalSize {
+                width: 80,
+                height: 7,
+            },
+        ));
     }
 
     fn summary_ctx(
