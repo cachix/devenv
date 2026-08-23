@@ -14,6 +14,12 @@
 //! cgroups can replace it without changing callers. A descendant can still
 //! escape a session by creating a nested session, so termination also snapshots
 //! the live process ancestry before signalling it.
+//!
+//! A process that must keep the caller's controlling terminal cannot become a
+//! session leader. [`ProcessScope::descendants_of_current`] covers that case
+//! with weaker containment: the process and its live descendants, reached by
+//! process group where the group is the scope's own and by PID where the group
+//! belongs to the caller.
 
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
@@ -68,6 +74,47 @@ impl PreparedProcessScope {
     }
 }
 
+/// What a scope signals: whole process groups, plus processes that no group
+/// can stand in for.
+///
+/// A scope normally reaches its members through their process groups. A leader
+/// that shares a process group with the caller who started it is the exception:
+/// signalling that group would reach the caller too, so the leader is named on
+/// its own instead.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct ScopeTargets {
+    groups: BTreeSet<i32>,
+    processes: BTreeSet<i32>,
+}
+
+impl ScopeTargets {
+    fn from_groups(groups: BTreeSet<i32>) -> Self {
+        Self {
+            groups,
+            processes: BTreeSet::new(),
+        }
+    }
+
+    /// Absorb `other` and return what it added.
+    fn absorb(&mut self, other: Self) -> Self {
+        let added = Self {
+            groups: other.groups.difference(&self.groups).copied().collect(),
+            processes: other
+                .processes
+                .difference(&self.processes)
+                .copied()
+                .collect(),
+        };
+        self.groups.extend(other.groups);
+        self.processes.extend(other.processes);
+        added
+    }
+
+    fn is_empty(&self) -> bool {
+        self.groups.is_empty() && self.processes.is_empty()
+    }
+}
+
 /// A stable handle to a contained set of processes.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
@@ -77,15 +124,32 @@ pub struct ProcessScope {
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(tag = "backend", rename_all = "snake_case")]
+// The variant names are the persisted `backend` tags.
+#[allow(clippy::enum_variant_names)]
 enum ScopeBackend {
-    UnixSession { leader: ProcessIdentity },
-    UnixProcessGroup { leader: ProcessIdentity },
+    UnixSession {
+        leader: ProcessIdentity,
+    },
+    UnixProcessGroup {
+        leader: ProcessIdentity,
+    },
+    UnixDescendants {
+        leader: ProcessIdentity,
+        /// Process group the leader shares with whoever started it, when it
+        /// does not lead a group of its own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shared_group: Option<i32>,
+    },
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 struct ProcessIdentity {
     pid: i32,
     start_time: Option<u64>,
+    /// Boot this start time was measured against, where start times are
+    /// relative to boot. See [`boot_identity`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    boot_id: Option<String>,
 }
 
 impl ProcessScope {
@@ -119,6 +183,25 @@ impl ProcessScope {
         })
     }
 
+    /// Capture the calling process and its live descendants as a scope.
+    ///
+    /// For a manager that runs in the foreground and keeps the caller's
+    /// controlling terminal, so it cannot start its own session. Containment is
+    /// weaker than a session: a descendant that starts one of its own escapes
+    /// this scope once its ancestry is gone.
+    ///
+    /// The process group the caller handed over is recorded so that it is never
+    /// signalled. Members left in it are reached by PID instead.
+    pub fn descendants_of_current() -> std::io::Result<Self> {
+        let pid = std::process::id() as i32;
+        Ok(Self {
+            backend: ScopeBackend::UnixDescendants {
+                leader: capture_process_identity(pid)?,
+                shared_group: current_process_group().filter(|group| *group != pid),
+            },
+        })
+    }
+
     pub fn leader_pid(&self) -> i32 {
         self.leader().pid
     }
@@ -126,6 +209,9 @@ impl ProcessScope {
     /// Whether this scope can still be the one originally captured.
     pub fn matches_identity(&self) -> bool {
         let leader = self.leader();
+        if !boot_matches(leader.boot_id.as_deref()) {
+            return false;
+        }
         match process_start_time(leader.pid) {
             Some(start) => Some(start) == leader.start_time,
             // A session or process-group leader may exit while the scope still
@@ -137,18 +223,18 @@ impl ProcessScope {
 
     /// Whether the scope contains a non-zombie process that can do work.
     pub fn is_alive(&self) -> bool {
-        self.matches_identity() && process_groups_alive(&self.process_groups())
+        self.matches_identity() && targets_alive(&self.targets())
     }
 
-    /// Signal every process group currently contained by the scope.
+    /// Signal everything currently contained by the scope.
     ///
     /// Sessions and live descendants are enumerated on every call. Graceful
-    /// termination retains those groups for the later force-kill pass.
+    /// termination retains those targets for the later force-kill pass.
     pub fn signal(&self, signal_number: i32) -> std::io::Result<()> {
         if !self.matches_identity() {
             return Ok(());
         }
-        signal_process_groups(&self.process_groups(), signal_number)
+        signal_targets(&self.targets(), signal_number)
     }
 
     /// Immediately kill every process currently contained by the scope.
@@ -156,20 +242,20 @@ impl ProcessScope {
         self.signal(force_kill_signal())
     }
 
-    fn leader(&self) -> ProcessIdentity {
-        match self.backend {
-            ScopeBackend::UnixSession { leader } | ScopeBackend::UnixProcessGroup { leader } => {
-                leader
-            }
+    fn leader(&self) -> &ProcessIdentity {
+        match &self.backend {
+            ScopeBackend::UnixSession { leader }
+            | ScopeBackend::UnixProcessGroup { leader }
+            | ScopeBackend::UnixDescendants { leader, .. } => leader,
         }
     }
 
-    fn process_groups(&self) -> BTreeSet<i32> {
-        self.process_groups_in(&process_table())
+    fn targets(&self) -> ScopeTargets {
+        self.targets_in(&process_table())
     }
 
-    fn process_groups_in(&self, processes: &[ProcessTableEntry]) -> BTreeSet<i32> {
-        match self.backend {
+    fn targets_in(&self, processes: &[ProcessTableEntry]) -> ScopeTargets {
+        match &self.backend {
             ScopeBackend::UnixSession { leader } => {
                 // The session ID is also its leader's initial process-group ID.
                 // Preserve it when process-table enumeration races with exit.
@@ -189,9 +275,42 @@ impl ProcessScope {
                 // its ancestors are signalled, so capture its group while that
                 // relationship is observable.
                 groups.extend(descendant_process_groups(leader.pid, processes));
-                groups
+                ScopeTargets::from_groups(groups)
             }
-            ScopeBackend::UnixProcessGroup { leader } => BTreeSet::from([leader.pid]),
+            ScopeBackend::UnixProcessGroup { leader } => {
+                ScopeTargets::from_groups(BTreeSet::from([leader.pid]))
+            }
+            ScopeBackend::UnixDescendants {
+                leader,
+                shared_group,
+            } => {
+                // A group named by the leader's PID is the leader's own: a
+                // process group ID is the PID of its leader, so that group is
+                // either ours or absent entirely. `shared_group` belongs to
+                // whoever started the leader, so signalling it would reach the
+                // caller and everything else it started. Its members are named
+                // one at a time instead.
+                let mut groups = BTreeSet::from([leader.pid]);
+                let mut named = BTreeSet::from([leader.pid]);
+                let descendants = descendants_of(leader.pid, processes);
+                for process in processes {
+                    if process.pid == std::process::id() as i32
+                        || process.zombie
+                        || !descendants.contains(&process.pid)
+                    {
+                        continue;
+                    }
+                    if Some(process.process_group) == *shared_group {
+                        named.insert(process.pid);
+                    } else {
+                        groups.insert(process.process_group);
+                    }
+                }
+                ScopeTargets {
+                    groups,
+                    processes: named,
+                }
+            }
         }
     }
 }
@@ -201,12 +320,60 @@ fn capture_process_identity(pid: i32) -> std::io::Result<ProcessIdentity> {
     Ok(ProcessIdentity {
         pid,
         start_time: process_start_time(pid),
+        boot_id: boot_identity(),
     })
 }
 
 fn process_identity(pid: i32, start_time: Option<u64>) -> std::io::Result<ProcessIdentity> {
     validate_pid(pid)?;
-    Ok(ProcessIdentity { pid, start_time })
+    Ok(ProcessIdentity {
+        pid,
+        start_time,
+        boot_id: boot_identity(),
+    })
+}
+
+/// Identifier of the running kernel boot, where one is needed to interpret a
+/// start time.
+///
+/// Linux counts start times in ticks since boot, so a PID and a start time
+/// together do not distinguish a process from one that took the same PID after
+/// a reboot. macOS records absolute start times, which are already unambiguous.
+/// A scope that outlives the machine it was captured on must therefore carry
+/// the boot it was measured against.
+#[cfg(target_os = "linux")]
+fn boot_identity() -> Option<String> {
+    let boot_id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
+    let boot_id = boot_id.trim();
+    (!boot_id.is_empty()).then(|| boot_id.to_string())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn boot_identity() -> Option<String> {
+    None
+}
+
+/// Process group of the calling process.
+#[cfg(unix)]
+fn current_process_group() -> Option<i32> {
+    Some(nix::unistd::getpgrp().as_raw())
+}
+
+#[cfg(not(unix))]
+fn current_process_group() -> Option<i32> {
+    None
+}
+
+/// Whether a recorded boot identifier still describes the running system.
+fn boot_matches(recorded: Option<&str>) -> bool {
+    match (recorded, boot_identity()) {
+        // Recorded where start times carry no boot dependency.
+        (None, _) => true,
+        (Some(recorded), Some(current)) => recorded == current,
+        // The boot cannot be read now but could be then, so the start time
+        // can no longer be trusted to identify the process.
+        (Some(_), None) => false,
+    }
 }
 
 fn validate_pid(pid: i32) -> std::io::Result<()> {
@@ -266,12 +433,12 @@ pub fn stop_process_scopes(
     let mut scopes = scopes
         .into_iter()
         .map(|scope| {
-            let groups = scope.process_groups_in(&processes);
-            (scope, groups)
+            let targets = scope.targets_in(&processes);
+            (scope, targets)
         })
         .collect::<Vec<_>>();
-    for (scope, groups) in &scopes {
-        if let Err(error) = signal_process_groups(groups, policy.signal) {
+    for (scope, targets) in &scopes {
+        if let Err(error) = signal_targets(targets, policy.signal) {
             trace!(leader_pid = scope.leader_pid(), %error, "failed to signal process scope");
             if first_error.is_none() {
                 first_error = Some(error);
@@ -282,20 +449,16 @@ pub fn stop_process_scopes(
     let deadline = Instant::now() + policy.grace;
     while Instant::now() < deadline {
         let processes = process_table();
-        for (scope, groups) in &mut scopes {
+        let mut combined = ScopeTargets::default();
+        for (scope, targets) in &mut scopes {
             if scope.matches_identity() {
-                let discovered = scope.process_groups_in(&processes);
-                let new_groups = discovered
-                    .difference(groups)
-                    .copied()
-                    .collect::<BTreeSet<_>>();
-                groups.extend(discovered);
+                let discovered = targets.absorb(scope.targets_in(&processes));
                 // A supervisor may create another process group while handling
                 // the initial stop request. Give that group the same graceful
                 // signal immediately instead of leaving it untouched until the
                 // force-kill deadline.
-                if !new_groups.is_empty()
-                    && let Err(error) = signal_process_groups(&new_groups, policy.signal)
+                if !discovered.is_empty()
+                    && let Err(error) = signal_targets(&discovered, policy.signal)
                 {
                     trace!(leader_pid = scope.leader_pid(), %error, "failed to signal newly discovered process group");
                     if first_error.is_none() {
@@ -303,27 +466,53 @@ pub fn stop_process_scopes(
                     }
                 }
             }
+            combined.absorb(targets.clone());
         }
-        let groups = scopes
-            .iter()
-            .flat_map(|(_, groups)| groups.iter().copied())
-            .collect();
-        if !process_groups_alive(&groups) {
+        // One liveness sweep for every scope: each one walks the process table.
+        if !targets_alive(&combined) {
             return first_error.map_or(Ok(()), Err);
         }
         std::thread::sleep(Duration::from_millis(25));
     }
 
     let processes = process_table();
-    for (scope, mut groups) in scopes {
+    for (scope, mut targets) in scopes {
         if scope.matches_identity() {
-            groups.extend(scope.process_groups_in(&processes));
+            targets.absorb(scope.targets_in(&processes));
         }
-        if let Err(error) = signal_process_groups(&groups, force_kill_signal()) {
+        if let Err(error) = signal_targets(&targets, force_kill_signal()) {
             trace!(leader_pid = scope.leader_pid(), %error, "failed to kill process scope");
             if first_error.is_none() {
                 first_error = Some(error);
             }
+        }
+    }
+    first_error.map_or(Ok(()), Err)
+}
+
+#[cfg(unix)]
+fn signal_targets(targets: &ScopeTargets, signal_number: i32) -> std::io::Result<()> {
+    let group_result = signal_process_groups(&targets.groups, signal_number);
+    let process_result = signal_processes(&targets.processes, signal_number);
+    group_result.and(process_result)
+}
+
+#[cfg(not(unix))]
+fn signal_targets(_targets: &ScopeTargets, _signal_number: i32) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn signal_processes(pids: &BTreeSet<i32>, signal_number: i32) -> std::io::Result<()> {
+    let signal_value = Signal::try_from(signal_number).map_err(std::io::Error::other)?;
+    let mut first_error = None;
+    for &pid in pids {
+        match signal::kill(Pid::from_raw(pid), signal_value) {
+            Ok(()) | Err(nix::errno::Errno::ESRCH) => {}
+            Err(error) if first_error.is_none() => {
+                first_error = Some(std::io::Error::from(error));
+            }
+            Err(_) => {}
         }
     }
     first_error.map_or(Ok(()), Err)
@@ -375,6 +564,21 @@ fn configure_tokio_unix_session(command: &mut tokio::process::Command) {
 
 #[cfg(not(unix))]
 fn configure_tokio_unix_session(_command: &mut tokio::process::Command) {}
+
+/// Whether anything in the scope can still respond to signals.
+fn targets_alive(targets: &ScopeTargets) -> bool {
+    process_groups_alive(&targets.groups) || processes_alive(&targets.processes)
+}
+
+/// Whether any of `pids` is a live, non-zombie process.
+fn processes_alive(pids: &BTreeSet<i32>) -> bool {
+    if pids.is_empty() {
+        return false;
+    }
+    process_table()
+        .iter()
+        .any(|process| !process.zombie && pids.contains(&process.pid))
+}
 
 /// Whether a process group still contains work that can respond to signals.
 ///
@@ -433,9 +637,11 @@ struct ProcessTableEntry {
 /// boundaries. Callers must snapshot the result before signalling ancestors,
 /// because reparenting destroys this relationship.
 fn descendant_process_groups(root_pid: i32, entries: &[ProcessTableEntry]) -> BTreeSet<i32> {
-    let mut descendants = BTreeSet::from([root_pid]);
-    let mut groups = BTreeSet::new();
+    process_groups_of(&descendants_of(root_pid, entries), entries)
+}
 
+fn descendants_of(root_pid: i32, entries: &[ProcessTableEntry]) -> BTreeSet<i32> {
+    let mut descendants = BTreeSet::from([root_pid]);
     loop {
         let mut changed = false;
         for entry in entries {
@@ -444,19 +650,19 @@ fn descendant_process_groups(root_pid: i32, entries: &[ProcessTableEntry]) -> BT
             }
         }
         if !changed {
-            break;
+            return descendants;
         }
     }
+}
 
-    for entry in entries {
-        if entry.pid != std::process::id() as i32
-            && !entry.zombie
-            && descendants.contains(&entry.pid)
-        {
-            groups.insert(entry.process_group);
-        }
-    }
-    groups
+fn process_groups_of(pids: &BTreeSet<i32>, entries: &[ProcessTableEntry]) -> BTreeSet<i32> {
+    entries
+        .iter()
+        .filter(|entry| {
+            entry.pid != std::process::id() as i32 && !entry.zombie && pids.contains(&entry.pid)
+        })
+        .map(|entry| entry.process_group)
+        .collect()
 }
 
 #[cfg(target_os = "linux")]
@@ -797,6 +1003,113 @@ mod tests {
             .expect("mismatched identity is ignored");
     }
 
+    fn table_entry(pid: i32, parent_pid: i32, process_group: i32) -> ProcessTableEntry {
+        ProcessTableEntry {
+            pid,
+            parent_pid,
+            process_group,
+            session: 99,
+            zombie: false,
+        }
+    }
+
+    fn descendant_scope(leader_pid: i32, shared_group: Option<i32>) -> ProcessScope {
+        ProcessScope {
+            backend: ScopeBackend::UnixDescendants {
+                leader: ProcessIdentity {
+                    pid: leader_pid,
+                    start_time: Some(7),
+                    boot_id: None,
+                },
+                shared_group,
+            },
+        }
+    }
+
+    #[test]
+    fn a_descendant_scope_spares_the_process_group_it_shares_with_its_caller() {
+        // A manager that keeps the caller's controlling terminal runs in the
+        // caller's process group. Signalling that group would reach the caller
+        // and everything else it started.
+        let caller = table_entry(99, 1, 99);
+        let leader = table_entry(100, 99, 99);
+        let child = table_entry(101, 100, 101);
+        let sibling = table_entry(102, 99, 99);
+        let table = vec![caller, leader, child, sibling];
+
+        let targets = descendant_scope(leader.pid, Some(caller.process_group)).targets_in(&table);
+
+        assert!(
+            !targets.groups.contains(&caller.process_group),
+            "the caller's process group must not be a target"
+        );
+        assert!(
+            targets.groups.contains(&child.process_group),
+            "a descendant's own process group must be a target"
+        );
+        assert!(
+            targets.processes.contains(&leader.pid),
+            "the leader must be signalled directly when its group is not its own"
+        );
+    }
+
+    #[test]
+    fn a_descendant_scope_reaches_a_leader_that_leads_its_own_group() {
+        let leader = table_entry(100, 99, 100);
+        let child = table_entry(101, 100, 100);
+        let table = vec![table_entry(99, 1, 99), leader, child];
+
+        let targets = descendant_scope(leader.pid, None).targets_in(&table);
+
+        assert!(targets.groups.contains(&leader.pid));
+        assert!(targets.processes.contains(&leader.pid));
+    }
+
+    #[test]
+    fn a_descendant_scope_names_children_left_in_the_caller_process_group() {
+        // Honcho starts its children with `start_new_session=False`, so they
+        // stay in the process group the caller handed the manager.
+        let caller = table_entry(99, 1, 99);
+        let leader = table_entry(100, 99, 99);
+        let child = table_entry(101, 100, 99);
+        let table = vec![caller, leader, child];
+
+        let targets = descendant_scope(leader.pid, Some(caller.process_group)).targets_in(&table);
+
+        assert!(
+            !targets.groups.contains(&caller.process_group),
+            "signalling the shared group would reach the caller"
+        );
+        assert!(
+            targets.processes.contains(&child.pid),
+            "a child left in the shared group must be signalled by PID"
+        );
+    }
+
+    #[test]
+    fn a_scope_captured_before_a_reboot_is_not_ours() {
+        let live = ProcessScope::descendants_of_current().expect("capture current process");
+        assert!(
+            live.matches_identity(),
+            "a scope captured now must match this boot"
+        );
+
+        let start_time = process_start_time(std::process::id() as i32)
+            .map_or_else(|| "null".to_string(), |start| start.to_string());
+        let stale = format!(
+            r#"{{"backend":"unix_descendants","leader":{{"pid":{},"start_time":{start_time},"boot_id":"0000-not-this-boot"}}}}"#,
+            std::process::id()
+        );
+        let stale: ProcessScope = serde_json::from_str(&stale).expect("parse stale scope");
+
+        // Linux measures start times in ticks since boot, so this PID and start
+        // time would otherwise look like the running process.
+        assert!(
+            !stale.matches_identity(),
+            "a start time measured against another boot must not identify a process"
+        );
+    }
+
     #[test]
     fn constructors_reject_nonpositive_leader_pids() {
         assert!(ProcessScope::unix_session(0).is_err());
@@ -807,17 +1120,20 @@ mod tests {
     fn serialized_scope_preserves_the_existing_backend_schema() {
         let scope = ProcessScope::unix_session_with_start(42, Some(7)).expect("create scope");
         let value = serde_json::to_value(&scope).expect("serialize scope");
+        assert_eq!(value["backend"], "unix_session");
+        assert_eq!(value["leader"]["pid"], 42);
+        assert_eq!(value["leader"]["start_time"], 7);
         assert_eq!(
-            value,
-            serde_json::json!({
-                "backend": "unix_session",
-                "leader": { "pid": 42, "start_time": 7 }
-            })
-        );
-        assert_eq!(
-            serde_json::from_value::<ProcessScope>(value).expect("restore existing scope schema"),
+            serde_json::from_value::<ProcessScope>(value).expect("restore serialized scope"),
             scope
         );
+
+        // A document written where a boot identifier carries no meaning.
+        let without_boot_id = r#"{"backend":"unix_session","leader":{"pid":42,"start_time":7}}"#;
+        let restored =
+            serde_json::from_str::<ProcessScope>(without_boot_id).expect("restore scope");
+        assert_eq!(restored.leader_pid(), 42);
+        assert!(restored.matches_identity() || process_start_time(42) != Some(7));
     }
 
     #[test]

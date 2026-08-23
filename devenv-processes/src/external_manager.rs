@@ -30,6 +30,11 @@ const RUNTIME_PID_FILE_NAME: &str = "external-manager.pid";
 const LIFECYCLE_LOCK_FILE_NAME: &str = "external-manager.lock";
 const STATE_VERSION: u32 = 1;
 const BACKGROUND_ENV: &str = "DEVENV_PROCESS_MANAGER_BACKGROUND";
+/// Time a manager is given to stop, whether it was asked through its own stop
+/// adapter or signalled directly.
+const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(30);
+/// Time a stop adapter is given to hand the request over to the manager.
+const STOP_ADAPTER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[derive(Clone, Debug)]
 struct LaunchConfiguration {
@@ -130,9 +135,11 @@ impl ExternalManager {
         })
     }
 
-    /// Whether current or legacy detached external-manager state exists.
+    /// Whether current or legacy external-manager state exists.
     pub fn state_exists(state_dir: &Path, runtime_dir: &Path) -> bool {
-        runtime_dir.join(STATE_FILE_NAME).exists() || state_dir.join(PID_FILE_NAME).exists()
+        runtime_dir.join(STATE_FILE_NAME).exists()
+            || state_dir.join(STATE_FILE_NAME).exists()
+            || state_dir.join(PID_FILE_NAME).exists()
     }
 
     /// Check an operation against the contract persisted by the running
@@ -159,9 +166,13 @@ impl ExternalManager {
         self.runtime_dir.join(STATE_FILE_NAME)
     }
 
-    /// Load current manager state, falling back to the legacy PID format.
-    async fn load_state(&self) -> Result<Option<ExternalManagerState>> {
-        let state = match fs::read(self.state_file()).await {
+    /// Copy of the durable state that outlives the runtime directory.
+    fn persistent_state_file(&self) -> PathBuf {
+        self.state_dir.join(STATE_FILE_NAME)
+    }
+
+    async fn read_state_file(path: &Path) -> Result<Option<ExternalManagerState>> {
+        match fs::read(path).await {
             Ok(bytes) => {
                 let state = serde_json::from_slice::<ExternalManagerState>(&bytes)
                     .into_diagnostic()
@@ -173,11 +184,42 @@ impl ExternalManager {
                         STATE_VERSION
                     );
                 }
-                Some(state)
+                Ok(Some(state))
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-            Err(error) => return Err(error).into_diagnostic(),
-        };
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error).into_diagnostic(),
+        }
+    }
+
+    /// Publish durable state to both the runtime and the persistent location.
+    ///
+    /// Either directory can be removed while the manager runs: the OS clears
+    /// the runtime directory on its own schedule, and `.devenv` is the user's
+    /// to delete. Keeping a copy in each means the manager stays reachable
+    /// unless both are gone. Neither copy is trusted on its own — the process
+    /// scope it carries identifies the manager, so a copy that outlives it
+    /// reads as stale.
+    async fn write_state(&self, state: &ExternalManagerState) -> Result<()> {
+        let state_json = serde_json::to_vec(state).into_diagnostic()?;
+        let leader_pid = state.scope.leader_pid();
+        for path in [self.state_file(), self.persistent_state_file()] {
+            let directory = path
+                .parent()
+                .ok_or_else(|| miette::miette!("state file {} has no parent", path.display()))?;
+            fs::create_dir_all(directory).await.into_diagnostic()?;
+            let temporary = directory.join(format!(".{STATE_FILE_NAME}.{leader_pid}.tmp"));
+            fs::write(&temporary, &state_json).await.into_diagnostic()?;
+            fs::rename(&temporary, &path).await.into_diagnostic()?;
+        }
+        Ok(())
+    }
+
+    /// Load current manager state, falling back to the legacy PID format.
+    async fn load_state(&self) -> Result<Option<ExternalManagerState>> {
+        let mut state = Self::read_state_file(&self.state_file()).await?;
+        if state.is_none() {
+            state = Self::read_state_file(&self.persistent_state_file()).await?;
+        }
 
         if let Some(state) = state {
             self.validate_legacy_pid(&state.scope).await?;
@@ -222,7 +264,12 @@ impl ExternalManager {
     }
 
     async fn remove_state(&self) -> Result<()> {
-        for path in [self.pid_file(), self.state_file(), self.runtime_pid_file()] {
+        for path in [
+            self.pid_file(),
+            self.state_file(),
+            self.persistent_state_file(),
+            self.runtime_pid_file(),
+        ] {
             match fs::remove_file(path).await {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -265,6 +312,12 @@ impl ExternalManager {
         processes: &[String],
         env: &HashMap<String, String>,
     ) -> Result<std::process::Command> {
+        // Serialize the check and the state publication with `down` and with
+        // detached starts from concurrent CLI processes, exactly as
+        // `start_background` does.
+        #[cfg(unix)]
+        let _lifecycle_lock = self.lock_lifecycle()?;
+
         match self.check_status().await? {
             PidStatus::Running(pid) => {
                 bail!(
@@ -304,6 +357,31 @@ impl ExternalManager {
             cmd.env_clear().envs(env);
         }
 
+        // Publish before returning, because the caller replaces this process
+        // with the manager and no code of ours runs afterwards. `exec` keeps
+        // both the PID and its start time, so the identity captured here still
+        // describes the process once it is the manager. Without this a
+        // foreground manager leaves no trace: another client finds nothing to
+        // stop and starts a second manager for the same project.
+        //
+        // Nothing removes this state when the manager exits. It identifies a
+        // process scope, so the next status check sees it is no longer alive
+        // and clears it.
+        let scope = ProcessScope::descendants_of_current().into_diagnostic()?;
+        let pid = std::process::id();
+        let state = ExternalManagerState {
+            version: STATE_VERSION,
+            manager_id: launch.manager.id.clone(),
+            capabilities: launch.manager.capabilities,
+            capabilities_source: launch.manager.capabilities_source,
+            adapter: launch.manager.adapter,
+            adapter_source: launch.manager.adapter_source,
+            stop_command: launch.stop_command.clone(),
+            scope,
+        };
+        self.write_state(&state).await?;
+        self.write_legacy_pid_marker(pid).await?;
+
         Ok(cmd)
     }
 
@@ -321,6 +399,29 @@ impl ExternalManager {
 
         Ok(())
     }
+
+    /// Record the manager's PID where clients that predate durable state look.
+    ///
+    /// Older devenv clients only know `.devenv/processes.pid`. Point that
+    /// legacy marker at runtime state so it becomes harmlessly dangling when
+    /// the runtime directory is cleared.
+    async fn write_legacy_pid_marker(&self, pid: u32) -> Result<()> {
+        fs::create_dir_all(&self.runtime_dir)
+            .await
+            .into_diagnostic()?;
+        pid::write_pid(&self.runtime_pid_file(), pid).await?;
+
+        let runtime_pid_file = fs::canonicalize(self.runtime_pid_file())
+            .await
+            .into_diagnostic()?;
+        match fs::remove_file(self.pid_file()).await {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).into_diagnostic(),
+        }
+        std::os::unix::fs::symlink(runtime_pid_file, self.pid_file()).into_diagnostic()
+    }
+
     /// Start the configured external manager in an independent OS process
     /// scope and return after its detached state has been published.
     pub async fn start_background(&self, request: BackgroundStartRequest) -> Result<()> {
@@ -405,34 +506,9 @@ impl ExternalManager {
             stop_command: launch.stop_command.clone(),
             scope: scope.clone(),
         };
-        let state_json = serde_json::to_vec(&state).into_diagnostic()?;
         let persist_result = async {
-            fs::create_dir_all(&self.runtime_dir)
-                .await
-                .into_diagnostic()?;
-            let temporary_state = self
-                .runtime_dir
-                .join(format!(".{STATE_FILE_NAME}.{pid}.tmp"));
-            fs::write(&temporary_state, state_json)
-                .await
-                .into_diagnostic()?;
-            fs::rename(&temporary_state, self.state_file())
-                .await
-                .into_diagnostic()?;
-            pid::write_pid(&self.runtime_pid_file(), pid).await?;
-
-            // Older devenv clients only know `.devenv/processes.pid`.
-            // Point that legacy marker at runtime state so it becomes
-            // harmlessly dangling when the runtime directory is cleared.
-            let runtime_pid_file = fs::canonicalize(self.runtime_pid_file())
-                .await
-                .into_diagnostic()?;
-            match fs::remove_file(self.pid_file()).await {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error).into_diagnostic(),
-            }
-            std::os::unix::fs::symlink(runtime_pid_file, self.pid_file()).into_diagnostic()
+            self.write_state(&state).await?;
+            self.write_legacy_pid_marker(pid).await
         }
         .await;
         if let Err(error) = persist_result {
@@ -475,6 +551,35 @@ impl ExternalManager {
     }
 }
 
+/// Wait for every process in `scope` to exit, up to `grace`.
+///
+/// Returns whether the scope emptied in time. Enumerating it walks the process
+/// table, so the poll interval grows rather than repeating that at a fixed
+/// rate.
+async fn wait_for_scope_exit(scope: &ProcessScope, grace: std::time::Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + grace;
+    let mut interval = std::time::Duration::from_millis(20);
+    let max_interval = std::time::Duration::from_millis(500);
+
+    loop {
+        let probe = scope.clone();
+        // A join error leaves liveness unknown; report the scope as still
+        // running so the caller cleans it up rather than trusting the adapter.
+        let alive = tokio::task::spawn_blocking(move || probe.is_alive())
+            .await
+            .unwrap_or(true);
+        if !alive {
+            return true;
+        }
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            return false;
+        }
+        tokio::time::sleep(interval.min(deadline - now)).await;
+        interval = (interval * 2).min(max_interval);
+    }
+}
+
 #[async_trait]
 impl ProcessManagerControl for ExternalManager {
     async fn stop(&self) -> Result<()> {
@@ -490,11 +595,11 @@ impl ProcessManagerControl for ExternalManager {
             state.scope.leader_pid()
         );
 
-        match state.adapter.stop {
+        let adapter_accepted = match state.adapter.stop {
             ManagerStopMethod::Command => {
                 if let Some(stop_command) = &state.stop_command {
                     let status = tokio::time::timeout(
-                        std::time::Duration::from_secs(10),
+                        STOP_ADAPTER_TIMEOUT,
                         Command::new(stop_command)
                             .stdin(Stdio::null())
                             .stdout(Stdio::null())
@@ -505,27 +610,38 @@ impl ProcessManagerControl for ExternalManager {
                     match status {
                         Ok(Ok(status)) if status.success() => {
                             info!(manager = %state.manager_id, "command stop adapter completed");
+                            true
                         }
-                        Ok(Ok(status)) => tracing::warn!(
-                            manager = %state.manager_id,
-                            %status,
-                            "command stop adapter failed; falling back to process-scope cleanup"
-                        ),
-                        Ok(Err(error)) => tracing::warn!(
-                            manager = %state.manager_id,
-                            %error,
-                            "command stop adapter could not start; falling back to process-scope cleanup"
-                        ),
-                        Err(_) => tracing::warn!(
-                            manager = %state.manager_id,
-                            "command stop adapter timed out; falling back to process-scope cleanup"
-                        ),
+                        Ok(Ok(status)) => {
+                            tracing::warn!(
+                                manager = %state.manager_id,
+                                %status,
+                                "command stop adapter failed; falling back to process-scope cleanup"
+                            );
+                            false
+                        }
+                        Ok(Err(error)) => {
+                            tracing::warn!(
+                                manager = %state.manager_id,
+                                %error,
+                                "command stop adapter could not start; falling back to process-scope cleanup"
+                            );
+                            false
+                        }
+                        Err(_) => {
+                            tracing::warn!(
+                                manager = %state.manager_id,
+                                "command stop adapter timed out; falling back to process-scope cleanup"
+                            );
+                            false
+                        }
                     }
                 } else {
                     tracing::warn!(
                         manager = %state.manager_id,
                         "command stop adapter has no command; falling back to process-scope cleanup"
                     );
+                    false
                 }
             }
             ManagerStopMethod::NativeApi => {
@@ -533,8 +649,21 @@ impl ProcessManagerControl for ExternalManager {
                     manager = %state.manager_id,
                     "native API stop adapter found in external-manager state; falling back to process-scope cleanup"
                 );
+                false
             }
-            ManagerStopMethod::ProcessScope => {}
+            ManagerStopMethod::ProcessScope => false,
+        };
+
+        // A stop adapter returns once the manager has accepted the request, not
+        // once it has finished. Overmind's does exactly that: it exits zero
+        // immediately, and the manager then stops its children and removes its
+        // control socket. Signalling the scope before that completes leaves the
+        // socket behind, and the next start refuses to run because of it.
+        if adapter_accepted && !wait_for_scope_exit(&state.scope, STOP_GRACE).await {
+            tracing::warn!(
+                manager = %state.manager_id,
+                "manager still running after its stop adapter; falling back to process-scope cleanup"
+            );
         }
 
         let scope = state.scope;
@@ -543,7 +672,7 @@ impl ProcessManagerControl for ExternalManager {
                 [scope],
                 StopPolicy {
                     signal: Signal::SIGTERM as i32,
-                    grace: std::time::Duration::from_secs(30),
+                    grace: STOP_GRACE,
                 },
             )
         })
@@ -565,7 +694,8 @@ mod tests {
 
     fn write_executable_script(directory: &Path, name: &str, body: &str) -> PathBuf {
         let path = directory.join(name);
-        std::fs::write(&path, format!("#!/bin/bash\nset -e\n{body}\n"))
+        // `/bin/bash` does not exist on every Unix devenv supports.
+        std::fs::write(&path, format!("#!/usr/bin/env bash\nset -e\n{body}\n"))
             .expect("write executable script");
         let mut permissions = std::fs::metadata(&path)
             .expect("read script metadata")
@@ -856,22 +986,48 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn command_stop_adapter_runs_before_scope_cleanup() {
-        let state_dir = tempfile::tempdir().expect("state directory");
-        let runtime = tempfile::tempdir().expect("runtime directory");
-        let marker = runtime.path().join("shutdown-marker");
-        let launcher =
-            write_executable_script(runtime.path(), "long-running-manager", "exec sleep 300");
-        let stop_command = write_executable_script(
-            runtime.path(),
-            "shutdown-manager",
+    /// A manager that shuts down on SIGUSR1, taking `shutdown_seconds` over it
+    /// and recording that it finished, plus the command that asks it to.
+    ///
+    /// Real stop adapters signal the manager and return; the manager then stops
+    /// its children and removes its own runtime files. `sleep` runs in short
+    /// steps because bash defers a trap until the current command returns.
+    fn write_graceful_manager_scripts(
+        runtime: &Path,
+        shutdown_seconds: &str,
+        shutdown_marker: &Path,
+        liveness_marker: Option<&Path>,
+    ) -> (PathBuf, PathBuf) {
+        let launcher = write_executable_script(
+            runtime,
+            "graceful-manager",
             &format!(
-                "if kill -0 \"$(cat '{}')\" 2>/dev/null; then printf alive; else printf dead; fi > '{}'",
-                runtime.path().join(RUNTIME_PID_FILE_NAME).display(),
-                marker.display()
+                "trap 'sleep {shutdown_seconds}; printf shutdown > {marker:?}; exit 0' USR1\n\
+                 while true; do sleep 0.2; done",
+                marker = shutdown_marker,
             ),
         );
+        let manager_pid = format!("$(cat {:?})", runtime.join(RUNTIME_PID_FILE_NAME));
+        let record_liveness = liveness_marker.map_or_else(String::new, |path| {
+            format!(
+                "if kill -0 \"{manager_pid}\" 2>/dev/null; \
+                 then printf alive; else printf dead; fi > {path:?}\n"
+            )
+        });
+        let stop_command = write_executable_script(
+            runtime,
+            "shutdown-manager",
+            &format!("{record_liveness}kill -USR1 \"{manager_pid}\""),
+        );
+        (launcher, stop_command)
+    }
+
+    fn command_adapter_manager(
+        launcher: PathBuf,
+        stop_command: PathBuf,
+        state_dir: &Path,
+        runtime: &Path,
+    ) -> ExternalManager {
         let descriptor = ManagerDescriptor::resolve(
             "adapter-test",
             Some(ManagerCapabilities {
@@ -884,13 +1040,28 @@ mod tests {
                 client: crate::ManagerClient::None,
             }),
         );
-        let manager = ExternalManager::new(
+        ExternalManager::new(
             descriptor,
             launcher,
             Some(stop_command),
-            state_dir.path().into(),
-            runtime.path().into(),
+            state_dir.into(),
+            runtime.into(),
+        )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn command_stop_adapter_runs_before_scope_cleanup() {
+        let state_dir = tempfile::tempdir().expect("state directory");
+        let runtime = tempfile::tempdir().expect("runtime directory");
+        let liveness_marker = runtime.path().join("liveness-marker");
+        let (launcher, stop_command) = write_graceful_manager_scripts(
+            runtime.path(),
+            "0",
+            &runtime.path().join("shutdown-marker"),
+            Some(&liveness_marker),
         );
+        let manager =
+            command_adapter_manager(launcher, stop_command, state_dir.path(), runtime.path());
 
         manager
             .start_background(BackgroundStartRequest::default())
@@ -912,7 +1083,7 @@ mod tests {
         stop_result.expect("stop external manager");
 
         assert_eq!(
-            std::fs::read_to_string(marker).expect("read shutdown marker"),
+            std::fs::read_to_string(liveness_marker).expect("read liveness marker"),
             "alive",
             "stop command must run while the manager scope is still alive"
         );
@@ -921,6 +1092,163 @@ mod tests {
             state_dir.path(),
             runtime.path()
         ));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn command_stop_adapter_is_given_time_to_shut_the_manager_down() {
+        let state_dir = tempfile::tempdir().expect("state directory");
+        let runtime = tempfile::tempdir().expect("runtime directory");
+        let shutdown_marker = runtime.path().join("shutdown-marker");
+        let (launcher, stop_command) =
+            write_graceful_manager_scripts(runtime.path(), "2", &shutdown_marker, None);
+        let manager =
+            command_adapter_manager(launcher, stop_command, state_dir.path(), runtime.path());
+
+        manager
+            .start_background(BackgroundStartRequest::default())
+            .await
+            .expect("start external manager");
+        let scope = manager
+            .load_state()
+            .await
+            .expect("load persisted state")
+            .expect("persisted state exists")
+            .scope;
+
+        let stop_result = manager.stop().await;
+        if scope.is_alive() {
+            scope
+                .force_kill()
+                .expect("force cleanup after failed test stop");
+        }
+        stop_result.expect("stop external manager");
+
+        // Signalling the scope as soon as the adapter returns cuts the manager
+        // off partway through its own shutdown, which is how overmind came to
+        // leave its control socket behind and refuse the next start.
+        assert_eq!(
+            std::fs::read_to_string(shutdown_marker).ok().as_deref(),
+            Some("shutdown"),
+            "the manager must be left to finish the shutdown its adapter asked for"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_foreground_start_is_visible_to_other_clients() {
+        let state_dir = tempfile::tempdir().expect("state directory");
+        let runtime = tempfile::tempdir().expect("runtime directory");
+        let launcher =
+            write_executable_script(state_dir.path(), "long-running-manager", "exec sleep 300");
+        let descriptor = ManagerDescriptor::resolve(
+            "foreground-test",
+            Some(ManagerCapabilities {
+                background_start: true,
+                ..ManagerCapabilities::default()
+            }),
+            Some(ManagerAdapter::default()),
+        );
+        let manager = ExternalManager::new(
+            descriptor,
+            launcher,
+            None,
+            state_dir.path().into(),
+            runtime.path().into(),
+        );
+
+        // The caller execs this command, so the state has to be published
+        // before it is handed over.
+        let _command = manager
+            .prepare_follow_command(&[], &HashMap::new())
+            .await
+            .expect("prepare foreground start");
+
+        assert!(ExternalManager::state_exists(
+            state_dir.path(),
+            runtime.path()
+        ));
+        let state = manager
+            .load_state()
+            .await
+            .expect("load published state")
+            .expect("published state exists");
+        assert_eq!(
+            state.scope.leader_pid(),
+            std::process::id() as i32,
+            "the foreground scope must identify the process that becomes the manager"
+        );
+        assert_eq!(state.manager_id, "foreground-test");
+
+        let error = manager
+            .start_background(BackgroundStartRequest::default())
+            .await
+            .expect_err("a second manager must not be started for the same project");
+        assert!(
+            error.to_string().contains("Processes already running"),
+            "unexpected rejection: {error}"
+        );
+
+        manager.remove_state().await.expect("remove state");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_cleared_runtime_directory_does_not_orphan_the_manager() {
+        let state_dir = tempfile::tempdir().expect("state directory");
+        let runtime = tempfile::tempdir().expect("runtime directory");
+        let launcher =
+            write_executable_script(state_dir.path(), "long-running-manager", "exec sleep 300");
+        let descriptor = ManagerDescriptor::resolve(
+            "runtime-loss-test",
+            Some(ManagerCapabilities {
+                background_start: true,
+                ..ManagerCapabilities::default()
+            }),
+            Some(ManagerAdapter::default()),
+        );
+        let manager = ExternalManager::new(
+            descriptor,
+            launcher,
+            None,
+            state_dir.path().into(),
+            runtime.path().into(),
+        );
+
+        manager
+            .start_background(BackgroundStartRequest::default())
+            .await
+            .expect("start external manager");
+        let scope = manager
+            .load_state()
+            .await
+            .expect("load persisted state")
+            .expect("persisted state exists")
+            .scope;
+
+        // The runtime directory lives under $XDG_RUNTIME_DIR or /tmp, which the
+        // OS clears on its own schedule. The manager keeps running.
+        for entry in std::fs::read_dir(runtime.path()).expect("read runtime directory") {
+            let path = entry.expect("runtime directory entry").path();
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path).expect("clear runtime subdirectory");
+            } else {
+                std::fs::remove_file(&path).expect("clear runtime file");
+            }
+        }
+
+        let control = ExternalManager::control(state_dir.path().into(), runtime.path().into());
+        assert!(
+            ExternalManager::state_exists(state_dir.path(), runtime.path()),
+            "a manager must stay visible after its runtime directory is cleared"
+        );
+        assert!(control.is_running().await, "the manager is still running");
+
+        let stop_result = control.stop().await;
+        if scope.is_alive() {
+            scope
+                .force_kill()
+                .expect("force cleanup after failed test stop");
+        }
+        stop_result.expect("stop external manager");
+        assert!(!scope.is_alive(), "the manager must be reachable to stop");
     }
 
     #[test]
