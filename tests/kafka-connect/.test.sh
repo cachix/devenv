@@ -1,8 +1,8 @@
 set -e
 
-curl --connect-timeout 5 \
-    --max-time 5 \
-    --retry 9 \
-    --retry-delay 2 \
-    --retry-all-errors \
+. "$DEVENV_TEST_LIB"
+
+wait_until 30 curl -sf --connect-timeout 5 --max-time 5 \
     http://localhost:8083/connectors
+
+curl -sf http://localhost:8083/connectors

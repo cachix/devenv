@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
 set -ex
 
-timeout 60 bash -c 'until MYSQL_PWD="" mariadb -u root test_database < /dev/null; do sleep 0.5; done'
+. "$DEVENV_TEST_LIB"
+
+export MYSQL_PWD=""
+
+wait_until 60 mariadb -u root test_database < /dev/null

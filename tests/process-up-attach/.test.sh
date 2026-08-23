@@ -16,6 +16,8 @@
 
 set -ex
 
+. "$DEVENV_TEST_LIB"
+
 # The assertions below grep info-level messages ("Scheduled: ...", "Already
 # running ..."); the AI-agent auto-quiet mode would suppress them, so opt out.
 export DEVENV_NO_AI_AGENT=1
@@ -26,38 +28,18 @@ PORT_B=
 PORT_A_FILE=.devenv/state/alpha-port
 PORT_B_FILE=.devenv/state/beta-port
 
-load_ports() {
-  for _ in $(seq 1 30); do
-    if [ -s "$PORT_A_FILE" ] && [ -s "$PORT_B_FILE" ]; then
-      read -r PORT_A < "$PORT_A_FILE"
-      read -r PORT_B < "$PORT_B_FILE"
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
 load_alpha_port() {
-  for _ in $(seq 1 30); do
-    if [ -s "$PORT_A_FILE" ]; then
-      read -r PORT_A < "$PORT_A_FILE"
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
+  wait_until 30 test -s "$PORT_A_FILE" || return 1
+  read -r PORT_A < "$PORT_A_FILE"
 }
 
 load_beta_port() {
-  for _ in $(seq 1 30); do
-    if [ -s "$PORT_B_FILE" ]; then
-      read -r PORT_B < "$PORT_B_FILE"
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
+  wait_until 30 test -s "$PORT_B_FILE" || return 1
+  read -r PORT_B < "$PORT_B_FILE"
+}
+
+load_ports() {
+  load_alpha_port && load_beta_port
 }
 
 reset_port_files() {
@@ -66,37 +48,13 @@ reset_port_files() {
   rm -f "$PORT_A_FILE" "$PORT_B_FILE"
 }
 
-reachable() {
-  curl -s -o /dev/null --connect-timeout 1 "http://127.0.0.1:$1/" 2>/dev/null
-}
-
-wait_for_port() {
-  for _ in $(seq 1 30); do
-    if reachable "$1"; then return 0; fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_port_free() {
-  for _ in $(seq 1 15); do
-    if ! reachable "$1"; then return 0; fi
-    sleep 1
-  done
-  return 1
-}
-
 # Poll until the running manager's pid file exists and it reports ready.
 # `devenv processes wait` fails fast while the pid file is absent (the
 # foreground session writes it only once its cold start completes), so retry
 # it; once the pid file exists it blocks until ready. Event-driven with a
 # bounded number of attempts.
 wait_for_manager() {
-  for _ in $(seq 1 60); do
-    if devenv processes wait 2>/dev/null; then return 0; fi
-    sleep 1
-  done
-  return 1
+  wait_until 60 devenv processes wait 2>/dev/null
 }
 
 cleanup() {
@@ -113,10 +71,10 @@ cleanup() {
   fi
   devenv processes down >/dev/null 2>&1 || true
   if [ -n "$PORT_A" ]; then
-    wait_for_port_free "$PORT_A" || status=1
+    wait_for_http_gone "$PORT_A" || status=1
   fi
   if [ -n "$PORT_B" ]; then
-    wait_for_port_free "$PORT_B" || status=1
+    wait_for_http_gone "$PORT_B" || status=1
   fi
   exit "$status"
 }
@@ -127,8 +85,8 @@ reset_port_files
 devenv up -d
 load_ports
 devenv processes wait
-wait_for_port "$PORT_A" || { echo "FAIL: alpha did not start"; devenv processes down || true; exit 1; }
-wait_for_port "$PORT_B" || { echo "FAIL: beta did not start"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_A" || { echo "FAIL: alpha did not start"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_B" || { echo "FAIL: beta did not start"; devenv processes down || true; exit 1; }
 
 # Second up while everything is already running: exit 0, truthful "already
 # running" report, nothing restarted.
@@ -141,8 +99,8 @@ grep -q "Already running" reup_all.txt || {
 
 # Stop beta; alpha stays up.
 devenv processes stop beta
-wait_for_port_free "$PORT_B" || { echo "FAIL: beta did not stop"; devenv processes down || true; exit 1; }
-reachable "$PORT_A" || { echo "FAIL: alpha died after stopping beta"; devenv processes down || true; exit 1; }
+wait_for_http_gone "$PORT_B" || { echo "FAIL: beta did not stop"; devenv processes down || true; exit 1; }
+http_is_ready "$PORT_A" || { echo "FAIL: alpha died after stopping beta"; devenv processes down || true; exit 1; }
 
 # Third up attaches and restarts the up-enabled beta, reporting it scheduled.
 devenv up -d >reup.txt 2>&1
@@ -152,13 +110,13 @@ grep -q "Scheduled: beta" reup.txt || {
   devenv processes down || true; exit 1;
 }
 devenv processes wait
-wait_for_port "$PORT_B" || { echo "FAIL: beta not restarted by attaching up"; devenv processes down || true; exit 1; }
-reachable "$PORT_A" || { echo "FAIL: alpha died after attaching up"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_B" || { echo "FAIL: beta not restarted by attaching up"; devenv processes down || true; exit 1; }
+http_is_ready "$PORT_A" || { echo "FAIL: alpha died after attaching up"; devenv processes down || true; exit 1; }
 
 # Stop beta; an attaching `devenv up -d beta` must honour the subset and only
 # (re)start beta, not alpha (which is already running) and not anything else.
 devenv processes stop beta
-wait_for_port_free "$PORT_B" || { echo "FAIL: beta did not stop"; devenv processes down || true; exit 1; }
+wait_for_http_gone "$PORT_B" || { echo "FAIL: beta did not stop"; devenv processes down || true; exit 1; }
 devenv up -d beta >subset.txt 2>&1
 grep -q "Scheduled: beta" subset.txt || {
   echo "FAIL: subset attach should report beta as scheduled; got:"
@@ -166,12 +124,12 @@ grep -q "Scheduled: beta" subset.txt || {
   devenv processes down || true; exit 1;
 }
 devenv processes wait
-wait_for_port "$PORT_B" || { echo "FAIL: beta not restarted by subset attach"; devenv processes down || true; exit 1; }
-reachable "$PORT_A" || { echo "FAIL: alpha died after subset attach"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_B" || { echo "FAIL: beta not restarted by subset attach"; devenv processes down || true; exit 1; }
+http_is_ready "$PORT_A" || { echo "FAIL: alpha died after subset attach"; devenv processes down || true; exit 1; }
 
 devenv processes down
-wait_for_port_free "$PORT_A" || { echo "FAIL: alpha still bound after down"; exit 1; }
-wait_for_port_free "$PORT_B" || { echo "FAIL: beta still bound after down"; exit 1; }
+wait_for_http_gone "$PORT_A" || { echo "FAIL: alpha still bound after down"; exit 1; }
+wait_for_http_gone "$PORT_B" || { echo "FAIL: beta still bound after down"; exit 1; }
 
 # Foreground ownership guard: a `devenv up -d` must refuse to schedule into a
 # foreground `devenv up` session owned by another terminal — that session owns
@@ -201,8 +159,8 @@ grep -q "foreground" fgup.txt || {
 # Detach cleanup: SIGINT stops the foreground session and its processes.
 kill -INT "$FG_PID"
 wait "$FG_PID" || true
-wait_for_port_free "$PORT_A" || { echo "FAIL: alpha still bound after foreground up exit"; exit 1; }
-wait_for_port_free "$PORT_B" || { echo "FAIL: beta still bound after foreground up exit"; exit 1; }
+wait_for_http_gone "$PORT_A" || { echo "FAIL: alpha still bound after foreground up exit"; exit 1; }
+wait_for_http_gone "$PORT_B" || { echo "FAIL: beta still bound after foreground up exit"; exit 1; }
 
 # `devenv processes attach` requires a running manager: after down it must fail
 # fast with a helpful message instead of hanging or attaching to nothing.
@@ -225,7 +183,7 @@ reset_port_files
 devenv processes start alpha
 wait_for_manager || { echo "FAIL: processes start did not cold-start a manager"; exit 1; }
 load_alpha_port
-wait_for_port "$PORT_A" || { echo "FAIL: alpha not started by cold processes start"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_A" || { echo "FAIL: alpha not started by cold processes start"; devenv processes down || true; exit 1; }
 if [ -e "$PORT_B_FILE" ]; then
   echo "FAIL: beta started by cold 'processes start alpha'"
   devenv processes down || true
@@ -235,9 +193,9 @@ devenv processes list | grep -q beta || { echo "FAIL: beta missing from list aft
 devenv processes start beta
 devenv processes wait
 load_beta_port
-wait_for_port "$PORT_B" || { echo "FAIL: beta not started over the socket"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_B" || { echo "FAIL: beta not started over the socket"; devenv processes down || true; exit 1; }
 devenv processes down
-wait_for_port_free "$PORT_A" || { echo "FAIL: alpha still bound after final down"; exit 1; }
-wait_for_port_free "$PORT_B" || { echo "FAIL: beta still bound after final down"; exit 1; }
+wait_for_http_gone "$PORT_A" || { echo "FAIL: alpha still bound after final down"; exit 1; }
+wait_for_http_gone "$PORT_B" || { echo "FAIL: beta still bound after final down"; exit 1; }
 
 echo "All process-up-attach tests passed!"

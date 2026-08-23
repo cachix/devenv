@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+. "$DEVENV_TEST_LIB"
+
 cleanup() {
   for repo in repo2 repo1; do
     if [ -d "$repo" ]; then
@@ -22,7 +24,6 @@ trap cleanup EXIT
 base_port=$(python3 - <<'PY'
 import errno
 import socket
-
 
 def can_allocate(port):
     listeners = []
@@ -51,7 +52,6 @@ def can_allocate(port):
     finally:
         for listener in listeners:
             listener.close()
-
 
 for _ in range(1000):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -113,43 +113,20 @@ path.write_text(path.read_text().replace("__BASE_PORT__", sys.argv[2]))
 PYEDIT
 }
 
-wait_for_port() {
-  local port=$1
-  for _ in $(seq 1 150); do
-    if (echo > "/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 0.1
-  done
-  return 1
+# These probe a TCP port rather than an HTTP endpoint, so they are local. The
+# names stay clear of devenv's own `wait_for_port`, which takes a timeout and
+# checks something else.
+tcp_is_ready() {
+  (echo > "/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1
 }
 
-wait_for_allocated_port_file() {
-  local repo=$1
-  for _ in $(seq 1 150); do
-    if [ -s "$repo/allocated-port" ]; then
-      return 0
-    fi
-    sleep 0.1
-  done
-  return 1
+tcp_is_gone() {
+  ! tcp_is_ready "$1"
 }
 
-wait_for_port_closed() {
+port_is_allocatable() {
   local port=$1
-  for _ in $(seq 1 150); do
-    if ! (echo > "/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 0.1
-  done
-  return 1
-}
-
-wait_for_port_allocatable() {
-  local port=$1
-  for _ in $(seq 1 150); do
-    if python3 - "$port" <<'PY' >/dev/null 2>&1; then
+  python3 - "$port" <<'PY' >/dev/null 2>&1
 import socket
 import sys
 import errno
@@ -177,11 +154,6 @@ finally:
     for listener in listeners:
         listener.close()
 PY
-      return 0
-    fi
-    sleep 0.1
-  done
-  return 1
 }
 
 start_repo() {
@@ -220,7 +192,7 @@ make_repo repo2
 # Warm repo2 while the base port is free. This creates eval-cache entries that
 # must be replayed/revalidated when repo2 starts again below.
 start_repo_detached repo2 || { cat repo2/up.log; exit 1; }
-wait_for_allocated_port_file repo2 || { cat repo2/up.log; exit 1; }
+wait_until 15 test -s "repo2/allocated-port" || { cat repo2/up.log; exit 1; }
 repo2_warm_port=$(cat repo2/allocated-port)
 if [ "$repo2_warm_port" != "$base_port" ]; then
   echo "Expected warm repo2 run to use free base port $base_port"
@@ -228,18 +200,18 @@ if [ "$repo2_warm_port" != "$base_port" ]; then
   exit 1
 fi
 stop_repo repo2
-wait_for_port_closed "$base_port" || { cat repo2/up.log; exit 1; }
-wait_for_port_allocatable "$base_port" || { cat repo2/up.log; exit 1; }
+wait_until 15 tcp_is_gone "$base_port" || { cat repo2/up.log; exit 1; }
+wait_until 15 port_is_allocatable "$base_port" || { cat repo2/up.log; exit 1; }
 
 start_repo repo1
-wait_for_allocated_port_file repo1 || { cat repo1/up.log; exit 1; }
+wait_until 15 test -s "repo1/allocated-port" || { cat repo1/up.log; exit 1; }
 repo1_process_port=$(cat repo1/allocated-port)
-wait_for_port "$repo1_process_port" || { cat repo1/up.log; exit 1; }
+wait_until 15 tcp_is_ready "$repo1_process_port" || { cat repo1/up.log; exit 1; }
 
 start_repo repo2
-wait_for_allocated_port_file repo2 || { cat repo2/up.log; exit 1; }
+wait_until 15 test -s "repo2/allocated-port" || { cat repo2/up.log; exit 1; }
 repo2_process_port=$(cat repo2/allocated-port)
-wait_for_port "$repo2_process_port" || { cat repo2/up.log; exit 1; }
+wait_until 15 tcp_is_ready "$repo2_process_port" || { cat repo2/up.log; exit 1; }
 
 echo "base port: $base_port"
 echo "repo2 warm port: $repo2_warm_port"

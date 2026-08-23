@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -ex
 
+. "$DEVENV_TEST_LIB"
+
 echo $PGHOST
 
-timeout 20 bash -c 'until psql -c "SELECT 1" mydb 2>/dev/null; do sleep 0.5; done'
+wait_until 20 psql -c "SELECT 1" mydb

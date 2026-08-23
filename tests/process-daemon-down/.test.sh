@@ -8,18 +8,14 @@
 
 set -ex
 
+. "$DEVENV_TEST_LIB"
+
 PORT=
 PORT_FILE=.devenv/state/http-port
 
 load_port() {
-  for _ in $(seq 1 30); do
-    if [ -s "$PORT_FILE" ]; then
-      read -r PORT < "$PORT_FILE"
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
+  wait_until 30 test -s "$PORT_FILE" || return 1
+  read -r PORT < "$PORT_FILE"
 }
 
 start_daemon() {
@@ -29,52 +25,7 @@ start_daemon() {
   load_port
 }
 
-runtime_hash() {
-  dotfile="$(pwd -P)/.devenv"
-  if command -v sha256sum >/dev/null 2>&1; then
-    printf '%s' "$dotfile" | sha256sum | cut -c1-7
-  else
-    printf '%s' "$dotfile" | shasum -a 256 | cut -c1-7
-  fi
-}
-
-RUNTIME_BASE="${XDG_RUNTIME_DIR:-/tmp}"
-PROCESS_RUNTIME_DIR="$RUNTIME_BASE/devenv-$(runtime_hash)/processes"
-
-wait_for_port() {
-  for i in $(seq 1 30); do
-    if curl -s -o /dev/null http://127.0.0.1:$PORT/ 2>/dev/null; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-port_free() {
-  [ -z "$PORT" ] && return 0
-  ! curl -s -o /dev/null --connect-timeout 1 http://127.0.0.1:$PORT/ 2>/dev/null
-}
-
-wait_for_port_free() {
-  for i in $(seq 1 15); do
-    if port_free; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_pid_exit() {
-  for _ in $(seq 1 30); do
-    if ! kill -0 "$1" 2>/dev/null; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
+PROCESS_RUNTIME_DIR="$(devenv_runtime_dir)/processes"
 
 cleanup() {
   status=$?
@@ -95,7 +46,7 @@ cleanup() {
     done
   fi
   devenv processes down >/dev/null 2>&1 || true
-  wait_for_port_free || status=1
+  wait_for_http_gone "$PORT" || status=1
   exit "$status"
 }
 trap cleanup EXIT INT TERM
@@ -104,16 +55,16 @@ trap cleanup EXIT INT TERM
 echo "--- Test 1: basic up -d / down ---"
 start_daemon
 devenv processes wait
-wait_for_port
+wait_for_http_ready "$PORT"
 devenv processes down
-wait_for_port_free || { echo "FAIL: port still bound after down"; exit 1; }
+wait_for_http_gone "$PORT" || { echo "FAIL: port still bound after down"; exit 1; }
 echo "PASS: basic up -d / down"
 
 # === Test 2: up -d attaches when a daemon is already running ===
 echo "--- Test 2: up -d attaches when a daemon is already running ---"
 start_daemon
 devenv processes wait
-wait_for_port
+wait_for_http_ready "$PORT"
 
 # A second `up -d` must attach to the running daemon (start up-enabled processes
 # over the control socket) without erroring and without clobbering the daemon's
@@ -126,9 +77,9 @@ curl -s -o /dev/null http://127.0.0.1:$PORT/ || { echo "FAIL: daemon died after 
 
 # A non-interactive foreground `up` (no -d) against a running daemon must fail
 # fast, not attach and block forever. Assert on the message: a hang killed by
-# the timeout also exits non-zero, so the exit code alone can't tell a clean
-# reject from a hang.
-timeout 15 devenv up --no-tui >up_out.txt 2>&1 || true
+# the failure bound also exits non-zero, so the exit code alone can't tell a
+# clean reject from a hang.
+run_bounded 15 devenv up --no-tui >up_out.txt 2>&1 || true
 grep -q "Processes already running" up_out.txt || {
   echo "FAIL: non-interactive foreground up should fail fast when a daemon is running"
   cat up_out.txt
@@ -137,23 +88,23 @@ grep -q "Processes already running" up_out.txt || {
 }
 
 devenv processes down
-wait_for_port_free || { echo "FAIL: port still bound after down"; exit 1; }
+wait_for_http_gone "$PORT" || { echo "FAIL: port still bound after down"; exit 1; }
 echo "PASS: up -d attaches when daemon running"
 
 # === Test 3: up -d / down / restart ===
 echo "--- Test 3: restart after down ---"
 start_daemon
 devenv processes wait
-wait_for_port
+wait_for_http_ready "$PORT"
 devenv processes down
-wait_for_port_free || { echo "FAIL: port bound before restart"; exit 1; }
+wait_for_http_gone "$PORT" || { echo "FAIL: port bound before restart"; exit 1; }
 
 start_daemon
 devenv processes wait
-wait_for_port || { echo "FAIL: restart failed"; exit 1; }
+wait_for_http_ready "$PORT" || { echo "FAIL: restart failed"; exit 1; }
 devenv processes down
 sleep 1
-port_free || { echo "FAIL: port bound after second down"; exit 1; }
+! http_is_ready "$PORT" || { echo "FAIL: port bound after second down"; exit 1; }
 echo "PASS: restart after down"
 
 # === Test 4: double down is safe ===
@@ -161,10 +112,10 @@ echo "--- Test 4: double down ---"
 start_daemon
 devenv processes wait
 devenv processes down
-wait_for_port_free || true
+wait_for_http_gone "$PORT" || true
 # Second down should fail gracefully, not crash
 devenv processes down 2>&1 || true
-port_free || { echo "FAIL: port bound after double down"; exit 1; }
+! http_is_ready "$PORT" || { echo "FAIL: port bound after double down"; exit 1; }
 echo "PASS: double down"
 
 # === Test 5: concurrent cold daemon starts have one owner ===
@@ -179,7 +130,7 @@ wait "$UP_ONE"
 wait "$UP_TWO"
 load_port
 devenv processes wait
-wait_for_port
+wait_for_http_ready "$PORT"
 
 DAEMON_PID=$(sed -n '1p' "$PROCESS_RUNTIME_DIR/native-manager.pid")
 kill -0 "$DAEMON_PID"
@@ -197,8 +148,8 @@ test "$DAEMON_COUNT" -eq 1 || {
 }
 
 devenv processes down
-wait_for_port_free || { echo "FAIL: port bound after concurrent start cleanup"; exit 1; }
-wait_for_pid_exit "$DAEMON_PID" || { echo "FAIL: concurrent-start daemon survived down"; exit 1; }
+wait_for_http_gone "$PORT" || { echo "FAIL: port bound after concurrent start cleanup"; exit 1; }
+wait_for_pid_gone "$DAEMON_PID" || { echo "FAIL: concurrent-start daemon survived down"; exit 1; }
 echo "PASS: concurrent daemon startup"
 
 echo "All daemon-down tests passed!"

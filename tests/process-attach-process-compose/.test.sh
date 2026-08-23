@@ -4,6 +4,8 @@
 
 set -eux
 
+. "$DEVENV_TEST_LIB"
+
 export DEVENV_NO_AI_AGENT=1
 
 PORT=18661
@@ -12,30 +14,6 @@ STATE_FILE=
 
 manager_pid() {
   jq -r '.scope.leader.pid' "$STATE_FILE"
-}
-
-reachable() {
-  curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:$PORT/" 2>/dev/null
-}
-
-wait_for_port() {
-  for _ in $(seq 1 60); do
-    if reachable; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_port_free() {
-  for _ in $(seq 1 30); do
-    if ! reachable; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
 }
 
 cleanup() {
@@ -48,13 +26,13 @@ cleanup() {
     fi
   fi
   devenv processes down >/dev/null 2>&1 || true
-  wait_for_port_free || status=1
+  wait_for_http_gone "$PORT" 30 || status=1
   exit "$status"
 }
 trap cleanup EXIT INT TERM
 
 devenv up -d
-wait_for_port
+wait_for_http_ready "$PORT" 60
 test -L "$PID_FILE"
 RUNTIME_PROCESS_DIR=$(dirname "$(readlink "$PID_FILE")")
 STATE_FILE="$RUNTIME_PROCESS_DIR/external-manager.json"
@@ -98,7 +76,7 @@ do
   grep -q "only supported with the native process manager" native-only.txt
   test "$(manager_pid)" = "$MANAGER_PID"
   kill -0 "$MANAGER_PID"
-  reachable
+  http_is_ready "$PORT"
 done
 
 for command in \
@@ -114,7 +92,7 @@ do
     unsupported-operation.txt
   test "$(manager_pid)" = "$MANAGER_PID"
   kill -0 "$MANAGER_PID"
-  reachable
+  http_is_ready "$PORT"
 done
 
 if devenv processes wait >wait.txt 2>&1; then
@@ -123,9 +101,9 @@ if devenv processes wait >wait.txt 2>&1; then
 fi
 grep -Fq "process manager 'process-compose' does not support readiness waiting" wait.txt
 test "$(manager_pid)" = "$MANAGER_PID"
-reachable
+http_is_ready "$PORT"
 
 devenv processes down
-wait_for_port_free
+wait_for_http_gone "$PORT" 30
 
 echo "All process-compose compatibility tests passed!"

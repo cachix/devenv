@@ -17,6 +17,8 @@
 
 set -ex
 
+. "$DEVENV_TEST_LIB"
+
 # The assertions below grep info-level messages ("Scheduled: ..."); the
 # AI-agent auto-quiet mode would suppress them, so opt out.
 export DEVENV_NO_AI_AGENT=1
@@ -25,26 +27,6 @@ export DEVENV_RUNTIME="$PWD/.runtime"
 PORT_ALPHA=18581
 PORT_BETA=18582
 PORT_GAMMA=18583
-
-reachable() {
-  curl -s -o /dev/null --connect-timeout 1 "http://127.0.0.1:$1/" 2>/dev/null
-}
-
-wait_for_port() {
-  for _ in $(seq 1 30); do
-    if reachable "$1"; then return 0; fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_port_free() {
-  for _ in $(seq 1 15); do
-    if ! reachable "$1"; then return 0; fi
-    sleep 1
-  done
-  return 1
-}
 
 cleanup() {
   status=$?
@@ -65,9 +47,9 @@ cleanup() {
     done
   fi
   devenv processes down >/dev/null 2>&1 || true
-  wait_for_port_free "$PORT_ALPHA" || status=1
-  wait_for_port_free "$PORT_BETA" || status=1
-  wait_for_port_free "$PORT_GAMMA" || status=1
+  wait_for_http_gone "$PORT_ALPHA" || status=1
+  wait_for_http_gone "$PORT_BETA" || status=1
+  wait_for_http_gone "$PORT_GAMMA" || status=1
   exit "$status"
 }
 trap cleanup EXIT INT TERM
@@ -75,16 +57,16 @@ trap cleanup EXIT INT TERM
 # Start all three; beta comes up once gamma is ready.
 devenv up -d
 devenv processes wait
-wait_for_port "$PORT_ALPHA" || { echo "FAIL: alpha did not start"; devenv processes down || true; exit 1; }
-wait_for_port "$PORT_GAMMA" || { echo "FAIL: gamma did not start"; devenv processes down || true; exit 1; }
-wait_for_port "$PORT_BETA"  || { echo "FAIL: beta did not start"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_ALPHA" || { echo "FAIL: alpha did not start"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_GAMMA" || { echo "FAIL: gamma did not start"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_BETA"  || { echo "FAIL: beta did not start"; devenv processes down || true; exit 1; }
 
 # Stop gamma and beta; alpha stays up.
 devenv processes stop beta
 devenv processes stop gamma
-wait_for_port_free "$PORT_BETA"  || { echo "FAIL: beta did not stop"; devenv processes down || true; exit 1; }
-wait_for_port_free "$PORT_GAMMA" || { echo "FAIL: gamma did not stop"; devenv processes down || true; exit 1; }
-reachable "$PORT_ALPHA" || { echo "FAIL: alpha died"; devenv processes down || true; exit 1; }
+wait_for_http_gone "$PORT_BETA"  || { echo "FAIL: beta did not stop"; devenv processes down || true; exit 1; }
+wait_for_http_gone "$PORT_GAMMA" || { echo "FAIL: gamma did not stop"; devenv processes down || true; exit 1; }
+http_is_ready "$PORT_ALPHA" || { echo "FAIL: alpha died"; devenv processes down || true; exit 1; }
 
 # Attach `up beta` while gamma is stopped: the daemon schedules beta and
 # reports so truthfully, but beta's dependency is unmet, so it must be held as
@@ -104,12 +86,12 @@ devenv processes list | grep -E '^beta\b' | grep -q waiting || {
   devenv processes down || true; exit 1;
 }
 # beta must not have launched: its gamma dependency is stopped.
-if reachable "$PORT_BETA"; then
+if http_is_ready "$PORT_BETA"; then
   echo "FAIL: beta started without its gamma@ready dependency"
   devenv processes down || true
   exit 1
 fi
-reachable "$PORT_ALPHA" || { echo "FAIL: alpha died after attaching up beta"; devenv processes down || true; exit 1; }
+http_is_ready "$PORT_ALPHA" || { echo "FAIL: alpha died after attaching up beta"; devenv processes down || true; exit 1; }
 
 # `devenv processes wait` must settle while beta is parked on the stopped
 # gamma: only external action can unblock it, so nothing can make further
@@ -118,7 +100,7 @@ reachable "$PORT_ALPHA" || { echo "FAIL: alpha died after attaching up beta"; de
 # Include CLI lock validation in the failure bound: on a loaded Nix daemon it
 # can take tens of seconds before the client reaches the already-running
 # manager, while the manager-side parked judgment itself is event-driven.
-timeout 180 devenv processes wait || {
+run_bounded 180 devenv processes wait || {
   echo "FAIL: processes wait did not settle while beta was parked on stopped gamma"
   devenv processes down || true; exit 1;
 }
@@ -140,8 +122,8 @@ grep -q "not found in configuration" typo.txt || {
 # Attach `up gamma`: gamma becomes ready, satisfying beta's dependency, so beta
 # is launched automatically by the daemon's scheduler.
 devenv up -d gamma
-wait_for_port "$PORT_GAMMA" || { echo "FAIL: gamma not started by attach"; devenv processes down || true; exit 1; }
-wait_for_port "$PORT_BETA"  || { echo "FAIL: beta not launched after gamma became ready"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_GAMMA" || { echo "FAIL: gamma not started by attach"; devenv processes down || true; exit 1; }
+wait_for_http_ready "$PORT_BETA"  || { echo "FAIL: beta not launched after gamma became ready"; devenv processes down || true; exit 1; }
 
 devenv processes down
 

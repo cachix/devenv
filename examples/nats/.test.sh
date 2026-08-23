@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -ex
 
+. "$DEVENV_TEST_LIB"
+
 # Wait for NATS to be ready via monitoring endpoint
-timeout 20 bash -c "until curl -sf http://nats-user:nats-pass@127.0.0.1:$NATS_MONITORING_PORT/healthz >/dev/null 2>&1; do sleep 0.5; done"
+wait_until 20 curl -sf -o /dev/null "http://nats-user:nats-pass@127.0.0.1:$NATS_MONITORING_PORT/healthz"
 
 # Test: Verify server is responding with auth
 curl -f http://nats-user:nats-pass@127.0.0.1:$NATS_MONITORING_PORT/varz | grep -q '"server_name"'

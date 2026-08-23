@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -ex
 
+. "$DEVENV_TEST_LIB"
+
 endpoint="http://localhost:13133/"
 
-timeout 60 bash -c "until curl $endpoint 2>/dev/null; do sleep 0.5; done"
+wait_until 60 curl -sf -o /dev/null "$endpoint"
 curl -s "$endpoint" | grep "Server"

@@ -7,39 +7,13 @@
 
 set -euo pipefail
 
+. "$DEVENV_TEST_LIB"
+
 export DEVENV_NO_AI_AGENT=1
 
 ACTIVE_MANAGER=
 ACTIVE_PORT=
-
-reachable() {
-  local port=$1
-  curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:$port/" 2>/dev/null
-}
-
-wait_for_port() {
-  local port=$1
-  local attempt
-  for attempt in $(seq 1 60); do
-    if reachable "$port"; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_port_free() {
-  local port=$1
-  local attempt
-  for attempt in $(seq 1 30); do
-    if ! reachable "$port"; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
+FOREGROUND_PID=
 
 runtime_for() {
   printf '%s/.runtime/%s' "$PWD" "$1"
@@ -79,13 +53,17 @@ cleanup() {
   local status=$?
   trap - EXIT INT TERM
 
+  if [ -n "$FOREGROUND_PID" ]; then
+    kill "$FOREGROUND_PID" 2>/dev/null || true
+  fi
+
   if [ -n "$ACTIVE_MANAGER" ]; then
     if [ "$status" -ne 0 ]; then
       dump_diagnostics "$ACTIVE_MANAGER"
     fi
     run_devenv "$ACTIVE_MANAGER" processes down >/dev/null 2>&1 || true
     if [ -n "$ACTIVE_PORT" ]; then
-      wait_for_port_free "$ACTIVE_PORT" || status=1
+      wait_for_http_gone "$ACTIVE_PORT" || status=1
     fi
   fi
 
@@ -113,37 +91,33 @@ assert_adapter() {
     '.["process.manager.adapter"] == $expected' <<<"$output" >/dev/null
 }
 
-assert_detached_lifecycle() {
+assert_lifecycle_cycle() {
   local manager=$1
   local port=$2
-  local log="${manager}-up.log"
-  local capabilities
-  local adapter
+  local capabilities=$3
+  local adapter=$4
+  local cycle=$5
+  local log="${manager}-up-${cycle}.log"
   local runtime_process_dir
   local state_file
+  local persistent_state_file
   local pid_file
-
-  echo "Testing detached lifecycle: $manager"
-  ACTIVE_MANAGER=$manager
-  ACTIVE_PORT=$port
 
   if ! run_devenv "$manager" up -d >"$log" 2>&1; then
     cat "$log" >&2
     return 1
   fi
-  wait_for_port "$port"
+  wait_for_http_ready "$port" 60
 
   # Reaching the service after `up -d` returned proves it outlived the client.
-  reachable "$port"
+  http_is_ready "$port"
 
   pid_file=".devenv/profiles/$manager/processes.pid"
   test -L "$pid_file"
   runtime_process_dir=$(dirname "$(readlink "$pid_file")")
   state_file="$runtime_process_dir/external-manager.json"
-  capabilities=$(run_devenv "$manager" eval process.manager.capabilities \
-    | jq -c '.["process.manager.capabilities"]')
-  adapter=$(run_devenv "$manager" eval process.manager.adapter \
-    | jq -c '.["process.manager.adapter"]')
+  persistent_state_file=".devenv/profiles/$manager/external-manager.json"
+  test -e "$persistent_state_file"
   jq -e \
     --arg manager "$manager" \
     --argjson capabilities "$capabilities" \
@@ -160,8 +134,33 @@ assert_detached_lifecycle() {
     "$state_file" >/dev/null
 
   run_devenv "$manager" processes down
-  wait_for_port_free "$port"
+  wait_for_http_gone "$port" 30
   test ! -e "$state_file"
+  test ! -e "$persistent_state_file"
+  test ! -L "$pid_file"
+}
+
+assert_detached_lifecycle() {
+  local manager=$1
+  local port=$2
+  local capabilities
+  local adapter
+
+  echo "Testing detached lifecycle: $manager"
+  ACTIVE_MANAGER=$manager
+  ACTIVE_PORT=$port
+
+  capabilities=$(run_devenv "$manager" eval process.manager.capabilities \
+    | jq -c '.["process.manager.capabilities"]')
+  adapter=$(run_devenv "$manager" eval process.manager.adapter \
+    | jq -c '.["process.manager.adapter"]')
+
+  # Two cycles, not one. `down` returns as soon as the manager accepts the
+  # request, so a manager that stops slowly still passes a single cycle. The
+  # second start fails if the first one left a control socket or a live process
+  # behind.
+  assert_lifecycle_cycle "$manager" "$port" "$capabilities" "$adapter" 1
+  assert_lifecycle_cycle "$manager" "$port" "$capabilities" "$adapter" 2
 
   ACTIVE_MANAGER=
   ACTIVE_PORT=
@@ -200,6 +199,72 @@ assert_detached_lifecycle honcho 18772
 assert_detached_lifecycle hivemind 18773
 assert_detached_lifecycle overmind 18774
 
+# A foreground `devenv up` execs the manager in place, so nothing of devenv's
+# runs afterwards to record it. Without state published before the exec, a
+# second client sees an idle project and starts a rival manager.
+assert_foreground_start_is_shared() {
+  local manager=$1
+  local port=$2
+  local pid_file=".devenv/profiles/$manager/processes.pid"
+  local state_file
+
+  echo "Testing foreground lifecycle: $manager"
+  ACTIVE_MANAGER=$manager
+  ACTIVE_PORT=$port
+
+  run_devenv "$manager" up >"${manager}-foreground.log" 2>&1 </dev/null &
+  FOREGROUND_PID=$!
+  wait_for_http_ready "$port" 60
+
+  test -L "$pid_file"
+  state_file="$(dirname "$(readlink "$pid_file")")/external-manager.json"
+  test -e "$state_file"
+  jq -e --arg manager "$manager" '.manager_id == $manager' "$state_file" >/dev/null
+
+  # A separate client stops the manager it never started.
+  run_devenv "$manager" processes down
+  wait_for_http_gone "$port" 30
+  wait_for_pid_gone "$FOREGROUND_PID" 30
+  FOREGROUND_PID=
+  test ! -e "$state_file"
+  test ! -L "$pid_file"
+
+  ACTIVE_MANAGER=
+  ACTIVE_PORT=
+}
+
+assert_foreground_start_is_shared honcho 18772
+
+# The OS clears the runtime directory on its own schedule. A second copy of the
+# state under `.devenv` keeps the manager reachable when that happens, instead
+# of leaving it running with nothing able to name it.
+assert_cleared_runtime_dir_still_stops() {
+  local manager=$1
+  local port=$2
+  local pid_file=".devenv/profiles/$manager/processes.pid"
+  local persistent_state_file=".devenv/profiles/$manager/external-manager.json"
+  local runtime_process_dir
+
+  echo "Testing recovery from a cleared runtime directory: $manager"
+  ACTIVE_MANAGER=$manager
+  ACTIVE_PORT=$port
+
+  run_devenv "$manager" up -d >"${manager}-cleared-runtime.log" 2>&1
+  wait_for_http_ready "$port" 60
+
+  runtime_process_dir=$(dirname "$(readlink "$pid_file")")
+  rm -rf "$runtime_process_dir"
+
+  run_devenv "$manager" processes down
+  wait_for_http_gone "$port" 30
+  test ! -e "$persistent_state_file"
+
+  ACTIVE_MANAGER=
+  ACTIVE_PORT=
+}
+
+assert_cleared_runtime_dir_still_stops process-compose 18771
+
 echo "Checking unsupported detached launch is rejected before spawn: mprocs"
 rm -f mprocs-was-invoked mprocs-up.log
 if run_devenv mprocs up -d >mprocs-up.log 2>&1; then
@@ -211,7 +276,7 @@ if [ -e mprocs-was-invoked ]; then
   exit 1
 fi
 grep -Fq "process manager 'mprocs' does not support background start" mprocs-up.log
-if reachable 18775; then
+if http_is_ready 18775; then
   echo "mprocs started the test service despite rejecting detached launch" >&2
   exit 1
 fi

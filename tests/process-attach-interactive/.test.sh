@@ -11,64 +11,16 @@
 
 set -eux
 
+. "$DEVENV_TEST_LIB"
+
 export DEVENV_NO_AI_AGENT=1
 
 PORT_ALPHA=18641
 PORT_BETA=18642
 
-runtime_hash() {
-  dotfile="$(pwd -P)/.devenv"
-  if command -v sha256sum >/dev/null 2>&1; then
-    printf '%s' "$dotfile" | sha256sum | cut -c1-7
-  else
-    printf '%s' "$dotfile" | shasum -a 256 | cut -c1-7
-  fi
-}
-
-RUNTIME_BASE="${XDG_RUNTIME_DIR:-/tmp}"
-PROCESS_RUNTIME_DIR="$RUNTIME_BASE/devenv-$(runtime_hash)/processes"
+PROCESS_RUNTIME_DIR="$(devenv_runtime_dir)/processes"
 PID_FILE="$PROCESS_RUNTIME_DIR/native-manager.pid"
 SOCKET_FILE="$PROCESS_RUNTIME_DIR/native.sock"
-
-reachable() {
-  curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:$1/" 2>/dev/null
-}
-
-# Bounded polls for teardown that is asynchronous to the attach client.
-# A daemon that receives SIGTERM drops its attach connections at the head of
-# shutdown: the manager token is cancelled first, and only afterwards does the
-# daemon stop its processes, retire the session guardians, remove the PID file
-# and unlink the socket. The client's "went away" message therefore marks the
-# start of shutdown, not its end.
-wait_for_pid_exit() {
-  for _ in $(seq 1 30); do
-    if ! kill -0 "$1" 2>/dev/null; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_missing() {
-  for _ in $(seq 1 30); do
-    if [ ! -e "$1" ]; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_port_free() {
-  for _ in $(seq 1 30); do
-    if ! reachable "$1"; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
 
 dump_failure_state() {
   echo "native manager diagnostics:" >&2
@@ -101,11 +53,11 @@ cleanup() {
   fi
   # `devenv processes down` blocks until the daemon and its processes exit.
   devenv processes down >/dev/null 2>&1 || true
-  if reachable "$PORT_ALPHA"; then
+  if http_is_ready "$PORT_ALPHA"; then
     echo "alpha port remained bound after cleanup" >&2
     status=1
   fi
-  if reachable "$PORT_BETA"; then
+  if http_is_ready "$PORT_BETA"; then
     echo "beta port remained bound after cleanup" >&2
     status=1
   fi
@@ -113,7 +65,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if reachable "$PORT_ALPHA" || reachable "$PORT_BETA"; then
+if http_is_ready "$PORT_ALPHA" || http_is_ready "$PORT_BETA"; then
   echo "test ports are already in use" >&2
   exit 1
 fi
@@ -173,14 +125,14 @@ grep -a -q "Attached to the running process manager" plain-up.typescript
 grep -a -q "plain-up-marker" plain-up.typescript
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
 kill -0 "$DAEMON_PID"
-reachable "$PORT_ALPHA"
+http_is_ready "$PORT_ALPHA"
 
 # E05: explicit attach observes the same daemon without scheduling work.
 run_detach_session explicit-attach.typescript "devenv processes attach" explicit-attach-marker
 grep -a -q "Attached to the running process manager" explicit-attach.typescript
 grep -a -q "explicit-attach-marker" explicit-attach.typescript
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
-reachable "$PORT_ALPHA"
+http_is_ready "$PORT_ALPHA"
 
 # R03: repeat real PTY attachments while generating unique logs. Every
 # disconnect must release its socket/log tailers, and the daemon must remain
@@ -226,7 +178,7 @@ EOF
   grep -a -q "$marker" "$transcript"
   test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
   kill -0 "$DAEMON_PID"
-  reachable "$PORT_ALPHA"
+  http_is_ready "$PORT_ALPHA"
 done
 
 # E06: attached TUI commands restart, stop, and then re-start the process.
@@ -270,7 +222,7 @@ case "$COMMAND_STATUS" in
   *) echo "attached command session exited with status $COMMAND_STATUS" >&2; exit "$COMMAND_STATUS" ;;
 esac
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
-reachable "$PORT_ALPHA"
+http_is_ready "$PORT_ALPHA"
 
 # E10: automation must fail fast even when a wrapper allocated a PTY.
 if devenv up --no-tui </dev/null >non-tty.txt 2>&1; then
@@ -291,7 +243,7 @@ if devenv-run-tests pty agent.typescript "env -u DEVENV_NO_AI_AGENT CLAUDECODE=1
 fi
 grep -a -q "Processes already running" agent.typescript
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
-reachable "$PORT_ALPHA"
+http_is_ready "$PORT_ALPHA"
 
 # E11: a newly configured name is unknown to the retained older graph.
 cp devenv-with-beta.nix devenv.nix
@@ -302,8 +254,8 @@ fi
 grep -q "different configuration" config-skew.txt
 grep -q "devenv processes down" config-skew.txt
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
-reachable "$PORT_ALPHA"
-if reachable "$PORT_BETA"; then
+http_is_ready "$PORT_ALPHA"
+if http_is_ready "$PORT_BETA"; then
   echo "unknown beta process launched in the old graph" >&2
   exit 1
 fi
@@ -324,12 +276,12 @@ case "$STOP_STATUS" in
   0) ;;
   *) echo "stop-manager session exited with status $STOP_STATUS" >&2; exit "$STOP_STATUS" ;;
 esac
-if reachable "$PORT_ALPHA"; then
+if http_is_ready "$PORT_ALPHA"; then
   echo "alpha port still bound after manager stop" >&2
   exit 1
 fi
-test ! -e "$PID_FILE"
-test ! -e "$SOCKET_FILE"
+wait_for_path_gone "$PID_FILE"
+wait_for_path_gone "$SOCKET_FILE"
 
 # E08: losing the daemon externally is reported as an error, not a detach.
 devenv up -d >/dev/null 2>&1
@@ -345,25 +297,17 @@ LOSS_STATUS=$?
 set -e
 test "$LOSS_STATUS" -ne 0
 grep -a -q "process manager went away" manager-loss.typescript
-# The client observes the disconnect before the daemon has torn anything down,
-# so allow the daemon its whole shutdown budget (the per-process grace period
-# plus guardian retirement) to exit and remove its runtime files.
-if ! wait_for_pid_exit "$DAEMON_PID"; then
-  echo "process manager still running after manager loss" >&2
-  exit 1
-fi
-if ! wait_for_port_free "$PORT_ALPHA"; then
-  echo "alpha port still bound after manager loss" >&2
-  exit 1
-fi
-if ! wait_for_missing "$PID_FILE"; then
-  echo "PID file remained after manager loss" >&2
-  exit 1
-fi
-if ! wait_for_missing "$SOCKET_FILE"; then
-  echo "socket file remained after manager loss" >&2
-  exit 1
-fi
+# The client observes the disconnect before the daemon has torn anything down:
+# a daemon that receives SIGTERM drops its attach connections at the head of
+# shutdown, and only afterwards stops its processes, retires the session
+# guardians, removes the PID file and unlinks the socket. Nothing synchronises
+# the client's view with that teardown, so every post-condition here is polled,
+# with the daemon's whole shutdown budget (the per-process grace period plus
+# guardian retirement) as the bound.
+wait_for_pid_gone "$DAEMON_PID"
+wait_for_http_gone "$PORT_ALPHA" 30
+wait_for_path_gone "$PID_FILE" 30
+wait_for_path_gone "$SOCKET_FILE" 30
 
 if devenv processes attach >attach-after-down.txt 2>&1; then
   echo "attach unexpectedly succeeded without a manager" >&2

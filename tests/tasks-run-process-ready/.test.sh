@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+. "$DEVENV_TEST_LIB"
+
 # End-to-end coverage for issues #3030, #3102, and #2037.
 # Timeouts bound deadlocks; PID checks detect leaked forked children.
 
@@ -30,12 +32,9 @@ assert_stopped() {
 
   pid=$(cat "$pid_file")
   # Allow init to reap a killed orphan before treating its PID as live.
-  for _ in $(seq 1 50); do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      return 0
-    fi
-    sleep 0.1
-  done
+  if wait_for_pid_gone "$pid" 5 2>/dev/null; then
+    return 0
+  fi
 
   ps -o pid,ppid,pgid,stat,etime,command -p "$pid" >&2 || true
   kill -9 "$pid" 2>/dev/null || true
@@ -44,7 +43,7 @@ assert_stopped() {
 }
 
 status=0
-timeout 120 devenv tasks run devenv:processes:chain-backend || status=$?
+run_bounded 120 devenv tasks run devenv:processes:chain-backend || status=$?
 
 if [ "$status" -eq 124 ]; then
   echo "FAIL: mixed process/task chain hung"
@@ -90,7 +89,7 @@ assert_stopped "$state/probe-target.pid" "source"
 assert_stopped "$state/chain-backend.pid" "downstream"
 
 failure_status=0
-timeout 120 devenv tasks run devenv:processes:blocked-backend \
+run_bounded 120 devenv tasks run devenv:processes:blocked-backend \
   >failure-output.txt 2>&1 || failure_status=$?
 
 if [ "$failure_status" -eq 124 ]; then
