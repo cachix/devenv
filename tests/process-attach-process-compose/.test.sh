@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 
-# Native-only control commands must fail without disturbing process-compose.
+# Unsupported operations must fail without disturbing process-compose.
 
 set -eux
 
-export DEVENV_RUNTIME="$PWD/.runtime"
 export DEVENV_NO_AI_AGENT=1
 
 PORT=18661
-TREE_FILE="$DEVENV_RUNTIME/processes/external-manager.tree.json"
 PID_FILE="$PWD/.devenv/processes.pid"
+STATE_FILE=
 
 manager_pid() {
   jq -r '.scope.leader.pid' "$STATE_FILE"
@@ -56,8 +55,27 @@ trap cleanup EXIT INT TERM
 
 devenv up -d
 wait_for_port
-test -s "$TREE_FILE"
 test -L "$PID_FILE"
+RUNTIME_PROCESS_DIR=$(dirname "$(readlink "$PID_FILE")")
+STATE_FILE="$RUNTIME_PROCESS_DIR/external-manager.json"
+test -s "$STATE_FILE"
+jq -e '
+  .manager_id == "process-compose"
+  and .capabilities_source == "nix"
+  and .adapter_source == "nix"
+  and .capabilities == {
+    "background_start": true,
+    "devenv_attach": false,
+    "wait_ready": false,
+    "individual_control": false,
+    "cold_start_subset": true
+  }
+  and .adapter == {
+    "terminal": "none",
+    "stop": "process-scope",
+    "client": "none"
+  }
+' "$STATE_FILE" >/dev/null
 MANAGER_PID=$(manager_pid)
 test "$(sed -n '1p' "$PID_FILE")" = "$MANAGER_PID"
 kill -0 "$MANAGER_PID"
@@ -66,16 +84,12 @@ if devenv processes attach >attach.txt 2>&1; then
   echo "attach unexpectedly accepted process-compose" >&2
   exit 1
 fi
-grep -q "only supported by the native process manager" attach.txt
-grep -q "left running" attach.txt
+grep -Fq "process manager 'process-compose' does not support devenv attach" attach.txt
 
 for command in \
   "list" \
   "status alpha" \
-  "logs alpha" \
-  "start alpha" \
-  "stop alpha" \
-  "restart alpha"
+  "logs alpha"
 do
   if devenv processes $command >native-only.txt 2>&1; then
     echo "native-only command unexpectedly accepted process-compose: $command" >&2
@@ -87,11 +101,27 @@ do
   reachable
 done
 
+for command in \
+  "start alpha" \
+  "stop alpha" \
+  "restart alpha"
+do
+  if devenv processes $command >unsupported-operation.txt 2>&1; then
+    echo "unsupported command unexpectedly accepted process-compose: $command" >&2
+    exit 1
+  fi
+  grep -Fq "process manager 'process-compose' does not support individual process control" \
+    unsupported-operation.txt
+  test "$(manager_pid)" = "$MANAGER_PID"
+  kill -0 "$MANAGER_PID"
+  reachable
+done
+
 if devenv processes wait >wait.txt 2>&1; then
   echo "process-compose wait unexpectedly succeeded" >&2
   exit 1
 fi
-grep -q "not supported for external process-manager backends" wait.txt
+grep -Fq "process manager 'process-compose' does not support readiness waiting" wait.txt
 test "$(manager_pid)" = "$MANAGER_PID"
 reachable
 

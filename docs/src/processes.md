@@ -67,7 +67,7 @@ $ devenv up api           # attach and bring api back up
 
 A bare `devenv up` starts only processes with `start.enable = true`; explicitly named processes always start, even when their `start.enable` is `false`. The same applies to `devenv processes start <name>`, which uses the same dependency-aware launch path: if a dependency is not running, the process waits for it instead of starting without it. When no process manager is running yet, `devenv processes start <name>` starts one in the background launching only the named process, like `devenv up -d <name>`.
 
-The attached session is a non-interactive live view: stdin is not connected to the processes, and Ctrl-C detaches while leaving them running (the TUI restart/stop keybindings still work).
+The attached client is a non-interactive live view: stdin is not connected to the processes, and Ctrl-C detaches while leaving them running (the TUI restart/stop keybindings still work).
 
 !!! note "Configuration changes are not picked up by attach"
 
@@ -454,32 +454,65 @@ To switch:
 Selecting a manager does not imply that it supports every process command. Each manager declares the lifecycle
 capabilities that devenv may use, and the CLI rejects unsupported operations before starting the manager.
 
-| Manager | Background | Attach | Wait ready | Individual control | Subset start | Requires TTY | Manager-aware stop |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| native | Yes | Yes | Yes | Yes | Yes | No | Yes |
-| process-compose | Yes | No | No | No | Yes | No | No |
-| Overmind | Yes | No | No | No | Yes | No | Yes |
-| Honcho | Yes | No | No | No | Yes | No | No |
-| Hivemind | Yes | No | No | No | No | No | No |
-| mprocs | No | No | No | No | No | Yes | No |
+| Manager | Background start | devenv attach | Wait ready | Individual control | Cold-start subset |
+| --- | --- | --- | --- | --- | --- |
+| native | Yes | Yes | Yes | Yes | Yes |
+| process-compose | Yes | No | No | No | Yes |
+| overmind | Yes | No | No | No | Yes |
+| honcho | Yes | No | No | No | Yes |
+| hivemind | Yes | No | No | No | No |
+| mprocs | No | No | No | No | No |
 
 The columns mean:
 
-- **Background**: `devenv up -d` can return while the manager and its processes remain running.
-- **Attach**: `devenv processes attach`, and devenv's live attach behavior when `devenv up` finds a running manager.
-- **Wait ready**: `devenv processes wait` can query readiness through that manager.
-- **Individual control**: `devenv processes start`, `stop`, and `restart` can control an existing manager by
-  process name.
-- **Subset start**: a new manager can be started with selected names, for example `devenv up -d api worker`.
-- **Requires TTY**: the manager needs a terminal while it runs. mprocs is therefore supported in the foreground, but
-  `devenv up -d` rejects it before spawning anything.
-- **Manager-aware stop**: devenv has a dedicated graceful-shutdown adapter for the manager.
+- **Background start** (`background_start`): `devenv up -d` can return while the manager and its processes remain
+  running.
+- **devenv attach** (`devenv_attach`): `devenv processes attach`, and devenv's live attach behavior when
+  `devenv up` finds a running manager.
+- **Wait ready** (`wait_ready`): `devenv processes wait` can query readiness through that manager.
+- **Individual control** (`individual_control`): `devenv processes start`, `stop`, and `restart` can control an
+  existing manager by process name.
+- **Cold-start subset** (`cold_start_subset`): a new manager can be started with selected names, for example
+  `devenv up -d api worker`.
 
-`devenv down` is supported for every manager in the table that supports background start. A manager-aware stop is
-used when available. Otherwise, devenv terminates the recorded operating-system process scope and verifies that the
-manager and its descendants have exited. Therefore, **Manager-aware stop** describes the graceful strategy; a “No”
-in that column does not mean that `devenv down` is unavailable.
+### Manager adapters
 
-These capabilities are internal implementation data rather than additional public Nix options. When a newer CLI is
-used with older devenv Nix modules that do not declare them, the CLI uses an embedded compatibility declaration for
-the known managers above. Unknown managers receive no optional capabilities implicitly.
+Capabilities answer which user-visible operations are available. Runtime adapters separately describe how devenv
+hosts and stops each manager:
+
+| Manager | Terminal adapter | Stop adapter | Client adapter |
+| --- | --- | --- | --- |
+| native | `none` | `native-api` | `native-api` |
+| process-compose | `none` | `process-scope` | `none` |
+| overmind | `none` | `command` | `none` |
+| honcho | `none` | `process-scope` | `none` |
+| hivemind | `none` | `process-scope` | `none` |
+| mprocs | `controlling` | `process-scope` | `none` |
+
+The terminal adapters mean:
+
+- `none`: the manager has no continuing controlling-terminal requirement.
+- `controlling`: the manager must remain connected to a controlling terminal while it runs.
+
+The stop adapters mean:
+
+- `native-api`: devenv requests shutdown through its native manager control protocol.
+- `command`: devenv invokes a manager-specific stop command, then performs final process-scope cleanup.
+- `process-scope`: devenv terminates the recorded operating-system process scope directly and verifies that the
+  manager and its descendants have exited.
+
+The client adapter names the protocol used for attach, readiness, and individual process control. `native-api`
+uses devenv's native manager socket; `none` means those capabilities must remain disabled. A future external client
+protocol can be added as a new adapter without conflating its transport with the operations it implements.
+
+`devenv down` is supported for every manager that supports background start. The stop adapter describes how that
+shutdown is performed; it is not itself an optional operation capability.
+
+mprocs currently requires a controlling terminal, so it is supported by foreground `devenv up` but `devenv up -d` rejects it
+before spawning anything. Background mprocs support would require a persistent devenv-owned PTY that stays alive,
+drains output, and participates in shutdown and recovery. Merely changing `background_start` to `true` would not be
+sufficient.
+
+Capabilities and adapters are internal implementation data rather than additional public Nix options. When a newer
+CLI is used with older devenv Nix modules that do not declare them, the CLI uses embedded compatibility declarations
+for the known managers above. Unknown managers receive no optional capabilities implicitly.

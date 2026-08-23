@@ -3,6 +3,7 @@
   packages = [
     pkgs.python3
     pkgs.curl
+    pkgs.jq
   ];
   process.manager.implementation = "process-compose";
 

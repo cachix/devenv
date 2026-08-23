@@ -3,39 +3,7 @@ let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
   readyType = import ./lib/ready.nix { inherit lib; };
-
-  managerCapabilitiesType = types.submodule {
-    options = {
-      background_start = lib.mkOption {
-        type = types.bool;
-        description = "Whether the manager can remain running after the launching client exits.";
-      };
-      devenv_attach = lib.mkOption {
-        type = types.bool;
-        description = "Whether devenv can attach its interactive client to an existing manager.";
-      };
-      wait_ready = lib.mkOption {
-        type = types.bool;
-        description = "Whether devenv can wait for process readiness through the manager.";
-      };
-      individual_control = lib.mkOption {
-        type = types.bool;
-        description = "Whether devenv can start, stop, and restart individual processes through the manager.";
-      };
-      subset_start = lib.mkOption {
-        type = types.bool;
-        description = "Whether the manager can initially start a named subset of processes.";
-      };
-      requires_tty = lib.mkOption {
-        type = types.bool;
-        description = "Whether the manager requires a controlling terminal while it is running.";
-      };
-      manager_aware_stop = lib.mkOption {
-        type = types.bool;
-        description = "Whether devenv has a manager-specific graceful shutdown mechanism.";
-      };
-    };
-  };
+  processManagerTypes = import ./lib/process-manager-types.nix { inherit lib; };
 
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
@@ -468,17 +436,24 @@ in
       };
 
       capabilities = lib.mkOption {
-        type = managerCapabilitiesType;
+        type = processManagerTypes.capabilities;
         internal = true;
         readOnly = true;
         description = "Capabilities of the selected process manager.";
       };
 
-      shutdownScript = lib.mkOption {
-        type = types.nullOr types.package;
+      adapter = lib.mkOption {
+        type = processManagerTypes.adapter;
         internal = true;
         readOnly = true;
-        description = "Manager-specific graceful shutdown script, if one is available.";
+        description = "Runtime adapter settings of the selected process manager.";
+      };
+
+      stopCommand = lib.mkOption {
+        type = processManagerTypes.stopCommand;
+        internal = true;
+        readOnly = true;
+        description = "Manager-specific graceful stop command, if one is available.";
       };
     };
 
@@ -554,11 +529,42 @@ in
             Use tasks with process dependencies instead. See https://devenv.sh/tasks/
           '';
         }
+        {
+          assertion =
+            (config.process.managers.${implementation}.adapter.stop == "command")
+            == (config.process.managers.${implementation}.stopCommand != null);
+          message = ''
+            A process manager using the command stop adapter must provide process.managers.${implementation}.stopCommand,
+            and managers using another stop adapter must leave it null.
+          '';
+        }
+        {
+          assertion =
+            let
+              capabilities = config.process.managers.${implementation}.capabilities;
+              exposesClientOperations =
+                capabilities.devenv_attach
+                || capabilities.wait_ready
+                || capabilities.individual_control;
+            in
+            !exposesClientOperations
+            || config.process.managers.${implementation}.adapter.client != "none";
+          message = ''
+            A process manager exposing attach, readiness, or individual control must provide a client adapter.
+          '';
+        }
+        {
+          assertion =
+            config.process.managers.${implementation}.adapter.client != "native-api"
+            || implementation == "native";
+          message = "The native-api client adapter can only be used by the native process manager.";
+        }
       ];
 
       process.managers.${implementation}.enable = lib.mkDefault true;
       process.manager.capabilities = config.process.managers.${implementation}.capabilities;
-      process.manager.shutdownScript = config.process.managers.${implementation}.shutdownScript;
+      process.manager.adapter = config.process.managers.${implementation}.adapter;
+      process.manager.stopCommand = config.process.managers.${implementation}.stopCommand;
     }
 
     (lib.mkIf options.processes.isDefined (

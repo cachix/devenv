@@ -756,12 +756,16 @@ impl Devenv {
         )
     }
 
+    fn external_process_manager_control(&self) -> processes::ExternalManager {
+        processes::ExternalManager::control(
+            self.devenv_dotfile.clone(),
+            self.devenv_runtime.join(processes::PROCESSES_DIR),
+        )
+    }
+
     async fn processes_running(&self) -> bool {
         if self.external_process_manager_state_exists() {
-            let manager = processes::ExternalManager::control(
-                self.devenv_dotfile.clone(),
-                self.devenv_runtime.join(processes::PROCESSES_DIR),
-            );
+            let manager = self.external_process_manager_control();
             if manager.is_running().await {
                 return true;
             }
@@ -1439,13 +1443,19 @@ impl Devenv {
         let Ok(processes::PidStatus::Running(pid)) = processes::check_pid_file(&pid_file).await
         else {
             if self.external_process_manager_state_exists() {
-                bail!(
-                    "`devenv processes attach` is only supported by the native process manager; \
-                     the configured external process manager was left running"
+                let adapter = self
+                    .external_process_manager_control()
+                    .require_operation(processes::ManagerOperation::DevenvAttach)
+                    .await?;
+                return Self::unsupported_external_client_operation(
+                    adapter,
+                    processes::ManagerOperation::DevenvAttach,
                 );
             }
             bail!("No processes running. Start them with: devenv up -d");
         };
+        processes::ManagerDescriptor::resolve("native", None, None)
+            .require(processes::ManagerOperation::DevenvAttach)?;
         info!(%pid, "attached to running process manager");
         let parent = devenv_activity::start!(Activity::operation("Running processes").parent(None));
         self.run_attached_view(&parent, frontend_event_rx, frontend_command_tx)
@@ -2489,7 +2499,7 @@ impl Devenv {
             // CLI may still be paired with older Nix modules, so absence of
             // this attribute selects the Rust compatibility declaration for
             // managers known to this binary.
-            let declared = match self
+            let declared_capabilities = match self
                 .backend
                 .eval_devenv(&["devenv.config.process.manager.capabilities"])
                 .await
@@ -2514,27 +2524,65 @@ impl Devenv {
                     None
                 }
             };
+
+            // Adapter settings describe how the CLI implements the declared
+            // outcomes. Keep their compatibility fallback separate from the
+            // capabilities: a launch requirement or stop mechanism is not a
+            // user-visible operation in its own right.
+            let declared_adapter = match self
+                .backend
+                .eval_devenv(&["devenv.config.process.manager.adapter"])
+                .await
+            {
+                Ok(json) => Some(
+                    serde_json::from_str::<processes::ManagerAdapter>(&json).map_err(
+                        |error| {
+                            miette!(
+                                "Invalid adapter declaration for process manager '{}': {}",
+                                implementation,
+                                error
+                            )
+                        },
+                    )?,
+                ),
+                Err(error) => {
+                    debug!(
+                        manager = %implementation,
+                        %error,
+                        "process-manager adapter settings unavailable; using Rust compatibility data"
+                    );
+                    None
+                }
+            };
             Ok::<_, miette::Report>(processes::ManagerDescriptor::resolve(
                 implementation,
-                declared,
+                declared_capabilities,
+                declared_adapter,
             ))
         }
         .in_activity(&phase4)
         .await?;
 
-        if options.mode == ClientRunMode::ReturnAfterStart
-            && !manager_descriptor.capabilities.background_start
-        {
-            bail!(
-                "process manager '{}' does not support background start",
-                manager_descriptor.id
-            );
+        if options.mode == ClientRunMode::ReturnAfterStart {
+            manager_descriptor.require(processes::ManagerOperation::BackgroundStart)?;
         }
-        if !processes.is_empty() && !manager_descriptor.capabilities.subset_start {
-            bail!(
-                "process manager '{}' does not support starting a process subset",
+        if !processes.is_empty() {
+            manager_descriptor.require(processes::ManagerOperation::ColdStartSubset)?;
+        }
+
+        match (
+            manager_descriptor.is_native(),
+            manager_descriptor.adapter.client,
+        ) {
+            (true, processes::ManagerClient::NativeApi)
+            | (false, processes::ManagerClient::None) => {}
+            (true, processes::ManagerClient::None) => {
+                bail!("the native process manager requires the native API client adapter")
+            }
+            (false, processes::ManagerClient::NativeApi) => bail!(
+                "external process manager '{}' cannot use the native API client adapter",
                 manager_descriptor.id
-            );
+            ),
         }
 
         // Create appropriate manager based on implementation
@@ -2596,6 +2644,7 @@ impl Devenv {
                     );
                 }
 
+                manager_descriptor.require(processes::ManagerOperation::DevenvAttach)?;
                 self.attach_start_up_processes(&launch_names).await?;
                 info!(names = ?launch_names, "attached to running process manager");
                 self.run_attached_view(
@@ -2713,42 +2762,42 @@ impl Devenv {
         .in_activity(&phase4)
         .await?;
 
-        let shutdown_script = if manager_descriptor.capabilities.manager_aware_stop {
-            let build = async {
-                let gc_root = self.devenv_dot_gc.join("process-manager-shutdown");
-                self.backend()
-                    .build_devenv(
-                        &["devenv.config.process.manager.shutdownScript"],
-                        BuildOptions {
-                            gc_root: Some(gc_root),
-                        },
-                    )
-                    .await
-            }
-            .in_activity(&phase4)
-            .await;
-            match build {
-                Ok(paths) => paths.first().map(|path| path.as_path().to_path_buf()),
-                Err(error) => {
-                    // Older Nix modules have no shutdownScript attribute. The
-                    // embedded capabilities still allow background startup;
-                    // down then uses the durable process-scope fallback.
-                    debug!(
-                        manager = %manager_descriptor.id,
-                        %error,
-                        "manager-aware shutdown adapter unavailable; using process-scope cleanup"
-                    );
-                    None
+        let stop_command =
+            if manager_descriptor.adapter.stop == processes::ManagerStopMethod::Command {
+                let build = async {
+                    let gc_root = self.devenv_dot_gc.join("process-manager-shutdown");
+                    self.backend()
+                        .build_devenv(
+                            &["devenv.config.process.manager.stopCommand"],
+                            BuildOptions {
+                                gc_root: Some(gc_root),
+                            },
+                        )
+                        .await
                 }
-            }
-        } else {
-            None
-        };
+                .in_activity(&phase4)
+                .await;
+                match build {
+                    Ok(paths) => paths.first().map(|path| path.as_path().to_path_buf()),
+                    Err(error) => {
+                        // Modules predating adapter declarations still have the
+                        // durable process scope as a safe fallback.
+                        debug!(
+                            manager = %manager_descriptor.id,
+                            %error,
+                            "command stop adapter unavailable; using process-scope cleanup"
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
         let manager = processes::ExternalManager::new(
             manager_descriptor,
             launcher_script,
-            shutdown_script,
+            stop_command,
             self.devenv_dotfile.clone(),
             self.process_runtime_dir()?.clone(),
         );
@@ -2955,10 +3004,7 @@ impl Devenv {
             } else if self.external_process_manager_state_exists() {
                 // A detached external process manager is running.
                 // Stopping does not invoke the launcher, so a dummy path is sufficient.
-                Box::new(processes::ExternalManager::control(
-                    self.devenv_dotfile.clone(),
-                    self.devenv_runtime.join(processes::PROCESSES_DIR),
-                ))
+                Box::new(self.external_process_manager_control())
             } else {
                 bail!("No process manager is running. Start processes first with `devenv up -d`")
             };
@@ -2968,6 +3014,8 @@ impl Devenv {
 
     pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
         if self.native_manager_pid_file().exists() {
+            processes::ManagerDescriptor::resolve("native", None, None)
+                .require(processes::ManagerOperation::WaitReady)?;
             let socket_path = self.native_socket_path();
             let pid_file = self.native_manager_pid_file();
             let start = std::time::Instant::now();
@@ -2990,7 +3038,14 @@ impl Devenv {
                 }
             }
         } else if self.external_process_manager_state_exists() {
-            bail!("'devenv processes wait' is not supported for external process-manager backends")
+            let adapter = self
+                .external_process_manager_control()
+                .require_operation(processes::ManagerOperation::WaitReady)
+                .await?;
+            Self::unsupported_external_client_operation(
+                adapter,
+                processes::ManagerOperation::WaitReady,
+            )
         } else {
             bail!("No process manager is running. Start processes first with `devenv up -d`")
         }
@@ -3067,6 +3122,42 @@ impl Devenv {
             bail!("This subcommand is only supported with the native process manager")
         } else {
             bail!("No process manager is running. Start processes first with `devenv up -d`")
+        }
+    }
+
+    /// Check an operation against the contract of the manager that is
+    /// actually running. External managers persist this contract at launch,
+    /// so later commands do not accidentally consult changed project config.
+    async fn require_running_manager_operation(
+        &self,
+        operation: processes::ManagerOperation,
+    ) -> Result<()> {
+        if self.native_manager_pid_file().exists() {
+            return processes::ManagerDescriptor::resolve("native", None, None).require(operation);
+        }
+        if self.external_process_manager_state_exists() {
+            let adapter = self
+                .external_process_manager_control()
+                .require_operation(operation)
+                .await?;
+            return Self::unsupported_external_client_operation(adapter, operation);
+        }
+        bail!("No process manager is running. Start processes first with `devenv up -d`")
+    }
+
+    fn unsupported_external_client_operation(
+        adapter: processes::ManagerAdapter,
+        operation: processes::ManagerOperation,
+    ) -> Result<()> {
+        match adapter.client {
+            processes::ManagerClient::None => bail!(
+                "the running manager declares support for {}, but has no client adapter",
+                operation.description()
+            ),
+            processes::ManagerClient::NativeApi => bail!(
+                "the running external manager cannot use the native API client adapter for {}",
+                operation.description()
+            ),
         }
     }
 
@@ -3148,6 +3239,8 @@ impl Devenv {
     }
 
     pub async fn processes_restart(&self, name: &str) -> Result<()> {
+        self.require_running_manager_operation(processes::ManagerOperation::IndividualControl)
+            .await?;
         self.expect_ok_response(&processes::ApiRequest::Restart {
             name: name.to_string(),
         })
@@ -3159,6 +3252,8 @@ impl Devenv {
     /// reply is truthful: already running is an error (matching the historic
     /// `processes start` strictness), unknown names get config-skew guidance.
     pub async fn processes_start(&self, name: &str) -> Result<()> {
+        self.require_running_manager_operation(processes::ManagerOperation::IndividualControl)
+            .await?;
         let request = processes::ApiRequest::Start {
             names: vec![name.to_string()],
         };
@@ -3188,6 +3283,8 @@ impl Devenv {
     }
 
     pub async fn processes_stop(&self, name: &str) -> Result<()> {
+        self.require_running_manager_operation(processes::ManagerOperation::IndividualControl)
+            .await?;
         self.expect_ok_response(&processes::ApiRequest::Stop {
             name: name.to_string(),
         })

@@ -2,6 +2,7 @@
 let
   cfg = config.process.managers.process-compose;
   settingsFormat = pkgs.formats.yaml { };
+  processManagerTypes = import ../lib/process-manager-types.nix { inherit lib; };
 
   parseProcessDep = import ../lib/parse-process-dep.nix { inherit lib; };
 
@@ -109,7 +110,7 @@ in
     };
 
     capabilities = lib.mkOption {
-      type = lib.types.attrsOf lib.types.bool;
+      type = processManagerTypes.capabilities;
       internal = true;
       readOnly = true;
       description = "Capabilities provided by the process-compose process manager.";
@@ -118,18 +119,24 @@ in
         devenv_attach = false;
         wait_ready = false;
         individual_control = false;
-        subset_start = true;
-        requires_tty = false;
-        manager_aware_stop = false;
+        cold_start_subset = true;
       };
     };
 
-    shutdownScript = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
+    adapter = lib.mkOption {
+      type = processManagerTypes.adapter;
+      internal = true;
+      readOnly = true;
+      default = { terminal = "none"; stop = "process-scope"; client = "none"; };
+      description = "Runtime adapter settings of the process-compose process manager.";
+    };
+
+    stopCommand = lib.mkOption {
+      type = processManagerTypes.stopCommand;
       internal = true;
       readOnly = true;
       default = null;
-      description = "Manager-specific graceful shutdown script, if one is available.";
+      description = "Manager-specific graceful stop command, if one is available.";
     };
   };
 

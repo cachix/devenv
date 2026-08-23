@@ -1,7 +1,10 @@
-use devenv_processes::manager_capabilities::{ManagerCapabilities, fallback_capabilities};
+use devenv_processes::manager_capabilities::{
+    ManagerAdapter, ManagerCapabilities, ManagerClient, ManagerStopMethod, ManagerTerminal,
+    fallback_adapter, fallback_capabilities,
+};
 
 #[test]
-fn compatibility_capabilities_match_known_manager_contracts() {
+fn compatibility_contracts_match_known_managers() {
     let cases = [
         (
             "native",
@@ -10,16 +13,14 @@ fn compatibility_capabilities_match_known_manager_contracts() {
                 devenv_attach: true,
                 wait_ready: true,
                 individual_control: true,
-                subset_start: true,
-                requires_tty: false,
-                manager_aware_stop: true,
+                cold_start_subset: true,
             },
         ),
         (
             "process-compose",
             ManagerCapabilities {
                 background_start: true,
-                subset_start: true,
+                cold_start_subset: true,
                 ..ManagerCapabilities::default()
             },
         ),
@@ -27,8 +28,7 @@ fn compatibility_capabilities_match_known_manager_contracts() {
             "overmind",
             ManagerCapabilities {
                 background_start: true,
-                subset_start: true,
-                manager_aware_stop: true,
+                cold_start_subset: true,
                 ..ManagerCapabilities::default()
             },
         ),
@@ -36,7 +36,7 @@ fn compatibility_capabilities_match_known_manager_contracts() {
             "honcho",
             ManagerCapabilities {
                 background_start: true,
-                subset_start: true,
+                cold_start_subset: true,
                 ..ManagerCapabilities::default()
             },
         ),
@@ -47,16 +47,44 @@ fn compatibility_capabilities_match_known_manager_contracts() {
                 ..ManagerCapabilities::default()
             },
         ),
-        (
-            "mprocs",
-            ManagerCapabilities {
-                requires_tty: true,
-                ..ManagerCapabilities::default()
-            },
-        ),
+        ("mprocs", ManagerCapabilities::default()),
     ];
 
     for (manager, expected) in cases {
         assert_eq!(fallback_capabilities(manager), Some(expected), "{manager}");
+    }
+
+    let adapter_cases = [
+        (
+            "native",
+            ManagerAdapter {
+                terminal: ManagerTerminal::None,
+                stop: ManagerStopMethod::NativeApi,
+                client: ManagerClient::NativeApi,
+            },
+        ),
+        ("process-compose", ManagerAdapter::default()),
+        (
+            "overmind",
+            ManagerAdapter {
+                terminal: ManagerTerminal::None,
+                stop: ManagerStopMethod::Command,
+                client: ManagerClient::None,
+            },
+        ),
+        ("honcho", ManagerAdapter::default()),
+        ("hivemind", ManagerAdapter::default()),
+        (
+            "mprocs",
+            ManagerAdapter {
+                terminal: ManagerTerminal::Controlling,
+                stop: ManagerStopMethod::ProcessScope,
+                client: ManagerClient::None,
+            },
+        ),
+    ];
+
+    for (manager, expected) in adapter_cases {
+        assert_eq!(fallback_adapter(manager), Some(expected), "{manager}");
     }
 }

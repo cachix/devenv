@@ -57,7 +57,7 @@ dump_diagnostics() {
   local runtime
   runtime=$(runtime_for "$manager")
 
-  ps -o pid,ppid,pgid,sid,stat,command -u "$(id -u)" \
+  ps -o pid,ppid,pgid,stat,command -u "$(id -u)" \
     | grep -E 'devenv|process-compose|honcho|hivemind|overmind|mprocs|http.server' >&2 \
     || true
 
@@ -103,10 +103,25 @@ assert_capabilities() {
     '.["process.manager.capabilities"] == $expected' <<<"$output" >/dev/null
 }
 
+assert_adapter() {
+  local manager=$1
+  local expected=$2
+  local output
+
+  output=$(run_devenv "$manager" eval process.manager.adapter)
+  jq -e --argjson expected "$expected" \
+    '.["process.manager.adapter"] == $expected' <<<"$output" >/dev/null
+}
+
 assert_detached_lifecycle() {
   local manager=$1
   local port=$2
   local log="${manager}-up.log"
+  local capabilities
+  local adapter
+  local runtime_process_dir
+  local state_file
+  local pid_file
 
   echo "Testing detached lifecycle: $manager"
   ACTIVE_MANAGER=$manager
@@ -121,8 +136,32 @@ assert_detached_lifecycle() {
   # Reaching the service after `up -d` returned proves it outlived the client.
   reachable "$port"
 
+  pid_file=".devenv/profiles/$manager/processes.pid"
+  test -L "$pid_file"
+  runtime_process_dir=$(dirname "$(readlink "$pid_file")")
+  state_file="$runtime_process_dir/external-manager.json"
+  capabilities=$(run_devenv "$manager" eval process.manager.capabilities \
+    | jq -c '.["process.manager.capabilities"]')
+  adapter=$(run_devenv "$manager" eval process.manager.adapter \
+    | jq -c '.["process.manager.adapter"]')
+  jq -e \
+    --arg manager "$manager" \
+    --argjson capabilities "$capabilities" \
+    --argjson adapter "$adapter" \
+    '.manager_id == $manager
+      and .capabilities == $capabilities
+      and .adapter == $adapter
+      and .capabilities_source == "nix"
+      and .adapter_source == "nix"
+      and (if $manager == "overmind"
+           then (.stop_command | type) == "string"
+           else has("stop_command") | not
+           end)' \
+    "$state_file" >/dev/null
+
   run_devenv "$manager" processes down
   wait_for_port_free "$port"
+  test ! -e "$state_file"
 
   ACTIVE_MANAGER=
   ACTIVE_PORT=
@@ -130,21 +169,30 @@ assert_detached_lifecycle() {
 
 echo "Checking selected capability declarations"
 assert_capabilities native \
-  '{"background_start":true,"devenv_attach":true,"wait_ready":true,"individual_control":true,"subset_start":true,"requires_tty":false,"manager_aware_stop":true}'
+  '{"background_start":true,"devenv_attach":true,"wait_ready":true,"individual_control":true,"cold_start_subset":true}'
 assert_capabilities process-compose \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"manager_aware_stop":false}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"cold_start_subset":true}'
 assert_capabilities overmind \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"manager_aware_stop":true}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"cold_start_subset":true}'
 assert_capabilities honcho \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":true,"requires_tty":false,"manager_aware_stop":false}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"cold_start_subset":true}'
 assert_capabilities hivemind \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":false,"requires_tty":false,"manager_aware_stop":false}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"cold_start_subset":false}'
 assert_capabilities mprocs \
-  '{"background_start":false,"devenv_attach":false,"wait_ready":false,"individual_control":false,"subset_start":false,"requires_tty":true,"manager_aware_stop":false}'
+  '{"background_start":false,"devenv_attach":false,"wait_ready":false,"individual_control":false,"cold_start_subset":false}'
+
+echo "Checking selected adapter declarations"
+assert_adapter native '{"terminal":"none","stop":"native-api","client":"native-api"}'
+assert_adapter process-compose '{"terminal":"none","stop":"process-scope","client":"none"}'
+assert_adapter overmind '{"terminal":"none","stop":"command","client":"none"}'
+assert_adapter honcho '{"terminal":"none","stop":"process-scope","client":"none"}'
+assert_adapter hivemind '{"terminal":"none","stop":"process-scope","client":"none"}'
+assert_adapter mprocs '{"terminal":"controlling","stop":"process-scope","client":"none"}'
 
 if [ "$(uname -s)" = Darwin ]; then
   echo "Checking mprocs shell uses the native macOS clipboard provider"
-  test "$(run_devenv mprocs shell -- bash -c 'command -v pbcopy')" = /usr/bin/pbcopy
+  run_devenv mprocs shell -- bash -c \
+    'PATH=/usr/bin:/bin; test "$(command -v pbcopy)" = /usr/bin/pbcopy'
 fi
 
 assert_detached_lifecycle process-compose 18771

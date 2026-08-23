@@ -9,6 +9,7 @@ use nix::sys::signal::Signal;
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::IsTerminal;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -18,7 +19,8 @@ use tracing::info;
 
 use crate::pid::{self, PidStatus};
 use crate::{
-    BackgroundStartRequest, ManagerCapabilities, ManagerDescriptor, PreparedProcessScope,
+    BackgroundStartRequest, DeclarationSource, ManagerAdapter, ManagerCapabilities,
+    ManagerDescriptor, ManagerOperation, ManagerStopMethod, ManagerTerminal, PreparedProcessScope,
     ProcessManagerControl, ProcessScope, StopPolicy, stop_process_scopes,
 };
 
@@ -33,7 +35,7 @@ const BACKGROUND_ENV: &str = "DEVENV_PROCESS_MANAGER_BACKGROUND";
 struct LaunchConfiguration {
     manager: ManagerDescriptor,
     launcher_script: PathBuf,
-    shutdown_script: Option<PathBuf>,
+    stop_command: Option<PathBuf>,
 }
 
 /// Durable state needed to stop an external manager without re-evaluating the
@@ -43,8 +45,11 @@ struct ExternalManagerState {
     version: u32,
     manager_id: String,
     capabilities: ManagerCapabilities,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    shutdown_script: Option<PathBuf>,
+    capabilities_source: DeclarationSource,
+    adapter: ManagerAdapter,
+    adapter_source: DeclarationSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop_command: Option<PathBuf>,
     scope: ProcessScope,
 }
 
@@ -63,13 +68,13 @@ impl ExternalManager {
     /// # Arguments
     /// * `manager` - Selected backend identity and negotiated capabilities
     /// * `launcher_script` - Path to the Nix-built manager launcher
-    /// * `shutdown_script` - Optional Nix-built manager-aware stop adapter
+    /// * `stop_command` - Optional Nix-built command stop adapter
     /// * `state_dir` - Persistent directory for the wrapper, logs, and legacy PID file
     /// * `runtime_dir` - Runtime directory for current manager identity
     pub fn new(
         manager: ManagerDescriptor,
         launcher_script: PathBuf,
-        shutdown_script: Option<PathBuf>,
+        stop_command: Option<PathBuf>,
         state_dir: PathBuf,
         runtime_dir: PathBuf,
     ) -> Self {
@@ -77,7 +82,7 @@ impl ExternalManager {
             launch: Some(LaunchConfiguration {
                 manager,
                 launcher_script,
-                shutdown_script,
+                stop_command,
             }),
             state_dir,
             runtime_dir,
@@ -130,6 +135,26 @@ impl ExternalManager {
         runtime_dir.join(STATE_FILE_NAME).exists() || state_dir.join(PID_FILE_NAME).exists()
     }
 
+    /// Check an operation against the contract persisted by the running
+    /// manager, rather than the project's potentially changed configuration.
+    pub async fn require_operation(&self, operation: ManagerOperation) -> Result<ManagerAdapter> {
+        if !matches!(self.check_status().await?, PidStatus::Running(_)) {
+            bail!("No process manager is running. Start processes first with `devenv up -d`");
+        }
+        let Some(state) = self.load_state().await? else {
+            bail!("No process manager is running. Start processes first with `devenv up -d`");
+        };
+        if state.capabilities.supports(operation) {
+            Ok(state.adapter)
+        } else {
+            bail!(
+                "process manager '{}' does not support {}",
+                state.manager_id,
+                operation.description()
+            )
+        }
+    }
+
     fn state_file(&self) -> PathBuf {
         self.runtime_dir.join(STATE_FILE_NAME)
     }
@@ -178,7 +203,10 @@ impl ExternalManager {
             version: STATE_VERSION,
             manager_id: "unknown".to_string(),
             capabilities: ManagerCapabilities::default(),
-            shutdown_script: None,
+            capabilities_source: DeclarationSource::ConservativeDefault,
+            adapter: ManagerAdapter::default(),
+            adapter_source: DeclarationSource::ConservativeDefault,
+            stop_command: None,
             scope,
         }
     }
@@ -251,6 +279,19 @@ impl ExternalManager {
             .launch
             .as_ref()
             .ok_or_else(|| miette::miette!("external manager has no launch configuration"))?;
+        if !processes.is_empty() {
+            launch.manager.require(ManagerOperation::ColdStartSubset)?;
+        }
+        match launch.manager.adapter.terminal {
+            ManagerTerminal::None => {}
+            ManagerTerminal::Controlling if std::io::stdin().is_terminal() => {}
+            ManagerTerminal::Controlling => {
+                bail!(
+                    "process manager '{}' requires a controlling terminal",
+                    launch.manager.id
+                );
+            }
+        }
         self.write_wrapper_script().await?;
 
         let wrapper = self.wrapper_script();
@@ -292,6 +333,19 @@ impl ExternalManager {
             .launch
             .as_ref()
             .ok_or_else(|| miette::miette!("external manager has no launch configuration"))?;
+        launch.manager.require(ManagerOperation::BackgroundStart)?;
+        if !request.processes.is_empty() {
+            launch.manager.require(ManagerOperation::ColdStartSubset)?;
+        }
+        match launch.manager.adapter.terminal {
+            ManagerTerminal::None => {}
+            ManagerTerminal::Controlling => {
+                bail!(
+                    "process manager '{}' requires a controlling terminal; background PTY launch is not implemented",
+                    launch.manager.id
+                );
+            }
+        }
 
         // Check if already running
         match self.check_status().await? {
@@ -345,7 +399,10 @@ impl ExternalManager {
             version: STATE_VERSION,
             manager_id: launch.manager.id.clone(),
             capabilities: launch.manager.capabilities,
-            shutdown_script: launch.shutdown_script.clone(),
+            capabilities_source: launch.manager.capabilities_source,
+            adapter: launch.manager.adapter,
+            adapter_source: launch.manager.adapter_source,
+            stop_command: launch.stop_command.clone(),
             scope: scope.clone(),
         };
         let state_json = serde_json::to_vec(&state).into_diagnostic()?;
@@ -433,42 +490,51 @@ impl ProcessManagerControl for ExternalManager {
             state.scope.leader_pid()
         );
 
-        if state.capabilities.manager_aware_stop {
-            if let Some(shutdown_script) = &state.shutdown_script {
-                let status = tokio::time::timeout(
-                    std::time::Duration::from_secs(10),
-                    Command::new(shutdown_script)
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .status(),
-                )
-                .await;
-                match status {
-                    Ok(Ok(status)) if status.success() => {
-                        info!(manager = %state.manager_id, "manager-aware shutdown completed");
+        match state.adapter.stop {
+            ManagerStopMethod::Command => {
+                if let Some(stop_command) = &state.stop_command {
+                    let status = tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        Command::new(stop_command)
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .status(),
+                    )
+                    .await;
+                    match status {
+                        Ok(Ok(status)) if status.success() => {
+                            info!(manager = %state.manager_id, "command stop adapter completed");
+                        }
+                        Ok(Ok(status)) => tracing::warn!(
+                            manager = %state.manager_id,
+                            %status,
+                            "command stop adapter failed; falling back to process-scope cleanup"
+                        ),
+                        Ok(Err(error)) => tracing::warn!(
+                            manager = %state.manager_id,
+                            %error,
+                            "command stop adapter could not start; falling back to process-scope cleanup"
+                        ),
+                        Err(_) => tracing::warn!(
+                            manager = %state.manager_id,
+                            "command stop adapter timed out; falling back to process-scope cleanup"
+                        ),
                     }
-                    Ok(Ok(status)) => tracing::warn!(
+                } else {
+                    tracing::warn!(
                         manager = %state.manager_id,
-                        %status,
-                        "manager-aware shutdown failed; falling back to process-scope cleanup"
-                    ),
-                    Ok(Err(error)) => tracing::warn!(
-                        manager = %state.manager_id,
-                        %error,
-                        "manager-aware shutdown could not start; falling back to process-scope cleanup"
-                    ),
-                    Err(_) => tracing::warn!(
-                        manager = %state.manager_id,
-                        "manager-aware shutdown timed out; falling back to process-scope cleanup"
-                    ),
+                        "command stop adapter has no command; falling back to process-scope cleanup"
+                    );
                 }
-            } else {
+            }
+            ManagerStopMethod::NativeApi => {
                 tracing::warn!(
                     manager = %state.manager_id,
-                    "manager-aware stop was advertised without an adapter; falling back to process-scope cleanup"
+                    "native API stop adapter found in external-manager state; falling back to process-scope cleanup"
                 );
             }
+            ManagerStopMethod::ProcessScope => {}
         }
 
         let scope = state.scope;
@@ -514,7 +580,10 @@ mod tests {
             version: STATE_VERSION,
             manager_id: "test-manager".to_string(),
             capabilities: ManagerCapabilities::default(),
-            shutdown_script: None,
+            capabilities_source: DeclarationSource::Nix,
+            adapter: ManagerAdapter::default(),
+            adapter_source: DeclarationSource::Nix,
+            stop_command: None,
             scope,
         }
     }
@@ -529,18 +598,24 @@ mod tests {
             devenv_attach: false,
             wait_ready: true,
             individual_control: false,
-            subset_start: true,
-            requires_tty: false,
-            manager_aware_stop: true,
+            cold_start_subset: true,
         };
-        let shutdown_script = runtime.path().join("shutdown adapter with spaces");
+        let adapter = ManagerAdapter {
+            terminal: ManagerTerminal::None,
+            stop: ManagerStopMethod::Command,
+            client: crate::ManagerClient::None,
+        };
+        let stop_command = runtime.path().join("stop adapter with spaces");
         let scope = ProcessScope::unix_session(std::process::id() as i32)
             .expect("capture test process identity");
         let expected = ExternalManagerState {
             version: STATE_VERSION,
             manager_id: "external-test-manager".to_string(),
             capabilities,
-            shutdown_script: Some(shutdown_script.clone()),
+            capabilities_source: DeclarationSource::Nix,
+            adapter,
+            adapter_source: DeclarationSource::Nix,
+            stop_command: Some(stop_command.clone()),
             scope: scope.clone(),
         };
 
@@ -559,8 +634,101 @@ mod tests {
         assert_eq!(loaded.version, STATE_VERSION);
         assert_eq!(loaded.manager_id, "external-test-manager");
         assert_eq!(loaded.capabilities, capabilities);
-        assert_eq!(loaded.shutdown_script, Some(shutdown_script));
+        assert_eq!(loaded.capabilities_source, DeclarationSource::Nix);
+        assert_eq!(loaded.adapter, adapter);
+        assert_eq!(loaded.adapter_source, DeclarationSource::Nix);
+        assert_eq!(loaded.stop_command, Some(stop_command));
         assert_eq!(loaded.scope, scope);
+    }
+
+    #[tokio::test]
+    async fn durable_state_requires_the_complete_manager_contract() {
+        let state_dir = tempfile::tempdir().expect("state directory");
+        let runtime = tempfile::tempdir().expect("runtime directory");
+        let manager = ExternalManager::control(state_dir.path().into(), runtime.path().into());
+        let incomplete = serde_json::json!({
+            "version": STATE_VERSION,
+            "manager_id": "incomplete-manager",
+            "capabilities": ManagerCapabilities::default(),
+            "scope": ProcessScope::unix_session(std::process::id() as i32)
+                .expect("capture test process identity"),
+        });
+        fs::write(
+            manager.state_file(),
+            serde_json::to_vec(&incomplete).expect("serialize incomplete state"),
+        )
+        .await
+        .expect("write incomplete state");
+
+        manager
+            .load_state()
+            .await
+            .expect_err("state without adapter declarations must be rejected");
+    }
+
+    #[tokio::test]
+    async fn persisted_manager_contract_gates_operations() {
+        let state_dir = tempfile::tempdir().expect("state directory");
+        let runtime = tempfile::tempdir().expect("runtime directory");
+        let launcher =
+            write_executable_script(runtime.path(), "long-running-manager", "exec sleep 300");
+        let manager = ExternalManager::new(
+            ManagerDescriptor::resolve(
+                "newly-configured-manager",
+                Some(ManagerCapabilities {
+                    background_start: true,
+                    ..ManagerCapabilities::default()
+                }),
+                Some(ManagerAdapter::default()),
+            ),
+            launcher,
+            None,
+            state_dir.path().into(),
+            runtime.path().into(),
+        );
+        manager
+            .start_background(BackgroundStartRequest::default())
+            .await
+            .expect("start live manager scope");
+        let scope = manager
+            .load_state()
+            .await
+            .expect("load launched state")
+            .expect("launched state exists")
+            .scope;
+        let persisted = ExternalManagerState {
+            version: STATE_VERSION,
+            manager_id: "persisted-manager".to_string(),
+            capabilities: ManagerCapabilities {
+                wait_ready: true,
+                ..ManagerCapabilities::default()
+            },
+            capabilities_source: DeclarationSource::Nix,
+            adapter: ManagerAdapter::default(),
+            adapter_source: DeclarationSource::Nix,
+            stop_command: None,
+            scope,
+        };
+        fs::write(
+            manager.state_file(),
+            serde_json::to_vec(&persisted).expect("serialize state"),
+        )
+        .await
+        .expect("write state");
+
+        manager
+            .require_operation(ManagerOperation::WaitReady)
+            .await
+            .expect("persisted capability is supported");
+        let error = manager
+            .require_operation(ManagerOperation::BackgroundStart)
+            .await
+            .expect_err("current configuration must not override persisted capabilities");
+        assert_eq!(
+            error.to_string(),
+            "process manager 'persisted-manager' does not support background start"
+        );
+        manager.stop().await.expect("stop live manager scope");
     }
 
     #[tokio::test]
@@ -578,7 +746,16 @@ mod tests {
             .expect("pid-only state exists");
         assert_eq!(loaded_pid.manager_id, "unknown");
         assert_eq!(loaded_pid.capabilities, ManagerCapabilities::default());
-        assert_eq!(loaded_pid.shutdown_script, None);
+        assert_eq!(
+            loaded_pid.capabilities_source,
+            DeclarationSource::ConservativeDefault
+        );
+        assert_eq!(loaded_pid.adapter, ManagerAdapter::default());
+        assert_eq!(
+            loaded_pid.adapter_source,
+            DeclarationSource::ConservativeDefault
+        );
+        assert_eq!(loaded_pid.stop_command, None);
         assert_eq!(loaded_pid.scope.leader_pid(), std::process::id() as i32);
     }
 
@@ -591,7 +768,10 @@ mod tests {
             version: STATE_VERSION + 1,
             manager_id: "future-manager".to_string(),
             capabilities: ManagerCapabilities::default(),
-            shutdown_script: None,
+            capabilities_source: DeclarationSource::Nix,
+            adapter: ManagerAdapter::default(),
+            adapter_source: DeclarationSource::Nix,
+            stop_command: None,
             scope: ProcessScope::unix_session(std::process::id() as i32)
                 .expect("capture test process identity"),
         };
@@ -626,7 +806,14 @@ mod tests {
             r#"printf '%s\0' "$@" > "$ARGV_FILE""#,
         );
         let manager = ExternalManager::new(
-            ManagerDescriptor::resolve("argv-test", Some(ManagerCapabilities::default())),
+            ManagerDescriptor::resolve(
+                "argv-test",
+                Some(ManagerCapabilities {
+                    cold_start_subset: true,
+                    ..ManagerCapabilities::default()
+                }),
+                Some(ManagerAdapter::default()),
+            ),
             launcher,
             None,
             state_dir.path().into(),
@@ -670,13 +857,13 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn manager_aware_shutdown_runs_before_scope_cleanup() {
+    async fn command_stop_adapter_runs_before_scope_cleanup() {
         let state_dir = tempfile::tempdir().expect("state directory");
         let runtime = tempfile::tempdir().expect("runtime directory");
         let marker = runtime.path().join("shutdown-marker");
         let launcher =
             write_executable_script(runtime.path(), "long-running-manager", "exec sleep 300");
-        let shutdown = write_executable_script(
+        let stop_command = write_executable_script(
             runtime.path(),
             "shutdown-manager",
             &format!(
@@ -685,15 +872,22 @@ mod tests {
                 marker.display()
             ),
         );
-        let capabilities = ManagerCapabilities {
-            background_start: true,
-            manager_aware_stop: true,
-            ..ManagerCapabilities::default()
-        };
+        let descriptor = ManagerDescriptor::resolve(
+            "adapter-test",
+            Some(ManagerCapabilities {
+                background_start: true,
+                ..ManagerCapabilities::default()
+            }),
+            Some(ManagerAdapter {
+                terminal: ManagerTerminal::None,
+                stop: ManagerStopMethod::Command,
+                client: crate::ManagerClient::None,
+            }),
+        );
         let manager = ExternalManager::new(
-            ManagerDescriptor::resolve("adapter-test", Some(capabilities)),
+            descriptor,
             launcher,
-            Some(shutdown),
+            Some(stop_command),
             state_dir.path().into(),
             runtime.path().into(),
         );
@@ -720,7 +914,7 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(marker).expect("read shutdown marker"),
             "alive",
-            "shutdown adapter must run while the manager scope is still alive"
+            "stop command must run while the manager scope is still alive"
         );
         assert!(!scope.is_alive(), "scope cleanup must follow the adapter");
         assert!(!ExternalManager::state_exists(

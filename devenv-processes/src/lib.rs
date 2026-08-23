@@ -71,7 +71,8 @@ pub use manager::{
     ProcessScheduler, ProcessState, StartOutcome,
 };
 pub use manager_capabilities::{
-    CapabilitySource, ManagerCapabilities, ManagerDescriptor, fallback_capabilities,
+    DeclarationSource, ManagerAdapter, ManagerCapabilities, ManagerClient, ManagerDescriptor,
+    ManagerOperation, ManagerStopMethod, ManagerTerminal, fallback_adapter, fallback_capabilities,
 };
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_guardian::maybe_run_process_guardian;

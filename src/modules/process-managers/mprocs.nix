@@ -2,6 +2,7 @@
 let
   cfg = config.process.managers.mprocs;
   settingsFormat = pkgs.formats.yaml { };
+  processManagerTypes = import ../lib/process-manager-types.nix { inherit lib; };
 in
 {
   options.process.managers.mprocs = {
@@ -32,7 +33,7 @@ in
     };
 
     capabilities = lib.mkOption {
-      type = lib.types.attrsOf lib.types.bool;
+      type = processManagerTypes.capabilities;
       internal = true;
       readOnly = true;
       description = "Capabilities provided by the mprocs process manager.";
@@ -41,18 +42,24 @@ in
         devenv_attach = false;
         wait_ready = false;
         individual_control = false;
-        subset_start = false;
-        requires_tty = true;
-        manager_aware_stop = false;
+        cold_start_subset = false;
       };
     };
 
-    shutdownScript = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
+    adapter = lib.mkOption {
+      type = processManagerTypes.adapter;
+      internal = true;
+      readOnly = true;
+      default = { terminal = "controlling"; stop = "process-scope"; client = "none"; };
+      description = "Runtime adapter settings of the mprocs process manager.";
+    };
+
+    stopCommand = lib.mkOption {
+      type = processManagerTypes.stopCommand;
       internal = true;
       readOnly = true;
       default = null;
-      description = "Manager-specific graceful shutdown script, if one is available.";
+      description = "Manager-specific graceful stop command, if one is available.";
     };
   };
 
