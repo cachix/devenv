@@ -547,11 +547,10 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         let patch_script = PathBuf::from(".patch.sh");
         if patch_script.exists() {
             devenv_activity::message(ActivityLevel::Info, "Running .patch.sh");
-            let _ = tokio::process::Command::new("bash")
-                .arg(&patch_script)
-                .status()
-                .await
-                .into_diagnostic()?;
+            let mut command = tokio::process::Command::new("bash");
+            command.arg(&patch_script);
+            with_test_env_path(&mut command);
+            let _ = command.status().await.into_diagnostic()?;
         }
 
         // A script to run inside the shell before the test.
@@ -620,11 +619,10 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             // Run .test.sh directly - it must exist when run_test_sh is false
             if PathBuf::from(".test.sh").exists() {
                 devenv_activity::message(ActivityLevel::Info, "Running .test.sh directly");
-                let output = tokio::process::Command::new("bash")
-                    .arg(".test.sh")
-                    .status()
-                    .await
-                    .into_diagnostic()?;
+                let mut command = tokio::process::Command::new("bash");
+                command.arg(".test.sh");
+                with_test_env_path(&mut command);
+                let output = command.status().await.into_diagnostic()?;
                 if output.success() {
                     Ok(())
                 } else {
@@ -761,6 +759,66 @@ fn build_gc_runtime() -> Result<tokio::runtime::Runtime> {
         .wrap_err("Failed to create tokio runtime")
 }
 
+/// Flake attribute holding the environment tests run in.
+const TEST_ENV_ATTR: &str = "devenv-test-env";
+
+fn test_lib_path(test_env: &Path) -> PathBuf {
+    test_env.join("share/devenv-run-tests/test-lib.sh")
+}
+
+/// Prepend the test environment's tools to `PATH` for a script that runs
+/// outside the devenv shell.
+fn with_test_env_path(command: &mut tokio::process::Command) {
+    let Ok(test_env) = env::var("DEVENV_TEST_ENV") else {
+        return;
+    };
+    let bin = Path::new(&test_env).join("bin");
+    command.env(
+        "PATH",
+        format!("{}:{}", bin.display(), env::var("PATH").unwrap_or_default()),
+    );
+}
+
+/// Build the environment that `.test.sh` scripts run in.
+///
+/// `DEVENV_TEST_ENV` takes precedence, so a caller that already has the
+/// environment can skip the evaluation.
+async fn resolve_test_env(repo: &Path) -> Result<PathBuf> {
+    if let Ok(path) = env::var("DEVENV_TEST_ENV") {
+        return Ok(PathBuf::from(path));
+    }
+
+    let flake_ref = format!("{}#{TEST_ENV_ATTR}", repo.display());
+    let output = tokio::process::Command::new("nix")
+        .args([
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            "--extra-experimental-features",
+            "nix-command flakes",
+        ])
+        .arg(&flake_ref)
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .output()
+        .await
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to run `nix build {flake_ref}`"))?;
+
+    if !output.status.success() {
+        miette::bail!(
+            "Failed to build the test environment ({flake_ref}). \
+             Set DEVENV_TEST_ENV to an existing one to skip this build."
+        );
+    }
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() {
+        miette::bail!("`nix build {flake_ref}` produced no output path");
+    }
+    Ok(PathBuf::from(path))
+}
+
 async fn async_main() -> Result<ExitCode> {
     let _tracing_guard = devenv_tracing::init_tracing_default();
 
@@ -850,6 +908,14 @@ exec '{bin_dir}/devenv' \
         .await
         .into_diagnostic()?;
 
+    // The environment `.test.sh` runs in: shared shell helpers plus the tools
+    // they use. Building it here means every test in the run sees the same one.
+    // `generate-json` only reads test metadata, so it goes without.
+    let test_env = match Args::parse().command {
+        Commands::Run(_) => Some(resolve_test_env(&cwd).await?),
+        _ => None,
+    };
+
     let mut env = vec![
         ("DEVENV_RUN_TESTS", "1".to_string()),
         ("DEVENV_NIX", env::var("DEVENV_NIX").unwrap_or_default()),
@@ -873,6 +939,14 @@ exec '{bin_dir}/devenv' \
             env::var("USER").unwrap_or_else(|_| "nobody".to_string()),
         ),
     ];
+
+    if let Some(test_env) = &test_env {
+        env.push(("DEVENV_TEST_ENV", test_env.display().to_string()));
+        env.push((
+            "DEVENV_TEST_LIB",
+            test_lib_path(test_env).display().to_string(),
+        ));
+    }
 
     // Pass through optional environment variables only if they exist
     // TERM is essential for many programs, provide a safe default if not set

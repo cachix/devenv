@@ -128,6 +128,8 @@
           inherit (workspace.crates) devenv devenv-tasks;
           default = self.packages.${system}.devenv;
           crate2nix = pkgs.crate2nix;
+          # Tools and shell helpers that `devenv-run-tests` runs `.test.sh` in.
+          devenv-test-env = pkgs.callPackage ./devenv-run-tests/test-env.nix { };
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           devenv-image = import ./containers/devenv/image.nix {

@@ -60,6 +60,48 @@ Each test is a subdirectory inside `tests/` or `examples/` containing:
 | `.setup.sh` | no | Setup script that runs in the shell before the test |
 | `.patch.sh` | no | Patch script that runs *before* config is loaded (outside the shell) |
 
+### The test environment
+
+Scripts that run outside the devenv shell — `.patch.sh`, and `.test.sh` under `use_shell: false` — would otherwise depend on whatever the host happens to provide.
+`test-env.nix` decides instead.
+`devenv-run-tests run` builds it once per run and puts its `bin` first on `PATH` for those scripts, so `curl`, `jq`, `git` and GNU coreutils are the same on every platform.
+Stock macOS has no `timeout` and no `sha256sum`; here both are the GNU ones.
+
+Add a tool by listing it in `test-env.nix`.
+Set `DEVENV_TEST_ENV` to an already-built environment to skip the build.
+
+The same file defines the shared shell helpers, and `DEVENV_TEST_LIB` points at the generated library:
+
+```bash
+. "$DEVENV_TEST_LIB"
+```
+
+The helpers call their tools by store path, so they hold even where a test rewrites `PATH`.
+
+| Helper | Purpose |
+|---|---|
+| `run_bounded SECONDS CMD...` | Run a command under a failure bound |
+| `wait_until SECONDS CMD...` | Retry a command until it succeeds |
+| `http_is_ready [PORT]` | Whether a local HTTP port answers |
+| `wait_for_http_ready PORT [seconds]` | Wait for it to start answering |
+| `wait_for_http_gone [PORT] [seconds]` | Wait for it to stop answering |
+| `wait_for_path_gone PATH [seconds]` | Wait for a path to disappear |
+| `wait_for_pid_gone PID [seconds]` | Wait for a process to exit |
+| `devenv_runtime_dir` | The runtime directory devenv derives for `$PWD` |
+
+Every bound is in seconds, and waiting helpers poll ten times a second.
+
+Names follow two shapes: a check is `<subject>_is_<state>`, and waiting for that same state is `wait_for_<subject>_<state>`.
+Helpers that take a command take the bound first; helpers that take a subject take it last, where it is optional.
+A test that needs a check of its own writes it as a predicate and passes it to `wait_until`, keeping the same shapes.
+
+`wait_until` replaces the `timeout N bash -c 'until CMD; do sleep; done'` idiom, and takes shell functions as well as commands.
+
+Scripts that run inside the devenv shell keep using `wait_for_port` and `wait_for_processes`, which devenv itself provides to every project.
+See [tests](https://devenv.sh/tests/).
+
+A test that needs a package for the shell itself still declares it in `devenv.nix`; the test environment covers only the scripts above.
+
 ### Test configuration (`.test-config.yml`)
 
 All fields are optional with sensible defaults:
