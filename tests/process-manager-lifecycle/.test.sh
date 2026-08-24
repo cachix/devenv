@@ -199,6 +199,37 @@ assert_detached_lifecycle honcho 18772
 assert_detached_lifecycle hivemind 18773
 assert_detached_lifecycle overmind 18774
 
+# Overmind drops its tmux session as it exits but never the server that held
+# it, and that server runs in its own session, outside the process scope. The
+# socket is named after the project directory, so a leftover shows up in the
+# process table. Reading it there rather than asking tmux avoids depending on
+# this client and that server agreeing on a protocol version.
+overmind_tmux_servers() {
+  ps -eo args= 2>/dev/null | grep -- "-L [o]vermind-$1-" || true
+}
+
+no_overmind_tmux_server() {
+  [ -z "$(overmind_tmux_servers "$1")" ]
+}
+
+assert_no_leftover_tmux_server() {
+  local session
+  session=$(basename "$PWD" \
+    | sed -e 's/[^a-zA-Z0-9]/-/g' -e 's/-\{2,\}/-/g' \
+    | tr 'A-Z' 'a-z')
+
+  echo "Checking overmind left no tmux server behind"
+  # `tmux kill-server` returns before the server has gone, so a single-shot
+  # check can catch one on its way out.
+  if ! wait_until 10 no_overmind_tmux_server "$session"; then
+    echo "overmind left a tmux server running:" >&2
+    overmind_tmux_servers "$session" >&2
+    return 1
+  fi
+}
+
+assert_no_leftover_tmux_server
+
 # A foreground `devenv up` execs the manager in place, so nothing of devenv's
 # runs afterwards to record it. Without state published before the exec, a
 # second client sees an idle project and starts a rival manager.
