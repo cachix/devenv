@@ -14,16 +14,45 @@ let
     # ${hostHash}
     ${hostContent}
   '';
+  # sudo does not live in the nix store: it is in /usr/bin on darwin and in
+  # /run/wrappers/bin on NixOS. The system PATH is not always inherited, for
+  # example with `devenv --clean`, inside containers, or when the caller's PATH
+  # is already stripped. Add those directories last, so nix store tools keep
+  # precedence.
+  systemPath = lib.concatStringsSep ":" (
+    lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ "/usr/bin" "/bin" "/usr/sbin" "/sbin" ]
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ "/run/wrappers/bin" "/usr/bin" "/bin" ]
+  );
+  # Run hostctl with the privileges needed to write /etc/hosts.
+  # Returns non-zero with an explanation when that is not possible.
+  elevate = ''
+    devenv_hostctl() {
+      local PATH="$PATH${lib.optionalString (systemPath != "") ":${systemPath}"}"
+
+      if [[ $EUID -eq 0 ]]; then
+        ${pkgs.hostctl}/bin/hostctl "$@"
+      elif command -v sudo > /dev/null; then
+        sudo ${pkgs.hostctl}/bin/hostctl "$@"
+      else
+        echo "devenv: cannot update /etc/hosts, because 'sudo' is not available." >&2
+        echo "devenv: Add these entries to /etc/hosts yourself:" >&2
+        ${lib.concatMapStringsSep "\n    " (line: "echo ${lib.escapeShellArg line} >&2") lines}
+        return 1
+      fi
+    }
+  '';
   setupScript = ''
+    ${elevate}
     if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
-      sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfileName} --from ${file}
+      devenv_hostctl replace ${config.hostsProfileName} --from ${file}
       mkdir -p "$DEVENV_STATE"
       echo "${hostHash}" > "$DEVENV_STATE/hostctl"
     fi
   '';
   teardownScript = ''
+    ${elevate}
     rm -f "$DEVENV_STATE/hostctl"
-    sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName}
+    devenv_hostctl remove ${config.hostsProfileName}
   '';
   isNative = config.process.manager.implementation == "native";
   processTaskNames = lib.mapAttrsToList (name: _: "devenv:processes:${name}") config.processes;
