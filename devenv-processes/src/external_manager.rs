@@ -193,12 +193,18 @@ impl ExternalManager {
 
     /// Publish durable state to both the runtime and the persistent location.
     ///
-    /// Either directory can be removed while the manager runs: the OS clears
-    /// the runtime directory on its own schedule, and `.devenv` is the user's
-    /// to delete. Keeping a copy in each means the manager stays reachable
-    /// unless both are gone. Neither copy is trusted on its own — the process
-    /// scope it carries identifies the manager, so a copy that outlives it
-    /// reads as stale.
+    /// `.devenv` is the copy that has to be there. The runtime directory lasts
+    /// only as long as the login session — systemd removes `/run/user/$UID`
+    /// when the last one ends, and the `/tmp` fallback is aged by the OS — while
+    /// a detached manager is defined by outliving the terminal that started it.
+    /// A manager recorded only there survives its own record: nothing can name
+    /// it, `devenv processes down` does nothing, and the next `devenv up`
+    /// starts a second manager beside the first.
+    ///
+    /// The runtime copy stays because `.devenv` is the user's to delete, and
+    /// between them the manager stays reachable unless both are gone. Neither
+    /// is trusted on its own: the process scope each carries identifies the
+    /// manager, so a copy that outlives it reads as stale.
     async fn write_state(&self, state: &ExternalManagerState) -> Result<()> {
         let state_json = serde_json::to_vec(state).into_diagnostic()?;
         let leader_pid = state.scope.leader_pid();

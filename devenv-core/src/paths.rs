@@ -47,12 +47,34 @@ pub fn resolve_home() -> Result<PathBuf> {
 /// Resolve the per-project runtime directory that holds sockets and other
 /// short-lived runtime files.
 ///
-/// The default is kept short to stay within the unix-domain-socket path length limit.
+/// The default is kept short to stay within the unix-domain-socket path length
+/// limit. macOS gives `sun_path` 104 bytes including the terminator, which is
+/// the tighter of the two platforms devenv supports.
 ///
 /// Derives a short, deterministic `devenv-<hash>` path
 /// under `$XDG_RUNTIME_DIR` (falling back to `/tmp`) that is unique to
 /// `devenv_dotfile`. `$TMPDIR` is deliberately ignored because it may differ
 /// between invocations that need to rendezvous on the same runtime directory.
+///
+/// # What belongs here, and what does not
+///
+/// This directory lasts as long as the login session, and no longer. The XDG
+/// Base Directory specification is explicit: "if the user fully logs out the
+/// directory MUST be removed", and "files in the directory MUST not survive
+/// reboot or a full logout/login cycle". systemd implements exactly that, so
+/// `/run/user/$UID` disappears when the last session ends. The fallback is no
+/// safer over time: `/tmp` is aged by `systemd-tmpfiles` on Linux and by
+/// `com.apple.tmp_cleaner` on macOS.
+///
+/// So this directory is right for anything scoped to the session, and for
+/// secrets that should not outlive it — the managed netrc holds a Cachix
+/// token, and 0700 under a per-user base is where it belongs.
+///
+/// It is wrong for anything that identifies work meant to outlive the
+/// terminal. A detached process manager is defined by outliving it, so the
+/// state that names one lives in `.devenv` instead. Losing this directory then
+/// costs the client its socket, not the manager itself: devenv can still find
+/// the manager and stop it. See `devenv_processes::ExternalManager`.
 pub fn resolve_runtime_dir(devenv_dotfile: &Path) -> PathBuf {
     resolve_runtime_dir_with(devenv_dotfile, |name| std::env::var_os(name))
 }
