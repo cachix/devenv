@@ -23,7 +23,7 @@ for i in $(seq 1 20); do
 done
 
 echo "Checking namespace..."
-temporal operator namespace describe mynamespace
+temporal operator namespace describe -n mynamespace
 
 # Print the captured output when temporal status succeeds
 echo "Startup complete..."
