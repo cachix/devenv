@@ -59,7 +59,7 @@ let
             PATH="${pkgs.lib.makeBinPath config.packages}:$PATH"
           '';
         in
-        lib.hiPrioSet (
+        lib.hiPrio (
           pkgs.writeScriptBin name ''
             #!${pkgs.bash}/bin/sh
             ${setupPath}

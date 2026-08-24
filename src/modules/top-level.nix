@@ -32,11 +32,14 @@ let
           let
             wanted = lib.unique ((drvOrPackage.meta.outputsToInstall or [ ]) ++ shellOutputs);
             available = builtins.filter (output: builtins.elem output drvOrPackage.outputs) wanted;
+            # Keep the package's `meta` on the selected outputs so that `buildEnv`
+            # sees the `meta.priority` set with `lib.hiPrio` or `lib.lowPrio`.
+            withMeta = output: drvOrPackage.${output} // lib.optionalAttrs (drvOrPackage ? meta) { inherit (drvOrPackage) meta; };
           in
           if available == [ ] then
             [ drvOrPackage ]
           else
-            builtins.map (output: drvOrPackage.${output}) available;
+            builtins.map withMeta available;
       # Include transitive Python dependencies so they end up in the profile's
       # site-packages. Without this, packages added via `packages = [ pkgs.python3Packages.foo ]`
       # would be importable but their dependencies (propagatedBuildInputs) would not,
@@ -344,6 +347,15 @@ in
 
     changelogs = [
       {
+        date = "2026-08-24";
+        title = "Packages with a higher `meta.priority` come first on `PATH`";
+        description = ''
+          The shell now orders `packages` by `meta.priority`, so `scripts` and packages wrapped with `lib.hiPrio` shadow other packages that ship a program with the same name.
+          Previously the raw package could win on `PATH` even though `$DEVENV_PROFILE/bin` linked the script.
+          Packages with the same priority keep their order.
+        '';
+      }
+      {
         date = "2026-08-16";
         title = "The profile only links the outputs a package installs and the shell exposes";
         description = ''
@@ -437,13 +449,18 @@ in
         # This distinction is generally not important for devShells, except when it comes to setup hooks and their run order.
         # On macOS, route apple-sdk packages (identified by `passthru.sdkroot`) into `buildInputs`
         # so they participate in the SDK version comparison done by stdenv's setup hooks.
+        # Order packages by `meta.priority` so that high-priority packages, such as
+        # `scripts` and packages wrapped with `lib.hiPrio`, come first on `PATH` and
+        # shadow packages that ship a program with the same name. The sort is stable,
+        # so packages with the same priority keep their order.
+        orderedPackages = lib.sortOn (pkg: pkg.meta.priority or lib.meta.defaultPriority) config.packages;
         partitioned =
           if pkgs.stdenv.hostPlatform.isDarwin then
-            builtins.partition (pkg: pkg ? sdkroot) config.packages
+            builtins.partition (pkg: pkg ? sdkroot) orderedPackages
           else
             {
               right = [ ];
-              wrong = config.packages;
+              wrong = orderedPackages;
             };
       in
       performAssertions (
