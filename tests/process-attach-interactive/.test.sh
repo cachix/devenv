@@ -34,6 +34,42 @@ reachable() {
   curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:$1/" 2>/dev/null
 }
 
+# Bounded polls for teardown that is asynchronous to the attach client.
+# A daemon that receives SIGTERM drops its attach connections at the head of
+# shutdown: the manager token is cancelled first, and only afterwards does the
+# daemon stop its processes, retire the session guardians, remove the PID file
+# and unlink the socket. The client's "went away" message therefore marks the
+# start of shutdown, not its end.
+wait_for_pid_exit() {
+  for _ in $(seq 1 30); do
+    if ! kill -0 "$1" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_missing() {
+  for _ in $(seq 1 30); do
+    if [ ! -e "$1" ]; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_port_free() {
+  for _ in $(seq 1 30); do
+    if ! reachable "$1"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 dump_failure_state() {
   echo "native manager diagnostics:" >&2
   if [ -f "$PID_FILE" ]; then
@@ -309,12 +345,25 @@ LOSS_STATUS=$?
 set -e
 test "$LOSS_STATUS" -ne 0
 grep -a -q "process manager went away" manager-loss.typescript
-if reachable "$PORT_ALPHA"; then
+# The client observes the disconnect before the daemon has torn anything down,
+# so allow the daemon its whole shutdown budget (the per-process grace period
+# plus guardian retirement) to exit and remove its runtime files.
+if ! wait_for_pid_exit "$DAEMON_PID"; then
+  echo "process manager still running after manager loss" >&2
+  exit 1
+fi
+if ! wait_for_port_free "$PORT_ALPHA"; then
   echo "alpha port still bound after manager loss" >&2
   exit 1
 fi
-test ! -e "$PID_FILE"
-test ! -e "$SOCKET_FILE"
+if ! wait_for_missing "$PID_FILE"; then
+  echo "PID file remained after manager loss" >&2
+  exit 1
+fi
+if ! wait_for_missing "$SOCKET_FILE"; then
+  echo "socket file remained after manager loss" >&2
+  exit 1
+fi
 
 if devenv processes attach >attach-after-down.txt 2>&1; then
   echo "attach unexpectedly succeeded without a manager" >&2
