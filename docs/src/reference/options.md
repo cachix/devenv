@@ -24471,6 +24471,54 @@ list of function that evaluates to a(n) function that evaluates to a(n) (attribu
 
 
 
+## process.manager.adapter.client
+
+
+
+Client protocol used for attach, readiness, and individual process control.
+
+
+
+*Type:*
+one of “none”, “native-api”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## process.manager.adapter.stop
+
+
+
+Adapter used to stop the running manager.
+
+
+
+*Type:*
+one of “native-api”, “command”, “process-scope”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## process.manager.adapter.terminal
+
+
+
+Terminal required by the manager launcher.
+
+
+
+*Type:*
+one of “none”, “controlling”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## process.manager.after
 
 
@@ -24535,6 +24583,86 @@ strings concatenated with “\\n”
 
 
 
+## process.manager.capabilities.background_start
+
+
+
+Whether the manager can remain running after the launching client exits.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## process.manager.capabilities.cold_start_subset
+
+
+
+Whether the manager can initially start a named subset of processes.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## process.manager.capabilities.devenv_attach
+
+
+
+Whether devenv can attach its interactive client to an existing manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## process.manager.capabilities.individual_control
+
+
+
+Whether devenv can start, stop, and restart individual processes through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## process.manager.capabilities.wait_ready
+
+
+
+Whether devenv can wait for process readiness through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## process.manager.implementation
 
 
@@ -24588,6 +24716,134 @@ pkgs.hivemind
 
 
 
+## process.managers.hivemind.adapter.client
+
+
+
+Client protocol used for attach, readiness, and individual process control.
+
+
+
+*Type:*
+one of “none”, “native-api”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+## process.managers.hivemind.adapter.stop
+
+
+
+Adapter used to stop the running manager.
+
+
+
+*Type:*
+one of “native-api”, “command”, “process-scope”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+## process.managers.hivemind.adapter.terminal
+
+
+
+Terminal required by the manager launcher.
+
+
+
+*Type:*
+one of “none”, “controlling”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+## process.managers.hivemind.capabilities.background_start
+
+
+
+Whether the manager can remain running after the launching client exits.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+## process.managers.hivemind.capabilities.cold_start_subset
+
+
+
+Whether the manager can initially start a named subset of processes.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+## process.managers.hivemind.capabilities.devenv_attach
+
+
+
+Whether devenv can attach its interactive client to an existing manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+## process.managers.hivemind.capabilities.individual_control
+
+
+
+Whether devenv can start, stop, and restart individual processes through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+## process.managers.hivemind.capabilities.wait_ready
+
+
+
+Whether devenv can wait for process readiness through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
 ## process.managers.honcho.package
 
 
@@ -24612,6 +24868,134 @@ pkgs.honcho
 
 
 
+## process.managers.honcho.adapter.client
+
+
+
+Client protocol used for attach, readiness, and individual process control.
+
+
+
+*Type:*
+one of “none”, “native-api”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
+## process.managers.honcho.adapter.stop
+
+
+
+Adapter used to stop the running manager.
+
+
+
+*Type:*
+one of “native-api”, “command”, “process-scope”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
+## process.managers.honcho.adapter.terminal
+
+
+
+Terminal required by the manager launcher.
+
+
+
+*Type:*
+one of “none”, “controlling”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
+## process.managers.honcho.capabilities.background_start
+
+
+
+Whether the manager can remain running after the launching client exits.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
+## process.managers.honcho.capabilities.cold_start_subset
+
+
+
+Whether the manager can initially start a named subset of processes.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
+## process.managers.honcho.capabilities.devenv_attach
+
+
+
+Whether devenv can attach its interactive client to an existing manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
+## process.managers.honcho.capabilities.individual_control
+
+
+
+Whether devenv can start, stop, and restart individual processes through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
+## process.managers.honcho.capabilities.wait_ready
+
+
+
+Whether devenv can wait for process readiness through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
 ## process.managers.mprocs.package
 
 
@@ -24630,6 +25014,134 @@ package
 ```nix
 pkgs.mprocs
 ```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.adapter.client
+
+
+
+Client protocol used for attach, readiness, and individual process control.
+
+
+
+*Type:*
+one of “none”, “native-api”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.adapter.stop
+
+
+
+Adapter used to stop the running manager.
+
+
+
+*Type:*
+one of “native-api”, “command”, “process-scope”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.adapter.terminal
+
+
+
+Terminal required by the manager launcher.
+
+
+
+*Type:*
+one of “none”, “controlling”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.capabilities.background_start
+
+
+
+Whether the manager can remain running after the launching client exits.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.capabilities.cold_start_subset
+
+
+
+Whether the manager can initially start a named subset of processes.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.capabilities.devenv_attach
+
+
+
+Whether devenv can attach its interactive client to an existing manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.capabilities.individual_control
+
+
+
+Whether devenv can start, stop, and restart individual processes through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.capabilities.wait_ready
+
+
+
+Whether devenv can wait for process readiness through the manager.
+
+
+
+*Type:*
+boolean
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
@@ -24662,6 +25174,134 @@ YAML 1.1 value
 
 
 
+## process.managers.native.adapter.client
+
+
+
+Client protocol used for attach, readiness, and individual process control.
+
+
+
+*Type:*
+one of “none”, “native-api”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.adapter.stop
+
+
+
+Adapter used to stop the running manager.
+
+
+
+*Type:*
+one of “native-api”, “command”, “process-scope”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.adapter.terminal
+
+
+
+Terminal required by the manager launcher.
+
+
+
+*Type:*
+one of “none”, “controlling”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.capabilities.background_start
+
+
+
+Whether the manager can remain running after the launching client exits.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.capabilities.cold_start_subset
+
+
+
+Whether the manager can initially start a named subset of processes.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.capabilities.devenv_attach
+
+
+
+Whether devenv can attach its interactive client to an existing manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.capabilities.individual_control
+
+
+
+Whether devenv can start, stop, and restart individual processes through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+## process.managers.native.capabilities.wait_ready
+
+
+
+Whether devenv can wait for process readiness through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
 ## process.managers.overmind.package
 
 
@@ -24686,6 +25326,134 @@ pkgs.overmind
 
 
 
+## process.managers.overmind.adapter.client
+
+
+
+Client protocol used for attach, readiness, and individual process control.
+
+
+
+*Type:*
+one of “none”, “native-api”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
+
+
+
+## process.managers.overmind.adapter.stop
+
+
+
+Adapter used to stop the running manager.
+
+
+
+*Type:*
+one of “native-api”, “command”, “process-scope”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
+
+
+
+## process.managers.overmind.adapter.terminal
+
+
+
+Terminal required by the manager launcher.
+
+
+
+*Type:*
+one of “none”, “controlling”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
+
+
+
+## process.managers.overmind.capabilities.background_start
+
+
+
+Whether the manager can remain running after the launching client exits.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
+
+
+
+## process.managers.overmind.capabilities.cold_start_subset
+
+
+
+Whether the manager can initially start a named subset of processes.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
+
+
+
+## process.managers.overmind.capabilities.devenv_attach
+
+
+
+Whether devenv can attach its interactive client to an existing manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
+
+
+
+## process.managers.overmind.capabilities.individual_control
+
+
+
+Whether devenv can start, stop, and restart individual processes through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
+
+
+
+## process.managers.overmind.capabilities.wait_ready
+
+
+
+Whether devenv can wait for process readiness through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
+
+
+
 ## process.managers.process-compose.package
 
 
@@ -24704,6 +25472,134 @@ package
 ```nix
 pkgs.process-compose
 ```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.adapter.client
+
+
+
+Client protocol used for attach, readiness, and individual process control.
+
+
+
+*Type:*
+one of “none”, “native-api”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.adapter.stop
+
+
+
+Adapter used to stop the running manager.
+
+
+
+*Type:*
+one of “native-api”, “command”, “process-scope”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.adapter.terminal
+
+
+
+Terminal required by the manager launcher.
+
+
+
+*Type:*
+one of “none”, “controlling”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.capabilities.background_start
+
+
+
+Whether the manager can remain running after the launching client exits.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.capabilities.cold_start_subset
+
+
+
+Whether the manager can initially start a named subset of processes.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.capabilities.devenv_attach
+
+
+
+Whether devenv can attach its interactive client to an existing manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.capabilities.individual_control
+
+
+
+Whether devenv can start, stop, and restart individual processes through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.capabilities.wait_ready
+
+
+
+Whether devenv can wait for process readiness through the manager.
+
+
+
+*Type:*
+boolean
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
