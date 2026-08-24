@@ -51,7 +51,7 @@ package
 *Default:*
 
 ```nix
-pkgs.elixir
+pkgs.beamPackages.elixir
 ```
 
 *Declared by:*
@@ -107,7 +107,7 @@ package
 *Default:*
 
 ```nix
-pkgs.elixir-ls
+pkgs.beamPackages.elixir-ls
 ```
 
 *Declared by:*
