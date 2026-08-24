@@ -7,11 +7,33 @@
 let
   domainList = lib.concatStringsSep " " config.certificates;
   hash = builtins.hashString "sha256" domainList;
+  # mkcert needs tools that do not live in the nix store to write to the system
+  # trust stores: security(1) and sudo(8) on darwin, sudo(8) on NixOS.
+  # The system PATH is not always inherited, for example with `devenv --clean`,
+  # inside containers, or when the caller's PATH is already stripped.
+  # Add those directories last, so nix store tools keep precedence.
+  systemPath = lib.concatStringsSep ":" (
+    lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ "/usr/bin" "/bin" "/usr/sbin" "/sbin" ]
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ "/run/wrappers/bin" "/usr/bin" "/bin" ]
+  );
+  mkcertPath = "${pkgs.nssTools}/bin:$PATH${lib.optionalString (systemPath != "") ":${systemPath}"}";
   setupScript = ''
     mkdir -p "${config.env.DEVENV_STATE}/mkcert"
 
     if [[ ! -f "$DEVENV_STATE/mkcert/rootCA.pem" ]]; then
-      PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert -install
+      # `mkcert -install` creates the local CA and adds it to the system trust stores.
+      # Trusting the CA needs privileges that are not always available, for example in CI.
+      # The generated certificates stay usable without it, because env.CAROOT and
+      # env.NODE_EXTRA_CA_CERTS point at the local CA.
+      if ! PATH="${mkcertPath}" ${pkgs.mkcert}/bin/mkcert -install; then
+        echo "devenv: mkcert could not add the local CA to the system trust stores." >&2
+        echo "devenv: Certificates are still generated. Run 'mkcert -install' yourself to trust them." >&2
+      fi
+
+      if [[ ! -f "$DEVENV_STATE/mkcert/rootCA.pem" ]]; then
+        echo "devenv: mkcert failed to create the local CA in $DEVENV_STATE/mkcert." >&2
+        exit 1
+      fi
     fi
 
     if [[ ! -f "$DEVENV_STATE/mkcert/hash" || "$(cat "$DEVENV_STATE/mkcert/hash")" != "${hash}" ]]; then
@@ -19,7 +41,7 @@ let
 
       pushd ${config.env.DEVENV_STATE}/mkcert > /dev/null
 
-      PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert \
+      PATH="${mkcertPath}" ${pkgs.mkcert}/bin/mkcert \
         ${lib.optionalString (config.keyFile != null) "-key-file ${config.keyFile}"} \
         ${lib.optionalString (config.certFile != null) "-cert-file ${config.certFile}"} \
         ${domainList} 2> /dev/null
@@ -56,6 +78,20 @@ in
   };
 
   config = lib.mkIf (domainList != "") {
+    changelogs = [
+      {
+        date = "2026-08-24";
+        title = "mkcert no longer fails when the local CA cannot be trusted";
+        description = ''
+          `mkcert -install` needs `sudo` and, on darwin, `security` to add the local CA to the system trust stores.
+          Those tools are unavailable on machines without a system PATH or without a way to gain privileges, such as CI runners.
+          devenv now prints a warning instead of failing when the local CA cannot be trusted.
+          The certificates are generated in either case, and `env.CAROOT` and `env.NODE_EXTRA_CA_CERTS` point at the local CA.
+          devenv also adds the system directories (`/usr/bin`, `/bin`, `/usr/sbin`, `/sbin` on darwin, `/run/wrappers/bin` on NixOS) to the PATH of the mkcert calls, so the tools are found when they exist.
+        '';
+      }
+    ];
+
     tasks."devenv:mkcert:setup" = lib.mkIf isNative {
       exec = setupScript;
       before = processTaskNames;
