@@ -56,7 +56,16 @@ in
         (coursier.override { jre = java.jdk.package; })
         (scalafmt.override { jre = java.jdk.package; })
       ]
-      ++ lib.optional cfg.lsp.enable (cfg.lsp.package.override { jre = java.jdk.package; })
+      ++ lib.optional cfg.lsp.enable (
+        # Metals is a language server: it runs in its own JVM and can still index and
+        # build projects that target an older JDK via languages.java.jdk.package.
+        # Only reuse the user's JDK for Metals when it's new enough; otherwise fall
+        # back to pkgs.jdk (21 on both nixpkgs 25.05 and current unstable), which
+        # satisfies Metals' Java 17+ requirement.
+        cfg.lsp.package.override {
+          jre = if lib.versionAtLeast java.jdk.package.version "17" then java.jdk.package else pkgs.jdk;
+        }
+      )
       ++ lib.optionals cfg.sbt.enable [
         (sbt.override (
           old:
