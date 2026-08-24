@@ -11,8 +11,7 @@ use iocraft::Context;
 use iocraft::components::ContextProvider;
 use iocraft::hooks::UseComponentRect;
 use iocraft::prelude::*;
-use std::collections::HashMap;
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,6 +29,170 @@ pub type ActivityHeights = Ref<HashMap<u64, i32>>;
 pub struct ScrollState {
     pub handle: Option<Ref<ScrollViewHandle>>,
     pub display_activities: Vec<DisplayActivity>,
+    pub process_previews_fit: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct TreePosition {
+    ancestor_continuations: Vec<bool>,
+    is_last_sibling: bool,
+}
+
+fn tree_positions(activities: &[DisplayActivity]) -> Vec<TreePosition> {
+    let depths: Vec<_> = activities.iter().map(|activity| activity.depth).collect();
+    tree_positions_for_depths(&depths)
+}
+
+fn tree_positions_for_depths(depths: &[usize]) -> Vec<TreePosition> {
+    let mut positions = vec![TreePosition::default(); depths.len()];
+    let mut last_at_depth: Vec<Option<usize>> = Vec::new();
+
+    for (index, depth) in depths.iter().copied().enumerate() {
+        last_at_depth.truncate(depth + 1);
+        if last_at_depth.len() <= depth {
+            last_at_depth.resize(depth + 1, None);
+        }
+        if let Some(previous) = last_at_depth[depth].replace(index) {
+            positions[previous].is_last_sibling = false;
+        }
+        positions[index].is_last_sibling = true;
+    }
+
+    let last_siblings: Vec<_> = positions
+        .iter()
+        .map(|position| position.is_last_sibling)
+        .collect();
+    let mut ancestors: Vec<usize> = Vec::new();
+
+    for (index, depth) in depths.iter().copied().enumerate() {
+        ancestors.truncate(depth);
+        positions[index].ancestor_continuations = ancestors
+            .iter()
+            .skip(1)
+            .map(|ancestor| !last_siblings[*ancestor])
+            .collect();
+        ancestors.push(index);
+    }
+
+    positions
+}
+
+pub(crate) fn process_previews_fit(
+    model: &ActivityModel,
+    activities: &[DisplayActivity],
+    terminal_size: TerminalSize,
+) -> bool {
+    let activity_rows: usize = activities
+        .iter()
+        .map(|display| non_process_activity_height(model, display, terminal_size))
+        .sum();
+    let preview_rows: usize = activities
+        .iter()
+        .filter(|display| matches!(display.activity.variant, ActivityVariant::Process(_)))
+        .filter_map(|display| {
+            model
+                .get_build_logs(display.activity.id)
+                .filter(|logs| !logs.is_empty())
+                .map(|logs| {
+                    ExpandedContentComponent::new(Some(logs.as_ref()))
+                        .with_terminal_width(terminal_size.width)
+                        .with_border_indent(display.depth * 2)
+                        .visual_height()
+                })
+        })
+        .sum();
+    let available_rows = terminal_size.height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize;
+
+    preview_rows > 0 && activity_rows + preview_rows <= available_rows
+}
+
+/// Height of an activity before automatic process log previews are added.
+///
+/// Process rows are always one line at this stage. For other activities, this
+/// mirrors the multi-line layouts in `ActivityItem` so the preview preflight
+/// does not enable previews that would immediately require scrolling.
+fn non_process_activity_height(
+    model: &ActivityModel,
+    display: &DisplayActivity,
+    terminal_size: TerminalSize,
+) -> usize {
+    let activity = &display.activity;
+    let expanded_content_height = |max_lines| {
+        model
+            .get_build_logs(activity.id)
+            .map(|logs| {
+                1 + ExpandedContentComponent::new(Some(logs.as_ref()))
+                    .with_terminal_width(terminal_size.width)
+                    .with_max_lines(max_lines)
+                    .visual_height()
+            })
+            .unwrap_or(1)
+    };
+
+    match &activity.variant {
+        ActivityVariant::Process(_) => 1,
+        ActivityVariant::Task(task_data) => {
+            let failed = matches!(
+                &activity.state,
+                NixActivityState::Completed { success: false, .. }
+            );
+            if failed {
+                expanded_content_height(LOG_VIEWPORT_FAILED)
+            } else if task_data.show_output {
+                expanded_content_height(LOG_VIEWPORT_SHOW_OUTPUT)
+            } else {
+                1
+            }
+        }
+        ActivityVariant::Download(download_data) => {
+            if download_data.size_current.is_some() && download_data.size_total.is_some()
+                || activity
+                    .progress
+                    .as_ref()
+                    .is_some_and(|progress| progress.total.unwrap_or(0) > 0)
+            {
+                2
+            } else {
+                1
+            }
+        }
+        ActivityVariant::Evaluating(_) | ActivityVariant::Devenv
+            if matches!(
+                &activity.state,
+                NixActivityState::Completed { success: false, .. }
+            ) =>
+        {
+            expanded_content_height(LOG_VIEWPORT_FAILED)
+        }
+        ActivityVariant::Message(message_data) if message_data.details.is_some() => model
+            .get_build_logs(activity.id)
+            .map(|logs| 1 + logs.len().min(LOG_VIEWPORT_FAILED))
+            .unwrap_or(1),
+        _ => 1,
+    }
+}
+
+pub(crate) fn activity_shows_inline_logs(
+    model: &ActivityModel,
+    ui_state: &UiState,
+    activity_id: u64,
+    process_previews_fit: bool,
+) -> bool {
+    if ui_state.inline_logs_activity == Some(activity_id) {
+        return true;
+    }
+    if ui_state.inline_logs_activity.is_some()
+        || ui_state.process_previews_hidden
+        || !process_previews_fit
+    {
+        return false;
+    }
+    model.get_activity(activity_id).is_some_and(|activity| {
+        matches!(activity.variant, ActivityVariant::Process(_))
+            && model
+                .get_build_logs(activity_id)
+                .is_some_and(|logs| !logs.is_empty())
+    })
 }
 
 /// Main view function that creates the UI
@@ -40,36 +203,50 @@ pub fn view(
     scroll: Option<ScrollState>,
     shutting_down: bool,
 ) -> impl Into<AnyElement<'static>> {
-    let (scroll_handle, active_activities) = match scroll {
-        Some(s) => (s.handle, s.display_activities),
-        None => (None, model.get_display_activities(ui_state)),
+    let (scroll_handle, active_activities, process_previews_fit) = match scroll {
+        Some(s) => (s.handle, s.display_activities, s.process_previews_fit),
+        None => {
+            let activities = model.get_display_activities(ui_state);
+            let previews_fit = process_previews_fit(model, &activities, ui_state.terminal_size);
+            (None, activities, previews_fit)
+        }
     };
 
     let summary = model.calculate_summary();
     let terminal_size = ui_state.terminal_size;
+    let tree_positions = tree_positions(&active_activities);
 
     let selected_id = ui_state
         .selected_activity
         .filter(|id| active_activities.iter().any(|da| da.activity.id == *id));
     let selected_activity = selected_id.and_then(|id| model.get_activity(id));
-    let selected_logs = selected_activity
-        .as_ref()
-        .and_then(|a| model.get_build_logs(a.id));
-
-    // Show all activities (including the selected activity with inline logs)
     let activities_to_show: Vec<_> = active_activities.iter().collect();
+    let process_search_match_ids = ui_state.process_search.as_ref().map(|search| {
+        model
+            .get_matching_process_activity_ids_from_display(&active_activities, &search.query)
+            .into_iter()
+            .collect::<HashSet<_>>()
+    });
 
     // Create owned activity elements, including hidden children indicators
     let mut activity_elements: Vec<AnyElement<'static>> = Vec::new();
 
-    for display_activity in activities_to_show.iter() {
+    for (display_activity, tree_position) in activities_to_show.iter().zip(tree_positions) {
         let activity = &display_activity.activity;
         let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
+        let is_dimmed = activity_is_dimmed(activity, process_search_match_ids.as_ref());
+        let show_inline_logs =
+            activity_shows_inline_logs(model, ui_state, activity.id, process_previews_fit);
+        let disclosure = model
+            .collapsible_descendant_count(activity.id, ui_state)
+            .map(|descendant_count| ActivityDisclosure {
+                collapsed: !ui_state.expanded_activities.contains(&activity.id),
+                descendant_count,
+            });
 
         // Pass logs for activities that should display them:
         // - Tasks with show_output=true or failed: show logs inline
         // - Messages with details: always show details inline
-        // - Selected activities: show logs when selected
         let task_failed = matches!(
             (&activity.variant, &activity.state),
             (
@@ -99,10 +276,8 @@ pub fn view(
                 ActivityVariant::Message(msg_data) => msg_data.details.is_some(),
                 _ => false,
             };
-        let activity_logs = if show_activity_logs {
+        let activity_logs = if show_activity_logs || show_inline_logs {
             model.get_build_logs(activity.id).cloned()
-        } else if is_selected {
-            selected_logs.cloned()
         } else {
             None
         };
@@ -126,7 +301,11 @@ pub fn view(
                 ContextProvider(value: Context::owned(ActivityRenderContext {
                     activity: activity.clone(),
                     depth: display_activity.depth,
+                    tree_position,
+                    disclosure,
                     is_selected,
+                    is_dimmed,
+                    show_inline_logs,
                     logs: activity_logs,
                     log_line_count: model.get_log_line_count(activity.id),
                     completed,
@@ -143,7 +322,8 @@ pub fn view(
     }
 
     // Determine if navigation is possible
-    let selectable_ids = model.get_selectable_activity_ids(ui_state);
+    let selectable_ids =
+        model.get_selectable_activity_ids_from_display(&active_activities, ui_state);
     let (can_go_up, can_go_down) = if let Some(current_id) = selected_id {
         if let Some(pos) = selectable_ids.iter().position(|&id| id == current_id) {
             (pos > 0, pos + 1 < selectable_ids.len())
@@ -161,12 +341,35 @@ pub fn view(
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
             selected: selected_activity.cloned(),
-            showing_logs: selected_logs.is_some(),
+            showing_logs: selected_id.is_some_and(|id| {
+                activity_shows_inline_logs(model, ui_state, id, process_previews_fit)
+            }),
             can_go_up,
             can_go_down,
             interrupt_prompt_active: ui_state.interrupt_prompt_active(),
             interrupt_prompt_attached: ui_state.interrupt_prompt_attached(),
             hide_stopped_processes: ui_state.hide_stopped_processes,
+            process_search: ui_state
+                .process_search
+                .as_ref()
+                .map(|search| search.query.clone()),
+            process_search_matches: process_search_match_ids.as_ref().map_or(0, HashSet::len),
+            process_search_available: active_activities
+                .iter()
+                .any(|display| matches!(display.activity.variant, ActivityVariant::Process(_))),
+            selected_disclosure: selected_id.and_then(|id| {
+                model
+                    .collapsible_descendant_count(id, ui_state)
+                    .map(|_| !ui_state.expanded_activities.contains(&id))
+            }),
+            selected_has_logs: selected_id.is_some_and(|id| {
+                model
+                    .get_build_logs(id)
+                    .is_some_and(|logs| !logs.is_empty())
+            }),
+            selected_preview_focused: selected_id
+                .is_some_and(|id| ui_state.inline_logs_activity == Some(id)),
+            process_previews_fit,
         })) {
             SummaryView
         }
@@ -243,10 +446,20 @@ pub fn view(
 
 /// Context for activity rendering
 #[derive(Clone)]
+struct ActivityDisclosure {
+    collapsed: bool,
+    descendant_count: usize,
+}
+
+#[derive(Clone)]
 struct ActivityRenderContext {
     activity: Activity,
     depth: usize,
+    tree_position: TreePosition,
+    disclosure: Option<ActivityDisclosure>,
     is_selected: bool,
+    is_dimmed: bool,
+    show_inline_logs: bool,
     logs: Option<Arc<VecDeque<String>>>,
     /// Total log line count (not affected by buffer rotation)
     log_line_count: usize,
@@ -262,15 +475,56 @@ struct ActivityRenderContext {
     hidden_children_count: usize,
 }
 
+fn activity_is_dimmed(
+    activity: &Activity,
+    process_search_match_ids: Option<&HashSet<u64>>,
+) -> bool {
+    process_search_match_ids.is_some_and(|matches| {
+        matches!(activity.variant, ActivityVariant::Process(_)) && !matches.contains(&activity.id)
+    })
+}
+
+fn disclosed_name(activity: &Activity, disclosure: Option<&ActivityDisclosure>) -> String {
+    match disclosure {
+        Some(disclosure) if disclosure.collapsed => format!("▸ {}", activity.name),
+        Some(_) => format!("▾ {}", activity.name),
+        None => activity.name.clone(),
+    }
+}
+
+fn disclosed_suffix(
+    suffix: Option<String>,
+    disclosure: Option<&ActivityDisclosure>,
+) -> Option<String> {
+    let Some(disclosure) = disclosure.filter(|disclosure| disclosure.collapsed) else {
+        return suffix;
+    };
+    let summary = if disclosure.descendant_count == 1 {
+        "1 step".to_string()
+    } else {
+        format!("{} steps", disclosure.descendant_count)
+    };
+    Some(match suffix {
+        Some(suffix) => format!("{summary} • {suffix}"),
+        None => summary,
+    })
+}
+
 /// Helper to build activity prefix with hierarchy and status indicator.
 /// - Top-level (depth == 0): [StatusIndicator]
 /// - Nested (depth > 0): [HierarchyPrefix][StatusIndicator]
 fn build_activity_prefix(
     depth: usize,
+    tree_position: &TreePosition,
     completed: Option<bool>,
     show_spinner: bool,
 ) -> Vec<AnyElement<'static>> {
-    let mut prefix = HierarchyPrefixComponent::new(depth).render();
+    let mut prefix = HierarchyPrefixComponent::new(
+        depth,
+        &tree_position.ancestor_continuations,
+        tree_position.is_last_sibling,
+    )
+    .render();
 
     prefix.push(
         element!(View(margin_right: 1) {
@@ -286,11 +540,17 @@ fn build_activity_prefix(
 /// encodes the lifecycle state (see `process_status_dot`) instead of a spinner.
 fn build_process_prefix(
     depth: usize,
+    tree_position: &TreePosition,
     glyph: &'static str,
     color: Color,
     pulse: bool,
 ) -> Vec<AnyElement<'static>> {
-    let mut prefix = HierarchyPrefixComponent::new(depth).render();
+    let mut prefix = HierarchyPrefixComponent::new(
+        depth,
+        &tree_position.ancestor_continuations,
+        tree_position.is_last_sibling,
+    )
+    .render();
 
     prefix.push(
         element!(View(margin_right: 1) {
@@ -299,6 +559,21 @@ fn build_process_prefix(
         .into_any(),
     );
 
+    prefix
+}
+
+fn process_preview_prefix(depth: usize, tree_position: &TreePosition) -> String {
+    let mut prefix = "  ".to_string();
+    for continues in &tree_position.ancestor_continuations {
+        prefix.push_str(if *continues { "│ " } else { "  " });
+    }
+    if depth > 0 {
+        prefix.push_str(if tree_position.is_last_sibling {
+            "  "
+        } else {
+            "│ "
+        });
+    }
     prefix
 }
 
@@ -320,7 +595,11 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ActivityRenderContext {
         activity,
         depth,
+        tree_position,
+        disclosure,
         is_selected,
+        is_dimmed,
+        show_inline_logs,
         logs,
         log_line_count,
         completed,
@@ -359,9 +638,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 build_data.phase.clone()
             };
 
-            // For selected build activities, use custom multi-line rendering
-            if *is_selected {
-                let prefix = build_activity_prefix(*depth, *completed, true);
+            if *show_inline_logs {
+                let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
                 let main_line = ActivityTextComponent::new(
                     "building".to_string(),
@@ -381,7 +659,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
 
             // Non-selected build activities use normal rendering
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "building".to_string(),
@@ -432,7 +710,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     base_status
                 };
 
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             let main_line = ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -446,7 +724,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // Show logs inline for tasks with show_output=true or failed tasks
             let task_failed = *completed == Some(false);
-            if (task_data.show_output || task_failed) && logs.is_some() {
+            if (task_data.show_output || task_failed || *show_inline_logs)
+                && (logs.is_some() || *show_inline_logs)
+            {
                 let empty_message = if completed.is_some() {
                     "  → no output"
                 } else {
@@ -457,7 +737,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .with_empty_message(empty_message);
                 if task_failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
-                } else if task_data.show_output && !is_selected {
+                } else if task_data.show_output && !show_inline_logs {
                     component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
                 }
                 return component.render_with_main_line(main_line);
@@ -471,6 +751,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 (download_data.size_current, download_data.size_total)
             {
                 return DownloadActivityComponent::new(activity, *depth, *is_selected)
+                    .with_hierarchy(
+                        &tree_position.ancestor_continuations,
+                        tree_position.is_last_sibling,
+                    )
                     .with_completed(*completed)
                     .with_cached(*cached)
                     .render(terminal_width);
@@ -478,6 +762,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 // Use generic progress if available
                 if progress.total.unwrap_or(0) > 0 {
                     return DownloadActivityComponent::new(activity, *depth, *is_selected)
+                        .with_hierarchy(
+                            &tree_position.ancestor_continuations,
+                            tree_position.is_last_sibling,
+                        )
                         .with_completed(*completed)
                         .with_cached(*cached)
                         .render(terminal_width);
@@ -490,7 +778,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             progress.current.unwrap_or(0).human_count_bytes()
                         )
                     });
-                    let prefix = build_activity_prefix(*depth, *completed, true);
+                    let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
                     return ActivityTextComponent::new(
                         "downloading".to_string(),
@@ -509,7 +797,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .substituter
                     .as_ref()
                     .map(|s| format!("from {}", s));
-                let prefix = build_activity_prefix(*depth, *completed, true);
+                let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
                 return ActivityTextComponent::new(
                     "downloading".to_string(),
@@ -524,7 +812,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Copy => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "copying".to_string(),
@@ -542,7 +830,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .substituter
                 .as_ref()
                 .map(|s| format!("from {}", s));
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "querying".to_string(),
@@ -556,7 +844,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::FetchTree => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "fetching".to_string(),
@@ -577,11 +865,12 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             } else {
                 activity.detail.clone()
             };
+            let suffix = disclosed_suffix(suffix, disclosure.as_ref());
 
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             let main_line = ActivityTextComponent::name_only(
-                activity.name.clone(),
+                disclosed_name(activity, disclosure.as_ref()),
                 elapsed_str,
                 activity.variant.clone(),
             )
@@ -590,9 +879,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
 
-            // Show logs when selected or when failed (so error details are visible)
             let failed = *completed == Some(false);
-            if (failed || *is_selected) && logs.is_some() {
+            if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
                     .with_empty_message("  → no files evaluated yet (press Ctrl-E to expand)");
@@ -605,7 +893,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             return main_line;
         }
         ActivityVariant::UserOperation => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -617,7 +905,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Devenv => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             // Show line count as suffix when active or failed with logs
             let base_suffix = if *completed == Some(true) {
@@ -655,9 +943,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             } else {
                 base_suffix
             };
+            let suffix = disclosed_suffix(suffix, disclosure.as_ref());
 
             let main_line = ActivityTextComponent::name_only(
-                activity.name.clone(),
+                disclosed_name(activity, disclosure.as_ref()),
                 elapsed_str,
                 activity.variant.clone(),
             )
@@ -666,9 +955,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_selection(*is_selected)
             .render(terminal_width, *depth, prefix);
 
-            // Show logs when selected or when failed
             let failed = *completed == Some(false);
-            if (failed || *is_selected) && logs.is_some() {
+            if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
                     .with_empty_message("  → no output yet");
@@ -732,7 +1020,13 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // state; transient states pulse instead of animating a spinner.
             let (dot_glyph, dot_color, dot_pulse) =
                 process_status_dot(&process_data.status, *completed, *shutting_down);
-            let prefix = build_process_prefix(*depth, dot_glyph, dot_color, dot_pulse);
+            let dot_color = if *is_dimmed {
+                COLOR_HIERARCHY
+            } else {
+                dot_color
+            };
+            let prefix =
+                build_process_prefix(*depth, tree_position, dot_glyph, dot_color, dot_pulse);
 
             // Hide elapsed time for not-started/stopped processes
             let process_elapsed = if matches!(process_data.status, ProcessStatus::NotStarted)
@@ -751,20 +1045,20 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             )
             .with_suffix(status_text)
             .with_selection(*is_selected)
+            .with_dimmed(*is_dimmed)
             .render(terminal_width, *depth, prefix);
 
-            // Show logs: always show LOG_VIEWPORT_SHOW_OUTPUT lines,
-            // expand when selected, show more when failed
             let process_failed = *completed == Some(false) || process_data.status.is_failed();
-            if logs.is_some() {
+            if *show_inline_logs
+                || (process_failed && *render_context == RenderContext::Final && logs.is_some())
+            {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
-                    .with_depth(*depth)
-                    .with_empty_message("→ no output yet (press 'e' to expand)");
+                    .with_border_indent(*depth * 2)
+                    .with_line_prefix(process_preview_prefix(*depth, tree_position))
+                    .with_empty_message("→ no output yet");
                 if process_failed && *render_context == RenderContext::Final {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
-                } else if !is_selected {
-                    component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
                 }
 
                 let mut elements = vec![main_line];
@@ -928,7 +1222,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Unknown => {
-            let prefix = build_activity_prefix(*depth, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "unknown".to_string(),
@@ -954,6 +1248,13 @@ struct SummaryViewContext {
     interrupt_prompt_active: bool,
     interrupt_prompt_attached: bool,
     hide_stopped_processes: bool,
+    process_search: Option<String>,
+    process_search_matches: usize,
+    process_search_available: bool,
+    selected_disclosure: Option<bool>,
+    selected_has_logs: bool,
+    selected_preview_focused: bool,
+    process_previews_fit: bool,
 }
 
 /// Summary view component that adapts to terminal width
@@ -975,6 +1276,13 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         interrupt_prompt_active,
         interrupt_prompt_attached,
         hide_stopped_processes,
+        process_search,
+        process_search_matches,
+        process_search_available,
+        selected_disclosure,
+        selected_has_logs,
+        selected_preview_focused,
+        process_previews_fit,
     } = ctx;
     let selected = selected.as_ref();
     let showing_logs = *showing_logs;
@@ -983,6 +1291,12 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let interrupt_prompt_active = *interrupt_prompt_active;
     let interrupt_prompt_attached = *interrupt_prompt_attached;
     let hide_stopped_processes = *hide_stopped_processes;
+    let process_search_matches = *process_search_matches;
+    let process_search_available = *process_search_available;
+    let selected_disclosure = *selected_disclosure;
+    let selected_has_logs = *selected_has_logs;
+    let selected_preview_focused = *selected_preview_focused;
+    let process_previews_fit = *process_previews_fit;
 
     if interrupt_prompt_active {
         if interrupt_prompt_attached {
@@ -1050,6 +1364,39 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         .into_any();
     }
 
+    if let Some(query) = process_search {
+        let prompt = if query.is_empty() {
+            "Search processes: /".to_string()
+        } else {
+            format!("Search processes: /{query}")
+        };
+        let result = match process_search_matches {
+            0 => "no matches".to_string(),
+            1 => "1 match".to_string(),
+            count => format!("{count} matches"),
+        };
+        let hints = if terminal_width < 72 {
+            format!("{result}  Enter:select Esc:cancel")
+        } else {
+            format!("{result} • ↑↓ next • Enter select • Esc cancel")
+        };
+        let prompt_color = process_search_prompt_color(process_search_matches);
+        return element!(View(
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            width: 100pct,
+            overflow: Overflow::Hidden,
+        ) {
+            View(flex_grow: 1.0, flex_shrink: 0.0, min_width: 0, overflow: Overflow::Hidden) {
+                Text(content: prompt, color: prompt_color, weight: Weight::Bold)
+            }
+            View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
+                Text(content: hints)
+            }
+        })
+        .into_any();
+    }
+
     let mut children = vec![];
     let mut has_content = false;
 
@@ -1067,7 +1414,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     );
 
     // Determine display mode based on terminal width
-    let use_symbols = terminal_width < 60; // Use unicode symbols for very narrow terminals
+    let use_symbols = terminal_width < if has_selection { 120 } else { 100 };
 
     // Builds - only show if there are any builds (active, completed, or failed)
     if summary.active_builds > 0 || summary.completed_builds > 0 || summary.failed_builds > 0 {
@@ -1269,7 +1616,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     // The verbose process vocabulary can exceed even a 120-column terminal
     // once summary counts and the hide-stopped action are present. Keep the
     // compact tier through 159 columns; very narrow terminals use keys only.
-    let use_short_text = terminal_width < 160;
+    let use_short_text = terminal_width < if has_selection { 200 } else { 160 };
     let show_hide_toggle = summary.stopped_processes > 0 || hide_stopped_processes;
 
     let up_arrow_color = if can_go_up {
@@ -1287,6 +1634,12 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         // Show full navigation when something is selected
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: " j", color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
+        help_children.push(element!(Text(content: "k", color: up_arrow_color)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { " ^D" } else { " Ctrl-D" }, color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { "^U" } else { "Ctrl-U" }, color: up_arrow_color)).into_any());
         if !use_symbols {
             if use_short_text {
                 // Compact, single-space separators on narrow terminals (< 100
@@ -1299,13 +1652,72 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         } else {
             help_children.push(element!(Text(content: " • ")).into_any());
         }
-        help_children.push(element!(Text(content: if use_short_text { "^E" } else { "Ctrl-E" }, color: COLOR_INTERACTIVE)).into_any());
-        if use_symbols {
-            help_children.push(element!(Text(content: " ▼ • ")).into_any());
-        } else if use_short_text {
-            help_children.push(element!(Text(content: " expand ")).into_any());
-        } else {
-            help_children.push(element!(Text(content: " expand logs • ")).into_any());
+        let directional_open = selected_disclosure == Some(true) || is_process && !showing_logs;
+        let directional_close = selected_disclosure == Some(false) || is_process && showing_logs;
+        help_children.push(
+            element!(Text(
+                content: if directional_open && !use_short_text {
+                    "Enter/l/→"
+                } else if directional_close && !use_short_text {
+                    "Enter/h/←"
+                } else {
+                    "Enter"
+                },
+                color: COLOR_INTERACTIVE
+            ))
+            .into_any(),
+        );
+        match selected_disclosure {
+            Some(true) if use_symbols => {
+                help_children.push(element!(Text(content: " ▾ • ")).into_any());
+            }
+            Some(false) if use_symbols => {
+                help_children.push(element!(Text(content: " ▴ • ")).into_any());
+            }
+            Some(true) => {
+                help_children.push(element!(Text(content: " expand ")).into_any());
+            }
+            Some(false) => {
+                help_children.push(element!(Text(content: " collapse ")).into_any());
+            }
+            None if is_process && !showing_logs && process_previews_fit && use_symbols => {
+                help_children.push(element!(Text(content: " ◎ • ")).into_any());
+            }
+            None if is_process && showing_logs && use_symbols => {
+                help_children.push(element!(Text(content: " ▴ • ")).into_any());
+            }
+            None if use_symbols => {
+                help_children.push(element!(Text(content: " ▾ • ")).into_any());
+            }
+            None if is_process && !showing_logs && process_previews_fit => {
+                help_children.push(element!(Text(content: " focus ")).into_any());
+            }
+            None if is_process
+                && showing_logs
+                && process_previews_fit
+                && !selected_preview_focused =>
+            {
+                help_children.push(element!(Text(content: " hide previews ")).into_any());
+            }
+            None if is_process && showing_logs => {
+                help_children.push(element!(Text(content: " hide preview ")).into_any());
+            }
+            None if use_short_text => {
+                help_children.push(element!(Text(content: " preview ")).into_any());
+            }
+            None => {
+                help_children.push(element!(Text(content: " preview logs • ")).into_any());
+            }
+        }
+        if selected_has_logs || is_process {
+            help_children.push(element!(Text(content: if use_short_text { "^E" } else { "Ctrl-E" }, color: COLOR_INTERACTIVE)).into_any());
+            if use_symbols {
+                help_children.push(element!(Text(content: " ▼ • ")).into_any());
+            } else if use_short_text {
+                help_children.push(element!(Text(content: " logs ")).into_any());
+            } else {
+                help_children.push(element!(Text(content: " full logs • ")).into_any());
+            }
         }
         if is_process {
             if is_stoppable {
@@ -1340,6 +1752,16 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                 help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped • " } else { " hide stopped • " })).into_any());
             }
         }
+        if process_search_available {
+            help_children.push(element!(Text(content: "/", color: COLOR_INTERACTIVE)).into_any());
+            if use_symbols {
+                help_children.push(element!(Text(content: " ")).into_any());
+            } else if use_short_text {
+                help_children.push(element!(Text(content: " search ")).into_any());
+            } else {
+                help_children.push(element!(Text(content: " search processes • ")).into_any());
+            }
+        }
         help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
         if showing_logs {
             if use_symbols {
@@ -1357,14 +1779,24 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         // Show navigate hint only when no selection (Ctrl-E requires selection)
         help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
         help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
-        let trail = if show_hide_toggle { " • " } else { "" };
+        help_children.push(element!(Text(content: " j", color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
+        help_children.push(element!(Text(content: "k", color: up_arrow_color)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { " ^D" } else { " Ctrl-D" }, color: down_arrow_color)).into_any());
+        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
+        help_children.push(element!(Text(content: if use_short_text { "^U" } else { "Ctrl-U" }, color: up_arrow_color)).into_any());
+        let trail = if show_hide_toggle || process_search_available {
+            " • "
+        } else {
+            ""
+        };
         if !use_symbols {
             if use_short_text {
                 help_children.push(element!(Text(content: format!(" nav{trail}"))).into_any());
             } else {
                 help_children.push(element!(Text(content: format!(" navigate{trail}"))).into_any());
             }
-        } else if show_hide_toggle {
+        } else if show_hide_toggle || process_search_available {
             help_children.push(element!(Text(content: " • ")).into_any());
         }
         if show_hide_toggle {
@@ -1373,22 +1805,65 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                 help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped" } else { " hide stopped" })).into_any());
             }
         }
+        if process_search_available {
+            if show_hide_toggle {
+                help_children.push(element!(Text(content: " • ")).into_any());
+            }
+            help_children.push(element!(Text(content: "/", color: COLOR_INTERACTIVE)).into_any());
+            if !use_symbols {
+                help_children.push(element!(Text(content: " search")).into_any());
+            }
+        }
     }
 
-    if has_selection {
-        if terminal_width < 60 {
-            return element!(View(
-                flex_direction: FlexDirection::Row,
-                width: terminal_width.saturating_sub(2) as u32,
-                overflow: Overflow::Hidden
-            ) {
-                #(help_children)
-            })
-            .into_any();
+    if has_selection && terminal_width < 60 {
+        let mut compact_help_children = vec![
+            element!(Text(content: "↑", color: up_arrow_color)).into_any(),
+            element!(Text(content: "↓", color: down_arrow_color)).into_any(),
+            element!(Text(content: " j", color: down_arrow_color)).into_any(),
+            element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any(),
+            element!(Text(content: "k", color: up_arrow_color)).into_any(),
+            element!(Text(content: " ^D", color: down_arrow_color)).into_any(),
+            element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any(),
+            element!(Text(content: "^U", color: up_arrow_color)).into_any(),
+            element!(Text(content: " Enter", color: COLOR_INTERACTIVE)).into_any(),
+        ];
+        if selected_has_logs || is_process {
+            compact_help_children
+                .push(element!(Text(content: " ^E", color: COLOR_INTERACTIVE)).into_any());
         }
+        if is_stoppable {
+            compact_help_children
+                .push(element!(Text(content: " ^X", color: COLOR_INTERACTIVE)).into_any());
+        }
+        if is_restartable {
+            compact_help_children
+                .push(element!(Text(content: " ^R", color: COLOR_INTERACTIVE)).into_any());
+        }
+        if show_hide_toggle {
+            compact_help_children
+                .push(element!(Text(content: " ^H", color: COLOR_INTERACTIVE)).into_any());
+        }
+        if process_search_available {
+            compact_help_children
+                .push(element!(Text(content: " /", color: COLOR_INTERACTIVE)).into_any());
+        }
+        compact_help_children
+            .push(element!(Text(content: " Esc", color: COLOR_INTERACTIVE)).into_any());
         return element!(View(
             flex_direction: FlexDirection::Row,
-            width: 100pct,
+            width: terminal_width.saturating_sub(2) as u32,
+            overflow: Overflow::Hidden
+        ) {
+            #(compact_help_children)
+        })
+        .into_any();
+    }
+
+    if has_selection && terminal_width < 72 {
+        return element!(View(
+            flex_direction: FlexDirection::Row,
+            width: terminal_width.saturating_sub(2) as u32,
             overflow: Overflow::Hidden
         ) {
             #(help_children)
@@ -1424,6 +1899,14 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     }).into_any()
 }
 
+fn process_search_prompt_color(matches: usize) -> Color {
+    if matches == 0 {
+        COLOR_FAILED
+    } else {
+        COLOR_INTERACTIVE
+    }
+}
+
 /// Format a duration in a human-readable way
 pub fn format_duration(duration: Duration) -> String {
     if cfg!(feature = "deterministic-tui") {
@@ -1436,7 +1919,114 @@ pub fn format_duration(duration: Duration) -> String {
 mod tests {
     use super::*;
     use crate::model::ActivityModel;
-    use devenv_activity::{ActivityEvent, ActivityLevel, Operation, Process, Timestamp};
+    use devenv_activity::{
+        ActivityEvent, ActivityLevel, Operation, Process, Timestamp,
+        test_helpers::{process_log, process_start, task_hierarchy_single, task_log, task_start},
+    };
+
+    #[test]
+    fn tree_positions_connect_nested_siblings() {
+        assert_eq!(
+            tree_positions_for_depths(&[0, 1, 2, 2, 1, 2]),
+            vec![
+                TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: true,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: false,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![true],
+                    is_last_sibling: false,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![true],
+                    is_last_sibling: true,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: true,
+                },
+                TreePosition {
+                    ancestor_continuations: vec![false],
+                    is_last_sibling: true,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn process_preview_prefix_matches_tree_position() {
+        assert_eq!(
+            process_preview_prefix(
+                1,
+                &TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: false,
+                },
+            ),
+            "  │ "
+        );
+        assert_eq!(
+            process_preview_prefix(
+                1,
+                &TreePosition {
+                    ancestor_continuations: vec![],
+                    is_last_sibling: true,
+                },
+            ),
+            "    "
+        );
+        assert_eq!(
+            process_preview_prefix(
+                2,
+                &TreePosition {
+                    ancestor_continuations: vec![true],
+                    is_last_sibling: false,
+                },
+            ),
+            "  │ │ "
+        );
+        assert_eq!(
+            process_preview_prefix(
+                2,
+                &TreePosition {
+                    ancestor_continuations: vec![false],
+                    is_last_sibling: true,
+                },
+            ),
+            "      "
+        );
+    }
+
+    #[test]
+    fn process_previews_do_not_fit_beside_multiline_task_output() {
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(task_hierarchy_single(1, "build", None, true, false));
+        model.apply_activity_event(task_start(1));
+        model.apply_activity_event(task_log(1, "line one", false));
+        model.apply_activity_event(task_log(1, "line two", false));
+        model.apply_activity_event(task_log(1, "line three", false));
+        model.apply_activity_event(process_start(2, "server"));
+        model.apply_activity_event(process_log(2, "listening", false));
+
+        let ui_state = UiState::new();
+        let display = model.get_display_activities(&ui_state);
+
+        // The task occupies four rows (its main row plus three output rows),
+        // and the process with its preview occupies two more. The five-row
+        // viewport therefore cannot show automatic previews without scrolling.
+        assert!(!process_previews_fit(
+            &model,
+            &display,
+            TerminalSize {
+                width: 80,
+                height: 7,
+            },
+        ));
+    }
 
     fn summary_ctx(
         hide_stopped_processes: bool,
@@ -1455,6 +2045,13 @@ mod tests {
             interrupt_prompt_active,
             interrupt_prompt_attached: false,
             hide_stopped_processes,
+            process_search: None,
+            process_search_matches: 0,
+            process_search_available: false,
+            selected_disclosure: None,
+            selected_has_logs: false,
+            selected_preview_focused: false,
+            process_previews_fit: false,
         }
     }
 
@@ -1495,6 +2092,145 @@ mod tests {
         assert!(!output.contains("hide stopped"));
         assert!(!output.contains("show stopped"));
         assert!(!output.contains("Ctrl-H"));
+    }
+
+    #[test]
+    fn test_summary_navigation_shows_arrow_and_vim_keys() {
+        let mut ctx = summary_ctx(false, false, 0);
+        ctx.can_go_down = true;
+
+        for width in [48, 100, 180] {
+            let output = build_summary_view_impl(&ctx, width)
+                .render(Some(width as usize))
+                .to_string();
+            assert!(
+                output.contains("↑↓ j/k"),
+                "missing navigation keys at {width}: {output:?}"
+            );
+            if width < 160 {
+                assert!(output.contains("^D/^U"));
+            } else {
+                assert!(output.contains("Ctrl-D/Ctrl-U"));
+            }
+        }
+
+        let mut model = ActivityModel::default();
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id: 1,
+            name: "api".to_string(),
+            parent: None,
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+        ctx.selected = model.get_activity(1).cloned();
+        ctx.can_go_up = true;
+        ctx.summary.running_processes = 1;
+        ctx.summary.total_processes = 1;
+
+        let output = build_summary_view_impl(&ctx, 120)
+            .render(Some(120))
+            .to_string();
+        assert!(output.contains("↑↓ j/k ^D/^U nav"));
+        assert!(output.contains("1 process"));
+    }
+
+    #[test]
+    fn test_summary_process_preview_action_matches_scope() {
+        let mut model = ActivityModel::default();
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id: 1,
+            name: "api".to_string(),
+            parent: None,
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+
+        let mut ctx = summary_ctx(false, false, 0);
+        ctx.selected = model.get_activity(1).cloned();
+        ctx.showing_logs = true;
+        ctx.process_previews_fit = true;
+
+        let automatic = build_summary_view_impl(&ctx, 120)
+            .render(Some(120))
+            .to_string();
+        assert!(automatic.contains("hide previews"));
+
+        ctx.selected_preview_focused = true;
+        let focused = build_summary_view_impl(&ctx, 120)
+            .render(Some(120))
+            .to_string();
+        assert!(focused.contains("hide preview"));
+        assert!(!focused.contains("hide previews"));
+    }
+
+    #[test]
+    fn test_process_search_keeps_query_visible_across_terminal_widths() {
+        let mut ctx = summary_ctx(false, false, 0);
+        ctx.process_search = Some("worker".to_string());
+        ctx.process_search_matches = 1;
+
+        for width in [32, 48, 72, 120] {
+            let output = build_summary_view_impl(&ctx, width)
+                .render(Some(width as usize))
+                .to_string();
+
+            assert!(
+                output.contains("Search processes: /worker"),
+                "search query was truncated at {width} columns: {output:?}"
+            );
+        }
+
+        let output = build_summary_view_impl(&ctx, 120)
+            .render(Some(120))
+            .to_string();
+        assert!(output.contains("1 match"));
+        assert!(output.contains("Esc cancel"));
+    }
+
+    #[test]
+    fn test_process_search_prompt_turns_red_without_matches() {
+        assert_eq!(process_search_prompt_color(0), COLOR_FAILED);
+        assert_eq!(process_search_prompt_color(1), COLOR_INTERACTIVE);
+    }
+
+    #[test]
+    fn test_process_search_dims_only_non_matching_processes() {
+        let mut model = ActivityModel::default();
+        let ui_state = UiState::new();
+
+        for (id, name) in [(1, "email-worker"), (2, "event-router")] {
+            model.apply_activity_event(ActivityEvent::Process(Process::Start {
+                id,
+                name: name.to_string(),
+                parent: None,
+                command: None,
+                ports: vec![],
+                ready_probe: None,
+                level: ActivityLevel::Info,
+                timestamp: Timestamp::now(),
+            }));
+        }
+
+        let matches: HashSet<_> = model
+            .get_matching_process_activity_ids(&ui_state, "ema")
+            .into_iter()
+            .collect();
+
+        assert!(!activity_is_dimmed(
+            model.get_activity(1).unwrap(),
+            Some(&matches)
+        ));
+        assert!(activity_is_dimmed(
+            model.get_activity(2).unwrap(),
+            Some(&matches)
+        ));
+        assert!(!activity_is_dimmed(model.get_activity(2).unwrap(), None));
     }
 
     #[test]
@@ -1544,6 +2280,7 @@ mod tests {
             Some(ScrollState {
                 handle: None,
                 display_activities,
+                process_previews_fit: false,
             }),
             false,
         )
@@ -1598,6 +2335,7 @@ mod tests {
                 Some(ScrollState {
                     handle: None,
                     display_activities,
+                    process_previews_fit: false,
                 }),
                 false,
             )
@@ -1663,6 +2401,7 @@ mod tests {
             Some(ScrollState {
                 handle: None,
                 display_activities,
+                process_previews_fit: false,
             }),
             false,
         )
@@ -1728,6 +2467,7 @@ mod tests {
             Some(ScrollState {
                 handle: None,
                 display_activities,
+                process_previews_fit: false,
             }),
             false,
         )
@@ -1750,7 +2490,7 @@ mod tests {
     fn process_view_renders_every_status_label_and_gave_up_affordance() {
         let mut model = ActivityModel::default();
         let mut ui_state = UiState::new();
-        ui_state.set_terminal_size(160, 30);
+        ui_state.set_terminal_size(200, 30);
 
         model.apply_activity_event(ActivityEvent::Operation(Operation::Start {
             id: 100,
@@ -1803,11 +2543,12 @@ mod tests {
             Some(ScrollState {
                 handle: None,
                 display_activities,
+                process_previews_fit: false,
             }),
             false,
         )
         .into();
-        let rendered = element.render(Some(160)).to_string();
+        let rendered = element.render(Some(200)).to_string();
 
         for label in [
             "auto start off",

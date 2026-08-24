@@ -4,4 +4,4 @@ expression: output
 ---
 ⠋ test:without-output 2 lines → HIDDEN_OUTPUT_LINE_2 [TIME]
 
- 0 of 1 tasks                                        ↑↓ nav
+ 0/1 tasks                                     ↑↓ j/k ^D/^U

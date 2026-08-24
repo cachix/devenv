@@ -5,4 +5,4 @@ expression: output
 ⠋ Building shell [TIME]
   ✗ error: simple error
 
-                 ↑↓ nav
+           ↑↓ j/k ^D/^U

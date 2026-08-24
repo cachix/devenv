@@ -7,4 +7,4 @@ expression: output
   │ FAILED: assertion error in test_foo
   │ Expected: 42, Got: 0
 
- 0 of 1 tasks                                     ↑↓ nav
+ 0/1 tasks                                  ↑↓ j/k ^D/^U
