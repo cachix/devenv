@@ -1660,17 +1660,69 @@ fn test_failed_shell_tree_stays_expanded() {
 }
 
 #[test]
+fn test_successful_shell_tree_with_warning_stays_expanded() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(operation_start(1, "Building shell"));
+    model.apply_activity_event(evaluate_start_with(
+        2,
+        "Evaluating Nix",
+        ActivityLevel::Info,
+        Some(1),
+    ));
+    model.apply_activity_event(message_with(
+        3,
+        ActivityLevel::Warn,
+        "Deprecated option `old.option`",
+        Some(2),
+    ));
+    model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+
+    let rendered = render_to_string(&model, &ui_state);
+    assert!(!rendered.contains("▸ Building shell"));
+    assert!(rendered.contains("Evaluating Nix"));
+    assert!(rendered.contains("Deprecated option `old.option`"));
+}
+
+#[test]
 fn test_completed_non_shell_operation_stays_expanded() {
     let (mut model, ui_state) = new_test_model();
 
     model.apply_activity_event(operation_start(1, "Pushing to cache"));
-    model.apply_activity_event(build_start_with(2, "cached-build", Some(1)));
-    model.apply_activity_event(build_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(evaluate_start_with(
+        2,
+        "Evaluating package search",
+        ActivityLevel::Info,
+        Some(1),
+    ));
+    model.apply_activity_event(build_start_with(3, "cached-build", Some(2)));
+    model.apply_activity_event(build_complete(3, ActivityOutcome::Success));
+    model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
     model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
 
     let rendered = render_to_string(&model, &ui_state);
     assert!(!rendered.contains("▸ Pushing to cache"));
+    assert!(rendered.contains("Evaluating package search"));
     assert!(rendered.contains("cached-build"));
+}
+
+#[test]
+fn test_completed_non_shell_evaluation_stays_expanded() {
+    let (mut model, ui_state) = new_test_model();
+
+    model.apply_activity_event(evaluate_start(
+        1,
+        "Validating lock file",
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(build_start_with(2, "validation-input", Some(1)));
+    model.apply_activity_event(build_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(evaluate_complete(1, ActivityOutcome::Success));
+
+    let rendered = render_to_string(&model, &ui_state);
+    assert!(!rendered.contains("▸ Validating lock file"));
+    assert!(rendered.contains("validation-input"));
 }
 
 #[test]

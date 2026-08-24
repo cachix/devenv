@@ -1373,17 +1373,10 @@ impl ActivityModel {
     }
 
     fn is_completed_shell_activity(&self, activity: &Activity) -> bool {
-        let is_shell_activity = match activity.variant {
-            ActivityVariant::Evaluating(_) => true,
-            ActivityVariant::Devenv => {
-                activity.name.to_lowercase().contains("shell")
-                    || self.activities.values().any(|child| {
-                        matches!(child.variant, ActivityVariant::Evaluating(_))
-                            && self.is_direct_child_of(child, activity.id)
-                    })
-            }
-            _ => return false,
-        };
+        let is_shell_activity = matches!(
+            activity.variant,
+            ActivityVariant::Evaluating(_) | ActivityVariant::Devenv
+        ) && activity.name.to_lowercase().contains("shell");
         if !matches!(
             activity.state,
             NixActivityState::Completed { success: true, .. }
@@ -1399,6 +1392,35 @@ impl ActivityModel {
         is_shell_activity
     }
 
+    fn has_diagnostic_descendant(&self, activity_id: u64) -> bool {
+        let mut pending = vec![activity_id];
+        let mut visited = HashSet::from([activity_id]);
+
+        while let Some(parent_id) = pending.pop() {
+            for child in self
+                .activities
+                .values()
+                .filter(|child| self.is_direct_child_of(child, parent_id))
+            {
+                if !visited.insert(child.id) {
+                    continue;
+                }
+                if matches!(
+                    child.variant,
+                    ActivityVariant::Message(MessageActivity {
+                        level: ActivityLevel::Error | ActivityLevel::Warn,
+                        ..
+                    })
+                ) {
+                    return true;
+                }
+                pending.push(child.id);
+            }
+        }
+
+        false
+    }
+
     pub fn collapsible_descendant_count(
         &self,
         activity_id: u64,
@@ -1406,6 +1428,7 @@ impl ActivityModel {
     ) -> Option<usize> {
         let activity = self.activities.get(&activity_id)?;
         if !self.is_completed_shell_activity(activity)
+            || self.has_diagnostic_descendant(activity_id)
             || activity
                 .parent_id
                 .and_then(|parent_id| self.activities.get(&parent_id))
