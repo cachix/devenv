@@ -3,7 +3,14 @@
 let
   cfg = config.languages.erlang;
   # rebar3 must be compiled with the selected Erlang so its BEAM files load on the user's OTP version.
-  rebar3 = (pkgs.beam.packagesWith cfg.package).rebar3;
+  # `pkgs.beamPackages` supports `overrideScope` on recent nixpkgs and `extend` on nixpkgs 25.05; try both.
+  beamPackagesForErlang =
+    erlang:
+    if pkgs.beamPackages ? overrideScope then
+      pkgs.beamPackages.overrideScope (final: prev: { inherit erlang; })
+    else
+      pkgs.beamPackages.extend (final: prev: { inherit erlang; });
+  rebar3 = (beamPackagesForErlang cfg.package).rebar3;
 in
 {
   options.languages.erlang = {
