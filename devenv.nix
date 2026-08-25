@@ -149,21 +149,38 @@ in
     ];
   };
 
-  git-hooks.package = pkgs.prek;
-  git-hooks.excludes = [ "Cargo.nix" ];
-  git-hooks.hooks = {
-    nixpkgs-fmt.enable = true;
-    rustfmt.enable = true;
-    markdownlint = {
-      settings.configuration = {
-        MD013 = {
-          line_length = 120;
+  git-hooks =
+    let
+      modulePath = "^src/modules/";
+    in
+    {
+      package = pkgs.prek;
+      excludes = [
+        "Cargo.nix"
+        "^tests/syntax-error/devenv\\.nix$"
+      ];
+      hooks = {
+        nixfmt = {
+          enable = true;
+          files = "\\.nix$";
+          excludes = [ modulePath ];
         };
-        MD033 = false;
-        MD034 = false;
+        nixpkgs-fmt = {
+          enable = true;
+          files = "${modulePath}.*\\.nix$";
+        };
+        rustfmt.enable = true;
+        markdownlint = {
+          settings.configuration = {
+            MD013 = {
+              line_length = 120;
+            };
+            MD033 = false;
+            MD034 = false;
+          };
+        };
       };
     };
-  };
 }
 
 # reload-test
