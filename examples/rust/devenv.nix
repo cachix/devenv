@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   # Test the crate2nix import functionality
@@ -10,7 +15,13 @@ in
     # https://devenv.sh/reference/options/#languagesrustchannel
     channel = "nightly";
 
-    components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
+    components = [
+      "rustc"
+      "cargo"
+      "clippy"
+      "rustfmt"
+      "rust-analyzer"
+    ];
   };
 
   # Include the imported package in the environment

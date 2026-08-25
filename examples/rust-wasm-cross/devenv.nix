@@ -8,7 +8,14 @@
 
     targets = [ "wasm32-unknown-unknown" ];
 
-    components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "rust-std" ];
+    components = [
+      "rustc"
+      "cargo"
+      "clippy"
+      "rustfmt"
+      "rust-analyzer"
+      "rust-std"
+    ];
   };
 
   git-hooks.hooks = {

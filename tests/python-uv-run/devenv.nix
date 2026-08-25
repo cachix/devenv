@@ -1,4 +1,5 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   languages.python = {
     enable = true;
     venv.enable = true;

@@ -3,7 +3,10 @@
     "frontend:build" = {
       exec = "echo 'Building frontend...'";
       after = [ "frontend:test" ];
-      execIfModified = [ "src/frontend/*.js" "src/frontend/*.css" ];
+      execIfModified = [
+        "src/frontend/*.js"
+        "src/frontend/*.css"
+      ];
     };
 
     "frontend:test" = {
@@ -34,7 +37,10 @@
 
     "deploy:production" = {
       exec = "echo 'Deploying to production...'";
-      after = [ "frontend:build" "backend:build" ];
+      after = [
+        "frontend:build"
+        "backend:build"
+      ];
     };
 
     "docs:generate" = {

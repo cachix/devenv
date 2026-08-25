@@ -5,10 +5,12 @@ let
 
   # The pinned digest is a multi-arch index, so `pullImage` resolves a different
   # manifest per architecture and each one hashes differently.
-  sha256 = {
-    x86_64-linux = "sha256-hCgBDeQAulu/MSPPvojHcoynV1v1pjXtkir/dULO3Wk=";
-    aarch64-linux = "sha256-rUfLuH7m3lWeIsy8elCspDdIfpgjoDRLI8dBfL06mu8=";
-  }.${pkgs.stdenv.system};
+  sha256 =
+    {
+      x86_64-linux = "sha256-hCgBDeQAulu/MSPPvojHcoynV1v1pjXtkir/dULO3Wk=";
+      aarch64-linux = "sha256-rUfLuH7m3lWeIsy8elCspDdIfpgjoDRLI8dBfL06mu8=";
+    }
+    .${pkgs.stdenv.system};
 in
 {
   name = "from-image-test";

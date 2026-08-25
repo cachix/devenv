@@ -1,31 +1,32 @@
 # Tooling to build the workspace crates using crate2nix
-{ lib
-, stdenv
+{
+  lib,
+  stdenv,
 
-, openssl
-, dbus
-, protobuf
-, pkg-config
-, llvmPackages
-, cachix
-, libghostty-vt ? null
-, nix
-, nixd
+  openssl,
+  dbus,
+  protobuf,
+  pkg-config,
+  llvmPackages,
+  cachix,
+  libghostty-vt ? null,
+  nix,
+  nixd,
 
   # Helpers
-, callPackage
-, makeBinaryWrapper
-, installShellFiles
-, glibcLocalesUtf8
+  callPackage,
+  makeBinaryWrapper,
+  installShellFiles,
+  glibcLocalesUtf8,
 
   # Rust
-, defaultCrateOverrides
-, rustc
-, cargo
-, cargoProfile ? "release"
+  defaultCrateOverrides,
+  rustc,
+  cargo,
+  cargoProfile ? "release",
 
-, gitRev ? ""
-, isRelease ? false
+  gitRev ? "",
+  isRelease ? false,
 }:
 
 let
@@ -33,9 +34,11 @@ let
   inherit (cargoToml.workspace.package) version;
 
   # Override the rust toolchain
-  buildRustCrateForPkgs = pkgs: pkgs.buildRustCrate.override {
-    inherit rustc cargo;
-  };
+  buildRustCrateForPkgs =
+    pkgs:
+    pkgs.buildRustCrate.override {
+      inherit rustc cargo;
+    };
 
   # Import crate2nix generated file with overrides
   crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease libghostty-vt; };
@@ -46,71 +49,78 @@ let
     release = cargoProfile == "release";
     # Enable tracing_unstable for dependency resolution so valuable crate is included.
     # This matches the --cfg tracing_unstable passed via crate-config.nix at compile time.
-    extraTargetFlags = { tracing_unstable = true; };
+    extraTargetFlags = {
+      tracing_unstable = true;
+    };
   };
 
   xtask = cargoNix.workspaceMembers.xtask.build;
 
   # Wrap the devenv binary with required paths
-  wrapDevenv = drv: stdenv.mkDerivation {
-    pname = "devenv-wrapped";
-    inherit version;
-    src = drv;
+  wrapDevenv =
+    drv:
+    stdenv.mkDerivation {
+      pname = "devenv-wrapped";
+      inherit version;
+      src = drv;
 
-    nativeBuildInputs = [ makeBinaryWrapper installShellFiles ];
+      nativeBuildInputs = [
+        makeBinaryWrapper
+        installShellFiles
+      ];
 
-    # Include devenv-run-tests in the output
-    devenvRunTests = cargoNix.workspaceMembers.devenv-run-tests.build;
+      # Include devenv-run-tests in the output
+      devenvRunTests = cargoNix.workspaceMembers.devenv-run-tests.build;
 
-    installPhase =
-      let
-        setDefaultLocaleArchive = lib.optionalString (glibcLocalesUtf8 != null) ''
-          --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
+      installPhase =
+        let
+          setDefaultLocaleArchive = lib.optionalString (glibcLocalesUtf8 != null) ''
+            --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
+          '';
+        in
+        ''
+          mkdir -p $out/bin
+
+          cp $src/bin/devenv $out/bin/
+          cp $devenvRunTests/bin/devenv-run-tests $out/bin/
+          cp $src/bin/secretspec $out/bin/
+
+          wrapProgram $out/bin/devenv \
+            --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
+            ${setDefaultLocaleArchive}
+
+          wrapProgram $out/bin/devenv-run-tests \
+            --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
+            ${setDefaultLocaleArchive}
+
+          # Generate manpages
+          ${xtask}/bin/xtask generate-manpages --out-dir man
+          installManPage man/*
+
+          # Generate shell completions (devenv must be in PATH)
+          compdir=./completions
+          export PATH="$out/bin:$PATH"
+          for shell in bash fish zsh; do
+            ${xtask}/bin/xtask generate-shell-completion $shell --out-dir $compdir
+          done
+
+          installShellCompletion --cmd devenv \
+            --bash $compdir/devenv.bash \
+            --fish $compdir/devenv.fish \
+            --zsh $compdir/_devenv
+
+          # Make devenv hook load automatically on fish.
+          mkdir -p $out/share/fish/vendor_conf.d
+          echo "$out/bin/devenv hook fish | source" > $out/share/fish/vendor_conf.d/devenv.fish
+
+          # Make devenv hook load automatically on nushell. Unlike fish's
+          # `source`, Nu needs a static file.
+          mkdir -p $out/share/nushell/vendor/autoload
+          devenv hook nu > $out/share/nushell/vendor/autoload/devenv.nu
         '';
-      in
-      ''
-        mkdir -p $out/bin
 
-        cp $src/bin/devenv $out/bin/
-        cp $devenvRunTests/bin/devenv-run-tests $out/bin/
-        cp $src/bin/secretspec $out/bin/
-
-        wrapProgram $out/bin/devenv \
-          --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
-          ${setDefaultLocaleArchive}
-
-        wrapProgram $out/bin/devenv-run-tests \
-          --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
-          ${setDefaultLocaleArchive}
-
-        # Generate manpages
-        ${xtask}/bin/xtask generate-manpages --out-dir man
-        installManPage man/*
-
-        # Generate shell completions (devenv must be in PATH)
-        compdir=./completions
-        export PATH="$out/bin:$PATH"
-        for shell in bash fish zsh; do
-          ${xtask}/bin/xtask generate-shell-completion $shell --out-dir $compdir
-        done
-
-        installShellCompletion --cmd devenv \
-          --bash $compdir/devenv.bash \
-          --fish $compdir/devenv.fish \
-          --zsh $compdir/_devenv
-
-        # Make devenv hook load automatically on fish.
-        mkdir -p $out/share/fish/vendor_conf.d
-        echo "$out/bin/devenv hook fish | source" > $out/share/fish/vendor_conf.d/devenv.fish
-
-        # Make devenv hook load automatically on nushell. Unlike fish's
-        # `source`, Nu needs a static file.
-        mkdir -p $out/share/nushell/vendor/autoload
-        devenv hook nu > $out/share/nushell/vendor/autoload/devenv.nu
-      '';
-
-    meta.mainProgram = "devenv";
-  };
+      meta.mainProgram = "devenv";
+    };
 in
 {
   inherit version;

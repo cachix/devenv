@@ -1,6 +1,11 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   dotenv.enable = true;
-  dotenv.filename = [ ".env" "config/.env.bar" "generated/.env" ];
+  dotenv.filename = [
+    ".env"
+    "config/.env.bar"
+    "generated/.env"
+  ];
   dotenv.substitution = true;
 
   env.BAR = "1";

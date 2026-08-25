@@ -1,3 +1,4 @@
-{ pkgs, inputs, ... }: {
+{ pkgs, inputs, ... }:
+{
   languages.rust.enable = true;
 }

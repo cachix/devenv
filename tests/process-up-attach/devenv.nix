@@ -7,7 +7,10 @@ let
   betaPort = config.processes.beta.ports.main.value;
 in
 {
-  packages = [ pkgs.python3 pkgs.curl ];
+  packages = [
+    pkgs.python3
+    pkgs.curl
+  ];
   process.manager.implementation = "native";
 
   processes.alpha = {

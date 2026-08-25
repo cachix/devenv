@@ -1,4 +1,9 @@
-{ inputs, pkgs, multiverse, ... }:
+{
+  inputs,
+  pkgs,
+  multiverse,
+  ...
+}:
 
 let
   requested = {
@@ -13,9 +18,11 @@ let
   pinned = multiverse.pins requested;
 
   # The rest of the upstream API stays reachable through the raw input.
-  plan = (inputs."nixpkgs-multiverse".lib.mkMultiverse {
-    system = pkgs.stdenv.hostPlatform.system;
-  }).pinPlan requested;
+  plan =
+    (inputs."nixpkgs-multiverse".lib.mkMultiverse {
+      system = pkgs.stdenv.hostPlatform.system;
+    }).pinPlan
+      requested;
 in
 {
   packages = pinned;
@@ -38,7 +45,11 @@ in
       message = "Minimizing must serve both pins from a single nixpkgs revision.";
     }
     {
-      assertion = map (pkg: pkg.version) pinned == [ "0.7.0" "3.26.4" ];
+      assertion =
+        map (pkg: pkg.version) pinned == [
+          "0.7.0"
+          "3.26.4"
+        ];
       message = "`multiverse.pins` must return the requested versions as packages.";
     }
     {

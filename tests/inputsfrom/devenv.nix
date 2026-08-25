@@ -3,7 +3,10 @@ let
   # Create a simple derivation with some build inputs
   myDerivation = pkgs.stdenv.mkDerivation {
     name = "test-derivation";
-    buildInputs = [ pkgs.hello pkgs.cowsay ];
+    buildInputs = [
+      pkgs.hello
+      pkgs.cowsay
+    ];
     nativeBuildInputs = [ pkgs.jq ];
     dontUnpack = true;
     installPhase = "mkdir -p $out";

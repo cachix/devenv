@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 let
   pcProcesses = config.process.managers.process-compose.settings.processes;
   foo = pcProcesses.foo;
@@ -57,42 +62,56 @@ in
   assertions = [
     {
       assertion = (foo.readiness_probe.exec.command or null) == "true";
-      message = "process-compose merge: readiness_probe.exec.command lost from `ready.exec`. Got: ${builtins.toJSON (foo.readiness_probe or {})}";
+      message = "process-compose merge: readiness_probe.exec.command lost from `ready.exec`. Got: ${
+        builtins.toJSON (foo.readiness_probe or { })
+      }";
     }
     {
       assertion = foo.readiness_probe.failure_threshold == 99;
-      message = "process-compose merge: user override of readiness_probe.failure_threshold not applied. Got: ${toString (foo.readiness_probe.failure_threshold or null)}";
+      message = "process-compose merge: user override of readiness_probe.failure_threshold not applied. Got: ${
+        toString (foo.readiness_probe.failure_threshold or null)
+      }";
     }
     {
       assertion = foo.availability.restart == "on_failure";
-      message = "process-compose merge: availability.restart lost when user set availability.max_restarts. Got: ${toString (foo.availability.restart or null)}";
+      message = "process-compose merge: availability.restart lost when user set availability.max_restarts. Got: ${
+        toString (foo.availability.restart or null)
+      }";
     }
     {
       assertion = foo.availability.max_restarts == 7;
-      message = "process-compose merge: user override of availability.max_restarts not applied. Got: ${toString (foo.availability.max_restarts or null)}";
+      message = "process-compose merge: user override of availability.max_restarts not applied. Got: ${
+        toString (foo.availability.max_restarts or null)
+      }";
     }
     {
       assertion = foo.shutdown.signal == 2 && foo.shutdown.timeout_seconds == 8;
-      message = "process-compose merge: shutdown settings of a direct process were not translated. Got: ${builtins.toJSON (foo.shutdown or {})}";
+      message = "process-compose merge: shutdown settings of a direct process were not translated. Got: ${
+        builtins.toJSON (foo.shutdown or { })
+      }";
     }
     {
       assertion = bar.shutdown.signal == 15 && bar.shutdown.timeout_seconds == 6;
-      message = "process-compose merge: a devenv-tasks wrapped process must receive SIGTERM. Got: ${builtins.toJSON (bar.shutdown or {})}";
+      message = "process-compose merge: a devenv-tasks wrapped process must receive SIGTERM. Got: ${
+        builtins.toJSON (bar.shutdown or { })
+      }";
     }
     {
-      assertion = config.processes.bar.supervisionMode == "external"
+      assertion =
+        config.processes.bar.supervisionMode == "external"
         && lib.hasInfix "external" config.process.taskCommandsBase.bar;
       message = "process-compose merge: fully translated policy should use external supervision. Mode: ${config.processes.bar.supervisionMode}; command: ${config.process.taskCommandsBase.bar}";
     }
     {
-      assertion = config.processes.nativeWatch.supervisionMode == "native"
+      assertion =
+        config.processes.nativeWatch.supervisionMode == "native"
         && nativeWatch.availability.restart == "no"
         && lib.hasInfix "native" config.process.taskCommandsBase.nativeWatch;
       message = "process-compose merge: unsupported watch policy must remain under native supervision. Mode: ${config.processes.nativeWatch.supervisionMode}; command: ${config.process.taskCommandsBase.nativeWatch}";
     }
     {
-      assertion = config.processes.nativePort.supervisionMode == "native"
-        && nativePort.availability.restart == "no";
+      assertion =
+        config.processes.nativePort.supervisionMode == "native" && nativePort.availability.restart == "no";
       message = "process-compose merge: implicit TCP readiness must remain under native supervision";
     }
   ];

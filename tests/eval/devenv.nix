@@ -1,4 +1,5 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   languages.python.enable = true;
 
   env.TEST_VAR = "hello";

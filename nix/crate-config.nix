@@ -1,17 +1,17 @@
 # Crate overrides for crate2nix build
-{ lib
-, stdenv
-, nix
-, openssl
-, dbus
-, protobuf
-, pkg-config
-, llvmPackages
-, rustPlatform
-, libghostty-vt
-, gitRev ? ""
-, isRelease ? false
-,
+{
+  lib,
+  stdenv,
+  nix,
+  openssl,
+  dbus,
+  protobuf,
+  pkg-config,
+  llvmPackages,
+  rustPlatform,
+  libghostty-vt,
+  gitRev ? "",
+  isRelease ? false,
 }:
 
 let

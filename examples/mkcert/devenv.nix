@@ -8,7 +8,10 @@
 
   hosts = {
     "example.com" = "127.0.0.1";
-    "another-example.com" = [ "127.0.0.1" "::1" ];
+    "another-example.com" = [
+      "127.0.0.1"
+      "::1"
+    ];
   };
 
   services.caddy.enable = true;

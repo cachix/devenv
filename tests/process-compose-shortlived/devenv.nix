@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 # #2879: the task wrapper must exit so process-compose reports Completed.
 let
   pcBin = lib.getExe config.process.managers.process-compose.package;

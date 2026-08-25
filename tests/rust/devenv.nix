@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   # The clang linker driver is only enabled by default on Linux, so the
   # clang-specific assertions below only apply where the module turns it on.
@@ -6,17 +11,22 @@ let
 
   # This is intentionally independent of the module's implementation so a
   # regression in its platform condition cannot silently disable the assertion.
-  expectLld =
-    clangLinker
-    && pkgs.stdenv.hostPlatform.rust.rustcTarget == "x86_64-unknown-linux-gnu";
+  expectLld = clangLinker && pkgs.stdenv.hostPlatform.rust.rustcTarget == "x86_64-unknown-linux-gnu";
 
   # The exact linker value the module configured, asserted against the build log.
-  rustLinker = config.env."CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" or "";
+  rustLinker =
+    config.env."CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" or "";
 
   # Ask the linker to print its version during the regular build so the LLD
   # assertion below does not need a second compile.
-  rustflags = [ "--cfg" "devenv_custom_cfg" ]
-    ++ lib.optionals expectLld [ "-C" "link-arg=-Wl,-v" ];
+  rustflags = [
+    "--cfg"
+    "devenv_custom_cfg"
+  ]
+  ++ lib.optionals expectLld [
+    "-C"
+    "link-arg=-Wl,-v"
+  ];
 in
 {
   languages.rust.enable = true;

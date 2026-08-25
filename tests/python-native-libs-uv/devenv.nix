@@ -1,5 +1,9 @@
-{ pkgs, lib, ... }: {
-  packages = [ pkgs.cairo pkgs.zlib ];
+{ pkgs, lib, ... }:
+{
+  packages = [
+    pkgs.cairo
+    pkgs.zlib
+  ];
 
   languages.python = {
     enable = true;

@@ -1,4 +1,5 @@
-{ ... }: {
+{ ... }:
+{
   claude.code = {
     enable = true;
     # "code-reviewer" is one of the project-defined agents below, so it

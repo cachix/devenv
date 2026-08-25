@@ -1,4 +1,9 @@
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 let
   prometheusPort = config.processes.prometheus.ports.main.value;
 in
@@ -9,9 +14,11 @@ in
     scrapeConfigs = [
       {
         job_name = "prometheus";
-        static_configs = [{
-          targets = [ "127.0.0.1:${toString prometheusPort}" ];
-        }];
+        static_configs = [
+          {
+            targets = [ "127.0.0.1:${toString prometheusPort}" ];
+          }
+        ];
       }
     ];
     globalConfig = {

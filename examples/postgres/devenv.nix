@@ -6,7 +6,7 @@
     enable = true;
     extensions = extensions: [ extensions.postgis ];
 
-    initialDatabases = [{ name = "mydb"; }];
+    initialDatabases = [ { name = "mydb"; } ];
 
     initialScript = ''
       CREATE EXTENSION IF NOT EXISTS postgis;

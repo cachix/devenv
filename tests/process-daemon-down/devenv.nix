@@ -7,7 +7,10 @@ let
   httpPort = config.processes.http.ports.main.value;
 in
 {
-  packages = [ pkgs.python3 pkgs.curl ];
+  packages = [
+    pkgs.python3
+    pkgs.curl
+  ];
   process.manager.implementation = "native";
   processes.http = {
     exec = ''

@@ -1,8 +1,9 @@
-{ pkgs
-, lib
-, inputs
-, options
-, ...
+{
+  pkgs,
+  lib,
+  inputs,
+  options,
+  ...
 }:
 
 let
@@ -25,9 +26,7 @@ let
   # Exclude repeated module options from treefmt programs, keep enable and settings
   filterTreefmt =
     path: opt:
-    if lib.lists.hasPrefix [ "treefmt" "config" "programs" ] path
-      && builtins.length path > 4
-    then
+    if lib.lists.hasPrefix [ "treefmt" "config" "programs" ] path && builtins.length path > 4 then
       !builtins.elem (builtins.elemAt path 4) [
         "description"
         "excludes"
@@ -39,9 +38,7 @@ let
     else
       true;
 
-  filterDocOptions =
-    path: opt:
-    filterGitHooks path opt && filterTreefmt path opt;
+  filterDocOptions = path: opt: filterGitHooks path opt && filterTreefmt path opt;
 
   # Rewrite source declarations to GitHub URLs
   sources = [
@@ -62,16 +59,13 @@ let
   rewriteSource =
     decl:
     let
-      source = lib.lists.findFirst
-        (
-          src:
-          let
-            prefix = toString src.prefix;
-          in
-          decl == prefix || lib.strings.hasPrefix "${prefix}/" decl
-        )
-        null
-        sources;
+      source = lib.lists.findFirst (
+        src:
+        let
+          prefix = toString src.prefix;
+        in
+        decl == prefix || lib.strings.hasPrefix "${prefix}/" decl
+      ) null sources;
       prefix =
         if source == null then
           throw "Failed to rewrite source url for module: ${decl}"
@@ -93,9 +87,9 @@ let
     });
 
   mkDocOptions =
-    { opts
-    , docOpts ? { }
-    ,
+    {
+      opts,
+      docOpts ? { },
     }:
     let
       optionsDoc = pkgs.nixosOptionsDoc (

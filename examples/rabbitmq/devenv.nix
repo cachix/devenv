@@ -3,7 +3,9 @@
 {
   services.rabbitmq = {
     enable = true;
-    managementPlugin = { enable = true; };
+    managementPlugin = {
+      enable = true;
+    };
 
     # macOS restricts `ps -o rss=` against hardened-runtime targets like
     # `beam.smp` when the caller is a non-admin service account (e.g. the

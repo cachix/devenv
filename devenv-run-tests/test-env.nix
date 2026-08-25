@@ -7,21 +7,22 @@
 #
 # The helpers call their tools by store path, so they hold even where a test
 # rewrites `PATH`.
-{ lib
-, buildEnv
-, runCommand
-, writeText
+{
+  lib,
+  buildEnv,
+  runCommand,
+  writeText,
 
-, bash
-, coreutils
-, curl
-, diffutils
-, findutils
-, gawk
-, git
-, gnugrep
-, gnused
-, jq
+  bash,
+  coreutils,
+  curl,
+  diffutils,
+  findutils,
+  gawk,
+  git,
+  gnugrep,
+  gnused,
+  jq,
 }:
 let
   tools = buildEnv {
@@ -156,11 +157,12 @@ let
   '';
 in
 runCommand "devenv-test-env"
-{
-  passthru = { inherit testLib tools; };
-  meta.description = "Shell helpers and tools for devenv integration tests";
-} ''
-  mkdir -p $out/share/devenv-run-tests
-  cp ${testLib} $out/share/devenv-run-tests/test-lib.sh
-  ln -s ${lib.getBin tools}/bin $out/bin
-''
+  {
+    passthru = { inherit testLib tools; };
+    meta.description = "Shell helpers and tools for devenv integration tests";
+  }
+  ''
+    mkdir -p $out/share/devenv-run-tests
+    cp ${testLib} $out/share/devenv-run-tests/test-lib.sh
+    ln -s ${lib.getBin tools}/bin $out/bin
+  ''

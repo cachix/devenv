@@ -1,8 +1,9 @@
-{ inputs
-, pkgs
-, lib
-, options
-, ...
+{
+  inputs,
+  pkgs,
+  lib,
+  options,
+  ...
 }:
 
 let

@@ -1,4 +1,5 @@
-{ ... }: {
+{ ... }:
+{
   claude.code = {
     enable = true;
     # "general-purpose" is a built-in Claude Code agent. It is intentionally

@@ -1,4 +1,5 @@
-{ pkgs, inputs, ... }: {
+{ pkgs, inputs, ... }:
+{
   languages.python.enable = true;
 
   tasks."test:export-env" = {
