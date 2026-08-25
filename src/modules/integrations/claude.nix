@@ -40,6 +40,29 @@ let
     };
   };
 
+  # A file bundled next to a skill's SKILL.md. A bare path is the common case;
+  # the attribute set form exists because a bundled script cannot be made
+  # executable after the fact: the symlink target is read-only in the store, and
+  # a copied file is rewritten on every shell entry.
+  skillResourceType = lib.types.coercedTo lib.types.path (source: { inherit source; }) (
+    lib.types.submodule {
+      options = {
+        source = lib.mkOption {
+          type = lib.types.path;
+          description = "File to place next to SKILL.md.";
+        };
+        executable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Make the file executable, for a resource that is run directly
+            rather than passed to an interpreter.
+          '';
+        };
+      };
+    }
+  );
+
   # Reserved keys that are not tool names (for backward compat detection)
   reservedPermissionKeys = [ "defaultMode" "disableBypassPermissionsMode" "additionalDirectories" "rules" ];
 
@@ -455,6 +478,108 @@ in
       '';
     };
 
+    skills = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule ({ name, ... }: {
+          options = {
+            description = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                What the skill covers and when Claude should load it.
+                Descriptions are the only part of a skill kept in context at all
+                times, so this is what decides whether the skill ever triggers.
+              '';
+            };
+            content = lib.mkOption {
+              type = lib.types.lines;
+              description = "The body of SKILL.md, loaded when the skill triggers.";
+            };
+            allowedTools = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "Restrict the tools available while this skill is active. Empty means no restriction.";
+            };
+            resources = lib.mkOption {
+              type = lib.types.attrsOf skillResourceType;
+              default = { };
+              example = lib.literalExpression ''
+                {
+                  "references/api.md" = ./api.md;
+                  "scripts/check.sh" = { source = ./check.sh; executable = true; };
+                }
+              '';
+              description = ''
+                Files placed alongside SKILL.md, keyed by path relative to the
+                skill directory. Claude reads these on demand, so bulky reference
+                material belongs here rather than in `content`.
+              '';
+            };
+            copyMode = lib.mkOption {
+              type = lib.types.enum [ "symlink" "seed" "copy" ];
+              default = "symlink";
+              description = ''
+                How to materialise the skill's files, as in `files.<name>.copyMode`.
+                Use `seed` to hand-edit a skill after devenv writes it once.
+              '';
+            };
+            assertions = lib.mkOption {
+              type = lib.types.listOf lib.types.unspecified;
+              default = [ ];
+              internal = true;
+              visible = false;
+              description = "Assertions raised by this skill's submodule, collected into the top-level assertions.";
+            };
+          };
+
+          config.assertions = [
+            {
+              assertion = builtins.match "[a-z0-9]+(-[a-z0-9]+)*" name != null && builtins.stringLength name <= 64;
+              message = ''
+                claude.code.skills.${name}: skill names must be lowercase letters, digits and
+                single hyphens, at most 64 characters. Claude Code skips directories it cannot
+                match to a valid skill name.
+              '';
+            }
+          ];
+        })
+      );
+      default = { };
+      description = ''
+        Custom Claude Code skills to create in the project.
+        A skill is a folder of instructions Claude loads on demand when its
+        description matches the task, keeping specialised knowledge out of the
+        always-on context.
+
+        For more details, see: https://docs.anthropic.com/en/docs/claude-code/skills
+      '';
+      example = lib.literalExpression ''
+        {
+          database-migrations = {
+            description = "How to write and run migrations in this project. Use when adding, editing or rolling back a migration.";
+            content = '''
+              Migrations live in `migrations/` and are applied with `diesel migration run`.
+
+              - One logical change per migration; never edit an applied migration.
+              - Always write the matching `down.sql`.
+              - Run `devenv tasks run db:reset` before opening a pull request.
+            ''';
+          };
+
+          api-conventions = {
+            description = "REST conventions for this codebase. Use when adding or changing an HTTP endpoint.";
+            allowedTools = [ "Read" "Grep" ];
+            resources = {
+              "references/error-codes.md" = ./docs/error-codes.md;
+            };
+            content = '''
+              Endpoints are versioned under `/v1`.
+              Read references/error-codes.md before inventing a new error code.
+            ''';
+          };
+        }
+      '';
+    };
+
     apiKeyHelper = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -717,7 +842,8 @@ in
     }
 
     {
-      assertions = lib.flatten (lib.mapAttrsToList (_: agent: agent.assertions) cfg.agents);
+      assertions = lib.flatten (lib.mapAttrsToList (_: agent: agent.assertions) cfg.agents)
+        ++ lib.flatten (lib.mapAttrsToList (_: skill: skill.assertions) cfg.skills);
     }
 
     (lib.mkIf cfg.enable {
@@ -759,6 +885,47 @@ in
             };
           })
           cfg.agents)
+
+        # Skill files
+        (lib.mapAttrs'
+          (name: skill: {
+            name = ".claude/skills/${name}/SKILL.md";
+            value = {
+              inherit (skill) copyMode;
+              text =
+                let
+                  # Built as a list so an unset field leaves no blank line behind.
+                  frontmatter = [
+                    "name: ${name}"
+                    # toJSON gives a quoted YAML scalar, so a description
+                    # containing a colon or a quote stays valid frontmatter.
+                    "description: ${builtins.toJSON skill.description}"
+                  ]
+                  ++ lib.optional (skill.allowedTools != [ ])
+                    # Quoted for the same reason as the description: a tool
+                    # pattern may contain a colon.
+                    "allowed-tools: ${builtins.toJSON (lib.concatStringsSep ", " skill.allowedTools)}";
+                in
+                ''
+                  ---
+                  ${lib.concatStringsSep "\n" frontmatter}
+                  ---
+
+                  ${skill.content}
+                '';
+            };
+          })
+          cfg.skills)
+
+        # Files bundled alongside a skill (references, scripts, assets)
+        (lib.listToAttrs (lib.concatLists (lib.mapAttrsToList
+          (name: skill: lib.mapAttrsToList
+            (path: resource: lib.nameValuePair ".claude/skills/${name}/${path}" {
+              inherit (resource) source executable;
+              inherit (skill) copyMode;
+            })
+            skill.resources)
+          cfg.skills)))
       ];
 
       # Add a message about the integration
@@ -784,6 +951,11 @@ in
             ${lib.optionalString (subAgents != { })
               "- Sub-agents: ${
                 lib.concatStringsSep ", " (lib.attrNames subAgents)
+              }"
+            }
+            ${lib.optionalString (cfg.skills != { })
+              "- Skills: ${
+                lib.concatStringsSep ", " (lib.attrNames cfg.skills)
               }"
             }
             ${lib.optionalString (cfg.mcpServers != { })

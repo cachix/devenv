@@ -25,6 +25,7 @@ This tells Claude to use devenv for running commands, ensuring all tools and dep
 - **Automatic code formatting**: Runs `pre-commit` hooks on files after Claude edits them
 - **Custom hooks**: Define pre/post actions for Claude's tool usage
 - **Project commands**: Create custom slash commands for common tasks
+- **Skills**: Package project knowledge Claude loads on demand
 - **Seamless integration**: Works with your existing git-hooks configuration
 
 ## Basic Setup
@@ -308,6 +309,92 @@ Any agent can also be requested explicitly, by asking Claude to use it or by des
 4. **Ask for proactive use carefully**: Only say "use proactively" in the description of agents that should run automatically
 
 For more details on agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/sub-agents).
+
+## Skills
+
+Skills are folders of instructions Claude loads on demand. Only a skill's `description` stays in context; the body is read when Claude decides the skill applies.
+That makes them the right place for knowledge that is important when it is relevant and noise the rest of the time (e.g., migration workflows, API conventions, deployment runbooks).
+
+Skills are written to `.claude/skills/<name>/SKILL.md`.
+
+```nix
+{
+  claude.code.skills = {
+    database-migrations = {
+      description = "How to write and run migrations in this project. Use when adding, editing or rolling back a migration.";
+      content = ''
+        Migrations live in `migrations/` and are applied with `diesel migration run`.
+
+        - One logical change per migration; never edit an applied migration.
+        - Always write the matching `down.sql`.
+        - Run `devenv tasks run db:reset` before opening a pull request.
+      '';
+    };
+  };
+}
+```
+
+### Properties
+
+- **description**: What the skill covers and when to use it. This is the only part Claude sees before loading the skill, so it decides whether the skill ever triggers.
+  Keep it one line and name the situations that should pull it in.
+- **content**: The body of `SKILL.md`.
+- **allowedTools**: Restrict the tools available while the skill is active. Empty (the default) means no restriction.
+- **resources**: Extra files placed next to `SKILL.md`, keyed by path relative to the skill directory.
+  A bare path is the common case; use `{ source = ./x; executable = true; }`
+  when the file needs to be run directly rather than passed to an interpreter.
+- **copyMode**: How the files are materialised, as in [`files.<name>.copyMode`](../reference/options.md#filesnamecopymode). Defaults to `symlink`.
+
+Skill names must be lowercase letters, digits and single hyphens, at most 64 characters.
+Devenv asserts this, because Claude Code silently ignores skill directories it cannot match to a valid name.
+
+### Bundled resources
+
+Long reference material belongs in its own file rather than in `content`, so Claude pulls it in only when it needs the detail:
+
+```nix
+{
+  claude.code.skills.api-conventions = {
+    description = "REST conventions for this codebase. Use when adding or changing an HTTP endpoint.";
+    allowedTools = [ "Read" "Grep" ];
+    resources = {
+      "references/error-codes.md" = ./docs/error-codes.md;
+      "scripts/lint-endpoints.sh" = {
+        source = ./scripts/lint-endpoints.sh;
+        executable = true;
+      };
+    };
+    content = ''
+      Endpoints are versioned under `/v1`.
+      Read references/error-codes.md before inventing a new error code.
+    '';
+  };
+}
+```
+
+### Editing a skill in place
+
+By default the generated files are symlinks into the Nix store and cannot be edited.
+Set `copyMode = "seed"` to have devenv write the skill once and leave it writable, so you can iterate on the prose and move it back into `devenv.nix` when it settles:
+
+```nix
+{
+  claude.code.skills.api-conventions = {
+    copyMode = "seed";
+    # ...
+  };
+}
+```
+
+### Skills, commands or agents?
+
+- A **skill** is knowledge Claude loads by itself when the task matches.
+- A **command** is something you invoke explicitly with `/name`.
+- An **agent** is a separate context window with its own tools and prompt.
+
+Reach for a skill when you would otherwise repeat the same explanation to Claude across sessions.
+
+For more details, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/skills).
 
 ## MCP Servers
 
