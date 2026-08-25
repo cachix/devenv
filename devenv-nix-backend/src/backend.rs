@@ -18,7 +18,7 @@
 //! let fingerprint = lock::with_lock_scope(&logger_setup.bridge, || {
 //!     let eval_state = lock::build_eval_state(&store, &root, &flake_settings)?;
 //!     lock::validate_and_load(&eval_state, &store, &fetchers_settings,
-//!         &flake_settings, &root, &inputs)
+//!         &flake_settings, &root, &lock_file, &inputs)
 //! })?;
 //! let bootstrap_args = build_bootstrap_args(..., &fingerprint)?;
 //! let backend = NixCBackend::new(
@@ -188,16 +188,16 @@ pub struct NixCBackend {
 unsafe impl Send for NixCBackend {}
 unsafe impl Sync for NixCBackend {}
 
-fn core_config_watch_paths(root: &Path) -> Vec<PathBuf> {
+fn core_config_watch_paths(root: &Path, lock_file: &Path) -> Vec<PathBuf> {
     [
         "devenv.nix",
         "devenv.yaml",
-        "devenv.lock",
         "devenv.local.nix",
         "devenv.local.yaml",
     ]
     .into_iter()
     .map(|path| root.join(path))
+    .chain(std::iter::once(lock_file.to_path_buf()))
     .filter(|path| path.exists())
     .collect()
 }
@@ -367,7 +367,10 @@ impl NixCBackend {
             if let Some(pool) = pool_cell.get() {
                 let config = CachingConfig {
                     force_refresh: self.cache_settings.refresh_eval_cache,
-                    extra_watch_paths: core_config_watch_paths(&self.paths.root),
+                    extra_watch_paths: core_config_watch_paths(
+                        &self.paths.root,
+                        &self.paths.lock_file,
+                    ),
                     excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
                     excluded_paths: vec![self.nixpkgs_config_path.clone()],
                 };
@@ -1122,6 +1125,7 @@ impl NixCBackend {
             &self.fetchers_settings,
             &self.flake_settings,
             &self.paths.root,
+            &self.paths.lock_file,
             inputs,
             input_name.as_deref(),
             override_inputs,
@@ -1716,13 +1720,14 @@ mod tests {
         let temp_dir = TempDir::new().expect("failed to create temp dir");
         std::fs::write(temp_dir.path().join("devenv.nix"), "{ ... }: { }").unwrap();
         std::fs::write(temp_dir.path().join("devenv.yaml"), "inputs: {}\n").unwrap();
-        std::fs::write(temp_dir.path().join("devenv.lock"), "{}\n").unwrap();
+        let lock_file = temp_dir.path().join("custom.lock");
+        std::fs::write(&lock_file, "{}\n").unwrap();
 
-        let tracked = core_config_watch_paths(temp_dir.path());
+        let tracked = core_config_watch_paths(temp_dir.path(), &lock_file);
 
         assert!(tracked.contains(&temp_dir.path().join("devenv.nix")));
         assert!(tracked.contains(&temp_dir.path().join("devenv.yaml")));
-        assert!(tracked.contains(&temp_dir.path().join("devenv.lock")));
+        assert!(tracked.contains(&lock_file));
         assert!(!tracked.contains(&temp_dir.path().join("devenv.local.nix")));
         assert!(!tracked.contains(&temp_dir.path().join("devenv.local.yaml")));
     }

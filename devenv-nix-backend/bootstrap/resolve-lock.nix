@@ -1,12 +1,11 @@
 # Adapted from https://git.lix.systems/lix-project/flake-compat/src/branch/main/default.nix
 {
   src,
+  lockFilePath,
   system ? builtins.currentSystem or "unknown-system",
 }:
 
 let
-  lockFilePath = src + "/devenv.lock";
-
   lockFile = builtins.fromJSON (builtins.readFile lockFilePath);
 
   rootSrc = {

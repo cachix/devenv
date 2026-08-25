@@ -11,6 +11,7 @@ use std::sync::Arc;
 use devenv_core::{
     BootstrapArgs, CacheOptions, CacheSettings, CliOptionsConfig, Config, DevenvPaths, NixArgs,
     NixOptions, NixSettings, PortAllocator, StoreSettings, default_system,
+    paths::DEFAULT_LOCK_FILE,
 };
 use devenv_nix_backend::NixCBackend;
 use tempfile::TempDir;
@@ -54,6 +55,7 @@ pub fn paths_under(base: &Path) -> DevenvPaths {
     let dotfile = base.join(".devenv");
     let paths = DevenvPaths {
         root: base.to_path_buf(),
+        lock_file: base.join(DEFAULT_LOCK_FILE),
         dotfile: dotfile.clone(),
         dot_gc: dotfile.join("gc"),
         home_gc: dotfile.join("home-gc"),
@@ -72,7 +74,7 @@ pub fn paths_under(base: &Path) -> DevenvPaths {
 /// eval/build paths use this to skip an `update()` round-trip.
 pub fn copy_fixture_lock(dest: &Path) {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/devenv.lock");
-    std::fs::copy(&fixture, dest.join("devenv.lock")).expect("copy fixture lock");
+    std::fs::copy(&fixture, dest).expect("copy fixture lock");
 }
 
 fn run_git(dir: &Path, args: &[&str]) {
@@ -156,6 +158,7 @@ impl TestEnv {
 pub struct TestEnvBuilder {
     yaml: String,
     nix: String,
+    lock_file: Option<PathBuf>,
     extra_files: Vec<(String, String)>,
     nix_options: NixOptions,
     fixture_lock: bool,
@@ -166,6 +169,7 @@ impl Default for TestEnvBuilder {
         Self {
             yaml: DEFAULT_YAML.into(),
             nix: DEFAULT_NIX.into(),
+            lock_file: None,
             extra_files: Vec::new(),
             nix_options: NixOptions::default(),
             fixture_lock: true,
@@ -181,6 +185,11 @@ impl TestEnvBuilder {
 
     pub fn nix(mut self, nix: impl Into<String>) -> Self {
         self.nix = nix.into();
+        self
+    }
+
+    pub fn lock_file(mut self, lock_file: impl Into<PathBuf>) -> Self {
+        self.lock_file = Some(lock_file.into());
         self
     }
 
@@ -221,11 +230,14 @@ impl TestEnvBuilder {
             std::fs::write(&dest, content).expect("write extra file");
         }
 
-        let paths = paths_under(&path);
+        let mut paths = paths_under(&path);
+        if let Some(lock_file) = self.lock_file {
+            paths.lock_file = devenv_core::paths::resolve_against(&lock_file, &path);
+        }
         let config = Config::load_from(&path).expect("load config");
 
         if self.fixture_lock {
-            copy_fixture_lock(&path);
+            copy_fixture_lock(&paths.lock_file);
         }
 
         (temp_dir, cwd_guard, paths, config, self.nix_options)
@@ -269,6 +281,7 @@ fn test_bootstrap_args(paths: &DevenvPaths, config: &Config) -> BootstrapArgs {
         require_version_match: false,
         system: &system,
         devenv_root: &paths.root,
+        devenv_lock: &paths.lock_file,
         skip_local_src: false,
         devenv_dotfile: &paths.dotfile,
         devenv_dotfile_path: &dotfile_relative,

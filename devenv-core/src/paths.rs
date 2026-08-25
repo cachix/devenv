@@ -6,9 +6,12 @@ use std::ffi::OsString;
 use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
+pub const DEFAULT_LOCK_FILE: &str = "devenv.lock";
+
 #[derive(Debug, Clone)]
 pub struct DevenvPaths {
     pub root: PathBuf,
+    pub lock_file: PathBuf,
     pub dotfile: PathBuf,
     pub dot_gc: PathBuf,
     pub home_gc: PathBuf,

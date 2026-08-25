@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::tasks;
+use devenv::tasks;
 use miette::{IntoDiagnostic, Result, WrapErr};
 use tokio_shutdown::Shutdown;
 
@@ -60,7 +60,7 @@ pub fn run(config_file: &Path) -> Result<()> {
         // `Waiting` classify as `skipped`. The coerced `Arc<dyn _>` shares
         // its refcount with `tasks_runner`, so the `Weak` the manager holds
         // stays upgradable for the daemon's lifetime.
-        let scheduler: Arc<dyn crate::processes::ProcessScheduler> = tasks_runner.clone();
+        let scheduler: Arc<dyn devenv::processes::ProcessScheduler> = tasks_runner.clone();
         tasks_runner
             .process_manager()
             .set_scheduler(Arc::downgrade(&scheduler));
@@ -69,12 +69,12 @@ pub fn run(config_file: &Path) -> Result<()> {
         // are pre-registered) is answered correctly.
         tasks_runner
             .process_manager()
-            .set_residence(crate::processes::ManagerResidence::Daemon);
+            .set_residence(devenv::processes::ManagerResidence::Daemon);
 
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 
         let pid_file = tasks_runner.process_manager().manager_pid_file();
-        crate::processes::write_pid(&pid_file, std::process::id())
+        devenv::processes::write_pid(&pid_file, std::process::id())
             .await
             .map_err(|e| miette::miette!("Failed to write PID: {}", e))?;
 
@@ -83,7 +83,7 @@ pub fn run(config_file: &Path) -> Result<()> {
             .run_event_loop(
                 shutdown.cancellation_token(),
                 None,
-                crate::processes::OnIdle::Linger,
+                devenv::processes::OnIdle::Linger,
             )
             .await
             .map_err(|e| miette::miette!("Process manager error: {}", e));

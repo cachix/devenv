@@ -30,9 +30,7 @@ pub use dotenv::{
     DotenvFileSpec, DotenvFileState, DotenvSpec, DotenvSubstitutionSpec, DotenvTracker,
 };
 pub use eval_op::{EvalOp, OpObserver};
-pub use evaluator::{
-    BuildOptions, DevEnvOutput, Evaluator, NixMetadata, PackageSearchResult, SearchResults,
-};
+pub use evaluator::{BuildOptions, DevEnvOutput, Evaluator, PackageSearchResult, SearchResults};
 pub use internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 pub use nix_args::{CliOptionsConfig, NixArgs, SecretspecData};
 pub use nix_config::NixConfig;

@@ -271,7 +271,7 @@ pub fn load_lock_file(
 pub fn write_lock_file(lock_file: &LockFile, output_path: &Path) -> Result<()> {
     let lock_json = lock_file.to_string()?;
     // Compare with existing content to avoid updating mtime unnecessarily.
-    // direnv watches devenv.lock and uses mtime to detect changes.
+    // direnv watches the lock file and uses mtime to detect changes.
     if let Ok(existing) = std::fs::read_to_string(output_path)
         && existing == lock_json
     {
@@ -283,7 +283,7 @@ pub fn write_lock_file(lock_file: &LockFile, output_path: &Path) -> Result<()> {
 }
 
 /// Lock the requested inputs against an existing lock file (if any) and write
-/// the result to `<root>/devenv.lock`.
+/// the result to `lock_file_path`.
 ///
 /// `input_name = Some(name)` updates a single input; `None` updates all.
 /// `override_inputs` is a flat list of `[name, url, name, url, ...]` parsed
@@ -296,6 +296,7 @@ pub fn lock_inputs(
     fetch_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
     root: &Path,
+    lock_file_path: &Path,
     inputs: &BTreeMap<String, Input>,
     input_name: Option<&str>,
     override_inputs: &[String],
@@ -303,9 +304,8 @@ pub fn lock_inputs(
     let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
         .context("Failed to create flake inputs")?;
 
-    let lock_file_path = root.join("devenv.lock");
     let old_lock =
-        load_lock_file(fetch_settings, &lock_file_path).context("Failed to load lock file")?;
+        load_lock_file(fetch_settings, lock_file_path).context("Failed to load lock file")?;
 
     let base_dir_str = root.to_str().context("Root path contains invalid UTF-8")?;
     // Nix's resolveRelativePath uses parent() on the source_path to get the directory.
@@ -363,7 +363,7 @@ pub fn lock_inputs(
             .context("Failed to lock inputs")?
     };
 
-    write_lock_file(&lock_file, &lock_file_path).context("Failed to write lock file")?;
+    write_lock_file(&lock_file, lock_file_path).context("Failed to write lock file")?;
 
     Ok(())
 }
@@ -371,22 +371,22 @@ pub fn lock_inputs(
 /// Validate the existing lock file against the current inputs, regenerating it
 /// if missing, unparseable, or out of date.
 ///
-/// On success, `<root>/devenv.lock` exists and is consistent with `inputs`.
+/// On success, `lock_file_path` exists and is consistent with `inputs`.
 pub fn validate_lock_file(
     eval_state: &EvalState,
     fetch_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
     root: &Path,
+    lock_file_path: &Path,
     inputs: &BTreeMap<String, Input>,
 ) -> Result<()> {
-    let lock_file_path = root.join("devenv.lock");
-
     if !lock_file_path.exists() {
         return lock_inputs(
             eval_state,
             fetch_settings,
             flake_settings,
             root,
+            lock_file_path,
             inputs,
             None,
             &[],
@@ -394,13 +394,14 @@ pub fn validate_lock_file(
     }
 
     let old_lock =
-        load_lock_file(fetch_settings, &lock_file_path).context("Failed to load lock file")?;
+        load_lock_file(fetch_settings, lock_file_path).context("Failed to load lock file")?;
     let Some(old_lock) = old_lock else {
         return lock_inputs(
             eval_state,
             fetch_settings,
             flake_settings,
             root,
+            lock_file_path,
             inputs,
             None,
             &[],
@@ -434,7 +435,7 @@ pub fn validate_lock_file(
         tracing::debug!("Lock validation found changes, writing updated lock");
         // Writing new_lock directly avoids re-fetching every input: it was
         // computed with old_lock as a base, so unchanged inputs are preserved.
-        write_lock_file(&new_lock, &lock_file_path).context("Failed to write lock file")?;
+        write_lock_file(&new_lock, lock_file_path).context("Failed to write lock file")?;
     }
     Ok(())
 }

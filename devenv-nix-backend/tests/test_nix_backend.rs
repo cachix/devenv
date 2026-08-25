@@ -41,7 +41,19 @@ async fn test_backend_update_all_inputs() {
         .await
         .expect("update should succeed");
 
-    assert!(env.path().join("devenv.lock").exists());
+    assert!(env.paths.lock_file.exists());
+}
+
+#[nix_test]
+async fn test_backend_uses_configured_lock_file() {
+    let env = TestEnv::builder().lock_file("custom.lock").build().await;
+
+    assert!(env.paths.lock_file.exists());
+    assert!(!env.path().join("devenv.lock").exists());
+    env.backend
+        .eval(&["config.devenv.root"])
+        .await
+        .expect("bootstrap should read the configured lock file");
 }
 
 #[nix_test]

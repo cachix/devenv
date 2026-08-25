@@ -11,7 +11,7 @@ use std::sync::Arc;
 use miette::{Result, WrapErr, miette};
 
 use crate::bootstrap_args::BootstrapArgs;
-use crate::evaluator::{BuildOptions, Evaluator, NixMetadata};
+use crate::evaluator::{BuildOptions, Evaluator};
 use crate::store::{Store, StorePath};
 
 pub struct Backend<E: Evaluator + ?Sized> {
@@ -52,13 +52,6 @@ impl<E: Evaluator + ?Sized> Backend<E> {
 
     pub async fn build_devenv(&self, attrs: &[&str], opts: BuildOptions) -> Result<Vec<StorePath>> {
         self.nix.build(attrs, opts).await
-    }
-
-    pub async fn metadata(&self) -> Result<NixMetadata> {
-        match self.eval_devenv(&["config.info"]).await {
-            Ok(json) => Ok(serde_json::from_str::<String>(&json).unwrap_or(json)),
-            Err(_) => Ok(String::new()),
-        }
     }
 
     pub async fn gc(&self, paths: Vec<PathBuf>) -> Result<crate::store::GcStats> {

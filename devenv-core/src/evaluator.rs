@@ -43,9 +43,6 @@ pub struct PackageSearchResult {
 /// Map of attr-path → package search result.
 pub type SearchResults = std::collections::BTreeMap<String, PackageSearchResult>;
 
-/// Formatted metadata produced by evaluating the devenv configuration.
-pub type NixMetadata = String;
-
 /// Build the eval-cache key suffix for the current invocation. Encodes
 /// CLI-side knobs that affect evaluation output but are not part of the
 /// Nix args themselves.

@@ -57,7 +57,7 @@ where
     activity.with_new_scope_sync(f)
 }
 
-/// Validate (and create or update if needed) `<root>/devenv.lock`,
+/// Validate (and create or update if needed) `lock_file`,
 /// returning the fingerprint of the resulting lock graph.
 pub fn validate_and_load(
     eval_state: &EvalState,
@@ -65,22 +65,29 @@ pub fn validate_and_load(
     fetchers_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
     root: &Path,
+    lock_file: &Path,
     inputs: &BTreeMap<String, Input>,
 ) -> Result<String> {
-    crate::validate_lock_file(eval_state, fetchers_settings, flake_settings, root, inputs)
-        .to_miette()?;
-    fingerprint(store, fetchers_settings, root)
+    crate::validate_lock_file(
+        eval_state,
+        fetchers_settings,
+        flake_settings,
+        root,
+        lock_file,
+        inputs,
+    )
+    .to_miette()?;
+    fingerprint(store, fetchers_settings, lock_file)
 }
 
-/// Compute the fingerprint of `<root>/devenv.lock` against `store`.
+/// Compute the fingerprint of `lock_file` against `store`.
 pub fn fingerprint(
     store: &Store,
     fetchers_settings: &FetchersSettings,
-    root: &Path,
+    lock_file: &Path,
 ) -> Result<String> {
-    let lock_file_path = root.join("devenv.lock");
-    let lock_file = crate::load_lock_file(fetchers_settings, &lock_file_path).to_miette()?;
-    crate::compute_lock_fingerprint(lock_file.as_ref(), fetchers_settings, store).to_miette()
+    let lock = crate::load_lock_file(fetchers_settings, lock_file).to_miette()?;
+    crate::compute_lock_fingerprint(lock.as_ref(), fetchers_settings, store).to_miette()
 }
 
 /// Lock or update the requested inputs.
@@ -90,6 +97,7 @@ pub fn update(
     fetchers_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
     root: &Path,
+    lock_file: &Path,
     inputs: &BTreeMap<String, Input>,
     name: Option<&str>,
     overrides: &[String],
@@ -99,6 +107,7 @@ pub fn update(
         fetchers_settings,
         flake_settings,
         root,
+        lock_file,
         inputs,
         name,
         overrides,

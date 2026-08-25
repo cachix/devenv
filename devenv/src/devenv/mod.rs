@@ -2,7 +2,6 @@ mod cachix;
 mod container;
 mod dotenv;
 mod gc;
-mod info;
 mod search;
 
 use self::dotenv::{DotenvConfig, DotenvEnvironment};
@@ -19,7 +18,7 @@ use devenv_core::{
     config::{CachixAuthToken, Input, NixBackendType, NixpkgsConfig},
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_config::NixConfig,
-    paths::DevenvPaths,
+    paths::{DEFAULT_LOCK_FILE, DevenvPaths},
     ports::PortAllocator,
     settings::{CacheSettings, InputOverrides, NixSettings, SecretSettings, ShellSettings},
 };
@@ -455,6 +454,7 @@ impl Devenv {
             });
             std::fs::canonicalize(&root).unwrap_or(root)
         };
+        let lock_file = devenv_root.join(DEFAULT_LOCK_FILE);
 
         let nix_settings = options.nix_settings;
         let shell_settings = options.shell_settings;
@@ -493,6 +493,7 @@ impl Devenv {
         // Create DevenvPaths struct
         let paths = DevenvPaths {
             root: devenv_root.clone(),
+            lock_file,
             dotfile: devenv_dotfile.clone(),
             dot_gc: devenv_dot_gc.clone(),
             home_gc: devenv_home_gc.clone(),
@@ -659,6 +660,7 @@ impl Devenv {
                             &fetchers_settings,
                             &flake_settings,
                             &paths.root,
+                            &paths.lock_file,
                             &options.inputs,
                         )
                     })?;
@@ -793,6 +795,7 @@ impl Devenv {
     pub fn paths(&self) -> DevenvPaths {
         DevenvPaths {
             root: self.devenv_root.clone(),
+            lock_file: self.config.paths.lock_file.clone(),
             dotfile: self.devenv_dotfile.clone(),
             dot_gc: self.devenv_dot_gc.clone(),
             home_gc: self.devenv_home_gc.clone(),
@@ -1873,9 +1876,10 @@ impl Devenv {
     }
 
     pub async fn update(&self, input_name: &Option<String>) -> Result<Option<String>> {
+        let lock_file = self.config.paths.lock_file.display();
         let msg = match input_name {
-            Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
-            None => "Updating devenv.lock".to_string(),
+            Some(input_name) => format!("Updating {lock_file} with input {input_name}"),
+            None => format!("Updating {lock_file}"),
         };
 
         let activity = activity!(INFO, operation, &msg);
@@ -2318,10 +2322,17 @@ impl Devenv {
         }
     }
 
-    pub async fn info(&self) -> Result<String> {
+    pub async fn metadata(&self) -> Result<crate::metadata::Metadata> {
         self.setup_cachix().await?;
-        let info_str = self.backend.metadata().await?;
-        info::render(&self.devenv_root.join("devenv.lock"), &info_str)
+        let json = self.backend.eval_devenv(&["config.infoSections"]).await?;
+        let info_sections = serde_json::from_str(&json)
+            .into_diagnostic()
+            .wrap_err("Failed to parse config.infoSections")?;
+        let inputs = crate::metadata::load_inputs(&self.config.paths.lock_file)?;
+        Ok(crate::metadata::Metadata {
+            inputs,
+            info_sections,
+        })
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {
@@ -3812,6 +3823,7 @@ fn build_bootstrap_args(
         require_version_match,
         system: &nix.system,
         devenv_root: &paths.root,
+        devenv_lock: &paths.lock_file,
         skip_local_src: from_external
             || (!config.input_overrides.nix_module_options.is_empty()
                 && !paths.root.join("devenv.nix").exists()),

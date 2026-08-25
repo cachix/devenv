@@ -1,5 +1,7 @@
 #![recursion_limit = "256"]
 
+mod commands;
+
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
@@ -10,7 +12,7 @@ use devenv::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
         TraceOutputSpec,
     },
-    commands, is_ai_agent,
+    is_ai_agent,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
     terminal::{self, IsForegroundTerminal as _},
     tracing as devenv_tracing,
@@ -1208,7 +1210,7 @@ async fn dispatch_command(
             )))
         }
         Commands::Info {} => {
-            let output = devenv.info().await?;
+            let output = commands::info::run(devenv).await?;
             Ok(CommandResult::Print(format!("{output}\n")))
         }
         Commands::Repl {} => {

@@ -10,8 +10,8 @@ use include_dir::{Dir, File, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use similar::{ChangeTag, TextDiff};
 
-use crate::console as devenv_console;
-use crate::terminal::{self, IsForegroundTerminal as _};
+use devenv::console as devenv_console;
+use devenv::terminal::{self, IsForegroundTerminal as _};
 use devenv_core::VerbosityLevel;
 
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");

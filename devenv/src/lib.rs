@@ -4,11 +4,11 @@
 pub mod backend;
 pub mod changelog;
 pub mod cli;
-pub mod commands;
 pub mod console;
 mod devenv;
 pub mod lsp;
 pub mod mcp;
+pub mod metadata;
 pub mod nix_log_bridge;
 pub mod reload;
 pub(crate) mod shell_env;
@@ -26,6 +26,7 @@ pub use devenv::{
     format_shell_exports, is_ai_agent, load_cachix_secretspec,
 };
 pub use devenv_tasks as tasks;
+pub use metadata::{InfoSections, InputAttribute, InputMetadata, InputSource, Metadata};
 
 // Re-export common subsystem crates for convenience.
 pub use devenv_activity as activity;

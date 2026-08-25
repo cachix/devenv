@@ -27,6 +27,7 @@ rec {
       require_version_match ? false,
       system,
       devenv_root,
+      devenv_lock,
       git_root ? null,
       devenv_dotfile,
       devenv_dotfile_path,

@@ -6,7 +6,7 @@
 //! - Project discovery and activation check (should_activate)
 //! - Shell hook script output (bash/zsh/fish/nushell)
 
-use crate::cli::HookShell;
+use devenv::cli::HookShell;
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
 use std::io::Write;

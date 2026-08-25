@@ -3,6 +3,6 @@
 use miette::Result;
 
 pub fn run() -> Result<()> {
-    print!("{}", *crate::DIRENVRC);
+    print!("{}", *devenv::DIRENVRC);
     Ok(())
 }

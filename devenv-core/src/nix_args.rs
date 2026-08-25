@@ -332,6 +332,10 @@ pub struct NixArgs<'a> {
     /// Serialized as a Nix path literal by ser_nix
     pub devenv_root: &'a Path,
 
+    /// Absolute path to the devenv input lock file
+    /// Serialized as a Nix path literal by ser_nix
+    pub devenv_lock: &'a Path,
+
     /// Whether to skip loading the local devenv.nix (used when --from is provided)
     pub skip_local_src: bool,
 
@@ -555,6 +559,7 @@ android_sdk:
         let version = "1.10.1";
         let system = "aarch64-darwin";
         let root = PathBuf::from("/home/user/project");
+        let lock = root.join("custom.lock");
         let dotfile = PathBuf::from("/home/user/project/.devenv");
         let dotfile_path = PathBuf::from("./.devenv");
         let tmpdir = PathBuf::from("/tmp");
@@ -573,6 +578,7 @@ android_sdk:
             require_version_match: false,
             system,
             devenv_root: &root,
+            devenv_lock: &lock,
             skip_local_src: false,
             devenv_dotfile: &dotfile,
             devenv_dotfile_path: &dotfile_path,
@@ -604,6 +610,14 @@ android_sdk:
         assert!(
             contains_key_value(&serialized, "system", "\"aarch64-darwin\""),
             "system key-value pair not found"
+        );
+        assert!(
+            contains_key_value(
+                &serialized,
+                "devenv_lock",
+                "\"/home/user/project/custom.lock\""
+            ),
+            "devenv_lock key-value pair not found"
         );
         assert!(
             contains_key_value(&serialized, "skip_local_src", "false"),
@@ -654,6 +668,7 @@ android_sdk:
         let version = "1.10.1";
         let system = "x86_64-linux";
         let root = PathBuf::from("/tmp/test");
+        let lock = root.join("custom.lock");
         let dotfile = PathBuf::from("/tmp/test/.devenv");
         let dotfile_path = PathBuf::from("./.devenv");
         let tmpdir = PathBuf::from("/tmp");
@@ -677,6 +692,7 @@ android_sdk:
             require_version_match: false,
             system,
             devenv_root: &root,
+            devenv_lock: &lock,
             skip_local_src: false,
             devenv_dotfile: &dotfile,
             devenv_dotfile_path: &dotfile_path,
