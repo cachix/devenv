@@ -8345,6 +8345,10 @@ rec {
             features = [ "fs" "poll" "process" "resource" "signal" "term" ];
           }
           {
+            name = "nix-flake-lock";
+            packageId = "nix-flake-lock";
+          }
+          {
             name = "once_cell";
             packageId = "once_cell";
           }
@@ -9316,6 +9320,14 @@ rec {
             name = "nix";
             packageId = "nix 0.31.3";
             features = [ "fs" "poll" "process" "resource" "signal" "term" ];
+          }
+          {
+            name = "nix-bindings-expr";
+            packageId = "nix-bindings-expr";
+          }
+          {
+            name = "nix-flake-lock";
+            packageId = "nix-flake-lock";
           }
           {
             name = "portable-pty";
@@ -20501,6 +20513,24 @@ rec {
           {
             name = "thiserror";
             packageId = "thiserror 2.0.18";
+          }
+        ];
+
+      };
+      "nix-flake-lock" = rec {
+        crateName = "nix-flake-lock";
+        version = "0.1.0";
+        edition = "2024";
+        sha256 = "1ng67lslyyxw0gicb80b9i77ach16sq8mmj6sv2q1zbqjvciay6b";
+        libName = "nix_flake_lock";
+        dependencies = [
+          {
+            name = "itoa";
+            packageId = "itoa";
+          }
+          {
+            name = "memchr";
+            packageId = "memchr";
           }
         ];
 
