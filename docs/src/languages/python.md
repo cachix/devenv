@@ -255,33 +255,6 @@ devenv adds these libraries to `LD_LIBRARY_PATH` (Linux) or `DYLD_LIBRARY_PATH` 
 
 For more control over library search paths, use the `libraries` option.
 
-### CUDA support
-
-Some Python packages require CUDA support. 
-This is a minimal working example of enabling CUDA support in a Python environment.
-
-```nix
-{
-  packages = [ 
-    # Typical CUDA dependencies
-    pkgs.cudaPackages.cuda_cudart  # Runtime 
-    pkgs.cudaPackages.cudnn        # Deep neural networks 
-    pkgs.cudaPackages.cuda_nvrtc   # Runtime compiler
-    pkgs.cudaPackages.cuda_cupti   # Profiling tools interface
-    pkgs.cudaPackages.cudatoolkit  # Toolkit
-  ];
-
-  languages.python = {
-    enable = true;
-    venv.enable = true;
-    libraries = [
-      # Point CUDA libraries to host CUDA drivers
-      "/run/opengl-driver/lib:/run/opengl-driver-32/lib"
-    ];
-  };
-}
-```
-
 ### Manylinux support
 
 On Linux, some pre-built Python wheels depend on [manylinux](https://github.com/pypa/manylinux) compatibility libraries.
