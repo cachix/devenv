@@ -2,6 +2,7 @@ mod cachix;
 mod container;
 mod dotenv;
 mod gc;
+mod info;
 mod search;
 
 use self::dotenv::{DotenvConfig, DotenvEnvironment};
@@ -2319,12 +2320,8 @@ impl Devenv {
 
     pub async fn info(&self) -> Result<String> {
         self.setup_cachix().await?;
-        // CNix has a lock-file-aware metadata implementation; for other
-        // backends fall back to the generic `Backend<E>::metadata`.
-        if let Some(cnix) = self.cnix() {
-            return cnix.metadata().await;
-        }
-        self.backend.metadata().await
+        let info_str = self.backend.metadata().await?;
+        info::render(&self.devenv_root.join("devenv.lock"), &info_str)
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<Vec<(String, PathBuf)>> {

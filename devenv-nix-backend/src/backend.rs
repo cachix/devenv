@@ -42,7 +42,7 @@ use devenv_core::config::NixpkgsConfig;
 use devenv_core::dotenv::{DotenvTracker, load_dotenv_tracked};
 use devenv_core::evaluator::eval_cache_key_args;
 use devenv_core::evaluator::{
-    BuildOptions, DevEnvOutput, Evaluator, NixMetadata, PackageSearchResult, SearchResults,
+    BuildOptions, DevEnvOutput, Evaluator, PackageSearchResult, SearchResults,
 };
 use devenv_core::nix_args::NixpkgsConfigForNix;
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
@@ -1048,33 +1048,6 @@ impl NixCBackend {
         Ok(results)
     }
 
-    pub async fn metadata(&self) -> Result<NixMetadata> {
-        let lock_file_path = self.paths.root.join("devenv.lock");
-        let inputs_section = if lock_file_path.exists() {
-            let lock = crate::load_lock_file(&self.fetchers_settings, &lock_file_path)
-                .to_miette()
-                .wrap_err("Failed to load lock file")?;
-            if let Some(lock_file) = lock {
-                format_lock_inputs(&lock_file)?
-            } else {
-                "Inputs:\n  (no lock file)".to_string()
-            }
-        } else {
-            "Inputs:\n  (no lock file)".to_string()
-        };
-
-        let info_str = match self.eval(&["config.info"]).await {
-            Ok(json_str) => serde_json::from_str::<String>(&json_str).unwrap_or_default(),
-            Err(_) => String::new(),
-        };
-
-        if info_str.is_empty() {
-            Ok(inputs_section)
-        } else {
-            Ok(format!("{inputs_section}\n\n{info_str}"))
-        }
-    }
-
     pub async fn gc(&self, paths: Vec<PathBuf>) -> Result<(u64, u64)> {
         if paths.is_empty() {
             return Ok((0, 0));
@@ -1447,64 +1420,6 @@ struct CachedShellPaths {
     out_path: String,
     #[serde(default)]
     env_path: Option<String>,
-}
-
-fn format_lock_inputs(lock_file: &nix_bindings_flake::LockFile) -> Result<String> {
-    let mut iter = lock_file
-        .inputs_iterator()
-        .to_miette()
-        .wrap_err("Failed to create inputs iterator")?;
-
-    let mut inputs = Vec::new();
-    while iter.next() {
-        let attr_path = iter
-            .attr_path()
-            .to_miette()
-            .wrap_err("Failed to get attr path")?;
-        let locked_ref = iter
-            .locked_ref()
-            .to_miette()
-            .wrap_err("Failed to get locked ref")?;
-        if !attr_path.contains('/') {
-            inputs.push((attr_path, locked_ref));
-        }
-    }
-
-    if inputs.is_empty() {
-        return Ok("Inputs:\n  (no inputs)".to_string());
-    }
-
-    inputs.sort_by(|a, b| a.0.cmp(&b.0));
-
-    let mut lines = vec!["Inputs:".to_string()];
-    let inputs_len = inputs.len();
-    for (idx, (path, ref_str)) in inputs.into_iter().enumerate() {
-        let is_last = idx == inputs_len - 1;
-        let prefix = if is_last {
-            "└───"
-        } else {
-            "├───"
-        };
-        lines.push(format!(
-            "{prefix}{path}: {brief}",
-            brief = format_brief_ref(&ref_str)
-        ));
-    }
-    Ok(lines.join("\n"))
-}
-
-fn format_brief_ref(ref_str: &str) -> String {
-    if ref_str.is_empty() {
-        return String::from("(follows)");
-    }
-    if let Some(last_slash_idx) = ref_str.rfind('/') {
-        let before_slash = &ref_str[..last_slash_idx];
-        let after_slash = &ref_str[last_slash_idx + 1..];
-        if after_slash.len() >= 40 && after_slash.chars().all(|c| c.is_ascii_hexdigit()) {
-            return format!("{}/{}", before_slash, &after_slash[..7]);
-        }
-    }
-    ref_str.to_string()
 }
 
 fn build_eval_state(

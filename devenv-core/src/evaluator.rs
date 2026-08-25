@@ -43,7 +43,7 @@ pub struct PackageSearchResult {
 /// Map of attr-path → package search result.
 pub type SearchResults = std::collections::BTreeMap<String, PackageSearchResult>;
 
-/// Formatted flake metadata (lock file inputs + `config.info`).
+/// Formatted metadata produced by evaluating the devenv configuration.
 pub type NixMetadata = String;
 
 /// Build the eval-cache key suffix for the current invocation. Encodes

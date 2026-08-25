@@ -602,39 +602,6 @@ async fn test_dev_env_after_invalidate_yaml_import() {
 }
 
 // ============================================================================
-// METADATA
-// ============================================================================
-
-#[nix_test]
-async fn test_backend_metadata() {
-    let env = TestEnv::new().await;
-    let metadata = env.backend.metadata().await.expect("metadata");
-    assert!(
-        metadata.contains("Inputs:"),
-        "missing Inputs section: {metadata}"
-    );
-}
-
-#[nix_test]
-async fn test_metadata_before_any_update() {
-    let env = TestEnv::builder().no_lock().build().await;
-    let metadata = env.backend.metadata().await.expect("metadata");
-    assert!(
-        metadata.contains("no lock file") || metadata.contains("Inputs"),
-        "metadata should mention lock state: {metadata}"
-    );
-}
-
-#[nix_test]
-async fn test_metadata_with_corrupted_lock_file() {
-    let env = TestEnv::builder().no_lock().build().await;
-    std::fs::write(env.path().join("devenv.lock"), "{ invalid json here").unwrap();
-
-    // Should not crash; success or error are both acceptable.
-    let _ = env.backend.metadata().await;
-}
-
-// ============================================================================
 // GC
 // ============================================================================
 

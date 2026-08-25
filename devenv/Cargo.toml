@@ -41,6 +41,7 @@ include_dir.workspace = true
 indoc.workspace = true
 miette.workspace = true
 nix.workspace = true
+nix-flake-lock.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -2435,6 +2435,7 @@ dependencies = [
  "json-subscriber",
  "miette",
  "nix 0.31.3",
+ "nix-flake-lock",
  "once_cell",
  "opentelemetry 0.32.0",
  "opentelemetry-otlp 0.32.0",
