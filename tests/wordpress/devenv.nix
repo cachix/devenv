@@ -40,16 +40,25 @@ in
   services.mysql = {
     enable = true;
     package = pkgs.mariadb;
-    initialDatabases = [{ name = "wordpress"; }];
-    ensureUsers = [{
-      name = "wordpress";
-      password = "wordpress";
-      ensurePermissions = { "wordpress.*" = "ALL PRIVILEGES"; };
-    }];
+    initialDatabases = [ { name = "wordpress"; } ];
+    ensureUsers = [
+      {
+        name = "wordpress";
+        password = "wordpress";
+        ensurePermissions = {
+          "wordpress.*" = "ALL PRIVILEGES";
+        };
+      }
+    ];
   };
 
   services.caddy = {
     enable = true;
+    config = ''
+      {
+        admin off
+      }
+    '';
     virtualHosts."http://127.0.0.1:${toString caddyPort}" = {
       extraConfig = ''
         root * ${config.devenv.root}

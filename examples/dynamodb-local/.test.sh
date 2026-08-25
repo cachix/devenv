@@ -7,5 +7,5 @@ export AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
 
 wait_for_processes
 
-aws dynamodb list-tables --endpoint-url http://127.0.0.1:8000 --output text --no-cli-pager
-
+DYNAMODB_PORT=${DYNAMODB_PORT:?DYNAMODB_PORT is not set}
+aws dynamodb list-tables --endpoint-url "http://127.0.0.1:$DYNAMODB_PORT" --output text --no-cli-pager

@@ -783,20 +783,16 @@ fn with_test_env_path(command: &mut tokio::process::Command) {
 ///
 /// `DEVENV_TEST_ENV` takes precedence, so a caller that already has the
 /// environment can skip the evaluation.
-async fn resolve_test_env(repo: &Path) -> Result<PathBuf> {
+async fn resolve_test_env(repo: &Path, out_link: &Path) -> Result<PathBuf> {
     if let Ok(path) = env::var("DEVENV_TEST_ENV") {
         return Ok(PathBuf::from(path));
     }
 
     let flake_ref = format!("{}#{TEST_ENV_ATTR}", repo.display());
     let output = tokio::process::Command::new("nix")
-        .args([
-            "build",
-            "--no-link",
-            "--print-out-paths",
-            "--extra-experimental-features",
-            "nix-command flakes",
-        ])
+        .args(["build", "--print-out-paths", "--out-link"])
+        .arg(out_link)
+        .args(["--extra-experimental-features", "nix-command flakes"])
         .arg(&flake_ref)
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
@@ -912,7 +908,12 @@ exec '{bin_dir}/devenv' \
     // they use. Building it here means every test in the run sees the same one.
     // `generate-json` only reads test metadata, so it goes without.
     let test_env = match Args::parse().command {
-        Commands::Run(_) => Some(resolve_test_env(&cwd).await?),
+        // Keep an out-link alive for the whole subprocess. A bare store path
+        // from `--no-link` can be collected in the middle of a long test run.
+        Commands::Run(_) => {
+            let out_link = wrapper_dir.path().join("devenv-test-env");
+            Some(resolve_test_env(&cwd, &out_link).await?)
+        }
         _ => None,
     };
 

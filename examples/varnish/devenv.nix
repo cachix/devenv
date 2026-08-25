@@ -13,10 +13,17 @@
     '';
   };
 
-  services.caddy.enable = true;
-  services.caddy.virtualHosts.":8001" = {
-    extraConfig = ''
-      respond "Hello, world!"
+  services.caddy = {
+    enable = true;
+    config = ''
+      {
+        admin off
+      }
     '';
+    virtualHosts.":8001" = {
+      extraConfig = ''
+        respond "Hello, world!"
+      '';
+    };
   };
 }
