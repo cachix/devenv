@@ -156,6 +156,32 @@ finally:
 PY
 }
 
+runtime_hash() {
+  local dotfile
+  dotfile="$(cd "$1" && pwd -P)/.devenv"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$dotfile" | sha256sum | cut -c1-7
+  else
+    printf '%s' "$dotfile" | shasum -a 256 | cut -c1-7
+  fi
+}
+
+wait_for_manager_pid() {
+  local repo=$1
+  # The manager publishes its PID file only after every process passes its
+  # readiness probe, so `up` returning a bound port does not yet mean the
+  # manager is discoverable. Commands that seed from it must wait for this.
+  local pid_file="${XDG_RUNTIME_DIR:-/tmp}/devenv-$(runtime_hash "$repo")/processes/native-manager.pid"
+  for _ in $(seq 1 300); do
+    if [ -s "$pid_file" ]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "Timed out waiting for $pid_file"
+  return 1
+}
+
 start_repo() {
   local repo=$1
   rm -f "$repo/allocated-port" "$repo/server.pid" "$repo/up.log"
@@ -231,6 +257,18 @@ fi
 
 if [ "$repo1_process_port" = "$repo2_process_port" ]; then
   echo "Expected two running repos to have distinct process ports"
+  exit 1
+fi
+
+# Commands other than `up` must resolve the allocated port too, instead of
+# falling back to the base port that repo1 is holding.
+wait_for_manager_pid repo2 || { cat repo2/up.log; exit 1; }
+repo2_shell_port=$(cd repo2 && devenv --no-tui shell -- printenv ALLOCATED_PORT | tail -n 1 | tr -d '[:space:]')
+echo "repo2 shell port: $repo2_shell_port"
+
+if [ "$repo2_shell_port" != "$repo2_process_port" ]; then
+  echo "Expected devenv shell in repo2 to report its allocated port $repo2_process_port, got $repo2_shell_port"
+  cat repo2/up.log
   exit 1
 fi
 
