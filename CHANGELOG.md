@@ -31,6 +31,7 @@
 - Fixed `devenv processes down` returning before Overmind had finished stopping. Overmind left its control socket behind, and the next `devenv up` refused to start. devenv now waits for the manager to exit before it cleans up.
 - Fixed a foreground `devenv up` with an external process manager being invisible to other devenv commands. `devenv processes down` in another terminal now stops it, and a second `devenv up` attaches instead of starting a rival manager.
 - Fixed `devenv processes down` doing nothing after you log out and back in. systemd removes `/run/user/$UID` when your last session ends, which used to lose a detached process manager: it kept running, nothing could stop it, and the next `devenv up` started a second one beside it. devenv now keeps a copy of the manager state in `.devenv`.
+- Fixed devenv suppressing the TUI and forcing quiet output for every shell started from Warp. AI-agent auto-detection now matches only autonomous agents, not "hybrid" environments.
 
 ## 2.2.2 (2026-08-13)
 
