@@ -21,6 +21,8 @@ mod file_limit;
 
 pub mod lock;
 
+pub mod source;
+
 use std::cell::RefCell;
 
 // Ensure Nix/GC is initialized exactly once across all threads
