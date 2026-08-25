@@ -1,5 +1,6 @@
 {
   config,
+  lib,
   pkgs,
   ...
 }:
@@ -14,7 +15,7 @@ in
     generate-doc-css = {
       enable = true;
       name = "generate-doc-css";
-      entry = config.scripts."devenv-generate-doc-css".exec;
+      entry = lib.getExe config.scripts."devenv-generate-doc-css".scriptPackage;
       files = "^docs/src/assets/extra\\.css$";
       pass_filenames = false;
     };
