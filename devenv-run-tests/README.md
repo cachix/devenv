@@ -64,7 +64,7 @@ Each test is a subdirectory inside `tests/` or `examples/` containing:
 
 Scripts that run outside the devenv shell — `.patch.sh`, and `.test.sh` under `use_shell: false` — would otherwise depend on whatever the host happens to provide.
 `test-env.nix` decides instead.
-`devenv-run-tests run` builds it once per run and puts its `bin` first on `PATH` for those scripts, so `curl`, `jq`, `git` and GNU coreutils are the same on every platform.
+`devenv-run-tests run` embeds and builds it once per run through the Nix API, using the devenv repository's locked `nixpkgs` input. It then puts the environment's `bin` first on `PATH` for those scripts, so `curl`, `jq`, `git` and GNU coreutils are the same on every platform.
 Stock macOS has no `timeout` and no `sha256sum`; here both are the GNU ones.
 
 Add a tool by listing it in `test-env.nix`.

@@ -7,8 +7,11 @@ use devenv::{
     activity as devenv_activity, console as devenv_console, tracing as devenv_tracing,
 };
 use devenv_mailbox::FrontendCommand;
+use devenv_nix_backend::anyhow_ext::AnyhowToMiette;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use miette::{IntoDiagnostic, Result, WrapErr};
+use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder};
+use nix_bindings_flake::EvalStateBuilderExt;
 use serde::{Deserialize, Serialize};
 use std::{
     env, fs,
@@ -759,8 +762,34 @@ fn build_gc_runtime() -> Result<tokio::runtime::Runtime> {
         .wrap_err("Failed to create tokio runtime")
 }
 
-/// Flake attribute holding the environment tests run in.
-const TEST_ENV_ATTR: &str = "devenv-test-env";
+/// Vendored Nix function for the environment tests run in.
+const TEST_ENV_NIX: &str = include_str!("../test-env.nix");
+
+/// A realised test environment and the evaluator keeping its temporary GC root alive.
+struct TestEnvironment {
+    path: PathBuf,
+    _eval_state: Option<EvalState>,
+}
+
+impl TestEnvironment {
+    fn external(path: PathBuf) -> Self {
+        Self {
+            path,
+            _eval_state: None,
+        }
+    }
+
+    fn realised(path: PathBuf, eval_state: EvalState) -> Self {
+        Self {
+            path,
+            _eval_state: Some(eval_state),
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
 
 fn test_lib_path(test_env: &Path) -> PathBuf {
     test_env.join("share/devenv-run-tests/test-lib.sh")
@@ -783,36 +812,67 @@ fn with_test_env_path(command: &mut tokio::process::Command) {
 ///
 /// `DEVENV_TEST_ENV` takes precedence, so a caller that already has the
 /// environment can skip the evaluation.
-async fn resolve_test_env(repo: &Path, out_link: &Path) -> Result<PathBuf> {
+fn resolve_test_env(devenv_repo: &Path) -> Result<TestEnvironment> {
     if let Ok(path) = env::var("DEVENV_TEST_ENV") {
-        return Ok(PathBuf::from(path));
+        return Ok(TestEnvironment::external(PathBuf::from(path)));
     }
 
-    let flake_ref = format!("{}#{TEST_ENV_ATTR}", repo.display());
-    let output = tokio::process::Command::new("nix")
-        .args(["build", "--print-out-paths", "--out-link"])
-        .arg(out_link)
-        .args(["--extra-experimental-features", "nix-command flakes"])
-        .arg(&flake_ref)
-        .stdin(Stdio::null())
-        .stderr(Stdio::inherit())
-        .output()
-        .await
+    let store_settings = Default::default();
+    let store = devenv_nix_backend::backend::open_store(&store_settings)?;
+    let (flake_settings, _) = devenv_nix_backend::backend::build_settings()?;
+    let mut eval_state = EvalStateBuilder::new(store)
+        .to_miette()
+        .wrap_err("Failed to create the test environment evaluator")?
+        .flakes(&flake_settings)
+        .to_miette()
+        .wrap_err("Failed to configure Nix flakes")?
+        .build()
+        .to_miette()
+        .wrap_err("Failed to initialize the test environment evaluator")?;
+
+    let repo_url = url::Url::from_directory_path(devenv_repo)
+        .map_err(|_| miette::miette!("The devenv repository path must be absolute"))?;
+    let repo_ref = serde_json::to_string(&format!("git+{repo_url}"))
         .into_diagnostic()
-        .wrap_err_with(|| format!("Failed to run `nix build {flake_ref}`"))?;
+        .wrap_err("Failed to encode the devenv repository flake reference")?;
+    let expression = format!(
+        r#"
+let
+  devenv = builtins.getFlake {repo_ref};
+  pkgs = devenv.inputs.nixpkgs.legacyPackages.${{builtins.currentSystem}};
+in
+pkgs.callPackage (
+{TEST_ENV_NIX}
+) {{}}
+"#
+    );
+    let value = eval_state
+        .eval_from_string(&expression, "<devenv-run-tests/test-env.nix>")
+        .to_miette()
+        .wrap_err("Failed to evaluate the test environment")?;
+    let out_path = eval_state
+        .require_attrs_select(&value, "outPath")
+        .to_miette()
+        .wrap_err("The test environment has no outPath")?;
+    let realised = eval_state
+        .realise_string(&out_path, false)
+        .to_miette()
+        .wrap_err("Failed to build the test environment")?;
+    let store_path = realised
+        .paths
+        .first()
+        .ok_or_else(|| miette::miette!("The test environment produced no store path"))?;
+    let path = eval_state
+        .store()
+        .clone()
+        .real_path(store_path)
+        .to_miette()
+        .wrap_err("Failed to resolve the test environment store path")?;
 
-    if !output.status.success() {
-        miette::bail!(
-            "Failed to build the test environment ({flake_ref}). \
-             Set DEVENV_TEST_ENV to an existing one to skip this build."
-        );
-    }
-
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path.is_empty() {
-        miette::bail!("`nix build {flake_ref}` produced no output path");
-    }
-    Ok(PathBuf::from(path))
+    // Realising the derivation registers its output as a process-scoped
+    // temporary GC root. Keep the evaluator (and its store) alive until the
+    // test subprocess exits so a concurrent collection cannot remove it.
+    Ok(TestEnvironment::realised(PathBuf::from(path), eval_state))
 }
 
 async fn async_main() -> Result<ExitCode> {
@@ -908,12 +968,7 @@ exec '{bin_dir}/devenv' \
     // they use. Building it here means every test in the run sees the same one.
     // `generate-json` only reads test metadata, so it goes without.
     let test_env = match Args::parse().command {
-        // Keep an out-link alive for the whole subprocess. A bare store path
-        // from `--no-link` can be collected in the middle of a long test run.
-        Commands::Run(_) => {
-            let out_link = wrapper_dir.path().join("devenv-test-env");
-            Some(resolve_test_env(&cwd, &out_link).await?)
-        }
+        Commands::Run(_) => Some(resolve_test_env(&cwd)?),
         _ => None,
     };
 
@@ -942,10 +997,10 @@ exec '{bin_dir}/devenv' \
     ];
 
     if let Some(test_env) = &test_env {
-        env.push(("DEVENV_TEST_ENV", test_env.display().to_string()));
+        env.push(("DEVENV_TEST_ENV", test_env.path().display().to_string()));
         env.push((
             "DEVENV_TEST_LIB",
-            test_lib_path(test_env).display().to_string(),
+            test_lib_path(test_env.path()).display().to_string(),
         ));
     }
 

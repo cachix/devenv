@@ -2680,6 +2680,8 @@ dependencies = [
  "globset",
  "miette",
  "nix 0.31.3",
+ "nix-bindings-expr",
+ "nix-bindings-flake",
  "portable-pty",
  "serde",
  "serde_json",
@@ -2687,6 +2689,7 @@ dependencies = [
  "signal-hook 0.4.4",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]
