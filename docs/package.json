@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "autoprefixer": "^10.4.21",
+    "badge-maker": "^6.0.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.3",
     "tailwindcss-base-font-size": "^1.0.1"

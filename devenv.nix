@@ -1,7 +1,6 @@
 { inputs
 , pkgs
 , lib
-, config
 , options
 , ...
 }:
@@ -81,27 +80,20 @@ in
 
   # Project dependencies
   packages = [
-    inputs.nix.packages.${system}.nix # Required for integration tests
+    inputs.nix.packages.${system}.nix.dev # Required for integration tests
     pkgs.git
-    pkgs.libxcb
-    pkgs.yaml2json
-    pkgs.tesh
-    pkgs.watchexec
-    pkgs.openssl
-    pkgs.sqlite
+    pkgs.openssl.dev
+    pkgs.sqlite.dev
     pkgs.sqlx-cli
     pkgs.tig
-    pkgs.process-compose
     pkgs.cargo-outdated # Find outdated crates
     pkgs.cargo-machete # Find unused crates
     pkgs.cargo-edit # Adds the set-version command
     pkgs.cargo-insta # Snapshot testing for Rust
     pkgs.cargo-nextest # Test runner with process isolation
     pkgs.protobuf # snix
-    pkgs.dbus # secretspec
-    pkgs.nixd # LSP for devenv lsp command
     inputs.crate2nix.packages.${system}.default # Generate Cargo.nix from Cargo.lock
-    inputs.ghostty.packages.${system}.libghostty-vt # pkg-config provider for libghostty-vt-sys
+    inputs.ghostty.packages.${system}.libghostty-vt.dev # pkg-config provider for libghostty-vt-sys
   ];
 
   languages = {
@@ -150,7 +142,11 @@ in
   tasks."devenv:crate2nix" = {
     description = "Generate Cargo.nix from Cargo.lock";
     exec = "crate2nix generate -h nix/crate-hashes.json";
-    execIfModified = [ "Cargo.lock" ];
+    execIfModified = [
+      "Cargo.lock"
+      "Cargo.toml"
+      "*/Cargo.toml"
+    ];
   };
 
   git-hooks.package = pkgs.prek;

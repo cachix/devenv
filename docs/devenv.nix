@@ -1,21 +1,21 @@
 { config
-, lib
 , pkgs
 , ...
 }:
 
+let
+  docsRoot = "${config.devenv.root}/docs";
+in
 {
-  # Disable browserlist warnings that break git hooks
-  env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
-
-  packages = [ pkgs.cairo ];
+  packages = [ pkgs.cairo.out ];
 
   git-hooks.hooks = {
     generate-doc-css = {
       enable = true;
       name = "generate-doc-css";
       entry = config.scripts."devenv-generate-doc-css".exec;
-      files = "${config.git.root}/docs/src/assets/extra.css";
+      files = "^docs/src/assets/extra\\.css$";
+      pass_filenames = false;
     };
   };
 
@@ -34,7 +34,7 @@
     # For developing the frontend doc dependencies
     javascript = {
       enable = true;
-      directory = "${config.git.root}/docs";
+      directory = docsRoot;
       npm = {
         enable = true;
         install.enable = true;
@@ -46,36 +46,40 @@
     docs = {
       # Serve the mkdocs documentation website with live reload
       exec = "mkdocs serve";
-      cwd = config.git.root + "/docs";
+      cwd = docsRoot;
     };
   };
 
   scripts."devenv-generate-doc-css" = {
     description = "Generate CSS for the docs.";
-    exec = "${lib.getExe pkgs.tailwindcss} -m -i src/assets/extra.css -o src/assets/output.css";
+    exec = ''
+      cd "${docsRoot}" \
+        && BROWSERSLIST_IGNORE_OLD_DATA=1 \
+          ./node_modules/.bin/tailwindcss -m -i src/assets/extra.css -o src/assets/output.css
+    '';
   };
 
   scripts."docs-sitemap" = {
     description = "Generate a complete docs sitemap (pages + heading anchors) from the running docs server.";
-    exec = ''python3 "${config.git.root}/docs/gen/sitemap_with_anchors.py" "$@"'';
+    exec = ''python3 "${docsRoot}/gen/sitemap_with_anchors.py" "$@"'';
   };
 
   scripts."docs-sitemap-diff" = {
     description = "Diff two docs sitemaps (old vs new) and propose _redirects entries.";
-    exec = ''python3 "${config.git.root}/docs/gen/sitemap_diff.py" "$@"'';
+    exec = ''python3 "${docsRoot}/gen/sitemap_diff.py" "$@"'';
   };
 
   tasks = {
     "devenv:compile-requirements" = {
       before = [ "devenv:python:virtualenv" ];
-      exec = "uv pip compile --no-header ${config.git.root}/docs/requirements.in -o ${config.git.root}/docs/requirements.txt";
+      exec = "uv pip compile --no-header ${docsRoot}/requirements.in -o ${docsRoot}/requirements.txt";
       execIfModified = [
-        "${config.git.root}/docs/requirements.in"
-        "${config.git.root}/docs/requirements.txt"
+        "${docsRoot}/requirements.in"
+        "${docsRoot}/requirements.txt"
       ];
     };
     "docs:generate-badge" = {
-      exec = "node ${config.git.root}/docs/src/assets/generate-badge.mjs";
+      exec = "node ${docsRoot}/src/assets/generate-badge.mjs";
     };
   };
 }
