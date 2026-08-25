@@ -11,7 +11,7 @@ use devenv_nix_backend::anyhow_ext::AnyhowToMiette;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder};
-use nix_bindings_flake::EvalStateBuilderExt;
+use nix_flake_lock::{AttrValue, LockFile};
 use serde::{Deserialize, Serialize};
 use std::{
     env, fs,
@@ -808,6 +808,41 @@ fn with_test_env_path(command: &mut tokio::process::Command) {
     );
 }
 
+fn locked_input_json(devenv_repo: &Path, input: &str) -> Result<String> {
+    let lock_path = devenv_repo.join("flake.lock");
+    let bytes = fs::read(&lock_path)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to read {}", lock_path.display()))?;
+    let lock = LockFile::parse(&bytes)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to parse {}", lock_path.display()))?;
+    lock.validate()
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to validate {}", lock_path.display()))?;
+    let node_id = lock
+        .resolve([input])
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to resolve input {input:?}"))?
+        .ok_or_else(|| miette::miette!("flake.lock has no {input:?} input"))?;
+    let locked = lock
+        .node(node_id)
+        .and_then(|node| node.locked())
+        .ok_or_else(|| miette::miette!("flake.lock input {input:?} is not locked"))?;
+
+    let mut object = serde_json::Map::new();
+    for attr in locked.locked().iter() {
+        let value = match attr.value() {
+            AttrValue::String(value) => serde_json::Value::String(value.to_string()),
+            AttrValue::Integer(value) => serde_json::Value::Number((*value).into()),
+            AttrValue::Bool(value) => serde_json::Value::Bool(*value),
+        };
+        object.insert(attr.name().to_string(), value);
+    }
+    serde_json::to_string(&object)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to encode locked input {input:?}"))
+}
+
 /// Build the environment that `.test.sh` scripts run in.
 ///
 /// `DEVENV_TEST_ENV` takes precedence, so a caller that already has the
@@ -819,27 +854,22 @@ fn resolve_test_env(devenv_repo: &Path) -> Result<TestEnvironment> {
 
     let store_settings = Default::default();
     let store = devenv_nix_backend::backend::open_store(&store_settings)?;
-    let (flake_settings, _) = devenv_nix_backend::backend::build_settings()?;
     let mut eval_state = EvalStateBuilder::new(store)
         .to_miette()
         .wrap_err("Failed to create the test environment evaluator")?
-        .flakes(&flake_settings)
-        .to_miette()
-        .wrap_err("Failed to configure Nix flakes")?
         .build()
         .to_miette()
         .wrap_err("Failed to initialize the test environment evaluator")?;
 
-    let repo_url = url::Url::from_directory_path(devenv_repo)
-        .map_err(|_| miette::miette!("The devenv repository path must be absolute"))?;
-    let repo_ref = serde_json::to_string(&format!("git+{repo_url}"))
+    let nixpkgs = locked_input_json(devenv_repo, "nixpkgs")?;
+    let nixpkgs = serde_json::to_string(&nixpkgs)
         .into_diagnostic()
-        .wrap_err("Failed to encode the devenv repository flake reference")?;
+        .wrap_err("Failed to encode the locked nixpkgs input")?;
     let expression = format!(
         r#"
 let
-  devenv = builtins.getFlake {repo_ref};
-  pkgs = devenv.inputs.nixpkgs.legacyPackages.${{builtins.currentSystem}};
+  nixpkgsSource = (builtins.fetchTree (builtins.fromJSON {nixpkgs})).outPath;
+  pkgs = import nixpkgsSource {{ system = builtins.currentSystem; }};
 in
 pkgs.callPackage (
 {TEST_ENV_NIX}
@@ -1179,5 +1209,14 @@ mod tests {
         assert_eq!(format_size(1_700_000_000), "1.7 GB");
         assert_eq!(format_duration(Duration::from_millis(6_240)), "6.2s");
         assert_eq!(format_duration(Duration::from_secs(103)), "1m43s");
+    }
+
+    #[test]
+    fn resolves_locked_nixpkgs_input() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let input: serde_json::Value =
+            serde_json::from_str(&locked_input_json(repo, "nixpkgs").unwrap()).unwrap();
+        assert!(input["type"].is_string());
+        assert!(input["narHash"].is_string());
     }
 }

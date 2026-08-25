@@ -2681,7 +2681,7 @@ dependencies = [
  "miette",
  "nix 0.31.3",
  "nix-bindings-expr",
- "nix-bindings-flake",
+ "nix-flake-lock",
  "portable-pty",
  "serde",
  "serde_json",
@@ -2689,7 +2689,6 @@ dependencies = [
  "signal-hook 0.4.4",
  "tempfile",
  "tokio",
- "url",
 ]
 
 [[package]]
@@ -6119,6 +6118,16 @@ dependencies = [
  "indexmap 2.14.0",
  "miette",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "nix-flake-lock"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7815d99678fd80c5d646d68ab0360132754e4c0ba0c5e203bc7b4f353de6d9"
+dependencies = [
+ "itoa",
+ "memchr",
 ]
 
 [[package]]
