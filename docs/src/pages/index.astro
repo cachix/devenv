@@ -74,9 +74,9 @@ const initialPreview = `{ pkgs, ... }: {
 
 <StarlightPage
   frontmatter={{
-    title: 'Your whole development environment, declared',
+    title: 'Your whole development environment, declared with Nix',
     description:
-      'Define packages, languages, services, tasks, secrets, and tooling once. Give every developer—and CI—the same fast, reproducible environment.',
+      'Declare packages, languages, services, tasks, secrets, and tooling with Nix. Give every developer—and CI—the same fast, reproducible environment.',
     template: 'splash',
     hero: { tagline: '' },
   }}
@@ -246,7 +246,7 @@ const initialPreview = `{ pkgs, ... }: {
 <section class="landing-section">
   <div class="landing-container">
     <div class="landing-section-centered">
-      <h2 class="landing-section-title">Three commands. Done.</h2>
+      <h2 class="landing-section-title">Three steps. Done.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
         From zero to a reproducible environment your whole team can use.
       </p>
@@ -256,16 +256,16 @@ const initialPreview = `{ pkgs, ... }: {
       <div class="landing-step">
         <span class="landing-step-num">1</span>
         <p class="landing-step-title">Install</p>
-        <p class="landing-step-desc">One command. Works on Linux, macOS, and WSL.</p>
+        <p class="landing-step-desc">Once Nix is installed. Works on Linux, macOS, and WSL.</p>
         <CodeBlock class="landing-step-code" lang="bash" code="$ nix profile install nixpkgs#devenv" />
       </div>
 
       <div class="landing-step">
         <span class="landing-step-num">2</span>
-        <p class="landing-step-title">Describe</p>
-        <p class="landing-step-desc">Write <code class="inline-code">devenv.nix</code> by hand, or generate it from a prompt above.</p>
-        <CodeBlock class="landing-step-code" lang="nix" code={`languages.rust.enable = true;
-services.postgres.enable = true;`} />
+        <p class="landing-step-title">Initialize &amp; describe</p>
+        <p class="landing-step-desc">Scaffold the project, then edit <code class="inline-code">devenv.nix</code> or generate it from a prompt above.</p>
+        <CodeBlock class="landing-step-code" lang="bash" code={`$ devenv init
+$EDITOR devenv.nix`} />
       </div>
 
       <div class="landing-step">
@@ -283,7 +283,7 @@ services.postgres.enable = true;`} />
 <section class="landing-section">
   <div class="landing-container">
     <div class="landing-section-centered">
-      <h2 class="landing-section-title">Everything you need in one file</h2>
+      <h2 class="landing-section-title">Your whole stack, declared together</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
         Languages, services, processes, tasks, secrets — all declarative.
       </p>
@@ -544,7 +544,7 @@ services.postgres.enable`} />
         </div>
         <div class="landing-proc-meta">port :8080 · uptime 3m 09s</div>
         <div class="landing-proc-feat">after: <code>postgres</code>, <code>redis</code>, <code>migrate</code></div>
-        <div class="landing-proc-feat">socket activation · zero-downtime reload</div>
+        <div class="landing-proc-feat">socket activation · zero-downtime restarts</div>
       </div>
     </div>
 
@@ -626,7 +626,7 @@ STRIPE_SECRET_KEY = { required = true }`} />
         <div class="landing-pipe-title">devenv.nix</div>
         <CodeBlock class="landing-pipe-code" lang="nix" code={`languages.rust.enable = true;
 outputs.app =
-  config.languages.rust.import ./.;`} />
+  config.languages.rust.import ./. {};`} />
       </div>
 
       <div class="landing-pipe-arrow" aria-hidden="true">→</div>
@@ -643,9 +643,9 @@ in 12.4s`} />
 
       <div class="landing-pipe-card is-final">
         <div class="landing-pipe-label">3 · Ship</div>
-        <div class="landing-pipe-title">OCI image · Nix store · CI</div>
-        <CodeBlock class="landing-pipe-code" lang="bash" code={`$ devenv container build app
-$ docker push myorg/app:v1`} />
+        <div class="landing-pipe-title">Nix store · binary cache · CI</div>
+        <CodeBlock class="landing-pipe-code" lang="bash" code={`$ nix copy --to ssh://deploy \\
+  /nix/store/...-app`} />
       </div>
     </div>
   </div>
