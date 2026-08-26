@@ -22,9 +22,11 @@ set -ex
 # running ..."); the AI-agent auto-quiet mode would suppress them, so opt out.
 export DEVENV_NO_AI_AGENT=1
 export DEVENV_RUNTIME="$PWD/.runtime"
+PROCESS_RUNTIME_DIR="$(devenv_runtime_dir)/processes"
 
 PORT_A=
 PORT_B=
+DAEMON_PID=
 PORT_A_FILE=.devenv/state/alpha-port
 PORT_B_FILE=.devenv/state/beta-port
 
@@ -69,7 +71,13 @@ cleanup() {
       fi
     done
   fi
-  devenv processes down >/dev/null 2>&1 || true
+  if ! devenv processes down >/dev/null 2>&1 && [ -n "$DAEMON_PID" ]; then
+    # The regression exercised below removes the discovery files while leaving
+    # the daemon alive. Retain its captured PID so a failing test can still
+    # clean up the exact process it started.
+    kill "$DAEMON_PID" 2>/dev/null || true
+    wait_for_pid_gone "$DAEMON_PID" || status=1
+  fi
   if [ -n "$PORT_A" ]; then
     wait_for_http_gone "$PORT_A" || status=1
   fi
@@ -87,6 +95,29 @@ load_ports
 devenv processes wait
 wait_for_http_ready "$PORT_A" || { echo "FAIL: alpha did not start"; devenv processes down || true; exit 1; }
 wait_for_http_ready "$PORT_B" || { echo "FAIL: beta did not start"; devenv processes down || true; exit 1; }
+
+# Running an unrelated one-shot task must not take ownership of the persistent
+# manager's PID file or control socket. Historically every Tasks instance
+# constructed a NativeProcessManager for the canonical process runtime, whose
+# Drop implementation then removed the running daemon's discovery files.
+DAEMON_PID=$(sed -n '1p' "$PROCESS_RUNTIME_DIR/native-manager.pid")
+devenv tasks run test:noop
+test "$(sed -n '1p' "$PROCESS_RUNTIME_DIR/native-manager.pid")" = "$DAEMON_PID" || {
+  echo "FAIL: tasks run replaced or removed the detached manager PID file"
+  exit 1
+}
+kill -0 "$DAEMON_PID" || {
+  echo "FAIL: detached manager exited after tasks run"
+  exit 1
+}
+devenv processes list | grep -q alpha || {
+  echo "FAIL: detached manager is no longer reachable after tasks run"
+  exit 1
+}
+http_is_ready "$PORT_A" || {
+  echo "FAIL: alpha stopped after tasks run"
+  exit 1
+}
 
 # Second up while everything is already running: exit 0, truthful "already
 # running" report, nothing restarted.
@@ -130,6 +161,7 @@ http_is_ready "$PORT_A" || { echo "FAIL: alpha died after subset attach"; devenv
 devenv processes down
 wait_for_http_gone "$PORT_A" || { echo "FAIL: alpha still bound after down"; exit 1; }
 wait_for_http_gone "$PORT_B" || { echo "FAIL: beta still bound after down"; exit 1; }
+DAEMON_PID=
 
 # Foreground ownership guard: a `devenv up -d` must refuse to schedule into a
 # foreground `devenv up` session owned by another terminal — that session owns

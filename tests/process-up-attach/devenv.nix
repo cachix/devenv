@@ -13,6 +13,8 @@ in
   ];
   process.manager.implementation = "native";
 
+  tasks."test:noop".exec = "true";
+
   processes.alpha = {
     exec = ''
       printf '%s\n' ${toString alphaPort} > "${config.devenv.state}/alpha-port"

@@ -35,11 +35,7 @@ async fn exit_on_idle_returns_after_a_watched_native_oneshot_exits() {
         let manager = ctx.create_manager();
         manager.start_command(&config, None).await.unwrap();
         manager
-            .run_event_loop(
-                tokio_util::sync::CancellationToken::new(),
-                None,
-                OnIdle::Exit,
-            )
+            .run_until(tokio_util::sync::CancellationToken::new(), OnIdle::Exit)
             .await
             .unwrap();
 

@@ -8,7 +8,7 @@ use crate::types::{
 };
 use base64::Engine;
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
-use devenv_processes::{NativeProcessManager, ProcessConfig};
+use devenv_processes::{ProcessConfig, ProcessRunner};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -410,11 +410,11 @@ impl TaskState {
 
     /// Launch a process task and return info about how it was launched.
     ///
-    /// This spawns a process using NativeProcessManager but does not wait for
+    /// This spawns a process using ProcessRunner but does not wait for
     /// readiness or set task status. The caller is responsible for status tracking.
     pub async fn run_process(
         &self,
-        manager: &Arc<NativeProcessManager>,
+        manager: &Arc<ProcessRunner>,
         config: ProcessConfig,
     ) -> Result<ProcessLaunchInfo> {
         tracing::info!("Launching process task: {}", self.task.name);

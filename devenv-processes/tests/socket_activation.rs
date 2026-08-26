@@ -1,4 +1,4 @@
-//! Socket activation integration tests for NativeProcessManager.
+//! Socket activation integration tests for ProcessRunner.
 //!
 //! Tests TCP and Unix socket activation using the systemd-style
 //! LISTEN_FDS environment variable mechanism.

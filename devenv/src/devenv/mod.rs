@@ -388,8 +388,8 @@ pub struct Devenv {
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
-    // Native process manager started in-process (for detach mode used by test())
-    native_process_manager: OnceCell<Arc<processes::NativeProcessManager>>,
+    // Root owner for the native manager started in-process by `devenv test`.
+    native_api_server: OnceCell<processes::NativeApiServer>,
 
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
@@ -736,7 +736,7 @@ impl Devenv {
             eval_cache_pool,
             secretspec: secretspec_cell,
             port_allocator,
-            native_process_manager: OnceCell::new(),
+            native_api_server: OnceCell::new(),
             shutdown,
             task_exports: std::sync::Mutex::new(BTreeMap::new()),
             task_messages: std::sync::Mutex::new(Vec::new()),
@@ -1182,7 +1182,7 @@ impl Devenv {
         frontend_command_tx: Option<tokio::sync::mpsc::Sender<FrontendCommand>>,
     ) -> Result<()> {
         let mut stream =
-            Some(processes::NativeProcessManager::attach_stream(&self.native_socket_path()).await?);
+            Some(processes::NativeManagerClient::attach_stream(&self.native_socket_path()).await?);
         let token = self.shutdown.cancellation_token();
         let parent_id = parent.id();
         let mut procs: HashMap<String, devenv_activity::ActivityRef> = HashMap::new();
@@ -2671,33 +2671,21 @@ impl Devenv {
                     .map_err(|e| miette!("Failed to build task runner: {}", e))?,
             );
 
-            // Answer `devenv up` attach requests against this manager: a
-            // second `devenv up` finds our PID file and attaches over the
-            // control socket; the per-connection API task serves `Start` through
-            // this scheduler. Registered before the run, matching the daemon,
-            // so a `Start` arriving mid-startup is answered (classifying
-            // against the pre-registered Waiting entries) instead of
-            // rejected. The coerced `Arc<dyn _>` shares its refcount with
-            // `tasks_runner`, so the manager's `Weak` stays upgradable as
-            // long as the runner lives.
+            // The persistent manager owns both the scheduler and the process
+            // runner. Tasks itself remains reusable and never publishes a
+            // daemon endpoint.
             let scheduler: Arc<dyn processes::ProcessScheduler> = tasks_runner.clone();
-            tasks_runner
-                .process_manager()
-                .set_scheduler(Arc::downgrade(&scheduler));
-            // This in-process manager (interactive foreground `up`, or a
-            // detached owner like `devenv test`) is owned by a live devenv
-            // process: mark it InProcess so a `devenv up -d` from another
-            // terminal refuses to schedule into it. Set before the run so a
-            // residence query during startup is answered correctly.
-            tasks_runner
-                .process_manager()
-                .set_residence(processes::ManagerResidence::InProcess);
+            let manager = Arc::new(processes::NativeProcessManager::new(
+                scheduler,
+                Arc::clone(tasks_runner.process_runner()),
+                processes::ManagerResidence::InProcess,
+            ));
 
             // Start command processing before task execution so that
             // Ctrl-R works even while tasks are still running (e.g. when
             // a process task is waiting on an auto start off dependency).
             if let Some(rx) = options.frontend_event_rx.take() {
-                tasks_runner.process_manager().start_command_listener(rx);
+                manager.start_command_listener(rx);
             }
 
             // Run process tasks under the Phase 4 activity.
@@ -2713,14 +2701,13 @@ impl Devenv {
             if task_status.has_failures() {
                 // A caller such as `devenv test` must not leave successfully
                 // started process siblings behind when another task fails.
-                let _ = tasks_runner.process_manager().stop_all().await;
+                let _ = tasks_runner.process_runner().stop_all().await;
                 bail!("Process tasks failed");
             }
 
-            // API server is started inside run_internal() so it's available
-            // while processes are still starting up.
+            let api_server = processes::NativeApiServer::start(manager)?;
 
-            let pid_file = tasks_runner.process_manager().manager_pid_file();
+            let pid_file = api_server.manager().manager_pid_file();
             processes::write_pid(&pid_file, std::process::id())
                 .await
                 .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
@@ -2730,8 +2717,8 @@ impl Devenv {
                     "devenv.up: calling run_event_loop (native manager, following client), global_token_cancelled={}",
                     self.shutdown.is_cancelled()
                 );
-                let result = tasks_runner
-                    .process_manager()
+                let result = api_server
+                    .manager()
                     .run_event_loop(
                         self.shutdown.cancellation_token(),
                         None,
@@ -2742,12 +2729,12 @@ impl Devenv {
                 trace!("devenv.up: run_event_loop returned");
 
                 let _ = tokio::fs::remove_file(&pid_file).await;
+                drop(api_server);
                 result?;
             } else {
-                // Store manager for later stop via down()
-                let _ = self
-                    .native_process_manager
-                    .set(Arc::clone(tasks_runner.process_manager()));
+                self.native_api_server.set(api_server).map_err(|_| {
+                    miette!("an in-process native manager is already running for this command")
+                })?;
             }
 
             return Ok(ProcessStartOutcome::Completed);
@@ -2898,10 +2885,8 @@ impl Devenv {
             // request) is treated as a daemon and attached, preserving the
             // previous behavior.
             if matches!(
-                processes::NativeProcessManager::query_manager_residence(
-                    &self.native_socket_path()
-                )
-                .await,
+                processes::NativeManagerClient::query_manager_residence(&self.native_socket_path())
+                    .await,
                 Some(processes::ManagerResidence::InProcess)
             ) {
                 bail!(
@@ -2994,21 +2979,18 @@ impl Devenv {
     }
 
     pub async fn down(&self) -> Result<()> {
-        // In-process native manager (started by test() or up(detach=true))
-        if let Some(manager) = self.native_process_manager.get() {
-            manager.stop_all().await?;
+        if let Some(server) = self.native_api_server.get() {
+            server.manager().stop_all().await?;
             return Ok(());
         }
 
         // Determine which manager is running and create appropriate instance
         let manager: Box<dyn processes::ProcessManagerControl> =
             if self.native_manager_pid_file().exists() {
-                // Native process manager is running — create a control client
-                // that won't delete the daemon's runtime files on drop
+                // Native process manager is running — use a path-only client,
+                // not a process runner pointed at the daemon's state directory.
                 let runtime_dir = self.process_runtime_dir()?.clone();
-                let mut manager = processes::NativeProcessManager::new(runtime_dir)?;
-                manager.set_control_client();
-                Box::new(manager)
+                Box::new(processes::NativeManagerClient::new(runtime_dir))
             } else if self.external_process_manager_state_exists() {
                 // A detached external process manager is running.
                 // Stopping does not invoke the launcher, so a dummy path is sufficient.
@@ -3028,7 +3010,7 @@ impl Devenv {
             let pid_file = self.native_manager_pid_file();
             let start = std::time::Instant::now();
             loop {
-                match processes::NativeProcessManager::wait_for_ready(&socket_path).await {
+                match processes::NativeManagerClient::wait_for_ready(&socket_path).await {
                     Ok(()) => return Ok(()),
                     Err(_) if start.elapsed() < timeout => {
                         // Check that the daemon is still alive before retrying
@@ -3105,7 +3087,7 @@ impl Devenv {
         connect_timeout: std::time::Duration,
     ) -> Result<processes::ApiResponse> {
         let socket_path = self.require_native_manager()?;
-        processes::NativeProcessManager::api_request_bounded_connect(
+        processes::NativeManagerClient::api_request_bounded_connect(
             &socket_path,
             request,
             connect_timeout,
@@ -3119,7 +3101,7 @@ impl Devenv {
         request: &processes::ApiRequest,
     ) -> Result<processes::ApiResponse> {
         let socket_path = self.require_native_manager()?;
-        processes::NativeProcessManager::api_request(&socket_path, request).await
+        processes::NativeManagerClient::api_request(&socket_path, request).await
     }
 
     /// Resolve the native manager socket, failing when no native manager runs.
@@ -3325,7 +3307,7 @@ impl Devenv {
 
         self.port_allocator.set_allow_in_use(false);
 
-        match processes::NativeProcessManager::api_request(
+        match processes::NativeManagerClient::api_request(
             &self.native_socket_path(),
             &processes::ApiRequest::Ports,
         )
@@ -3478,7 +3460,7 @@ async fn run_tasks(
 ) -> Result<(tasks::TasksStatus, tasks::Outputs)> {
     let outputs = tasks.run(false).await;
     if stop_processes {
-        let _ = tasks.process_manager().stop_all().await;
+        let _ = tasks.process_runner().stop_all().await;
     }
     let status = tasks.get_completion_status().await;
     Ok((status, outputs))

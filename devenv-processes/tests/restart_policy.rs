@@ -1,4 +1,4 @@
-//! Restart policy integration tests for NativeProcessManager.
+//! Restart policy integration tests for ProcessRunner.
 //!
 //! All tests use the `job_state()` API to observe supervisor phase and
 //! restart count, avoiding filesystem-based communication.

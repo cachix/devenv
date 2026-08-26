@@ -1,4 +1,4 @@
-//! File watching integration tests for NativeProcessManager.
+//! File watching integration tests for ProcessRunner.
 //!
 //! Tests the watch.paths configuration that triggers process restarts
 //! when watched files change.

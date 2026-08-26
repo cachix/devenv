@@ -1,4 +1,4 @@
-//! Process lifecycle integration tests for NativeProcessManager.
+//! Process lifecycle integration tests for ProcessRunner.
 //!
 //! Note: Some tests use watchexec-supervisor directly because the manager
 //! currently hardcodes `/bin/bash` which doesn't exist on NixOS.
@@ -8,8 +8,8 @@ mod common;
 
 use common::*;
 use devenv_processes::{
-    ProcessConfig, ProcessManagerControl, ProcessPhase, RestartConfig, RestartPolicy,
-    ShutdownConfig,
+    NativeManagerClient, ProcessConfig, ProcessManagerControl, ProcessPhase, RestartConfig,
+    RestartPolicy, ShutdownConfig,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -411,10 +411,10 @@ done
 #[tokio::test(flavor = "multi_thread")]
 async fn test_is_running_initially_false() {
     let ctx = TestContext::new();
-    let manager = ctx.create_manager();
+    let client = NativeManagerClient::new(ctx.state_dir.clone());
 
     // Manager has no PID file initially
-    assert!(!manager.is_running().await);
+    assert!(!client.is_running().await);
 }
 
 /// Test that a process reading stdin gets EOF immediately and exits cleanly

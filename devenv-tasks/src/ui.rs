@@ -100,7 +100,7 @@ impl TasksUi {
 
         // Phase 2: If processes are still running (e.g., devenv-tasks invoked by
         // process-compose), keep forwarding output and wait for them to exit.
-        if !self.tasks.process_manager.list().await.is_empty() {
+        if !self.tasks.process_runner.list().await.is_empty() {
             #[cfg(feature = "test-all")]
             if std::env::var_os("DEVENV_TASKS_TEST_FAIL_UI_AFTER_PROCESS_START").is_some() {
                 tokio::time::sleep(std::time::Duration::from_millis(250)).await;
@@ -109,17 +109,16 @@ impl TasksUi {
             if stop_processes {
                 // Stop processes so the caller regains control (e.g., enterTest
                 // tasks that pulled processes into the task graph).
-                let _ = self.tasks.process_manager.stop_all().await;
+                let _ = self.tasks.process_runner.stop_all().await;
             } else {
                 let cancel = self.tasks.shutdown.cancellation_token();
-                let pm = Arc::clone(&self.tasks.process_manager);
+                let pm = Arc::clone(&self.tasks.process_runner);
                 let mode = if self.tasks.exit_on_idle {
                     devenv_processes::OnIdle::Exit
                 } else {
                     devenv_processes::OnIdle::Linger
                 };
-                let fg_handle =
-                    tokio::spawn(async move { pm.run_event_loop(cancel, None, mode).await });
+                let fg_handle = tokio::spawn(async move { pm.run_until(cancel, mode).await });
 
                 if let Err(e) = self
                     .consume_events_until(fg_handle)
@@ -377,7 +376,7 @@ impl TasksUi {
             let gave_up = task_state.task.r#type == TaskType::Process
                 && self
                     .tasks
-                    .process_manager
+                    .process_runner
                     .get_phase(process_name(&task_state.task.name))
                     .await
                     == Some(ProcessPhase::GaveUp);

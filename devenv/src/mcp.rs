@@ -65,7 +65,7 @@ impl DevenvMcpServer {
             .as_ref()
             .ok_or_else(|| "Could not determine process socket path".to_string())?;
 
-        devenv_processes::NativeProcessManager::api_request(socket_path, request)
+        devenv_processes::NativeManagerClient::api_request(socket_path, request)
             .await
             .map_err(|e| {
                 if socket_path.exists() {

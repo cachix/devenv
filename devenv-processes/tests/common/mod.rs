@@ -4,8 +4,7 @@
 #![allow(dead_code)]
 
 use devenv_processes::{
-    ListenKind, ListenSpec, NativeProcessManager, ProcessConfig, RestartConfig, RestartPolicy,
-    WatchConfig,
+    ListenKind, ListenSpec, ProcessConfig, ProcessRunner, RestartConfig, RestartPolicy, WatchConfig,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -53,9 +52,9 @@ impl TestContext {
         path
     }
 
-    /// Create a NativeProcessManager
-    pub fn create_manager(&self) -> NativeProcessManager {
-        NativeProcessManager::new(self.state_dir.clone()).expect("Failed to create manager")
+    /// Create a ProcessRunner
+    pub fn create_manager(&self) -> ProcessRunner {
+        ProcessRunner::new(self.state_dir.clone()).expect("Failed to create manager")
     }
 }
 
@@ -196,7 +195,7 @@ where
 
 /// Wait for a process to appear in the manager's job list
 pub async fn wait_for_process_start(
-    manager: &NativeProcessManager,
+    manager: &ProcessRunner,
     name: &str,
     timeout: Duration,
 ) -> bool {
@@ -208,11 +207,7 @@ pub async fn wait_for_process_start(
 }
 
 /// Wait for a process to exit (no longer in job list)
-pub async fn wait_for_process_exit(
-    manager: &NativeProcessManager,
-    name: &str,
-    timeout: Duration,
-) -> bool {
+pub async fn wait_for_process_exit(manager: &ProcessRunner, name: &str, timeout: Duration) -> bool {
     wait_for_condition(
         || async { !manager.list().await.contains(&name.to_string()) },
         timeout,

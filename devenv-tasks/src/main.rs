@@ -269,7 +269,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
             let result = ui.run(run_handle, false).await;
 
-            let cleanup_result = tasks.process_manager().stop_all().await;
+            let cleanup_result = tasks.process_runner().stop_all().await;
             let (status, _) = result?;
             cleanup_result.map_err(|e| {
                 TaskError::Other(format!(

@@ -1,4 +1,4 @@
-//! Readiness probe integration tests for NativeProcessManager.
+//! Readiness probe integration tests for ProcessRunner.
 
 mod common;
 

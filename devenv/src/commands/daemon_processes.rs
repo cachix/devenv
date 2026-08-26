@@ -46,40 +46,24 @@ pub fn run(config_file: &Path) -> Result<()> {
             devenv_activity::Activity::operation("Running processes").parent(None)
         );
 
-        // Service `devenv up` attaches: `Start` requests are served live by the
-        // per-connection API task through the task scheduler — which owns the
-        // dependency graph — so it brings the requested processes up in
-        // dependency order, rather than the client re-deriving the order and
-        // force-starting each one.
-        //
-        // Register the scheduler BEFORE the run below. The API socket starts
-        // accepting connections as soon as processes are pre-registered (well
-        // before `run_with_parent_activity` returns). Without the scheduler
-        // set, a `Start` arriving mid-startup is rejected outright; registered
-        // here it is answered concurrently — names already pre-registered
-        // `Waiting` classify as `skipped`. The coerced `Arc<dyn _>` shares
-        // its refcount with `tasks_runner`, so the `Weak` the manager holds
-        // stays upgradable for the daemon's lifetime.
         let scheduler: Arc<dyn devenv::processes::ProcessScheduler> = tasks_runner.clone();
-        tasks_runner
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
-        // Declare daemon residence before the run, so a `Mode` query
-        // arriving during startup (the API socket accepts as soon as processes
-        // are pre-registered) is answered correctly.
-        tasks_runner
-            .process_manager()
-            .set_residence(devenv::processes::ManagerResidence::Daemon);
+        let manager = Arc::new(devenv::processes::NativeProcessManager::new(
+            scheduler,
+            Arc::clone(tasks_runner.process_runner()),
+            devenv::processes::ManagerResidence::Daemon,
+        ));
 
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 
-        let pid_file = tasks_runner.process_manager().manager_pid_file();
+        let api_server = devenv::processes::NativeApiServer::start(manager)?;
+
+        let pid_file = api_server.manager().manager_pid_file();
         devenv::processes::write_pid(&pid_file, std::process::id())
             .await
             .map_err(|e| miette::miette!("Failed to write PID: {}", e))?;
 
-        let result = tasks_runner
-            .process_manager()
+        let result = api_server
+            .manager()
             .run_event_loop(
                 shutdown.cancellation_token(),
                 None,

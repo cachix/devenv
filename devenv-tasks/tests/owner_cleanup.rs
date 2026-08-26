@@ -376,8 +376,8 @@ async fn assert_native_api_socket_publishing(supervisor: &str, expected: bool) {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn native_devenv_tasks_publishes_native_api_socket() {
-    assert_native_api_socket_publishing("native", true).await;
+async fn native_devenv_tasks_does_not_publish_native_api_socket() {
+    assert_native_api_socket_publishing("native", false).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -385,9 +385,8 @@ async fn external_devenv_tasks_does_not_publish_native_api_socket() {
     assert_native_api_socket_publishing("external", false).await;
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn external_devenv_tasks_does_not_remove_native_api_socket() {
-    let fixture = Fixture::new("external-socket-cleanup");
+async fn assert_devenv_tasks_does_not_remove_native_api_socket(supervisor: &str) {
+    let fixture = Fixture::new(&format!("{supervisor}-socket-cleanup"));
     fixture.write_task("true".to_string(), ShutdownConfig::default());
 
     // Simulate the native owner of the shared socket.
@@ -398,19 +397,40 @@ async fn external_devenv_tasks_does_not_remove_native_api_socket() {
         std::os::unix::net::UnixListener::bind(&socket).expect("bind native manager API socket");
 
     let mut owner = fixture
-        .owner_command_with_supervisor("external")
+        .owner_command_with_supervisor(supervisor)
         .spawn()
-        .expect("spawn external devenv-tasks");
+        .expect("spawn devenv-tasks");
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    if owner.try_wait().expect("poll devenv-tasks").is_none() {
+        signal::kill(
+            Pid::from_raw(owner.id().expect("owner pid") as i32),
+            Signal::SIGINT,
+        )
+        .expect("stop devenv-tasks");
+    }
     let status = tokio::time::timeout(Duration::from_secs(10), owner.wait())
         .await
-        .expect("external devenv-tasks did not exit")
-        .expect("wait for external devenv-tasks");
-    assert!(status.success(), "external devenv-tasks failed: {status}");
+        .expect("devenv-tasks did not exit")
+        .expect("wait for devenv-tasks");
+    assert!(
+        status.success() || supervisor == "native",
+        "devenv-tasks failed: {status}"
+    );
 
     assert!(
         socket.exists(),
-        "external devenv-tasks removed the native manager API socket"
+        "{supervisor} devenv-tasks removed the native manager API socket"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn native_devenv_tasks_does_not_remove_native_api_socket() {
+    assert_devenv_tasks_does_not_remove_native_api_socket("native").await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn external_devenv_tasks_does_not_remove_native_api_socket() {
+    assert_devenv_tasks_does_not_remove_native_api_socket("external").await;
 }
 
 #[tokio::test(flavor = "multi_thread")]

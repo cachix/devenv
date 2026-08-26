@@ -158,11 +158,7 @@ async fn test_external_exits_even_with_watch_paths() {
         let manager = ctx.create_manager();
         manager.start_command(&config, None).await.unwrap();
         manager
-            .run_event_loop(
-                tokio_util::sync::CancellationToken::new(),
-                None,
-                OnIdle::Exit,
-            )
+            .run_until(tokio_util::sync::CancellationToken::new(), OnIdle::Exit)
             .await
             .unwrap();
         assert_eq!(

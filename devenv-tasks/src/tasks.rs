@@ -8,7 +8,7 @@ use crate::types::{
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
 use devenv_processes::{
-    ExitStatus, NativeProcessManager, ProcessConfig, ProcessPhase, StartOutcome, SupervisionMode,
+    ExitStatus, ProcessConfig, ProcessPhase, ProcessRunner, StartOutcome, SupervisionMode,
 };
 use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -79,16 +79,14 @@ impl TasksBuilder {
                 .map_err(|e| Error::io(format!("Failed to initialize task cache: {e}")))?
         };
 
-        // Create process manager for long-running process tasks
-        let mut pm = NativeProcessManager::new(self.config.runtime_dir.clone())
+        // Tasks own process execution, but never daemon discovery or an API
+        // endpoint. Persistent callers compose those around this runner.
+        let mut pm = ProcessRunner::new(self.config.runtime_dir.clone())
             .map_err(|e| Error::io(format!("Failed to initialize process manager: {e}")))?;
-        if supervisor == SupervisionMode::External {
-            pm.disown_runtime_files();
-        }
 
         let notify_finished = Arc::new(Notify::new());
         pm.set_task_notify(Arc::clone(&notify_finished));
-        let process_manager = Arc::new(pm);
+        let process_runner = Arc::new(pm);
 
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
@@ -128,7 +126,7 @@ impl TasksBuilder {
             run_mode: self.config.run_mode,
             cache,
             shutdown: self.shutdown,
-            process_manager,
+            process_runner,
             env: self.config.env,
             bash: self.config.bash,
             refresh_task_cache: self.refresh_task_cache,
@@ -174,8 +172,8 @@ pub struct Tasks {
     pub(crate) run_mode: RunMode,
     pub(crate) cache: TaskCache,
     pub(crate) shutdown: Arc<tokio_shutdown::Shutdown>,
-    /// Process manager for running long-lived process tasks
-    pub(crate) process_manager: Arc<NativeProcessManager>,
+    /// Low-level runner for long-lived process tasks.
+    pub(crate) process_runner: Arc<ProcessRunner>,
     /// Environment variables to pass to processes
     pub(crate) env: HashMap<String, String>,
     /// Path to the bash binary to use for probe commands
@@ -228,9 +226,9 @@ impl Tasks {
         TasksBuilder::new(config, verbosity, shutdown)
     }
 
-    /// Returns a reference to the process manager used for long-lived process tasks.
-    pub fn process_manager(&self) -> &Arc<NativeProcessManager> {
-        &self.process_manager
+    /// Returns the process runner used by process tasks.
+    pub fn process_runner(&self) -> &Arc<ProcessRunner> {
+        &self.process_runner
     }
 
     /// Get the current task completion status
@@ -249,12 +247,12 @@ impl Tasks {
                 // always wins below: it is the graph-owned launch outcome.
                 TaskStatus::Pending if task_state.task.r#type == TaskType::Process => {
                     let pname = crate::types::process_name(&task_state.task.name);
-                    match self.process_manager.get_phase(pname).await {
+                    match self.process_runner.get_phase(pname).await {
                         Some(ProcessPhase::NotStarted | ProcessPhase::Stopped) => {
                             status.skipped += 1
                         }
                         Some(ProcessPhase::Exited) => {
-                            if self.process_manager.get_exit_status(pname).await
+                            if self.process_runner.get_exit_status(pname).await
                                 == Some(ExitStatus::Failure)
                             {
                                 status.failed += 1;
@@ -715,7 +713,7 @@ impl Tasks {
                 continue;
             };
 
-            match self.process_manager.get_phase(&name).await {
+            match self.process_runner.get_phase(&name).await {
                 // Preserve the existing driver for active and scheduled processes.
                 Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::Waiting) => {
                     outcome.skipped.push(name.clone());
@@ -723,7 +721,7 @@ impl Tasks {
                 }
                 // `rearm_waiting` only replaces inactive manager entries.
                 Some(ProcessPhase::Exited | ProcessPhase::GaveUp) => {
-                    if let Err(e) = self.process_manager.stop_and_keep(&name).await {
+                    if let Err(e) = self.process_runner.stop_and_keep(&name).await {
                         tracing::warn!(
                             process = %name,
                             error = %e,
@@ -755,7 +753,7 @@ impl Tasks {
             };
             // Cold subsets leave unseen one-shot predecessors without a driver.
             self.schedule_unseen_oneshot_dependencies(index).await;
-            self.process_manager.rearm_waiting(config.clone()).await;
+            self.process_runner.rearm_waiting(config.clone()).await;
             // Make the manager's re-armed phase authoritative again.
             {
                 let mut ts = self.graph[index].write().await;
@@ -768,18 +766,18 @@ impl Tasks {
             let deps = self.collect_deps(index);
             let task_state = Arc::clone(&self.graph[index]);
             let notify_finished = Arc::clone(&self.notify_finished);
-            let process_manager = Arc::clone(&self.process_manager);
+            let process_runner = Arc::clone(&self.process_runner);
             let shutdown = Arc::clone(&self.shutdown);
             let process_name = name.clone();
 
             // Detached waiters keep unsatisfied starts visible without blocking replies.
             tokio::spawn(async move {
-                match Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown)
+                match Self::wait_for_task_deps(&deps, &process_runner, &notify_finished, &shutdown)
                     .await
                 {
                     DependencyWaitOutcome::Ready => {}
                     outcome => {
-                        process_manager.cancel_waiting(&process_name).await;
+                        process_runner.cancel_waiting(&process_name).await;
                         // Publish the graph outcome before waking transitive waiters.
                         task_state.write().await.status = TaskStatus::Completed(match outcome {
                             DependencyWaitOutcome::Cancelled => TaskCompleted::Cancelled(None),
@@ -796,7 +794,7 @@ impl Tasks {
                 // Scope the read guard before the failure-path write lock.
                 let launch_result = {
                     let ts = task_state.read().await;
-                    ts.run_process(&process_manager, config).await
+                    ts.run_process(&process_runner, config).await
                 };
                 if let Err(e) = launch_result {
                     tracing::error!(
@@ -940,7 +938,7 @@ impl Tasks {
             let notify_ui = Arc::clone(&self.notify_ui);
             let cache = Arc::new(self.cache.clone());
             let shutdown = Arc::clone(&self.shutdown);
-            let process_manager = Arc::clone(&self.process_manager);
+            let process_runner = Arc::clone(&self.process_runner);
             let refresh_task_cache = self.refresh_task_cache;
             let shell_env = self.env.clone();
             let task_activity_id = next_id();
@@ -954,7 +952,7 @@ impl Tasks {
                     notify_ui,
                     cache,
                     shutdown,
-                    process_manager,
+                    process_runner,
                     task_activity_id,
                     refresh_task_cache,
                     shell_env,
@@ -973,12 +971,12 @@ impl Tasks {
         notify_ui: Arc<Notify>,
         cache: Arc<TaskCache>,
         shutdown: Arc<tokio_shutdown::Shutdown>,
-        process_manager: Arc<NativeProcessManager>,
+        process_runner: Arc<ProcessRunner>,
         task_activity_id: u64,
         refresh_task_cache: bool,
         shell_env: HashMap<String, String>,
     ) {
-        match Self::wait_for_task_deps(&deps, &process_manager, &notify_finished, &shutdown).await {
+        match Self::wait_for_task_deps(&deps, &process_runner, &notify_finished, &shutdown).await {
             DependencyWaitOutcome::Ready => {}
             outcome => {
                 let task_name = task_state.read().await.task.name.clone();
@@ -1103,7 +1101,7 @@ impl Tasks {
     async fn eval_dep(
         dep_state: &Arc<RwLock<TaskState>>,
         dep_kind: &DependencyKind,
-        process_manager: &Arc<NativeProcessManager>,
+        process_runner: &Arc<ProcessRunner>,
     ) -> DepEval {
         let dep_guard = dep_state.read().await;
         tracing::trace!(
@@ -1115,7 +1113,7 @@ impl Tasks {
         if dep_guard.task.r#type == TaskType::Process {
             let pname = crate::types::process_name(&dep_guard.task.name);
             // Preserve terminal history hidden by an explicit stop.
-            let live_phase = process_manager.get_dependency_phase(pname).await;
+            let live_phase = process_runner.get_dependency_phase(pname).await;
             let sat = match live_phase {
                 // Live phases outrank stale terminal graph state.
                 Some(
@@ -1173,7 +1171,7 @@ impl Tasks {
             };
             let mut any_blocker = false;
             for (dep_state, dep_kind) in self.collect_deps(index) {
-                let eval = Self::eval_dep(&dep_state, &dep_kind, &self.process_manager).await;
+                let eval = Self::eval_dep(&dep_state, &dep_kind, &self.process_runner).await;
                 // Terminal failures settle the waiter; only unresolved edges can park it.
                 if eval.sat != DepSatisfaction::NotYet {
                     continue;
@@ -1199,7 +1197,7 @@ impl Tasks {
     /// Wait for dependencies; concurrent shutdown takes precedence over failure.
     async fn wait_for_task_deps(
         deps: &[(Arc<RwLock<TaskState>>, DependencyKind)],
-        process_manager: &Arc<NativeProcessManager>,
+        process_runner: &Arc<ProcessRunner>,
         notify_finished: &Notify,
         shutdown: &tokio_shutdown::Shutdown,
     ) -> DependencyWaitOutcome {
@@ -1220,7 +1218,7 @@ impl Tasks {
             let mut all_satisfied = true;
 
             for (dep_state, dep_kind) in deps {
-                let satisfaction = Self::eval_dep(dep_state, dep_kind, process_manager)
+                let satisfaction = Self::eval_dep(dep_state, dep_kind, process_runner)
                     .await
                     .sat;
                 // eval_dep awaits task and manager locks. Shutdown may have
@@ -1302,7 +1300,6 @@ impl Tasks {
         // Long-lived runners register the full graph for later dynamic starts.
         // Transient task runners expose only their cold schedule.
         let mut process_configs: HashMap<NodeIndex, ProcessConfig> = HashMap::new();
-        let mut has_process_tasks = false;
         let process_indices: Vec<_> = if register_unscheduled_processes {
             self.graph.node_indices().collect()
         } else {
@@ -1318,16 +1315,15 @@ impl Tasks {
             }
             match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                 Ok(mut config) => {
-                    has_process_tasks = true;
                     if scheduled.contains(&index) {
-                        self.process_manager
+                        self.process_runner
                             .register_waiting(config.clone(), Some(orchestration_activity.id()))
                             .await;
                         process_configs.insert(index, config);
                     } else {
                         config.start.enable = false;
                         if let Err(e) = self
-                            .process_manager
+                            .process_runner
                             .start_command(&config, Some(orchestration_activity.id()))
                             .await
                         {
@@ -1354,14 +1350,6 @@ impl Tasks {
                     ));
                 }
             }
-        }
-
-        // External wrappers share a runtime directory and cannot own its API socket.
-        if self.supervisor == SupervisionMode::Native
-            && has_process_tasks
-            && let Err(e) = self.process_manager.start_api_server()
-        {
-            error!(error = %e, "failed to start process manager API server");
         }
 
         for index in &self.tasks_order {
@@ -1417,7 +1405,7 @@ impl Tasks {
                 let task_state_clone = Arc::clone(task_state);
                 let notify_finished_clone = Arc::clone(&self.notify_finished);
                 let notify_ui_clone = Arc::clone(&self.notify_ui);
-                let process_manager_clone = self.process_manager.clone();
+                let process_runner_clone = self.process_runner.clone();
                 let orchestration_activity_clone = Arc::clone(&orchestration_activity);
                 let completed_tasks_clone = Arc::clone(&completed_tasks);
                 let shutdown_clone = Arc::clone(&self.shutdown);
@@ -1434,7 +1422,7 @@ impl Tasks {
                         );
                         let dep_outcome = Self::wait_for_task_deps(
                             &deps,
-                            &process_manager_clone,
+                            &process_runner_clone,
                             &notify_finished_clone,
                             &shutdown_clone,
                         )
@@ -1448,7 +1436,7 @@ impl Tasks {
                         if dep_outcome != DependencyWaitOutcome::Ready {
                             // Clean up the Waiting entry in the process manager
                             // so the TUI no longer shows this process as "Waiting".
-                            process_manager_clone.cancel_waiting(&config.name).await;
+                            process_runner_clone.cancel_waiting(&config.name).await;
 
                             Self::mark_task_skipped(
                                 &task_state_clone,
@@ -1470,7 +1458,7 @@ impl Tasks {
                         // the end of the match and would self-deadlock.
                         let launch_result = {
                             let ts = task_state_clone.read().await;
-                            ts.run_process(&process_manager_clone, config).await
+                            ts.run_process(&process_runner_clone, config).await
                         };
                         let launch_info = match launch_result {
                             Ok(info) => info,
@@ -1504,7 +1492,7 @@ impl Tasks {
                             // Stopped/NotStarted end the wait too: a process
                             // stopped mid-launch must not park this task.
                             let _ = wait_for_phase(
-                                &process_manager_clone,
+                                &process_runner_clone,
                                 &notify_finished_clone,
                                 &shutdown_clone,
                                 &launch_info.process_name,
@@ -1546,7 +1534,7 @@ impl Tasks {
             // TODO: remove this clone
             let cache = Arc::new(self.cache.clone());
             let shutdown_clone = Arc::clone(&self.shutdown);
-            let process_manager_clone = Arc::clone(&self.process_manager);
+            let process_runner_clone = Arc::clone(&self.process_runner);
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
             let refresh_task_cache = self.refresh_task_cache;
@@ -1565,7 +1553,7 @@ impl Tasks {
                         notify_ui_clone.clone(),
                         cache,
                         shutdown_clone,
-                        process_manager_clone,
+                        process_runner_clone,
                         task_activity_id,
                         refresh_task_cache,
                         shell_env,
@@ -1617,7 +1605,7 @@ impl Tasks {
                     // is cancelled; terminal phases stay Pending and are counted
                     // via the manager in get_completion_status.
                     let phase = self
-                        .process_manager
+                        .process_runner
                         .get_phase(crate::types::process_name(&task_name))
                         .await;
                     if matches!(
@@ -1649,11 +1637,8 @@ impl Tasks {
     }
 }
 
-/// The owner-side hooks the process manager delegates to: `ApiRequest::Start`
-/// scheduling and the `Wait` parked judgment, both of which need the
-/// dependency graph that lives here. Registered via
-/// `NativeProcessManager::set_scheduler` (weakly, so the manager never keeps
-/// the scheduler alive).
+/// Scheduler operations the persistent process manager delegates to. The
+/// manager holds this scheduler strongly for its full published lifetime.
 #[async_trait::async_trait]
 impl devenv_processes::ProcessScheduler for Tasks {
     async fn start(&self, names: Vec<String>) -> StartOutcome {
@@ -1670,7 +1655,7 @@ impl devenv_processes::ProcessScheduler for Tasks {
 /// no entry for the process. Event-driven: wakes on `notify_finished`, which
 /// the manager fires on every lifecycle and supervisor transition.
 async fn wait_for_phase(
-    manager: &Arc<NativeProcessManager>,
+    manager: &Arc<ProcessRunner>,
     notify_finished: &Notify,
     shutdown: &tokio_shutdown::Shutdown,
     name: &str,
@@ -1926,6 +1911,15 @@ mod schedule_tests {
             .await
             .unwrap();
         (tasks, tmp)
+    }
+
+    fn process_manager(tasks: &Arc<Tasks>) -> devenv_processes::NativeProcessManager {
+        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
+        devenv_processes::NativeProcessManager::new(
+            scheduler,
+            Arc::clone(tasks.process_runner()),
+            devenv_processes::ManagerResidence::InProcess,
+        )
     }
 
     fn oneshot_task(name: &str, after: Vec<&str>) -> TaskConfig {
@@ -2253,9 +2247,8 @@ mod schedule_tests {
             .expect("external processes did not settle");
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            tasks.process_manager().run_event_loop(
+            tasks.process_runner().run_until(
                 tokio_util::sync::CancellationToken::new(),
-                None,
                 devenv_processes::OnIdle::Exit,
             ),
         )
@@ -2266,7 +2259,7 @@ mod schedule_tests {
         let status = tasks.get_completion_status().await;
         assert_eq!(status.succeeded, 1);
         assert_eq!(status.failed, 1);
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     async fn run_cold_dependency_case(case: DependencyCase) {
@@ -2457,9 +2450,9 @@ mod schedule_tests {
                 .await
                 .status
                 .clone();
-            let source_phase = tasks.process_manager().get_phase("source").await;
-            let downstream_phase = tasks.process_manager().get_phase("downstream").await;
-            tasks.process_manager().stop_all().await.unwrap();
+            let source_phase = tasks.process_runner().get_phase("source").await;
+            let downstream_phase = tasks.process_runner().get_phase("downstream").await;
+            tasks.process_runner().stop_all().await.unwrap();
             panic!(
                 "{}: heterogeneous run did not settle; markers=({},{},{},{}), \
                  statuses=({source_status:?},{downstream_status:?}), \
@@ -2479,12 +2472,12 @@ mod schedule_tests {
             .clone();
         let completion = tasks.get_completion_status().await;
         let downstream_phase = if case.dependency.task_type() == TaskType::Oneshot {
-            tasks.process_manager().get_phase("downstream").await
+            tasks.process_runner().get_phase("downstream").await
         } else {
             None
         };
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
 
         assert_eq!(
             downstream_ran.exists(),
@@ -2536,13 +2529,13 @@ mod schedule_tests {
         }
         if case.dependency.task_type() == TaskType::Oneshot {
             assert_eq!(
-                tasks.process_manager().get_phase("downstream").await,
+                tasks.process_runner().get_phase("downstream").await,
                 Some(ProcessPhase::Stopped),
                 "{}: downstream process was not cleaned up",
                 case_name
             );
         } else {
-            let phase = tasks.process_manager().get_phase("source").await;
+            let phase = tasks.process_runner().get_phase("source").await;
             assert!(
                 matches!(phase, Some(ProcessPhase::Stopped | ProcessPhase::Exited)),
                 "{}: source process did not reach a terminal phase: {phase:?}",
@@ -2607,14 +2600,14 @@ mod schedule_tests {
 
         assert!(downstream_ran.exists());
         assert_eq!(
-            tasks.process_manager().get_phase("source").await,
+            tasks.process_runner().get_phase("source").await,
             Some(ProcessPhase::GaveUp)
         );
         let completion = tasks.get_completion_status().await;
         assert_eq!(completion.failed, 1);
         assert_eq!(completion.soft_failed, 1);
         assert!(!completion.has_failures());
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     async fn run_dynamic_oneshot_dependency_case(case: DependencyCase) {
@@ -2695,10 +2688,6 @@ mod schedule_tests {
         )
         .await;
         let tasks = Arc::new(tasks);
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        tasks
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
 
         tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
@@ -2736,7 +2725,7 @@ mod schedule_tests {
             .await
             .status
             .clone();
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
 
         assert_eq!(
             downstream_ran.exists(),
@@ -2757,7 +2746,7 @@ mod schedule_tests {
         }
         if case.dependency.allows_dependent(case.exit) {
             assert_eq!(
-                tasks.process_manager().get_phase("downstream").await,
+                tasks.process_runner().get_phase("downstream").await,
                 Some(ProcessPhase::Stopped),
                 "{}: dynamic downstream was not cleaned up",
                 case_name
@@ -2901,10 +2890,6 @@ mod schedule_tests {
         )
         .await;
         let tasks = Arc::new(tasks);
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        tasks
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
 
         tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
@@ -2925,7 +2910,7 @@ mod schedule_tests {
 
         if case.dependency.kind() != DependencyKind::Completed {
             assert_eq!(
-                tasks.process_manager().get_phase("downstream").await,
+                tasks.process_runner().get_phase("downstream").await,
                 Some(ProcessPhase::Waiting),
                 "{}: downstream must wait while its process predecessor is not started",
                 case_name
@@ -2951,8 +2936,8 @@ mod schedule_tests {
             .await
             .status
             .clone();
-        let source_phase = tasks.process_manager().get_phase("source").await;
-        tasks.process_manager().stop_all().await.unwrap();
+        let source_phase = tasks.process_runner().get_phase("source").await;
+        tasks.process_runner().stop_all().await.unwrap();
 
         assert_eq!(
             downstream_ran.exists(),
@@ -2970,7 +2955,7 @@ mod schedule_tests {
                 case_name
             );
             assert_eq!(
-                tasks.process_manager().get_phase("downstream").await,
+                tasks.process_runner().get_phase("downstream").await,
                 Some(ProcessPhase::Stopped),
                 "{}: downstream was not cleaned up",
                 case_name
@@ -3107,10 +3092,6 @@ mod schedule_tests {
         )
         .await;
         let tasks = Arc::new(tasks);
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        tasks
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
 
         if !dynamic {
             let scheduled = task_names(&tasks).await;
@@ -3124,7 +3105,7 @@ mod schedule_tests {
             let outcome = tasks.start_with_deps(["backend"]).await;
             assert_eq!(outcome.scheduled, ["backend"]);
             assert_eq!(
-                tasks.process_manager().get_phase("backend").await,
+                tasks.process_runner().get_phase("backend").await,
                 Some(ProcessPhase::Waiting)
             );
             let outcome = tasks.start_with_deps(["source"]).await;
@@ -3132,14 +3113,14 @@ mod schedule_tests {
         }
         wait_phase(&tasks, "backend", ProcessPhase::Ready).await;
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
         assert_eq!(std::fs::read_to_string(&left_runs).unwrap(), "left\n");
         assert_eq!(std::fs::read_to_string(&right_runs).unwrap(), "right\n");
         assert!(backend_ran.exists());
         assert!(!unrelated_ran.exists());
         for process in ["source", "backend"] {
             assert_eq!(
-                tasks.process_manager().get_phase(process).await,
+                tasks.process_runner().get_phase(process).await,
                 Some(ProcessPhase::Stopped),
                 "{process} was not cleaned up"
             );
@@ -3210,11 +3191,11 @@ mod schedule_tests {
 
         wait_for_pipe_signal(bridge_listener, "bridge command to start").await;
         assert_eq!(
-            tasks.process_manager().get_phase("source").await,
+            tasks.process_runner().get_phase("source").await,
             Some(ProcessPhase::Ready)
         );
         assert_eq!(
-            tasks.process_manager().get_phase("backend").await,
+            tasks.process_runner().get_phase("backend").await,
             Some(ProcessPhase::Waiting)
         );
         tasks.shutdown.shutdown();
@@ -3238,14 +3219,14 @@ mod schedule_tests {
                 "{name} did not record cancellation: {status:?}"
             );
         }
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
         for process in ["source", "backend"] {
             assert_eq!(
-                tasks.process_manager().get_phase(process).await,
+                tasks.process_runner().get_phase(process).await,
                 Some(ProcessPhase::Stopped)
             );
         }
-        assert!(tasks.process_manager().wait_settled().await);
+        assert!(process_manager(&tasks).wait_settled().await);
     }
 
     #[tokio::test]
@@ -3349,11 +3330,11 @@ mod schedule_tests {
             "a downstream node ran before its dependency"
         );
         assert_eq!(
-            tasks.process_manager().get_phase("source").await,
+            tasks.process_runner().get_phase("source").await,
             Some(ProcessPhase::Ready)
         );
         assert_eq!(
-            tasks.process_manager().get_phase("backend").await,
+            tasks.process_runner().get_phase("backend").await,
             Some(ProcessPhase::Ready)
         );
         assert!(matches!(
@@ -3364,7 +3345,7 @@ mod schedule_tests {
             TaskStatus::Completed(TaskCompleted::Success(_, _))
         ));
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3446,12 +3427,12 @@ mod schedule_tests {
             TaskStatus::Completed(TaskCompleted::DependencyFailed)
         ));
         assert_eq!(
-            tasks.process_manager().get_phase("blocked-backend").await,
+            tasks.process_runner().get_phase("blocked-backend").await,
             Some(ProcessPhase::Stopped)
         );
         assert!(tasks.get_completion_status().await.has_failures());
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     /// Wait for a lifecycle notification that publishes the requested phase.
@@ -3461,7 +3442,7 @@ mod schedule_tests {
                 let notified = tasks.notify_finished.notified();
                 tokio::pin!(notified);
                 notified.as_mut().enable();
-                if tasks.process_manager().get_phase(name).await == Some(want) {
+                if tasks.process_runner().get_phase(name).await == Some(want) {
                     return;
                 }
                 notified.await;
@@ -3494,7 +3475,7 @@ mod schedule_tests {
     #[tokio::test]
     async fn dependency_wait_reports_failure_without_shutdown() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         let dependency = Arc::new(RwLock::new(TaskState::new(
             oneshot_task("devenv:tasks:failed", vec![]),
             VerbosityLevel::Normal,
@@ -3513,7 +3494,7 @@ mod schedule_tests {
     #[tokio::test]
     async fn dependency_wait_prefers_shutdown_over_failure() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         let dependency = Arc::new(RwLock::new(TaskState::new(
             oneshot_task("devenv:tasks:failed", vec![]),
             VerbosityLevel::Normal,
@@ -3543,9 +3524,9 @@ mod schedule_tests {
 
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        tasks.process_manager().stop_and_keep("web").await.unwrap();
+        tasks.process_runner().stop_and_keep("web").await.unwrap();
         assert_eq!(
-            tasks.process_manager().get_phase("web").await,
+            tasks.process_runner().get_phase("web").await,
             Some(ProcessPhase::Stopped)
         );
 
@@ -3553,7 +3534,7 @@ mod schedule_tests {
         assert_eq!(outcome.scheduled, vec!["web".to_string()]);
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3588,7 +3569,7 @@ mod schedule_tests {
         assert_eq!(outcome.scheduled, vec!["web".to_string()]);
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3631,7 +3612,7 @@ mod schedule_tests {
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
         assert_eq!(std::fs::read_to_string(&marker).unwrap().trim(), "3");
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3652,18 +3633,14 @@ mod schedule_tests {
         tasks.run(true).await;
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
-        tasks.process_manager().stop_and_keep("beta").await.unwrap();
-        tasks
-            .process_manager()
-            .stop_and_keep("gamma")
-            .await
-            .unwrap();
+        tasks.process_runner().stop_and_keep("beta").await.unwrap();
+        tasks.process_runner().stop_and_keep("gamma").await.unwrap();
 
         let outcome = tasks.start_with_deps(["beta"]).await;
         assert_eq!(outcome.scheduled, vec!["beta".to_string()]);
 
         let phase = tasks
-            .process_manager
+            .process_runner
             .get_phase("beta")
             .await
             .expect("beta must stay registered while its dependency is unmet");
@@ -3674,7 +3651,7 @@ mod schedule_tests {
         );
         assert!(
             tasks
-                .process_manager
+                .process_runner
                 .subscribe_status("beta")
                 .await
                 .is_none(),
@@ -3685,7 +3662,7 @@ mod schedule_tests {
         assert_eq!(outcome.scheduled, ["gamma"]);
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3719,10 +3696,6 @@ mod schedule_tests {
         )
         .await;
         let tasks = Arc::new(tasks);
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        tasks
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
 
         tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
@@ -3753,11 +3726,11 @@ mod schedule_tests {
         }
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
         assert!(
-            tasks.process_manager().wait_settled().await,
+            process_manager(&tasks).wait_settled().await,
             "processes wait must settle after the dynamic closure completes"
         );
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3796,10 +3769,6 @@ mod schedule_tests {
         )
         .await;
         let tasks = Arc::new(tasks);
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        tasks
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
 
         tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
@@ -3843,17 +3812,17 @@ mod schedule_tests {
                 "{name} must record DependencyFailed, got {status:?}"
             );
             assert_eq!(
-                tasks.process_manager().get_phase(name).await,
+                tasks.process_runner().get_phase(name).await,
                 Some(ProcessPhase::Stopped),
                 "{name} must leave Waiting when its dependency fails"
             );
         }
         assert!(
-            tasks.process_manager().wait_settled().await,
+            process_manager(&tasks).wait_settled().await,
             "no dynamically scheduled node may remain pending or waiting"
         );
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3905,10 +3874,6 @@ mod schedule_tests {
         .await;
         let tasks = Arc::new(tasks);
         let setup_listener = listen_for_pipe_signal(setup_started);
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        tasks
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
 
         tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
@@ -3938,13 +3903,13 @@ mod schedule_tests {
         }
         for name in ["beta", "gamma"] {
             assert_eq!(
-                tasks.process_manager().get_phase(name).await,
+                tasks.process_runner().get_phase(name).await,
                 Some(ProcessPhase::Stopped)
             );
         }
-        assert!(tasks.process_manager().wait_settled().await);
+        assert!(process_manager(&tasks).wait_settled().await);
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3970,13 +3935,13 @@ mod schedule_tests {
         assert!(outcome.scheduled.is_empty());
         assert!(outcome.skipped.is_empty());
 
-        tasks.process_manager().stop_and_keep("web").await.unwrap();
+        tasks.process_runner().stop_and_keep("web").await.unwrap();
         let outcome = tasks.start_with_deps(["web"]).await;
         assert_eq!(outcome.scheduled, vec!["web".to_string()]);
         assert!(outcome.skipped.is_empty());
         wait_phase(&tasks, "web", ProcessPhase::Ready).await;
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -4030,10 +3995,6 @@ mod schedule_tests {
         )
         .await;
         let tasks = Arc::new(tasks);
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        tasks
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
 
         tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
@@ -4088,7 +4049,7 @@ mod schedule_tests {
             );
         }
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -4108,10 +4069,6 @@ mod schedule_tests {
         )
         .await;
         let tasks = Arc::new(tasks);
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        tasks
-            .process_manager()
-            .set_scheduler(Arc::downgrade(&scheduler));
 
         tasks.run(true).await;
         wait_phase(&tasks, "delta", ProcessPhase::Ready).await;
@@ -4119,24 +4076,16 @@ mod schedule_tests {
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
         assert!(!tasks.dependency_parked("beta").await);
-        assert!(tasks.process_manager().wait_settled().await);
+        assert!(process_manager(&tasks).wait_settled().await);
 
-        tasks.process_manager().stop_and_keep("beta").await.unwrap();
-        tasks
-            .process_manager()
-            .stop_and_keep("gamma")
-            .await
-            .unwrap();
-        tasks
-            .process_manager()
-            .stop_and_keep("delta")
-            .await
-            .unwrap();
+        tasks.process_runner().stop_and_keep("beta").await.unwrap();
+        tasks.process_runner().stop_and_keep("gamma").await.unwrap();
+        tasks.process_runner().stop_and_keep("delta").await.unwrap();
 
         let outcome = tasks.start_with_deps(["beta"]).await;
         assert_eq!(outcome.scheduled, vec!["beta".to_string()]);
         assert_eq!(
-            tasks.process_manager().get_phase("beta").await,
+            tasks.process_runner().get_phase("beta").await,
             Some(ProcessPhase::Waiting)
         );
         assert!(
@@ -4144,7 +4093,7 @@ mod schedule_tests {
             "beta must be parked: gamma is stopped"
         );
         assert!(
-            tasks.process_manager().wait_settled().await,
+            process_manager(&tasks).wait_settled().await,
             "a parked Waiting process must settle Wait"
         );
 
@@ -4158,7 +4107,7 @@ mod schedule_tests {
             tasks.dependency_parked("beta").await,
             "beta must be transitively parked through waiting gamma"
         );
-        assert!(tasks.process_manager().wait_settled().await);
+        assert!(process_manager(&tasks).wait_settled().await);
 
         let outcome = tasks.start_with_deps(["delta"]).await;
         assert_eq!(outcome.scheduled, vec!["delta".to_string()]);
@@ -4166,7 +4115,7 @@ mod schedule_tests {
         assert!(!tasks.dependency_parked("beta").await);
         assert!(!tasks.dependency_parked("gamma").await);
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -4193,10 +4142,10 @@ mod schedule_tests {
             .await
             .build_process_config(&tasks.env, &tasks.bash, tasks.supervisor)
             .unwrap();
-        tasks.process_manager().register_waiting(d_cfg, None).await;
-        tasks.process_manager().cancel_waiting("d").await;
+        tasks.process_runner().register_waiting(d_cfg, None).await;
+        tasks.process_runner().cancel_waiting("d").await;
         assert_eq!(
-            tasks.process_manager().get_phase("d").await,
+            tasks.process_runner().get_phase("d").await,
             Some(ProcessPhase::Stopped)
         );
 
@@ -4234,7 +4183,7 @@ mod schedule_tests {
             .build_process_config(&tasks.env, &tasks.bash, tasks.supervisor)
             .unwrap();
         tasks
-            .process_manager
+            .process_runner
             .start_command(&p_cfg, None)
             .await
             .unwrap();
@@ -4246,9 +4195,9 @@ mod schedule_tests {
             "an exited process satisfies @started, so d must not be parked"
         );
 
-        tasks.process_manager().stop_and_keep("p").await.unwrap();
+        tasks.process_runner().stop_and_keep("p").await.unwrap();
         assert_eq!(
-            tasks.process_manager().get_phase("p").await,
+            tasks.process_runner().get_phase("p").await,
             Some(ProcessPhase::Stopped),
         );
 
@@ -4258,7 +4207,7 @@ mod schedule_tests {
              an explicit stop; d must not be judged dependency-parked"
         );
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -4278,7 +4227,7 @@ mod schedule_tests {
         tasks.run(false).await;
 
         assert_eq!(
-            tasks.process_manager().get_phase("docs").await,
+            tasks.process_runner().get_phase("docs").await,
             None,
             "an unscheduled process must not leak into a transient task runner"
         );
@@ -4326,13 +4275,13 @@ mod schedule_tests {
         tasks.run(true).await;
         for name in ["worker", "blocked"] {
             assert_eq!(
-                tasks.process_manager().get_phase(name).await,
+                tasks.process_runner().get_phase(name).await,
                 Some(ProcessPhase::NotStarted),
                 "{name} must be visible to the retained manager without launching"
             );
         }
 
-        tasks.process_manager().stop_all().await.unwrap();
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     #[tokio::test]

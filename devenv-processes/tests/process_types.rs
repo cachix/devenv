@@ -1,4 +1,4 @@
-//! Process type integration tests for NativeProcessManager.
+//! Process type integration tests for ProcessRunner.
 
 mod common;
 

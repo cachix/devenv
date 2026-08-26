@@ -313,7 +313,7 @@ impl std::fmt::Display for ProcessPhase {
     }
 }
 
-/// Controls [`NativeProcessManager::run_event_loop`] after all processes settle.
+/// Controls manager and runner event loops after all processes settle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OnIdle {
     /// Stay alive until shutdown.
@@ -372,7 +372,7 @@ fn lifecycle_phase(terminal_phase: Option<ProcessPhase>) -> ProcessPhase {
     terminal_phase.unwrap_or(ProcessPhase::Stopped)
 }
 
-/// Resources consumed by [`NativeProcessManager::finish_stop`].
+/// Resources consumed by [`ProcessRunner::finish_stop`].
 struct StopParts {
     job: Arc<Job>,
     cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
@@ -534,8 +534,12 @@ impl ProcessEntry {
     }
 }
 
-/// Native process manager using watchexec-supervisor
-pub struct NativeProcessManager {
+/// Runs and supervises native child processes.
+///
+/// This type deliberately has no API, PID-file, or socket ownership. It is a
+/// reusable execution component for both persistent managers and transient
+/// task runs.
+pub struct ProcessRunner {
     processes: Arc<RwLock<HashMap<String, ProcessEntry>>>,
     state_dir: PathBuf,
     shutdown: CancellationToken,
@@ -549,26 +553,10 @@ pub struct NativeProcessManager {
     live: Arc<AtomicUsize>,
     /// Wakes a foreground run when a process reaches a terminal phase.
     completion: Arc<Notify>,
-    /// Whether this instance removes the socket and PID file on drop.
-    owns_runtime_files: bool,
-    /// The owning task scheduler (devenv-tasks) servicing `ApiRequest::Start`
-    /// and the `Wait` parked judgment. The manager can't drive dependency
-    /// ordering itself — the graph lives in `devenv-tasks` — so it delegates.
-    /// Set once, after the manager is wrapped in an `Arc`; unset on managers
-    /// without an owning scheduler.
-    scheduler: std::sync::OnceLock<std::sync::Weak<dyn ProcessScheduler>>,
-    /// Where this manager resides, reported over `ApiRequest::Residence`. Set
-    /// once by the owning CLI. An unset manager answers `InProcess` — the conservative
-    /// default: another terminal's `up -d` will refuse to schedule into a
-    /// manager that has not declared itself a daemon.
-    residence: std::sync::OnceLock<ManagerResidence>,
 }
 
-/// Owner-side scheduler hooks. Implemented by the task scheduler that owns
-/// this manager (devenv-tasks), keeping the dependency graph out of
-/// devenv-processes. Held weakly so the manager never keeps its owner alive;
-/// a dead `Weak` (the owner is gone, e.g. a `devenv test`-owned manager after
-/// its run) behaves like no scheduler at all.
+/// Scheduler operations needed by the persistent process manager. Implemented
+/// by `devenv-tasks`, keeping its concrete task graph out of this crate.
 #[async_trait]
 pub trait ProcessScheduler: Send + Sync {
     /// Service `ApiRequest::Start`: bring the named processes up honouring their
@@ -577,11 +565,7 @@ pub trait ProcessScheduler: Send + Sync {
     ///
     /// Called directly from the per-connection API task, so a long-running
     /// `start` blocks only that one connection — other clients, further `Start`
-    /// requests, and shutdown handling proceed concurrently. The scheduler is
-    /// registered before the cold start runs; a `Start` arriving mid-startup is
-    /// served concurrently — names already pre-registered `Waiting` classify
-    /// as `skipped`, and the launch race handling in `launch_waiting` makes
-    /// the residual pre-registration race safe.
+    /// requests, and shutdown handling proceed concurrently.
     async fn start(&self, names: Vec<String>) -> StartOutcome;
 
     /// Whether the named `Waiting` process is dependency-parked: all of its
@@ -590,6 +574,70 @@ pub trait ProcessScheduler: Send + Sync {
     /// process). Judged live against the scheduler's graph at call time, so
     /// the `Wait` settled rule never acts on stale information.
     async fn dependency_parked(&self, process_name: &str) -> bool;
+}
+
+/// High-level native manager. It owns the task scheduler and the process
+/// runner as one persistent service; the API server owns this manager.
+pub struct NativeProcessManager {
+    scheduler: Arc<dyn ProcessScheduler>,
+    runner: Arc<ProcessRunner>,
+    residence: ManagerResidence,
+}
+
+impl NativeProcessManager {
+    pub fn new(
+        scheduler: Arc<dyn ProcessScheduler>,
+        runner: Arc<ProcessRunner>,
+        residence: ManagerResidence,
+    ) -> Self {
+        Self {
+            scheduler,
+            runner,
+            residence,
+        }
+    }
+
+    pub fn process_runner(&self) -> &Arc<ProcessRunner> {
+        &self.runner
+    }
+
+    fn scheduler(&self) -> Arc<dyn ProcessScheduler> {
+        Arc::clone(&self.scheduler)
+    }
+
+    pub fn residence(&self) -> ManagerResidence {
+        self.residence
+    }
+}
+
+impl std::ops::Deref for NativeProcessManager {
+    type Target = ProcessRunner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.runner
+    }
+}
+
+/// Owns the native manager's published Unix socket and accept loop.
+pub struct NativeApiServer {
+    manager: Arc<NativeProcessManager>,
+    socket_path: PathBuf,
+    task: JoinHandle<()>,
+}
+
+/// Path-only control client for an already-running native manager.
+pub struct NativeManagerClient {
+    state_dir: PathBuf,
+}
+
+impl NativeManagerClient {
+    pub fn new(state_dir: PathBuf) -> Self {
+        Self { state_dir }
+    }
+
+    fn manager_pid_file(&self) -> PathBuf {
+        self.state_dir.join("native-manager.pid")
+    }
 }
 
 /// Display ports for a process: socket-activation `listen` specs plus declared
@@ -906,8 +954,8 @@ fn spawn_notify_forwarder(
     })
 }
 
-impl NativeProcessManager {
-    /// Create a new native process manager
+impl ProcessRunner {
+    /// Create a native process runner.
     pub fn new(state_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&state_dir).into_diagnostic()?;
 
@@ -919,52 +967,7 @@ impl NativeProcessManager {
             entries_changed: Arc::new(Notify::new()),
             live: Arc::new(AtomicUsize::new(0)),
             completion: Arc::new(Notify::new()),
-            owns_runtime_files: true,
-            scheduler: std::sync::OnceLock::new(),
-            residence: std::sync::OnceLock::new(),
         })
-    }
-
-    /// Declare where this manager resides, so it can answer
-    /// `ApiRequest::Residence` authoritatively. Set once by the owning CLI;
-    /// ignored if already set.
-    pub fn set_residence(&self, residence: ManagerResidence) {
-        let _ = self.residence.set(residence);
-    }
-
-    /// This manager's declared residence. Defaults to `InProcess` when
-    /// unset (the conservative choice: do not auto-schedule into it).
-    pub fn residence(&self) -> ManagerResidence {
-        self.residence
-            .get()
-            .copied()
-            .unwrap_or(ManagerResidence::InProcess)
-    }
-
-    /// Register the owning task scheduler that services `ApiRequest::Start` and
-    /// the `Wait` parked judgment. Without it, `Start` requests are rejected and
-    /// `Waiting` entries never settle a `Wait`. Can be called after the
-    /// manager is wrapped in an `Arc`; ignored if already set.
-    pub fn set_scheduler(&self, scheduler: std::sync::Weak<dyn ProcessScheduler>) {
-        let _ = self.scheduler.set(scheduler);
-    }
-
-    /// The owning task scheduler, if one is registered and its owner is still
-    /// alive. A `None` means dependency-aware launching is unavailable (no
-    /// owner, or it has been dropped) and callers fall back accordingly.
-    fn scheduler(&self) -> Option<Arc<dyn ProcessScheduler>> {
-        self.scheduler.get().and_then(std::sync::Weak::upgrade)
-    }
-
-    /// Mark this instance as a control client that should not clean up
-    /// runtime files (socket, pid file) on drop.
-    pub fn set_control_client(&mut self) {
-        self.disown_runtime_files();
-    }
-
-    /// Keep shared runtime files when this manager is dropped.
-    pub fn disown_runtime_files(&mut self) {
-        self.owns_runtime_files = false;
     }
 
     /// Set the notify handle used to wake the task dependency loop
@@ -2056,6 +2059,38 @@ impl NativeProcessManager {
         }
     }
 
+    /// Keep a transient process runner alive until cancellation or idleness.
+    /// Interactive commands and dependency-aware restarts belong to
+    /// [`NativeProcessManager::run_event_loop`].
+    pub async fn run_until(
+        &self,
+        cancellation_token: CancellationToken,
+        mode: OnIdle,
+    ) -> Result<()> {
+        let done = || mode == OnIdle::Exit && self.live.load(Ordering::SeqCst) == 0;
+        if done() {
+            return Ok(());
+        }
+
+        loop {
+            tokio::select! {
+                _ = cancellation_token.cancelled() => {
+                    self.stop_all().await?;
+                    break;
+                }
+                _ = self.completion.notified() => {}
+            }
+
+            if done() {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl NativeProcessManager {
     /// Wait until every process is terminal, ready, or dependency-parked.
     async fn handle_wait(&self) -> ApiResponse {
         // Register both notifiers before checking to avoid missed transitions.
@@ -2110,9 +2145,7 @@ impl NativeProcessManager {
         if waiting.is_empty() {
             return true;
         }
-        let Some(scheduler) = self.scheduler() else {
-            return false;
-        };
+        let scheduler = self.scheduler();
         for name in waiting {
             if !scheduler.dependency_parked(&name).await {
                 return false;
@@ -2120,13 +2153,12 @@ impl NativeProcessManager {
         }
         true
     }
+}
 
-    /// Start the API socket server for external queries (e.g., `devenv processes wait`).
-    ///
-    /// Listens on `state_dir/native.sock` using newline-delimited JSON (`ApiRequest`/`ApiResponse`).
-    /// Must be called after all initial processes have been registered in `jobs`.
-    pub fn start_api_server(self: &Arc<Self>) -> Result<()> {
-        let sock_path = self.api_socket_path();
+impl NativeApiServer {
+    /// Publish a manager over its native Unix socket.
+    pub fn start(manager: Arc<NativeProcessManager>) -> Result<Self> {
+        let sock_path = manager.api_socket_path();
         let _ = std::fs::remove_file(&sock_path);
 
         let listener = std::os::unix::net::UnixListener::bind(&sock_path)
@@ -2136,13 +2168,13 @@ impl NativeProcessManager {
         let listener = tokio::net::UnixListener::from_std(listener).into_diagnostic()?;
         info!("API server listening on {}", sock_path.display());
 
-        let manager = Arc::clone(self);
-        tokio::spawn(async move {
+        let accept_manager = Arc::clone(&manager);
+        let task = tokio::spawn(async move {
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
-                        let manager = Arc::clone(&manager);
-                        tokio::spawn(Self::handle_api_client(stream, manager));
+                        let manager = Arc::clone(&accept_manager);
+                        tokio::spawn(NativeProcessManager::handle_api_client(stream, manager));
                     }
                     Err(e) => {
                         warn!("API accept error: {}", e);
@@ -2152,9 +2184,35 @@ impl NativeProcessManager {
             }
         });
 
-        Ok(())
+        Ok(Self {
+            manager,
+            socket_path: sock_path,
+            task,
+        })
     }
 
+    /// The manager served by this endpoint.
+    pub fn manager(&self) -> &Arc<NativeProcessManager> {
+        &self.manager
+    }
+}
+
+impl std::fmt::Debug for NativeApiServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NativeApiServer")
+            .field("socket_path", &self.socket_path)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Drop for NativeApiServer {
+    fn drop(&mut self) {
+        self.task.abort();
+        let _ = std::fs::remove_file(&self.socket_path);
+    }
+}
+
+impl NativeProcessManager {
     /// Build a `ProcessInfo` from a process entry.
     fn process_info(name: &str, entry: &ProcessEntry) -> ProcessInfo {
         let (phase, restart_count) = match entry {
@@ -2243,28 +2301,15 @@ impl NativeProcessManager {
                         drop(procs);
                         // A stopped process is brought back through the
                         // scheduler so its `after`/`before` dependencies are
-                        // honoured like any other launch; the dep-blind
-                        // direct start remains only as a fallback for
-                        // managers without a registered scheduler.
-                        match manager.scheduler() {
-                            Some(scheduler) => {
-                                let outcome = scheduler.start(vec![name.clone()]).await;
-                                if outcome.scheduled.contains(&name)
-                                    || outcome.skipped.contains(&name)
-                                {
-                                    ApiResponse::Ok
-                                } else {
-                                    ApiResponse::Error {
-                                        message: format!("failed to restart process '{}'", name),
-                                    }
-                                }
+                        // honoured like any other launch.
+                        let scheduler = manager.scheduler();
+                        let outcome = scheduler.start(vec![name.clone()]).await;
+                        if outcome.scheduled.contains(&name) || outcome.skipped.contains(&name) {
+                            ApiResponse::Ok
+                        } else {
+                            ApiResponse::Error {
+                                message: format!("failed to restart process '{}'", name),
                             }
-                            None => match manager.start_not_started(&name).await {
-                                Ok(_) => ApiResponse::Ok,
-                                Err(e) => ApiResponse::Error {
-                                    message: format!("failed to restart process '{}': {}", name, e),
-                                },
-                            },
                         }
                     }
                     Some(_) => {
@@ -2279,18 +2324,13 @@ impl NativeProcessManager {
                     None => Self::process_not_found(&name),
                 }
             }
-            Ok(ApiRequest::Start { names }) => match manager.scheduler() {
-                Some(scheduler) => ApiResponse::Start {
-                    outcome: scheduler.start(names).await,
-                },
-                None => ApiResponse::Error {
-                    message: "this manager has no process scheduler to handle `start`".to_string(),
-                },
+            Ok(ApiRequest::Start { names }) => ApiResponse::Start {
+                outcome: manager.scheduler().start(names).await,
             },
             Ok(ApiRequest::Residence) => ApiResponse::Residence {
                 residence: manager.residence(),
             },
-            Ok(ApiRequest::Stop { name }) => match manager.stop(&name).await {
+            Ok(ApiRequest::Stop { name }) => match manager.process_runner().stop(&name).await {
                 Ok(()) => ApiResponse::Ok,
                 Err(e) => ApiResponse::Error {
                     message: format!("failed to stop process '{}': {}", name, e),
@@ -2551,7 +2591,9 @@ impl NativeProcessManager {
             ));
         }
     }
+}
 
+impl NativeManagerClient {
     /// Connect to a running manager and open an attach event stream.
     pub async fn attach_stream(socket_path: &Path) -> Result<AttachStream> {
         use tokio::io::{AsyncBufReadExt, BufReader};
@@ -2682,7 +2724,9 @@ impl NativeProcessManager {
             other => bail!("Unexpected response: {:?}", other),
         }
     }
+}
 
+impl NativeProcessManager {
     /// Handle a single process command (restart, start not-started, etc.).
     pub async fn handle_command(&self, cmd: ProcessCommand) {
         match cmd {
@@ -2692,25 +2736,9 @@ impl NativeProcessManager {
                     Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. })
                 );
                 if needs_fresh_start {
-                    // Bring a stopped/not-started process back through the
-                    // scheduler so its `after`/`before` dependencies are
-                    // honoured, matching the socket `Restart`/`Start` path. The
-                    // dep-blind direct start remains only as a fallback for a
-                    // manager with no registered scheduler.
-                    match self.scheduler() {
-                        Some(scheduler) => {
-                            let outcome = scheduler.start(vec![name.clone()]).await;
-                            if !outcome.scheduled.contains(&name)
-                                && !outcome.skipped.contains(&name)
-                            {
-                                warn!(process = %name, "failed to start process");
-                            }
-                        }
-                        None => {
-                            if let Err(e) = self.start_not_started(&name).await {
-                                warn!(process = %name, error = ?e, "failed to start process");
-                            }
-                        }
+                    let outcome = self.scheduler().start(vec![name.clone()]).await;
+                    if !outcome.scheduled.contains(&name) && !outcome.skipped.contains(&name) {
+                        warn!(process = %name, "failed to start process");
                     }
                 } else {
                     if let Err(e) = self.restart(&name).await {
@@ -2815,38 +2843,27 @@ impl NativeProcessManager {
         info!("Manager event loop stopped");
         Ok(())
     }
+}
 
-    /// Save the manager PID to a file
-    pub fn save_manager_pid(pid_path: &Path) -> Result<()> {
-        let pid = std::process::id();
-        std::fs::write(pid_path, pid.to_string()).into_diagnostic()?;
-        debug!("Saved manager PID {} to {}", pid, pid_path.display());
-        Ok(())
-    }
-
-    /// Load the manager PID from a file
-    pub fn load_manager_pid(pid_path: &Path) -> Result<u32> {
-        let pid_str = std::fs::read_to_string(pid_path).into_diagnostic()?;
-        let pid = pid_str.trim().parse::<u32>().into_diagnostic()?;
-        Ok(pid)
-    }
-
-    /// Stop the manager daemon by sending SIGTERM
-    async fn stop_manager(&self) -> Result<()> {
+#[async_trait]
+impl ProcessManagerControl for NativeManagerClient {
+    async fn stop(&self) -> Result<()> {
         let manager_pid_file = self.manager_pid_file();
-
         if !manager_pid_file.exists() {
             bail!("Native process manager not running (PID file not found)");
         }
 
-        let manager_pid = Self::load_manager_pid(&manager_pid_file)?;
+        let manager_pid = std::fs::read_to_string(&manager_pid_file)
+            .into_diagnostic()?
+            .trim()
+            .parse::<u32>()
+            .into_diagnostic()?;
         let pid = Pid::from_raw(manager_pid as i32);
 
         info!("Stopping native process manager (PID: {})", manager_pid);
 
-        // Send SIGTERM
         match signal::kill(pid, NixSignal::SIGTERM) {
-            Ok(_) => {
+            Ok(()) => {
                 debug!("Sent SIGTERM to manager process (PID {})", pid);
             }
             Err(nix::errno::Errno::ESRCH) => {
@@ -2860,16 +2877,16 @@ impl NativeProcessManager {
                     .wrap_err("Failed to remove stale PID file")?;
                 return Ok(());
             }
-            Err(e) => {
+            Err(error) => {
                 bail!(
                     "Failed to send SIGTERM to manager process (PID {}): {}",
                     pid,
-                    e
+                    error
                 );
             }
         }
 
-        // Wait for shutdown with exponential backoff
+        // Wait for shutdown with exponential backoff.
         let start = std::time::Instant::now();
         let max_wait = Duration::from_secs(30);
         let mut interval = Duration::from_millis(100);
@@ -2877,7 +2894,7 @@ impl NativeProcessManager {
 
         loop {
             match signal::kill(pid, None) {
-                Ok(_) => {
+                Ok(()) => {
                     if start.elapsed() >= max_wait {
                         warn!(
                             "Manager did not shut down within {} seconds, sending SIGKILL",
@@ -2885,8 +2902,8 @@ impl NativeProcessManager {
                         );
 
                         match signal::kill(pid, NixSignal::SIGKILL) {
-                            Ok(_) => info!("Sent SIGKILL to manager (PID {})", pid),
-                            Err(e) => warn!("Failed to send SIGKILL: {}", e),
+                            Ok(()) => info!("Sent SIGKILL to manager (PID {})", pid),
+                            Err(error) => warn!("Failed to send SIGKILL: {}", error),
                         }
 
                         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -2905,32 +2922,18 @@ impl NativeProcessManager {
                     );
                     break;
                 }
-                Err(e) => {
-                    warn!("Error checking manager process: {}", e);
+                Err(error) => {
+                    warn!("Error checking manager process: {}", error);
                     break;
                 }
             }
         }
 
-        // Remove PID file (may already be gone if the daemon cleaned up)
+        // The daemon may already have removed its PID file.
         let _ = tokio::fs::remove_file(&manager_pid_file).await;
 
         info!("Native process manager stopped");
         Ok(())
-    }
-}
-
-#[async_trait]
-impl ProcessManagerControl for NativeProcessManager {
-    async fn stop(&self) -> Result<()> {
-        // Check if there's a manager daemon running
-        let manager_pid_file = self.manager_pid_file();
-        if manager_pid_file.exists() {
-            return self.stop_manager().await;
-        }
-
-        // Otherwise just stop all local jobs
-        self.stop_all().await
     }
 
     async fn is_running(&self) -> bool {
@@ -2941,14 +2944,11 @@ impl ProcessManagerControl for NativeProcessManager {
     }
 }
 
-impl Drop for NativeProcessManager {
+impl Drop for ProcessRunner {
     fn drop(&mut self) {
-        // Signal supervisors to exit so they don't keep running after the manager is gone
+        // A runner owns only the child supervisors it created. Persistent
+        // discovery state is owned by NativeApiServer and the manager host.
         self.shutdown_supervisors();
-        if self.owns_runtime_files {
-            let _ = std::fs::remove_file(self.api_socket_path());
-            let _ = std::fs::remove_file(self.manager_pid_file());
-        }
     }
 }
 
@@ -2987,7 +2987,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_manager() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf());
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf());
         assert!(manager.is_ok());
     }
 
@@ -3045,7 +3045,7 @@ mod tests {
             ..Default::default()
         };
 
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         assert!(manager.start_command(&config, None).await.is_ok());
         assert_eq!(manager.list().await.len(), 1);
@@ -3121,11 +3121,7 @@ mod tests {
         }
     }
 
-    async fn wait_for_manager_phase(
-        manager: &NativeProcessManager,
-        name: &str,
-        expected: ProcessPhase,
-    ) {
+    async fn wait_for_manager_phase(manager: &ProcessRunner, name: &str, expected: ProcessPhase) {
         tokio::time::timeout(Duration::from_secs(30), async {
             loop {
                 let notified = manager.entries_changed.notified();
@@ -3168,7 +3164,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_waiting_sets_phase() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = test_config("waiter");
 
         manager.register_waiting(config, None).await;
@@ -3184,7 +3180,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_phase_unknown() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         assert_eq!(manager.get_phase("nonexistent").await, None);
     }
@@ -3196,7 +3192,7 @@ mod tests {
         let _activity_guard = handle.install();
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = test_config("cancel-me");
 
         manager.register_waiting(config, None).await;
@@ -3224,7 +3220,7 @@ mod tests {
         let _activity_guard = handle.install();
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         // An unparsable TCP listen address makes `activation_from_listen`
         // fail inside launch_setup.
         let config = ProcessConfig {
@@ -3260,7 +3256,7 @@ mod tests {
     #[tokio::test]
     async fn test_supervisor_transitions_fire_task_notify() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let mut manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         let notify = Arc::new(Notify::new());
         manager.set_task_notify(notify.clone());
@@ -3290,7 +3286,7 @@ mod tests {
     #[tokio::test]
     async fn explicit_stop_after_self_exit_reports_stopped() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let mut manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let notify = Arc::new(Notify::new());
         manager.set_task_notify(notify.clone());
 
@@ -3332,7 +3328,7 @@ mod tests {
         let _guard = handle.install();
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         manager
             .start_command(&test_config("self-exit"), None)
@@ -3375,7 +3371,7 @@ mod tests {
         let _guard = handle.install();
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = ProcessConfig {
             name: "crash-loop".to_string(),
             exec: "false".to_string(),
@@ -3425,7 +3421,7 @@ mod tests {
     #[tokio::test]
     async fn test_cancel_waiting_noop_for_unknown() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         manager.cancel_waiting("does-not-exist").await;
     }
@@ -3433,7 +3429,7 @@ mod tests {
     #[tokio::test]
     async fn test_launch_waiting_auto_start_off_becomes_not_started() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = auto_start_off_config("auto-start-off-proc");
 
         manager.register_waiting(config, None).await;
@@ -3450,7 +3446,7 @@ mod tests {
     #[tokio::test]
     async fn test_launch_waiting_not_found_errors() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         let result = manager.launch_waiting("ghost").await;
         assert!(result.is_err());
@@ -3459,7 +3455,7 @@ mod tests {
     #[tokio::test]
     async fn test_launch_waiting_not_in_waiting_state_errors() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = test_config("active-proc");
 
         manager.start_command(&config, None).await.unwrap();
@@ -3480,7 +3476,7 @@ mod tests {
     #[tokio::test]
     async fn test_launch_waiting_enabled_starts_process() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = long_running_config("long-runner");
 
         manager.register_waiting(config, None).await;
@@ -3499,7 +3495,7 @@ mod tests {
     #[tokio::test]
     async fn test_rearm_waiting_relaunches_stopped_process() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = long_running_config("relaunch-me");
 
         manager.register_waiting(config.clone(), None).await;
@@ -3528,7 +3524,7 @@ mod tests {
     #[tokio::test]
     async fn test_rearm_waiting_clears_stale_logs() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let name = "rearm-logs";
 
         manager
@@ -3557,7 +3553,7 @@ mod tests {
     #[tokio::test]
     async fn test_launch_waiting_notifies_task_system() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let mut manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         let notify = Arc::new(Notify::new());
         manager.set_task_notify(notify.clone());
@@ -3583,7 +3579,7 @@ mod tests {
     #[tokio::test]
     async fn test_start_processes_preserves_process_env_over_global_env() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let _manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let _manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         // Process config with a per-process env var
         let mut config = ProcessConfig {
@@ -3722,7 +3718,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_and_keep_transitions_to_stopped() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = long_running_config("keepable");
 
         manager.start_command(&config, None).await.unwrap();
@@ -3744,7 +3740,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_and_keep_rejects_not_started() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = auto_start_off_config("idle");
 
         manager.register_waiting(config, None).await;
@@ -3760,7 +3756,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_and_keep_rejects_waiting() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = test_config("waiter");
 
         manager.register_waiting(config, None).await;
@@ -3772,7 +3768,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_and_keep_rejects_unknown() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         let result = manager.stop_and_keep("ghost").await;
         assert!(result.is_err(), "should reject stopping an unknown process");
@@ -3781,7 +3777,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_and_keep_notifies_task_system() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let mut manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
         let notify = Arc::new(Notify::new());
         manager.set_task_notify(notify.clone());
@@ -3804,7 +3800,7 @@ mod tests {
     #[tokio::test]
     async fn test_stop_and_keep_then_restart() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = long_running_config("restartable");
 
         manager.start_command(&config, None).await.unwrap();
@@ -3828,18 +3824,21 @@ mod tests {
     #[tokio::test]
     async fn test_handle_command_stop() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
+        let scheduler: Arc<dyn ProcessScheduler> = stub_scheduler(StartOutcome::default());
+        let manager =
+            NativeProcessManager::new(scheduler, Arc::clone(&runner), ManagerResidence::InProcess);
         let config = long_running_config("cmd-stop");
 
-        manager.start_command(&config, None).await.unwrap();
-        assert!(manager.list().await.contains(&"cmd-stop".to_string()));
+        runner.start_command(&config, None).await.unwrap();
+        assert!(runner.list().await.contains(&"cmd-stop".to_string()));
 
         manager
             .handle_command(ProcessCommand::Stop("cmd-stop".to_string()))
             .await;
 
         assert_eq!(
-            manager.get_phase("cmd-stop").await,
+            runner.get_phase("cmd-stop").await,
             Some(ProcessPhase::Stopped),
             "handle_command(Stop) should call stop_and_keep"
         );
@@ -3887,55 +3886,56 @@ mod tests {
         })
     }
 
+    fn native_manager(
+        runner: Arc<ProcessRunner>,
+        scheduler: Arc<dyn ProcessScheduler>,
+        residence: ManagerResidence,
+    ) -> Arc<NativeProcessManager> {
+        Arc::new(NativeProcessManager::new(scheduler, runner, residence))
+    }
+
+    fn default_native_manager(runner: Arc<ProcessRunner>) -> Arc<NativeProcessManager> {
+        native_manager(
+            runner,
+            stub_scheduler(StartOutcome::default()),
+            ManagerResidence::InProcess,
+        )
+    }
+
     #[tokio::test]
     async fn wait_settled_judges_waiting_via_scheduler() {
         use std::sync::atomic::Ordering;
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         let stub = stub_scheduler(StartOutcome::default());
         let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
-        manager.set_scheduler(Arc::downgrade(&scheduler));
+        let manager = native_manager(Arc::clone(&runner), scheduler, ManagerResidence::InProcess);
 
         assert!(manager.wait_settled().await);
 
-        manager.register_waiting(test_config("waiter"), None).await;
+        runner.register_waiting(test_config("waiter"), None).await;
         assert!(!manager.wait_settled().await);
 
         stub.parked.store(true, Ordering::SeqCst);
         assert!(manager.wait_settled().await);
 
         let config = test_config("mid-launch");
-        let activity = manager.create_process_activity(&config, None);
-        manager.processes.write().await.insert(
+        let activity = runner.create_process_activity(&config, None);
+        runner.processes.write().await.insert(
             "mid-launch".to_string(),
             ProcessEntry::Launching { config, activity },
         );
         assert!(!manager.wait_settled().await);
-        manager.processes.write().await.remove("mid-launch");
+        runner.processes.write().await.remove("mid-launch");
 
         // Inactive processes do not consult the scheduler.
         stub.parked.store(false, Ordering::SeqCst);
-        manager
+        runner
             .register_waiting(auto_start_off_config("idle"), None)
             .await;
-        manager.launch_waiting("idle").await.unwrap(); // -> NotStarted
-        manager.cancel_waiting("waiter").await; // -> Stopped
-        assert!(manager.wait_settled().await);
-    }
-
-    #[tokio::test]
-    async fn wait_settled_without_scheduler_treats_waiting_as_unsettled() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
-
-        manager.register_waiting(test_config("waiter"), None).await;
-        assert!(
-            !manager.wait_settled().await,
-            "without a scheduler, Waiting must keep Wait blocking (historical semantics)"
-        );
-
-        manager.cancel_waiting("waiter").await; // -> Stopped
+        runner.launch_waiting("idle").await.unwrap(); // -> NotStarted
+        runner.cancel_waiting("waiter").await; // -> Stopped
         assert!(manager.wait_settled().await);
     }
 
@@ -3965,10 +3965,10 @@ mod tests {
         use std::sync::atomic::Ordering;
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let mut manager = NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap();
+        let mut manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let task_notify = Arc::new(Notify::new());
         manager.set_task_notify(task_notify.clone());
-        let manager = Arc::new(manager);
+        let runner = Arc::new(manager);
 
         let (consulted_tx, mut consulted_rx) = tokio::sync::mpsc::unbounded_channel();
         let stub = Arc::new(SignalingScheduler {
@@ -3976,10 +3976,10 @@ mod tests {
             consulted: consulted_tx,
         });
         let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
-        manager.set_scheduler(Arc::downgrade(&scheduler));
+        let manager = native_manager(Arc::clone(&runner), scheduler, ManagerResidence::InProcess);
 
         // A Waiting entry judged progressing: Wait blocks.
-        manager.register_waiting(test_config("waiter"), None).await;
+        runner.register_waiting(test_config("waiter"), None).await;
 
         let waiter = tokio::spawn({
             let manager = Arc::clone(&manager);
@@ -4010,7 +4010,7 @@ mod tests {
     #[tokio::test]
     async fn start_request_over_socket_uses_scheduler() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         let outcome = StartOutcome {
             scheduled: vec!["a".to_string()],
             skipped: vec!["b".to_string()],
@@ -4019,10 +4019,10 @@ mod tests {
         };
         let stub = stub_scheduler(outcome.clone());
         let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
-        manager.set_scheduler(Arc::downgrade(&scheduler));
-        manager.start_api_server().unwrap();
+        let manager = native_manager(Arc::clone(&runner), scheduler, ManagerResidence::InProcess);
+        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
 
-        let response = NativeProcessManager::api_request(
+        let response = NativeManagerClient::api_request(
             &manager.api_socket_path(),
             &ApiRequest::Start {
                 names: vec!["a".to_string()],
@@ -4076,7 +4076,7 @@ mod tests {
         const BOUND: Duration = Duration::from_secs(30);
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let stub = Arc::new(BlockingStartScheduler {
             started: std::sync::Mutex::new(Some(started_tx)),
@@ -4085,13 +4085,13 @@ mod tests {
             completed_notify: Notify::new(),
         });
         let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
-        manager.set_scheduler(Arc::downgrade(&scheduler));
-        manager.start_api_server().unwrap();
+        let manager = native_manager(Arc::clone(&runner), scheduler, ManagerResidence::InProcess);
+        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
 
         let client = tokio::spawn({
             let socket_path = manager.api_socket_path();
             async move {
-                NativeProcessManager::api_request_bounded_connect(
+                NativeManagerClient::api_request_bounded_connect(
                     &socket_path,
                     &ApiRequest::Start {
                         names: vec!["slow".to_string()],
@@ -4121,7 +4121,7 @@ mod tests {
         // the manager API.
         let response = tokio::time::timeout(
             BOUND,
-            NativeProcessManager::api_request(&manager.api_socket_path(), &ApiRequest::List),
+            NativeManagerClient::api_request(&manager.api_socket_path(), &ApiRequest::List),
         )
         .await
         .expect("manager stopped responding after Start client interruption")
@@ -4139,12 +4139,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn start_request_without_scheduler_errors() {
+    async fn process_manager_keeps_its_scheduler_alive() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
-        manager.start_api_server().unwrap();
+        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = default_native_manager(Arc::clone(&runner));
+        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
 
-        let response = NativeProcessManager::api_request(
+        let response = NativeManagerClient::api_request(
             &manager.api_socket_path(),
             &ApiRequest::Start {
                 names: vec!["a".to_string()],
@@ -4153,25 +4154,21 @@ mod tests {
         .await
         .unwrap();
 
-        match response {
-            ApiResponse::Error { message } => {
-                assert!(
-                    message.contains("no process scheduler"),
-                    "unexpected error message: {message}"
-                );
-            }
-            other => panic!("expected Error response, got {other:?}"),
-        }
+        assert!(matches!(response, ApiResponse::Start { .. }));
     }
 
     #[tokio::test]
     async fn manager_residence_round_trips_over_socket() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
-        manager.set_residence(ManagerResidence::Daemon);
-        manager.start_api_server().unwrap();
+        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = native_manager(
+            Arc::clone(&runner),
+            stub_scheduler(StartOutcome::default()),
+            ManagerResidence::Daemon,
+        );
+        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
         assert_eq!(
-            NativeProcessManager::query_manager_residence(&manager.api_socket_path()).await,
+            NativeManagerClient::query_manager_residence(&manager.api_socket_path()).await,
             Some(ManagerResidence::Daemon),
             "a daemon-declared manager must report Daemon over the socket"
         );
@@ -4180,11 +4177,12 @@ mod tests {
         // terminal's `up -d` refuses to schedule into a manager that has not
         // declared itself a daemon, instead of the old None=Daemon fail-open.
         let temp_dir2 = tempfile::tempdir().unwrap();
-        let undeclared =
-            Arc::new(NativeProcessManager::new(temp_dir2.path().to_path_buf()).unwrap());
-        undeclared.start_api_server().unwrap();
+        let undeclared_runner =
+            Arc::new(ProcessRunner::new(temp_dir2.path().to_path_buf()).unwrap());
+        let undeclared = default_native_manager(undeclared_runner);
+        let _undeclared_server = NativeApiServer::start(Arc::clone(&undeclared)).unwrap();
         assert_eq!(
-            NativeProcessManager::query_manager_residence(&undeclared.api_socket_path()).await,
+            NativeManagerClient::query_manager_residence(&undeclared.api_socket_path()).await,
             Some(ManagerResidence::InProcess),
             "an undeclared manager must default to InProcess"
         );
@@ -4227,15 +4225,16 @@ mod tests {
     #[tokio::test]
     async fn logs_request_counts_partial_final_line() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
-        manager.register_waiting(test_config("logger"), None).await;
-        let (stdout_path, stderr_path) = crate::command::log_paths(manager.state_dir(), "logger");
+        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
+        runner.register_waiting(test_config("logger"), None).await;
+        let (stdout_path, stderr_path) = crate::command::log_paths(runner.state_dir(), "logger");
         std::fs::create_dir_all(stdout_path.parent().unwrap()).unwrap();
         std::fs::write(&stdout_path, b"one\ntwo\nthree").unwrap();
         std::fs::write(&stderr_path, b"first\r\nsecond\r\n").unwrap();
-        manager.start_api_server().unwrap();
+        let manager = default_native_manager(Arc::clone(&runner));
+        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
 
-        let response = NativeProcessManager::api_request(
+        let response = NativeManagerClient::api_request(
             &manager.api_socket_path(),
             &ApiRequest::Logs {
                 name: "logger".to_string(),
@@ -4257,7 +4256,7 @@ mod tests {
     #[tokio::test]
     async fn ports_request_is_sorted() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         for (name, ports) in [
             (
                 "zeta",
@@ -4265,7 +4264,7 @@ mod tests {
             ),
             ("alpha", HashMap::from([("db".to_string(), 5432)])),
         ] {
-            manager
+            runner
                 .register_waiting(
                     ProcessConfig {
                         ports,
@@ -4275,10 +4274,11 @@ mod tests {
                 )
                 .await;
         }
-        manager.start_api_server().unwrap();
+        let manager = default_native_manager(Arc::clone(&runner));
+        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
 
         let response =
-            NativeProcessManager::api_request(&manager.api_socket_path(), &ApiRequest::Ports)
+            NativeManagerClient::api_request(&manager.api_socket_path(), &ApiRequest::Ports)
                 .await
                 .unwrap();
 
@@ -4362,7 +4362,7 @@ mod tests {
         const BOUND: Duration = Duration::from_secs(60);
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         let readiness_gate = temp_dir.path().join("snapshot-starting-ready");
 
         manager
@@ -4430,8 +4430,9 @@ mod tests {
         .expect("crash loop must reach GaveUp");
         assert_eq!(manager.get_phase("active").await, Some(ProcessPhase::Ready));
 
-        manager.start_api_server().unwrap();
-        let mut stream = NativeProcessManager::attach_stream(&manager.api_socket_path())
+        let native_manager = default_native_manager(Arc::clone(&manager));
+        let _server = NativeApiServer::start(native_manager).unwrap();
+        let mut stream = NativeManagerClient::attach_stream(&manager.api_socket_path())
             .await
             .unwrap();
         let event = tokio::time::timeout(BOUND, stream.next())
@@ -4510,7 +4511,7 @@ mod tests {
         const BOUND: Duration = Duration::from_secs(60);
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         let ready_gate = temp_dir.path().join("live-ready");
         let exit_gate = temp_dir.path().join("live-exit");
         let gave_up_gate = temp_dir.path().join("live-gave-up");
@@ -4543,8 +4544,9 @@ mod tests {
             .await
             .unwrap();
 
-        manager.start_api_server().unwrap();
-        let mut stream = NativeProcessManager::attach_stream(&manager.api_socket_path())
+        let native_manager = default_native_manager(Arc::clone(&manager));
+        let _server = NativeApiServer::start(native_manager).unwrap();
+        let mut stream = NativeManagerClient::attach_stream(&manager.api_socket_path())
             .await
             .unwrap();
         let snapshot = tokio::time::timeout(BOUND, stream.next())
@@ -4607,17 +4609,18 @@ mod tests {
         }
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         manager
             .start_command(&long_running_config("shared"), None)
             .await
             .unwrap();
-        manager.start_api_server().unwrap();
+        let native_manager = default_native_manager(Arc::clone(&manager));
+        let _server = NativeApiServer::start(native_manager).unwrap();
 
-        let mut first = NativeProcessManager::attach_stream(&manager.api_socket_path())
+        let mut first = NativeManagerClient::attach_stream(&manager.api_socket_path())
             .await
             .unwrap();
-        let mut second = NativeProcessManager::attach_stream(&manager.api_socket_path())
+        let mut second = NativeManagerClient::attach_stream(&manager.api_socket_path())
             .await
             .unwrap();
         snapshot(&mut first).await;
@@ -4680,17 +4683,18 @@ mod tests {
         const CYCLES: usize = 10;
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         manager
             .start_command(&long_running_config("stable"), None)
             .await
             .unwrap();
-        manager.start_api_server().unwrap();
+        let native_manager = default_native_manager(Arc::clone(&manager));
+        let _server = NativeApiServer::start(native_manager).unwrap();
         let (stdout_path, _) = crate::command::log_paths(temp_dir.path(), "stable");
 
         for cycle in 0..CYCLES {
             let marker = format!("attach-cycle-{cycle}");
-            let mut stream = NativeProcessManager::attach_stream(&manager.api_socket_path())
+            let mut stream = NativeManagerClient::attach_stream(&manager.api_socket_path())
                 .await
                 .unwrap();
             let snapshot = tokio::time::timeout(BOUND, stream.next())
@@ -4758,12 +4762,13 @@ mod tests {
         const BULK_LINES: usize = ATTACH_EVENT_CHANNEL_CAPACITY * 4;
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
         manager
             .start_command(&long_running_config("noisy"), None)
             .await
             .unwrap();
-        manager.start_api_server().unwrap();
+        let native_manager = default_native_manager(Arc::clone(&manager));
+        let _server = NativeApiServer::start(native_manager).unwrap();
 
         // Send Attach and deliberately never read the snapshot or subsequent
         // events from this socket.
@@ -4792,14 +4797,14 @@ mod tests {
 
         let response = tokio::time::timeout(
             BOUND,
-            NativeProcessManager::api_request(&manager.api_socket_path(), &ApiRequest::List),
+            NativeManagerClient::api_request(&manager.api_socket_path(), &ApiRequest::List),
         )
         .await
         .expect("slow attach consumer blocked the manager API")
         .unwrap();
         assert!(matches!(response, ApiResponse::ProcessList { .. }));
 
-        let mut peer = NativeProcessManager::attach_stream(&manager.api_socket_path())
+        let mut peer = NativeManagerClient::attach_stream(&manager.api_socket_path())
             .await
             .unwrap();
         let snapshot = tokio::time::timeout(BOUND, peer.next())
@@ -4876,7 +4881,7 @@ mod tests {
             writer.write_all(&json).await.unwrap();
         });
 
-        let mut stream = NativeProcessManager::attach_stream(&socket_path)
+        let mut stream = NativeManagerClient::attach_stream(&socket_path)
             .await
             .unwrap();
         let error = stream
@@ -4907,7 +4912,7 @@ mod tests {
         }
 
         let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(NativeProcessManager::new(temp_dir.path().to_path_buf()).unwrap());
+        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
 
         // No ports/ready config: the supervisor reports Ready immediately,
         // and the echo lands in the stdout log before or shortly after the
@@ -4923,7 +4928,8 @@ mod tests {
             ..Default::default()
         };
         manager.start_command(&config, None).await.unwrap();
-        manager.start_api_server().unwrap();
+        let native_manager = default_native_manager(Arc::clone(&manager));
+        let _server = NativeApiServer::start(native_manager).unwrap();
 
         let mut stream = tokio::net::UnixStream::connect(manager.api_socket_path())
             .await
