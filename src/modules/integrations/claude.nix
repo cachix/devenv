@@ -40,6 +40,19 @@ let
     };
   };
 
+  # Claude Code's default cap on the combined `description` + `when_to_use` text
+  # it keeps in the always-on skill listing, per skill.
+  skillListingMaxDescChars = 1536;
+
+  # A file bundled next to a skill's SKILL.md. A bare path is the common case, so
+  # it coerces; the attribute set form takes the same contents and `executable`
+  # options as `files.<name>`, reused through `config.lib.fileSpecType`.
+  skillResourceType = lib.types.coercedTo lib.types.path (source: { inherit source; })
+    config.lib.fileSpecType;
+
+  # Bound out here because the skills submodule shadows `config` with its own.
+  fileCopyModeType = config.lib.fileCopyModeType;
+
   # Reserved keys that are not tool names (for backward compat detection)
   reservedPermissionKeys = [ "defaultMode" "disableBypassPermissionsMode" "additionalDirectories" "rules" ];
 
@@ -455,6 +468,243 @@ in
       '';
     };
 
+    skills = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule ({ name, config, ... }: {
+          options = {
+            description = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                What the skill covers and when Claude should load it.
+                Descriptions are the only part of a skill kept in context at all
+                times, so this is what decides whether the skill ever triggers.
+              '';
+            };
+            whenToUse = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Additional context for when Claude should invoke the skill, such as trigger
+                phrases or example requests. Appended to `description` in the skill listing
+                and counts toward the ${toString skillListingMaxDescChars}-character cap.
+              '';
+              example = "Use when the user mentions migrations, schema changes or rollbacks.";
+            };
+            content = lib.mkOption {
+              type = lib.types.lines;
+              description = "The body of SKILL.md, loaded when the skill triggers.";
+            };
+            allowedTools = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Tools Claude can use without asking permission during the turn that invokes
+                this skill. The grant clears when you send your next message.
+
+                This pre-approves tools rather than restricting them; use `disallowedTools`
+                to take tools away.
+              '';
+              example = [ "Read" "Grep" "Bash(git status:*)" ];
+            };
+            disallowedTools = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Tools removed from Claude's available pool while this skill is active; the
+                restriction clears when you send your next message. Use it for a skill that
+                should never call a given tool, such as an autonomous loop that must not stop
+                to ask a question.
+              '';
+              example = [ "AskUserQuestion" ];
+            };
+            disableModelInvocation = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Prevent Claude from automatically loading this skill. Use for workflows you
+                want to trigger manually with `/${name}`.
+              '';
+            };
+            userInvocable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = ''
+                Whether you can invoke the skill yourself with `/${name}`. Set to false when
+                only Claude should invoke it, for background knowledge rather than a command.
+              '';
+            };
+            argumentHint = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Hint shown during autocomplete to indicate the expected arguments.";
+              example = "[issue-number]";
+            };
+            arguments = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Named positional arguments, substituted into `content` as `$name`. Names map
+                to argument positions in order.
+              '';
+              example = [ "issue" "branch" ];
+            };
+            model = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Model to use while this skill is active, for the rest of the current turn.
+                Accepts an alias (`sonnet`, `opus`, `haiku`, `fable`), a full model ID
+                (e.g. `claude-opus-5`), or `inherit`. With `context = "fork"` it sets the
+                forked subagent's model instead.
+              '';
+              example = "opus";
+            };
+            effort = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "low" "medium" "high" "xhigh" "max" ]);
+              default = null;
+              description = ''
+                Override the effort level while this skill is active.
+                Which levels are available depends on the model.
+              '';
+            };
+            context = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "fork" ]);
+              default = null;
+              description = ''
+                Set to `fork` to run the skill in a forked subagent context.
+              '';
+            };
+            agent = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Which subagent type to use when `context = "fork"` is set, such as one of
+                `claude.code.agents`.
+              '';
+              example = "code-reviewer";
+            };
+            background = lib.mkOption {
+              type = lib.types.nullOr lib.types.bool;
+              default = null;
+              description = ''
+                Only applies with `context = "fork"`. Set to false to wait for the forked
+                subagent's result in the turn that invoked the skill, instead of letting it
+                run in the background.
+              '';
+            };
+            resources = lib.mkOption {
+              type = lib.types.attrsOf skillResourceType;
+              default = { };
+              example = lib.literalExpression ''
+                {
+                  "references/api.md" = ./api.md;
+                  "scripts/check.sh" = { source = ./check.sh; executable = true; };
+                }
+              '';
+              description = ''
+                Files placed alongside SKILL.md, keyed by path relative to the
+                skill directory. Claude reads these on demand, so bulky reference
+                material belongs here rather than in `content`.
+              '';
+            };
+            copyMode = lib.mkOption {
+              type = fileCopyModeType;
+              default = "symlink";
+              description = ''
+                How to materialise the skill's files, as in `files.<name>.copyMode`.
+                Use `seed` to hand-edit a skill after devenv writes it once.
+              '';
+            };
+            assertions = lib.mkOption {
+              type = lib.types.listOf lib.types.unspecified;
+              default = [ ];
+              internal = true;
+              visible = false;
+              description = "Assertions raised by this skill's submodule, collected into the top-level assertions.";
+            };
+            warnings = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              internal = true;
+              visible = false;
+              description = "Warnings raised by this skill's submodule, collected into the top-level warnings.";
+            };
+          };
+
+          config.warnings =
+            let
+              hasWhenToUse = config.whenToUse != null;
+              listingLength =
+                builtins.stringLength config.description
+                + (if hasWhenToUse then builtins.stringLength config.whenToUse else 0);
+              subject =
+                if hasWhenToUse
+                then "`description` and `whenToUse` add up to"
+                else "`description` is";
+            in
+            lib.optional (listingLength > skillListingMaxDescChars) ''
+              claude.code.skills.${name}: ${subject} ${toString listingLength} characters, over the
+              ${toString skillListingMaxDescChars} Claude Code keeps in the skill listing. The rest is truncated, so
+              put the key use case first or move the detail into `content`.
+            '';
+
+          config.assertions = [
+            {
+              assertion = builtins.match "[a-z0-9]+(-[a-z0-9]+)*" name != null && builtins.stringLength name <= 64;
+              message = ''
+                claude.code.skills.${name}: skill names must be lowercase letters, digits and
+                single hyphens, at most 64 characters. Claude Code skips directories it cannot
+                match to a valid skill name.
+              '';
+            }
+            {
+              assertion = name != "synced";
+              message = ''
+                claude.code.skills.synced: `synced` is a reserved directory name. Claude Code
+                uses .claude/skills/synced/ for the skills it downloads from your claude.ai
+                account, and skips a skill you author at that name. Pick a different name.
+              '';
+            }
+          ];
+        })
+      );
+      default = { };
+      description = ''
+        Custom Claude Code skills to create in the project.
+        A skill is a folder of instructions Claude loads on demand when its
+        description matches the task, keeping specialised knowledge out of the
+        always-on context.
+
+        For more details, see: https://docs.anthropic.com/en/docs/claude-code/skills
+      '';
+      example = lib.literalExpression ''
+        {
+          database-migrations = {
+            description = "How to write and run migrations in this project. Use when adding, editing or rolling back a migration.";
+            content = '''
+              Migrations live in `migrations/` and are applied with `diesel migration run`.
+
+              - One logical change per migration; never edit an applied migration.
+              - Always write the matching `down.sql`.
+              - Run `devenv tasks run db:reset` before opening a pull request.
+            ''';
+          };
+
+          api-conventions = {
+            description = "REST conventions for this codebase. Use when adding or changing an HTTP endpoint.";
+            allowedTools = [ "Read" "Grep" ];
+            resources = {
+              "references/error-codes.md" = ./docs/error-codes.md;
+            };
+            content = '''
+              Endpoints are versioned under `/v1`.
+              Read references/error-codes.md before inventing a new error code.
+            ''';
+          };
+        }
+      '';
+    };
+
     apiKeyHelper = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -717,7 +967,9 @@ in
     }
 
     {
-      assertions = lib.flatten (lib.mapAttrsToList (_: agent: agent.assertions) cfg.agents);
+      assertions = lib.flatten (lib.mapAttrsToList (_: agent: agent.assertions) cfg.agents)
+        ++ lib.flatten (lib.mapAttrsToList (_: skill: skill.assertions) cfg.skills);
+      warnings = lib.flatten (lib.mapAttrsToList (_: skill: skill.warnings) cfg.skills);
     }
 
     (lib.mkIf cfg.enable {
@@ -759,6 +1011,62 @@ in
             };
           })
           cfg.agents)
+
+        # Skill files
+        (lib.mapAttrs'
+          (name: skill: {
+            name = ".claude/skills/${name}/SKILL.md";
+            value = {
+              inherit (skill) copyMode;
+              text =
+                let
+                  # toJSON keeps colons and quotes valid; a list renders as a JSON
+                  # array, sidestepping the comma/space separator rules these fields
+                  # disagree on.
+                  scalar = key: value: "${key}: ${builtins.toJSON value}";
+                  optionalScalar = key: value: lib.optional (value != null) (scalar key value);
+                  optionalList = key: value: lib.optional (value != [ ]) (scalar key value);
+                  optionalFlag = key: value: default: lib.optional (value != default) "${key}: ${lib.boolToString value}";
+
+                  # Built as a list so an unset field leaves no blank line behind.
+                  frontmatter = [
+                    "name: ${name}"
+                    (scalar "description" skill.description)
+                  ]
+                  ++ optionalScalar "when_to_use" skill.whenToUse
+                  ++ optionalList "allowed-tools" skill.allowedTools
+                  ++ optionalList "disallowed-tools" skill.disallowedTools
+                  ++ optionalFlag "disable-model-invocation" skill.disableModelInvocation false
+                  ++ optionalFlag "user-invocable" skill.userInvocable true
+                  ++ optionalScalar "argument-hint" skill.argumentHint
+                  ++ optionalList "arguments" skill.arguments
+                  ++ optionalScalar "model" skill.model
+                  ++ optionalScalar "effort" skill.effort
+                  ++ optionalScalar "context" skill.context
+                  ++ optionalScalar "agent" skill.agent
+                  ++ lib.optional (skill.background != null)
+                    "background: ${lib.boolToString skill.background}";
+                in
+                ''
+                  ---
+                  ${lib.concatStringsSep "\n" frontmatter}
+                  ---
+
+                  ${skill.content}
+                '';
+            };
+          })
+          cfg.skills)
+
+        # Files bundled alongside a skill (references, scripts, assets)
+        (lib.listToAttrs (lib.concatLists (lib.mapAttrsToList
+          (name: skill: lib.mapAttrsToList
+            (path: resource: lib.nameValuePair ".claude/skills/${name}/${path}" {
+              source = resource.file;
+              inherit (skill) copyMode;
+            })
+            skill.resources)
+          cfg.skills)))
       ];
 
       # Add a message about the integration
@@ -784,6 +1092,11 @@ in
             ${lib.optionalString (subAgents != { })
               "- Sub-agents: ${
                 lib.concatStringsSep ", " (lib.attrNames subAgents)
+              }"
+            }
+            ${lib.optionalString (cfg.skills != { })
+              "- Skills: ${
+                lib.concatStringsSep ", " (lib.attrNames cfg.skills)
               }"
             }
             ${lib.optionalString (cfg.mcpServers != { })
