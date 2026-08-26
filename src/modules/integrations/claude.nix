@@ -490,6 +490,15 @@ in
                 times, so this is what decides whether the skill ever triggers.
               '';
             };
+            whenToUse = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Additional context for when Claude should invoke the skill, such as trigger
+                phrases or example requests. Appended to `description` in the skill listing.
+              '';
+              example = "Use when the user mentions migrations, schema changes or rollbacks.";
+            };
             content = lib.mkOption {
               type = lib.types.lines;
               description = "The body of SKILL.md, loaded when the skill triggers.";
@@ -505,6 +514,92 @@ in
                 to take tools away.
               '';
               example = [ "Read" "Grep" "Bash(git status:*)" ];
+            };
+            disallowedTools = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Tools removed from Claude's available pool while this skill is active; the
+                restriction clears when you send your next message. Use it for a skill that
+                should never call a given tool, such as an autonomous loop that must not stop
+                to ask a question.
+              '';
+              example = [ "AskUserQuestion" ];
+            };
+            disableModelInvocation = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Prevent Claude from automatically loading this skill. Use for workflows you
+                want to trigger manually with `/${name}`.
+              '';
+            };
+            userInvocable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = ''
+                Whether you can invoke the skill yourself with `/${name}`. Set to false when
+                only Claude should invoke it, for background knowledge rather than a command.
+              '';
+            };
+            argumentHint = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Hint shown during autocomplete to indicate the expected arguments.";
+              example = "[issue-number]";
+            };
+            arguments = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Named positional arguments, substituted into `content` as `$name`. Names map
+                to argument positions in order.
+              '';
+              example = [ "issue" "branch" ];
+            };
+            model = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Model to use while this skill is active, for the rest of the current turn.
+                Accepts an alias (`sonnet`, `opus`, `haiku`, `fable`), a full model ID
+                (e.g. `claude-opus-5`), or `inherit`. With `context = "fork"` it sets the
+                forked subagent's model instead.
+              '';
+              example = "opus";
+            };
+            effort = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "low" "medium" "high" "xhigh" "max" ]);
+              default = null;
+              description = ''
+                Override the effort level while this skill is active.
+                Which levels are available depends on the model.
+              '';
+            };
+            context = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "fork" ]);
+              default = null;
+              description = ''
+                Set to `fork` to run the skill in a forked subagent context.
+              '';
+            };
+            agent = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Which subagent type to use when `context = "fork"` is set, such as one of
+                `claude.code.agents`.
+              '';
+              example = "code-reviewer";
+            };
+            background = lib.mkOption {
+              type = lib.types.nullOr lib.types.bool;
+              default = null;
+              description = ''
+                Only applies with `context = "fork"`. Set to false to wait for the forked
+                subagent's result in the turn that invoked the skill, instead of letting it
+                run in the background.
+              '';
             };
             resources = lib.mkOption {
               type = lib.types.attrsOf skillResourceType;
@@ -909,17 +1004,32 @@ in
               inherit (skill) copyMode;
               text =
                 let
+                  # toJSON keeps colons and quotes valid; a list renders as a JSON
+                  # array, sidestepping the comma/space separator rules these fields
+                  # disagree on.
+                  scalar = key: value: "${key}: ${builtins.toJSON value}";
+                  optionalScalar = key: value: lib.optional (value != null) (scalar key value);
+                  optionalList = key: value: lib.optional (value != [ ]) (scalar key value);
+                  optionalFlag = key: value: default: lib.optional (value != default) "${key}: ${lib.boolToString value}";
+
                   # Built as a list so an unset field leaves no blank line behind.
                   frontmatter = [
                     "name: ${name}"
-                    # toJSON gives a quoted YAML scalar, so a description
-                    # containing a colon or a quote stays valid frontmatter.
-                    "description: ${builtins.toJSON skill.description}"
+                    (scalar "description" skill.description)
                   ]
-                  ++ lib.optional (skill.allowedTools != [ ])
-                    # Quoted for the same reason as the description: a tool
-                    # pattern may contain a colon.
-                    "allowed-tools: ${builtins.toJSON (lib.concatStringsSep ", " skill.allowedTools)}";
+                  ++ optionalScalar "when_to_use" skill.whenToUse
+                  ++ optionalList "allowed-tools" skill.allowedTools
+                  ++ optionalList "disallowed-tools" skill.disallowedTools
+                  ++ optionalFlag "disable-model-invocation" skill.disableModelInvocation false
+                  ++ optionalFlag "user-invocable" skill.userInvocable true
+                  ++ optionalScalar "argument-hint" skill.argumentHint
+                  ++ optionalList "arguments" skill.arguments
+                  ++ optionalScalar "model" skill.model
+                  ++ optionalScalar "effort" skill.effort
+                  ++ optionalScalar "context" skill.context
+                  ++ optionalScalar "agent" skill.agent
+                  ++ lib.optional (skill.background != null)
+                    "background: ${lib.boolToString skill.background}";
                 in
                 ''
                   ---
