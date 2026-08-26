@@ -96,12 +96,13 @@ pub async fn execute(
     use tracing::error;
 
     let mut command = ctx.build_command();
-    let prepared_scope = match devenv_processes::PreparedProcessScope::prepare_tokio(&mut command) {
-        Ok(spawn) => spawn,
-        Err(error) => {
-            return ExecutionResult::failed(format!("Failed to isolate task process: {error}"));
-        }
-    };
+    let prepared_scope =
+        match devenv_processes::PreparedProcessScope::prepare_tokio_process_group(&mut command) {
+            Ok(spawn) => spawn,
+            Err(error) => {
+                return ExecutionResult::failed(format!("Failed to isolate task process: {error}"));
+            }
+        };
 
     // Spawn the process
     let mut child = match command.spawn() {
@@ -220,7 +221,7 @@ pub async fn execute(
                 }
             }
             _ = cancellation.cancelled() => {
-                // Scope cleanup handles the whole session and escalates after
+                // Scope cleanup handles the whole process tree and escalates after
                 // one grace period. Wait for it alongside the direct child so
                 // Tokio remains the process responsible for reaping that child.
                 let cleanup_scope = process_scope.clone();

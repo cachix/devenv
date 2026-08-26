@@ -785,8 +785,11 @@ impl TaskState {
         let callback = ActivityCallback::new(task_activity);
         let result = crate::executor::execute(ctx, &callback, cancellation).await;
 
-        // Only update file states on success - failed tasks should not be cached
-        if result.success {
+        // File state is only consulted by tasks with cache semantics. Avoid
+        // database cleanup and command-path writes for ordinary always-run
+        // tasks, where the stored state can never affect a later decision.
+        if result.success && (self.task.status.is_some() || !self.task.exec_if_modified.is_empty())
+        {
             let expanded_paths = find_files_matching_patterns(&self.task.exec_if_modified);
             for path in &expanded_paths {
                 cache.update_file_state(&self.task.name, path).await?;

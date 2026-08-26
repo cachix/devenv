@@ -1,7 +1,7 @@
 //! Tracks live child process scopes so a force-exit can tear them down.
 //!
-//! Every process scope currently uses its own Unix session, which means a
-//! signal sent to devenv's own process group never reaches it. Orderly shutdown
+//! Every process scope uses its own Unix session or process group, which means
+//! a signal sent to devenv's own process group never reaches it. Orderly shutdown
 //! paths stop each process through the manager, and tokio's kill-on-drop catches
 //! the direct child if a handle is dropped. Neither runs when the process
 //! re-raises a signal to die,

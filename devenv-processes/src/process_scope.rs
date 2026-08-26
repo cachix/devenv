@@ -8,12 +8,12 @@
 //!   and cleanup. It includes the leader's start time to avoid acting on a
 //!   recycled PID.
 //!
-//! Unix sessions are the current portable backend because descendants may
-//! create their own process groups without escaping the session. Backend
-//! selection is deliberately internal so stronger containment such as Linux
-//! cgroups can replace it without changing callers. A descendant can still
-//! escape a session by creating a nested session, so termination also snapshots
-//! the live process ancestry before signalling it.
+//! Durable managed processes use Unix sessions because descendants may create
+//! their own process groups without escaping the session. Short-lived task
+//! commands can instead use a dedicated process group, which preserves the
+//! native spawn fast path. Termination snapshots live ancestry for both
+//! backends, so descendants that create another group or session are included
+//! while their relationship to the leader is observable.
 //!
 //! A process that must keep the caller's controlling terminal cannot become a
 //! session leader. [`ProcessScope::descendants_of_current`] covers that case
@@ -41,6 +41,7 @@ pub struct PreparedProcessScope {
 #[derive(Debug)]
 enum SpawnBackend {
     UnixSession,
+    UnixProcessGroup,
 }
 
 impl PreparedProcessScope {
@@ -64,12 +65,40 @@ impl PreparedProcessScope {
         }
     }
 
+    /// Configure a transient command in its own process group.
+    ///
+    /// Unlike creating a session through `pre_exec`, this lets `Command` retain
+    /// the platform's optimized spawn path. It is appropriate when the scope is
+    /// only needed while the direct child is alive; durable process recovery
+    /// should use [`Self::prepare_tokio`] instead.
+    pub fn prepare_tokio_process_group(
+        command: &mut tokio::process::Command,
+    ) -> std::io::Result<Self> {
+        #[cfg(not(unix))]
+        {
+            let _ = command;
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "process scopes are not implemented on this platform",
+            ));
+        }
+
+        #[cfg(unix)]
+        {
+            command.process_group(0);
+            Ok(Self {
+                backend: SpawnBackend::UnixProcessGroup,
+            })
+        }
+    }
+
     /// Capture the scope created for `pid` after a successful spawn.
     pub fn capture(self, pid: u32) -> std::io::Result<ProcessScope> {
         let pid = i32::try_from(pid)
             .map_err(|_| std::io::Error::other(format!("child PID {pid} exceeds i32::MAX")))?;
         match self.backend {
             SpawnBackend::UnixSession => ProcessScope::unix_session(pid),
+            SpawnBackend::UnixProcessGroup => ProcessScope::unix_process_group(pid),
         }
     }
 }
@@ -162,13 +191,18 @@ impl ProcessScope {
         })
     }
 
-    /// Restore the process-group state written before durable scope records existed.
-    pub(crate) fn legacy_unix_process_group(leader_pid: i32) -> std::io::Result<Self> {
+    /// Capture an already-spawned Unix process group.
+    fn unix_process_group(leader_pid: i32) -> std::io::Result<Self> {
         Ok(Self {
             backend: ScopeBackend::UnixProcessGroup {
                 leader: capture_process_identity(leader_pid)?,
             },
         })
+    }
+
+    /// Restore the process-group state written before durable scope records existed.
+    pub(crate) fn legacy_unix_process_group(leader_pid: i32) -> std::io::Result<Self> {
+        Self::unix_process_group(leader_pid)
     }
 
     /// Restore a legacy session identity from an existing guardian lease.
@@ -278,7 +312,9 @@ impl ProcessScope {
                 ScopeTargets::from_groups(groups)
             }
             ScopeBackend::UnixProcessGroup { leader } => {
-                ScopeTargets::from_groups(BTreeSet::from([leader.pid]))
+                let mut groups = BTreeSet::from([leader.pid]);
+                groups.extend(descendant_process_groups(leader.pid, processes));
+                ScopeTargets::from_groups(groups)
             }
             ScopeBackend::UnixDescendants {
                 leader,
@@ -877,8 +913,9 @@ mod tests {
         let _ = nested.wait();
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn terminates_descendant_that_creates_a_nested_session() {
+    async fn assert_terminates_descendant_that_creates_a_nested_session(
+        prepare: fn(&mut tokio::process::Command) -> std::io::Result<PreparedProcessScope>,
+    ) {
         let temp = tempfile::tempdir().expect("temporary directory");
         let pid_file = temp.path().join("nested.pid");
         let mut command =
@@ -893,8 +930,7 @@ mod tests {
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
-        let spawn =
-            PreparedProcessScope::prepare_tokio(&mut command).expect("prepare process scope");
+        let spawn = prepare(&mut command).expect("prepare process scope");
         let mut root = command.spawn().expect("spawn process-scope root");
         let root_pid = root.id().expect("root PID");
         let scope = spawn.capture(root_pid).expect("capture process scope");
@@ -948,6 +984,22 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn session_scope_terminates_descendant_that_creates_a_nested_session() {
+        assert_terminates_descendant_that_creates_a_nested_session(
+            PreparedProcessScope::prepare_tokio,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn process_group_scope_terminates_descendant_that_creates_a_nested_session() {
+        assert_terminates_descendant_that_creates_a_nested_session(
+            PreparedProcessScope::prepare_tokio_process_group,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn prepared_scope_creates_and_captures_the_scope() {
         let mut command = tokio::process::Command::new("bash");
         command
@@ -973,6 +1025,51 @@ mod tests {
             serde_json::from_slice::<ProcessScope>(&serialized).expect("restore scope"),
             scope,
             "durable scope identity must round-trip"
+        );
+
+        let cleanup_scope = scope.clone();
+        let cleanup = tokio::task::spawn_blocking(move || {
+            stop_process_scopes(
+                [cleanup_scope],
+                StopPolicy {
+                    signal: Signal::SIGTERM as i32,
+                    grace: Duration::from_secs(2),
+                },
+            )
+        });
+        let (status, cleanup) = tokio::join!(child.wait(), cleanup);
+        assert!(!status.expect("wait succeeds").success());
+        cleanup
+            .expect("cleanup task succeeds")
+            .expect("scope cleanup succeeds");
+        assert!(!scope.is_alive());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn prepared_process_group_creates_and_captures_the_scope() {
+        let mut command = tokio::process::Command::new("bash");
+        command
+            .arg("-c")
+            .arg("sleep 300 & wait")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let spawn = PreparedProcessScope::prepare_tokio_process_group(&mut command)
+            .expect("prepare process-group scope");
+
+        let mut child = command.spawn().expect("spawn scope leader");
+        let pid = child.id().expect("child pid");
+        let scope = spawn.capture(pid).expect("capture process scope");
+
+        assert_eq!(
+            nix::unistd::getpgid(Some(Pid::from_raw(pid as i32))),
+            Ok(Pid::from_raw(pid as i32)),
+            "spawned child must lead its process group"
+        );
+        assert_ne!(
+            nix::unistd::getsid(Some(Pid::from_raw(pid as i32))),
+            Ok(Pid::from_raw(pid as i32)),
+            "transient scope must not create a session"
         );
 
         let cleanup_scope = scope.clone();
@@ -1024,6 +1121,32 @@ mod tests {
                 shared_group,
             },
         }
+    }
+
+    fn process_group_scope(leader_pid: i32) -> ProcessScope {
+        ProcessScope {
+            backend: ScopeBackend::UnixProcessGroup {
+                leader: ProcessIdentity {
+                    pid: leader_pid,
+                    start_time: Some(7),
+                    boot_id: None,
+                },
+            },
+        }
+    }
+
+    #[test]
+    fn a_process_group_scope_includes_descendants_private_groups() {
+        let leader = table_entry(100, 99, 100);
+        let same_group_child = table_entry(101, 100, 100);
+        let private_group_child = table_entry(102, 101, 102);
+        let unrelated = table_entry(200, 99, 200);
+        let table = vec![leader, same_group_child, private_group_child, unrelated];
+
+        let targets = process_group_scope(100).targets_in(&table);
+
+        assert_eq!(targets.groups, BTreeSet::from([100, 102]));
+        assert!(targets.processes.is_empty());
     }
 
     #[test]

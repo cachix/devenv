@@ -1325,6 +1325,39 @@ echo "Task executed successfully"
 }
 
 #[tokio::test]
+async fn test_always_run_task_does_not_write_unused_file_state() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks-always-run.db");
+    let script = create_script("#!/bin/sh\nexit 0\n")?;
+    let task_name = "always_run:no_cache";
+    let config = Config::try_from(json!({
+        "roots": [task_name],
+        "run_mode": "all",
+        "tasks": [{
+            "name": task_name,
+            "command": script.to_str().unwrap()
+        }]
+    }))
+    .unwrap();
+
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+        .with_db_path(db_path)
+        .build()
+        .await?;
+    tasks.run(false).await;
+
+    let watched_files: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM watched_file WHERE task_name = ?")
+            .bind(task_name)
+            .fetch_one(tasks.cache.pool())
+            .await
+            .unwrap();
+    assert_eq!(watched_files, 0);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_file_state_updated_after_task() -> Result<(), Error> {
     // Create a unique tempdir for this test
     let temp_dir = TempDir::new().unwrap();

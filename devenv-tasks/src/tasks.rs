@@ -1226,20 +1226,19 @@ impl Tasks {
             }
         };
 
-        let (task_name, persist_cached_output) = {
-            let state = task_state.read().await;
-            if !state.is_current_attempt(attempt) {
-                return false;
-            }
-            (
-                state.task.name.clone(),
-                state.task.status.is_some() || !state.task.exec_if_modified.is_empty(),
-            )
-        };
-
         match &completed {
             TaskCompleted::Success(_, Output(Some(output)))
             | TaskCompleted::Skipped(Skipped::Cached(Output(Some(output)))) => {
+                let (task_name, persist_cached_output) = {
+                    let state = task_state.read().await;
+                    if !state.is_current_attempt(attempt) {
+                        return false;
+                    }
+                    (
+                        state.task.name.clone(),
+                        state.task.status.is_some() || !state.task.exec_if_modified.is_empty(),
+                    )
+                };
                 outputs
                     .lock()
                     .await
