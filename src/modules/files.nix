@@ -25,7 +25,9 @@ let
   currentManagedFiles = attrNames config.files;
 
 
-  fileType = types.submodule ({ name, config, ... }: {
+  copyModeType = types.enum [ "symlink" "seed" "copy" ];
+
+  fileSpecModule = { name, config, ... }: {
     options = {
       format = mkOption {
         type = types.anything;
@@ -54,17 +56,6 @@ let
         description = "Make the file executable";
       };
 
-      copyMode = mkOption {
-        type = types.enum [ "symlink" "seed" "copy" ];
-        default = "symlink";
-        description = ''
-          How to materialize the file in the project root:
-
-          - `symlink` (default): symlink to the read-only file in the Nix store. Edits are not possible; devenv keeps the link pointed at the current contents.
-          - `seed`: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. Useful for seeding configuration from templates the user then edits.
-          - `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. Useful when a tool must write to the file in place but devenv should remain the source of truth.
-        '';
-      };
     } // (mapAttrs
       (name: format: mkOption {
         type = types.nullOr format.type;
@@ -97,7 +88,24 @@ let
           else
             generated;
       };
-  });
+  };
+
+  fileType = types.submodule {
+    imports = [ fileSpecModule ];
+
+    options.copyMode = mkOption {
+      type = copyModeType;
+      default = "symlink";
+      description = ''
+        How to materialize the file in the project root:
+
+        - `symlink` (default): symlink to the read-only file in the Nix store. Edits are not possible; devenv keeps the link pointed at the current contents.
+        - `seed`: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. Useful for seeding configuration from templates the user then edits.
+        - `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. Useful when a tool must write to the file in place but devenv should remain the source of truth.
+      '';
+    };
+  };
+
   # Track successfully created files for partial state saving
   createSymlinkScript = filename: fileOption: ''
     if [ -L "${filename}" ]; then
@@ -212,6 +220,9 @@ in
   };
 
   config = {
+    lib.fileSpecType = types.submodule fileSpecModule;
+    lib.fileCopyModeType = copyModeType;
+
     tasks."devenv:files:cleanup" = {
       description = "Cleanup orphaned files";
       exec = cleanupScript;
