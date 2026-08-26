@@ -2625,6 +2625,702 @@ list of string
 
 
 
+## claude.code.skills
+
+
+
+Custom Claude Code skills to create in the project.
+A skill is a folder of instructions Claude loads on demand when its
+description matches the task, keeping specialised knowledge out of the
+always-on context.
+
+For more details, see: https://docs.anthropic.com/en/docs/claude-code/skills
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+````nix
+{
+  database-migrations = {
+    description = "How to write and run migrations in this project. Use when adding, editing or rolling back a migration.";
+    content = ''
+      Migrations live in `migrations/` and are applied with `diesel migration run`.
+
+      - One logical change per migration; never edit an applied migration.
+      - Always write the matching `down.sql`.
+      - Run `devenv tasks run db:reset` before opening a pull request.
+    '';
+  };
+
+  api-conventions = {
+    description = "REST conventions for this codebase. Use when adding or changing an HTTP endpoint.";
+    allowedTools = [ "Read" "Grep" ];
+    resources = {
+      "references/error-codes.md" = ./docs/error-codes.md;
+    };
+    content = ''
+      Endpoints are versioned under `/v1`.
+      Read references/error-codes.md before inventing a new error code.
+    '';
+  };
+}
+
+````
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.agent
+
+
+
+Which subagent type to use when ` context = "fork" ` is set, such as one of
+` claude.code.agents `.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+"code-reviewer"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.allowedTools
+
+
+
+Tools Claude can use without asking permission during the turn that invokes
+this skill. The grant clears when you send your next message.
+
+This pre-approves tools rather than restricting them; use ` disallowedTools `
+to take tools away.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "Read"
+  "Grep"
+  "Bash(git status:*)"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.argumentHint
+
+
+
+Hint shown during autocomplete to indicate the expected arguments.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+"[issue-number]"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.arguments
+
+
+
+Named positional arguments, substituted into ` content ` as ` $name `. Names map
+to argument positions in order.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "issue"
+  "branch"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.background
+
+
+
+Only applies with ` context = "fork" `. Set to false to wait for the forked
+subagent’s result in the turn that invoked the skill, instead of letting it
+run in the background.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.content
+
+
+
+The body of SKILL.md, loaded when the skill triggers.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.context
+
+Set to ` fork ` to run the skill in a forked subagent context.
+
+
+
+*Type:*
+null or value “fork” (singular enum)
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.copyMode
+
+
+
+How to materialise the skill’s files, as in ` files.<name>.copyMode `.
+Use ` seed ` to hand-edit a skill after devenv writes it once.
+
+
+
+*Type:*
+one of “symlink”, “seed”, “copy”
+
+
+
+*Default:*
+
+```nix
+"symlink"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.description
+
+
+
+What the skill covers and when Claude should load it.
+Descriptions are the only part of a skill kept in context at all
+times, so this is what decides whether the skill ever triggers.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.disableModelInvocation
+
+
+
+Prevent Claude from automatically loading this skill. Use for workflows you
+want to trigger manually with ` /‹name› `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.disallowedTools
+
+
+
+Tools removed from Claude’s available pool while this skill is active; the
+restriction clears when you send your next message. Use it for a skill that
+should never call a given tool, such as an autonomous loop that must not stop
+to ask a question.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
+
+
+
+*Example:*
+
+```nix
+[
+  "AskUserQuestion"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.effort
+
+
+
+Override the effort level while this skill is active.
+Which levels are available depends on the model.
+
+
+
+*Type:*
+null or one of “low”, “medium”, “high”, “xhigh”, “max”
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.model
+
+
+
+Model to use while this skill is active, for the rest of the current turn.
+Accepts an alias (` sonnet `, ` opus `, ` haiku `, ` fable `), a full model ID
+(e.g. ` claude-opus-5 `), or ` inherit `. With ` context = "fork" ` it sets the
+forked subagent’s model instead.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+"opus"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.resources
+
+
+
+Files placed alongside SKILL.md, keyed by path relative to the
+skill directory. Claude reads these on demand, so bulky reference
+material belongs here rather than in ` content `.
+
+
+
+*Type:*
+attribute set of ((submodule) or absolute path convertible to it)
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+*Example:*
+
+```nix
+{
+  "references/api.md" = ./api.md;
+  "scripts/check.sh" = { source = ./check.sh; executable = true; };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.resources.\<name>.executable
+
+
+
+Make the file executable
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.resources.\<name>.ini
+
+
+
+ini contents
+
+
+
+*Type:*
+null or (attribute set of section of an INI file (attrs of INI atom (null, bool, int, float or string)))
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.resources.\<name>.json
+
+
+
+json contents
+
+
+
+*Type:*
+null or JSON value
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.resources.\<name>.source
+
+
+
+source contents
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.resources.\<name>.text
+
+
+
+text contents
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.resources.\<name>.toml
+
+
+
+toml contents
+
+
+
+*Type:*
+null or TOML value
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.resources.\<name>.yaml
+
+
+
+yaml contents
+
+
+
+*Type:*
+null or YAML 1.1 value
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.userInvocable
+
+
+
+Whether you can invoke the skill yourself with ` /‹name› `. Set to false when
+only Claude should invoke it, for background knowledge rather than a command.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.skills.\<name>.whenToUse
+
+
+
+Additional context for when Claude should invoke the skill, such as trigger
+phrases or example requests. Appended to ` description ` in the skill listing
+and counts toward the 1536-character cap.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+"Use when the user mentions migrations, schema changes or rollbacks."
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## container.isBuilding
 
 
@@ -2814,6 +3510,8 @@ null
 
 
 ## containers.\<name>.isBuilding
+
+
 
 Set to true when the environment is building this container.
 
@@ -5518,8 +6216,6 @@ string
 
 ## git-hooks.hooks.\<name>.name
 
-
-
 The name of the hook. Shown during hook execution.
 
 
@@ -6081,6 +6777,8 @@ null or string
 
 
 ## git-hooks.hooks.autoflake.settings.flags
+
+
 
 Flags passed to autoflake.
 
@@ -7819,8 +8517,6 @@ false
 
 ## git-hooks.hooks.flynt.settings.string
 
-
-
 Interpret the input as a Python code snippet and print the converted version.
 
 
@@ -8354,6 +9050,8 @@ false
 
 
 ## git-hooks.hooks.isort
+
+
 
 isort hook
 
