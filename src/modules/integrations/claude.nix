@@ -540,6 +540,14 @@ in
                 match to a valid skill name.
               '';
             }
+            {
+              assertion = name != "synced";
+              message = ''
+                claude.code.skills.synced: `synced` is a reserved directory name. Claude Code
+                uses .claude/skills/synced/ for the skills it downloads from your claude.ai
+                account, and skips a skill you author at that name. Pick a different name.
+              '';
+            }
           ];
         })
       );
