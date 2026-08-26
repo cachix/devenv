@@ -8,6 +8,7 @@ license.workspace = true
 devenv-activity.workspace = true
 devenv-cache-core.workspace = true
 devenv-core.workspace = true
+devenv-mailbox.workspace = true
 devenv-processes.workspace = true
 
 async-trait.workspace = true

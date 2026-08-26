@@ -1,11 +1,10 @@
 use async_trait::async_trait;
 use devenv_activity::{Activity, ProcessStatus};
-use devenv_mailbox::{FrontendEvent, ProcessCommand};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,36 +17,6 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
-
-fn same_process_command(left: &ProcessCommand, right: &ProcessCommand) -> bool {
-    matches!(
-        (left, right),
-        (ProcessCommand::Restart(left), ProcessCommand::Restart(right))
-            | (ProcessCommand::Stop(left), ProcessCommand::Stop(right))
-            if left == right
-    )
-}
-
-async fn recv_process_command(rx: &mut mpsc::Receiver<FrontendEvent>) -> Option<ProcessCommand> {
-    while let Some(event) = rx.recv().await {
-        if let FrontendEvent::Process(command) = event {
-            return Some(command);
-        }
-    }
-    None
-}
-
-/// Keep only the newest process intent that accumulated while the backend was
-/// busy. Terminal key repeats are input intent, not a queue of work to replay.
-fn latest_queued_process_command(rx: &mut mpsc::Receiver<FrontendEvent>) -> Option<ProcessCommand> {
-    let mut latest = None;
-    while let Ok(event) = rx.try_recv() {
-        if let FrontendEvent::Process(command) = event {
-            latest = Some(command);
-        }
-    }
-    latest
-}
 
 /// Request sent by a client to the native manager API socket.
 ///
@@ -555,76 +524,6 @@ pub struct ProcessRunner {
     completion: Arc<Notify>,
 }
 
-/// Scheduler operations needed by the persistent process manager. Implemented
-/// by `devenv-tasks`, keeping its concrete task graph out of this crate.
-#[async_trait]
-pub trait ProcessScheduler: Send + Sync {
-    /// Service `ApiRequest::Start`: bring the named processes up honouring their
-    /// dependencies, classifying every requested name into a [`StartOutcome`]
-    /// bucket.
-    ///
-    /// Called directly from the per-connection API task, so a long-running
-    /// `start` blocks only that one connection — other clients, further `Start`
-    /// requests, and shutdown handling proceed concurrently.
-    async fn start(&self, names: Vec<String>) -> StartOutcome;
-
-    /// Whether the named `Waiting` process is dependency-parked: all of its
-    /// unsatisfied dependencies are blocked on external action (a stopped or
-    /// not-started dependency, or transitively another parked `Waiting`
-    /// process). Judged live against the scheduler's graph at call time, so
-    /// the `Wait` settled rule never acts on stale information.
-    async fn dependency_parked(&self, process_name: &str) -> bool;
-}
-
-/// High-level native manager. It owns the task scheduler and the process
-/// runner as one persistent service; the API server owns this manager.
-pub struct NativeProcessManager {
-    scheduler: Arc<dyn ProcessScheduler>,
-    runner: Arc<ProcessRunner>,
-    residence: ManagerResidence,
-}
-
-impl NativeProcessManager {
-    pub fn new(
-        scheduler: Arc<dyn ProcessScheduler>,
-        runner: Arc<ProcessRunner>,
-        residence: ManagerResidence,
-    ) -> Self {
-        Self {
-            scheduler,
-            runner,
-            residence,
-        }
-    }
-
-    pub fn process_runner(&self) -> &Arc<ProcessRunner> {
-        &self.runner
-    }
-
-    fn scheduler(&self) -> Arc<dyn ProcessScheduler> {
-        Arc::clone(&self.scheduler)
-    }
-
-    pub fn residence(&self) -> ManagerResidence {
-        self.residence
-    }
-}
-
-impl std::ops::Deref for NativeProcessManager {
-    type Target = ProcessRunner;
-
-    fn deref(&self) -> &Self::Target {
-        &self.runner
-    }
-}
-
-/// Owns the native manager's published Unix socket and accept loop.
-pub struct NativeApiServer {
-    manager: Arc<NativeProcessManager>,
-    socket_path: PathBuf,
-    task: JoinHandle<()>,
-}
-
 /// Path-only control client for an already-running native manager.
 pub struct NativeManagerClient {
     state_dir: PathBuf,
@@ -681,41 +580,6 @@ fn probe_description(config: &ProcessConfig) -> Option<String> {
         return Some("notify".to_string());
     }
     None
-}
-
-/// Failure bound for a single attach event write: a client that stops reading
-/// (full socket buffer) must not park the handler with shutdown unobserved
-/// while the event queue grows behind it.
-const ATTACH_WRITE_STALL_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// Lines of backlog per log file sent when an attach stream opens.
-const ATTACH_BACKLOG_LINES: usize = 50;
-
-/// Bound on the per-connection attach event queue. A slow client applies
-/// backpressure to the feed (status diffs await a free slot) and, once the
-/// queue is full, log lines are dropped rather than buffered without limit, so
-/// a slow-but-alive reader cannot grow daemon memory unboundedly.
-const ATTACH_EVENT_CHANNEL_CAPACITY: usize = 2048;
-
-/// Attach log tailers owned by one feed. Tokio detaches a task when its
-/// `JoinHandle` is dropped, so abort explicitly when the feed ends; otherwise
-/// repeated attach/detach cycles can leave tailers alive until their next
-/// cancellation check.
-#[derive(Default)]
-struct AttachTailers(Vec<JoinHandle<()>>);
-
-impl AttachTailers {
-    fn push(&mut self, tailer: JoinHandle<()>) {
-        self.0.push(tailer);
-    }
-}
-
-impl Drop for AttachTailers {
-    fn drop(&mut self) {
-        for tailer in &self.0 {
-            tailer.abort();
-        }
-    }
 }
 
 const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(15);
@@ -1038,6 +902,23 @@ impl ProcessRunner {
         }
     }
 
+    /// Whether restarting this process requires scheduling it through the task
+    /// graph instead of sending an in-place restart to a live supervisor.
+    ///
+    /// This is deliberately independent of [`Self::get_phase`], which is a
+    /// presentation phase and may preserve `Exited`/`GaveUp` after manager-wide
+    /// teardown. Callers should not reconstruct restart semantics from that
+    /// display value.
+    pub async fn needs_scheduled_start(&self, name: &str) -> Option<bool> {
+        let processes = self.processes.read().await;
+        processes.get(name).map(|entry| {
+            matches!(
+                entry,
+                ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }
+            )
+        })
+    }
+
     /// Subscribe to status updates for a given active process.
     /// Returns a clone of the watch receiver if the process is active.
     pub async fn subscribe_status(
@@ -1064,6 +945,82 @@ impl ProcessRunner {
     /// Path to the API socket
     pub fn api_socket_path(&self) -> PathBuf {
         self.state_dir.join(crate::NATIVE_SOCKET_NAME)
+    }
+
+    /// Cancellation token shared by the process supervisors and API streams.
+    pub fn shutdown_token(&self) -> &CancellationToken {
+        &self.shutdown
+    }
+
+    /// Lifecycle notifier used by persistent views to observe process-map changes.
+    pub fn entries_changed(&self) -> &Notify {
+        &self.entries_changed
+    }
+
+    /// Return a sorted snapshot of all managed processes.
+    pub async fn process_infos(&self) -> Vec<ProcessInfo> {
+        let processes = self.processes.read().await;
+        let mut infos: Vec<_> = processes
+            .iter()
+            .map(|(name, entry)| Self::process_info(name, entry))
+            .collect();
+        infos.sort_by(|left, right| left.name.cmp(&right.name));
+        infos
+    }
+
+    /// Return information about one managed process.
+    pub async fn process_info_by_name(&self, name: &str) -> Option<ProcessInfo> {
+        let processes = self.processes.read().await;
+        processes
+            .get(name)
+            .map(|entry| Self::process_info(name, entry))
+    }
+
+    /// Return all declared port allocations in stable order.
+    pub async fn port_allocations(&self) -> Vec<PortInfo> {
+        let processes = self.processes.read().await;
+        let mut ports = Vec::new();
+        for (process_name, entry) in processes.iter() {
+            for (port_name, &port) in &entry.config().ports {
+                ports.push(PortInfo {
+                    process_name: process_name.clone(),
+                    port_name: port_name.clone(),
+                    port,
+                });
+            }
+        }
+        ports.sort_by(|left, right| {
+            (&left.process_name, &left.port_name, left.port).cmp(&(
+                &right.process_name,
+                &right.port_name,
+                right.port,
+            ))
+        });
+        ports
+    }
+
+    fn process_info(name: &str, entry: &ProcessEntry) -> ProcessInfo {
+        let (phase, restart_count) = match entry {
+            ProcessEntry::NotStarted { .. } => (ProcessPhase::NotStarted, 0),
+            ProcessEntry::Stopping { .. } => (ProcessPhase::Stopping, 0),
+            ProcessEntry::Stopped {
+                terminal_phase,
+                user_stopped,
+                ..
+            } => (display_phase(*terminal_phase, *user_stopped), 0),
+            ProcessEntry::Waiting { .. } => (ProcessPhase::Waiting, 0),
+            ProcessEntry::Launching { .. } => (ProcessPhase::Starting, 0),
+            ProcessEntry::Active(handle) => {
+                let status = handle.status_rx.borrow();
+                (ProcessPhase::from(status.phase), status.restart_count)
+            }
+        };
+        ProcessInfo {
+            name: name.to_string(),
+            phase,
+            restart_count,
+            ports: display_ports(entry.config()),
+        }
     }
 
     /// Create a TUI activity for a process without launching it.
@@ -2060,8 +2017,8 @@ impl ProcessRunner {
     }
 
     /// Keep a transient process runner alive until cancellation or idleness.
-    /// Interactive commands and dependency-aware restarts belong to
-    /// [`NativeProcessManager::run_event_loop`].
+    /// Interactive commands and dependency-aware restarts belong to the
+    /// persistent manager in `devenv-tasks`.
     pub async fn run_until(
         &self,
         cancellation_token: CancellationToken,
@@ -2087,509 +2044,6 @@ impl ProcessRunner {
         }
 
         Ok(())
-    }
-}
-
-impl NativeProcessManager {
-    /// Wait until every process is terminal, ready, or dependency-parked.
-    async fn handle_wait(&self) -> ApiResponse {
-        // Register both notifiers before checking to avoid missed transitions.
-        let task_notify = self
-            .task_notify
-            .clone()
-            .unwrap_or_else(|| Arc::new(Notify::new()));
-        loop {
-            let entries_notified = self.entries_changed.notified();
-            let task_notified = task_notify.notified();
-            tokio::pin!(entries_notified, task_notified);
-            entries_notified.as_mut().enable();
-            task_notified.as_mut().enable();
-            if self.wait_settled().await {
-                return ApiResponse::Ready;
-            }
-            tokio::select! {
-                _ = &mut entries_notified => {}
-                _ = &mut task_notified => {}
-            }
-        }
-    }
-
-    /// Whether every entry satisfies the `Wait` rule.
-    /// Without a scheduler, `Waiting` remains unsettled.
-    pub async fn wait_settled(&self) -> bool {
-        // Snapshot Waiting names under the map read lock and drop the guard
-        // before consulting the scheduler: dependency_parked re-enters
-        // get_phase, and a queued writer on this write-preferring lock would
-        // deadlock that second read.
-        let waiting: Vec<String> = {
-            let procs = self.processes.read().await;
-            let mut waiting = Vec::new();
-            for (name, entry) in procs.iter() {
-                match entry {
-                    ProcessEntry::Launching { .. } | ProcessEntry::Stopping { .. } => return false,
-                    ProcessEntry::Active(handle) => {
-                        let phase: ProcessPhase = handle.status_rx.borrow().phase.into();
-                        if !matches!(
-                            phase,
-                            ProcessPhase::Ready | ProcessPhase::Exited | ProcessPhase::GaveUp
-                        ) {
-                            return false;
-                        }
-                    }
-                    ProcessEntry::Waiting { .. } => waiting.push(name.clone()),
-                    ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. } => {}
-                }
-            }
-            waiting
-        };
-        if waiting.is_empty() {
-            return true;
-        }
-        let scheduler = self.scheduler();
-        for name in waiting {
-            if !scheduler.dependency_parked(&name).await {
-                return false;
-            }
-        }
-        true
-    }
-}
-
-impl NativeApiServer {
-    /// Publish a manager over its native Unix socket.
-    pub fn start(manager: Arc<NativeProcessManager>) -> Result<Self> {
-        let sock_path = manager.api_socket_path();
-        let _ = std::fs::remove_file(&sock_path);
-
-        let listener = std::os::unix::net::UnixListener::bind(&sock_path)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to bind API socket at {}", sock_path.display()))?;
-        listener.set_nonblocking(true).into_diagnostic()?;
-        let listener = tokio::net::UnixListener::from_std(listener).into_diagnostic()?;
-        info!("API server listening on {}", sock_path.display());
-
-        let accept_manager = Arc::clone(&manager);
-        let task = tokio::spawn(async move {
-            loop {
-                match listener.accept().await {
-                    Ok((stream, _)) => {
-                        let manager = Arc::clone(&accept_manager);
-                        tokio::spawn(NativeProcessManager::handle_api_client(stream, manager));
-                    }
-                    Err(e) => {
-                        warn!("API accept error: {}", e);
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                    }
-                }
-            }
-        });
-
-        Ok(Self {
-            manager,
-            socket_path: sock_path,
-            task,
-        })
-    }
-
-    /// The manager served by this endpoint.
-    pub fn manager(&self) -> &Arc<NativeProcessManager> {
-        &self.manager
-    }
-}
-
-impl std::fmt::Debug for NativeApiServer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NativeApiServer")
-            .field("socket_path", &self.socket_path)
-            .finish_non_exhaustive()
-    }
-}
-
-impl Drop for NativeApiServer {
-    fn drop(&mut self) {
-        self.task.abort();
-        let _ = std::fs::remove_file(&self.socket_path);
-    }
-}
-
-impl NativeProcessManager {
-    /// Build a `ProcessInfo` from a process entry.
-    fn process_info(name: &str, entry: &ProcessEntry) -> ProcessInfo {
-        let (phase, restart_count) = match entry {
-            ProcessEntry::NotStarted { .. } => (ProcessPhase::NotStarted, 0),
-            ProcessEntry::Stopping { .. } => (ProcessPhase::Stopping, 0),
-            ProcessEntry::Stopped {
-                terminal_phase,
-                user_stopped,
-                ..
-            } => (display_phase(*terminal_phase, *user_stopped), 0),
-            ProcessEntry::Waiting { .. } => (ProcessPhase::Waiting, 0),
-            ProcessEntry::Launching { .. } => (ProcessPhase::Starting, 0),
-            ProcessEntry::Active(handle) => {
-                let status = handle.status_rx.borrow();
-                (ProcessPhase::from(status.phase), status.restart_count)
-            }
-        };
-        ProcessInfo {
-            name: name.to_string(),
-            phase,
-            restart_count,
-            ports: display_ports(entry.config()),
-        }
-    }
-
-    fn process_not_found(name: &str) -> ApiResponse {
-        ApiResponse::Error {
-            message: format!("process '{}' not found", name),
-        }
-    }
-
-    /// Handle a single API client connection.
-    async fn handle_api_client(stream: tokio::net::UnixStream, manager: Arc<Self>) {
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-
-        let (reader, mut writer) = stream.into_split();
-        let mut reader = BufReader::new(reader);
-        let mut line = String::new();
-        if reader.read_line(&mut line).await.is_err() {
-            return;
-        }
-
-        let response = match serde_json::from_str::<ApiRequest>(&line) {
-            Ok(ApiRequest::Wait) => manager.handle_wait().await,
-            Ok(ApiRequest::List) => {
-                let procs = manager.processes.read().await;
-                let mut list: Vec<ProcessInfo> = procs
-                    .iter()
-                    .map(|(name, entry)| Self::process_info(name, entry))
-                    .collect();
-                list.sort_by(|a, b| a.name.cmp(&b.name));
-                ApiResponse::ProcessList { processes: list }
-            }
-            Ok(ApiRequest::Status { name }) => {
-                let procs = manager.processes.read().await;
-                match procs.get(&name) {
-                    Some(entry) => ApiResponse::ProcessDetail {
-                        info: Self::process_info(&name, entry),
-                    },
-                    None => Self::process_not_found(&name),
-                }
-            }
-            Ok(ApiRequest::Logs { name, lines }) => {
-                let max_lines = lines.unwrap_or(100);
-                let procs = manager.processes.read().await;
-                if !procs.contains_key(&name) {
-                    Self::process_not_found(&name)
-                } else {
-                    drop(procs);
-                    let (stdout_path, stderr_path) =
-                        crate::command::log_paths(&manager.state_dir, &name);
-                    let (stdout, stderr) = tokio::task::spawn_blocking(move || {
-                        let stdout = crate::log_tailer::read_tail(&stdout_path, max_lines);
-                        let stderr = crate::log_tailer::read_tail(&stderr_path, max_lines);
-                        (stdout, stderr)
-                    })
-                    .await
-                    .unwrap_or_default();
-                    ApiResponse::ProcessLogs { stdout, stderr }
-                }
-            }
-            Ok(ApiRequest::Restart { name }) => {
-                let procs = manager.processes.read().await;
-                match procs.get(&name) {
-                    Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }) => {
-                        drop(procs);
-                        // A stopped process is brought back through the
-                        // scheduler so its `after`/`before` dependencies are
-                        // honoured like any other launch.
-                        let scheduler = manager.scheduler();
-                        let outcome = scheduler.start(vec![name.clone()]).await;
-                        if outcome.scheduled.contains(&name) || outcome.skipped.contains(&name) {
-                            ApiResponse::Ok
-                        } else {
-                            ApiResponse::Error {
-                                message: format!("failed to restart process '{}'", name),
-                            }
-                        }
-                    }
-                    Some(_) => {
-                        drop(procs);
-                        match manager.restart(&name).await {
-                            Ok(()) => ApiResponse::Ok,
-                            Err(e) => ApiResponse::Error {
-                                message: format!("failed to restart process '{}': {}", name, e),
-                            },
-                        }
-                    }
-                    None => Self::process_not_found(&name),
-                }
-            }
-            Ok(ApiRequest::Start { names }) => ApiResponse::Start {
-                outcome: manager.scheduler().start(names).await,
-            },
-            Ok(ApiRequest::Residence) => ApiResponse::Residence {
-                residence: manager.residence(),
-            },
-            Ok(ApiRequest::Stop { name }) => match manager.process_runner().stop(&name).await {
-                Ok(()) => ApiResponse::Ok,
-                Err(e) => ApiResponse::Error {
-                    message: format!("failed to stop process '{}': {}", name, e),
-                },
-            },
-            Ok(ApiRequest::Ports) => {
-                let procs = manager.processes.read().await;
-                let mut ports = Vec::new();
-                for (name, entry) in procs.iter() {
-                    for (port_name, &port) in &entry.config().ports {
-                        ports.push(PortInfo {
-                            process_name: name.clone(),
-                            port_name: port_name.clone(),
-                            port,
-                        });
-                    }
-                }
-                ports.sort_by(|a, b| {
-                    (&a.process_name, &a.port_name, a.port).cmp(&(
-                        &b.process_name,
-                        &b.port_name,
-                        b.port,
-                    ))
-                });
-                ApiResponse::PortAllocations { ports }
-            }
-            Ok(ApiRequest::Attach) => {
-                Self::handle_attach_client(reader, writer, manager).await;
-                return;
-            }
-            Err(e) => ApiResponse::Error {
-                message: format!("invalid request: {}", e),
-            },
-        };
-
-        if let Ok(mut json) = serde_json::to_vec(&response) {
-            json.push(b'\n');
-            let _ = writer.write_all(&json).await;
-        }
-    }
-
-    /// Serialize one attach event as a JSON line and write it.
-    async fn write_attach_event(
-        writer: &mut tokio::net::unix::OwnedWriteHalf,
-        event: &AttachEvent,
-    ) -> std::io::Result<()> {
-        use tokio::io::AsyncWriteExt;
-
-        let mut json = serde_json::to_vec(event)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        json.push(b'\n');
-        writer.write_all(&json).await
-    }
-
-    /// Write one event, treating manager shutdown, a write error, and a write
-    /// stalled past the failure bound all as disconnect. Returns false when
-    /// the connection should be torn down.
-    async fn write_attach_event_bounded(
-        writer: &mut tokio::net::unix::OwnedWriteHalf,
-        event: &AttachEvent,
-        shutdown: &CancellationToken,
-    ) -> bool {
-        tokio::select! {
-            res = tokio::time::timeout(
-                ATTACH_WRITE_STALL_TIMEOUT,
-                Self::write_attach_event(writer, event),
-            ) => matches!(res, Ok(Ok(()))),
-            _ = shutdown.cancelled() => false,
-        }
-    }
-
-    /// Serve one attach connection: snapshot, then status diffs and log tails
-    /// until the client disconnects or the manager shuts down.
-    async fn handle_attach_client(
-        mut reader: tokio::io::BufReader<tokio::net::unix::OwnedReadHalf>,
-        mut writer: tokio::net::unix::OwnedWriteHalf,
-        manager: Arc<Self>,
-    ) {
-        use tokio::io::AsyncReadExt;
-
-        // Every exit path cancels the feeder and tailers.
-        let conn = CancellationToken::new();
-        let _guard = conn.clone().drop_guard();
-
-        // Snapshot under a short read lock, dropped before any I/O.
-        let snapshot: Vec<ProcessInfo> = {
-            let procs = manager.processes.read().await;
-            let mut list: Vec<ProcessInfo> = procs
-                .iter()
-                .map(|(name, entry)| Self::process_info(name, entry))
-                .collect();
-            list.sort_by(|a, b| a.name.cmp(&b.name));
-            list
-        };
-
-        if !Self::write_attach_event_bounded(
-            &mut writer,
-            &AttachEvent::Snapshot {
-                processes: snapshot.clone(),
-            },
-            &manager.shutdown,
-        )
-        .await
-        {
-            return;
-        }
-
-        let (tx, mut rx) = mpsc::channel::<AttachEvent>(ATTACH_EVENT_CHANNEL_CAPACITY);
-        tokio::spawn(Self::attach_feed(
-            Arc::clone(&manager),
-            snapshot,
-            tx,
-            conn.clone(),
-        ));
-
-        // Writer/disconnect loop; never touches the processes map, so no
-        // lock is ever held across a write.
-        let mut probe = [0u8; 64];
-        loop {
-            tokio::select! {
-                ev = rx.recv() => match ev {
-                    Some(ev) => {
-                        if !Self::write_attach_event_bounded(&mut writer, &ev, &manager.shutdown)
-                            .await
-                        {
-                            break;
-                        }
-                    }
-                    None => break,
-                },
-                // The client never sends after the request line; 0 or Err
-                // means it disconnected.
-                n = reader.read(&mut probe) => {
-                    if matches!(n, Ok(0) | Err(_)) {
-                        break;
-                    }
-                }
-                _ = manager.shutdown.cancelled() => break,
-            }
-        }
-    }
-
-    /// Feed an attach connection: per-process log tailers (bounded backlog,
-    /// then append-only) plus status diffs woken by `entries_changed`.
-    async fn attach_feed(
-        manager: Arc<Self>,
-        snapshot: Vec<ProcessInfo>,
-        tx: mpsc::Sender<AttachEvent>,
-        conn: CancellationToken,
-    ) {
-        let mut tailers = AttachTailers::default();
-        let mut prev: BTreeMap<String, ProcessInfo> = snapshot
-            .into_iter()
-            .map(|info| (info.name.clone(), info))
-            .collect();
-        for name in prev.keys() {
-            Self::spawn_attach_tailers(&manager.state_dir, name, &tx, &conn, &mut tailers);
-        }
-
-        loop {
-            // Register before reading so a transition between the read and
-            // the await cannot be missed (same idiom as stop_all).
-            let notified = manager.entries_changed.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
-
-            let current: BTreeMap<String, ProcessInfo> = {
-                let procs = manager.processes.read().await;
-                procs
-                    .iter()
-                    .map(|(name, entry)| (name.clone(), Self::process_info(name, entry)))
-                    .collect()
-            };
-            // Lock released above; sends never run under it. Entries are
-            // never removed from the map, so there are no removal events.
-            for (name, info) in &current {
-                let is_new = !prev.contains_key(name);
-                if prev.get(name) != Some(info)
-                    && tx
-                        .send(AttachEvent::Status { info: info.clone() })
-                        .await
-                        .is_err()
-                {
-                    return;
-                }
-                if is_new {
-                    Self::spawn_attach_tailers(&manager.state_dir, name, &tx, &conn, &mut tailers);
-                }
-            }
-            prev = current;
-
-            tokio::select! {
-                _ = notified => {}
-                _ = conn.cancelled() => return,
-            }
-        }
-    }
-
-    /// Enqueue one log event without ever waiting for queue capacity. A full
-    /// queue means the slow client loses this log line but stays connected; a
-    /// closed queue means its feed can stop.
-    fn try_send_attach_log(tx: &mpsc::Sender<AttachEvent>, event: AttachEvent) -> bool {
-        match tx.try_send(event) {
-            Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => true,
-            Err(mpsc::error::TrySendError::Closed(_)) => false,
-        }
-    }
-
-    /// Spawn stdout+stderr attach tailers for one process: emit a backlog of
-    /// the last complete lines, then tail strictly append-only from the
-    /// recorded byte offset. `wait_for_create` covers processes that have not
-    /// started yet. Handles are retained by the connection feed and aborted
-    /// when it ends, in addition to the normal `conn` cancellation path.
-    fn spawn_attach_tailers(
-        state_dir: &Path,
-        name: &str,
-        tx: &mpsc::Sender<AttachEvent>,
-        conn: &CancellationToken,
-        tailers: &mut AttachTailers,
-    ) {
-        let (stdout_path, stderr_path) = crate::command::log_paths(state_dir, name);
-        for (path, stream) in [
-            (stdout_path, LogStream::Stdout),
-            (stderr_path, LogStream::Stderr),
-        ] {
-            let (backlog, offset) = crate::log_tailer::read_backlog(&path, ATTACH_BACKLOG_LINES);
-            for line in backlog {
-                // Best-effort: drop on a full/closed queue rather than buffer
-                // without bound; the connection is going away on Closed.
-                if !Self::try_send_attach_log(
-                    tx,
-                    AttachEvent::Log {
-                        name: name.to_string(),
-                        stream,
-                        line,
-                    },
-                ) {
-                    return;
-                }
-            }
-            let tx = tx.clone();
-            let name = name.to_string();
-            tailers.push(crate::log_tailer::spawn_tail_to(
-                path,
-                offset,
-                true,
-                conn.clone(),
-                move |line| {
-                    Self::try_send_attach_log(
-                        &tx,
-                        AttachEvent::Log {
-                            name: name.clone(),
-                            stream,
-                            line,
-                        },
-                    )
-                },
-            ));
-        }
     }
 }
 
@@ -2726,125 +2180,6 @@ impl NativeManagerClient {
     }
 }
 
-impl NativeProcessManager {
-    /// Handle a single process command (restart, start not-started, etc.).
-    pub async fn handle_command(&self, cmd: ProcessCommand) {
-        match cmd {
-            ProcessCommand::Restart(name) => {
-                let needs_fresh_start = matches!(
-                    self.processes.read().await.get(&name),
-                    Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. })
-                );
-                if needs_fresh_start {
-                    let outcome = self.scheduler().start(vec![name.clone()]).await;
-                    if !outcome.scheduled.contains(&name) && !outcome.skipped.contains(&name) {
-                        warn!(process = %name, "failed to start process");
-                    }
-                } else {
-                    if let Err(e) = self.restart(&name).await {
-                        warn!(process = %name, error = ?e, "failed to restart process");
-                    }
-                }
-            }
-            ProcessCommand::Stop(name) => {
-                if let Err(e) = self.stop_and_keep(&name).await {
-                    warn!(process = %name, error = ?e, "failed to stop process");
-                }
-            }
-            // Only the attached client view services this;
-            // an in-process manager's interrupt prompt offers quit instead of
-            // detach/stop, so it is never sent here.
-            ProcessCommand::StopManager => {
-                debug!("ignoring StopManager on an in-process manager");
-            }
-        }
-    }
-
-    /// Start processing commands in a background task.
-    ///
-    /// This allows commands (e.g. Ctrl-R restart) to be handled while task
-    /// execution is still in progress. The background task exits when the
-    /// sender half of the channel is dropped.
-    pub fn start_command_listener(self: &Arc<Self>, mut rx: mpsc::Receiver<FrontendEvent>) {
-        let pm = Arc::clone(self);
-        tokio::spawn(async move {
-            let mut queued_command = None;
-            while let Some(command) = match queued_command.take() {
-                Some(command) => Some(command),
-                None => recv_process_command(&mut rx).await,
-            } {
-                pm.handle_command(command.clone()).await;
-                queued_command = latest_queued_process_command(&mut rx)
-                    .filter(|queued| !same_process_command(&command, queued));
-            }
-        });
-    }
-
-    /// Note: This method relies on the cancellation token for shutdown signals.
-    /// Signal handling (SIGINT/SIGTERM) is done by tokio-shutdown in the main app,
-    /// which cancels the token when a signal is received.
-    pub async fn run_event_loop(
-        &self,
-        cancellation_token: tokio_util::sync::CancellationToken,
-        mut frontend_event_rx: Option<mpsc::Receiver<FrontendEvent>>,
-        mode: OnIdle,
-    ) -> Result<()> {
-        trace!(
-            "run_event_loop: ENTERED, mode={:?}, token_cancelled={}",
-            mode,
-            cancellation_token.is_cancelled()
-        );
-        info!("Manager event loop started (foreground)");
-        let mut queued_command = None;
-
-        let done = || mode == OnIdle::Exit && self.live.load(Ordering::SeqCst) == 0;
-        if done() {
-            trace!("run_event_loop: all processes already settled, returning");
-            info!("Manager event loop stopped");
-            return Ok(());
-        }
-
-        loop {
-            tokio::select! {
-                biased;
-                _ = cancellation_token.cancelled() => {
-                    trace!("run_event_loop: cancellation detected, calling stop_all");
-                    info!("Shutdown requested, stopping all processes");
-                    self.stop_all().await?;
-                    trace!("run_event_loop: stop_all completed");
-                    break;
-                }
-                Some(event) = async {
-                    match queued_command.take() {
-                        Some(command) => Some(FrontendEvent::Process(command)),
-                        None => match frontend_event_rx.as_mut() {
-                            Some(rx) => rx.recv().await,
-                            None => std::future::pending().await,
-                        },
-                    }
-                } => {
-                    if let FrontendEvent::Process(command) = event {
-                        self.handle_command(command.clone()).await;
-                        queued_command = frontend_event_rx
-                            .as_mut()
-                            .and_then(latest_queued_process_command)
-                            .filter(|queued| !same_process_command(&command, queued));
-                    }
-                }
-                _ = self.completion.notified() => {}
-            }
-
-            if done() {
-                trace!("all processes settled, shutting down");
-                break;
-            }
-        }
-
-        info!("Manager event loop stopped");
-        Ok(())
-    }
-}
-
 #[async_trait]
 impl ProcessManagerControl for NativeManagerClient {
     async fn stop(&self) -> Result<()> {
@@ -2947,7 +2282,7 @@ impl ProcessManagerControl for NativeManagerClient {
 impl Drop for ProcessRunner {
     fn drop(&mut self) {
         // A runner owns only the child supervisors it created. Persistent
-        // discovery state is owned by NativeApiServer and the manager host.
+        // discovery state is owned by the API server and manager host.
         self.shutdown_supervisors();
     }
 }
@@ -2955,7 +2290,7 @@ impl Drop for ProcessRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ListenKind, ListenSpec, ReadyConfig, RestartPolicy, StartConfig};
+    use crate::config::{ListenKind, ListenSpec, RestartPolicy, StartConfig};
     use std::net::Ipv4Addr;
 
     static ACTIVITY_EVENT_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -2989,44 +2324,6 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = ProcessRunner::new(temp_dir.path().to_path_buf());
         assert!(manager.is_ok());
-    }
-
-    #[tokio::test]
-    async fn process_command_queue_keeps_only_the_latest_intent() {
-        let (tx, mut rx) = mpsc::channel(4);
-        tx.send(FrontendEvent::Process(ProcessCommand::Restart(
-            "alpha".to_string(),
-        )))
-        .await
-        .unwrap();
-        tx.send(FrontendEvent::Process(ProcessCommand::Stop(
-            "alpha".to_string(),
-        )))
-        .await
-        .unwrap();
-        tx.send(FrontendEvent::Process(ProcessCommand::Restart(
-            "beta".to_string(),
-        )))
-        .await
-        .unwrap();
-
-        let first = recv_process_command(&mut rx).await.unwrap();
-        let latest = latest_queued_process_command(&mut rx).unwrap();
-
-        assert!(matches!(first, ProcessCommand::Restart(name) if name == "alpha"));
-        assert!(matches!(latest, ProcessCommand::Restart(name) if name == "beta"));
-    }
-
-    #[test]
-    fn repeated_process_command_is_the_same_intent() {
-        assert!(same_process_command(
-            &ProcessCommand::Restart("alpha".to_string()),
-            &ProcessCommand::Restart("alpha".to_string()),
-        ));
-        assert!(!same_process_command(
-            &ProcessCommand::Restart("alpha".to_string()),
-            &ProcessCommand::Stop("alpha".to_string()),
-        ));
     }
 
     #[tokio::test]
@@ -3068,6 +2365,22 @@ mod tests {
         }
     }
 
+    async fn wait_for_manager_phase(manager: &ProcessRunner, name: &str, expected: ProcessPhase) {
+        tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                let notified = manager.entries_changed().notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                if manager.get_phase(name).await == Some(expected) {
+                    return;
+                }
+                notified.await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for {name} to reach {expected}"));
+    }
+
     fn auto_start_off_config(name: &str) -> ProcessConfig {
         ProcessConfig {
             start: StartConfig { enable: false },
@@ -3086,79 +2399,6 @@ mod tests {
             },
             ..Default::default()
         }
-    }
-
-    fn readiness_gated_config(name: &str, gate: &Path) -> ProcessConfig {
-        ProcessConfig {
-            ready: Some(ReadyConfig {
-                exec: Some(format!("test -e '{}'", gate.display())),
-                period: 1,
-                ..Default::default()
-            }),
-            ..long_running_config(name)
-        }
-    }
-
-    fn exit_gated_config(
-        name: &str,
-        gate: &Path,
-        exit_code: i32,
-        restart_on: RestartPolicy,
-        restart_max: usize,
-    ) -> ProcessConfig {
-        ProcessConfig {
-            name: name.to_string(),
-            exec: format!(
-                "while [ ! -e '{}' ]; do sleep 0.05; done; exit {exit_code}",
-                gate.display()
-            ),
-            restart: crate::config::RestartConfig {
-                on: restart_on,
-                max: Some(restart_max),
-                window: None,
-            },
-            ..Default::default()
-        }
-    }
-
-    async fn wait_for_manager_phase(manager: &ProcessRunner, name: &str, expected: ProcessPhase) {
-        tokio::time::timeout(Duration::from_secs(30), async {
-            loop {
-                let notified = manager.entries_changed.notified();
-                tokio::pin!(notified);
-                notified.as_mut().enable();
-                if manager.get_phase(name).await == Some(expected) {
-                    break;
-                }
-                notified.await;
-            }
-        })
-        .await
-        .unwrap_or_else(|_| panic!("timed out waiting for {name} to reach {expected}"));
-    }
-
-    async fn wait_for_attach_phase(
-        stream: &mut AttachStream,
-        name: &str,
-        expected: ProcessPhase,
-    ) -> ProcessInfo {
-        tokio::time::timeout(Duration::from_secs(30), async {
-            loop {
-                let event = stream
-                    .next()
-                    .await
-                    .expect("attach stream closed before status transition")
-                    .expect("attach stream failed before status transition");
-                if let AttachEvent::Status { info } = event
-                    && info.name == name
-                    && info.phase == expected
-                {
-                    return info;
-                }
-            }
-        })
-        .await
-        .unwrap_or_else(|_| panic!("timed out waiting for attached {name} to reach {expected}"))
     }
 
     #[tokio::test]
@@ -3318,6 +2558,30 @@ mod tests {
         );
 
         let _ = manager.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn restart_routing_uses_lifecycle_state_not_display_phase() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
+
+        manager
+            .start_command(&test_config("self-exit"), None)
+            .await
+            .unwrap();
+        wait_for_manager_phase(&manager, "self-exit", ProcessPhase::Exited).await;
+        manager.stop_all().await.unwrap();
+
+        assert_eq!(
+            manager.get_phase("self-exit").await,
+            Some(ProcessPhase::Exited),
+            "manager teardown should preserve the terminal display phase"
+        );
+        assert_eq!(
+            manager.needs_scheduled_start("self-exit").await,
+            Some(true),
+            "restart routing must classify the torn-down entry independently of its display phase"
+        );
     }
 
     #[tokio::test]
@@ -3821,29 +3085,6 @@ mod tests {
         let _ = manager.stop_all().await;
     }
 
-    #[tokio::test]
-    async fn test_handle_command_stop() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        let scheduler: Arc<dyn ProcessScheduler> = stub_scheduler(StartOutcome::default());
-        let manager =
-            NativeProcessManager::new(scheduler, Arc::clone(&runner), ManagerResidence::InProcess);
-        let config = long_running_config("cmd-stop");
-
-        runner.start_command(&config, None).await.unwrap();
-        assert!(runner.list().await.contains(&"cmd-stop".to_string()));
-
-        manager
-            .handle_command(ProcessCommand::Stop("cmd-stop".to_string()))
-            .await;
-
-        assert_eq!(
-            runner.get_phase("cmd-stop").await,
-            Some(ProcessPhase::Stopped),
-            "handle_command(Stop) should call stop_and_keep"
-        );
-    }
-
     #[test]
     fn test_display_ports_merges_listen_and_ports() {
         let config = ProcessConfig {
@@ -3862,330 +3103,23 @@ mod tests {
         assert_eq!(display_ports(&config), vec!["db:5432", "web:8080"]);
     }
 
-    /// Test scheduler with a canned parked judgment and start outcome.
-    struct StubScheduler {
-        parked: std::sync::atomic::AtomicBool,
-        outcome: StartOutcome,
-    }
-
-    #[async_trait]
-    impl ProcessScheduler for StubScheduler {
-        async fn start(&self, _names: Vec<String>) -> StartOutcome {
-            self.outcome.clone()
-        }
-
-        async fn dependency_parked(&self, _process_name: &str) -> bool {
-            self.parked.load(std::sync::atomic::Ordering::SeqCst)
-        }
-    }
-
-    fn stub_scheduler(outcome: StartOutcome) -> Arc<StubScheduler> {
-        Arc::new(StubScheduler {
-            parked: std::sync::atomic::AtomicBool::new(false),
-            outcome,
-        })
-    }
-
-    fn native_manager(
-        runner: Arc<ProcessRunner>,
-        scheduler: Arc<dyn ProcessScheduler>,
-        residence: ManagerResidence,
-    ) -> Arc<NativeProcessManager> {
-        Arc::new(NativeProcessManager::new(scheduler, runner, residence))
-    }
-
-    fn default_native_manager(runner: Arc<ProcessRunner>) -> Arc<NativeProcessManager> {
-        native_manager(
-            runner,
-            stub_scheduler(StartOutcome::default()),
-            ManagerResidence::InProcess,
-        )
-    }
-
-    #[tokio::test]
-    async fn wait_settled_judges_waiting_via_scheduler() {
-        use std::sync::atomic::Ordering;
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        let stub = stub_scheduler(StartOutcome::default());
-        let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
-        let manager = native_manager(Arc::clone(&runner), scheduler, ManagerResidence::InProcess);
-
-        assert!(manager.wait_settled().await);
-
-        runner.register_waiting(test_config("waiter"), None).await;
-        assert!(!manager.wait_settled().await);
-
-        stub.parked.store(true, Ordering::SeqCst);
-        assert!(manager.wait_settled().await);
-
-        let config = test_config("mid-launch");
-        let activity = runner.create_process_activity(&config, None);
-        runner.processes.write().await.insert(
-            "mid-launch".to_string(),
-            ProcessEntry::Launching { config, activity },
-        );
-        assert!(!manager.wait_settled().await);
-        runner.processes.write().await.remove("mid-launch");
-
-        // Inactive processes do not consult the scheduler.
-        stub.parked.store(false, Ordering::SeqCst);
-        runner
-            .register_waiting(auto_start_off_config("idle"), None)
-            .await;
-        runner.launch_waiting("idle").await.unwrap(); // -> NotStarted
-        runner.cancel_waiting("waiter").await; // -> Stopped
-        assert!(manager.wait_settled().await);
-    }
-
-    /// Scheduler that reports every `dependency_parked` consultation over a
-    /// channel, so tests can synchronize with `handle_wait`'s loop without
-    /// timing.
-    struct SignalingScheduler {
-        parked: std::sync::atomic::AtomicBool,
-        consulted: tokio::sync::mpsc::UnboundedSender<()>,
-    }
-
-    #[async_trait]
-    impl ProcessScheduler for SignalingScheduler {
-        async fn start(&self, _names: Vec<String>) -> StartOutcome {
-            StartOutcome::default()
-        }
-
-        async fn dependency_parked(&self, _process_name: &str) -> bool {
-            let _ = self.consulted.send(());
-            self.parked.load(std::sync::atomic::Ordering::SeqCst)
-        }
-    }
-
-    /// `task_notify` wakes `handle_wait` when a dependency becomes parked.
-    #[tokio::test]
-    async fn handle_wait_wakes_on_task_notify_only() {
-        use std::sync::atomic::Ordering;
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let mut manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
-        let task_notify = Arc::new(Notify::new());
-        manager.set_task_notify(task_notify.clone());
-        let runner = Arc::new(manager);
-
-        let (consulted_tx, mut consulted_rx) = tokio::sync::mpsc::unbounded_channel();
-        let stub = Arc::new(SignalingScheduler {
-            parked: std::sync::atomic::AtomicBool::new(false),
-            consulted: consulted_tx,
-        });
-        let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
-        let manager = native_manager(Arc::clone(&runner), scheduler, ManagerResidence::InProcess);
-
-        // A Waiting entry judged progressing: Wait blocks.
-        runner.register_waiting(test_config("waiter"), None).await;
-
-        let waiter = tokio::spawn({
-            let manager = Arc::clone(&manager);
-            async move { manager.handle_wait().await }
-        });
-
-        // Wait until the loop has consulted the scheduler once: by then it
-        // has already registered on both notifiers (register-before-check),
-        // so a wakeup fired after this point cannot be missed.
-        consulted_rx
-            .recv()
-            .await
-            .expect("handle_wait must consult the scheduler for a Waiting entry");
-
-        // Simulate an oneshot dependency completing: the only signal is the
-        // graph-side task_notify; the manager map does not transition.
-        stub.parked.store(true, Ordering::SeqCst);
-        task_notify.notify_waiters();
-
-        // Failure bound only; the wait itself is event-driven.
-        let response = tokio::time::timeout(std::time::Duration::from_secs(60), waiter)
-            .await
-            .expect("handle_wait must wake on task_notify, not only entries_changed")
-            .unwrap();
-        assert!(matches!(response, ApiResponse::Ready));
-    }
-
-    #[tokio::test]
-    async fn start_request_over_socket_uses_scheduler() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        let outcome = StartOutcome {
-            scheduled: vec!["a".to_string()],
-            skipped: vec!["b".to_string()],
-            unknown: vec!["c".to_string()],
-            failed: vec!["d".to_string()],
+    #[test]
+    fn attach_event_serde_round_trips() {
+        let event = AttachEvent::Log {
+            name: "web".to_string(),
+            stream: LogStream::Stderr,
+            line: "boom".to_string(),
         };
-        let stub = stub_scheduler(outcome.clone());
-        let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
-        let manager = native_manager(Arc::clone(&runner), scheduler, ManagerResidence::InProcess);
-        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
-
-        let response = NativeManagerClient::api_request(
-            &manager.api_socket_path(),
-            &ApiRequest::Start {
-                names: vec!["a".to_string()],
-            },
-        )
-        .await
-        .unwrap();
-
-        match response {
-            ApiResponse::Start { outcome: got } => assert_eq!(got, outcome),
-            other => panic!("expected Start response, got {other:?}"),
-        }
-    }
-
-    struct BlockingStartScheduler {
-        started: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
-        release: Notify,
-        completed: std::sync::atomic::AtomicBool,
-        completed_notify: Notify,
-    }
-
-    #[async_trait]
-    impl ProcessScheduler for BlockingStartScheduler {
-        async fn start(&self, names: Vec<String>) -> StartOutcome {
-            // Register before announcing that work started so the test can
-            // release us without racing this waiter registration.
-            let released = self.release.notified();
-            tokio::pin!(released);
-            released.as_mut().enable();
-            if let Some(started) = self.started.lock().unwrap().take() {
-                let _ = started.send(());
-            }
-            released.await;
-            self.completed
-                .store(true, std::sync::atomic::Ordering::SeqCst);
-            self.completed_notify.notify_waiters();
-            StartOutcome {
-                scheduled: names,
-                ..Default::default()
-            }
-        }
-
-        async fn dependency_parked(&self, _process_name: &str) -> bool {
-            false
-        }
-    }
-
-    /// Scheduler work survives an interrupted Start client.
-    #[tokio::test]
-    async fn interrupted_start_client_does_not_cancel_daemon_work() {
-        const BOUND: Duration = Duration::from_secs(30);
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
-        let stub = Arc::new(BlockingStartScheduler {
-            started: std::sync::Mutex::new(Some(started_tx)),
-            release: Notify::new(),
-            completed: std::sync::atomic::AtomicBool::new(false),
-            completed_notify: Notify::new(),
-        });
-        let scheduler: Arc<dyn ProcessScheduler> = stub.clone();
-        let manager = native_manager(Arc::clone(&runner), scheduler, ManagerResidence::InProcess);
-        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
-
-        let client = tokio::spawn({
-            let socket_path = manager.api_socket_path();
-            async move {
-                NativeManagerClient::api_request_bounded_connect(
-                    &socket_path,
-                    &ApiRequest::Start {
-                        names: vec!["slow".to_string()],
-                    },
-                    BOUND,
-                )
-                .await
-            }
-        });
-        tokio::time::timeout(BOUND, started_rx)
-            .await
-            .expect("scheduler did not receive Start")
-            .expect("scheduler start signal dropped");
-
-        // Ctrl-C drops the client-side response future and closes its socket.
-        // The per-connection server task owns the scheduler future and must
-        // continue independently.
-        client.abort();
-        let join_error = tokio::time::timeout(BOUND, client)
-            .await
-            .expect("interrupted client did not exit promptly")
-            .expect_err("aborted client unexpectedly completed");
-        assert!(join_error.is_cancelled());
-        assert!(!stub.completed.load(std::sync::atomic::Ordering::SeqCst));
-
-        // A blocked Start handler is per-connection and must not monopolize
-        // the manager API.
-        let response = tokio::time::timeout(
-            BOUND,
-            NativeManagerClient::api_request(&manager.api_socket_path(), &ApiRequest::List),
-        )
-        .await
-        .expect("manager stopped responding after Start client interruption")
-        .unwrap();
-        assert!(matches!(response, ApiResponse::ProcessList { .. }));
-
-        let completed = stub.completed_notify.notified();
-        tokio::pin!(completed);
-        completed.as_mut().enable();
-        stub.release.notify_waiters();
-        tokio::time::timeout(BOUND, completed)
-            .await
-            .expect("daemon-owned Start work was cancelled with its client");
-        assert!(stub.completed.load(std::sync::atomic::Ordering::SeqCst));
-    }
-
-    #[tokio::test]
-    async fn process_manager_keeps_its_scheduler_alive() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        let manager = default_native_manager(Arc::clone(&runner));
-        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
-
-        let response = NativeManagerClient::api_request(
-            &manager.api_socket_path(),
-            &ApiRequest::Start {
-                names: vec!["a".to_string()],
-            },
-        )
-        .await
-        .unwrap();
-
-        assert!(matches!(response, ApiResponse::Start { .. }));
-    }
-
-    #[tokio::test]
-    async fn manager_residence_round_trips_over_socket() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        let manager = native_manager(
-            Arc::clone(&runner),
-            stub_scheduler(StartOutcome::default()),
-            ManagerResidence::Daemon,
-        );
-        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
-        assert_eq!(
-            NativeManagerClient::query_manager_residence(&manager.api_socket_path()).await,
-            Some(ManagerResidence::Daemon),
-            "a daemon-declared manager must report Daemon over the socket"
-        );
-
-        // An undeclared manager defaults to InProcess (fail-closed): another
-        // terminal's `up -d` refuses to schedule into a manager that has not
-        // declared itself a daemon, instead of the old None=Daemon fail-open.
-        let temp_dir2 = tempfile::tempdir().unwrap();
-        let undeclared_runner =
-            Arc::new(ProcessRunner::new(temp_dir2.path().to_path_buf()).unwrap());
-        let undeclared = default_native_manager(undeclared_runner);
-        let _undeclared_server = NativeApiServer::start(Arc::clone(&undeclared)).unwrap();
-        assert_eq!(
-            NativeManagerClient::query_manager_residence(&undeclared.api_socket_path()).await,
-            Some(ManagerResidence::InProcess),
-            "an undeclared manager must default to InProcess"
-        );
+        let json = serde_json::to_string(&event).unwrap();
+        let decoded: AttachEvent = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            decoded,
+            AttachEvent::Log {
+                name,
+                stream: LogStream::Stderr,
+                line,
+            } if name == "web" && line == "boom"
+        ));
     }
 
     #[test]
@@ -4223,644 +3157,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn logs_request_counts_partial_final_line() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        runner.register_waiting(test_config("logger"), None).await;
-        let (stdout_path, stderr_path) = crate::command::log_paths(runner.state_dir(), "logger");
-        std::fs::create_dir_all(stdout_path.parent().unwrap()).unwrap();
-        std::fs::write(&stdout_path, b"one\ntwo\nthree").unwrap();
-        std::fs::write(&stderr_path, b"first\r\nsecond\r\n").unwrap();
-        let manager = default_native_manager(Arc::clone(&runner));
-        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
-
-        let response = NativeManagerClient::api_request(
-            &manager.api_socket_path(),
-            &ApiRequest::Logs {
-                name: "logger".to_string(),
-                lines: Some(2),
-            },
-        )
-        .await
-        .unwrap();
-
-        match response {
-            ApiResponse::ProcessLogs { stdout, stderr } => {
-                assert_eq!(stdout, "two\nthree");
-                assert_eq!(stderr, "first\nsecond");
-            }
-            other => panic!("expected ProcessLogs response, got {other:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn ports_request_is_sorted() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let runner = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        for (name, ports) in [
-            (
-                "zeta",
-                HashMap::from([("web".to_string(), 8080), ("admin".to_string(), 9000)]),
-            ),
-            ("alpha", HashMap::from([("db".to_string(), 5432)])),
-        ] {
-            runner
-                .register_waiting(
-                    ProcessConfig {
-                        ports,
-                        ..test_config(name)
-                    },
-                    None,
-                )
-                .await;
-        }
-        let manager = default_native_manager(Arc::clone(&runner));
-        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
-
-        let response =
-            NativeManagerClient::api_request(&manager.api_socket_path(), &ApiRequest::Ports)
-                .await
-                .unwrap();
-
-        match response {
-            ApiResponse::PortAllocations { ports } => {
-                let ports: Vec<_> = ports
-                    .into_iter()
-                    .map(|port| (port.process_name, port.port_name, port.port))
-                    .collect();
-                assert_eq!(
-                    ports,
-                    [
-                        ("alpha".to_string(), "db".to_string(), 5432),
-                        ("zeta".to_string(), "admin".to_string(), 9000),
-                        ("zeta".to_string(), "web".to_string(), 8080),
-                    ]
-                );
-            }
-            other => panic!("expected PortAllocations response, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_attach_event_serde() {
-        let event = AttachEvent::Log {
-            name: "proc".to_string(),
-            stream: LogStream::Stderr,
-            line: "boom".to_string(),
-        };
-        let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains(r#""event":"log""#), "wire format: {json}");
-        assert!(json.contains(r#""stream":"stderr""#), "wire format: {json}");
-
-        let back: AttachEvent = serde_json::from_str(&json).unwrap();
-        assert!(matches!(
-            back,
-            AttachEvent::Log {
-                ref name,
-                stream: LogStream::Stderr,
-                ref line,
-            } if name == "proc" && line == "boom"
-        ));
-    }
-
-    /// A full attach queue drops new log events without growing.
-    #[tokio::test]
-    async fn slow_attach_log_queue_is_strictly_bounded() {
-        const CAPACITY: usize = 4;
-        let (tx, mut rx) = mpsc::channel(CAPACITY);
-        let event = || AttachEvent::Log {
-            name: "noisy".to_string(),
-            stream: LogStream::Stdout,
-            line: "line".to_string(),
-        };
-
-        for _ in 0..CAPACITY {
-            assert!(NativeProcessManager::try_send_attach_log(&tx, event()));
-        }
-        assert_eq!(rx.len(), CAPACITY);
-        assert_eq!(tx.capacity(), 0);
-
-        for _ in 0..100_000 {
-            assert!(
-                NativeProcessManager::try_send_attach_log(&tx, event()),
-                "a full queue drops logs without disconnecting a slow client"
-            );
-        }
-        assert_eq!(rx.len(), CAPACITY);
-        assert_eq!(tx.capacity(), 0);
-
-        while rx.try_recv().is_ok() {}
-        drop(rx);
-        assert!(
-            !NativeProcessManager::try_send_attach_log(&tx, event()),
-            "a closed queue stops its tailers"
-        );
-    }
-
-    #[tokio::test]
-    async fn attach_snapshot_is_sorted_and_preserves_all_manager_phases() {
-        const BOUND: Duration = Duration::from_secs(60);
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        let readiness_gate = temp_dir.path().join("snapshot-starting-ready");
-
-        manager
-            .start_command(&long_running_config("active"), None)
-            .await
-            .unwrap();
-        assert_eq!(manager.get_phase("active").await, Some(ProcessPhase::Ready));
-
-        let mut idle = auto_start_off_config("idle");
-        idle.ports.insert("http".to_string(), 48_123);
-        manager.register_waiting(idle, None).await;
-        manager.launch_waiting("idle").await.unwrap();
-        assert_eq!(manager.get_phase("active").await, Some(ProcessPhase::Ready));
-
-        manager
-            .register_waiting(long_running_config("waiting"), None)
-            .await;
-
-        manager
-            .start_command(&long_running_config("stopped"), None)
-            .await
-            .unwrap();
-        assert_eq!(manager.get_phase("active").await, Some(ProcessPhase::Ready));
-        manager.stop_and_keep("stopped").await.unwrap();
-        assert_eq!(manager.get_phase("active").await, Some(ProcessPhase::Ready));
-
-        manager
-            .start_command(&readiness_gated_config("starting", &readiness_gate), None)
-            .await
-            .unwrap();
-        assert_eq!(
-            manager.get_phase("starting").await,
-            Some(ProcessPhase::Starting)
-        );
-
-        manager
-            .start_command(&test_config("exited"), None)
-            .await
-            .unwrap();
-        wait_for_manager_phase(&manager, "exited", ProcessPhase::Exited).await;
-
-        let gave_up = ProcessConfig {
-            name: "gave-up".to_string(),
-            exec: "false".to_string(),
-            restart: crate::config::RestartConfig {
-                on: RestartPolicy::OnFailure,
-                max: Some(1),
-                window: None,
-            },
-            ..Default::default()
-        };
-        manager.start_command(&gave_up, None).await.unwrap();
-        tokio::time::timeout(BOUND, async {
-            loop {
-                let notified = manager.entries_changed.notified();
-                tokio::pin!(notified);
-                notified.as_mut().enable();
-                if manager.get_phase("gave-up").await == Some(ProcessPhase::GaveUp) {
-                    break;
-                }
-                notified.await;
-            }
-        })
-        .await
-        .expect("crash loop must reach GaveUp");
-        assert_eq!(manager.get_phase("active").await, Some(ProcessPhase::Ready));
-
-        let native_manager = default_native_manager(Arc::clone(&manager));
-        let _server = NativeApiServer::start(native_manager).unwrap();
-        let mut stream = NativeManagerClient::attach_stream(&manager.api_socket_path())
-            .await
-            .unwrap();
-        let event = tokio::time::timeout(BOUND, stream.next())
-            .await
-            .expect("timed out waiting for attach snapshot")
-            .expect("attach stream closed")
-            .expect("attach snapshot failed");
-        let AttachEvent::Snapshot { processes } = event else {
-            panic!("snapshot must be the first attach event");
-        };
-
-        assert_eq!(
-            processes
-                .iter()
-                .map(|info| info.name.as_str())
-                .collect::<Vec<_>>(),
-            [
-                "active", "exited", "gave-up", "idle", "starting", "stopped", "waiting"
-            ]
-        );
-        let by_name: BTreeMap<_, _> = processes
-            .into_iter()
-            .map(|info| (info.name.clone(), info))
-            .collect();
-        assert_eq!(by_name["active"].phase, ProcessPhase::Ready);
-        assert_eq!(by_name["exited"].phase, ProcessPhase::Exited);
-        assert_eq!(by_name["gave-up"].phase, ProcessPhase::GaveUp);
-        assert_eq!(by_name["gave-up"].restart_count, 1);
-        assert_eq!(by_name["idle"].phase, ProcessPhase::NotStarted);
-        assert_eq!(by_name["idle"].ports, ["http:48123"]);
-        assert_eq!(by_name["starting"].phase, ProcessPhase::Starting);
-        assert_eq!(by_name["stopped"].phase, ProcessPhase::Stopped);
-        assert_eq!(by_name["waiting"].phase, ProcessPhase::Waiting);
-
-        drop(stream);
-
-        for (name, phase) in [
-            ("active", ProcessPhase::Ready),
-            ("exited", ProcessPhase::Exited),
-            ("gave-up", ProcessPhase::GaveUp),
-            ("idle", ProcessPhase::NotStarted),
-            ("starting", ProcessPhase::Starting),
-            ("stopped", ProcessPhase::Stopped),
-            ("waiting", ProcessPhase::Waiting),
-        ] {
-            assert_eq!(
-                manager.get_phase(name).await,
-                Some(phase),
-                "disconnecting an observer must not mutate {name}"
-            );
-        }
-
-        // Manager-owned lifecycle work continues after detachment: a process
-        // can become ready, a dependency-parked process can launch, and a
-        // manually stopped process can start again without an observer.
-        std::fs::write(&readiness_gate, "").unwrap();
-        wait_for_manager_phase(&manager, "starting", ProcessPhase::Ready).await;
-        manager.launch_waiting("waiting").await.unwrap();
-        wait_for_manager_phase(&manager, "waiting", ProcessPhase::Ready).await;
-        manager.start_not_started("stopped").await.unwrap();
-        wait_for_manager_phase(&manager, "stopped", ProcessPhase::Ready).await;
-
-        assert_eq!(
-            manager.get_phase("exited").await,
-            Some(ProcessPhase::Exited)
-        );
-        assert_eq!(
-            manager.get_phase("gave-up").await,
-            Some(ProcessPhase::GaveUp)
-        );
-        let _ = manager.stop_all().await;
-    }
-
-    #[tokio::test]
-    async fn attach_stream_reports_live_nonterminal_and_terminal_transitions() {
-        const BOUND: Duration = Duration::from_secs(60);
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        let ready_gate = temp_dir.path().join("live-ready");
-        let exit_gate = temp_dir.path().join("live-exit");
-        let gave_up_gate = temp_dir.path().join("live-gave-up");
-
-        manager
-            .register_waiting(long_running_config("waiting-live"), None)
-            .await;
-        manager
-            .start_command(&readiness_gated_config("starting-live", &ready_gate), None)
-            .await
-            .unwrap();
-        manager
-            .start_command(
-                &exit_gated_config("exit-live", &exit_gate, 0, RestartPolicy::Never, 0),
-                None,
-            )
-            .await
-            .unwrap();
-        manager
-            .start_command(
-                &exit_gated_config(
-                    "gave-up-live",
-                    &gave_up_gate,
-                    1,
-                    RestartPolicy::OnFailure,
-                    0,
-                ),
-                None,
-            )
-            .await
-            .unwrap();
-
-        let native_manager = default_native_manager(Arc::clone(&manager));
-        let _server = NativeApiServer::start(native_manager).unwrap();
-        let mut stream = NativeManagerClient::attach_stream(&manager.api_socket_path())
-            .await
-            .unwrap();
-        let snapshot = tokio::time::timeout(BOUND, stream.next())
-            .await
-            .expect("timed out waiting for live-transition snapshot")
-            .expect("live-transition attach stream closed")
-            .expect("live-transition snapshot failed");
-        let AttachEvent::Snapshot { processes } = snapshot else {
-            panic!("snapshot must be the first attach event");
-        };
-        let by_name: BTreeMap<_, _> = processes
-            .into_iter()
-            .map(|info| (info.name.clone(), info))
-            .collect();
-        assert_eq!(by_name["waiting-live"].phase, ProcessPhase::Waiting);
-        assert_eq!(by_name["starting-live"].phase, ProcessPhase::Starting);
-        assert_eq!(by_name["exit-live"].phase, ProcessPhase::Ready);
-        assert_eq!(by_name["gave-up-live"].phase, ProcessPhase::Ready);
-
-        manager.launch_waiting("waiting-live").await.unwrap();
-        wait_for_attach_phase(&mut stream, "waiting-live", ProcessPhase::Ready).await;
-
-        std::fs::write(&ready_gate, "").unwrap();
-        wait_for_attach_phase(&mut stream, "starting-live", ProcessPhase::Ready).await;
-
-        std::fs::write(&exit_gate, "").unwrap();
-        wait_for_attach_phase(&mut stream, "exit-live", ProcessPhase::Exited).await;
-
-        std::fs::write(&gave_up_gate, "").unwrap();
-        wait_for_attach_phase(&mut stream, "gave-up-live", ProcessPhase::GaveUp).await;
-
-        drop(stream);
-        for (name, phase) in [
-            ("waiting-live", ProcessPhase::Ready),
-            ("starting-live", ProcessPhase::Ready),
-            ("exit-live", ProcessPhase::Exited),
-            ("gave-up-live", ProcessPhase::GaveUp),
-        ] {
-            assert_eq!(
-                manager.get_phase(name).await,
-                Some(phase),
-                "detaching after a live transition must preserve {name}"
-            );
-        }
-
-        let _ = manager.stop_all().await;
-    }
-
-    #[tokio::test]
-    async fn disconnecting_one_attach_client_does_not_affect_another() {
-        const BOUND: Duration = Duration::from_secs(30);
-
-        async fn snapshot(stream: &mut AttachStream) {
-            let event = tokio::time::timeout(BOUND, stream.next())
-                .await
-                .expect("timed out waiting for snapshot")
-                .expect("stream closed")
-                .expect("snapshot failed");
-            assert!(matches!(event, AttachEvent::Snapshot { .. }));
-        }
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        manager
-            .start_command(&long_running_config("shared"), None)
-            .await
-            .unwrap();
-        let native_manager = default_native_manager(Arc::clone(&manager));
-        let _server = NativeApiServer::start(native_manager).unwrap();
-
-        let mut first = NativeManagerClient::attach_stream(&manager.api_socket_path())
-            .await
-            .unwrap();
-        let mut second = NativeManagerClient::attach_stream(&manager.api_socket_path())
-            .await
-            .unwrap();
-        snapshot(&mut first).await;
-        snapshot(&mut second).await;
-        drop(first);
-
-        let (stdout_path, _) = crate::command::log_paths(temp_dir.path(), "shared");
-        {
-            use std::io::Write;
-            let mut stdout = std::fs::OpenOptions::new()
-                .append(true)
-                .open(stdout_path)
-                .unwrap();
-            stdout.write_all(b"after-first-disconnect\n").unwrap();
-        }
-
-        loop {
-            let event = tokio::time::timeout(BOUND, second.next())
-                .await
-                .expect("second client stopped receiving logs")
-                .expect("second stream closed")
-                .expect("second stream failed");
-            if matches!(
-                event,
-                AttachEvent::Log {
-                    ref name,
-                    stream: LogStream::Stdout,
-                    ref line,
-                } if name == "shared" && line == "after-first-disconnect"
-            ) {
-                break;
-            }
-        }
-
-        manager.stop_and_keep("shared").await.unwrap();
-        loop {
-            let event = tokio::time::timeout(BOUND, second.next())
-                .await
-                .expect("second client stopped receiving status")
-                .expect("second stream closed")
-                .expect("second stream failed");
-            if matches!(
-                event,
-                AttachEvent::Status { ref info }
-                    if info.name == "shared" && info.phase == ProcessPhase::Stopped
-            ) {
-                break;
-            }
-        }
-        assert_eq!(
-            manager.get_phase("shared").await,
-            Some(ProcessPhase::Stopped)
-        );
-    }
-
-    /// Disconnecting observers neither duplicates logs nor mutates the process.
-    #[tokio::test]
-    async fn repeated_attach_disconnect_has_no_duplicate_logs_or_process_mutation() {
-        const BOUND: Duration = Duration::from_secs(30);
-        const CYCLES: usize = 10;
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        manager
-            .start_command(&long_running_config("stable"), None)
-            .await
-            .unwrap();
-        let native_manager = default_native_manager(Arc::clone(&manager));
-        let _server = NativeApiServer::start(native_manager).unwrap();
-        let (stdout_path, _) = crate::command::log_paths(temp_dir.path(), "stable");
-
-        for cycle in 0..CYCLES {
-            let marker = format!("attach-cycle-{cycle}");
-            let mut stream = NativeManagerClient::attach_stream(&manager.api_socket_path())
-                .await
-                .unwrap();
-            let snapshot = tokio::time::timeout(BOUND, stream.next())
-                .await
-                .expect("timed out waiting for repeated-attach snapshot")
-                .expect("repeated attach stream closed")
-                .expect("repeated attach snapshot failed");
-            assert!(matches!(snapshot, AttachEvent::Snapshot { .. }));
-
-            {
-                use std::io::Write;
-                let mut stdout = std::fs::OpenOptions::new()
-                    .append(true)
-                    .open(&stdout_path)
-                    .unwrap();
-                writeln!(stdout, "{marker}").unwrap();
-            }
-
-            loop {
-                let event = tokio::time::timeout(BOUND, stream.next())
-                    .await
-                    .expect("repeated attach stopped receiving logs")
-                    .expect("repeated attach stream closed")
-                    .expect("repeated attach stream failed");
-                if matches!(
-                    event,
-                    AttachEvent::Log {
-                        ref name,
-                        stream: LogStream::Stdout,
-                        ref line,
-                    } if name == "stable" && line == &marker
-                ) {
-                    break;
-                }
-            }
-
-            // No second copy may follow. There are no process transitions in
-            // this interval, so any event with this marker is a duplicate.
-            if let Ok(Some(Ok(AttachEvent::Log { name, line, .. }))) =
-                tokio::time::timeout(Duration::from_millis(250), stream.next()).await
-            {
-                assert!(
-                    name != "stable" || line != marker,
-                    "live line was duplicated in attach cycle {cycle}"
-                );
-            }
-
-            drop(stream);
-            assert_eq!(
-                manager.get_phase("stable").await,
-                Some(ProcessPhase::Ready),
-                "observer cycle {cycle} mutated the manager-owned process"
-            );
-        }
-
-        let _ = manager.stop_all().await;
-    }
-
-    /// A non-reading client does not block the manager or another attach client.
-    #[tokio::test]
-    async fn non_reading_attach_client_does_not_block_manager_or_peer() {
-        use tokio::io::AsyncWriteExt;
-
-        const BOUND: Duration = Duration::from_secs(30);
-        const BULK_LINES: usize = ATTACH_EVENT_CHANNEL_CAPACITY * 4;
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-        manager
-            .start_command(&long_running_config("noisy"), None)
-            .await
-            .unwrap();
-        let native_manager = default_native_manager(Arc::clone(&manager));
-        let _server = NativeApiServer::start(native_manager).unwrap();
-
-        // Send Attach and deliberately never read the snapshot or subsequent
-        // events from this socket.
-        let mut slow = tokio::net::UnixStream::connect(manager.api_socket_path())
-            .await
-            .unwrap();
-        slow.write_all(b"{\"command\":\"attach\"}\n").await.unwrap();
-
-        let (stdout_path, _) = crate::command::log_paths(temp_dir.path(), "noisy");
-        {
-            use std::io::{BufWriter, Write};
-            let stdout = std::fs::OpenOptions::new()
-                .append(true)
-                .open(&stdout_path)
-                .unwrap();
-            let mut stdout = BufWriter::new(stdout);
-            let payload = "x".repeat(512);
-            for index in 0..BULK_LINES {
-                writeln!(stdout, "bulk-{index:05}-{payload}").unwrap();
-            }
-            stdout.flush().unwrap();
-        }
-
-        // Give the real tailer enough time to reach the bounded/drop path.
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        let response = tokio::time::timeout(
-            BOUND,
-            NativeManagerClient::api_request(&manager.api_socket_path(), &ApiRequest::List),
-        )
-        .await
-        .expect("slow attach consumer blocked the manager API")
-        .unwrap();
-        assert!(matches!(response, ApiResponse::ProcessList { .. }));
-
-        let mut peer = NativeManagerClient::attach_stream(&manager.api_socket_path())
-            .await
-            .unwrap();
-        let snapshot = tokio::time::timeout(BOUND, peer.next())
-            .await
-            .expect("responsive peer did not receive a snapshot")
-            .expect("responsive peer closed")
-            .expect("responsive peer snapshot failed");
-        assert!(matches!(snapshot, AttachEvent::Snapshot { .. }));
-
-        {
-            use std::io::Write;
-            let mut stdout = std::fs::OpenOptions::new()
-                .append(true)
-                .open(&stdout_path)
-                .unwrap();
-            writeln!(stdout, "peer-live-marker").unwrap();
-        }
-        loop {
-            let event = tokio::time::timeout(BOUND, peer.next())
-                .await
-                .expect("responsive peer stopped receiving live logs")
-                .expect("responsive peer closed")
-                .expect("responsive peer failed");
-            if matches!(
-                event,
-                AttachEvent::Log {
-                    ref name,
-                    stream: LogStream::Stdout,
-                    ref line,
-                } if name == "noisy" && line == "peer-live-marker"
-            ) {
-                break;
-            }
-        }
-
-        manager.stop_and_keep("noisy").await.unwrap();
-        loop {
-            let event = tokio::time::timeout(BOUND, peer.next())
-                .await
-                .expect("responsive peer stopped receiving status")
-                .expect("responsive peer closed")
-                .expect("responsive peer failed");
-            if matches!(
-                event,
-                AttachEvent::Status { ref info }
-                    if info.name == "noisy" && info.phase == ProcessPhase::Stopped
-            ) {
-                break;
-            }
-        }
-
-        drop(slow);
-        drop(peer);
-    }
-
-    #[tokio::test]
     async fn attach_stream_surfaces_an_older_daemon_protocol_error() {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -4891,136 +3187,5 @@ mod tests {
             .expect_err("old daemon response must surface as an attach error");
         assert!(error.to_string().contains("unknown variant"));
         server.await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_attach_stream_end_to_end() {
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-
-        // Failure bound only; every wait below is event-driven.
-        const BOUND: Duration = Duration::from_secs(30);
-
-        async fn next_event(
-            lines: &mut tokio::io::Lines<BufReader<tokio::net::unix::OwnedReadHalf>>,
-        ) -> AttachEvent {
-            let line = tokio::time::timeout(BOUND, lines.next_line())
-                .await
-                .expect("timed out waiting for attach event")
-                .expect("attach stream read failed")
-                .expect("attach stream closed unexpectedly");
-            serde_json::from_str(&line).expect("invalid attach event")
-        }
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let manager = Arc::new(ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap());
-
-        // No ports/ready config: the supervisor reports Ready immediately,
-        // and the echo lands in the stdout log before or shortly after the
-        // attach, exercising backlog or live tail respectively.
-        let config = ProcessConfig {
-            name: "attach-proc".to_string(),
-            exec: "echo attach-line; exec tail -f /dev/null".to_string(),
-            restart: crate::config::RestartConfig {
-                on: RestartPolicy::Never,
-                max: Some(0),
-                window: None,
-            },
-            ..Default::default()
-        };
-        manager.start_command(&config, None).await.unwrap();
-        let native_manager = default_native_manager(Arc::clone(&manager));
-        let _server = NativeApiServer::start(native_manager).unwrap();
-
-        let mut stream = tokio::net::UnixStream::connect(manager.api_socket_path())
-            .await
-            .unwrap();
-        stream
-            .write_all(b"{\"command\":\"attach\"}\n")
-            .await
-            .unwrap();
-        // The write half stays alive: dropping it would read as a client
-        // disconnect on the server.
-        let (reader, _writer) = stream.into_split();
-        let mut lines = BufReader::new(reader).lines();
-
-        // 1. Snapshot arrives first and contains the process.
-        match next_event(&mut lines).await {
-            AttachEvent::Snapshot { processes } => {
-                assert!(
-                    processes.iter().any(|p| p.name == "attach-proc"),
-                    "snapshot must contain attach-proc: {processes:?}"
-                );
-            }
-            other => panic!("expected snapshot first, got {other:?}"),
-        }
-
-        // 2. The echoed line arrives as a Log event (backlog or live tail).
-        loop {
-            match next_event(&mut lines).await {
-                AttachEvent::Log {
-                    name,
-                    stream: LogStream::Stdout,
-                    line,
-                } if name == "attach-proc" && line == "attach-line" => break,
-                _ => {}
-            }
-        }
-
-        // 3. An appended line is tailed append-only: it arrives exactly once
-        // and the backlog line is never re-emitted.
-        let (stdout_log, _) = crate::command::log_paths(temp_dir.path(), "attach-proc");
-        {
-            use std::io::Write;
-            let mut f = std::fs::OpenOptions::new()
-                .append(true)
-                .open(&stdout_log)
-                .unwrap();
-            f.write_all(b"live-line\n").unwrap();
-        }
-        loop {
-            match next_event(&mut lines).await {
-                AttachEvent::Log {
-                    name,
-                    stream: LogStream::Stdout,
-                    line,
-                } if name == "attach-proc" => {
-                    if line == "live-line" {
-                        break;
-                    }
-                    assert_ne!(line, "attach-line", "backlog line must not be re-emitted");
-                }
-                _ => {}
-            }
-        }
-
-        // 4. A phase change is pushed as a Status diff via entries_changed.
-        manager.stop_and_keep("attach-proc").await.unwrap();
-        loop {
-            match next_event(&mut lines).await {
-                AttachEvent::Status { info }
-                    if info.name == "attach-proc" && info.phase == ProcessPhase::Stopped =>
-                {
-                    break;
-                }
-                _ => {}
-            }
-        }
-
-        // 5. Manager shutdown closes the stream: drain any buffered events
-        // and assert EOF.
-        manager.shutdown_supervisors();
-        loop {
-            let line = tokio::time::timeout(BOUND, lines.next_line())
-                .await
-                .expect("timed out waiting for stream EOF")
-                .expect("attach stream read failed");
-            match line {
-                None => break,
-                Some(line) => {
-                    let _: AttachEvent =
-                        serde_json::from_str(&line).expect("invalid event before EOF");
-                }
-            }
-        }
     }
 }

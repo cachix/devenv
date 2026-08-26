@@ -1,6 +1,7 @@
 mod config;
 mod error;
 pub mod executor;
+mod native_manager;
 mod privileges;
 mod task_cache;
 mod task_state;
@@ -11,6 +12,7 @@ pub mod ui;
 pub use config::{Config, RunMode, TaskConfig};
 pub use error::Error;
 pub use executor::{ExecutionContext, ExecutionResult, OutputCallback};
+pub use native_manager::{NativeApiServer, NativeProcessManager};
 pub use privileges::SudoContext;
 pub use tasks::{Tasks, TasksBuilder, compute_display_hierarchy};
 pub use types::{

@@ -231,6 +231,11 @@ impl Tasks {
         &self.process_runner
     }
 
+    /// Wakes on task completions and process-map transitions.
+    pub fn notified(&self) -> tokio::sync::futures::Notified<'_> {
+        self.notify_finished.notified()
+    }
+
     /// Get the current task completion status
     pub async fn get_completion_status(&self) -> TasksStatus {
         let mut status = TasksStatus::new();
@@ -1637,19 +1642,6 @@ impl Tasks {
     }
 }
 
-/// Scheduler operations the persistent process manager delegates to. The
-/// manager holds this scheduler strongly for its full published lifetime.
-#[async_trait::async_trait]
-impl devenv_processes::ProcessScheduler for Tasks {
-    async fn start(&self, names: Vec<String>) -> StartOutcome {
-        self.start_with_deps(names).await
-    }
-
-    async fn dependency_parked(&self, process_name: &str) -> bool {
-        Tasks::dependency_parked(self, process_name).await
-    }
-}
-
 /// Block until the manager reports one of `terminal` phases for `name`.
 /// Returns the reached phase, or `None` on shutdown or when the manager has
 /// no entry for the process. Event-driven: wakes on `notify_finished`, which
@@ -1913,11 +1905,9 @@ mod schedule_tests {
         (tasks, tmp)
     }
 
-    fn process_manager(tasks: &Arc<Tasks>) -> devenv_processes::NativeProcessManager {
-        let scheduler: Arc<dyn devenv_processes::ProcessScheduler> = tasks.clone();
-        devenv_processes::NativeProcessManager::new(
-            scheduler,
-            Arc::clone(tasks.process_runner()),
+    fn process_manager(tasks: &Arc<Tasks>) -> crate::NativeProcessManager {
+        crate::NativeProcessManager::new(
+            Arc::clone(tasks),
             devenv_processes::ManagerResidence::InProcess,
         )
     }

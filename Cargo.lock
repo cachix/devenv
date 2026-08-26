@@ -2742,6 +2742,7 @@ dependencies = [
  "devenv-activity",
  "devenv-cache-core",
  "devenv-core",
+ "devenv-mailbox",
  "devenv-processes",
  "ignore",
  "miette",

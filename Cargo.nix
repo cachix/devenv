@@ -9556,6 +9556,10 @@ rec {
             packageId = "devenv-core";
           }
           {
+            name = "devenv-mailbox";
+            packageId = "devenv-mailbox";
+          }
+          {
             name = "devenv-processes";
             packageId = "devenv-processes";
           }

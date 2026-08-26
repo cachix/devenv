@@ -389,7 +389,7 @@ pub struct Devenv {
     port_allocator: Arc<PortAllocator>,
 
     // Root owner for the native manager started in-process by `devenv test`.
-    native_api_server: OnceCell<processes::NativeApiServer>,
+    native_api_server: OnceCell<tasks::NativeApiServer>,
 
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
@@ -2671,13 +2671,10 @@ impl Devenv {
                     .map_err(|e| miette!("Failed to build task runner: {}", e))?,
             );
 
-            // The persistent manager owns both the scheduler and the process
-            // runner. Tasks itself remains reusable and never publishes a
-            // daemon endpoint.
-            let scheduler: Arc<dyn processes::ProcessScheduler> = tasks_runner.clone();
-            let manager = Arc::new(processes::NativeProcessManager::new(
-                scheduler,
-                Arc::clone(tasks_runner.process_runner()),
+            // The persistent manager owns the task execution scope. That scope
+            // owns the one process runner used by all of its process tasks.
+            let manager = Arc::new(tasks::NativeProcessManager::new(
+                Arc::clone(&tasks_runner),
                 processes::ManagerResidence::InProcess,
             ));
 
@@ -2705,7 +2702,7 @@ impl Devenv {
                 bail!("Process tasks failed");
             }
 
-            let api_server = processes::NativeApiServer::start(manager)?;
+            let api_server = tasks::NativeApiServer::start(manager)?;
 
             let pid_file = api_server.manager().manager_pid_file();
             processes::write_pid(&pid_file, std::process::id())
