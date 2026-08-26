@@ -339,16 +339,31 @@ Skills are written to `.claude/skills/<name>/SKILL.md`.
 - **description**: What the skill covers and when to use it. This is the only part Claude sees before loading the skill, so it decides whether the skill ever triggers.
   Keep it one line and name the situations that should pull it in.
 - **content**: The body of `SKILL.md`.
-- **allowedTools**: Tools Claude can use without asking permission during the turn that invokes the skill.
-  The grant clears when you send your next message.
+- **allowedTools**: Tools Claude can use without asking permission during the turn that invokes the skill; the grant clears when you send your next message.
   This pre-approves tools rather than restricting them; use **disallowedTools** to take tools away.
+- **whenToUse**: Extra context for when Claude should invoke the skill, such as trigger phrases or example requests.
+  Appended to **description** in the skill listing.
+- **disallowedTools**: Tools removed from Claude's available pool while the skill is active, cleared when you send your next message.
+  Use it for a skill that should never call a given tool, such as an autonomous loop that must not stop to ask a question.
+- **disableModelInvocation**: Prevent Claude from automatically loading the skill. Use for workflows you want to trigger manually with `/<name>`.
+- **userInvocable**: Whether you can invoke the skill yourself with `/<name>`. Set to `false` when only Claude should invoke it, for background knowledge rather than a command.
+- **argumentHint**: Hint shown during autocomplete to indicate the expected arguments, e.g. `[issue-number]`.
+- **arguments**: Named positional arguments, substituted into **content** as `$name` in the order given.
+- **model**: Model to use while the skill is active, for the rest of the turn. Accepts an alias, a full model ID, or `inherit`.
+  With `context = "fork"` it sets the forked subagent's model instead.
+- **effort**: Effort level while the skill is active: `low`, `medium`, `high`, `xhigh` or `max`.
+- **context**: Set to `"fork"` to run the skill in a forked subagent context.
+- **agent**: Which subagent type to use when `context = "fork"` is set, such as one of [`claude.code.agents`](#agents).
+- **background**: Only applies with `context = "fork"`. Set to `false` to wait for the forked subagent's result in the turn that invoked the skill.
 - **resources**: Extra files placed next to `SKILL.md`, keyed by path relative to the skill directory.
   A bare path is the common case; use `{ source = ./x; executable = true; }`
   when the file needs to be run directly rather than passed to an interpreter.
+  Resources take the same content options as [`files`](../reference/options.md#files), so they can also be written inline instead of pointing at a path.
 - **copyMode**: How the files are materialised, as in [`files.<name>.copyMode`](../reference/options.md#filesnamecopymode). Defaults to `symlink`.
 
 Skill names must be lowercase letters, digits and single hyphens, at most 64 characters.
 Devenv asserts this, because Claude Code silently ignores skill directories it cannot match to a valid name.
+`synced` is rejected too: Claude Code reserves that directory for the skills it downloads from your claude.ai account.
 
 ### Bundled resources
 
