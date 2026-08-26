@@ -6,7 +6,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ReadyConfig, RestartConfig, RestartPolicy, SupervisorPhase};
+use devenv_processes::{ProcessConfig, ProcessPhase, ReadyConfig, RestartConfig, RestartPolicy};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -84,7 +84,7 @@ async fn test_restart_always_on_success() {
                 manager
                     .job_state("always-restart")
                     .await
-                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+                    .is_some_and(|s| s.display_phase() == ProcessPhase::GaveUp)
             },
             RESTART_TIMEOUT,
         )
@@ -130,7 +130,7 @@ async fn test_restart_always_on_failure() {
                 manager
                     .job_state("always-fail")
                     .await
-                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+                    .is_some_and(|s| s.display_phase() == ProcessPhase::GaveUp)
             },
             RESTART_TIMEOUT,
         )
@@ -176,7 +176,7 @@ async fn test_restart_on_failure_with_failure() {
                 manager
                     .job_state("on-failure")
                     .await
-                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+                    .is_some_and(|s| s.display_phase() == ProcessPhase::GaveUp)
             },
             RESTART_TIMEOUT,
         )
@@ -258,7 +258,7 @@ async fn test_max_restarts_limit() {
                 manager
                     .job_state("max-restarts")
                     .await
-                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+                    .is_some_and(|s| s.display_phase() == ProcessPhase::GaveUp)
             },
             RESTART_TIMEOUT,
         )
@@ -317,7 +317,7 @@ async fn test_manual_restart_after_exit_reports_fresh_status() {
                 manager
                     .job_state("restart-status")
                     .await
-                    .is_some_and(|s| s.phase == SupervisorPhase::Exited)
+                    .is_some_and(|s| s.display_phase() == ProcessPhase::Exited)
             },
             RESTART_TIMEOUT,
         )
@@ -331,10 +331,9 @@ async fn test_manual_restart_after_exit_reports_fresh_status() {
 
         let ready = wait_for_condition(
             || async {
-                manager
-                    .job_state("restart-status")
-                    .await
-                    .is_some_and(|s| s.phase == SupervisorPhase::Ready && s.restart_count == 0)
+                manager.job_state("restart-status").await.is_some_and(|s| {
+                    s.display_phase() == ProcessPhase::Ready && s.restart_count == 0
+                })
             },
             RESTART_TIMEOUT,
         )
@@ -369,8 +368,12 @@ async fn test_manual_restart_without_probe_stays_ready() {
         manager.restart("restart-ready").await.unwrap();
 
         assert_eq!(
-            manager.job_state("restart-ready").await.unwrap().phase,
-            SupervisorPhase::Ready
+            manager
+                .job_state("restart-ready")
+                .await
+                .unwrap()
+                .display_phase(),
+            ProcessPhase::Ready
         );
         manager.stop("restart-ready").await.unwrap();
     })

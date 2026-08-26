@@ -2,28 +2,14 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use crate::config::{ProcessConfig, RestartPolicy};
+use crate::manager::ProcessPhase;
+pub use crate::process_state::ExitOutcome;
+use crate::process_state::{
+    ChildState, ProcessStatus, ReadinessState, RestartDecision, StateTransition, StopReason,
+    TargetState,
+};
 
 const DEFAULT_RESTART_LIMIT_BURST: usize = 5;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SupervisorPhase {
-    /// Spawned, no READY or WATCHDOG received yet
-    Starting,
-    /// READY=1 received (or require_ready=false and first WATCHDOG received)
-    Ready,
-    /// Stop requested; the supervisor is tearing down the job.
-    Stopping,
-    /// Process exited and will not be restarted (restart policy says stop).
-    Exited,
-    /// Restart rate limit exceeded or policy says stop
-    GaveUp,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExitStatus {
-    Success,
-    Failure,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -38,7 +24,7 @@ pub enum Event {
         usec: u64,
     },
     ProcessExit {
-        status: ExitStatus,
+        status: ExitOutcome,
     },
     FileChange,
     /// Stop requested by the process manager.
@@ -73,42 +59,24 @@ impl RestartTrigger {
     }
 }
 
-/// Snapshot of supervisor state for external observation.
-#[derive(Clone, Debug)]
-pub struct JobStatus {
-    pub phase: SupervisorPhase,
-    pub restart_count: usize,
-    /// Exit result for the most recently settled child, if one has exited.
-    pub exit_status: Option<ExitStatus>,
-}
-
-impl JobStatus {
-    pub fn is_ready(&self) -> bool {
-        self.phase == SupervisorPhase::Ready
-    }
-
-    pub fn is_gave_up(&self) -> bool {
-        self.phase == SupervisorPhase::GaveUp
-    }
-}
+pub type JobStatus = ProcessStatus;
 
 /// Pure per-process supervision state machine with no I/O.
 #[derive(Debug)]
 pub struct SupervisorState {
     // Restart rate limiting; restart_limit_interval = None means a lifetime limit (no window).
     restart_timestamps: VecDeque<Instant>,
-    restart_count: usize,
     restart_limit_burst: usize,
     restart_limit_interval: Option<Duration>,
 
     watchdog_armed: bool,
     watchdog_deadline: Option<Instant>,
     startup_deadline: Option<Instant>,
-    phase: SupervisorPhase,
-    last_exit_status: Option<ExitStatus>,
+    status: ProcessStatus,
 
     watchdog_timeout: Option<Duration>,
     watchdog_require_ready: bool,
+    readiness_required: bool,
     restart_policy: RestartPolicy,
     startup_timeout: Option<Duration>,
 }
@@ -144,18 +112,33 @@ impl SupervisorState {
         let restart_limit_burst = config.restart.max.unwrap_or(DEFAULT_RESTART_LIMIT_BURST);
         let restart_limit_interval = config.restart.window.map(Duration::from_secs);
 
+        let readiness = if config.has_readiness_probe() {
+            ReadinessState::Pending
+        } else {
+            ReadinessState::NotRequired
+        };
         let mut state = Self {
             restart_timestamps: VecDeque::new(),
-            restart_count: 0,
             restart_limit_burst,
             restart_limit_interval,
             watchdog_armed: false,
             watchdog_deadline: None,
             startup_deadline: startup_timeout.map(|d: Duration| now + d),
-            phase: SupervisorPhase::Starting,
-            last_exit_status: None,
+            status: ProcessStatus {
+                restart_count: 0,
+                target: TargetState::Running,
+                transition: if readiness == ReadinessState::Pending {
+                    Some(StateTransition::Launching)
+                } else {
+                    None
+                },
+                child: ChildState::Running,
+                readiness,
+                restart: RestartDecision::None,
+            },
             watchdog_timeout,
             watchdog_require_ready,
+            readiness_required: config.has_readiness_probe(),
             restart_policy,
             startup_timeout,
         };
@@ -165,9 +148,18 @@ impl SupervisorState {
     }
 
     pub fn on_event(&mut self, event: Event, now: Instant) -> Action {
-        // Stop is idempotent and wins from every phase.
+        // Stop is idempotent and wins from every state.
         if event == Event::StopRequested {
-            self.phase = SupervisorPhase::Stopping;
+            self.status.target = TargetState::Stopped(StopReason::User);
+            self.status.restart = match self.status.restart {
+                RestartDecision::Pending => RestartDecision::None,
+                other => other,
+            };
+            self.status.transition = if self.status.child == ChildState::Running {
+                Some(StateTransition::Terminating)
+            } else {
+                None
+            };
             self.watchdog_armed = false;
             self.watchdog_deadline = None;
             self.startup_deadline = None;
@@ -175,12 +167,12 @@ impl SupervisorState {
         }
 
         // Ignore events while the caller tears the job down.
-        if self.phase == SupervisorPhase::Stopping {
+        if self.status.transition == Some(StateTransition::Terminating) {
             return Action::None;
         }
 
         // File changes may revive a process after policy restarts give up.
-        if self.phase == SupervisorPhase::GaveUp && event != Event::FileChange {
+        if self.status.restart == RestartDecision::Exhausted && event != Event::FileChange {
             return Action::None;
         }
 
@@ -191,7 +183,8 @@ impl SupervisorState {
                 if let Some(timeout) = self.watchdog_timeout {
                     self.watchdog_deadline = Some(now + timeout);
                 }
-                self.phase = SupervisorPhase::Ready;
+                self.status.readiness = ReadinessState::Ready;
+                self.status.transition = None;
                 Action::None
             }
             Event::WatchdogPing => {
@@ -200,7 +193,8 @@ impl SupervisorState {
                     self.startup_deadline = None;
                     if !self.watchdog_require_ready {
                         self.watchdog_armed = true;
-                        self.phase = SupervisorPhase::Ready;
+                        self.status.readiness = ReadinessState::Ready;
+                        self.status.transition = None;
                     }
                 }
                 Action::None
@@ -209,7 +203,7 @@ impl SupervisorState {
             Event::WatchdogTimeout => self.try_restart(now, RestartTrigger::WatchdogTimeout),
             Event::StartupTimeout => self.try_restart(now, RestartTrigger::StartupTimeout),
             Event::ExtendTimeout { usec } => {
-                if self.phase == SupervisorPhase::Starting
+                if self.status.readiness == ReadinessState::Pending
                     && let Some(deadline) = self.startup_deadline.as_mut()
                 {
                     *deadline += Duration::from_micros(usec);
@@ -217,44 +211,76 @@ impl SupervisorState {
                 Action::None
             }
             Event::ProcessExit { status } => {
-                self.last_exit_status = Some(status);
+                self.status.child = ChildState::Exited(status);
+                self.status.readiness = ReadinessState::Inactive;
+                self.status.transition = None;
+                self.watchdog_armed = false;
+                self.watchdog_deadline = None;
+                self.startup_deadline = None;
                 let should_restart = match self.restart_policy {
                     RestartPolicy::Never => false,
                     RestartPolicy::Always => true,
-                    RestartPolicy::OnFailure => status == ExitStatus::Failure,
+                    RestartPolicy::OnFailure => status == ExitOutcome::Failure,
                 };
                 if !should_restart {
-                    self.phase = SupervisorPhase::Exited;
+                    self.status.restart = RestartDecision::None;
                     return Action::None;
                 }
                 self.try_restart(now, RestartTrigger::ProcessExit)
             }
-            Event::FileChange => Action::Restart,
-            Event::StopRequested => unreachable!("handled by the early-return above"),
+            Event::FileChange => {
+                self.status.target = TargetState::Running;
+                self.status.restart = RestartDecision::None;
+                self.status.transition = Some(StateTransition::Replacing);
+                Action::Restart
+            }
+            Event::StopRequested => {
+                tracing::error!(
+                    "stop event reached the post-stop reducer; retaining stopped state"
+                );
+                Action::None
+            }
         }
     }
 
     /// Reset after an explicit restart, including its restart budget.
     pub fn reset_for_explicit_restart(&mut self, now: Instant) {
         self.restart_timestamps.clear();
-        self.restart_count = 0;
+        self.status.restart_count = 0;
+        self.status.target = TargetState::Running;
+        self.status.child = ChildState::Running;
+        self.status.restart = RestartDecision::None;
         self.watchdog_armed = false;
         self.watchdog_deadline = None;
-        self.phase = SupervisorPhase::Starting;
-        self.last_exit_status = None;
-        self.startup_deadline = self.startup_timeout.map(|d| now + d);
+        self.reset_readiness(now, StateTransition::Replacing);
         self.arm_initial_watchdog(now);
     }
 
     /// Reset state after a restart completes.
     pub fn on_restart_complete(&mut self, now: Instant) {
-        self.restart_count += 1;
+        self.status.restart_count = match self.status.restart_count.checked_add(1) {
+            Some(count) => count,
+            None => {
+                tracing::error!("process restart count exhausted; retaining maximum count");
+                u64::MAX
+            }
+        };
+        self.status.target = TargetState::Running;
+        self.status.child = ChildState::Running;
+        self.status.restart = RestartDecision::None;
         self.watchdog_armed = false;
         self.watchdog_deadline = None;
-        self.phase = SupervisorPhase::Starting;
-        self.last_exit_status = None;
-        self.startup_deadline = self.startup_timeout.map(|d| now + d);
+        self.reset_readiness(now, StateTransition::Replacing);
         self.arm_initial_watchdog(now);
+    }
+
+    pub fn on_termination_complete(&mut self) {
+        self.status.child = ChildState::Terminated;
+        self.status.readiness = ReadinessState::Inactive;
+        self.status.transition = None;
+        self.watchdog_armed = false;
+        self.watchdog_deadline = None;
+        self.startup_deadline = None;
     }
 
     /// Next deadline the select loop should wake for.
@@ -272,32 +298,39 @@ impl SupervisorState {
         }
     }
 
-    pub fn restart_count(&self) -> usize {
-        self.restart_count
+    pub fn restart_count(&self) -> u64 {
+        self.status.restart_count
     }
 
     pub fn is_ready(&self) -> bool {
-        self.phase == SupervisorPhase::Ready
+        self.status.is_ready()
     }
 
-    pub fn phase(&self) -> SupervisorPhase {
-        self.phase
+    pub fn phase(&self) -> ProcessPhase {
+        self.status.display_phase()
     }
 
-    /// Return a status snapshot.
     pub fn status(&self) -> JobStatus {
-        JobStatus {
-            phase: self.phase,
-            restart_count: self.restart_count,
-            exit_status: self.last_exit_status,
-        }
+        self.status
     }
 
     fn try_restart(&mut self, now: Instant, trigger: RestartTrigger) -> Action {
         if self.can_restart(now) {
+            if self.status.child == ChildState::Running {
+                self.status.transition = Some(StateTransition::Replacing);
+                self.status.restart = RestartDecision::None;
+            } else {
+                self.status.transition = None;
+                self.status.restart = RestartDecision::Pending;
+            }
             Action::Restart
         } else {
-            self.phase = SupervisorPhase::GaveUp;
+            self.status.restart = RestartDecision::Exhausted;
+            self.status.transition = if self.status.child == ChildState::Running {
+                Some(StateTransition::Terminating)
+            } else {
+                None
+            };
             Action::GiveUp {
                 reason: trigger.give_up_reason(),
             }
@@ -328,6 +361,18 @@ impl SupervisorState {
         {
             self.watchdog_armed = true;
             self.watchdog_deadline = Some(now + timeout);
+        }
+    }
+
+    fn reset_readiness(&mut self, now: Instant, transition: StateTransition) {
+        if self.readiness_required {
+            self.status.readiness = ReadinessState::Pending;
+            self.status.transition = Some(transition);
+            self.startup_deadline = self.startup_timeout.map(|duration| now + duration);
+        } else {
+            self.status.readiness = ReadinessState::NotRequired;
+            self.status.transition = None;
+            self.startup_deadline = None;
         }
     }
 }
@@ -475,7 +520,7 @@ mod tests {
 
         // Startup deadline must NOT be cleared — no watchdog is configured
         assert_eq!(state.startup_deadline, startup_before);
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Starting);
         assert!(!state.watchdog_armed);
     }
 
@@ -507,7 +552,7 @@ mod tests {
         let t = now + Duration::from_millis(100);
         let action = state.on_event(Event::WatchdogTimeout, t);
         assert!(matches!(action, Action::GiveUp { .. }));
-        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+        assert_eq!(state.phase(), ProcessPhase::Stopping);
     }
 
     #[test]
@@ -651,7 +696,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let action = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -670,7 +715,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -680,7 +725,7 @@ mod tests {
         let t = now + Duration::from_millis(100);
         let action = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             t,
         );
@@ -698,7 +743,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -709,7 +754,7 @@ mod tests {
         let later = now + Duration::from_secs(15);
         let action = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             later,
         );
@@ -735,7 +780,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -746,7 +791,7 @@ mod tests {
         let much_later = now + Duration::from_secs(60);
         let action = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             much_later,
         );
@@ -765,7 +810,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -776,7 +821,7 @@ mod tests {
         let much_later = now + Duration::from_secs(60);
         let action = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             much_later,
         );
@@ -813,7 +858,7 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t1,
             ),
@@ -850,7 +895,7 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Success,
+                    status: ExitOutcome::Success,
                 },
                 now,
             ),
@@ -860,7 +905,7 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 now,
             ),
@@ -874,19 +919,22 @@ mod tests {
         let now = Instant::now();
         let config = config_with_policy(RestartPolicy::Never);
         let mut state = SupervisorState::new(&config, now);
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
 
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Success,
+                    status: ExitOutcome::Success,
                 },
                 now,
             ),
             Action::None
         );
-        assert_eq!(state.phase(), SupervisorPhase::Exited);
-        assert_eq!(state.status().exit_status, Some(ExitStatus::Success));
+        assert_eq!(state.phase(), ProcessPhase::Exited);
+        assert_eq!(
+            state.status().child.exit_outcome(),
+            Some(ExitOutcome::Success)
+        );
     }
 
     /// Same regression test for on_failure policy with a successful exit.
@@ -899,13 +947,13 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Success,
+                    status: ExitOutcome::Success,
                 },
                 now,
             ),
             Action::None
         );
-        assert_eq!(state.phase(), SupervisorPhase::Exited);
+        assert_eq!(state.phase(), ProcessPhase::Exited);
     }
 
     #[test]
@@ -917,7 +965,7 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Success,
+                    status: ExitOutcome::Success,
                 },
                 now,
             ),
@@ -928,7 +976,7 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 now + Duration::from_millis(10),
             ),
@@ -945,7 +993,7 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Success,
+                    status: ExitOutcome::Success,
                 },
                 now,
             ),
@@ -955,7 +1003,7 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 now,
             ),
@@ -969,9 +1017,9 @@ mod tests {
         let config = config_with_watchdog(1_000_000, true);
         let mut state = SupervisorState::new(&config, now);
 
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
         let _ = state.on_event(Event::Ready, now);
-        assert_eq!(state.phase(), SupervisorPhase::Ready);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
         assert!(state.is_ready());
     }
 
@@ -981,9 +1029,9 @@ mod tests {
         let config = config_with_watchdog(1_000_000, false);
         let mut state = SupervisorState::new(&config, now);
 
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
         let _ = state.on_event(Event::WatchdogPing, now);
-        assert_eq!(state.phase(), SupervisorPhase::Ready);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
         assert!(state.is_ready());
     }
 
@@ -997,7 +1045,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -1007,11 +1055,11 @@ mod tests {
         let t = now + Duration::from_millis(100);
         let _ = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             t,
         );
-        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+        assert_eq!(state.phase(), ProcessPhase::GaveUp);
     }
 
     #[test]
@@ -1025,7 +1073,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -1034,15 +1082,15 @@ mod tests {
         let t = now + Duration::from_millis(100);
         let _ = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             t,
         );
-        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+        assert_eq!(state.phase(), ProcessPhase::GaveUp);
 
         // All events should be ignored
         assert_eq!(state.on_event(Event::Ready, t), Action::None);
-        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+        assert_eq!(state.phase(), ProcessPhase::GaveUp);
 
         assert_eq!(state.on_event(Event::WatchdogPing, t), Action::None);
         assert_eq!(state.on_event(Event::WatchdogTrigger, t), Action::None);
@@ -1051,13 +1099,13 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             ),
             Action::None
         );
-        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+        assert_eq!(state.phase(), ProcessPhase::GaveUp);
     }
 
     #[test]
@@ -1068,7 +1116,7 @@ mod tests {
 
         // Move to Ready, arm watchdog
         let _ = state.on_event(Event::Ready, now);
-        assert_eq!(state.phase(), SupervisorPhase::Ready);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
         assert!(state.watchdog_armed);
         assert!(state.startup_deadline.is_none());
 
@@ -1076,7 +1124,7 @@ mod tests {
         let t = now + Duration::from_millis(100);
         state.on_restart_complete(t);
 
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Starting);
         assert!(!state.watchdog_armed);
         assert!(state.watchdog_deadline.is_none());
         assert_eq!(state.startup_deadline, Some(t + Duration::from_secs(5)));
@@ -1093,7 +1141,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -1102,23 +1150,23 @@ mod tests {
         let t = now + Duration::from_millis(100);
         let _ = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             t,
         );
-        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+        assert_eq!(state.phase(), ProcessPhase::GaveUp);
         assert!(state.restart_count() > 0);
 
         let now2 = now + Duration::from_secs(1);
         state.reset_for_explicit_restart(now2);
 
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
         assert_eq!(state.restart_count(), 0);
         assert!(state.restart_timestamps.is_empty());
 
         let action = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             now2,
         );
@@ -1132,12 +1180,12 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         let _ = state.on_event(Event::Ready, now);
-        assert_eq!(state.phase(), SupervisorPhase::Ready);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
 
         let later = now + Duration::from_secs(2);
         state.reset_for_explicit_restart(later);
 
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
         assert!(state.watchdog_armed);
         assert_eq!(
             state.watchdog_deadline,
@@ -1157,7 +1205,7 @@ mod tests {
         let later = now + Duration::from_secs(2);
         state.reset_for_explicit_restart(later);
 
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
         assert!(!state.watchdog_armed);
         assert!(state.watchdog_deadline.is_none());
     }
@@ -1188,7 +1236,7 @@ mod tests {
 
         assert!(state.watchdog_armed);
         assert_eq!(state.watchdog_deadline, Some(t + Duration::from_secs(1)));
-        assert_eq!(state.phase(), SupervisorPhase::Starting);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
     }
 
     #[test]
@@ -1199,7 +1247,7 @@ mod tests {
 
         let action = state.on_event(Event::StopRequested, now);
         assert_eq!(action, Action::None);
-        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+        assert_eq!(state.phase(), ProcessPhase::Stopping);
     }
 
     #[test]
@@ -1209,11 +1257,11 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         let _ = state.on_event(Event::Ready, now);
-        assert_eq!(state.phase(), SupervisorPhase::Ready);
+        assert_eq!(state.phase(), ProcessPhase::Ready);
 
         let action = state.on_event(Event::StopRequested, now);
         assert_eq!(action, Action::None);
-        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+        assert_eq!(state.phase(), ProcessPhase::Stopping);
     }
 
     #[test]
@@ -1226,7 +1274,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -1235,15 +1283,15 @@ mod tests {
         let t = now + Duration::from_millis(100);
         let _ = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             t,
         );
-        assert_eq!(state.phase(), SupervisorPhase::GaveUp);
+        assert_eq!(state.phase(), ProcessPhase::GaveUp);
 
         let action = state.on_event(Event::StopRequested, t);
         assert_eq!(action, Action::None);
-        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+        assert_eq!(state.phase(), ProcessPhase::Stopped);
     }
 
     #[test]
@@ -1271,10 +1319,10 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         let _ = state.on_event(Event::StopRequested, now);
-        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+        assert_eq!(state.phase(), ProcessPhase::Stopping);
 
         assert_eq!(state.on_event(Event::Ready, now), Action::None);
-        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+        assert_eq!(state.phase(), ProcessPhase::Stopping);
 
         assert_eq!(state.on_event(Event::WatchdogPing, now), Action::None);
         assert_eq!(state.on_event(Event::WatchdogTrigger, now), Action::None);
@@ -1284,13 +1332,13 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 now,
             ),
             Action::None
         );
-        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+        assert_eq!(state.phase(), ProcessPhase::Stopping);
     }
 
     #[test]
@@ -1301,7 +1349,7 @@ mod tests {
 
         assert_eq!(state.on_event(Event::StopRequested, now), Action::None);
         assert_eq!(state.on_event(Event::StopRequested, now), Action::None);
-        assert_eq!(state.phase(), SupervisorPhase::Stopping);
+        assert_eq!(state.phase(), ProcessPhase::Stopping);
     }
 
     #[test]
@@ -1311,30 +1359,33 @@ mod tests {
         let mut state = SupervisorState::new(&config, now);
 
         let status = state.status();
-        assert_eq!(status.phase, SupervisorPhase::Starting);
+        assert_eq!(status.display_phase(), ProcessPhase::Ready);
         assert_eq!(status.restart_count, 0);
-        assert_eq!(status.exit_status, None);
-        assert!(!status.is_ready());
+        assert_eq!(status.child.exit_outcome(), None);
+        assert!(status.is_ready());
 
         let _ = state.on_event(Event::Ready, now);
         let status = state.status();
-        assert_eq!(status.phase, SupervisorPhase::Ready);
+        assert_eq!(status.display_phase(), ProcessPhase::Ready);
         assert!(status.is_ready());
 
         let t = now + Duration::from_millis(10);
         let _ = state.on_event(
             Event::ProcessExit {
-                status: ExitStatus::Failure,
+                status: ExitOutcome::Failure,
             },
             t,
         );
-        assert_eq!(state.status().exit_status, Some(ExitStatus::Failure));
+        assert_eq!(
+            state.status().child.exit_outcome(),
+            Some(ExitOutcome::Failure)
+        );
         state.on_restart_complete(t);
         let status = state.status();
-        assert_eq!(status.phase, SupervisorPhase::Starting);
+        assert_eq!(status.display_phase(), ProcessPhase::Ready);
         assert_eq!(status.restart_count, 1);
-        assert_eq!(status.exit_status, None);
-        assert!(!status.is_ready());
+        assert_eq!(status.child.exit_outcome(), None);
+        assert!(status.is_ready());
     }
 
     #[test]
@@ -1357,7 +1408,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -1369,7 +1420,7 @@ mod tests {
         assert!(matches!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             ),
@@ -1409,7 +1460,7 @@ mod tests {
             assert_eq!(
                 state.on_event(
                     Event::ProcessExit {
-                        status: ExitStatus::Failure
+                        status: ExitOutcome::Failure
                     },
                     t
                 ),
@@ -1421,7 +1472,7 @@ mod tests {
         assert!(matches!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure
+                    status: ExitOutcome::Failure
                 },
                 t
             ),
@@ -1448,7 +1499,7 @@ mod tests {
             assert_eq!(
                 state.on_event(
                     Event::ProcessExit {
-                        status: ExitStatus::Failure
+                        status: ExitOutcome::Failure
                     },
                     t
                 ),
@@ -1462,7 +1513,7 @@ mod tests {
         assert!(matches!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure
+                    status: ExitOutcome::Failure
                 },
                 t
             ),
@@ -1488,7 +1539,7 @@ mod tests {
             let t = now + Duration::from_millis(i * 10);
             let _ = state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure,
+                    status: ExitOutcome::Failure,
                 },
                 t,
             );
@@ -1500,7 +1551,7 @@ mod tests {
         assert_eq!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure
+                    status: ExitOutcome::Failure
                 },
                 t
             ),
@@ -1526,7 +1577,7 @@ mod tests {
             assert_eq!(
                 state.on_event(
                     Event::ProcessExit {
-                        status: ExitStatus::Failure
+                        status: ExitOutcome::Failure
                     },
                     t
                 ),
@@ -1538,7 +1589,7 @@ mod tests {
         assert!(matches!(
             state.on_event(
                 Event::ProcessExit {
-                    status: ExitStatus::Failure
+                    status: ExitOutcome::Failure
                 },
                 t
             ),

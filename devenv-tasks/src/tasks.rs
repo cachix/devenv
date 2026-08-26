@@ -1,14 +1,17 @@
 use crate::config::{Config, RunMode, parse_dependency};
 use crate::error::Error;
 use crate::task_cache::TaskCache;
-use crate::task_state::TaskState;
+use crate::task_state::{TaskEvent, TaskScheduleError, TaskState};
 use crate::types::{
-    DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, PROCESS_TASK_PREFIX, Skipped,
-    TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
+    DepSatisfaction, DependencyKind, Output, Outputs, PROCESS_TASK_PREFIX, Skipped, TaskCompleted,
+    TaskExecutionState, TaskFailure, TaskType, TasksStatus, VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
+#[cfg(test)]
+use devenv_processes::ProcessPhase;
 use devenv_processes::{
-    ExitStatus, ProcessConfig, ProcessPhase, ProcessRunner, StartOutcome, SupervisionMode,
+    ChildState, ExitOutcome, ProcessConfig, ProcessRunner, ProcessStatus, ReadinessState,
+    RestartDecision, StartOutcome, StateTransition, SupervisionMode, TargetState,
 };
 use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -133,7 +136,6 @@ impl TasksBuilder {
             ignore_process_deps,
             task_index_by_name: HashMap::new(),
             start_with_deps_lock: Mutex::new(()),
-            scheduled_task_indices: Mutex::new(HashSet::new()),
             outputs: Arc::new(Mutex::new(Outputs::new())),
             exit_on_idle,
             supervisor,
@@ -141,7 +143,13 @@ impl TasksBuilder {
 
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
-        tasks.scheduled_task_indices = Mutex::new(tasks.tasks_order.iter().copied().collect());
+        for index in &tasks.tasks_order {
+            tasks.graph[*index]
+                .write()
+                .await
+                .schedule()
+                .map_err(|error| Error::io(format!("failed to schedule task: {error:?}")))?;
+        }
         // Dynamic starts address nodes outside the initial schedule.
         for index in tasks.graph.node_indices() {
             let name = tasks.graph[index].read().await.task.name.clone();
@@ -186,9 +194,6 @@ pub struct Tasks {
     pub(crate) task_index_by_name: HashMap<String, NodeIndex>,
     /// Prevents concurrent dynamic starts from duplicating dependency waiters.
     pub(crate) start_with_deps_lock: Mutex<()>,
-    /// Nodes with an execution driver; `Pending` alone does not distinguish
-    /// scheduled from unscheduled one-shots.
-    pub(crate) scheduled_task_indices: Mutex<HashSet<NodeIndex>>,
     /// Shared outputs from cold and dynamic one-shot runs.
     pub(crate) outputs: Arc<Mutex<Outputs>>,
     /// Exit after every process has settled when an outer manager owns lifecycle.
@@ -202,8 +207,8 @@ struct DepEval {
     /// Full task name of the dependency (e.g. `devenv:processes:db`).
     task_name: String,
     sat: DepSatisfaction,
-    /// Live phase for a registered process dependency.
-    live_phase: Option<ProcessPhase>,
+    /// Coherent status for a registered process dependency.
+    process_status: Option<ProcessStatus>,
     /// Whether a one-shot dependency is currently executing.
     dep_in_flight: bool,
 }
@@ -214,6 +219,103 @@ enum DependencyWaitOutcome {
     Ready,
     Cancelled,
     DependencyFailed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProcessCompletion {
+    Pending,
+    Running,
+    Succeeded,
+    Failed,
+    Skipped,
+    DependencyFailed,
+    Cancelled,
+}
+
+/// Combine graph-owned pre-launch outcomes with live process accounting.
+/// Once a child was spawned, ProcessStatus owns runtime completion; a later
+/// exit must not rewrite the task attempt, but it does affect TasksStatus.
+fn process_task_completion(
+    execution: &TaskExecutionState,
+    status: Option<ProcessStatus>,
+) -> ProcessCompletion {
+    if matches!(
+        execution,
+        TaskExecutionState::Finished(TaskCompleted::Skipped(_))
+    ) {
+        return ProcessCompletion::Skipped;
+    }
+
+    if status.is_none_or(|status| status.child == ChildState::NeverSpawned) {
+        match execution {
+            TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {
+                return ProcessCompletion::Succeeded;
+            }
+            TaskExecutionState::Finished(TaskCompleted::Failed(_, _)) => {
+                return ProcessCompletion::Failed;
+            }
+            TaskExecutionState::Finished(TaskCompleted::DependencyFailed) => {
+                return ProcessCompletion::DependencyFailed;
+            }
+            TaskExecutionState::Finished(TaskCompleted::Cancelled(_)) => {
+                return ProcessCompletion::Cancelled;
+            }
+            _ => {}
+        }
+    }
+
+    process_completion(status)
+}
+
+/// Interpret process facts for task completion without consulting the display phase.
+fn process_completion(status: Option<ProcessStatus>) -> ProcessCompletion {
+    let Some(status) = status else {
+        return ProcessCompletion::Pending;
+    };
+
+    if status.transition == Some(StateTransition::WaitingForDependencies) {
+        ProcessCompletion::Pending
+    } else if matches!(
+        status.transition,
+        Some(StateTransition::Launching | StateTransition::Replacing)
+    ) || status.restart == RestartDecision::Pending
+    {
+        ProcessCompletion::Running
+    } else if status.child == ChildState::Running {
+        if matches!(
+            status.readiness,
+            ReadinessState::Ready | ReadinessState::NotRequired
+        ) {
+            ProcessCompletion::Succeeded
+        } else {
+            ProcessCompletion::Running
+        }
+    } else if status.restart == RestartDecision::Exhausted
+        || status.child == ChildState::Exited(ExitOutcome::Failure)
+    {
+        ProcessCompletion::Failed
+    } else if matches!(
+        status.child,
+        ChildState::Exited(ExitOutcome::Success) | ChildState::Terminated
+    ) {
+        ProcessCompletion::Succeeded
+    } else {
+        match status.target {
+            TargetState::Stopped(devenv_processes::StopReason::DependencyFailure) => {
+                ProcessCompletion::DependencyFailed
+            }
+            TargetState::Stopped(
+                devenv_processes::StopReason::User | devenv_processes::StopReason::ManagerShutdown,
+            ) => ProcessCompletion::Cancelled,
+            TargetState::Stopped(devenv_processes::StopReason::LaunchFailure) => {
+                ProcessCompletion::Failed
+            }
+            // Whether a dormant process was skipped or cancelled is task-owned
+            // runtime state and cannot be recovered from ProcessStatus alone.
+            TargetState::Stopped(devenv_processes::StopReason::NotRequested)
+            | TargetState::Running => ProcessCompletion::Pending,
+        }
+    }
 }
 
 impl Tasks {
@@ -246,46 +348,38 @@ impl Tasks {
 
         for index in &self.tasks_order {
             let task_state = self.graph[*index].read().await;
-            match &task_state.status {
-                // A process task node stays `Pending` for its whole live
-                // lifecycle; the manager owns the phase. A `Completed` node
-                // always wins below: it is the graph-owned launch outcome.
-                TaskStatus::Pending if task_state.task.r#type == TaskType::Process => {
-                    let pname = crate::types::process_name(&task_state.task.name);
-                    match self.process_runner.get_phase(pname).await {
-                        Some(ProcessPhase::NotStarted | ProcessPhase::Stopped) => {
-                            status.skipped += 1
+            if task_state.task.r#type == TaskType::Process {
+                let pname = crate::types::process_name(&task_state.task.name);
+                match process_task_completion(
+                    task_state.status(),
+                    self.process_runner.job_state(pname).await,
+                ) {
+                    ProcessCompletion::Pending => status.pending += 1,
+                    ProcessCompletion::Running => status.running += 1,
+                    ProcessCompletion::Succeeded => status.succeeded += 1,
+                    ProcessCompletion::Failed => {
+                        status.failed += 1;
+                        if self.is_soft_failure(index, &scheduled) {
+                            status.soft_failed += 1;
                         }
-                        Some(ProcessPhase::Exited) => {
-                            if self.process_runner.get_exit_status(pname).await
-                                == Some(ExitStatus::Failure)
-                            {
-                                status.failed += 1;
-                                if self.is_soft_failure(index, &scheduled) {
-                                    status.soft_failed += 1;
-                                }
-                            } else {
-                                status.succeeded += 1;
-                            }
-                        }
-                        Some(ProcessPhase::GaveUp) => {
-                            status.failed += 1;
-                            if self.is_soft_failure(index, &scheduled) {
-                                status.soft_failed += 1;
-                            }
-                        }
-                        Some(
-                            ProcessPhase::Waiting
-                            | ProcessPhase::Starting
-                            | ProcessPhase::Ready
-                            | ProcessPhase::Stopping,
-                        ) => status.running += 1,
-                        None => status.pending += 1,
                     }
+                    ProcessCompletion::Skipped => status.skipped += 1,
+                    ProcessCompletion::DependencyFailed => {
+                        status.dependency_failed += 1;
+                        if self.is_soft_failure(index, &scheduled) {
+                            status.soft_dependency_failed += 1;
+                        }
+                    }
+                    ProcessCompletion::Cancelled => status.cancelled += 1,
                 }
-                TaskStatus::Pending => status.pending += 1,
-                TaskStatus::Oneshot(OneshotStatus::Running(_)) => status.running += 1,
-                TaskStatus::Completed(completed) => match completed {
+                continue;
+            }
+
+            match task_state.status() {
+                TaskExecutionState::NotScheduled => status.pending += 1,
+                TaskExecutionState::WaitingForDependencies => status.pending += 1,
+                TaskExecutionState::Running { .. } => status.running += 1,
+                TaskExecutionState::Finished(completed) => match completed {
                     TaskCompleted::Success(_, _) => status.succeeded += 1,
                     TaskCompleted::Failed(_, _) => {
                         status.failed += 1;
@@ -718,14 +812,22 @@ impl Tasks {
                 continue;
             };
 
-            match self.process_runner.get_phase(&name).await {
-                // Preserve the existing driver for active and scheduled processes.
-                Some(ProcessPhase::Starting | ProcessPhase::Ready | ProcessPhase::Waiting) => {
+            if let Some(status) = self.process_runner.job_state(&name).await {
+                // Preserve an existing owner of the process lifecycle. This is
+                // deliberately expressed in its independent state facts, not
+                // the lossy display phase.
+                if status.child == ChildState::Running
+                    || status.transition.is_some()
+                    || status.restart == RestartDecision::Pending
+                {
                     outcome.skipped.push(name.clone());
                     continue;
                 }
-                // `rearm_waiting` only replaces inactive manager entries.
-                Some(ProcessPhase::Exited | ProcessPhase::GaveUp) => {
+
+                // A settled target-running entry must be reset before it can
+                // become a new dependency waiter. Explicitly stopped entries
+                // are already resettable by `rearm_waiting`.
+                if status.target == TargetState::Running && status.child.was_spawned() {
                     if let Err(e) = self.process_runner.stop_and_keep(&name).await {
                         tracing::warn!(
                             process = %name,
@@ -734,7 +836,6 @@ impl Tasks {
                         );
                     }
                 }
-                _ => {}
             }
 
             // Explicit selection overrides `start.enable`.
@@ -760,10 +861,21 @@ impl Tasks {
             self.schedule_unseen_oneshot_dependencies(index).await;
             self.process_runner.rearm_waiting(config.clone()).await;
             // Make the manager's re-armed phase authoritative again.
-            {
+            let attempt = {
                 let mut ts = self.graph[index].write().await;
-                ts.status = TaskStatus::Pending;
-            }
+                match ts.schedule() {
+                    Ok(attempt) => attempt,
+                    Err(TaskScheduleError::AttemptActive) => {
+                        outcome.skipped.push(name.clone());
+                        continue;
+                    }
+                    Err(TaskScheduleError::AttemptIdExhausted) => {
+                        tracing::error!(process = %name, "task attempt ID exhausted");
+                        outcome.failed.push(name.clone());
+                        continue;
+                    }
+                }
+            };
             self.notify_finished.notify_waiters();
 
             outcome.scheduled.push(name.clone());
@@ -782,44 +894,69 @@ impl Tasks {
                 {
                     DependencyWaitOutcome::Ready => {}
                     outcome => {
+                        if !task_state.read().await.is_current_attempt(attempt) {
+                            return;
+                        }
                         process_runner.cancel_waiting(&process_name).await;
                         // Publish the graph outcome before waking transitive waiters.
-                        task_state.write().await.status = TaskStatus::Completed(match outcome {
-                            DependencyWaitOutcome::Cancelled => TaskCompleted::Cancelled(None),
+                        let event = match outcome {
+                            DependencyWaitOutcome::Cancelled => TaskEvent::Cancel,
                             DependencyWaitOutcome::DependencyFailed => {
-                                TaskCompleted::DependencyFailed
+                                TaskEvent::DependenciesFailed
                             }
-                            DependencyWaitOutcome::Ready => unreachable!(),
-                        });
+                            DependencyWaitOutcome::Ready => return,
+                        };
+                        let _ = task_state.write().await.apply(attempt, event);
                         notify_finished.notify_waiters();
                         return;
                     }
                 }
 
                 // Scope the read guard before the failure-path write lock.
+                let started = Instant::now();
                 let launch_result = {
                     let ts = task_state.read().await;
                     ts.run_process(&process_runner, config).await
                 };
-                if let Err(e) = launch_result {
-                    tracing::error!(
-                        process = %process_name,
-                        error = %e,
-                        "failed to start process"
-                    );
-                    // Dependents read launch failures from the graph.
-                    let mut ts = task_state.write().await;
-                    ts.status = TaskStatus::Completed(TaskCompleted::Failed(
-                        std::time::Duration::ZERO,
-                        TaskFailure {
-                            stdout: Vec::new(),
-                            stderr: Vec::new(),
-                            error: format!("Failed to start process: {e}"),
-                        },
-                    ));
-                    drop(ts);
-                    notify_finished.notify_waiters();
-                }
+                let completed = match launch_result {
+                    Ok(info) if info.auto_start_off => TaskCompleted::Skipped(Skipped::NoCommand),
+                    Ok(info) => {
+                        let begin = task_state
+                            .write()
+                            .await
+                            .apply(attempt, TaskEvent::Begin { since: started });
+                        if !begin.applied() {
+                            if begin.changed() {
+                                notify_finished.notify_waiters();
+                            }
+                            return;
+                        }
+                        match process_runner
+                            .wait_launch_settled(&info.process_name, &shutdown.cancellation_token())
+                            .await
+                        {
+                            Ok(status) => Self::process_launch_outcome(status, started.elapsed()),
+                            Err(_) => TaskCompleted::Cancelled(Some(started.elapsed())),
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            process = %process_name,
+                            error = %e,
+                            "failed to start process"
+                        );
+                        TaskCompleted::Failed(
+                            started.elapsed(),
+                            TaskFailure {
+                                stdout: Vec::new(),
+                                stderr: Vec::new(),
+                                error: format!("Failed to start process: {e}"),
+                            },
+                        )
+                    }
+                };
+                let _ = task_state.write().await.apply(attempt, completed.into());
+                notify_finished.notify_waiters();
             });
         }
 
@@ -840,9 +977,36 @@ impl Tasks {
         notify_ui.notify_one();
     }
 
+    fn process_launch_outcome(
+        status: ProcessStatus,
+        duration: std::time::Duration,
+    ) -> TaskCompleted {
+        if status.is_ready()
+            || status.child == ChildState::Exited(ExitOutcome::Success)
+                && status.restart != devenv_processes::RestartDecision::Exhausted
+        {
+            return TaskCompleted::Success(duration, Output(None));
+        }
+        if status.target == TargetState::Stopped(devenv_processes::StopReason::NotRequested)
+            && status.child == ChildState::NeverSpawned
+        {
+            return TaskCompleted::Skipped(Skipped::NoCommand);
+        }
+
+        TaskCompleted::Failed(
+            duration,
+            TaskFailure {
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                error: format!("Process launch settled as {}", status.display_phase()),
+            },
+        )
+    }
+
     /// Publish a cancelled or dependency-failed task.
     async fn mark_task_skipped(
         task_state: &Arc<RwLock<TaskState>>,
+        attempt: crate::task_state::TaskAttemptId,
         task_activity_id: u64,
         cancelled: bool,
         completed_tasks: &std::sync::atomic::AtomicU64,
@@ -850,7 +1014,7 @@ impl Tasks {
         orchestration_activity: &Activity,
         notify_finished: &Notify,
         notify_ui: &Notify,
-    ) {
+    ) -> bool {
         let task_completed = if cancelled {
             TaskCompleted::Cancelled(None)
         } else {
@@ -866,9 +1030,13 @@ impl Tasks {
             skip_activity.dependency_failed();
         }
 
-        {
+        let transitioned = {
             let mut ts = task_state.write().await;
-            ts.status = TaskStatus::Completed(task_completed);
+            ts.apply(attempt, task_completed.into()).changed()
+        };
+
+        if !transitioned {
+            return false;
         }
 
         Self::signal_task_done(
@@ -878,6 +1046,7 @@ impl Tasks {
             notify_finished,
             notify_ui,
         );
+        true
     }
 
     /// Collect dependency edges for a task node.
@@ -923,19 +1092,21 @@ impl Tasks {
             }
         }
 
-        let to_schedule = {
-            let mut scheduled = self.scheduled_task_indices.lock().await;
-            oneshots
-                .into_iter()
-                .filter(|node| scheduled.insert(*node))
-                .collect::<Vec<_>>()
-        };
-
-        for node in to_schedule {
+        for node in oneshots {
             let task_state = Arc::clone(&self.graph[node]);
-            if !matches!(task_state.read().await.status, TaskStatus::Pending) {
-                continue;
-            }
+            let attempt = {
+                let mut state = task_state.write().await;
+                if !matches!(state.status(), TaskExecutionState::NotScheduled) {
+                    continue;
+                }
+                match state.schedule() {
+                    Ok(attempt) => attempt,
+                    Err(error) => {
+                        tracing::error!(task = %state.task.name, ?error, "failed to schedule task");
+                        continue;
+                    }
+                }
+            };
 
             let deps = self.collect_deps(node);
             let outputs = Arc::clone(&self.outputs);
@@ -951,6 +1122,7 @@ impl Tasks {
             tokio::spawn(async move {
                 Self::run_oneshot_task(
                     task_state,
+                    attempt,
                     deps,
                     outputs,
                     notify_finished,
@@ -970,6 +1142,7 @@ impl Tasks {
     #[allow(clippy::too_many_arguments)]
     async fn run_oneshot_task(
         task_state: Arc<RwLock<TaskState>>,
+        attempt: crate::task_state::TaskAttemptId,
         deps: Vec<(Arc<RwLock<TaskState>>, DependencyKind)>,
         outputs: Arc<Mutex<Outputs>>,
         notify_finished: Arc<Notify>,
@@ -980,33 +1153,46 @@ impl Tasks {
         task_activity_id: u64,
         refresh_task_cache: bool,
         shell_env: HashMap<String, String>,
-    ) {
+    ) -> bool {
         match Self::wait_for_task_deps(&deps, &process_runner, &notify_finished, &shutdown).await {
             DependencyWaitOutcome::Ready => {}
             outcome => {
                 let task_name = task_state.read().await.task.name.clone();
                 let task_activity =
                     devenv_activity::start!(Activity::task(&task_name).id(task_activity_id));
-                let completed = match outcome {
+                let event = match outcome {
                     DependencyWaitOutcome::Cancelled => {
                         task_activity.cancel();
-                        TaskCompleted::Cancelled(None)
+                        TaskEvent::Cancel
                     }
                     DependencyWaitOutcome::DependencyFailed => {
                         task_activity.dependency_failed();
-                        TaskCompleted::DependencyFailed
+                        TaskEvent::DependenciesFailed
                     }
-                    DependencyWaitOutcome::Ready => unreachable!(),
+                    DependencyWaitOutcome::Ready => return false,
                 };
-                task_state.write().await.status = TaskStatus::Completed(completed);
-                notify_finished.notify_waiters();
-                notify_ui.notify_one();
-                return;
+                let transitioned = task_state.write().await.apply(attempt, event).changed();
+                if transitioned {
+                    notify_finished.notify_waiters();
+                    notify_ui.notify_one();
+                }
+                return transitioned;
             }
         }
 
         let now = Instant::now();
-        task_state.write().await.status = TaskStatus::Oneshot(OneshotStatus::Running(now));
+        let begin = task_state
+            .write()
+            .await
+            .apply(attempt, TaskEvent::Begin { since: now });
+        if !begin.applied() {
+            if begin.changed() {
+                notify_finished.notify_waiters();
+                notify_ui.notify_one();
+                return true;
+            }
+            return false;
+        }
         notify_ui.notify_one();
 
         let completed = {
@@ -1040,65 +1226,53 @@ impl Tasks {
             }
         };
 
-        {
-            let mut task_state = task_state.write().await;
-            match &completed {
-                TaskCompleted::Success(_, Output(Some(output))) => {
-                    outputs
-                        .lock()
-                        .await
-                        .insert(task_state.task.name.clone(), output.clone());
-
-                    if let Some(output_value) = output.as_object() {
-                        let task_name = &task_state.task.name;
-                        if let Err(e) = cache
-                            .store_task_output(
-                                task_name,
-                                &serde_json::Value::Object(output_value.clone()),
-                            )
-                            .await
-                        {
-                            tracing::warn!(
-                                task = %task_name,
-                                error = %e,
-                                "failed to store task output"
-                            );
-                        }
-                    }
-                }
-                TaskCompleted::Skipped(Skipped::Cached(Output(Some(output)))) => {
-                    outputs
-                        .lock()
-                        .await
-                        .insert(task_state.task.name.clone(), output.clone());
-
-                    if (task_state.task.status.is_some()
-                        || !task_state.task.exec_if_modified.is_empty())
-                        && let Some(output_value) = output.as_object()
-                    {
-                        let task_name = &task_state.task.name;
-                        if let Err(e) = cache
-                            .store_task_output(
-                                task_name,
-                                &serde_json::Value::Object(output_value.clone()),
-                            )
-                            .await
-                        {
-                            tracing::warn!(
-                                task = %task_name,
-                                error = %e,
-                                "failed to store task output"
-                            );
-                        }
-                    }
-                }
-                _ => {}
+        let (task_name, persist_cached_output) = {
+            let state = task_state.read().await;
+            if !state.is_current_attempt(attempt) {
+                return false;
             }
+            (
+                state.task.name.clone(),
+                state.task.status.is_some() || !state.task.exec_if_modified.is_empty(),
+            )
+        };
 
-            task_state.status = TaskStatus::Completed(completed);
+        match &completed {
+            TaskCompleted::Success(_, Output(Some(output)))
+            | TaskCompleted::Skipped(Skipped::Cached(Output(Some(output)))) => {
+                outputs
+                    .lock()
+                    .await
+                    .insert(task_name.clone(), output.clone());
+
+                if (matches!(completed, TaskCompleted::Success(_, _)) || persist_cached_output)
+                    && let Some(output_value) = output.as_object()
+                    && let Err(e) = cache
+                        .store_task_output(
+                            &task_name,
+                            &serde_json::Value::Object(output_value.clone()),
+                        )
+                        .await
+                {
+                    tracing::warn!(
+                        task = %task_name,
+                        error = %e,
+                        "failed to store task output"
+                    );
+                }
+            }
+            _ => {}
         }
-        notify_finished.notify_waiters();
-        notify_ui.notify_one();
+
+        let transitioned = {
+            let mut state = task_state.write().await;
+            state.apply(attempt, completed.into()).changed()
+        };
+        if transitioned {
+            notify_finished.notify_waiters();
+            notify_ui.notify_one();
+        }
+        transitioned
     }
 
     /// Evaluate an edge consistently for waiting and parked-state checks.
@@ -1112,48 +1286,28 @@ impl Tasks {
         tracing::trace!(
             "  dep {} status={:?} kind={:?}",
             dep_guard.task.name,
-            dep_guard.status,
+            dep_guard.status(),
             dep_kind
         );
         if dep_guard.task.r#type == TaskType::Process {
             let pname = crate::types::process_name(&dep_guard.task.name);
-            // Preserve terminal history hidden by an explicit stop.
-            let live_phase = process_runner.get_dependency_phase(pname).await;
-            let sat = match live_phase {
-                // Live phases outrank stale terminal graph state.
-                Some(
-                    phase @ (ProcessPhase::Waiting
-                    | ProcessPhase::Starting
-                    | ProcessPhase::Ready
-                    | ProcessPhase::Exited
-                    | ProcessPhase::GaveUp),
-                ) => crate::types::is_process_dep_satisfied(phase, dep_kind),
-                // Graph-owned launch outcomes are conclusive for inactive entries.
-                phase => match &dep_guard.status {
-                    TaskStatus::Completed(_) => {
-                        crate::types::is_dep_satisfied(&dep_guard.status, dep_kind)
-                    }
-                    _ => match phase {
-                        Some(p) => crate::types::is_process_dep_satisfied(p, dep_kind),
-                        None => DepSatisfaction::NotYet,
-                    },
-                },
+            let process_status = process_runner.job_state(pname).await;
+            let sat = match process_status {
+                Some(status) => crate::types::is_process_status_dep_satisfied(status, dep_kind),
+                None => crate::types::is_dep_satisfied(dep_guard.status(), dep_kind),
             };
             DepEval {
                 task_name: dep_guard.task.name.clone(),
                 sat,
-                live_phase,
+                process_status,
                 dep_in_flight: false,
             }
         } else {
             DepEval {
                 task_name: dep_guard.task.name.clone(),
-                sat: crate::types::is_dep_satisfied(&dep_guard.status, dep_kind),
-                live_phase: None,
-                dep_in_flight: matches!(
-                    dep_guard.status,
-                    TaskStatus::Oneshot(OneshotStatus::Running(_))
-                ),
+                sat: crate::types::is_dep_satisfied(dep_guard.status(), dep_kind),
+                process_status: None,
+                dep_in_flight: matches!(dep_guard.status(), TaskExecutionState::Running { .. }),
             }
         }
     }
@@ -1182,10 +1336,17 @@ impl Tasks {
                     continue;
                 }
                 any_blocker = true;
-                let parked = match eval.live_phase {
-                    Some(ProcessPhase::NotStarted | ProcessPhase::Stopped) => true,
-                    Some(ProcessPhase::Waiting) => {
+                let parked = match eval.process_status {
+                    Some(status)
+                        if status.transition == Some(StateTransition::WaitingForDependencies) =>
+                    {
                         self.task_dependency_parked(&eval.task_name).await
+                    }
+                    Some(status)
+                        if status.is_settled()
+                            && matches!(status.target, TargetState::Stopped(_)) =>
+                    {
+                        true
                     }
                     Some(_) => false,
                     None if eval.dep_in_flight => false,
@@ -1345,14 +1506,19 @@ impl Tasks {
                     drop(ts);
                     let mut ts = self.graph[index].write().await;
                     error!(task = %name, error = %e, "failed to build process config");
-                    ts.status = TaskStatus::Completed(TaskCompleted::Failed(
-                        std::time::Duration::ZERO,
-                        TaskFailure {
-                            stdout: Vec::new(),
-                            stderr: Vec::new(),
-                            error: format!("Failed to build process config: {e}"),
-                        },
-                    ));
+                    let attempt = ts.current_attempt();
+                    let _ = ts.apply(
+                        attempt,
+                        TaskCompleted::Failed(
+                            std::time::Duration::ZERO,
+                            TaskFailure {
+                                stdout: Vec::new(),
+                                stderr: Vec::new(),
+                                error: format!("Failed to build process config: {e}"),
+                            },
+                        )
+                        .into(),
+                    );
                 }
             }
         }
@@ -1368,10 +1534,12 @@ impl Tasks {
                 let ts = task_state.read().await;
                 ts.task.r#type == TaskType::Process
             };
+            let attempt = task_state.read().await.current_attempt();
 
             if self.shutdown.is_cancelled() {
                 Self::mark_task_skipped(
                     task_state,
+                    attempt,
                     task_activity_id,
                     true,
                     &completed_tasks,
@@ -1445,6 +1613,7 @@ impl Tasks {
 
                             Self::mark_task_skipped(
                                 &task_state_clone,
+                                attempt,
                                 task_activity_id,
                                 dep_outcome == DependencyWaitOutcome::Cancelled,
                                 &completed_tasks_clone,
@@ -1454,6 +1623,10 @@ impl Tasks {
                                 &notify_ui_clone,
                             )
                             .await;
+                            return;
+                        }
+
+                        if !task_state_clone.read().await.is_current_attempt(attempt) {
                             return;
                         }
 
@@ -1474,14 +1647,40 @@ impl Tasks {
                                     error = %e,
                                     "failed to start process task"
                                 );
-                                task_state.status = TaskStatus::Completed(TaskCompleted::Failed(
-                                    std::time::Duration::ZERO,
-                                    TaskFailure {
-                                        stdout: Vec::new(),
-                                        stderr: Vec::new(),
-                                        error: format!("Failed to start process: {e}"),
-                                    },
-                                ));
+                                let transitioned = task_state
+                                    .apply(
+                                        attempt,
+                                        TaskCompleted::Failed(
+                                            std::time::Duration::ZERO,
+                                            TaskFailure {
+                                                stdout: Vec::new(),
+                                                stderr: Vec::new(),
+                                                error: format!("Failed to start process: {e}"),
+                                            },
+                                        )
+                                        .into(),
+                                    )
+                                    .changed();
+                                if transitioned {
+                                    Self::signal_task_done(
+                                        &completed_tasks_clone,
+                                        total_tasks,
+                                        &orchestration_activity_inner,
+                                        &notify_finished_clone,
+                                        &notify_ui_clone,
+                                    );
+                                }
+                                return;
+                            }
+                        };
+
+                        if launch_info.auto_start_off {
+                            let transitioned = task_state_clone
+                                .write()
+                                .await
+                                .apply(attempt, TaskEvent::Skip(Skipped::NoCommand))
+                                .changed();
+                            if transitioned {
                                 Self::signal_task_done(
                                     &completed_tasks_clone,
                                     total_tasks,
@@ -1489,37 +1688,52 @@ impl Tasks {
                                     &notify_finished_clone,
                                     &notify_ui_clone,
                                 );
-                                return;
                             }
-                        };
-
-                        if !launch_info.auto_start_off && launch_info.requires_ready_wait {
-                            // Stopped/NotStarted end the wait too: a process
-                            // stopped mid-launch must not park this task.
-                            let _ = wait_for_phase(
-                                &process_runner_clone,
-                                &notify_finished_clone,
-                                &shutdown_clone,
-                                &launch_info.process_name,
-                                &[
-                                    ProcessPhase::Ready,
-                                    ProcessPhase::GaveUp,
-                                    ProcessPhase::Exited,
-                                    ProcessPhase::Stopped,
-                                    ProcessPhase::NotStarted,
-                                ],
-                            )
-                            .await;
+                            return;
                         }
 
-                        // Initial setup done; the manager owns the phase from here.
-                        Self::signal_task_done(
-                            &completed_tasks_clone,
-                            total_tasks,
-                            &orchestration_activity_inner,
-                            &notify_finished_clone,
-                            &notify_ui_clone,
-                        );
+                        let started = Instant::now();
+                        let begin = task_state_clone
+                            .write()
+                            .await
+                            .apply(attempt, TaskEvent::Begin { since: started });
+                        if !begin.applied() {
+                            if begin.changed() {
+                                Self::signal_task_done(
+                                    &completed_tasks_clone,
+                                    total_tasks,
+                                    &orchestration_activity_inner,
+                                    &notify_finished_clone,
+                                    &notify_ui_clone,
+                                );
+                            }
+                            return;
+                        }
+
+                        let completed = match process_runner_clone
+                            .wait_launch_settled(
+                                &launch_info.process_name,
+                                &shutdown_clone.cancellation_token(),
+                            )
+                            .await
+                        {
+                            Ok(status) => Self::process_launch_outcome(status, started.elapsed()),
+                            Err(_) => TaskCompleted::Cancelled(Some(started.elapsed())),
+                        };
+                        let transitioned = task_state_clone
+                            .write()
+                            .await
+                            .apply(attempt, completed.into())
+                            .changed();
+                        if transitioned {
+                            Self::signal_task_done(
+                                &completed_tasks_clone,
+                                total_tasks,
+                                &orchestration_activity_inner,
+                                &notify_finished_clone,
+                                &notify_ui_clone,
+                            );
+                        }
                     }
                     .in_activity(&orchestration_activity_clone)
                 });
@@ -1544,14 +1758,16 @@ impl Tasks {
             let completed_tasks_clone = Arc::clone(&completed_tasks);
             let refresh_task_cache = self.refresh_task_cache;
             let shell_env = self.env.clone();
+            let attempt = task_state.read().await.current_attempt();
 
             running_tasks.spawn(move || {
                 // Clone for use inside the async block; the original is borrowed by in_activity
                 let orchestration_activity_inner = Arc::clone(&orchestration_activity_clone);
 
                 async move {
-                    Self::run_oneshot_task(
+                    let completed = Self::run_oneshot_task(
                         task_state_clone,
+                        attempt,
                         deps,
                         outputs_clone,
                         notify_finished_clone.clone(),
@@ -1565,13 +1781,15 @@ impl Tasks {
                     )
                     .await;
 
-                    Self::signal_task_done(
-                        &completed_tasks_clone,
-                        total_tasks,
-                        &orchestration_activity_inner,
-                        &notify_finished_clone,
-                        &notify_ui_clone,
-                    );
+                    if completed {
+                        Self::signal_task_done(
+                            &completed_tasks_clone,
+                            total_tasks,
+                            &orchestration_activity_inner,
+                            &notify_finished_clone,
+                            &notify_ui_clone,
+                        );
+                    }
                 }
                 .in_activity(&orchestration_activity_clone)
             });
@@ -1585,42 +1803,45 @@ impl Tasks {
         // completion status, so sweep any still-Running tasks to Cancelled.
         if self.shutdown.is_cancelled() {
             for &index in &self.tasks_order {
-                let (is_process, task_name, running_oneshot_start) = {
+                let (is_process, task_name, attempt, running_oneshot_start) = {
                     let task_state = self.graph[index].read().await;
-                    let running_start = match &task_state.status {
-                        TaskStatus::Oneshot(OneshotStatus::Running(start)) => Some(*start),
+                    let running_start = match task_state.status() {
+                        TaskExecutionState::Running { since } => Some(*since),
                         _ => None,
                     };
                     let is_pending_process = task_state.task.r#type == TaskType::Process
-                        && matches!(task_state.status, TaskStatus::Pending);
+                        && matches!(
+                            task_state.status(),
+                            TaskExecutionState::WaitingForDependencies
+                        );
                     (
                         is_pending_process,
                         task_state.task.name.clone(),
+                        task_state.current_attempt(),
                         running_start,
                     )
                 };
 
-                if let Some(start) = running_oneshot_start {
-                    let elapsed = start.elapsed();
+                if running_oneshot_start.is_some() {
                     let mut task_state = self.graph[index].write().await;
-                    task_state.status =
-                        TaskStatus::Completed(TaskCompleted::Cancelled(Some(elapsed)));
+                    let _ = task_state.apply(attempt, TaskEvent::Cancel);
                 } else if is_process {
                     // A process never launched (no manager entry) or still live
                     // is cancelled; terminal phases stay Pending and are counted
                     // via the manager in get_completion_status.
-                    let phase = self
+                    let is_live_or_waiting = self
                         .process_runner
-                        .get_phase(crate::types::process_name(&task_name))
-                        .await;
-                    if matches!(
-                        phase,
-                        None | Some(
-                            ProcessPhase::Waiting | ProcessPhase::Starting | ProcessPhase::Ready
-                        )
-                    ) {
+                        .job_state(crate::types::process_name(&task_name))
+                        .await
+                        .is_none_or(|status| {
+                            status.target == TargetState::Running
+                                && (!status.is_settled()
+                                    || status.child == ChildState::Running
+                                    || status.restart == RestartDecision::Pending)
+                        });
+                    if is_live_or_waiting {
                         let mut task_state = self.graph[index].write().await;
-                        task_state.status = TaskStatus::Completed(TaskCompleted::Cancelled(None));
+                        let _ = task_state.apply(attempt, TaskEvent::Cancel);
                     }
                 }
             }
@@ -1639,33 +1860,6 @@ impl Tasks {
         self.notify_ui.notify_one();
 
         outputs.lock().await.clone()
-    }
-}
-
-/// Block until the manager reports one of `terminal` phases for `name`.
-/// Returns the reached phase, or `None` on shutdown or when the manager has
-/// no entry for the process. Event-driven: wakes on `notify_finished`, which
-/// the manager fires on every lifecycle and supervisor transition.
-async fn wait_for_phase(
-    manager: &Arc<ProcessRunner>,
-    notify_finished: &Notify,
-    shutdown: &tokio_shutdown::Shutdown,
-    name: &str,
-    terminal: &[ProcessPhase],
-) -> Option<ProcessPhase> {
-    loop {
-        let notified = notify_finished.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
-        match manager.get_phase(name).await {
-            Some(phase) if terminal.contains(&phase) => return Some(phase),
-            None => return None,
-            Some(_) => {}
-        }
-        tokio::select! {
-            _ = notified => {}
-            _ = shutdown.wait_for_shutdown() => return None,
-        }
     }
 }
 
@@ -1861,7 +2055,113 @@ pub fn compute_hierarchy_edges<N, E>(
 mod schedule_tests {
     use super::*;
     use crate::config::TaskConfig;
+    use devenv_processes::{ReadinessState, StopReason};
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn process_completion_matches_the_spec_precedence_table() {
+        let settled = |target, child, restart| ProcessStatus {
+            restart_count: 0,
+            target,
+            transition: None,
+            child,
+            readiness: ReadinessState::Inactive,
+            restart,
+        };
+        let mut launching_without_child = ProcessStatus::waiting();
+        launching_without_child.transition = Some(StateTransition::Launching);
+        let mut restart_pending = settled(
+            TargetState::Running,
+            ChildState::Exited(ExitOutcome::Failure),
+            RestartDecision::None,
+        );
+        restart_pending.restart = RestartDecision::Pending;
+        let terminating_ready = ProcessStatus {
+            restart_count: 0,
+            target: TargetState::Stopped(StopReason::ManagerShutdown),
+            transition: Some(StateTransition::Terminating),
+            child: ChildState::Running,
+            readiness: ReadinessState::Ready,
+            restart: RestartDecision::None,
+        };
+
+        let cases = [
+            (ProcessStatus::waiting(), ProcessCompletion::Pending),
+            (launching_without_child, ProcessCompletion::Running),
+            (
+                ProcessStatus::running(true, StateTransition::Launching),
+                ProcessCompletion::Running,
+            ),
+            (
+                ProcessStatus::running(false, StateTransition::Launching),
+                ProcessCompletion::Succeeded,
+            ),
+            (terminating_ready, ProcessCompletion::Succeeded),
+            (restart_pending, ProcessCompletion::Running),
+            (
+                settled(
+                    TargetState::Stopped(StopReason::ManagerShutdown),
+                    ChildState::Exited(ExitOutcome::Failure),
+                    RestartDecision::None,
+                ),
+                ProcessCompletion::Failed,
+            ),
+            (
+                settled(
+                    TargetState::Stopped(StopReason::ManagerShutdown),
+                    ChildState::Exited(ExitOutcome::Success),
+                    RestartDecision::None,
+                ),
+                ProcessCompletion::Succeeded,
+            ),
+            (
+                settled(
+                    TargetState::Stopped(StopReason::User),
+                    ChildState::Terminated,
+                    RestartDecision::None,
+                ),
+                ProcessCompletion::Succeeded,
+            ),
+            (
+                settled(
+                    TargetState::Stopped(StopReason::User),
+                    ChildState::NeverSpawned,
+                    RestartDecision::None,
+                ),
+                ProcessCompletion::Cancelled,
+            ),
+            (
+                settled(
+                    TargetState::Stopped(StopReason::DependencyFailure),
+                    ChildState::NeverSpawned,
+                    RestartDecision::None,
+                ),
+                ProcessCompletion::DependencyFailed,
+            ),
+            (
+                settled(
+                    TargetState::Stopped(StopReason::LaunchFailure),
+                    ChildState::NeverSpawned,
+                    RestartDecision::None,
+                ),
+                ProcessCompletion::Failed,
+            ),
+            (ProcessStatus::not_started(), ProcessCompletion::Pending),
+            (
+                settled(
+                    TargetState::Running,
+                    ChildState::Exited(ExitOutcome::Failure),
+                    RestartDecision::Exhausted,
+                ),
+                ProcessCompletion::Failed,
+            ),
+        ];
+
+        for (status, expected) in cases {
+            assert!(status.is_valid(), "invalid table fixture: {status:?}");
+            assert_eq!(process_completion(Some(status)), expected, "{status:?}");
+        }
+    }
 
     // Keep the TempDir alive with the runtime and cache paths that use it.
     async fn build_test_tasks(
@@ -2433,12 +2733,12 @@ mod schedule_tests {
             let source_status = tasks.graph[tasks.task_index_by_name[&source_name]]
                 .read()
                 .await
-                .status
+                .status()
                 .clone();
             let downstream_status = tasks.graph[tasks.task_index_by_name[&downstream_name]]
                 .read()
                 .await
-                .status
+                .status()
                 .clone();
             let source_phase = tasks.process_runner().get_phase("source").await;
             let downstream_phase = tasks.process_runner().get_phase("downstream").await;
@@ -2458,7 +2758,7 @@ mod schedule_tests {
         let downstream_status = tasks.graph[tasks.task_index_by_name[&downstream_name]]
             .read()
             .await
-            .status
+            .status()
             .clone();
         let completion = tasks.get_completion_status().await;
         let downstream_phase = if case.dependency.task_type() == TaskType::Oneshot {
@@ -2488,7 +2788,7 @@ mod schedule_tests {
                 assert!(
                     matches!(
                         downstream_status,
-                        TaskStatus::Completed(TaskCompleted::Success(_, _))
+                        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
                     ),
                     "{}: expected downstream success, got {downstream_status:?}",
                     case_name
@@ -2498,7 +2798,7 @@ mod schedule_tests {
             assert!(
                 matches!(
                     downstream_status,
-                    TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                    TaskExecutionState::Finished(TaskCompleted::DependencyFailed)
                 ),
                 "{}: hard dependency failure did not propagate: {downstream_status:?}",
                 case_name
@@ -2521,8 +2821,9 @@ mod schedule_tests {
             assert_eq!(
                 tasks.process_runner().get_phase("downstream").await,
                 Some(ProcessPhase::Stopped),
-                "{}: downstream process was not cleaned up",
-                case_name
+                "{}: downstream process was not cleaned up; status={:?}",
+                case_name,
+                tasks.process_runner().job_state("downstream").await,
             );
         } else {
             let phase = tasks.process_runner().get_phase("source").await;
@@ -2707,13 +3008,13 @@ mod schedule_tests {
         let source_status = tasks.graph[tasks.task_index_by_name[source_name]]
             .read()
             .await
-            .status
+            .status()
             .clone();
         let downstream_status = tasks.graph
             [tasks.task_index_by_name[&format!("{PROCESS_TASK_PREFIX}downstream")]]
             .read()
             .await
-            .status
+            .status()
             .clone();
         tasks.process_runner().stop_all().await.unwrap();
 
@@ -2726,26 +3027,27 @@ mod schedule_tests {
         if case.exit.code() == 0 {
             assert!(matches!(
                 source_status,
-                TaskStatus::Completed(TaskCompleted::Success(_, _))
+                TaskExecutionState::Finished(TaskCompleted::Success(_, _))
             ));
         } else {
             assert!(matches!(
                 source_status,
-                TaskStatus::Completed(TaskCompleted::Failed(_, _))
+                TaskExecutionState::Finished(TaskCompleted::Failed(_, _))
             ));
         }
         if case.dependency.allows_dependent(case.exit) {
             assert_eq!(
                 tasks.process_runner().get_phase("downstream").await,
                 Some(ProcessPhase::Stopped),
-                "{}: dynamic downstream was not cleaned up",
-                case_name
+                "{}: dynamic downstream was not cleaned up; status={:?}",
+                case_name,
+                tasks.process_runner().job_state("downstream").await,
             );
         } else {
             assert!(
                 matches!(
                     downstream_status,
-                    TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                    TaskExecutionState::Finished(TaskCompleted::DependencyFailed)
                 ),
                 "{}: dynamic dependency failure did not propagate: {downstream_status:?}",
                 case_name
@@ -2919,12 +3221,12 @@ mod schedule_tests {
         let bridge_status = tasks.graph[tasks.task_index_by_name[bridge_name]]
             .read()
             .await
-            .status
+            .status()
             .clone();
         let downstream_status = tasks.graph[tasks.task_index_by_name[&downstream_name]]
             .read()
             .await
-            .status
+            .status()
             .clone();
         let source_phase = tasks.process_runner().get_phase("source").await;
         tasks.process_runner().stop_all().await.unwrap();
@@ -2939,7 +3241,7 @@ mod schedule_tests {
             assert!(
                 matches!(
                     bridge_status,
-                    TaskStatus::Completed(TaskCompleted::Success(_, _))
+                    TaskExecutionState::Finished(TaskCompleted::Success(_, _))
                 ),
                 "{}: bridge did not succeed: {bridge_status:?}",
                 case_name
@@ -2961,11 +3263,11 @@ mod schedule_tests {
         } else {
             assert!(matches!(
                 bridge_status,
-                TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                TaskExecutionState::Finished(TaskCompleted::DependencyFailed)
             ));
             assert!(matches!(
                 downstream_status,
-                TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                TaskExecutionState::Finished(TaskCompleted::DependencyFailed)
             ));
         }
     }
@@ -3194,20 +3496,33 @@ mod schedule_tests {
             .expect("cancelled heterogeneous run did not settle")
             .expect("heterogeneous run task panicked");
 
-        for name in [
-            format!("{PROCESS_TASK_PREFIX}source"),
-            "test:bridge".to_string(),
-            format!("{PROCESS_TASK_PREFIX}backend"),
+        for (name, completed_as_success) in [
+            (format!("{PROCESS_TASK_PREFIX}source"), true),
+            ("test:bridge".to_string(), false),
+            (format!("{PROCESS_TASK_PREFIX}backend"), false),
         ] {
             let status = tasks.graph[tasks.task_index_by_name[&name]]
                 .read()
                 .await
-                .status
+                .status()
                 .clone();
-            assert!(
-                matches!(status, TaskStatus::Completed(TaskCompleted::Cancelled(_))),
-                "{name} did not record cancellation: {status:?}"
-            );
+            if completed_as_success {
+                assert!(
+                    matches!(
+                        status,
+                        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
+                    ),
+                    "{name} launch outcome was rewritten by shutdown: {status:?}"
+                );
+            } else {
+                assert!(
+                    matches!(
+                        status,
+                        TaskExecutionState::Finished(TaskCompleted::Cancelled(_))
+                    ),
+                    "{name} did not record cancellation: {status:?}"
+                );
+            }
         }
         tasks.process_runner().stop_all().await.unwrap();
         for process in ["source", "backend"] {
@@ -3331,8 +3646,8 @@ mod schedule_tests {
             &tasks.graph[tasks.task_index_by_name[bridge_name]]
                 .read()
                 .await
-                .status,
-            TaskStatus::Completed(TaskCompleted::Success(_, _))
+                .status(),
+            TaskExecutionState::Finished(TaskCompleted::Success(_, _))
         ));
 
         tasks.process_runner().stop_all().await.unwrap();
@@ -3406,15 +3721,15 @@ mod schedule_tests {
             &tasks.graph[tasks.task_index_by_name[bridge_name]]
                 .read()
                 .await
-                .status,
-            TaskStatus::Completed(TaskCompleted::Failed(_, _))
+                .status(),
+            TaskExecutionState::Finished(TaskCompleted::Failed(_, _))
         ));
         assert!(matches!(
             &tasks.graph[tasks.task_index_by_name[&backend_name]]
                 .read()
                 .await
-                .status,
-            TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                .status(),
+            TaskExecutionState::Finished(TaskCompleted::DependencyFailed)
         ));
         assert_eq!(
             tasks.process_runner().get_phase("blocked-backend").await,
@@ -3450,8 +3765,8 @@ mod schedule_tests {
                 tokio::pin!(notified);
                 notified.as_mut().enable();
                 if matches!(
-                    tasks.graph[index].read().await.status,
-                    TaskStatus::Completed(_)
+                    tasks.graph[index].read().await.status(),
+                    TaskExecutionState::Finished(_)
                 ) {
                     return;
                 }
@@ -3471,7 +3786,12 @@ mod schedule_tests {
             VerbosityLevel::Normal,
             None,
         )));
-        dependency.write().await.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
+        dependency
+            .write()
+            .await
+            .set_status_for_test(TaskExecutionState::Finished(
+                TaskCompleted::DependencyFailed,
+            ));
         let deps = vec![(dependency, DependencyKind::Succeeded)];
         let shutdown = tokio_shutdown::Shutdown::new();
 
@@ -3490,7 +3810,12 @@ mod schedule_tests {
             VerbosityLevel::Normal,
             None,
         )));
-        dependency.write().await.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
+        dependency
+            .write()
+            .await
+            .set_status_for_test(TaskExecutionState::Finished(
+                TaskCompleted::DependencyFailed,
+            ));
         let deps = vec![(dependency, DependencyKind::Succeeded)];
         let shutdown = tokio_shutdown::Shutdown::new();
         shutdown.shutdown();
@@ -3697,7 +4022,10 @@ mod schedule_tests {
                 "{name} must be outside the cold schedule"
             );
             assert!(
-                matches!(tasks.graph[index].read().await.status, TaskStatus::Pending),
+                matches!(
+                    tasks.graph[index].read().await.status(),
+                    TaskExecutionState::NotScheduled
+                ),
                 "{name} must start unscheduled"
             );
         }
@@ -3708,9 +4036,12 @@ mod schedule_tests {
         for name in [prepare, setup] {
             wait_task_completed(&tasks, name).await;
             let index = tasks.task_index_by_name[name];
-            let status = tasks.graph[index].read().await.status.clone();
+            let status = tasks.graph[index].read().await.status().clone();
             assert!(
-                matches!(&status, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                matches!(
+                    &status,
+                    TaskExecutionState::Finished(TaskCompleted::Success(_, _))
+                ),
                 "{name} must run to completion before beta launches, got {status:?}"
             );
         }
@@ -3777,12 +4108,12 @@ mod schedule_tests {
         let failing_status = tasks.graph[tasks.task_index_by_name[failing]]
             .read()
             .await
-            .status
+            .status()
             .clone();
         assert!(
             matches!(
                 failing_status,
-                TaskStatus::Completed(TaskCompleted::Failed(_, _))
+                TaskExecutionState::Finished(TaskCompleted::Failed(_, _))
             ),
             "failing setup must retain its Failed graph result: {failing_status:?}"
         );
@@ -3792,12 +4123,12 @@ mod schedule_tests {
             let status = tasks.graph[tasks.task_index_by_name[&task_name]]
                 .read()
                 .await
-                .status
+                .status()
                 .clone();
             assert!(
                 matches!(
                     status,
-                    TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                    TaskExecutionState::Finished(TaskCompleted::DependencyFailed)
                 ),
                 "{name} must record DependencyFailed, got {status:?}"
             );
@@ -3884,10 +4215,13 @@ mod schedule_tests {
             let status = tasks.graph[tasks.task_index_by_name[&name]]
                 .read()
                 .await
-                .status
+                .status()
                 .clone();
             assert!(
-                matches!(status, TaskStatus::Completed(TaskCompleted::Cancelled(_))),
+                matches!(
+                    status,
+                    TaskExecutionState::Finished(TaskCompleted::Cancelled(_))
+                ),
                 "{name} must record Cancelled on shutdown, got {status:?}"
             );
         }
@@ -4044,12 +4378,22 @@ mod schedule_tests {
 
     #[tokio::test]
     async fn dependency_parked_judges_live_and_transitive() {
+        let ready_files = tempfile::tempdir().unwrap();
+        let ready = |name| ready_files.path().join(name);
+        let delta_ready = ready("delta");
+        let gamma_ready = ready("gamma");
+        let beta_ready = ready("beta");
+        for marker in [&delta_ready, &gamma_ready, &beta_ready] {
+            std::fs::write(marker, "ready").unwrap();
+        }
+        let mut delta = long_process_task("delta", vec![]);
+        delta.process = Some(no_restart_process_config(Some(&delta_ready)));
+        let mut gamma = long_process_task("gamma", vec!["delta@ready"]);
+        gamma.process = Some(no_restart_process_config(Some(&gamma_ready)));
+        let mut beta = long_process_task("beta", vec!["gamma@ready"]);
+        beta.process = Some(no_restart_process_config(Some(&beta_ready)));
         let (tasks, _tmp) = build_test_tasks(
-            vec![
-                long_process_task("delta", vec![]),
-                long_process_task("gamma", vec!["delta@started"]),
-                long_process_task("beta", vec!["gamma@started"]),
-            ],
+            vec![delta, gamma, beta],
             vec![
                 format!("{PROCESS_TASK_PREFIX}delta"),
                 format!("{PROCESS_TASK_PREFIX}gamma"),
@@ -4080,7 +4424,7 @@ mod schedule_tests {
         );
         assert!(
             tasks.dependency_parked("beta").await,
-            "beta must be parked: gamma is stopped"
+            "beta must be parked: gamma is not ready"
         );
         assert!(
             process_manager(&tasks).wait_settled().await,
@@ -4091,7 +4435,7 @@ mod schedule_tests {
         assert_eq!(outcome.scheduled, vec!["gamma".to_string()]);
         assert!(
             tasks.dependency_parked("gamma").await,
-            "gamma must be parked: delta is stopped"
+            "gamma must be parked: delta is not ready"
         );
         assert!(
             tasks.dependency_parked("beta").await,
@@ -4140,8 +4484,12 @@ mod schedule_tests {
         );
 
         let o_idx = tasks.task_index_by_name["devenv:tasks:migrate"];
-        tasks.graph[o_idx].write().await.status =
-            TaskStatus::Oneshot(OneshotStatus::Running(tokio::time::Instant::now()));
+        tasks.graph[o_idx]
+            .write()
+            .await
+            .set_status_for_test(TaskExecutionState::Running {
+                since: tokio::time::Instant::now(),
+            });
 
         assert!(
             !tasks.dependency_parked("p").await,

@@ -1,7 +1,7 @@
 use crate::config::{Config, RunMode};
 use crate::error::Error;
 use crate::tasks::Tasks;
-use crate::types::{Skipped, TaskCompleted, TaskStatus, VerbosityLevel};
+use crate::types::{Skipped, TaskCompleted, TaskExecutionState, VerbosityLevel};
 
 use pretty_assertions::assert_matches;
 use serde_json::json;
@@ -133,9 +133,9 @@ async fn test_basic_tasks() -> Result<(), Error> {
     assert_matches!(
         task_statuses,
         [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name3, TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
         ] if name1 == "myapp:task_1" && name2 == "myapp:task_3" && name3 == "myapp:task_4"
     );
     Ok(())
@@ -234,11 +234,15 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
 
     assert_eq!(tasks1.tasks_order.len(), 1);
 
-    let status = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
+    let status = tasks1.graph[tasks1.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("Task 1 status: {status:?}");
 
     match status {
-        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) => {
+        TaskExecutionState::Finished(TaskCompleted::Skipped(Skipped::Cached(_))) => {
             // Expected case
         }
         other => {
@@ -271,11 +275,15 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
 
     assert_eq!(tasks2.tasks_order.len(), 1);
 
-    let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    let status2 = tasks2.graph[tasks2.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("Task 2 status: {status2:?}");
 
     match status2 {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {
             // Expected case
         }
         other => {
@@ -332,8 +340,8 @@ async fn test_status_miss_not_rendered_as_failed() -> Result<(), Error> {
     drop(activity_guard);
 
     // A nonzero status is a cache miss, so the command must have actually run.
-    match &tasks.graph[tasks.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+    match &tasks.graph[tasks.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {}
         other => panic!("Expected Success status for status-miss task, got: {other:?}"),
     }
 
@@ -424,7 +432,11 @@ exit 0
     let outputs1 = tasks1.run(false).await;
 
     // Print the status and outputs for debugging
-    let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
+    let status1 = tasks1.graph[tasks1.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("First run status: {status1:?}");
     println!("First run outputs: {:?}", outputs1.0);
 
@@ -464,7 +476,11 @@ exit 0
     let outputs2 = tasks2.run(false).await;
 
     // Print the status and outputs for debugging
-    let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    let status2 = tasks2.graph[tasks2.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("Second run status: {status2:?}");
     println!("Second run outputs: {:?}", outputs2.0);
 
@@ -534,8 +550,8 @@ echo "Task executed"
         .await?;
     tasks1.run(false).await;
 
-    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {}
         other => panic!("Expected Success on first run, got: {other:?}"),
     }
 
@@ -557,8 +573,8 @@ echo "Task executed"
         .await?;
     tasks2.run(false).await;
 
-    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) => {}
+    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Skipped(Skipped::Cached(_))) => {}
         other => panic!("Expected Skipped (cached) without refresh, got: {other:?}"),
     }
 
@@ -581,8 +597,8 @@ echo "Task executed"
         .await?;
     tasks3.run(false).await;
 
-    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {}
         other => panic!("Expected Success with refresh_task_cache, got: {other:?}"),
     }
 
@@ -628,8 +644,8 @@ echo "Task executed"
         .await?;
     tasks1.run(false).await;
 
-    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {}
         other => panic!("Expected Success on first run, got: {other:?}"),
     }
 
@@ -651,8 +667,8 @@ echo "Task executed"
         .await?;
     tasks2.run(false).await;
 
-    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) => {}
+    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Skipped(Skipped::Cached(_))) => {}
         other => panic!("Expected Skipped (cached) without refresh, got: {other:?}"),
     }
 
@@ -675,8 +691,8 @@ echo "Task executed"
         .await?;
     tasks3.run(false).await;
 
-    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {}
         other => panic!("Expected Success with refresh_task_cache, got: {other:?}"),
     }
 
@@ -737,12 +753,16 @@ echo "Task executed successfully"
     let outputs = tasks.run(false).await;
 
     // Print status for debugging
-    let status = &tasks.graph[tasks.tasks_order[0]].read().await.status;
+    let status = tasks.graph[tasks.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("First run status: {status:?}");
 
     // Check task status - should be Success
-    match &tasks.graph[tasks.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {
+    match &tasks.graph[tasks.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {
             // This is the expected case - test passes
         }
         other => {
@@ -783,12 +803,16 @@ echo "Task executed successfully"
     let outputs2 = tasks2.run(false).await;
 
     // Print status for debugging
-    let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    let status2 = tasks2.graph[tasks2.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("Second run status: {status2:?}");
 
     // For the second run, expect it to be skipped
-    if let TaskStatus::Completed(TaskCompleted::Skipped(_)) =
-        &tasks2.graph[tasks2.tasks_order[0]].read().await.status
+    if let TaskExecutionState::Finished(TaskCompleted::Skipped(_)) =
+        &tasks2.graph[tasks2.tasks_order[0]].read().await.status()
     {
         // This is the expected case
     } else {
@@ -838,12 +862,16 @@ echo "Task executed successfully"
     let outputs3 = tasks3.run(false).await;
 
     // Print status for debugging
-    let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
+    let status3 = tasks3.graph[tasks3.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("Third run status: {status3:?}");
 
     // Check that the task was executed
-    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {
+    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {
             // This is the expected case
         }
         other => {
@@ -921,8 +949,8 @@ echo "Multiple files task executed successfully"
 
     // Check that task was executed
     assert_matches!(
-        tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_, _))
+        tasks.graph[tasks.tasks_order[0]].read().await.status(),
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
     );
 
     // Verify the output
@@ -1034,8 +1062,8 @@ echo "Multiple files task executed successfully"
 
     // Check that task was executed
     assert_matches!(
-        tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_, _))
+        tasks.graph[tasks.tasks_order[0]].read().await.status(),
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
     );
 
     // Modify only the first file this time
@@ -1074,8 +1102,8 @@ echo "Multiple files task executed successfully"
 
     // Check that task was executed
     assert_matches!(
-        tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_, _))
+        tasks.graph[tasks.tasks_order[0]].read().await.status(),
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
     );
 
     Ok(())
@@ -1138,7 +1166,11 @@ echo "Task executed successfully"
         let outputs1 = tasks1.run(false).await;
 
         // Print the status and outputs for debugging
-        let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
+        let status1 = tasks1.graph[tasks1.tasks_order[0]]
+            .read()
+            .await
+            .status()
+            .clone();
         println!("First run status: {status1:?}");
         println!("First run outputs: {:?}", outputs1.0);
 
@@ -1182,13 +1214,17 @@ echo "Task executed successfully"
         let outputs2 = tasks2.run(false).await;
 
         // Print the status and outputs for debugging
-        let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+        let status2 = tasks2.graph[tasks2.tasks_order[0]]
+            .read()
+            .await
+            .status()
+            .clone();
         println!("Second run status: {status2:?}");
         println!("Second run outputs: {:?}", outputs2.0);
 
         // Check task status for debugging - we're more relaxed here since CI can be flaky
-        if let TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) =
-            &tasks2.graph[tasks2.tasks_order[0]].read().await.status
+        if let TaskExecutionState::Finished(TaskCompleted::Skipped(Skipped::Cached(_))) =
+            &tasks2.graph[tasks2.tasks_order[0]].read().await.status()
         {
             println!("Task was correctly skipped on second run");
         } else {
@@ -1249,13 +1285,17 @@ echo "Task executed successfully"
         let outputs3 = tasks3.run(false).await;
 
         // Print the status and outputs for debugging
-        let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
+        let status3 = tasks3.graph[tasks3.tasks_order[0]]
+            .read()
+            .await
+            .status()
+            .clone();
         println!("Third run status: {status3:?}");
         println!("Third run outputs: {:?}", outputs3.0);
 
         // Check it was executed - should be Success because the file was modified
-        match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
-            TaskStatus::Completed(TaskCompleted::Success(_, _)) => {
+        match &tasks3.graph[tasks3.tasks_order[0]].read().await.status() {
+            TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {
                 println!("Task was correctly executed on third run");
             }
             other => {
@@ -1405,9 +1445,13 @@ echo "Task completed and modified the file"
     tasks2.run(false).await;
 
     // Check that the task was skipped
-    let status = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    let status = tasks2.graph[tasks2.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     match status {
-        TaskStatus::Completed(TaskCompleted::Skipped(_)) => {
+        TaskExecutionState::Finished(TaskCompleted::Skipped(_)) => {
             // Expected case - task was skipped because file wasn't modified
             println!("Task was correctly skipped on second run");
         }
@@ -1475,9 +1519,13 @@ exit 1
     tasks.run(false).await;
 
     // Check that the task failed
-    let status = &tasks.graph[tasks.tasks_order[0]].read().await.status;
+    let status = tasks.graph[tasks.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     match status {
-        TaskStatus::Completed(TaskCompleted::Failed(_, _)) => {
+        TaskExecutionState::Finished(TaskCompleted::Failed(_, _)) => {
             // Expected case - task should fail
         }
         other => {
@@ -1502,12 +1550,16 @@ exit 1
     tasks2.run(false).await;
 
     // Check that the task ran again and failed again (not cached)
-    let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    let status2 = tasks2.graph[tasks2.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     match status2 {
-        TaskStatus::Completed(TaskCompleted::Failed(_, _)) => {
+        TaskExecutionState::Finished(TaskCompleted::Failed(_, _)) => {
             // Expected case - task should fail again, not be cached
         }
-        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) => {
+        TaskExecutionState::Finished(TaskCompleted::Skipped(Skipped::Cached(_))) => {
             panic!("Failed task should NOT be cached on second run");
         }
         other => {
@@ -1564,8 +1616,15 @@ exit 1
         .await?;
     tasks1.run(false).await;
 
-    let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
-    assert_matches!(status1, TaskStatus::Completed(TaskCompleted::Failed(_, _)));
+    let status1 = tasks1.graph[tasks1.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
+    assert_matches!(
+        status1,
+        TaskExecutionState::Finished(TaskCompleted::Failed(_, _))
+    );
 
     // Create a succeeding script (simulating user fix)
     let success_script = create_script(
@@ -1597,10 +1656,14 @@ exit 0
     .await?;
     tasks2.run(false).await;
 
-    let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    let status2 = tasks2.graph[tasks2.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     assert_matches!(
         status2,
-        TaskStatus::Completed(TaskCompleted::Success(..)),
+        TaskExecutionState::Finished(TaskCompleted::Success(..)),
         "Task should succeed after fix"
     );
 
@@ -1611,10 +1674,14 @@ exit 0
         .await?;
     tasks3.run(false).await;
 
-    let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
+    let status3 = tasks3.graph[tasks3.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     assert_matches!(
         status3,
-        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))),
+        TaskExecutionState::Finished(TaskCompleted::Skipped(Skipped::Cached(_))),
         "Task should be cached after successful run"
     );
 
@@ -1654,7 +1721,7 @@ async fn test_nonexistent_script() -> Result<(), Error> {
         &task_statuses,
         [(
             task_1,
-            TaskStatus::Completed(TaskCompleted::Failed(
+            TaskExecutionState::Finished(TaskCompleted::Failed(
                 _,
                 crate::types::TaskFailure {
                     stdout: _,
@@ -1704,7 +1771,7 @@ async fn test_nonexistent_cwd() -> Result<(), Error> {
         &task_statuses,
         [(
             task_1,
-            TaskStatus::Completed(TaskCompleted::Failed(
+            TaskExecutionState::Finished(TaskCompleted::Failed(
                 _,
                 crate::types::TaskFailure {
                     stdout: _,
@@ -1758,7 +1825,7 @@ async fn test_cwd_is_file() -> Result<(), Error> {
         &task_statuses,
         [(
             task_1,
-            TaskStatus::Completed(TaskCompleted::Failed(
+            TaskExecutionState::Finished(TaskCompleted::Failed(
                 _,
                 crate::types::TaskFailure {
                     stdout: _,
@@ -1847,7 +1914,7 @@ async fn test_run_mode() -> Result<(), Error> {
         assert_matches!(
             &task_statuses[..],
             [
-                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
             ] if name2 == "myapp:task_2"
         );
     }
@@ -1867,8 +1934,8 @@ async fn test_run_mode() -> Result<(), Error> {
         assert_matches!(
             &task_statuses[..],
             [
-                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+                (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
             ] if name1 == "myapp:task_1" && name2 == "myapp:task_2"
         );
     }
@@ -1888,8 +1955,8 @@ async fn test_run_mode() -> Result<(), Error> {
         assert_matches!(
             &task_statuses[..],
             [
-                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+                (name3, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
             ] if name2 == "myapp:task_2" && name3 == "myapp:task_3"
         );
     }
@@ -1909,9 +1976,9 @@ async fn test_run_mode() -> Result<(), Error> {
         assert_matches!(
             &task_statuses[..],
             [
-                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+                (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+                (name3, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
             ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
         );
     }
@@ -1964,9 +2031,9 @@ async fn test_before_tasks() -> Result<(), Error> {
     assert_matches!(
         task_statuses,
         [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name3, TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
         ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
     );
     Ok(())
@@ -2017,9 +2084,9 @@ async fn test_after_tasks() -> Result<(), Error> {
     assert_matches!(
         task_statuses,
         [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name3, TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
         ] if name1 == "myapp:task_3" && name2 == "myapp:task_2" && name3 == "myapp:task_1"
     );
     Ok(())
@@ -2071,9 +2138,9 @@ async fn test_before_and_after_tasks() -> Result<(), Error> {
     assert_matches!(
         task_statuses,
         [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name3, TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
         ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
     );
     Ok(())
@@ -2125,9 +2192,9 @@ async fn test_transitive_dependencies() -> Result<(), Error> {
     assert_matches!(
         task_statuses,
         [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name3, TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
         ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
     );
     Ok(())
@@ -2179,9 +2246,9 @@ async fn test_non_root_before_and_after() -> Result<(), Error> {
     assert_matches!(
         task_statuses,
         [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name3, TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
         ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
     );
     Ok(())
@@ -2251,7 +2318,10 @@ async fn test_namespace_matching() -> Result<(), Error> {
     assert!(
         task_statuses.iter().all(|(name, status)| {
             name.starts_with("ci:")
-                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+                && matches!(
+                    status,
+                    TaskExecutionState::Finished(TaskCompleted::Success(_, _))
+                )
         }),
         "All ci namespace tasks should succeed"
     );
@@ -2297,7 +2367,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     assert_eq!(task_statuses2[0].0, "ci:lint:shellcheck");
     assert!(matches!(
         task_statuses2[0].1,
-        TaskStatus::Completed(TaskCompleted::Success(_, _))
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
     ));
 
     // Test ci:format namespace matching
@@ -2350,7 +2420,10 @@ async fn test_namespace_matching() -> Result<(), Error> {
     assert!(
         task_statuses3.iter().all(|(name, status)| {
             name.starts_with("ci:format:")
-                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+                && matches!(
+                    status,
+                    TaskExecutionState::Finished(TaskCompleted::Success(_, _))
+                )
         }),
         "All ci:format namespace tasks should succeed"
     );
@@ -2396,7 +2469,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     assert_eq!(task_statuses4[0].0, "ci:format:nixfmt");
     assert!(matches!(
         task_statuses4[0].1,
-        TaskStatus::Completed(TaskCompleted::Success(_, _))
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
     ));
 
     // Test namespace matching with trailing colon (should work same as without)
@@ -2449,7 +2522,10 @@ async fn test_namespace_matching() -> Result<(), Error> {
     assert!(
         task_statuses5.iter().all(|(name, status)| {
             name.starts_with("ci:format:")
-                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+                && matches!(
+                    status,
+                    TaskExecutionState::Finished(TaskCompleted::Success(_, _))
+                )
         }),
         "All ci:format: namespace tasks should succeed"
     );
@@ -2499,8 +2575,8 @@ async fn test_dependency_failure() -> Result<(), Error> {
     assert_matches!(
         *task_statuses_slice,
         [
-            (task_1, TaskStatus::Completed(TaskCompleted::Failed(_, _))),
-            (task_2, TaskStatus::Completed(TaskCompleted::DependencyFailed))
+            (task_1, TaskExecutionState::Finished(TaskCompleted::Failed(_, _))),
+            (task_2, TaskExecutionState::Finished(TaskCompleted::DependencyFailed))
         ] if task_1 == "myapp:task_1" && task_2 == "myapp:task_2"
     );
 
@@ -2561,7 +2637,7 @@ exit 0
     // The task should be skipped even though the status script printed to stdout/stderr
     assert_matches!(
         &task_statuses[..],
-        [(name, TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))))]
+        [(name, TaskExecutionState::Finished(TaskCompleted::Skipped(Skipped::Cached(_))))]
         if name == task_name,
         "Task should be skipped even when status script prints to stdout/stderr"
     );
@@ -2689,8 +2765,8 @@ fi
     assert_matches!(
         task_statuses,
         [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            (name1, TaskExecutionState::Finished(TaskCompleted::Success(_, _))),
+            (name2, TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
         ] if name1 == "myapp:task_1" && name2 == "myapp:task_2"
     );
 
@@ -2903,7 +2979,10 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
     assert!(
         task_statuses.iter().all(|(name, status)| {
             name.starts_with("test:")
-                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+                && matches!(
+                    status,
+                    TaskExecutionState::Finished(TaskCompleted::Success(_, _))
+                )
         }),
         "All test namespace tasks should succeed"
     );
@@ -2956,7 +3035,7 @@ async fn test_task_cancellation_during_execution() -> Result<(), Error> {
     assert_eq!(task_statuses.len(), 1);
     assert_matches!(
         task_statuses[0],
-        (ref name, TaskStatus::Completed(TaskCompleted::Cancelled(_)))
+        (ref name, TaskExecutionState::Finished(TaskCompleted::Cancelled(_)))
         if name == "test:long_task"
     );
 
@@ -3015,7 +3094,7 @@ async fn test_task_cancellation_waiting_for_dependencies() -> Result<(), Error> 
     for (name, status) in &task_statuses {
         assert_matches!(
             status,
-            TaskStatus::Completed(TaskCompleted::Cancelled(_)),
+            TaskExecutionState::Finished(TaskCompleted::Cancelled(_)),
             "Task {} should be cancelled",
             name
         );
@@ -3085,7 +3164,7 @@ async fn test_multiple_tasks_cancellation() -> Result<(), Error> {
     for (name, status) in &task_statuses {
         assert_matches!(
             status,
-            TaskStatus::Completed(TaskCompleted::Cancelled(_)),
+            TaskExecutionState::Finished(TaskCompleted::Cancelled(_)),
             "Task {} should be cancelled",
             name
         );
@@ -3144,7 +3223,7 @@ async fn test_wait_for_tasks_complete_without_cancellation() -> Result<(), Error
     for (name, status) in &task_statuses {
         assert_matches!(
             status,
-            TaskStatus::Completed(TaskCompleted::Success(_, _)),
+            TaskExecutionState::Finished(TaskCompleted::Success(_, _)),
             "Task {} should complete successfully",
             name
         );
@@ -3153,11 +3232,11 @@ async fn test_wait_for_tasks_complete_without_cancellation() -> Result<(), Error
     Ok(())
 }
 
-async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
+async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskExecutionState)> {
     let mut result = Vec::new();
     for index in &tasks.tasks_order {
         let task_state = tasks.graph[*index].read().await;
-        result.push((task_state.task.name.clone(), task_state.status.clone()));
+        result.push((task_state.task.name.clone(), task_state.status().clone()));
     }
     result
 }
@@ -3210,8 +3289,8 @@ echo "Command v1 executed"
         .await?;
     tasks1.run(false).await;
 
-    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+    match &tasks1.graph[tasks1.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {}
         other => panic!("Expected Success on first run, got: {other:?}"),
     }
 
@@ -3233,8 +3312,8 @@ echo "Command v1 executed"
         .await?;
     tasks2.run(false).await;
 
-    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Skipped(_)) => {}
+    match &tasks2.graph[tasks2.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Skipped(_)) => {}
         other => panic!("Expected Skipped on second run (same command), got: {other:?}"),
     }
 
@@ -3265,8 +3344,8 @@ echo "Command v2 executed"
         .await?;
     let outputs3 = tasks3.run(false).await;
 
-    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
+    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {}
         other => panic!("Expected Success on third run (command changed), got: {other:?}"),
     }
 
@@ -3336,8 +3415,8 @@ echo '{"version": 2}' > $DEVENV_TASK_OUTPUT_FILE
         .await?;
     tasks1.run(false).await;
     assert_matches!(
-        &tasks1.graph[tasks1.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_, _))
+        &tasks1.graph[tasks1.tasks_order[0]].read().await.status(),
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
     );
 
     let tasks2 = Tasks::builder(config(command1), VerbosityLevel::Verbose, Shutdown::new())
@@ -3346,8 +3425,8 @@ echo '{"version": 2}' > $DEVENV_TASK_OUTPUT_FILE
         .await?;
     tasks2.run(false).await;
     assert_matches!(
-        &tasks2.graph[tasks2.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Skipped(_))
+        &tasks2.graph[tasks2.tasks_order[0]].read().await.status(),
+        TaskExecutionState::Finished(TaskCompleted::Skipped(_))
     );
 
     let tasks3 = Tasks::builder(config(command2), VerbosityLevel::Verbose, Shutdown::new())
@@ -3356,8 +3435,8 @@ echo '{"version": 2}' > $DEVENV_TASK_OUTPUT_FILE
         .await?;
     let outputs3 = tasks3.run(false).await;
     assert_matches!(
-        &tasks3.graph[tasks3.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_, _))
+        &tasks3.graph[tasks3.tasks_order[0]].read().await.status(),
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _))
     );
 
     assert_eq!(
@@ -3573,7 +3652,7 @@ async fn test_complete_dependency_no_failure_propagation() -> Result<(), Error> 
         .map(|(_, status)| status);
     assert_matches!(
         failing_status,
-        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Failed(_, _)))
     );
 
     // The dependent task should have succeeded (not marked as DependencyFailed)
@@ -3583,7 +3662,7 @@ async fn test_complete_dependency_no_failure_propagation() -> Result<(), Error> 
         .map(|(_, status)| status);
     assert_matches!(
         dependent_status,
-        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
     );
 
     Ok(())
@@ -3635,7 +3714,7 @@ async fn test_ready_dependency_failure_propagation() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         failing_status,
-        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Failed(_, _)))
     );
 
     // The dependent task should be marked as DependencyFailed
@@ -3645,7 +3724,9 @@ async fn test_ready_dependency_failure_propagation() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         dependent_status,
-        Some(TaskStatus::Completed(TaskCompleted::DependencyFailed))
+        Some(TaskExecutionState::Finished(
+            TaskCompleted::DependencyFailed
+        ))
     );
 
     Ok(())
@@ -3701,7 +3782,7 @@ async fn test_mixed_dependencies() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         failing_status,
-        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Failed(_, _)))
     );
 
     // The success task should have succeeded
@@ -3711,7 +3792,7 @@ async fn test_mixed_dependencies() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         success_status,
-        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
     );
 
     // The dependent task should succeed because:
@@ -3723,7 +3804,7 @@ async fn test_mixed_dependencies() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         dependent_status,
-        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
     );
 
     Ok(())
@@ -3779,7 +3860,9 @@ async fn test_mixed_dependencies_hard_failure() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         dependent_status,
-        Some(TaskStatus::Completed(TaskCompleted::DependencyFailed))
+        Some(TaskExecutionState::Finished(
+            TaskCompleted::DependencyFailed
+        ))
     );
 
     Ok(())
@@ -3831,7 +3914,7 @@ async fn test_before_complete_dependency_no_failure_propagation() -> Result<(), 
         .map(|(_, status)| status);
     assert_matches!(
         failing_status,
-        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Failed(_, _)))
     );
 
     // The main task should have succeeded (not marked as DependencyFailed)
@@ -3842,7 +3925,7 @@ async fn test_before_complete_dependency_no_failure_propagation() -> Result<(), 
         .map(|(_, status)| status);
     assert_matches!(
         main_status,
-        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
     );
 
     Ok(())
@@ -3899,7 +3982,7 @@ async fn test_chained_soft_dependencies() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         a_status,
-        Some(TaskStatus::Completed(TaskCompleted::Failed(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Failed(_, _)))
     );
 
     // Task B should have succeeded (soft dependency on A)
@@ -3909,7 +3992,7 @@ async fn test_chained_soft_dependencies() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         b_status,
-        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
     );
 
     // Task C should have succeeded (soft dependency on B)
@@ -3919,7 +4002,7 @@ async fn test_chained_soft_dependencies() -> Result<(), Error> {
         .map(|(_, status)| status);
     assert_matches!(
         c_status,
-        Some(TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        Some(TaskExecutionState::Finished(TaskCompleted::Success(_, _)))
     );
 
     Ok(())
@@ -4305,7 +4388,7 @@ echo 'after invalid bytes'
     let task_statuses = task_statuses.as_slice();
     assert_matches!(
         task_statuses,
-        [(name, TaskStatus::Completed(TaskCompleted::Success(_, _)))]
+        [(name, TaskExecutionState::Finished(TaskCompleted::Success(_, _)))]
         if name == "myapp:task_1"
     );
 
@@ -4383,7 +4466,7 @@ async fn test_independent_oneshot_tasks_run_in_parallel() -> Result<(), Error> {
     for (name, status) in &task_statuses {
         assert_matches!(
             status,
-            TaskStatus::Completed(TaskCompleted::Success(_, _)),
+            TaskExecutionState::Finished(TaskCompleted::Success(_, _)),
             "Task {} should succeed",
             name
         );
@@ -4739,12 +4822,16 @@ echo "Dotfiles task executed successfully"
     let outputs = tasks.run(false).await;
 
     // Print status for debugging
-    let status = &tasks.graph[tasks.tasks_order[0]].read().await.status;
+    let status = tasks.graph[tasks.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("First run status: {status:?}");
 
     // Check task status - should be Success
-    match &tasks.graph[tasks.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Success(_, _)) => {
+    match &tasks.graph[tasks.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Success(_, _)) => {
             // This is the expected case - test passes
         }
         other => {
@@ -4784,12 +4871,16 @@ echo "Dotfiles task executed successfully"
     let outputs2 = tasks2.run(false).await;
 
     // Print status for debugging
-    let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
+    let status2 = tasks2.graph[tasks2.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("Second run status: {status2:?}");
 
     // For the second run, expect it to be skipped since dotfiles haven't changed
-    if let TaskStatus::Completed(TaskCompleted::Skipped(_)) =
-        &tasks2.graph[tasks2.tasks_order[0]].read().await.status
+    if let TaskExecutionState::Finished(TaskCompleted::Skipped(_)) =
+        &tasks2.graph[tasks2.tasks_order[0]].read().await.status()
     {
         // This is the expected case
     } else {
@@ -4838,12 +4929,16 @@ echo "Dotfiles task executed successfully"
     let outputs3 = tasks3.run(false).await;
 
     // Print status for debugging
-    let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
+    let status3 = tasks3.graph[tasks3.tasks_order[0]]
+        .read()
+        .await
+        .status()
+        .clone();
     println!("Third run status: {status3:?}");
 
     // Check that the task was not executed
-    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
-        TaskStatus::Completed(TaskCompleted::Skipped(_)) => {
+    match &tasks3.graph[tasks3.tasks_order[0]].read().await.status() {
+        TaskExecutionState::Finished(TaskCompleted::Skipped(_)) => {
             // This is the expected case
         }
         other => {

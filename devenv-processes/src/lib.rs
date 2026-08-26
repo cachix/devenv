@@ -50,6 +50,7 @@ pub mod manager_capabilities;
 pub mod pid;
 mod process_guardian;
 pub mod process_scope;
+pub mod process_state;
 pub mod pty;
 pub mod socket_activation;
 pub mod supervisor;
@@ -68,7 +69,7 @@ pub use force_exit_registry::{kill_process_scopes, track_process_scope, tracked_
 pub use manager::{
     ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, ManagerResidence,
     NativeManagerClient, OnIdle, PortInfo, ProcessInfo, ProcessPhase, ProcessResources,
-    ProcessRunner, ProcessState, StartOutcome,
+    ProcessRunner, ProcessState, RestartOutcome, StartOutcome,
 };
 pub use manager_capabilities::{
     DeclarationSource, ManagerAdapter, ManagerCapabilities, ManagerClient, ManagerDescriptor,
@@ -77,12 +78,16 @@ pub use manager_capabilities::{
 pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
 pub use process_guardian::maybe_run_process_guardian;
 pub use process_scope::{PreparedProcessScope, ProcessScope, StopPolicy, stop_process_scopes};
+pub use process_state::{
+    ChildState, ExitOutcome, ProcessStatus, ReadinessState, RestartDecision, StateTransition,
+    StopReason, TargetState,
+};
 pub use pty::PtyProcess;
 pub use socket_activation::{
     ActivatedSockets, ActivationSpec, ActivationSpecBuilder, SD_LISTEN_FDS_START,
     SocketActivationWrapper, activation_from_listen,
 };
-pub use supervisor_state::{ExitStatus, JobStatus, SupervisorPhase};
+pub use supervisor_state::JobStatus;
 
 /// Request to start an external manager in the background.
 #[derive(Debug, Clone, Default)]

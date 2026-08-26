@@ -31,6 +31,7 @@ use crate::config::ShutdownConfig;
 use crate::process_scope::{
     PreparedProcessScope, ProcessScope, StopPolicy, process_start_time, stop_process_scopes,
 };
+use devenv_event_sources::NotifySocket;
 
 const GUARDIAN_ARG: &str = "--devenv-session-guardian";
 const GUARDIAN_READY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -114,13 +115,19 @@ pub(crate) async fn restart_job(
     shutdown: &ShutdownConfig,
     manager_shutdown: &tokio_util::sync::CancellationToken,
     process_stop: &tokio_util::sync::CancellationToken,
-) -> bool {
+    notify_socket: Option<&NotifySocket>,
+) -> Result<bool> {
     stop_job(job, registry, shutdown).await;
     if manager_shutdown.is_cancelled() || process_stop.is_cancelled() {
-        return false;
+        return Ok(false);
+    }
+    if let Some(socket) = notify_socket {
+        socket
+            .drain()
+            .wrap_err("failed to reset notify socket between process runs")?;
     }
     job.start().await;
-    true
+    Ok(true)
 }
 
 /// Keeps one manager responsible for a process across restarts.

@@ -16,8 +16,8 @@ pub use native_manager::{NativeApiServer, NativeProcessManager};
 pub use privileges::SudoContext;
 pub use tasks::{Tasks, TasksBuilder, compute_display_hierarchy};
 pub use types::{
-    DependencyKind, Outputs, PROCESS_TASK_PREFIX, TaskCompleted, TaskOutputs, TaskStatus, TaskType,
-    TasksStatus, UiMode, determine_ui_mode, get_devenv_env, is_tty,
+    DependencyKind, Outputs, PROCESS_TASK_PREFIX, TaskCompleted, TaskExecutionState, TaskOutputs,
+    TaskType, TasksStatus, UiMode, determine_ui_mode, get_devenv_env, is_tty,
 };
 pub use ui::TasksUi;
 

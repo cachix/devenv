@@ -2336,6 +2336,7 @@ dependencies = [
  "async-priority-channel",
  "devenv-activity",
  "miette",
+ "nix 0.31.3",
  "notify",
  "reqwest 0.13.4",
  "tempfile",
@@ -2417,6 +2418,7 @@ dependencies = [
  "signal-hook 0.4.4",
  "signal-hook-tokio",
  "socket2 0.6.4",
+ "strum 0.28.0",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -5343,6 +5345,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases 0.2.1",
  "libc",
+ "memoffset 0.9.1",
 ]
 
 [[package]]

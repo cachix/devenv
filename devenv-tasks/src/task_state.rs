@@ -3,7 +3,7 @@ use crate::config::TaskConfig;
 use crate::executor::{ExecutionContext, OutputCallback};
 use crate::task_cache::{TaskCache, find_files_matching_patterns};
 use crate::types::{
-    Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel,
+    Output, Outputs, Skipped, TaskCompleted, TaskExecutionState, TaskFailure, VerbosityLevel,
     get_or_create_devenv_env_mut, process_name,
 };
 use base64::Engine;
@@ -52,15 +52,80 @@ impl OutputCallback for ActivityCallback<'_> {
 pub struct ProcessLaunchInfo {
     /// Whether the process has auto start off (start.enable = false).
     pub auto_start_off: bool,
-    /// Whether the process has a readiness probe that must be awaited.
-    pub requires_ready_wait: bool,
     /// The process manager name (stripped `devenv:processes:` prefix).
     pub process_name: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct TaskAttemptId(u64);
+
+impl TaskAttemptId {
+    fn next(&mut self) -> Option<Self> {
+        let next = self.0.checked_add(1)?;
+        self.0 = next;
+        Some(*self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TaskScheduleError {
+    AttemptActive,
+    AttemptIdExhausted,
+}
+
+#[derive(Debug)]
+pub(crate) enum TaskEvent {
+    Begin {
+        since: tokio::time::Instant,
+    },
+    Succeed {
+        duration: std::time::Duration,
+        output: Output,
+    },
+    Skip(Skipped),
+    Fail {
+        duration: std::time::Duration,
+        failure: TaskFailure,
+    },
+    DependenciesFailed,
+    Cancel,
+}
+
+impl From<TaskCompleted> for TaskEvent {
+    fn from(completed: TaskCompleted) -> Self {
+        match completed {
+            TaskCompleted::Success(duration, output) => Self::Succeed { duration, output },
+            TaskCompleted::Skipped(reason) => Self::Skip(reason),
+            TaskCompleted::Failed(duration, failure) => Self::Fail { duration, failure },
+            TaskCompleted::DependencyFailed => Self::DependenciesFailed,
+            TaskCompleted::Cancelled(_) => Self::Cancel,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use]
+pub(crate) enum TaskTransitionResult {
+    Applied,
+    Stale,
+    Recovered,
+    Rejected,
+}
+
+impl TaskTransitionResult {
+    pub fn applied(self) -> bool {
+        self == Self::Applied
+    }
+
+    pub fn changed(self) -> bool {
+        matches!(self, Self::Applied | Self::Recovered)
+    }
+}
+
 pub struct TaskState {
     pub task: TaskConfig,
-    pub status: TaskStatus,
+    attempt: TaskAttemptId,
+    status: TaskExecutionState,
     pub verbosity: VerbosityLevel,
     pub sudo_context: Option<SudoContext>,
 }
@@ -71,16 +136,116 @@ impl TaskState {
         verbosity: VerbosityLevel,
         sudo_context: Option<SudoContext>,
     ) -> Self {
-        // Process tasks stay `Pending` while their launch is in flight or
-        // their process is alive; the manager owns the live phase. The graph
-        // only records terminal launch outcomes as `Completed`.
-        let status = TaskStatus::Pending;
         Self {
             task,
-            status,
+            attempt: TaskAttemptId::default(),
+            status: TaskExecutionState::NotScheduled,
             verbosity,
             sudo_context,
         }
+    }
+
+    pub fn schedule(&mut self) -> Result<TaskAttemptId, TaskScheduleError> {
+        if matches!(
+            self.status,
+            TaskExecutionState::WaitingForDependencies | TaskExecutionState::Running { .. }
+        ) {
+            tracing::error!(
+                attempt = ?self.attempt,
+                execution = ?self.status,
+                "rejecting replacement of an active task attempt"
+            );
+            return Err(TaskScheduleError::AttemptActive);
+        }
+        let attempt = self
+            .attempt
+            .next()
+            .ok_or(TaskScheduleError::AttemptIdExhausted)?;
+        self.status = TaskExecutionState::WaitingForDependencies;
+        Ok(attempt)
+    }
+
+    pub fn status(&self) -> &TaskExecutionState {
+        &self.status
+    }
+
+    pub(crate) fn current_attempt(&self) -> TaskAttemptId {
+        self.attempt
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_status_for_test(&mut self, status: TaskExecutionState) {
+        self.status = status;
+    }
+
+    pub fn is_current_attempt(&self, attempt: TaskAttemptId) -> bool {
+        self.attempt == attempt
+    }
+
+    pub fn apply(&mut self, attempt: TaskAttemptId, event: TaskEvent) -> TaskTransitionResult {
+        if !self.is_current_attempt(attempt) {
+            tracing::trace!(?attempt, current = ?self.attempt, ?event, "ignoring stale task event");
+            return TaskTransitionResult::Stale;
+        }
+
+        let next = match (&self.status, event) {
+            (TaskExecutionState::WaitingForDependencies, TaskEvent::Begin { since }) => {
+                TaskExecutionState::Running { since }
+            }
+            (TaskExecutionState::WaitingForDependencies, TaskEvent::Skip(reason)) => {
+                TaskExecutionState::Finished(TaskCompleted::Skipped(reason))
+            }
+            (TaskExecutionState::WaitingForDependencies, TaskEvent::Fail { duration, failure }) => {
+                TaskExecutionState::Finished(TaskCompleted::Failed(duration, failure))
+            }
+            (TaskExecutionState::WaitingForDependencies, TaskEvent::DependenciesFailed) => {
+                TaskExecutionState::Finished(TaskCompleted::DependencyFailed)
+            }
+            (TaskExecutionState::WaitingForDependencies, TaskEvent::Cancel) => {
+                TaskExecutionState::Finished(TaskCompleted::Cancelled(None))
+            }
+            (TaskExecutionState::Running { .. }, TaskEvent::Succeed { duration, output }) => {
+                TaskExecutionState::Finished(TaskCompleted::Success(duration, output))
+            }
+            (TaskExecutionState::Running { .. }, TaskEvent::Skip(reason)) => {
+                // Cache/status checks currently run inside the one-shot worker,
+                // after Begin. The terminal meaning is still a skipped attempt.
+                TaskExecutionState::Finished(TaskCompleted::Skipped(reason))
+            }
+            (TaskExecutionState::Running { .. }, TaskEvent::Fail { duration, failure }) => {
+                TaskExecutionState::Finished(TaskCompleted::Failed(duration, failure))
+            }
+            (TaskExecutionState::Running { since }, TaskEvent::Cancel) => {
+                TaskExecutionState::Finished(TaskCompleted::Cancelled(Some(since.elapsed())))
+            }
+            (current, event) => {
+                let error = format!(
+                    "invalid same-attempt task event for attempt {attempt:?}: {current:?} + {event:?}"
+                );
+                tracing::error!(?attempt, ?current, ?event, "recovering invalid task event");
+                if matches!(
+                    current,
+                    TaskExecutionState::WaitingForDependencies | TaskExecutionState::Running { .. }
+                ) {
+                    let duration = match current {
+                        TaskExecutionState::Running { since } => since.elapsed(),
+                        _ => std::time::Duration::ZERO,
+                    };
+                    self.status = TaskExecutionState::Finished(TaskCompleted::Failed(
+                        duration,
+                        TaskFailure {
+                            stdout: Vec::new(),
+                            stderr: Vec::new(),
+                            error,
+                        },
+                    ));
+                    return TaskTransitionResult::Recovered;
+                }
+                return TaskTransitionResult::Rejected;
+            }
+        };
+        self.status = next;
+        TaskTransitionResult::Applied
     }
 
     /// Validate that the working directory exists and is a directory.
@@ -419,7 +584,6 @@ impl TaskState {
     ) -> Result<ProcessLaunchInfo> {
         tracing::info!("Launching process task: {}", self.task.name);
 
-        let requires_ready_wait = config.has_readiness_probe();
         let process_name = config.name.clone();
 
         // Launch the pre-registered waiting process.
@@ -432,7 +596,6 @@ impl TaskState {
 
         Ok(ProcessLaunchInfo {
             auto_start_off,
-            requires_ready_wait,
             process_name,
         })
     }
@@ -671,6 +834,221 @@ mod tests {
     use base64::Engine;
     use proptest::prelude::*;
     use std::time::Instant;
+
+    #[test]
+    fn stale_attempt_cannot_complete_a_new_attempt() {
+        let mut state = TaskState::new(TaskConfig::default(), VerbosityLevel::Normal, None);
+        let first = state.schedule().unwrap();
+        assert_eq!(
+            state.apply(
+                first,
+                TaskEvent::Begin {
+                    since: tokio::time::Instant::now(),
+                },
+            ),
+            TaskTransitionResult::Applied
+        );
+        assert_eq!(
+            state.apply(
+                first,
+                TaskEvent::Succeed {
+                    duration: std::time::Duration::ZERO,
+                    output: Output(None),
+                },
+            ),
+            TaskTransitionResult::Applied
+        );
+
+        let second = state.schedule().unwrap();
+        assert_ne!(first, second);
+        assert_eq!(
+            state.apply(first, TaskEvent::DependenciesFailed),
+            TaskTransitionResult::Stale
+        );
+        assert!(matches!(
+            state.status,
+            TaskExecutionState::WaitingForDependencies
+        ));
+
+        assert_eq!(
+            state.apply(second, TaskEvent::DependenciesFailed),
+            TaskTransitionResult::Applied
+        );
+    }
+
+    #[test]
+    fn current_attempt_recovers_from_invalid_event() {
+        let mut state = TaskState::new(TaskConfig::default(), VerbosityLevel::Normal, None);
+        let attempt = state.schedule().unwrap();
+
+        assert_eq!(
+            state.apply(
+                attempt,
+                TaskEvent::Succeed {
+                    duration: std::time::Duration::ZERO,
+                    output: Output(None),
+                },
+            ),
+            TaskTransitionResult::Recovered
+        );
+        assert!(matches!(
+            state.status,
+            TaskExecutionState::Finished(TaskCompleted::Failed(_, _))
+        ));
+    }
+
+    fn reducer_event(index: usize) -> Option<TaskEvent> {
+        Some(match index {
+            0 => TaskEvent::Begin {
+                since: tokio::time::Instant::now(),
+            },
+            1 => TaskEvent::Succeed {
+                duration: std::time::Duration::ZERO,
+                output: Output(None),
+            },
+            2 => TaskEvent::Skip(Skipped::NoCommand),
+            3 => TaskEvent::Fail {
+                duration: std::time::Duration::ZERO,
+                failure: TaskFailure {
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    error: "test failure".to_string(),
+                },
+            },
+            4 => TaskEvent::DependenciesFailed,
+            5 => TaskEvent::Cancel,
+            _ => return None,
+        })
+    }
+
+    #[test]
+    fn task_reducer_is_total_and_recovers_invalid_current_events() {
+        // Rows: NotScheduled, WaitingForDependencies, Running, Finished.
+        // Columns: Begin, Succeed, Skip, Fail, DependenciesFailed, Cancel.
+        let expected = [
+            [false, false, false, false, false, false],
+            [true, false, true, true, true, true],
+            [false, true, true, true, false, true],
+            [false, false, false, false, false, false],
+        ];
+
+        for (state_index, expected_row) in expected.into_iter().enumerate() {
+            for (event_index, should_apply) in expected_row.into_iter().enumerate() {
+                let mut state = TaskState::new(TaskConfig::default(), VerbosityLevel::Normal, None);
+                let attempt = match state_index {
+                    0 => state.attempt,
+                    1 => state.schedule().unwrap(),
+                    2 => {
+                        let attempt = state.schedule().unwrap();
+                        assert!(
+                            state
+                                .apply(
+                                    attempt,
+                                    TaskEvent::Begin {
+                                        since: tokio::time::Instant::now(),
+                                    },
+                                )
+                                .applied()
+                        );
+                        attempt
+                    }
+                    3 => {
+                        let attempt = state.schedule().unwrap();
+                        assert!(
+                            state
+                                .apply(attempt, TaskEvent::DependenciesFailed)
+                                .applied()
+                        );
+                        attempt
+                    }
+                    _ => return,
+                };
+
+                let Some(event) = reducer_event(event_index) else {
+                    return;
+                };
+                let result = state.apply(attempt, event);
+                assert_eq!(
+                    result.applied(),
+                    should_apply,
+                    "state row {state_index}, event column {event_index}"
+                );
+                if !should_apply && matches!(state_index, 1 | 2) {
+                    assert!(matches!(
+                        state.status,
+                        TaskExecutionState::Finished(TaskCompleted::Failed(_, _))
+                    ));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn active_attempt_cannot_be_overwritten() {
+        let mut state = TaskState::new(TaskConfig::default(), VerbosityLevel::Normal, None);
+        let attempt = state.schedule().unwrap();
+        assert_eq!(state.schedule(), Err(TaskScheduleError::AttemptActive));
+        assert_eq!(state.attempt, attempt);
+        assert!(matches!(
+            state.status,
+            TaskExecutionState::WaitingForDependencies
+        ));
+    }
+
+    #[test]
+    fn attempt_id_exhaustion_is_reported_without_mutation() {
+        let mut state = TaskState::new(TaskConfig::default(), VerbosityLevel::Normal, None);
+        state.attempt = TaskAttemptId(u64::MAX);
+        state.status = TaskExecutionState::Finished(TaskCompleted::DependencyFailed);
+
+        assert_eq!(state.schedule(), Err(TaskScheduleError::AttemptIdExhausted));
+        assert_eq!(state.attempt, TaskAttemptId(u64::MAX));
+        assert!(matches!(
+            state.status,
+            TaskExecutionState::Finished(TaskCompleted::DependencyFailed)
+        ));
+    }
+
+    proptest! {
+        #[test]
+        fn arbitrary_task_event_sequences_preserve_state_invariants(
+            operations in prop::collection::vec(0u8..16, 0..128)
+        ) {
+            let mut state = TaskState::new(
+                TaskConfig::default(),
+                VerbosityLevel::Normal,
+                None,
+            );
+
+            for operation in operations {
+                if operation == 0 {
+                    let _ = state.schedule();
+                } else {
+                    let current = state.attempt;
+                    let event_attempt = if operation & 1 == 0 {
+                        current
+                    } else {
+                        TaskAttemptId(current.0.saturating_sub(1))
+                    };
+                    let event_index = usize::from(operation % 6);
+                    if let Some(event) = reducer_event(event_index) {
+                        let _ = state.apply(event_attempt, event);
+                    }
+                }
+
+                prop_assert_eq!(
+                    matches!(state.status, TaskExecutionState::NotScheduled),
+                    state.attempt == TaskAttemptId::default(),
+                );
+                if matches!(
+                    state.status,
+                    TaskExecutionState::WaitingForDependencies | TaskExecutionState::Running { .. }
+                ) {
+                    prop_assert_ne!(state.attempt, TaskAttemptId::default());
+                }
+            }
+        }
+    }
 
     fn encode(s: &str) -> String {
         B64.encode(s)

@@ -8126,6 +8126,11 @@ rec {
             features = [ "fancy" ];
           }
           {
+            name = "nix";
+            packageId = "nix 0.31.3";
+            features = [ "fs" "poll" "process" "resource" "signal" "term" "socket" ];
+          }
+          {
             name = "notify";
             packageId = "notify";
             optional = true;
@@ -8464,6 +8469,11 @@ rec {
           {
             name = "sd-notify";
             packageId = "sd-notify";
+          }
+          {
+            name = "strum";
+            packageId = "strum 0.28.0";
+            features = [ "derive" ];
           }
         ];
         features = {
@@ -17898,6 +17908,11 @@ rec {
             packageId = "libc";
             features = [ "extra_traits" ];
           }
+          {
+            name = "memoffset";
+            packageId = "memoffset 0.9.1";
+            optional = true;
+          }
         ];
         buildDependencies = [
           {
@@ -17922,7 +17937,7 @@ rec {
           "user" = [ "feature" ];
           "zerocopy" = [ "fs" "uio" ];
         };
-        resolvedDefaultFeatures = [ "default" "feature" "fs" "poll" "process" "resource" "signal" "term" "user" ];
+        resolvedDefaultFeatures = [ "default" "feature" "fs" "memoffset" "poll" "process" "resource" "signal" "socket" "term" "user" ];
       };
       "nix-bindings-bindgen-raw" = rec {
         crateName = "nix-bindings-bindgen-raw";

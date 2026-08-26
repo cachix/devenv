@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use devenv_activity::{ActivityRef, ProcessStatus};
+use devenv_activity::ActivityRef;
 use devenv_event_sources::{
     ExecProbe, FileWatcher, FileWatcherConfig, HttpGetProbe, NotifyMessage, NotifySocket, TcpProbe,
 };
@@ -13,16 +13,16 @@ use futures::future::Either;
 use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use watchexec_supervisor::ProcessEnd;
 use watchexec_supervisor::job::{CommandState, Job};
 
 use crate::config::{ListenKind, ProcessConfig, SupervisionMode};
 use crate::manager::ProcessResources;
 use crate::process_guardian::ProcessScopeRegistry;
-use crate::supervisor_state::{
-    Action, Event, ExitStatus, JobStatus, SupervisorPhase, SupervisorState,
-};
+use crate::process_state::{DeadlineId, ListenerId, RunId, WatcherId};
+use crate::supervisor_state::{Action, Event, ExitOutcome, JobStatus, SupervisorState};
+use crate::{ChildState, ReadinessState};
 
 /// Lifecycle requests serialized with automatic policy in the supervisor loop.
 pub enum SupervisorCommand {
@@ -90,6 +90,61 @@ struct ProbeSet {
     tcp: Option<TcpProbe>,
     exec: Option<ExecProbe>,
     http: Option<HttpGetProbe>,
+}
+
+struct StampedNotifications {
+    run: RunId,
+    listener: ListenerId,
+    messages: Vec<NotifyMessage>,
+}
+
+struct NotifyReceiver {
+    cancel: CancellationToken,
+    task: JoinHandle<()>,
+}
+
+impl NotifyReceiver {
+    async fn stop(self) {
+        self.cancel.cancel();
+        let _ = self.task.await;
+    }
+}
+
+fn spawn_notify_receiver(
+    socket: Option<Arc<NotifySocket>>,
+    run: RunId,
+    listener: ListenerId,
+    tx: mpsc::Sender<StampedNotifications>,
+) -> Option<NotifyReceiver> {
+    let socket = socket?;
+    let cancel = CancellationToken::new();
+    let task_cancel = cancel.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            let messages = tokio::select! {
+                _ = task_cancel.cancelled() => break,
+                result = socket.recv() => match result {
+                    Ok(messages) => messages,
+                    Err(error) => {
+                        warn!(%error, "notify socket receive failed");
+                        break;
+                    }
+                },
+            };
+            if tx
+                .send(StampedNotifications {
+                    run,
+                    listener,
+                    messages,
+                })
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+    Some(NotifyReceiver { cancel, task })
 }
 
 impl ProbeSet {
@@ -236,11 +291,26 @@ enum SupervisorEvent {
     Shutdown,
     StopRequested,
     Command(SupervisorCommand),
-    ProbeSucceeded(ProbeKind),
-    FileChanged { drained: usize },
-    Notifications(Vec<NotifyMessage>),
-    Deadline,
-    ProcessExit,
+    ProbeSucceeded {
+        run: RunId,
+        kind: ProbeKind,
+    },
+    FileChanged {
+        watcher: WatcherId,
+        drained: usize,
+    },
+    Notifications {
+        run: RunId,
+        listener: ListenerId,
+        messages: Vec<NotifyMessage>,
+    },
+    Deadline {
+        run: RunId,
+        deadline: DeadlineId,
+    },
+    ProcessExit {
+        run: RunId,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -255,12 +325,20 @@ struct SupervisorRuntime {
     job: Arc<Job>,
     scopes: Arc<ProcessScopeRegistry>,
     activity: ActivityRef,
+    notify_socket: Option<Arc<NotifySocket>>,
     status_tx: watch::Sender<JobStatus>,
     shutdown: CancellationToken,
     stop_requested: CancellationToken,
     active_process: ActiveProcessGuard,
     state: SupervisorState,
     probes: ProbeSet,
+    run: RunId,
+    deadline: DeadlineId,
+    watcher: WatcherId,
+    listener: ListenerId,
+    notification_tx: mpsc::Sender<StampedNotifications>,
+    notification_rx: mpsc::Receiver<StampedNotifications>,
+    notify_receiver: Option<NotifyReceiver>,
 }
 
 impl SupervisorRuntime {
@@ -273,23 +351,76 @@ impl SupervisorRuntime {
     }
 
     fn monitors_exit(&self) -> bool {
-        self.state.phase() != SupervisorPhase::Exited
+        self.state.status().child == ChildState::Running
     }
 
     fn refresh_deadline(
-        &self,
+        &mut self,
         current_deadline: &mut Option<Instant>,
         mut deadline_fut: Pin<&mut Either<tokio::time::Sleep, std::future::Pending<()>>>,
     ) {
         let new_deadline = self.state.next_deadline();
         if new_deadline != *current_deadline {
+            if self.deadline.next().is_none() {
+                error!(
+                    process = self.name(),
+                    "deadline generation exhausted; stopping supervisor"
+                );
+                self.stop_requested.cancel();
+                return;
+            }
             *current_deadline = new_deadline;
             deadline_fut.set(make_deadline_future(new_deadline));
         }
     }
 
+    fn advance_run(&mut self) -> bool {
+        let (Some(run), Some(listener), Some(deadline)) = (
+            self.run.successor(),
+            self.listener.successor(),
+            self.deadline.successor(),
+        ) else {
+            error!(
+                process = self.name(),
+                "process observation generation exhausted; stopping supervisor"
+            );
+            self.stop_requested.cancel();
+            return false;
+        };
+        self.run = run;
+        self.listener = listener;
+        self.deadline = deadline;
+        true
+    }
+
+    fn current_run(&self, observed: RunId, source: &'static str) -> bool {
+        if observed == self.run {
+            true
+        } else {
+            trace!(
+                process = self.name(),
+                ?observed,
+                current = ?self.run,
+                source,
+                "ignoring stale process observation"
+            );
+            false
+        }
+    }
+
     fn publish_status(&self) {
-        let _ = self.status_tx.send(self.state.status());
+        let next = self.state.status();
+        if !next.is_valid() {
+            error!(
+                process = self.name(),
+                current = ?*self.status_tx.borrow(),
+                rejected = ?next,
+                "rejecting invalid supervisor status publication"
+            );
+            return;
+        }
+        let _ = self.status_tx.send(next);
+        self.activity.set_status(next.activity_status());
     }
 
     fn give_up(&self, reason: &'static str) {
@@ -299,15 +430,64 @@ impl SupervisorRuntime {
         self.publish_status();
     }
 
-    async fn restart_job(&self) -> bool {
-        crate::process_guardian::restart_job(
-            &self.job,
-            &self.scopes,
-            &self.config.shutdown,
-            &self.shutdown,
-            &self.stop_requested,
-        )
-        .await
+    fn watches_for_changes(&self) -> bool {
+        self.config.supervisor == SupervisionMode::Native && !self.config.watch.paths.is_empty()
+    }
+
+    /// Exhaustion is terminal for the current automatic-restart attempt, but
+    /// a current file watcher may revive it. A live child first publishes
+    /// Stopping and is reaped; only the settled state publishes GaveUp.
+    async fn settle_give_up(&mut self, reason: &'static str) -> Continuation {
+        self.give_up(reason);
+        if self.state.status().child == ChildState::Running {
+            crate::process_guardian::stop_job(&self.job, &self.scopes, &self.config.shutdown).await;
+            self.state.on_termination_complete();
+            self.publish_status();
+        }
+        self.active_process.settle();
+
+        if self.watches_for_changes() {
+            debug!(
+                "Process {} parked after exhaustion; watching {} path(s) for changes",
+                self.name(),
+                self.config.watch.paths.len()
+            );
+            Continuation::Continue
+        } else {
+            Continuation::Exit
+        }
+    }
+
+    async fn restart_job(&mut self) -> bool {
+        crate::process_guardian::stop_job(&self.job, &self.scopes, &self.config.shutdown).await;
+        if let Some(receiver) = self.notify_receiver.take() {
+            receiver.stop().await;
+        }
+        if self.shutdown.is_cancelled() || self.stop_requested.is_cancelled() {
+            return false;
+        }
+        if let Some(socket) = &self.notify_socket
+            && let Err(error) = socket.drain()
+        {
+            warn!(process = self.name(), %error, "failed to reset notify socket");
+            self.activity
+                .error(format!("Failed to reset notify socket: {error}"));
+            return false;
+        }
+
+        if !self.advance_run() {
+            self.activity
+                .error("Process observation generation exhausted");
+            return false;
+        }
+        self.notify_receiver = spawn_notify_receiver(
+            self.notify_socket.clone(),
+            self.run,
+            self.listener,
+            self.notification_tx.clone(),
+        );
+        self.job.start().await;
+        true
     }
 
     async fn handle_event(&mut self, event: SupervisorEvent) -> Continuation {
@@ -318,12 +498,29 @@ impl SupervisorRuntime {
             }
             SupervisorEvent::StopRequested => self.handle_stop_requested(),
             SupervisorEvent::Command(command) => self.handle_command(command).await,
-            SupervisorEvent::ProbeSucceeded(kind) => {
+            SupervisorEvent::ProbeSucceeded { run, kind } => {
+                if !self.current_run(run, "probe") {
+                    return Continuation::Continue;
+                }
                 self.handle_probe_success(kind);
                 Continuation::Continue
             }
-            SupervisorEvent::FileChanged { drained } => self.handle_file_change(drained).await,
-            SupervisorEvent::Notifications(messages) => {
+            SupervisorEvent::FileChanged { watcher, drained } => {
+                if watcher != self.watcher {
+                    trace!(process = self.name(), ?watcher, current = ?self.watcher, "ignoring stale file observation");
+                    return Continuation::Continue;
+                }
+                self.handle_file_change(drained).await
+            }
+            SupervisorEvent::Notifications {
+                run,
+                listener,
+                messages,
+            } => {
+                if !self.current_run(run, "notify") || listener != self.listener {
+                    trace!(process = self.name(), ?listener, current = ?self.listener, "ignoring stale notify listener");
+                    return Continuation::Continue;
+                }
                 for message in messages {
                     if self.handle_notification(message).await == Continuation::Exit {
                         return Continuation::Exit;
@@ -331,8 +528,19 @@ impl SupervisorRuntime {
                 }
                 Continuation::Continue
             }
-            SupervisorEvent::Deadline => self.handle_deadline().await,
-            SupervisorEvent::ProcessExit => self.handle_exit().await,
+            SupervisorEvent::Deadline { run, deadline } => {
+                if !self.current_run(run, "deadline") || deadline != self.deadline {
+                    trace!(process = self.name(), ?deadline, current = ?self.deadline, "ignoring stale deadline");
+                    return Continuation::Continue;
+                }
+                self.handle_deadline().await
+            }
+            SupervisorEvent::ProcessExit { run } => {
+                if !self.current_run(run, "exit") {
+                    return Continuation::Continue;
+                }
+                self.handle_exit().await
+            }
         }
     }
 
@@ -383,7 +591,6 @@ impl SupervisorRuntime {
         };
         self.activity
             .log(format!("{probe_name} probe succeeded - process ready"));
-        self.activity.set_status(ProcessStatus::Ready);
         let _ = self.state.on_event(Event::Ready, Instant::now());
         self.publish_status();
         self.probes.complete(kind);
@@ -415,8 +622,7 @@ impl SupervisorRuntime {
                 self.probes.respawn();
             }
             Action::GiveUp { reason } => {
-                self.give_up(reason);
-                return Continuation::Exit;
+                return self.settle_give_up(reason).await;
             }
             Action::None => {}
         }
@@ -429,7 +635,6 @@ impl SupervisorRuntime {
             NotifyMessage::Ready => {
                 info!("Process {} signaled ready", self.name());
                 self.activity.log("Process signaled ready");
-                self.activity.set_status(ProcessStatus::Ready);
                 let _ = self.state.on_event(Event::Ready, Instant::now());
                 self.publish_status();
             }
@@ -461,8 +666,7 @@ impl SupervisorRuntime {
                         self.probes.respawn_tcp();
                     }
                     Action::GiveUp { reason } => {
-                        self.give_up(reason);
-                        return Continuation::Exit;
+                        return self.settle_give_up(reason).await;
                     }
                     Action::None => {}
                 }
@@ -500,7 +704,7 @@ impl SupervisorRuntime {
         }
 
         let now = Instant::now();
-        let is_startup = self.state.phase() == SupervisorPhase::Starting;
+        let is_startup = self.state.status().readiness == ReadinessState::Pending;
         if is_startup {
             warn!("Startup timeout for process {}", self.name());
             self.activity
@@ -530,8 +734,7 @@ impl SupervisorRuntime {
                 self.probes.respawn();
             }
             Action::GiveUp { reason } => {
-                self.give_up(reason);
-                return Continuation::Exit;
+                return self.settle_give_up(reason).await;
             }
             Action::None => {}
         }
@@ -555,9 +758,9 @@ impl SupervisorRuntime {
             .run_async(move |ctx| {
                 let status = if let CommandState::Finished { status, .. } = ctx.current {
                     Some(if matches!(status, ProcessEnd::Success) {
-                        ExitStatus::Success
+                        ExitOutcome::Success
                     } else {
-                        ExitStatus::Failure
+                        ExitOutcome::Failure
                     })
                 } else {
                     None
@@ -593,7 +796,9 @@ impl SupervisorRuntime {
             Action::Restart => {
                 self.activity
                     .log(format!("Process exited ({exit_status:?}), restarting"));
-                self.job.start().await;
+                if !self.restart_job().await {
+                    return Continuation::Exit;
+                }
                 self.state.on_restart_complete(Instant::now());
                 let count = self.state.restart_count();
                 info!("Restarted process {} (attempt {})", self.name(), count);
@@ -601,8 +806,7 @@ impl SupervisorRuntime {
                 self.probes.respawn();
             }
             Action::GiveUp { reason } => {
-                self.give_up(reason);
-                return Continuation::Exit;
+                return self.settle_give_up(reason).await;
             }
             Action::None => {
                 self.active_process.settle();
@@ -625,21 +829,22 @@ impl SupervisorRuntime {
     }
 
     async fn finish(&mut self) {
-        // Shutdown uses the manager's Stopping/Stopped activity transition.
-        if !self.shutdown.is_cancelled()
-            && matches!(
-                self.state.phase(),
-                SupervisorPhase::Exited | SupervisorPhase::GaveUp
-            )
-        {
-            self.activity.set_status(match self.state.phase() {
-                SupervisorPhase::Exited => ProcessStatus::Exited,
-                SupervisorPhase::GaveUp => ProcessStatus::GaveUp,
-                _ => unreachable!("terminal phase checked above"),
-            });
+        if let Some(receiver) = self.notify_receiver.take() {
+            receiver.stop().await;
         }
 
+        let controlled_teardown = self.state.status().child == ChildState::Running;
         crate::process_guardian::stop_job(&self.job, &self.scopes, &self.config.shutdown).await;
+        if controlled_teardown {
+            self.state.on_termination_complete();
+            self.publish_status();
+        }
+
+        // Shutdown uses the manager's Stopping/Stopped activity transition.
+        if !self.shutdown.is_cancelled() {
+            self.activity
+                .set_status(self.state.status().activity_status());
+        }
         trace!("Supervision task for {} exiting", self.name());
     }
 }
@@ -653,7 +858,7 @@ pub fn spawn_supervisor(
     let config = resources.config.clone();
     let job = resources.job.clone();
     let scopes = resources.scopes.clone();
-    let activity = resources.activity.ref_handle();
+    let activity = resources.activity.clone();
     let notify_socket = resources.notify_socket.clone();
     let status_tx = resources.status_tx.clone();
     let stop_requested = resources.stop_requested.clone();
@@ -663,17 +868,40 @@ pub fn spawn_supervisor(
     tokio::spawn(async move {
         let state = SupervisorState::new(&config, Instant::now());
         let probes = ProbeSet::new(&config);
+        let mut run = RunId::initial();
+        let _ = run.next();
+        let mut deadline = DeadlineId::initial();
+        let _ = deadline.next();
+        let mut watcher = WatcherId::initial();
+        let _ = watcher.next();
+        let mut listener = ListenerId::initial();
+        let _ = listener.next();
+        let (notification_tx, notification_rx) = mpsc::channel(16);
+        let notify_receiver = spawn_notify_receiver(
+            notify_socket.clone(),
+            run,
+            listener,
+            notification_tx.clone(),
+        );
         let mut runtime = SupervisorRuntime {
             config,
             job: job.clone(),
             scopes,
             activity,
+            notify_socket: notify_socket.clone(),
             status_tx,
             shutdown: shutdown.clone(),
             stop_requested: stop_requested.clone(),
             active_process,
             state,
             probes,
+            run,
+            deadline,
+            watcher,
+            listener,
+            notification_tx,
+            notification_rx,
+            notify_receiver,
         };
         let mut file_watcher = spawn_file_watcher(&runtime.config).await;
 
@@ -683,22 +911,29 @@ pub fn spawn_supervisor(
 
         loop {
             let monitor_exit = runtime.monitors_exit();
+            let run = runtime.run;
+            let deadline = runtime.deadline;
+            let watcher = runtime.watcher;
             let event = tokio::select! {
                 biased;
 
                 _ = shutdown.cancelled() => SupervisorEvent::Shutdown,
                 _ = stop_requested.cancelled() => SupervisorEvent::StopRequested,
                 Some(command) = cmd_rx.recv() => SupervisorEvent::Command(command),
-                kind = runtime.probes.recv() => SupervisorEvent::ProbeSucceeded(kind),
+                kind = runtime.probes.recv() => SupervisorEvent::ProbeSucceeded { run, kind },
                 drained = next_file_change(&mut file_watcher) => {
-                    SupervisorEvent::FileChanged { drained }
+                    SupervisorEvent::FileChanged { watcher, drained }
                 }
-                messages = recv_notifications(&notify_socket) => {
-                    SupervisorEvent::Notifications(messages)
+                Some(batch) = runtime.notification_rx.recv() => {
+                    SupervisorEvent::Notifications {
+                        run: batch.run,
+                        listener: batch.listener,
+                        messages: batch.messages,
+                    }
                 }
-                _ = &mut deadline_fut => SupervisorEvent::Deadline,
+                _ = &mut deadline_fut => SupervisorEvent::Deadline { run, deadline },
                 // A parked job keeps `to_wait()` ready and would spin this loop.
-                _ = job.to_wait(), if monitor_exit => SupervisorEvent::ProcessExit,
+                _ = job.to_wait(), if monitor_exit => SupervisorEvent::ProcessExit { run },
             };
 
             if runtime.handle_event(event).await == Continuation::Exit {
@@ -747,13 +982,6 @@ async fn next_file_change(file_watcher: &mut FileWatcher) -> usize {
         drained += 1;
     }
     drained
-}
-
-async fn recv_notifications(notify_socket: &Option<Arc<NotifySocket>>) -> Vec<NotifyMessage> {
-    match notify_socket {
-        Some(socket) => socket.recv().await.unwrap_or_default(),
-        None => std::future::pending().await,
-    }
 }
 
 /// Returns a future that completes at `deadline`, or pends forever if `None`.

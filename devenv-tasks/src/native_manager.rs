@@ -2,7 +2,7 @@ use crate::Tasks;
 use devenv_mailbox::{FrontendEvent, ProcessCommand};
 use devenv_processes::{
     ApiRequest, ApiResponse, AttachEvent, LogStream, ManagerResidence, OnIdle, ProcessInfo,
-    ProcessPhase, ProcessRunner,
+    ProcessPhase, ProcessRunner, RestartOutcome,
 };
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
@@ -137,21 +137,18 @@ impl NativeProcessManager {
 
     pub async fn handle_command(&self, command: ProcessCommand) {
         match command {
-            ProcessCommand::Restart(name) => {
-                let needs_fresh_start = self
-                    .process_runner()
-                    .needs_scheduled_start(&name)
-                    .await
-                    .unwrap_or(false);
-                if needs_fresh_start {
+            ProcessCommand::Restart(name) => match self.process_runner().restart(&name).await {
+                Ok(RestartOutcome::RestartedInPlace) => {}
+                Ok(RestartOutcome::SchedulingRequired) => {
                     let outcome = self.tasks.start_with_deps([name.clone()]).await;
                     if !outcome.scheduled.contains(&name) && !outcome.skipped.contains(&name) {
                         warn!(process = %name, "failed to start process");
                     }
-                } else if let Err(error) = self.process_runner().restart(&name).await {
+                }
+                Err(error) => {
                     warn!(process = %name, ?error, "failed to restart process");
                 }
-            }
+            },
             ProcessCommand::Stop(name) => {
                 if let Err(error) = self.process_runner().stop_and_keep(&name).await {
                     warn!(process = %name, ?error, "failed to stop process");
@@ -249,24 +246,26 @@ impl NativeProcessManager {
                 }
             }
             Ok(ApiRequest::Restart { name }) => {
-                match manager.process_runner().needs_scheduled_start(&name).await {
-                    Some(true) => {
-                        let outcome = manager.tasks.start_with_deps([name.clone()]).await;
-                        if outcome.scheduled.contains(&name) || outcome.skipped.contains(&name) {
-                            ApiResponse::Ok
-                        } else {
-                            ApiResponse::Error {
-                                message: format!("failed to restart process '{name}'"),
+                if manager.process_runner().get_phase(&name).await.is_none() {
+                    Self::process_not_found(&name)
+                } else {
+                    match manager.process_runner().restart(&name).await {
+                        Ok(RestartOutcome::SchedulingRequired) => {
+                            let outcome = manager.tasks.start_with_deps([name.clone()]).await;
+                            if outcome.scheduled.contains(&name) || outcome.skipped.contains(&name)
+                            {
+                                ApiResponse::Ok
+                            } else {
+                                ApiResponse::Error {
+                                    message: format!("failed to restart process '{name}'"),
+                                }
                             }
                         }
-                    }
-                    Some(false) => match manager.process_runner().restart(&name).await {
-                        Ok(()) => ApiResponse::Ok,
+                        Ok(RestartOutcome::RestartedInPlace) => ApiResponse::Ok,
                         Err(error) => ApiResponse::Error {
                             message: format!("failed to restart process '{name}': {error}"),
                         },
-                    },
-                    None => Self::process_not_found(&name),
+                    }
                 }
             }
             Ok(ApiRequest::Start { names }) => ApiResponse::Start {
@@ -338,7 +337,7 @@ impl NativeProcessManager {
 
         if !Self::write_attach_event_bounded(
             &mut writer,
-            &AttachEvent::Snapshot {
+            &AttachEvent::InitialState {
                 processes: snapshot.clone(),
             },
             manager.process_runner().shutdown_token(),
@@ -948,7 +947,7 @@ mod tests {
             .expect("timed out waiting for attach snapshot")
             .expect("attach stream closed")
             .expect("attach snapshot failed");
-        let AttachEvent::Snapshot { processes } = event else {
+        let AttachEvent::InitialState { processes } = event else {
             panic!("snapshot must be the first attach event");
         };
 
@@ -1053,7 +1052,7 @@ mod tests {
             .expect("timed out waiting for live-transition snapshot")
             .expect("live-transition attach stream closed")
             .expect("live-transition snapshot failed");
-        let AttachEvent::Snapshot { processes } = snapshot else {
+        let AttachEvent::InitialState { processes } = snapshot else {
             panic!("snapshot must be the first attach event");
         };
         let by_name: BTreeMap<_, _> = processes
@@ -1096,7 +1095,7 @@ mod tests {
                 .expect("timed out waiting for snapshot")
                 .expect("stream closed")
                 .expect("snapshot failed");
-            assert!(matches!(event, AttachEvent::Snapshot { .. }));
+            assert!(matches!(event, AttachEvent::InitialState { .. }));
         }
 
         let temp_dir = tempfile::tempdir().unwrap();
@@ -1185,7 +1184,7 @@ mod tests {
                 .expect("timed out waiting for repeated-attach snapshot")
                 .expect("repeated attach stream closed")
                 .expect("repeated attach snapshot failed");
-            assert!(matches!(snapshot, AttachEvent::Snapshot { .. }));
+            assert!(matches!(snapshot, AttachEvent::InitialState { .. }));
 
             {
                 use std::io::Write;
@@ -1289,7 +1288,7 @@ mod tests {
             .expect("responsive peer did not receive a snapshot")
             .expect("responsive peer closed")
             .expect("responsive peer snapshot failed");
-        assert!(matches!(snapshot, AttachEvent::Snapshot { .. }));
+        assert!(matches!(snapshot, AttachEvent::InitialState { .. }));
 
         {
             use std::io::Write;
@@ -1377,7 +1376,7 @@ mod tests {
         let mut lines = BufReader::new(reader).lines();
 
         match next_event(&mut lines).await {
-            AttachEvent::Snapshot { processes } => assert!(
+            AttachEvent::InitialState { processes } => assert!(
                 processes.iter().any(|info| info.name == "attach-proc"),
                 "snapshot must contain attach-proc: {processes:?}"
             ),
@@ -1539,7 +1538,7 @@ mod tests {
             .unwrap();
         assert!(matches!(
             snapshot,
-            AttachEvent::Snapshot { processes }
+            AttachEvent::InitialState { processes }
                 if processes.len() == 1 && processes[0].name == "web"
         ));
 

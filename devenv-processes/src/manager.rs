@@ -87,7 +87,7 @@ pub struct PortInfo {
 pub struct ProcessInfo {
     pub name: String,
     pub phase: ProcessPhase,
-    pub restart_count: usize,
+    pub restart_count: u64,
     /// Configured ports, formatted as "name:port" (e.g. ["http:8080"]).
     #[serde(default)]
     pub ports: Vec<String>,
@@ -142,13 +142,24 @@ pub struct StartOutcome {
     pub failed: Vec<String>,
 }
 
+/// Result of asking a process to restart. The process owner decides whether
+/// its retained controller can perform the restart; callers never infer this
+/// from presentation state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub enum RestartOutcome {
+    RestartedInPlace,
+    SchedulingRequired,
+}
+
 /// Event pushed by the daemon on an `ApiRequest::Attach` connection.
 /// Newline-delimited JSON, one event per line.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum AttachEvent {
     /// Full process list, sent once when the stream opens.
-    Snapshot { processes: Vec<ProcessInfo> },
+    #[serde(rename = "snapshot")]
+    InitialState { processes: Vec<ProcessInfo> },
     /// A process changed phase/ports/restart count, or newly appeared.
     Status { info: ProcessInfo },
     /// One log line from a process log file (backlog or live tail).
@@ -212,7 +223,7 @@ pub struct ProcessState {
 pub struct ProcessResources {
     pub config: ProcessConfig,
     pub job: Arc<Job>,
-    pub activity: Activity,
+    pub activity: devenv_activity::ActivityRef,
     pub notify_socket: Option<Arc<NotifySocket>>,
     pub status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     pub stderr_log: PathBuf,
@@ -291,25 +302,11 @@ pub enum OnIdle {
     Exit,
 }
 
-impl From<crate::supervisor_state::SupervisorPhase> for ProcessPhase {
-    fn from(phase: crate::supervisor_state::SupervisorPhase) -> Self {
-        match phase {
-            crate::supervisor_state::SupervisorPhase::Starting => Self::Starting,
-            crate::supervisor_state::SupervisorPhase::Ready => Self::Ready,
-            crate::supervisor_state::SupervisorPhase::Stopping => Self::Stopping,
-            crate::supervisor_state::SupervisorPhase::Exited => Self::Exited,
-            crate::supervisor_state::SupervisorPhase::GaveUp => Self::GaveUp,
-        }
-    }
-}
-
-/// Initial phase before readiness observation begins.
-fn initial_phase(config: &ProcessConfig) -> crate::supervisor_state::SupervisorPhase {
-    if config.has_readiness_probe() {
-        crate::supervisor_state::SupervisorPhase::Starting
-    } else {
-        crate::supervisor_state::SupervisorPhase::Ready
-    }
+fn initial_status(config: &ProcessConfig) -> crate::process_state::ProcessStatus {
+    crate::process_state::ProcessStatus::running(
+        config.has_readiness_probe(),
+        crate::process_state::StateTransition::Launching,
+    )
 }
 
 /// Prevent a registered process from exposing logs from an earlier manager.
@@ -317,28 +314,6 @@ fn clear_stale_logs(state_dir: &Path, name: &str) {
     let (stdout_path, stderr_path) = crate::command::log_paths(state_dir, name);
     let _ = std::fs::write(&stdout_path, "");
     let _ = std::fs::write(&stderr_path, "");
-}
-
-/// Preserve terminal phases reached before teardown.
-fn terminal_phase_of(phase: crate::supervisor_state::SupervisorPhase) -> Option<ProcessPhase> {
-    match ProcessPhase::from(phase) {
-        p @ (ProcessPhase::Exited | ProcessPhase::GaveUp) => Some(p),
-        _ => None,
-    }
-}
-
-/// Explicit stops override the terminal phase in user-facing status.
-fn display_phase(terminal_phase: Option<ProcessPhase>, user_stopped: bool) -> ProcessPhase {
-    if user_stopped {
-        ProcessPhase::Stopped
-    } else {
-        terminal_phase.unwrap_or(ProcessPhase::Stopped)
-    }
-}
-
-/// Preserve terminal history for dependency evaluation after a stop.
-fn lifecycle_phase(terminal_phase: Option<ProcessPhase>) -> ProcessPhase {
-    terminal_phase.unwrap_or(ProcessPhase::Stopped)
 }
 
 /// Resources consumed by [`ProcessRunner::finish_stop`].
@@ -351,22 +326,33 @@ struct StopParts {
     ports: Vec<u16>,
     shutdown: ShutdownConfig,
     scopes: Arc<crate::process_guardian::ProcessScopeRegistry>,
+    reason: crate::StopReason,
 }
 
 /// Replace an active entry with an atomic teardown placeholder.
 /// `user_stopped` affects display only; terminal history is always retained.
 fn take_active_for_stop(
+    entry: &mut ProcessEntry,
     handle: JobHandle,
-    name: &str,
-    processes: &mut HashMap<String, ProcessEntry>,
     user_stopped: bool,
 ) -> StopParts {
     handle.resources.stop_requested.cancel();
     let ports = declared_ports(&handle.resources.config);
-    let status = handle.status_rx.borrow();
-    let terminal_phase = terminal_phase_of(status.phase);
-    let terminal_exit_status = status.exit_status;
-    drop(status);
+    let current = *entry.status_rx.borrow();
+    let mut stopping = current;
+    let reason = if user_stopped {
+        crate::process_state::StopReason::User
+    } else {
+        crate::process_state::StopReason::ManagerShutdown
+    };
+    stopping.target = crate::process_state::TargetState::Stopped(reason);
+    if stopping.restart == crate::process_state::RestartDecision::Pending {
+        stopping.restart = crate::process_state::RestartDecision::None;
+    }
+    if stopping.child == crate::process_state::ChildState::Running {
+        stopping.transition = Some(crate::process_state::StateTransition::Terminating);
+    }
+    entry.publish(stopping);
     let JobHandle {
         resources,
         cmd_tx,
@@ -375,26 +361,9 @@ fn take_active_for_stop(
         output_readers,
         ..
     } = handle;
-    let ProcessResources {
-        config,
-        activity,
-        job,
-        scopes,
-        ..
-    } = resources;
-
-    activity.set_status(ProcessStatus::Stopping);
-    let shutdown = config.shutdown.clone();
-    processes.insert(
-        name.to_string(),
-        ProcessEntry::Stopping {
-            config,
-            activity,
-            terminal_phase,
-            terminal_exit_status,
-            user_stopped,
-        },
-    );
+    let job = resources.job;
+    let scopes = resources.scopes;
+    let shutdown = resources.config.shutdown;
 
     StopParts {
         job,
@@ -405,6 +374,7 @@ fn take_active_for_stop(
         ports,
         shutdown,
         scopes,
+        reason,
     }
 }
 
@@ -428,78 +398,118 @@ async fn stop_via_supervisor(
 fn active_names(processes: &HashMap<String, ProcessEntry>) -> Vec<String> {
     processes
         .iter()
-        .filter_map(|(name, entry)| match entry {
-            ProcessEntry::Active(_) => Some(name.clone()),
-            ProcessEntry::NotStarted { .. }
-            | ProcessEntry::Stopping { .. }
-            | ProcessEntry::Stopped { .. }
-            | ProcessEntry::Waiting { .. }
-            | ProcessEntry::Launching { .. } => None,
-        })
+        .filter_map(|(name, entry)| entry.handle.is_some().then(|| name.clone()))
         .collect()
 }
 
-/// A managed process entry: not started, waiting for dependencies, or active.
-enum ProcessEntry {
-    /// Process has `start.enable = false`: visible in TUI but not yet launched.
-    NotStarted {
-        config: ProcessConfig,
-        activity: Activity,
-    },
-    /// Explicit or manager-wide teardown is still in progress.
-    Stopping {
-        config: ProcessConfig,
-        activity: Activity,
-        terminal_phase: Option<ProcessPhase>,
-        terminal_exit_status: Option<crate::supervisor_state::ExitStatus>,
-        user_stopped: bool,
-    },
-    /// Process was stopped (by the user or on shutdown teardown); can be
-    /// started again.
-    Stopped {
-        config: ProcessConfig,
-        activity: Activity,
-        /// The terminal supervisor phase the process reached on its own
-        /// (`Exited`/`GaveUp`), or `None` if it was stopped before reaching
-        /// one. Recorded independently of how the process was stopped, so a
-        /// dependent on `<proc>@started` still observes that it ran (see
-        /// [`lifecycle_phase`]).
-        terminal_phase: Option<ProcessPhase>,
-        /// Exit result paired with `terminal_phase`, retained across teardown.
-        terminal_exit_status: Option<crate::supervisor_state::ExitStatus>,
-        /// Whether the user explicitly stopped it (`devenv processes stop`,
-        /// Ctrl-X) rather than shutdown teardown. An explicit stop is
-        /// *displayed* as a plain `Stopped` even when `terminal_phase` is
-        /// `Some`, so lists and run summaries reflect the stop.
-        user_stopped: bool,
-    },
-    /// Process is waiting for dependencies before starting.
-    Waiting {
-        config: ProcessConfig,
-        activity: Activity,
-    },
-    /// Dependencies satisfied; launch in progress (the child may already be
-    /// spawned). Settles to `Active` on success, `Stopped` on failure or when
-    /// shutdown raced the launch.
-    Launching {
-        config: ProcessConfig,
-        activity: Activity,
-    },
-    /// Process is running under supervision.
-    Active(JobHandle),
+/// Stable registry record. Lifecycle facts and controller ownership are
+/// orthogonal; neither is encoded in the container shape.
+struct ProcessEntry {
+    config: ProcessConfig,
+    activity: Activity,
+    status_tx: tokio::sync::watch::Sender<crate::process_state::ProcessStatus>,
+    status_rx: tokio::sync::watch::Receiver<crate::process_state::ProcessStatus>,
+    handle: Option<JobHandle>,
+    /// The one stable notify socket for this process. It survives stop/start
+    /// cycles and is drained between child runs.
+    notify_socket: Option<Arc<NotifySocket>>,
 }
 
 impl ProcessEntry {
-    /// The process configuration backing this entry, regardless of phase.
-    fn config(&self) -> &ProcessConfig {
-        match self {
-            ProcessEntry::NotStarted { config, .. }
-            | ProcessEntry::Stopping { config, .. }
-            | ProcessEntry::Stopped { config, .. }
-            | ProcessEntry::Waiting { config, .. }
-            | ProcessEntry::Launching { config, .. } => config,
-            ProcessEntry::Active(handle) => &handle.resources.config,
+    fn new(config: ProcessConfig, activity: Activity, status: crate::ProcessStatus) -> Self {
+        activity.set_status(status.activity_status());
+        let (status_tx, status_rx) = tokio::sync::watch::channel(status);
+        Self {
+            config,
+            activity,
+            status_tx,
+            status_rx,
+            handle: None,
+            notify_socket: None,
         }
+    }
+
+    fn config(&self) -> &ProcessConfig {
+        &self.config
+    }
+
+    fn status(&self) -> crate::ProcessStatus {
+        *self.status_rx.borrow()
+    }
+
+    fn publish(&self, next: crate::ProcessStatus) {
+        if !next.is_valid() {
+            tracing::error!(
+                process = %self.config.name,
+                current = ?self.status(),
+                rejected = ?next,
+                "rejecting invalid process status publication"
+            );
+            return;
+        }
+        self.status_tx.send_if_modified(|current| {
+            if *current == next {
+                false
+            } else {
+                *current = next;
+                true
+            }
+        });
+        self.activity.set_status(next.activity_status());
+    }
+
+    fn reset_for_waiting(&mut self, config: ProcessConfig) {
+        self.config = config;
+        self.activity.reset();
+        self.publish(crate::ProcessStatus::waiting());
+    }
+
+    fn can_prepare_start(&self) -> bool {
+        self.handle.is_none()
+            && self.status().transition.is_none()
+            && self.status().child != crate::ChildState::Running
+    }
+
+    fn is_launching(&self) -> bool {
+        let status = self.status();
+        self.handle.is_none()
+            && status.transition == Some(crate::StateTransition::Launching)
+            && status.target == crate::TargetState::Running
+    }
+
+    fn start_launch(&self) {
+        let mut status = self.status();
+        status.target = crate::TargetState::Running;
+        status.transition = Some(crate::StateTransition::Launching);
+        status.child = crate::ChildState::NeverSpawned;
+        status.readiness = crate::ReadinessState::Inactive;
+        status.restart = crate::RestartDecision::None;
+        self.publish(status);
+    }
+
+    fn finish_launch_failure(&self) {
+        let mut status = self.status();
+        status.target = crate::TargetState::Stopped(crate::StopReason::LaunchFailure);
+        status.transition = None;
+        status.child = crate::ChildState::NeverSpawned;
+        status.readiness = crate::ReadinessState::Inactive;
+        status.restart = crate::RestartDecision::None;
+        self.publish(status);
+    }
+
+    fn finish_controlled_stop(&self, reason: crate::StopReason) {
+        let mut status = self.status();
+        // The supervisor publishes child observations while teardown is in
+        // progress. Reassert the stop request's higher-precedence target when
+        // the actor-owned teardown settles so a late child update cannot
+        // restore TargetState::Running.
+        status.target = crate::TargetState::Stopped(reason);
+        if status.child == crate::ChildState::Running {
+            status.child = crate::ChildState::Terminated;
+            status.readiness = crate::ReadinessState::Inactive;
+        }
+        status.transition = None;
+        self.publish(status);
     }
 }
 
@@ -769,8 +779,6 @@ async fn wait_for_port_conflicts_to_settle(ports: &[u16], timeout: Duration) -> 
 /// Everything a launch produces before the entry settles to Active.
 struct LaunchSetup {
     job: Arc<Job>,
-    status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
-    status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     notify_socket: Option<Arc<NotifySocket>>,
     stdout_tailer: JoinHandle<()>,
     stderr_tailer: JoinHandle<()>,
@@ -846,77 +854,24 @@ impl ProcessRunner {
         notify_lifecycle_parts(&self.entries_changed, &self.task_notify);
     }
 
-    /// The phase to display for a process: lists, run summaries, and the TUI.
-    /// After an explicit user stop this reports a plain `Stopped` even if the
-    /// process had exited on its own. For judging a *dependent* against this
-    /// process, use [`Self::get_dependency_phase`] instead.
+    /// The compatibility phase to display for a process.
     pub async fn get_phase(&self, name: &str) -> Option<ProcessPhase> {
-        self.phase_of(name, false).await
-    }
-
-    /// The phase a dependent should be judged against. Unlike
-    /// [`Self::get_phase`], an explicit user stop does not mask a preserved
-    /// terminal phase here, so a dependent on `<proc>@started` still sees that
-    /// the process started and ran, and the stop does not strand it.
-    pub async fn get_dependency_phase(&self, name: &str) -> Option<ProcessPhase> {
-        self.phase_of(name, true).await
+        self.processes
+            .read()
+            .await
+            .get(name)
+            .map(|entry| entry.status().display_phase())
     }
 
     /// Exit result for a process that reached a terminal child exit.
-    pub async fn get_exit_status(&self, name: &str) -> Option<crate::supervisor_state::ExitStatus> {
+    pub async fn get_exit_outcome(
+        &self,
+        name: &str,
+    ) -> Option<crate::supervisor_state::ExitOutcome> {
         let processes = self.processes.read().await;
-        match processes.get(name) {
-            Some(
-                ProcessEntry::Stopping {
-                    terminal_exit_status,
-                    ..
-                }
-                | ProcessEntry::Stopped {
-                    terminal_exit_status,
-                    ..
-                },
-            ) => *terminal_exit_status,
-            Some(ProcessEntry::Active(handle)) => handle.status_rx.borrow().exit_status,
-            _ => None,
-        }
-    }
-
-    async fn phase_of(&self, name: &str, for_dependency: bool) -> Option<ProcessPhase> {
-        let processes = self.processes.read().await;
-        match processes.get(name) {
-            Some(ProcessEntry::NotStarted { .. }) => Some(ProcessPhase::NotStarted),
-            Some(ProcessEntry::Stopping { .. }) => Some(ProcessPhase::Stopping),
-            Some(ProcessEntry::Stopped {
-                terminal_phase,
-                user_stopped,
-                ..
-            }) => Some(if for_dependency {
-                lifecycle_phase(*terminal_phase)
-            } else {
-                display_phase(*terminal_phase, *user_stopped)
-            }),
-            Some(ProcessEntry::Waiting { .. }) => Some(ProcessPhase::Waiting),
-            Some(ProcessEntry::Launching { .. }) => Some(ProcessPhase::Starting),
-            Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.borrow().phase.into()),
-            None => None,
-        }
-    }
-
-    /// Whether restarting this process requires scheduling it through the task
-    /// graph instead of sending an in-place restart to a live supervisor.
-    ///
-    /// This is deliberately independent of [`Self::get_phase`], which is a
-    /// presentation phase and may preserve `Exited`/`GaveUp` after manager-wide
-    /// teardown. Callers should not reconstruct restart semantics from that
-    /// display value.
-    pub async fn needs_scheduled_start(&self, name: &str) -> Option<bool> {
-        let processes = self.processes.read().await;
-        processes.get(name).map(|entry| {
-            matches!(
-                entry,
-                ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }
-            )
-        })
+        processes
+            .get(name)
+            .and_then(|entry| entry.status().child.exit_outcome())
     }
 
     /// Subscribe to status updates for a given active process.
@@ -926,10 +881,10 @@ impl ProcessRunner {
         name: &str,
     ) -> Option<tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>> {
         let processes = self.processes.read().await;
-        match processes.get(name) {
-            Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.clone()),
-            _ => None,
-        }
+        processes
+            .get(name)
+            .filter(|entry| entry.handle.is_some())
+            .map(|entry| entry.status_rx.clone())
     }
 
     /// Get the state directory
@@ -1000,25 +955,11 @@ impl ProcessRunner {
     }
 
     fn process_info(name: &str, entry: &ProcessEntry) -> ProcessInfo {
-        let (phase, restart_count) = match entry {
-            ProcessEntry::NotStarted { .. } => (ProcessPhase::NotStarted, 0),
-            ProcessEntry::Stopping { .. } => (ProcessPhase::Stopping, 0),
-            ProcessEntry::Stopped {
-                terminal_phase,
-                user_stopped,
-                ..
-            } => (display_phase(*terminal_phase, *user_stopped), 0),
-            ProcessEntry::Waiting { .. } => (ProcessPhase::Waiting, 0),
-            ProcessEntry::Launching { .. } => (ProcessPhase::Starting, 0),
-            ProcessEntry::Active(handle) => {
-                let status = handle.status_rx.borrow();
-                (ProcessPhase::from(status.phase), status.restart_count)
-            }
-        };
+        let status = entry.status();
         ProcessInfo {
             name: name.to_string(),
-            phase,
-            restart_count,
+            phase: status.display_phase(),
+            restart_count: status.restart_count,
             ports: display_ports(entry.config()),
         }
     }
@@ -1045,13 +986,12 @@ impl ProcessRunner {
     /// Call `launch_waiting` after dependencies are satisfied.
     pub async fn register_waiting(&self, config: ProcessConfig, parent_id: Option<u64>) {
         let activity = self.create_process_activity(&config, parent_id);
-        activity.set_status(ProcessStatus::Waiting);
         let name = config.name.clone();
         clear_stale_logs(&self.state_dir, &name);
-        self.processes
-            .write()
-            .await
-            .insert(name.clone(), ProcessEntry::Waiting { config, activity });
+        self.processes.write().await.insert(
+            name.clone(),
+            ProcessEntry::new(config, activity, crate::ProcessStatus::waiting()),
+        );
         info!("Registered waiting process: {}", name);
         self.notify_lifecycle();
     }
@@ -1072,31 +1012,20 @@ impl ProcessRunner {
         if self.shutdown.is_cancelled() {
             return;
         }
-        if matches!(
-            processes.get(&config.name),
-            Some(
-                ProcessEntry::Active(_)
-                    | ProcessEntry::Launching { .. }
-                    | ProcessEntry::Stopping { .. }
-            )
-        ) {
-            return;
-        }
         let name = config.name.clone();
-        let activity = match processes.remove(&name) {
-            // Reuse the existing activity so the TUI row is preserved.
-            Some(
-                ProcessEntry::NotStarted { activity, .. }
-                | ProcessEntry::Stopped { activity, .. }
-                | ProcessEntry::Waiting { activity, .. },
-            ) => activity,
-            // No prior entry (or an Active/Launching we just excluded): make a fresh one.
-            _ => self.create_process_activity(&config, None),
-        };
-        activity.reset();
-        activity.set_status(ProcessStatus::Waiting);
+        if let Some(entry) = processes.get_mut(&name) {
+            if !entry.can_prepare_start() {
+                return;
+            }
+            entry.reset_for_waiting(config);
+        } else {
+            let activity = self.create_process_activity(&config, None);
+            processes.insert(
+                name.clone(),
+                ProcessEntry::new(config, activity, crate::ProcessStatus::waiting()),
+            );
+        }
         clear_stale_logs(&self.state_dir, &name);
-        processes.insert(name.clone(), ProcessEntry::Waiting { config, activity });
         info!("Re-armed waiting process: {}", name);
         drop(processes);
         self.notify_lifecycle();
@@ -1110,31 +1039,21 @@ impl ProcessRunner {
         // Only a Waiting entry transitions; every other variant is reinserted
         // untouched so an entry can never vanish (dropping an Active entry
         // here would detach a live supervised child).
-        match processes.remove(name) {
-            Some(ProcessEntry::Waiting { config, activity }) => {
-                activity.dependency_failed();
-                activity.set_status(ProcessStatus::Stopped);
-                processes.insert(
-                    name.to_string(),
-                    ProcessEntry::Stopped {
-                        config,
-                        activity,
-                        terminal_phase: None,
-                        terminal_exit_status: None,
-                        // A dependency failure/cancel, not a user stop; the
-                        // entry never ran, so it displays as `Stopped` either
-                        // way.
-                        user_stopped: false,
-                    },
-                );
+        match processes.get_mut(name) {
+            Some(entry)
+                if entry.status().transition
+                    == Some(crate::StateTransition::WaitingForDependencies) =>
+            {
+                entry.activity.dependency_failed();
+                entry.publish(crate::ProcessStatus::stopped(
+                    crate::StopReason::DependencyFailure,
+                    crate::ChildState::NeverSpawned,
+                ));
                 info!("Cancelled waiting process: {}", name);
                 drop(processes);
                 self.notify_lifecycle();
             }
-            Some(entry) => {
-                processes.insert(name.to_string(), entry);
-            }
-            None => {}
+            _ => {}
         }
     }
 
@@ -1154,33 +1073,25 @@ impl ProcessRunner {
             if self.shutdown.is_cancelled() {
                 bail!("process manager is shutting down");
             }
-            match processes.remove(name) {
-                Some(ProcessEntry::Waiting { config, activity }) => {
-                    if !config.start.enable {
-                        activity.set_status(ProcessStatus::NotStarted);
+            match processes.get_mut(name) {
+                Some(entry)
+                    if entry.status().transition
+                        == Some(crate::StateTransition::WaitingForDependencies) =>
+                {
+                    if !entry.config.start.enable {
                         info!("Registered auto start off process: {}", name);
-                        processes.insert(
-                            name.to_string(),
-                            ProcessEntry::NotStarted { config, activity },
-                        );
+                        entry.publish(crate::ProcessStatus::not_started());
                         drop(processes);
                         self.notify_lifecycle();
                         return Ok(None);
                     }
-                    activity.set_status(ProcessStatus::Running);
-                    processes.insert(
-                        name.to_string(),
-                        ProcessEntry::Launching { config, activity },
-                    );
+                    entry.start_launch();
                     // No await between the Launching insert and the settle
                     // spawn: the settle task always completes even if this
                     // caller is aborted mid-launch.
                     self.spawn_launch_settle(name.to_string())
                 }
-                Some(entry) => {
-                    processes.insert(name.to_string(), entry);
-                    bail!("Process {} is not in waiting state", name)
-                }
+                Some(_) => bail!("Process {} is not in waiting state", name),
                 None => bail!("Process {} not found", name),
             }
         };
@@ -1220,12 +1131,11 @@ impl ProcessRunner {
             if self.shutdown.is_cancelled() {
                 bail!("process manager is shutting down");
             }
-            activity.set_status(ProcessStatus::NotStarted);
             info!("Registered auto start off process: {}", config.name);
             clear_stale_logs(&self.state_dir, &config.name);
             processes.insert(
                 config.name.clone(),
-                ProcessEntry::NotStarted { config, activity },
+                ProcessEntry::new(config, activity, crate::ProcessStatus::not_started()),
             );
             drop(processes);
             self.notify_lifecycle();
@@ -1240,8 +1150,9 @@ impl ProcessRunner {
             if self.shutdown.is_cancelled() {
                 bail!("process manager is shutting down");
             }
-            activity.set_status(ProcessStatus::Running);
-            processes.insert(name.clone(), ProcessEntry::Launching { config, activity });
+            let entry = ProcessEntry::new(config, activity, crate::ProcessStatus::waiting());
+            entry.start_launch();
+            processes.insert(name.clone(), entry);
             // No await between the Launching insert and the settle spawn: the
             // settle task always completes even if this caller is aborted.
             self.spawn_launch_settle(name)
@@ -1273,35 +1184,26 @@ impl ProcessRunner {
         let live = Arc::clone(&self.live);
         let completion = Arc::clone(&self.completion);
         tokio::spawn(async move {
-            let (config, activity_ref) = {
+            let (config, activity_ref, notify_socket) = {
                 let procs = processes.read().await;
                 match procs.get(&name) {
-                    Some(ProcessEntry::Launching { config, activity }) => {
-                        (config.clone(), activity.ref_handle())
-                    }
+                    Some(entry) if entry.is_launching() => (
+                        entry.config.clone(),
+                        entry.activity.ref_handle(),
+                        entry.notify_socket.clone(),
+                    ),
                     _ => bail!("process {} is not launching", name),
                 }
             };
 
-            let setup = Self::launch_setup(&state_dir, &config, &activity_ref).await;
+            let setup = Self::launch_setup(&state_dir, &config, &activity_ref, notify_socket).await;
 
             let mut procs = processes.write().await;
-            match procs.remove(&name) {
-                Some(ProcessEntry::Launching { config, activity }) => match setup {
+            match procs.get_mut(&name) {
+                Some(entry) if entry.is_launching() => match setup {
                     Err(e) => {
-                        activity.fail();
-                        activity.set_status(ProcessStatus::Stopped);
-                        procs.insert(
-                            name.clone(),
-                            ProcessEntry::Stopped {
-                                config,
-                                activity,
-                                terminal_phase: None,
-                                terminal_exit_status: None,
-                                // Launch failure, not a user stop.
-                                user_stopped: false,
-                            },
-                        );
+                        entry.activity.fail();
+                        entry.finish_launch_failure();
                         drop(procs);
                         notify_lifecycle_parts(&entries_changed, &task_notify);
                         Err(e)
@@ -1311,42 +1213,32 @@ impl ProcessRunner {
                         // while the spawned child is stopped, so the map never
                         // reports the process gone or stopped before the child
                         // is dead. Bounded by the stop grace period.
-                        procs.insert(name.clone(), ProcessEntry::Launching { config, activity });
                         drop(procs);
                         setup.abort_and_stop().await;
                         let mut procs = processes.write().await;
-                        match procs.remove(&name) {
-                            Some(ProcessEntry::Launching { config, activity }) => {
-                                activity.set_status(ProcessStatus::Stopped);
-                                procs.insert(
-                                    name.clone(),
-                                    ProcessEntry::Stopped {
-                                        config,
-                                        activity,
-                                        terminal_phase: None,
-                                        terminal_exit_status: None,
-                                        // Shutdown raced the launch, not a user
-                                        // stop.
-                                        user_stopped: false,
-                                    },
-                                );
-                            }
-                            Some(other) => {
-                                procs.insert(name.clone(), other);
-                            }
-                            None => {}
+                        if let Some(entry) = procs.get_mut(&name)
+                            && entry.is_launching()
+                        {
+                            entry.publish(crate::ProcessStatus::stopped(
+                                crate::StopReason::ManagerShutdown,
+                                crate::ChildState::Terminated,
+                            ));
                         }
                         drop(procs);
                         notify_lifecycle_parts(&entries_changed, &task_notify);
                         bail!("process manager is shutting down")
                     }
                     Ok(setup) => {
+                        entry.publish(initial_status(&entry.config));
+                        let status_rx = entry.status_rx.clone();
+                        let status_tx = entry.status_tx.clone();
+                        entry.notify_socket = setup.notify_socket.clone();
                         let resources = ProcessResources {
-                            config,
+                            config: entry.config.clone(),
                             job: setup.job.clone(),
-                            activity,
-                            notify_socket: setup.notify_socket,
-                            status_tx: setup.status_tx,
+                            activity: entry.activity.ref_handle(),
+                            notify_socket: setup.notify_socket.clone(),
+                            status_tx,
                             stderr_log: setup.stderr_log,
                             scopes: setup.scopes,
                             live: Arc::clone(&live),
@@ -1362,32 +1254,26 @@ impl ProcessRunner {
                         let notify_forwarder = spawn_notify_forwarder(
                             task_notify.clone(),
                             Arc::clone(&entries_changed),
-                            setup.status_rx.clone(),
+                            status_rx.clone(),
                         );
-                        procs.insert(
-                            name.clone(),
-                            ProcessEntry::Active(JobHandle {
-                                resources,
-                                status_rx: setup.status_rx,
-                                cmd_tx,
-                                supervisor_task,
-                                output_readers: Some((setup.stdout_tailer, setup.stderr_tailer)),
-                                notify_forwarder,
-                            }),
-                        );
+                        entry.handle = Some(JobHandle {
+                            resources,
+                            status_rx,
+                            cmd_tx,
+                            supervisor_task,
+                            output_readers: Some((setup.stdout_tailer, setup.stderr_tailer)),
+                            notify_forwarder,
+                        });
                         drop(procs);
                         notify_lifecycle_parts(&entries_changed, &task_notify);
                         info!("Command '{}' started", name);
                         Ok(setup.job)
                     }
                 },
-                other => {
+                _ => {
                     // Unreachable given every other path refuses to touch a
                     // Launching entry; defensive so a spawned child can never
                     // detach from the map.
-                    if let Some(entry) = other {
-                        procs.insert(name.clone(), entry);
-                    }
                     drop(procs);
                     if let Ok(setup) = setup {
                         setup.abort_and_stop().await;
@@ -1404,6 +1290,7 @@ impl ProcessRunner {
         state_dir: &Path,
         config: &ProcessConfig,
         activity: &devenv_activity::ActivityRef,
+        existing_notify_socket: Option<Arc<NotifySocket>>,
     ) -> Result<LaunchSetup> {
         // A previous manager may have left this process's scope behind.
         let claim =
@@ -1412,13 +1299,18 @@ impl ProcessRunner {
         let supervise_locally = config.supervisor == crate::config::SupervisionMode::Native;
         let uses_notify = supervise_locally && config.ready.as_ref().is_some_and(|r| r.notify);
         let notify_socket = if uses_notify {
-            let socket = NotifySocket::new(state_dir, &config.name).await?;
-            info!(
-                "Created notify socket for {} at {}",
-                config.name,
-                socket.path().display()
-            );
-            Some(Arc::new(socket))
+            if let Some(socket) = existing_notify_socket {
+                socket.drain()?;
+                Some(socket)
+            } else {
+                let socket = Arc::new(NotifySocket::new(state_dir, &config.name).await?);
+                info!(
+                    "Created notify socket for {} at {}",
+                    config.name,
+                    socket.path().display()
+                );
+                Some(socket)
+            }
         } else {
             None
         };
@@ -1550,19 +1442,8 @@ impl ProcessRunner {
         let stderr_tailer =
             crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.clone(), true);
 
-        // Create status channel for supervisor state observation.
-        // Processes with no readiness mechanism are reported Ready right away.
-        let initial_status = crate::supervisor_state::JobStatus {
-            phase: initial_phase(config),
-            restart_count: 0,
-            exit_status: None,
-        };
-        let (status_tx, status_rx) = tokio::sync::watch::channel(initial_status);
-
         Ok(LaunchSetup {
             job,
-            status_tx,
-            status_rx,
             notify_socket,
             stdout_tailer,
             stderr_tailer,
@@ -1587,6 +1468,7 @@ impl ProcessRunner {
             ports,
             shutdown,
             scopes,
+            reason,
         } = parts;
 
         stop_via_supervisor(&cmd_tx, supervisor_task).await;
@@ -1647,31 +1529,8 @@ impl ProcessRunner {
 
         // Publish Stopped only after child/scope cleanup and port settling.
         let mut processes = self.processes.write().await;
-        if let Some(entry) = processes.remove(name) {
-            match entry {
-                ProcessEntry::Stopping {
-                    config,
-                    activity,
-                    terminal_phase,
-                    terminal_exit_status,
-                    user_stopped,
-                } => {
-                    activity.set_status(ProcessStatus::Stopped);
-                    processes.insert(
-                        name.to_string(),
-                        ProcessEntry::Stopped {
-                            config,
-                            activity,
-                            terminal_phase,
-                            terminal_exit_status,
-                            user_stopped,
-                        },
-                    );
-                }
-                other => {
-                    processes.insert(name.to_string(), other);
-                }
-            }
+        if let Some(entry) = processes.get_mut(name) {
+            entry.finish_controlled_stop(reason);
         }
         drop(processes);
 
@@ -1696,30 +1555,23 @@ impl ProcessRunner {
         let parts = {
             let mut processes = self.processes.write().await;
 
-            match processes.remove(name) {
-                Some(ProcessEntry::Active(handle)) => {
-                    take_active_for_stop(handle, name, &mut processes, user_stopped)
-                }
-                Some(
-                    entry @ (ProcessEntry::NotStarted { .. }
-                    | ProcessEntry::Stopping { .. }
-                    | ProcessEntry::Stopped { .. }
-                    | ProcessEntry::Waiting { .. }
-                    | ProcessEntry::Launching { .. }),
-                ) => {
-                    let state = match &entry {
-                        ProcessEntry::NotStarted { .. } => "auto start off",
-                        ProcessEntry::Stopping { .. } => "stopping",
-                        ProcessEntry::Stopped { .. } => "already stopped",
-                        ProcessEntry::Waiting { .. } => "waiting for dependencies",
-                        ProcessEntry::Launching { .. } => "starting",
-                        ProcessEntry::Active(_) => unreachable!(),
-                    };
-                    processes.insert(name.to_string(), entry);
-                    bail!("Process {} is {}, cannot stop", name, state)
-                }
-                None => bail!("Process {} not found", name),
-            }
+            let entry = processes
+                .get_mut(name)
+                .ok_or_else(|| miette::miette!("Process {} not found", name))?;
+            let Some(handle) = entry.handle.take() else {
+                let state = match entry.status().display_phase() {
+                    ProcessPhase::NotStarted => "auto start off",
+                    ProcessPhase::Stopping => "stopping",
+                    ProcessPhase::Stopped | ProcessPhase::Exited | ProcessPhase::GaveUp => {
+                        "already stopped"
+                    }
+                    ProcessPhase::Waiting => "waiting for dependencies",
+                    ProcessPhase::Starting => "starting",
+                    ProcessPhase::Ready => "not supervised",
+                };
+                bail!("Process {} is {}, cannot stop", name, state)
+            };
+            take_active_for_stop(entry, handle, user_stopped)
         };
 
         trace!("Stopping process: {}", name);
@@ -1787,10 +1639,10 @@ impl ProcessRunner {
                 continue;
             }
 
-            let teardown_in_flight = self.processes.read().await.values().any(|e| {
+            let teardown_in_flight = self.processes.read().await.values().any(|entry| {
                 matches!(
-                    e,
-                    ProcessEntry::Launching { .. } | ProcessEntry::Stopping { .. }
+                    entry.status().transition,
+                    Some(crate::StateTransition::Launching | crate::StateTransition::Terminating)
                 )
             });
             if !teardown_in_flight {
@@ -1800,6 +1652,13 @@ impl ProcessRunner {
             notified.await;
         }
 
+        // Manager shutdown ends the stable-socket lifetime. Ordinary user
+        // stop/start cycles retain it; final shutdown releases the last owner
+        // so the filesystem entry is cleaned up.
+        for entry in self.processes.write().await.values_mut() {
+            entry.notify_socket = None;
+        }
+
         Ok(())
     }
 
@@ -1807,34 +1666,33 @@ impl ProcessRunner {
     ///
     /// This resets the restart count and activity state, respawns the supervision
     /// task if it exited (e.g., due to max restarts), and restarts the underlying job.
-    pub async fn restart(&self, name: &str) -> Result<()> {
+    pub async fn restart(&self, name: &str) -> Result<RestartOutcome> {
         let mut processes = self.processes.write().await;
         // Checked under the write lock so it serializes with stop_all's
         // post-cancel map reads (see launch_waiting).
         if self.shutdown.is_cancelled() {
             bail!("process manager is shutting down");
         }
-        let handle = match processes.get_mut(name) {
-            Some(ProcessEntry::Active(h)) => h,
-            Some(ProcessEntry::NotStarted { .. }) => {
-                bail!(
-                    "Process {} has auto start disabled, use 'start' instead",
-                    name
-                )
-            }
-            Some(ProcessEntry::Stopped { .. }) => {
-                bail!("Process {} is stopped, use 'start' instead", name)
-            }
-            Some(ProcessEntry::Stopping { .. }) => {
-                bail!("Process {} is stopping", name)
-            }
-            Some(ProcessEntry::Waiting { .. }) => {
-                bail!("Process {} is waiting for dependencies", name)
-            }
-            Some(ProcessEntry::Launching { .. }) => {
-                bail!("Process {} is starting", name)
-            }
-            None => bail!("Process {} not running", name),
+        let entry = processes
+            .get_mut(name)
+            .ok_or_else(|| miette::miette!("Process {} not running", name))?;
+        let handle = match entry.handle.as_mut() {
+            Some(handle) => handle,
+            None => match entry.status().transition {
+                Some(crate::StateTransition::Terminating) => {
+                    bail!("Process {} is stopping", name)
+                }
+                Some(crate::StateTransition::WaitingForDependencies) => {
+                    bail!("Process {} is waiting for dependencies", name)
+                }
+                Some(crate::StateTransition::Launching | crate::StateTransition::Replacing) => {
+                    bail!("Process {} is starting", name)
+                }
+                None if entry.status().child == crate::ChildState::Running => {
+                    bail!("Process {} is not supervised", name)
+                }
+                None => return Ok(RestartOutcome::SchedulingRequired),
+            },
         };
 
         // Reset activity state (unfail it) and set status to restarting
@@ -1856,12 +1714,12 @@ impl ProcessRunner {
         handle.output_readers = Some((
             crate::log_tailer::spawn_file_tailer(
                 stdout_log,
-                handle.resources.activity.ref_handle(),
+                handle.resources.activity.clone(),
                 false,
             ),
             crate::log_tailer::spawn_file_tailer(
                 stderr_log,
-                handle.resources.activity.ref_handle(),
+                handle.resources.activity.clone(),
                 true,
             ),
         ));
@@ -1892,19 +1750,18 @@ impl ProcessRunner {
                 &handle.resources.config.shutdown,
                 &self.shutdown,
                 &handle.resources.stop_requested,
+                handle.resources.notify_socket.as_deref(),
             )
-            .await
+            .await?
             {
                 bail!("process manager is shutting down");
             }
-            let _ = handle
+            let status = initial_status(&handle.resources.config);
+            let _ = handle.resources.status_tx.send(status);
+            handle
                 .resources
-                .status_tx
-                .send(crate::supervisor_state::JobStatus {
-                    phase: initial_phase(&handle.resources.config),
-                    restart_count: 0,
-                    exit_status: None,
-                });
+                .activity
+                .set_status(status.activity_status());
             let (cmd_tx, cmd_rx) = mpsc::channel(8);
             handle.supervisor_task = crate::supervisor::spawn_supervisor(
                 &handle.resources,
@@ -1914,12 +1771,8 @@ impl ProcessRunner {
             handle.cmd_tx = cmd_tx;
         }
 
-        // The supervisor will update the status via status_tx once the
-        // process is actually ready.
-        handle.resources.activity.set_status(ProcessStatus::Running);
-
         info!("Process {} restarted", name);
-        Ok(())
+        Ok(RestartOutcome::RestartedInPlace)
     }
 
     /// Start a previously not-started or stopped process, reusing its existing TUI activity.
@@ -1931,30 +1784,22 @@ impl ProcessRunner {
             if self.shutdown.is_cancelled() {
                 bail!("process manager is shutting down");
             }
-            match processes.get(name) {
-                Some(ProcessEntry::NotStarted { .. } | ProcessEntry::Stopped { .. }) => {}
-                Some(ProcessEntry::Stopping { .. }) => bail!("Process {} is stopping", name),
-                Some(_) => bail!("Process {} is already running", name),
-                None => bail!("Process {} not found", name),
+            let entry = processes
+                .get_mut(name)
+                .ok_or_else(|| miette::miette!("Process {} not found", name))?;
+            if entry.status().transition == Some(crate::StateTransition::Terminating) {
+                bail!("Process {} is stopping", name);
             }
-            // Safe: we just checked the variant above.
-            let (config, activity) = match processes.remove(name).unwrap() {
-                ProcessEntry::NotStarted { config, activity }
-                | ProcessEntry::Stopped {
-                    config, activity, ..
-                } => (config, activity),
-                _ => unreachable!(),
-            };
+            if !entry.can_prepare_start()
+                || entry.status().transition == Some(crate::StateTransition::WaitingForDependencies)
+            {
+                bail!("Process {} is already running", name);
+            }
 
-            // Reset the activity so it no longer shows as stopped
-            activity.reset();
-            activity.set_status(ProcessStatus::Running);
+            entry.activity.reset();
+            entry.start_launch();
 
             info!("Starting not-started process: {}", name);
-            processes.insert(
-                name.to_string(),
-                ProcessEntry::Launching { config, activity },
-            );
             // No await between the Launching insert and the settle spawn: the
             // settle task always completes even if this caller is aborted.
             self.spawn_launch_settle(name.to_string())
@@ -1975,13 +1820,11 @@ impl ProcessRunner {
     pub async fn wait_ready(&self, name: &str, cancel: &CancellationToken) -> Result<()> {
         let mut status_rx = {
             let processes = self.processes.read().await;
-            match processes.get(name) {
-                Some(ProcessEntry::Active(handle)) => handle.status_rx.clone(),
-                Some(_) => {
-                    return Ok(());
-                }
-                None => bail!("Process {} not found", name),
-            }
+            processes
+                .get(name)
+                .ok_or_else(|| miette::miette!("Process {} not found", name))?
+                .status_rx
+                .clone()
         };
 
         if status_rx.borrow().is_ready() {
@@ -2007,13 +1850,47 @@ impl ProcessRunner {
         }
     }
 
+    /// Wait until a launch has either reached usable readiness or a terminal
+    /// fact makes readiness impossible. Returns the coherent terminal status.
+    pub async fn wait_launch_settled(
+        &self,
+        name: &str,
+        cancel: &CancellationToken,
+    ) -> Result<crate::ProcessStatus> {
+        let mut status_rx = {
+            let processes = self.processes.read().await;
+            processes
+                .get(name)
+                .ok_or_else(|| miette::miette!("Process {} not found", name))?
+                .status_rx
+                .clone()
+        };
+
+        loop {
+            let status = *status_rx.borrow_and_update();
+            if status.is_ready()
+                || (status.transition.is_none() && status.child != crate::ChildState::Running)
+            {
+                return Ok(status);
+            }
+
+            tokio::select! {
+                changed = status_rx.changed() => {
+                    if changed.is_err() {
+                        bail!("Process {} launch status channel closed", name);
+                    }
+                }
+                _ = cancel.cancelled() => {
+                    bail!("Process {} launch wait cancelled", name);
+                }
+            }
+        }
+    }
+
     /// Query the current state of a process.
     pub async fn job_state(&self, name: &str) -> Option<crate::supervisor_state::JobStatus> {
         let processes = self.processes.read().await;
-        match processes.get(name) {
-            Some(ProcessEntry::Active(handle)) => Some(handle.status_rx.borrow().clone()),
-            _ => None,
-        }
+        processes.get(name).map(|entry| entry.status())
     }
 
     /// Keep a transient process runner alive until cancellation or idleness.
@@ -2561,27 +2438,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restart_routing_uses_lifecycle_state_not_display_phase() {
+    async fn restart_returns_scheduling_required_for_a_stopped_process() {
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
 
-        manager
-            .start_command(&test_config("self-exit"), None)
-            .await
-            .unwrap();
-        wait_for_manager_phase(&manager, "self-exit", ProcessPhase::Exited).await;
-        manager.stop_all().await.unwrap();
+        let mut config = test_config("restart-scheduling");
+        config.exec = "exec tail -f /dev/null".to_string();
+        manager.start_command(&config, None).await.unwrap();
+        manager.stop_and_keep("restart-scheduling").await.unwrap();
 
         assert_eq!(
-            manager.get_phase("self-exit").await,
-            Some(ProcessPhase::Exited),
-            "manager teardown should preserve the terminal display phase"
+            manager.restart("restart-scheduling").await.unwrap(),
+            RestartOutcome::SchedulingRequired
         );
-        assert_eq!(
-            manager.needs_scheduled_start("self-exit").await,
-            Some(true),
-            "restart routing must classify the torn-down entry independently of its display phase"
-        );
+
+        manager.stop_all().await.unwrap();
     }
 
     #[tokio::test]
@@ -3120,6 +2991,16 @@ mod tests {
                 line,
             } if name == "web" && line == "boom"
         ));
+
+        let initial: AttachEvent =
+            serde_json::from_str(r#"{"event":"snapshot","processes":[]}"#).unwrap();
+        assert!(
+            matches!(initial, AttachEvent::InitialState { ref processes } if processes.is_empty())
+        );
+        assert_eq!(
+            serde_json::to_string(&initial).unwrap(),
+            r#"{"event":"snapshot","processes":[]}"#
+        );
     }
 
     #[test]

@@ -10,7 +10,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ReadyConfig, SupervisorPhase, WatchdogConfig};
+use devenv_processes::{ProcessConfig, ProcessPhase, ReadyConfig, WatchdogConfig};
 use sd_notify::NotifyState;
 use std::os::unix::net::UnixDatagram;
 use std::sync::Mutex;
@@ -211,6 +211,52 @@ async fn test_notify_socket_cleanup_on_stop() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_notify_socket_is_reused_and_old_messages_are_drained() {
+    use std::os::unix::fs::MetadataExt;
+
+    timeout(TEST_TIMEOUT, async {
+        let ctx = TestContext::new();
+        let script = ctx
+            .create_script("stable-notify.sh", "#!/bin/sh\nsleep 3600\n")
+            .await;
+
+        let config = notify_process_config("stable-notify", &script);
+        let manager = ctx.create_manager();
+        manager.start_command(&config, None).await.unwrap();
+
+        let socket_path = ctx.state_dir.join("notify/stable-notify.sock");
+        let original_inode = std::fs::metadata(&socket_path).unwrap().ino();
+
+        manager.stop_and_keep("stable-notify").await.unwrap();
+        assert!(
+            socket_path.exists(),
+            "user stop must retain the bound socket"
+        );
+
+        // This belongs to the terminated run. The start boundary must discard
+        // it before the replacement receiver is installed.
+        send_notify(&socket_path, &[NotifyState::Ready]);
+
+        manager.start_not_started("stable-notify").await.unwrap();
+        assert_eq!(
+            std::fs::metadata(&socket_path).unwrap().ino(),
+            original_inode,
+            "restart must reuse the same bound notify socket"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            manager.get_phase("stable-notify").await,
+            Some(ProcessPhase::Starting),
+            "a queued READY from the old run must not ready the replacement"
+        );
+
+        manager.stop_all().await.unwrap();
+    })
+    .await
+    .expect("Test timed out");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_no_notify_socket_when_disabled() {
     timeout(TEST_TIMEOUT, async {
         let ctx = TestContext::new();
@@ -232,7 +278,8 @@ async fn test_no_notify_socket_when_disabled() {
             wait_for_condition(
                 || async {
                     manager.job_state("nosd").await.is_some_and(|s| {
-                        s.phase == SupervisorPhase::Starting || s.phase == SupervisorPhase::Ready
+                        s.display_phase() == ProcessPhase::Starting
+                            || s.display_phase() == ProcessPhase::Ready
                     })
                 },
                 STARTUP_TIMEOUT
@@ -553,7 +600,7 @@ async fn test_watchdog_respects_max_restarts() {
                 manager
                     .job_state("wdmax")
                     .await
-                    .is_some_and(|s| s.phase == devenv_processes::SupervisorPhase::GaveUp)
+                    .is_some_and(|s| s.display_phase() == devenv_processes::ProcessPhase::GaveUp)
             },
             RESTART_TIMEOUT,
         )

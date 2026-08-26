@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use devenv_processes::{ProcessConfig, ProcessType, RestartConfig, RestartPolicy, SupervisorPhase};
+use devenv_processes::{ProcessConfig, ProcessPhase, ProcessType, RestartConfig, RestartPolicy};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -44,7 +44,7 @@ async fn test_foreground_default_restarts_on_failure() {
                 manager
                     .job_state("foreground-fail")
                     .await
-                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+                    .is_some_and(|s| s.display_phase() == ProcessPhase::GaveUp)
             },
             RESTART_TIMEOUT,
         )
@@ -138,7 +138,7 @@ async fn test_default_process_type_is_foreground() {
                 manager
                     .job_state("default-type")
                     .await
-                    .is_some_and(|s| s.phase == SupervisorPhase::GaveUp)
+                    .is_some_and(|s| s.display_phase() == ProcessPhase::GaveUp)
             },
             RESTART_TIMEOUT,
         )

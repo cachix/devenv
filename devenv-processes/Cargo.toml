@@ -44,3 +44,4 @@ test-file-watcher = ["devenv-event-sources/macos-kqueue"]
 
 [dev-dependencies]
 sd-notify.workspace = true
+strum.workspace = true

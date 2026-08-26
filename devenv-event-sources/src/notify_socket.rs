@@ -7,6 +7,9 @@
 //! - STOPPING=1: Process is shutting down
 
 use miette::{IntoDiagnostic, Result, WrapErr};
+use nix::errno::Errno;
+use nix::sys::socket::{MsgFlags, recv};
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use tokio::net::UnixDatagram;
 use tracing::debug;
@@ -85,6 +88,28 @@ impl NotifySocket {
 
         let data = String::from_utf8_lossy(&buf[..len]);
         Ok(parse_notify_message(&data))
+    }
+
+    /// Drain every datagram currently queued on this socket without waiting.
+    ///
+    /// Process supervisors use this after the old process scope is fully
+    /// reaped and before launching a replacement. Keeping the bound socket
+    /// stable preserves `NOTIFY_SOCKET`, while draining establishes the
+    /// provenance boundary between child runs.
+    pub fn drain(&self) -> Result<usize> {
+        let mut buf = [0u8; 4096];
+        let mut drained = 0;
+        loop {
+            match recv(self.socket.as_raw_fd(), &mut buf, MsgFlags::MSG_DONTWAIT) {
+                Ok(_) => drained += 1,
+                Err(Errno::EAGAIN) => return Ok(drained),
+                Err(error) => {
+                    return Err(error)
+                        .into_diagnostic()
+                        .wrap_err("Failed to drain notify socket");
+                }
+            }
+        }
     }
 }
 
@@ -239,5 +264,28 @@ mod tests {
         }
         // Socket should be cleaned up after drop
         assert!(!socket_path.exists());
+    }
+
+    #[tokio::test]
+    async fn drain_reuses_the_bound_socket_and_discards_queued_datagrams() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let socket = NotifySocket::new(temp_dir.path(), "drain-test")
+            .await
+            .unwrap();
+        let path = socket.path().to_path_buf();
+        let sender = UnixDatagram::unbound().unwrap();
+
+        sender.send_to(b"READY=1", &path).await.unwrap();
+        sender.send_to(b"WATCHDOG=1", &path).await.unwrap();
+
+        assert_eq!(socket.drain().unwrap(), 2);
+        assert_eq!(socket.drain().unwrap(), 0);
+        assert_eq!(socket.path(), path);
+
+        sender.send_to(b"STATUS=new run", &path).await.unwrap();
+        assert_eq!(
+            socket.recv().await.unwrap(),
+            vec![NotifyMessage::Status("new run".to_string())]
+        );
     }
 }

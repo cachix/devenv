@@ -7,7 +7,9 @@ use devenv_activity::{ActivityEvent, ActivityOutcome, Process as ProcessEvent, T
 use tokio::sync::mpsc;
 
 use crate::types::VerbosityLevel;
-use crate::types::{ProcessPhase, TaskCompleted, TaskStatus, TaskType, TasksStatus, process_name};
+use crate::types::{
+    ProcessPhase, TaskCompleted, TaskExecutionState, TaskType, TasksStatus, process_name,
+};
 use crate::{Error, Outputs, Tasks};
 
 /// Line-buffered console output
@@ -387,8 +389,8 @@ impl TasksUi {
                     process_name(&task_state.task.name)
                 ));
                 errors.push_str("---\n");
-            } else if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) =
-                &task_state.status
+            } else if let TaskExecutionState::Finished(TaskCompleted::Failed(_, failure)) =
+                task_state.status()
             {
                 errors.push_str(&format!(
                     "\n--- {} failed with error: {}\n",
