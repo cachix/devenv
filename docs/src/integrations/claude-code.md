@@ -339,7 +339,9 @@ Skills are written to `.claude/skills/<name>/SKILL.md`.
 - **description**: What the skill covers and when to use it. This is the only part Claude sees before loading the skill, so it decides whether the skill ever triggers.
   Keep it one line and name the situations that should pull it in.
 - **content**: The body of `SKILL.md`.
-- **allowedTools**: Restrict the tools available while the skill is active. Empty (the default) means no restriction.
+- **allowedTools**: Tools Claude can use without asking permission during the turn that invokes the skill.
+  The grant clears when you send your next message.
+  This pre-approves tools rather than restricting them; use **disallowedTools** to take tools away.
 - **resources**: Extra files placed next to `SKILL.md`, keyed by path relative to the skill directory.
   A bare path is the common case; use `{ source = ./x; executable = true; }`
   when the file needs to be run directly rather than passed to an interpreter.

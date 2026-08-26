@@ -497,7 +497,14 @@ in
             allowedTools = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ ];
-              description = "Restrict the tools available while this skill is active. Empty means no restriction.";
+              description = ''
+                Tools Claude can use without asking permission during the turn that invokes
+                this skill. The grant clears when you send your next message.
+
+                This pre-approves tools rather than restricting them; use `disallowedTools`
+                to take tools away.
+              '';
+              example = [ "Read" "Grep" "Bash(git status:*)" ];
             };
             resources = lib.mkOption {
               type = lib.types.attrsOf skillResourceType;
