@@ -210,6 +210,8 @@ This avoids GCC’s ` collect2 ` wrapper, which can hit ` Argument list too long
 in large Nix development environments before the final linker receives
 Rust’s response file.
 
+On x86_64 Linux (glibc), Clang uses LLD unless another linker is enabled.
+
 
 
 *Type:*
@@ -220,7 +222,7 @@ boolean
 *Default:*
 
 ```nix
-pkgs.stdenv.isLinux
+pkgs.stdenv.hostPlatform.isLinux
 ```
 
 *Declared by:*

@@ -12,6 +12,8 @@ title: "hivemind"
 
 ### process.managers.hivemind.package
 
+
+
 The hivemind package to use.
 
 
@@ -26,6 +28,132 @@ package
 ```nix
 pkgs.hivemind
 ```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+### process.managers.hivemind.adapter.client
+
+Client protocol used for attach, readiness, and individual process control.
+
+
+
+*Type:*
+one of “none”, “native-api”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+### process.managers.hivemind.adapter.stop
+
+
+
+Adapter used to stop the running manager.
+
+
+
+*Type:*
+one of “native-api”, “command”, “process-scope”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+### process.managers.hivemind.adapter.terminal
+
+
+
+Terminal required by the manager launcher.
+
+
+
+*Type:*
+one of “none”, “controlling”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+### process.managers.hivemind.capabilities.background_start
+
+
+
+Whether the manager can remain running after the launching client exits.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+### process.managers.hivemind.capabilities.cold_start_subset
+
+
+
+Whether the manager can initially start a named subset of processes.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+### process.managers.hivemind.capabilities.devenv_attach
+
+
+
+Whether devenv can attach its interactive client to an existing manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+### process.managers.hivemind.capabilities.individual_control
+
+
+
+Whether devenv can start, stop, and restart individual processes through the manager.
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
+
+
+
+### process.managers.hivemind.capabilities.wait_ready
+
+
+
+Whether devenv can wait for process readiness through the manager.
+
+
+
+*Type:*
+boolean
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
