@@ -27,6 +27,25 @@
         description = "A skill with no tool restriction and no bundled resources.";
         content = "Body.";
       };
+
+      # Every field the module knows how to render, to prove each one lands in
+      # the frontmatter and that a value containing a comma survives the list.
+      everything = {
+        description = "A skill exercising every frontmatter field.";
+        whenToUse = "Use when checking that the frontmatter renders in full.";
+        allowedTools = [ "Read" "Bash(git log --format=a,b:*)" ];
+        disallowedTools = [ "AskUserQuestion" ];
+        disableModelInvocation = true;
+        userInvocable = false;
+        argumentHint = "[issue-number]";
+        arguments = [ "issue" "branch" ];
+        model = "opus";
+        effort = "high";
+        context = "fork";
+        agent = "code-reviewer";
+        background = false;
+        content = "Body of everything.";
+      };
     };
   };
 }

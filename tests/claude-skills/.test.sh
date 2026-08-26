@@ -15,7 +15,9 @@ grep -qF -- 'name: package-scoping' "$skill" \
 grep -qF -- 'description: "Decide system vs user: use when a \"package\" lands in the wrong layer."' "$skill" \
   || { echo "expected description in frontmatter:"; cat "$skill"; exit 1; }
 
-grep -qF -- 'allowed-tools: "Read, Grep, Bash(git status: *)"' "$skill" \
+# Rendered as a YAML flow sequence, so a pattern containing a comma or a colon
+# stays a single entry.
+grep -qF -- 'allowed-tools: ["Read","Grep","Bash(git status: *)"]' "$skill" \
   || { echo "expected allowed-tools in frontmatter:"; cat "$skill"; exit 1; }
 
 grep -qF -- '# Package scoping' "$skill" \
@@ -53,6 +55,30 @@ if [ -x .claude/skills/package-scoping/references/table.md ]; then
   exit 1
 fi
 
+# Every frontmatter field the module renders lands in SKILL.md, and a tool
+# pattern containing a comma survives as one list entry.
+everything=.claude/skills/everything/SKILL.md
+
+while IFS= read -r expected; do
+  grep -qF -- "$expected" "$everything" \
+    || { echo "expected in $everything: $expected"; cat "$everything"; exit 1; }
+done <<'EOF'
+name: everything
+description: "A skill exercising every frontmatter field."
+when_to_use: "Use when checking that the frontmatter renders in full."
+allowed-tools: ["Read","Bash(git log --format=a,b:*)"]
+disallowed-tools: ["AskUserQuestion"]
+disable-model-invocation: true
+user-invocable: false
+argument-hint: "[issue-number]"
+arguments: ["issue","branch"]
+model: "opus"
+effort: "high"
+context: "fork"
+agent: "code-reviewer"
+background: false
+EOF
+
 # Skills are reported by `devenv info`.
-devenv info | grep -qF -- "- Skills: minimal, package-scoping" \
+devenv info | grep -qF -- "- Skills: everything, minimal, package-scoping" \
   || { echo "expected skills in devenv info output:"; devenv info; exit 1; }
