@@ -40,28 +40,14 @@ let
     };
   };
 
-  # A file bundled next to a skill's SKILL.md. A bare path is the common case;
-  # the attribute set form exists because a bundled script cannot be made
-  # executable after the fact: the symlink target is read-only in the store, and
-  # a copied file is rewritten on every shell entry.
-  skillResourceType = lib.types.coercedTo lib.types.path (source: { inherit source; }) (
-    lib.types.submodule {
-      options = {
-        source = lib.mkOption {
-          type = lib.types.path;
-          description = "File to place next to SKILL.md.";
-        };
-        executable = lib.mkOption {
-          type = lib.types.bool;
-          default = false;
-          description = ''
-            Make the file executable, for a resource that is run directly
-            rather than passed to an interpreter.
-          '';
-        };
-      };
-    }
-  );
+  # A file bundled next to a skill's SKILL.md. A bare path is the common case, so
+  # it coerces; the attribute set form takes the same contents and `executable`
+  # options as `files.<name>`, reused through `config.lib.fileSpecType`.
+  skillResourceType = lib.types.coercedTo lib.types.path (source: { inherit source; })
+    config.lib.fileSpecType;
+
+  # Bound out here because the skills submodule shadows `config` with its own.
+  fileCopyModeType = config.lib.fileCopyModeType;
 
   # Reserved keys that are not tool names (for backward compat detection)
   reservedPermissionKeys = [ "defaultMode" "disableBypassPermissionsMode" "additionalDirectories" "rules" ];
@@ -617,7 +603,7 @@ in
               '';
             };
             copyMode = lib.mkOption {
-              type = lib.types.enum [ "symlink" "seed" "copy" ];
+              type = fileCopyModeType;
               default = "symlink";
               description = ''
                 How to materialise the skill's files, as in `files.<name>.copyMode`.
@@ -1046,7 +1032,7 @@ in
         (lib.listToAttrs (lib.concatLists (lib.mapAttrsToList
           (name: skill: lib.mapAttrsToList
             (path: resource: lib.nameValuePair ".claude/skills/${name}/${path}" {
-              inherit (resource) source executable;
+              source = resource.file;
               inherit (skill) copyMode;
             })
             skill.resources)
