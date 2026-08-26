@@ -142,9 +142,13 @@ pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConf
         let (source, recursive) = match op {
             EvalOp::ReadFile { source }
             | EvalOp::ReadDir { source }
+            | EvalOp::ReadFileType { source }
+            | EvalOp::HashFile { source, .. }
             | EvalOp::PathExists { source }
             | EvalOp::EvaluatedFile { source } => (source, false),
-            EvalOp::TrackedPath { source } | EvalOp::CopiedSource { source, .. } => (source, true),
+            EvalOp::CopiedSource { source, .. } | EvalOp::FilteredSource { source, .. } => {
+                (source, true)
+            }
             EvalOp::GetEnv { name } => {
                 if !config.excluded_envs.contains(&name) {
                     env_names.insert(name);
@@ -331,5 +335,40 @@ mod tests {
             matches!(&inputs[0], Input::File(desc) if desc.path == source && desc.recursive),
             "a copied-source observation must subsume a weaker readDir observation"
         );
+    }
+
+    #[test]
+    fn test_ops_to_inputs_tracks_new_file_effects_and_filtered_sources() {
+        let temp_dir = TempDir::new().unwrap();
+        let file = temp_dir.path().join("source.txt");
+        std::fs::write(&file, b"source").unwrap();
+        let source = temp_dir.path().to_path_buf();
+
+        let inputs = ops_to_inputs(
+            vec![
+                EvalOp::ReadFileType {
+                    source: file.clone(),
+                },
+                EvalOp::HashFile {
+                    source: file.clone(),
+                    algorithm: "sha256".into(),
+                },
+                EvalOp::FilteredSource {
+                    source: source.clone(),
+                    target: PathBuf::from("/nix/store/example-source"),
+                },
+            ],
+            &CachingConfig::default(),
+        );
+
+        assert_eq!(inputs.len(), 2);
+        assert!(matches!(
+            &inputs[0],
+            Input::File(desc) if desc.path == source && desc.recursive
+        ));
+        assert!(matches!(
+            &inputs[1],
+            Input::File(desc) if desc.path == file && !desc.recursive
+        ));
     }
 }

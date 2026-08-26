@@ -210,8 +210,8 @@ every file the session has seen so far, not just files forced by `A`. In
 devenv, module merging runs once per session and any file it reads is
 effectively an input to every later attribute, so the "everything seen so
 far" set is the correct invalidation boundary. It also sidesteps Nix's
-internal `fileEvalCache`, which suppresses the `evaluating file` event on
-the second and subsequent evaluations of a given path within one EvalState.
+internal `fileEvalCache`, whose cached and uncached evaluations are both
+reported as structured `evaluated-file` effects.
 
 ### Observed Operations
 
@@ -219,10 +219,12 @@ the second and subsequent evaluations of a given path within one EvalState.
 |--------|------------|
 | ReadFile | File input |
 | ReadDir | File input (directory) |
+| ReadFileType | File input |
+| HashFile | File input |
 | PathExists | File input |
 | EvaluatedFile | File input |
-| TrackedPath | File input |
-| CopiedSource | File input |
+| CopiedSource | Recursive file input |
+| FilteredSource | Recursive file input |
 | GetEnv | Env input |
 
 ### Filtering

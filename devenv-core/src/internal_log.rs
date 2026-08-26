@@ -145,9 +145,9 @@ pub enum ActivityType {
     PostBuildHook = 110,
     BuildWaiting = 111,
     FetchTree = 112,
-    /// A local source path was copied into the store during evaluation.
-    /// Fields: `[0]` = source path, `[1]` = destination store path.
-    EvalCopySource = 113,
+    /// A filesystem or environment dependency observed during evaluation.
+    /// Fields: `[0]` = kind, `[1]` = subject, `[2]` = optional detail.
+    EvalEffect = 113,
 }
 
 #[derive(Debug, thiserror::Error)]

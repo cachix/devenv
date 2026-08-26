@@ -623,11 +623,13 @@ impl ActivityModel {
                 self.log_to_activity(id, line);
 
                 // Count file read operations for the progress display.
-                // Excludes CopiedSource, ReadDir, GetEnv, TrackedPath.
+                // Excludes recursively tracked sources, ReadDir, GetEnv.
                 let is_file_read = matches!(
                     op,
                     EvalOp::EvaluatedFile { .. }
                         | EvalOp::ReadFile { .. }
+                        | EvalOp::ReadFileType { .. }
+                        | EvalOp::HashFile { .. }
                         | EvalOp::PathExists { .. }
                 );
                 if is_file_read

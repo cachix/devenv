@@ -9,14 +9,14 @@
 //!
 //! # Eval Activity Tracking
 //!
-//! The bridge tracks which Activity file evaluations should be logged to.
+//! The bridge tracks which Activity evaluation effects should be attached to.
 //! The caller owns the Activity and passes its ID to `begin_eval()`.
 //!
 //! ## How It Works
 //!
 //! 1. Caller creates an Activity (e.g., `Activity::evaluate("Building shell")`)
 //! 2. Caller calls `begin_eval(activity.id())` which returns an `EvalActivityGuard`
-//! 3. When file evaluation messages arrive, they are logged to that activity
+//! 3. Structured evaluation effects are appended to that activity
 //! 4. When the guard is dropped, `end_eval()` is called automatically
 //!
 //! This guard-based API ensures eval scopes are always properly closed.
@@ -41,7 +41,7 @@ use crate::internal_log::{
 /// The bridge stores only the activity ID, not the Activity itself.
 /// The caller owns the Activity and controls its lifecycle.
 struct EvalActivityState {
-    /// The current evaluation activity ID, used for logging file evaluations.
+    /// The current evaluation activity ID, used for logging evaluation effects.
     current_eval_id: Option<u64>,
 }
 
@@ -265,16 +265,15 @@ impl NixLogBridge {
                 fields,
                 ..
             } => {
-                // Some eval operations (e.g. a source copied into the store) are
-                // surfaced as structured activities rather than log messages.
-                // Activities are delivered regardless of verbosity, so record any
-                // input dependency they carry for cache invalidation.
-                if let Some(op) = EvalOp::from_activity(typ, &fields)
-                    && let Ok(guard) = self.observers.lock()
-                {
-                    for observer in guard.iter() {
-                        observer.record(op.clone());
+                // Eval dependencies are structured activities, so cache tracking
+                // and the UI do not depend on Nix's human-readable log output.
+                if let Some(op) = EvalOp::from_activity(typ, &fields) {
+                    if let Ok(guard) = self.observers.lock() {
+                        for observer in guard.iter() {
+                            observer.record(op.clone());
+                        }
                     }
+                    self.op_to_current_eval(op);
                 }
                 self.handle_activity_start(id, typ, text, fields);
             }
@@ -295,20 +294,6 @@ impl NixLogBridge {
                 }
             }
             InternalLog::Msg { level, ref msg, .. } => {
-                // Extract any input operation from the log for caching
-                if let Some(op) = EvalOp::from_internal_log(&log) {
-                    if let Ok(guard) = self.observers.lock() {
-                        for observer in guard.iter() {
-                            observer.record(op.clone());
-                        }
-                    }
-
-                    // Handle eval operations for UI - emit structured op to eval activity if in scope
-                    if self.op_to_current_eval(op) {
-                        return;
-                    }
-                }
-
                 match log.message_kind() {
                     NixMessageKind::Error => {
                         let (summary, details) = parse_nix_error(msg);
@@ -689,7 +674,7 @@ pub fn activity_type_from_str(s: &str) -> ActivityType {
         "post-build-hook" => ActivityType::PostBuildHook,
         "build-waiting" => ActivityType::BuildWaiting,
         "fetch-tree" => ActivityType::FetchTree,
-        "eval-copy-source" => ActivityType::EvalCopySource,
+        "eval-effect" => ActivityType::EvalEffect,
         _ => ActivityType::Unknown,
     }
 }
@@ -803,6 +788,17 @@ mod tests {
         }
     }
 
+    fn eval_effect(id: u64, fields: Vec<Field>) -> InternalLog {
+        InternalLog::Start {
+            id,
+            level: Verbosity::Info,
+            typ: ActivityType::EvalEffect,
+            text: String::new(),
+            parent: 0,
+            fields,
+        }
+    }
+
     #[test]
     fn process_internal_log_records_real_errors() {
         let bridge = NixLogBridge::new();
@@ -895,8 +891,8 @@ mod tests {
         );
         assert_eq!(activity_type_from_str("copy-path"), ActivityType::CopyPath);
         assert_eq!(
-            activity_type_from_str("eval-copy-source"),
-            ActivityType::EvalCopySource
+            activity_type_from_str("eval-effect"),
+            ActivityType::EvalEffect
         );
         assert_eq!(
             activity_type_from_str("unknown-type"),
@@ -1055,11 +1051,14 @@ mod tests {
         let observer = MockObserver::new();
         bridge.add_observer(observer.clone());
 
-        bridge.process_internal_log(InternalLog::Msg {
-            level: Verbosity::Talkative,
-            msg: "evaluating file '/tmp/default.nix'".into(),
-            raw_msg: None,
-        });
+        bridge.process_internal_log(eval_effect(
+            1,
+            vec![
+                Field::String("evaluated-file".into()),
+                Field::String("/tmp/default.nix".into()),
+                Field::String("uncached".into()),
+            ],
+        ));
 
         assert_eq!(observer.collected_ops().len(), 1);
         assert_eq!(
@@ -1078,11 +1077,14 @@ mod tests {
         bridge.add_observer(obs1.clone());
         bridge.add_observer(obs2.clone());
 
-        bridge.process_internal_log(InternalLog::Msg {
-            level: Verbosity::Talkative,
-            msg: "evaluating file '/tmp/default.nix'".into(),
-            raw_msg: None,
-        });
+        bridge.process_internal_log(eval_effect(
+            1,
+            vec![
+                Field::String("evaluated-file".into()),
+                Field::String("/tmp/default.nix".into()),
+                Field::String("uncached".into()),
+            ],
+        ));
 
         assert_eq!(obs1.collected_ops().len(), 1);
         assert_eq!(obs2.collected_ops().len(), 1);
@@ -1095,11 +1097,14 @@ mod tests {
         bridge.add_observer(observer.clone());
         bridge.clear_observers();
 
-        bridge.process_internal_log(InternalLog::Msg {
-            level: Verbosity::Talkative,
-            msg: "evaluating file '/tmp/default.nix'".into(),
-            raw_msg: None,
-        });
+        bridge.process_internal_log(eval_effect(
+            1,
+            vec![
+                Field::String("evaluated-file".into()),
+                Field::String("/tmp/default.nix".into()),
+                Field::String("uncached".into()),
+            ],
+        ));
 
         assert_eq!(observer.collected_ops().len(), 0);
     }

@@ -33,6 +33,7 @@ inputs:
     # Provides libghostty-vt.
     # Kept in sync with flake.nix's ghostty input.
     url: github:ghostty-org/ghostty
+    flake: false
 
   devenv-ai-agents:
     url: github:cachix/devenv-ai-agents

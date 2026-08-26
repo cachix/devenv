@@ -795,9 +795,9 @@ fn evaluated_files(ops: &[EvalOp]) -> std::collections::HashSet<PathBuf> {
 }
 
 /// The persistent `InputTracker` must accumulate file deps across attribute
-/// evaluations. Once Nix's internal fileEvalCache fires `evaluating file`
-/// for a path, later evals won't re-emit it — so the tracker is the only
-/// place those deps survive. This invariant keeps later attrs' DB rows
+/// evaluations. Nix reports both cached and uncached file evaluations as
+/// structured effects, and the tracker is the only place those dependencies
+/// survive across attribute evaluations. This invariant keeps later attrs' DB rows
 /// (e.g. `shell`) aware of files first touched during earlier attrs'
 /// evaluation (e.g. `config.cachix.*`).
 #[nix_test]

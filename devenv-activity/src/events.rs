@@ -171,18 +171,28 @@ pub enum EvalOp {
         source: std::path::PathBuf,
         target: std::path::PathBuf,
     },
+    /// Filtered a source tree and copied it to the store.
+    FilteredSource {
+        source: std::path::PathBuf,
+        target: std::path::PathBuf,
+    },
     /// Evaluated a Nix file.
     EvaluatedFile { source: std::path::PathBuf },
     /// Read a file's contents with `builtins.readFile`.
     ReadFile { source: std::path::PathBuf },
     /// List a directory's contents with `builtins.readDir`.
     ReadDir { source: std::path::PathBuf },
+    /// Read a file type with `builtins.readFileType`.
+    ReadFileType { source: std::path::PathBuf },
+    /// Hashed a file with `builtins.hashFile`.
+    HashFile {
+        source: std::path::PathBuf,
+        algorithm: String,
+    },
     /// Read an environment variable with `builtins.getEnv`.
     GetEnv { name: String },
     /// Check that a file exists with `builtins.pathExists`.
     PathExists { source: std::path::PathBuf },
-    /// Used a tracked devenv string path.
-    TrackedPath { source: std::path::PathBuf },
 }
 
 impl fmt::Display for EvalOp {
@@ -194,16 +204,27 @@ impl fmt::Display for EvalOp {
                 source.display(),
                 target.display()
             ),
+            EvalOp::FilteredSource { source, target } => write!(
+                f,
+                "filtered source '{}' -> '{}'",
+                source.display(),
+                target.display()
+            ),
             EvalOp::EvaluatedFile { source } => {
                 write!(f, "evaluating file '{}'", source.display())
             }
             EvalOp::ReadFile { source } => write!(f, "readFile: '{}'", source.display()),
             EvalOp::ReadDir { source } => write!(f, "readDir: '{}'", source.display()),
+            EvalOp::ReadFileType { source } => {
+                write!(f, "readFileType: '{}'", source.display())
+            }
+            EvalOp::HashFile { source, algorithm } => {
+                write!(f, "hashFile ({algorithm}): '{}'", source.display())
+            }
             EvalOp::GetEnv { name } => write!(f, "getEnv: '{}'", name),
             EvalOp::PathExists { source } => {
                 write!(f, "pathExists: '{}'", source.display())
             }
-            EvalOp::TrackedPath { source } => write!(f, "path: '{}'", source.display()),
         }
     }
 }

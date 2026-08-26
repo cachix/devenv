@@ -51,13 +51,12 @@ pub fn setup_nix_logger() -> Result<NixLoggerSetup> {
 
     let mut context = Context::new();
 
-    // Set verbosity to Talkative so we receive "evaluating file" messages
-    // These messages are emitted at lvlTalkative (4) and are needed to show
-    // the "Evaluating" activity in the UI
+    // Evaluation dependencies use structured `eval-effect` activities, so
+    // normal verbosity is enough for progress and cache invalidation.
     unsafe {
         nix_bindings_bindgen_raw::set_verbosity(
             context.ptr(),
-            nix_bindings_bindgen_raw::verbosity_NIX_LVL_TALKATIVE,
+            nix_bindings_bindgen_raw::verbosity_NIX_LVL_INFO,
         );
     }
 
