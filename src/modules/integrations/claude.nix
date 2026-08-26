@@ -40,6 +40,10 @@ let
     };
   };
 
+  # Claude Code's default cap on the combined `description` + `when_to_use` text
+  # it keeps in the always-on skill listing, per skill.
+  skillListingMaxDescChars = 1536;
+
   # A file bundled next to a skill's SKILL.md. A bare path is the common case, so
   # it coerces; the attribute set form takes the same contents and `executable`
   # options as `files.<name>`, reused through `config.lib.fileSpecType`.
@@ -466,7 +470,7 @@ in
 
     skills = lib.mkOption {
       type = lib.types.attrsOf (
-        lib.types.submodule ({ name, ... }: {
+        lib.types.submodule ({ name, config, ... }: {
           options = {
             description = lib.mkOption {
               type = lib.types.str;
@@ -481,7 +485,8 @@ in
               default = null;
               description = ''
                 Additional context for when Claude should invoke the skill, such as trigger
-                phrases or example requests. Appended to `description` in the skill listing.
+                phrases or example requests. Appended to `description` in the skill listing
+                and counts toward the ${toString skillListingMaxDescChars}-character cap.
               '';
               example = "Use when the user mentions migrations, schema changes or rollbacks.";
             };
@@ -617,7 +622,31 @@ in
               visible = false;
               description = "Assertions raised by this skill's submodule, collected into the top-level assertions.";
             };
+            warnings = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              internal = true;
+              visible = false;
+              description = "Warnings raised by this skill's submodule, collected into the top-level warnings.";
+            };
           };
+
+          config.warnings =
+            let
+              hasWhenToUse = config.whenToUse != null;
+              listingLength =
+                builtins.stringLength config.description
+                + (if hasWhenToUse then builtins.stringLength config.whenToUse else 0);
+              subject =
+                if hasWhenToUse
+                then "`description` and `whenToUse` add up to"
+                else "`description` is";
+            in
+            lib.optional (listingLength > skillListingMaxDescChars) ''
+              claude.code.skills.${name}: ${subject} ${toString listingLength} characters, over the
+              ${toString skillListingMaxDescChars} Claude Code keeps in the skill listing. The rest is truncated, so
+              put the key use case first or move the detail into `content`.
+            '';
 
           config.assertions = [
             {
@@ -940,6 +969,7 @@ in
     {
       assertions = lib.flatten (lib.mapAttrsToList (_: agent: agent.assertions) cfg.agents)
         ++ lib.flatten (lib.mapAttrsToList (_: skill: skill.assertions) cfg.skills);
+      warnings = lib.flatten (lib.mapAttrsToList (_: skill: skill.warnings) cfg.skills);
     }
 
     (lib.mkIf cfg.enable {

@@ -342,7 +342,7 @@ Skills are written to `.claude/skills/<name>/SKILL.md`.
 - **allowedTools**: Tools Claude can use without asking permission during the turn that invokes the skill; the grant clears when you send your next message.
   This pre-approves tools rather than restricting them; use **disallowedTools** to take tools away.
 - **whenToUse**: Extra context for when Claude should invoke the skill, such as trigger phrases or example requests.
-  Appended to **description** in the skill listing.
+  Appended to **description** in the skill listing and counts toward the 1536-character cap; devenv warns when a skill goes over.
 - **disallowedTools**: Tools removed from Claude's available pool while the skill is active, cleared when you send your next message.
   Use it for a skill that should never call a given tool, such as an autonomous loop that must not stop to ask a question.
 - **disableModelInvocation**: Prevent Claude from automatically loading the skill. Use for workflows you want to trigger manually with `/<name>`.
