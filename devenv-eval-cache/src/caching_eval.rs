@@ -26,6 +26,7 @@ use std::time::SystemTime;
 use tracing::{debug, trace, warn};
 
 use crate::db::{self, EnvInputRow, EvalRow, FileInputRow, empty_to_none};
+use crate::eval_input_manager::{EvalInputManager, EvalInputSpec};
 use crate::eval_inputs::{
     EnvInputDesc, FileInputDesc, FileState, Input, check_env_state, check_file_state,
 };
@@ -43,7 +44,7 @@ pub struct CachedEvalResult {
     pub eval_id: i64,
 }
 
-/// Cache-layer failures (DB, IO, serde, resource replay). Evaluation failures
+/// Cache-layer failures (DB, IO, serde, cached-state restoration). Evaluation failures
 /// from caller-supplied closures live on [`Error::Eval`] instead, so this
 /// crate stays agnostic of the caller's error type.
 #[derive(Debug, thiserror::Error)]
@@ -52,8 +53,8 @@ pub enum CacheError {
     Database(#[from] sqlx::Error),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
-    #[error("Resource replay failed: {0}")]
-    ResourceReplay(String),
+    #[error("Cached evaluation state could not be restored: {0}")]
+    CachedStateRestore(String),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 }
@@ -194,13 +195,14 @@ impl CachingEvalService {
         Ok(())
     }
 
-    /// Remove all cached eval entries that have associated resource specs.
+    /// Remove all cached eval entries that have associated extension state.
     ///
-    /// Used when resource replay fails: one bad entry may make resource state
-    /// across attrs inconsistent, so every resource-dependent entry must be
+    /// Used when restoring a resource or validating an input fails: one bad
+    /// entry may make extension state across attrs inconsistent, so every
+    /// state-dependent entry must be
     /// purged together. Returns the number of
     /// rows deleted.
-    pub async fn invalidate_resource_dependent(&self) -> Result<u64, CacheError> {
+    pub async fn invalidate_cached_state_dependent(&self) -> Result<u64, CacheError> {
         Ok(db::delete_evals_with_resource_specs(&self.pool).await?)
     }
 
@@ -358,7 +360,8 @@ pub struct CachedEval {
     /// stored row records the full transitive input set of the session.
     input_tracker: Arc<InputTracker>,
     resource_manager: Option<Arc<ResourceManager>>,
-    on_resource_invalidation: Option<Arc<dyn Fn() + Send + Sync>>,
+    eval_inputs: Option<Arc<EvalInputManager>>,
+    on_cached_state_invalidation: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl CachedEval {
@@ -378,7 +381,8 @@ impl CachedEval {
             config,
             input_tracker,
             resource_manager: None,
-            on_resource_invalidation: None,
+            eval_inputs: None,
+            on_cached_state_invalidation: None,
         }
     }
 
@@ -395,7 +399,8 @@ impl CachedEval {
             config: CachingConfig::default(),
             input_tracker,
             resource_manager: None,
-            on_resource_invalidation: None,
+            eval_inputs: None,
+            on_cached_state_invalidation: None,
         }
     }
 
@@ -410,11 +415,21 @@ impl CachedEval {
         self
     }
 
-    /// Set a callback invoked when resource replay fails and all resource-dependent
-    /// cache entries are purged. Use this to clear any in-memory cached Nix values
-    /// so that re-evaluation starts from a clean state.
-    pub fn with_on_resource_invalidation(mut self, f: Arc<dyn Fn() + Send + Sync>) -> Self {
-        self.on_resource_invalidation = Some(f);
+    /// Set the manager for inputs observed outside Nix's ordinary file/env log.
+    ///
+    /// On a cache hit, stored inputs are validated and restored into their live
+    /// trackers. This lets later orchestration retain the exact dependency set
+    /// even when evaluation itself was skipped.
+    pub fn with_eval_inputs(mut self, inputs: Arc<EvalInputManager>) -> Self {
+        self.eval_inputs = Some(inputs);
+        self
+    }
+
+    /// Set a callback invoked when cached resources or inputs cannot be restored
+    /// and all state-dependent cache entries are purged. Use this to clear any
+    /// in-memory cached Nix values so re-evaluation starts from a clean state.
+    pub fn with_on_cached_state_invalidation(mut self, f: Arc<dyn Fn() + Send + Sync>) -> Self {
+        self.on_cached_state_invalidation = Some(f);
         self
     }
 
@@ -450,9 +465,13 @@ impl CachedEval {
     ///
     /// Returns Ok(()) if replay succeeded or no resources were stored.
     /// Returns Err if replay failed (caller should re-evaluate).
-    pub async fn try_replay_resources(&self, eval_id: i64) -> Result<(), CacheError> {
-        if let (Some(service), Some(rm)) = (&self.service, &self.resource_manager) {
-            self.replay_resources(service, rm, eval_id).await
+    pub async fn try_restore_cached_state(&self, eval_id: i64) -> Result<(), CacheError> {
+        if let Some(service) = &self.service {
+            if let Err(error) = self.restore_cached_state(service, eval_id).await {
+                self.handle_restore_failure(service, &error).await;
+                return Err(error);
+            }
+            Ok(())
         } else {
             Ok(())
         }
@@ -462,30 +481,34 @@ impl CachedEval {
     ///
     /// Call this after a replay failure before re-evaluating, to ensure
     /// the resource manager starts fresh.
-    pub fn clear_resources(&self) {
+    pub fn clear_cached_state(&self) {
         if let Some(ref rm) = self.resource_manager {
             rm.clear_all();
         }
+        if let Some(ref inputs) = self.eval_inputs {
+            inputs.clear_all();
+        }
     }
 
-    /// Handle a replay failure by purging all resource-dependent cache entries,
-    /// resetting resource state, and invoking the invalidation
-    /// callback so the caller can clear any in-memory cached Nix values.
-    async fn handle_replay_failure(
-        &self,
-        service: &CachingEvalService,
-        rm: &ResourceManager,
-        error: &CacheError,
-    ) {
-        warn!(error = %error, "Resource replay failed, invalidating all resource-dependent cache entries");
+    /// Clear inputs observed by the current evaluation session.
+    pub fn clear_eval_inputs(&self) {
+        if let Some(ref inputs) = self.eval_inputs {
+            inputs.clear_all();
+        }
+    }
 
-        if let Err(db_err) = service.invalidate_resource_dependent().await {
-            warn!(error = %db_err, "Failed to delete resource-dependent cache entries");
+    /// Handle a cached-state restore failure by purging state-dependent cache
+    /// entries, resetting live state, and invoking the invalidation callback.
+    async fn handle_restore_failure(&self, service: &CachingEvalService, error: &CacheError) {
+        warn!(error = %error, "Cached evaluation state restore failed, invalidating all state-dependent cache entries");
+
+        if let Err(db_err) = service.invalidate_cached_state_dependent().await {
+            warn!(error = %db_err, "Failed to delete state-dependent cache entries");
         }
 
-        rm.clear_all();
+        self.clear_cached_state();
 
-        if let Some(ref cb) = self.on_resource_invalidation {
+        if let Some(ref cb) = self.on_cached_state_invalidation {
             cb();
         }
     }
@@ -495,17 +518,12 @@ impl CachedEval {
     /// Loads resource specs from the database and replays them through the
     /// resource manager. Returns Ok(()) if all resources were successfully
     /// re-acquired, or Err if any resource failed to replay.
-    async fn replay_resources(
+    async fn restore_cached_state(
         &self,
         service: &CachingEvalService,
-        rm: &ResourceManager,
         eval_id: i64,
     ) -> Result<(), CacheError> {
         let spec_rows = db::get_resource_specs_by_eval_id(&service.pool, eval_id).await?;
-
-        if spec_rows.is_empty() {
-            return Ok(());
-        }
 
         let specs: Vec<ResourceSpec> = spec_rows
             .into_iter()
@@ -521,31 +539,80 @@ impl CachedEval {
         debug!(
             eval_id = eval_id,
             num_specs = specs.len(),
-            "replaying resource allocations from cache"
+            "restoring evaluation state from cache"
         );
 
-        rm.replay_all(&specs)
-            .map_err(|e| CacheError::ResourceReplay(e.to_string()))
+        let mut resource_specs = Vec::new();
+        let mut input_specs = Vec::new();
+        for spec in specs {
+            if self
+                .resource_manager
+                .as_ref()
+                .is_some_and(|manager| manager.handles(&spec.type_id))
+            {
+                resource_specs.push(spec);
+            } else if self
+                .eval_inputs
+                .as_ref()
+                .is_some_and(|manager| manager.handles(&spec.type_id))
+            {
+                input_specs.push(EvalInputSpec {
+                    type_id: spec.type_id,
+                    data: spec.data,
+                });
+            } else {
+                return Err(CacheError::CachedStateRestore(format!(
+                    "unknown cached evaluation state type: {}",
+                    spec.type_id
+                )));
+            }
+        }
+
+        if let Some(inputs) = &self.eval_inputs {
+            inputs
+                .restore_all(&input_specs)
+                .map_err(|error| CacheError::CachedStateRestore(error.to_string()))?;
+        }
+        if let Some(resources) = &self.resource_manager {
+            resources
+                .replay_all(&resource_specs)
+                .map_err(|error| CacheError::CachedStateRestore(error.to_string()))?;
+        }
+        Ok(())
     }
 
     /// Snapshot and store resource allocations after a cache miss evaluation.
-    async fn store_resources(
+    async fn store_cached_state(
         &self,
         service: &CachingEvalService,
-        rm: &ResourceManager,
         eval_id: i64,
-    ) {
-        let specs = rm.snapshot_all();
+    ) -> Result<(), CacheError> {
+        let mut specs = self
+            .resource_manager
+            .as_ref()
+            .map(|manager| manager.snapshot_all())
+            .unwrap_or_default();
+        if let Some(inputs) = &self.eval_inputs {
+            specs.extend(
+                inputs
+                    .snapshot_all()
+                    .map_err(|error| CacheError::CachedStateRestore(error.to_string()))?
+                    .into_iter()
+                    .map(|spec| ResourceSpec {
+                        type_id: spec.type_id,
+                        data: spec.data,
+                    }),
+            );
+        }
         if !specs.is_empty() {
             debug!(
                 eval_id = eval_id,
                 num_specs = specs.len(),
                 "storing resource allocations in cache"
             );
-            if let Err(e) = db::insert_resource_specs(&service.pool, eval_id, &specs).await {
-                warn!(error = %e, "failed to store resource specs in cache");
-            }
+            db::insert_resource_specs(&service.pool, eval_id, &specs).await?;
         }
+        Ok(())
     }
 
     /// Look up `key` in the cache, replaying any associated resources.
@@ -567,10 +634,7 @@ impl CachedEval {
             }
         };
 
-        if let Some(ref rm) = self.resource_manager
-            && let Err(e) = self.replay_resources(service, rm, cached.eval_id).await
-        {
-            self.handle_replay_failure(service, rm, &e).await;
+        if self.try_restore_cached_state(cached.eval_id).await.is_err() {
             return None;
         }
 
@@ -588,8 +652,11 @@ impl CachedEval {
     ) {
         match service.store(key, json, inputs).await {
             Ok(eval_id) => {
-                if let Some(ref rm) = self.resource_manager {
-                    self.store_resources(service, rm, eval_id).await;
+                if let Err(error) = self.store_cached_state(service, eval_id).await {
+                    warn!(error = %error, "failed to store cached evaluation state");
+                    if let Err(invalidate_error) = service.invalidate(key).await {
+                        warn!(error = %invalidate_error, "failed to remove eval with incomplete cached state");
+                    }
                 }
             }
             Err(e) => {
@@ -1292,7 +1359,7 @@ mod tests {
         let config = CachingConfig::default();
         let cached_eval = CachedEval::with_cache(service, log_bridge, config)
             .with_resource_manager(resource_manager)
-            .with_on_resource_invalidation(Arc::new(move || {
+            .with_on_cached_state_invalidation(Arc::new(move || {
                 callback_flag.store(true, Ordering::Release);
             }));
 
@@ -1361,7 +1428,7 @@ mod tests {
 
         // Now call eval() for key1. The cache hit will try to replay port 50300
         // for "postgres:default", but it is already held by "other_process:blocker",
-        // so replay fails and handle_replay_failure should fire.
+        // so replay fails and handle_restore_failure should fire.
         let activity = devenv_activity::activity!(INFO, evaluate, "test");
         let (result, cache_hit) = cached_eval
             .eval(&key1, &activity, || async {
@@ -1385,7 +1452,7 @@ mod tests {
             .expect("key1 should be re-stored after re-evaluation");
         assert_eq!(key1_row.json_output, r#"{"port":50302}"#);
 
-        // key2 was deleted by handle_replay_failure and never re-evaluated
+        // key2 was deleted by handle_restore_failure and never re-evaluated
         assert!(
             db::get_eval_by_key_hash(&pool, &key2.key_hash)
                 .await
@@ -1400,6 +1467,65 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+    }
+
+    #[sqlx::test]
+    async fn cache_hit_restores_eval_inputs_and_change_re_evaluates(pool: SqlitePool) {
+        use devenv_core::dotenv::{DotenvTracker, load_dotenv_tracked};
+
+        let root = TempDir::new().unwrap();
+        let dotenv_path = root.path().join(".env");
+        std::fs::write(&dotenv_path, "VALUE=before\n").unwrap();
+
+        let tracker = Arc::new(DotenvTracker::default());
+        let mut inputs = EvalInputManager::new();
+        inputs.register(tracker.clone());
+        let inputs = Arc::new(inputs);
+        let cached_eval = CachedEval::with_cache(
+            CachingEvalService::new(pool),
+            NixLogBridge::new(),
+            CachingConfig::default(),
+        )
+        .with_eval_inputs(inputs.clone());
+        let key = EvalCacheKey::from_test_string("(import /test {})", "config.dotenv");
+        let activity = devenv_activity::activity!(INFO, evaluate, "test");
+
+        let first_path = dotenv_path.clone();
+        let first_tracker = tracker.clone();
+        let (first, first_hit) = cached_eval
+            .eval(&key, &activity, || async move {
+                let values = load_dotenv_tracked(&[first_path], false, &first_tracker)?;
+                Ok::<_, miette::Error>(values["VALUE"].clone())
+            })
+            .await
+            .unwrap();
+        assert_eq!(first, "before");
+        assert!(!first_hit);
+
+        inputs.clear_all();
+        assert!(!inputs.has_inputs());
+        let (second, second_hit) = cached_eval
+            .eval(&key, &activity, || async {
+                Ok::<_, miette::Error>("should not run".to_string())
+            })
+            .await
+            .unwrap();
+        assert_eq!(second, "before");
+        assert!(second_hit);
+        assert!(inputs.has_inputs(), "cache hit must restore tracked inputs");
+
+        std::fs::write(&dotenv_path, "VALUE=after\n").unwrap();
+        let changed_path = dotenv_path.clone();
+        let changed_tracker = tracker.clone();
+        let (third, third_hit) = cached_eval
+            .eval(&key, &activity, || async move {
+                let values = load_dotenv_tracked(&[changed_path], false, &changed_tracker)?;
+                Ok::<_, miette::Error>(values["VALUE"].clone())
+            })
+            .await
+            .unwrap();
+        assert_eq!(third, "after");
+        assert!(!third_hit);
     }
 
     /// Regression for #2745: if `devenv.nix` is modified while evaluation is

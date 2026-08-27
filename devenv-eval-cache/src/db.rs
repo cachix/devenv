@@ -515,10 +515,11 @@ where
     Ok(())
 }
 
-/// Delete all cached evals that have associated resource specs.
+/// Delete all cached evals that have associated extension-state specs.
 ///
-/// When resource replay fails for one attr, all resource-dependent cache
-/// entries must be purged to prevent inconsistent state across attrs.
+/// When resource replay or eval-input validation fails for one attr, all
+/// state-dependent cache entries must be purged to prevent inconsistent state
+/// across attrs.
 /// The existing `ON DELETE CASCADE` on `eval_resource_spec` and `eval_input_path`
 /// handles cleanup of related rows.
 pub(crate) async fn delete_evals_with_resource_specs(

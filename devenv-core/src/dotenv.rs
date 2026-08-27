@@ -10,7 +10,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::resource::{ReplayError, ReplayableResource};
+use crate::resource::{EvalInput, ReplayError};
 
 /// The state of dotenv inputs used by a Nix evaluation.
 ///
@@ -64,7 +64,7 @@ impl DotenvTracker {
     }
 }
 
-impl ReplayableResource for DotenvTracker {
+impl EvalInput for DotenvTracker {
     type Spec = DotenvSpec;
     const TYPE_ID: &'static str = "dotenv";
 
@@ -72,16 +72,19 @@ impl ReplayableResource for DotenvTracker {
         self.spec.lock().unwrap().clone()
     }
 
-    fn replay(&self, spec: &Self::Spec) -> std::result::Result<(), ReplayError> {
-        let current = capture_current_spec(spec)
-            .map_err(|error| ReplayError::Unavailable(error.to_string()))?;
+    fn is_empty(&self) -> bool {
+        let spec = self.spec.lock().unwrap();
+        spec.files.is_empty() && spec.substitution_environment.is_none()
+    }
 
-        if &current != spec {
-            return Err(ReplayError::Unavailable(
-                "dotenv inputs changed since the cached evaluation".to_string(),
-            ));
-        }
+    fn changed(&self, spec: &Self::Spec) -> std::result::Result<bool, ReplayError> {
+        let current =
+            capture_current_spec(spec).map_err(|error| ReplayError::Input(error.to_string()))?;
+        Ok(current != *spec)
+    }
 
+    fn restore(&self, spec: &Self::Spec) -> std::result::Result<(), ReplayError> {
+        self.validate(spec)?;
         self.record(spec.clone());
         Ok(())
     }
@@ -261,16 +264,16 @@ mod tests {
         load_dotenv_tracked(&[present.clone(), missing.clone()], false, &tracker).unwrap();
         let spec = tracker.snapshot();
         assert!(!tracker.inputs_changed(&spec).unwrap());
-        assert!(tracker.replay(&spec).is_ok());
+        assert!(tracker.validate(&spec).is_ok());
 
         fs::write(&present, "VALUE=two\n").unwrap();
         assert!(tracker.inputs_changed(&spec).unwrap());
-        assert!(tracker.replay(&spec).is_err());
+        assert!(tracker.validate(&spec).is_err());
 
         fs::write(&present, "VALUE=one\n").unwrap();
         fs::write(&missing, "LOCAL=yes\n").unwrap();
         assert!(tracker.inputs_changed(&spec).unwrap());
-        assert!(tracker.replay(&spec).is_err());
+        assert!(tracker.validate(&spec).is_err());
     }
 
     #[test]
@@ -278,6 +281,7 @@ mod tests {
         let tracker = DotenvTracker::default();
         let spec = tracker.snapshot();
 
+        assert!(tracker.is_empty());
         assert!(!tracker.inputs_changed(&spec).unwrap());
     }
 

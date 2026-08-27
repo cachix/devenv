@@ -37,7 +37,7 @@ pub use nix_config::NixConfig;
 pub use paths::DevenvPaths;
 pub use ports::{PortAllocation, PortAllocator, PortSpec};
 pub use realized::RealizedPathsObserver;
-pub use resource::{ReplayError, ReplayableResource};
+pub use resource::{EvalInput, ReplayError, ReplayableResource};
 pub use settings::{
     CacheOptions, CacheSettings, InputOverrides, NixOptions, NixSettings, SecretOptions,
     SecretSettings, ShellOptions, ShellSettings, VerbosityLevel, default_system, flag,

@@ -16,6 +16,7 @@ use devenv_core::{
     bootstrap_args::BootstrapArgs,
     cachix::{CACHIX_AUTH_TOKEN_ENV, CachixManager, CachixPaths},
     config::{CachixAuthToken, Input, NixBackendType, NixpkgsConfig},
+    dotenv::DotenvTracker,
     nix_args::{CliOptionsConfig, NixArgs, SecretspecData, parse_cli_options},
     nix_config::NixConfig,
     paths::{DEFAULT_LOCK_FILE, DevenvPaths},
@@ -392,6 +393,10 @@ pub struct Devenv {
     // Eval-cache pool (framework layer concern, used by backends)
     eval_cache_pool: Arc<OnceCell<SqlitePool>>,
 
+    // Inputs contributed by evaluation extensions. Retained here so shell
+    // lifecycle phases can validate the exact inputs used by evaluation.
+    eval_inputs: Arc<devenv_eval_cache::EvalInputManager>,
+
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
 
@@ -644,7 +649,7 @@ impl Devenv {
             }
         };
 
-        let backend = match nix_settings.backend {
+        let (backend, eval_inputs) = match nix_settings.backend {
             NixBackendType::Nix => {
                 // Phase 1: bring up Nix, open the store, build settings,
                 // validate the lock against a transient eval state, then
@@ -686,6 +691,29 @@ impl Devenv {
                     &fingerprint,
                 )?);
 
+                // Compose evaluation extensions outside the backend. Primops
+                // own their execution handlers, while the eval context
+                // gives the cache separate resource-replay and input-validation
+                // channels.
+                let dotenv_tracker = Arc::new(DotenvTracker::default());
+                let mut input_manager = devenv_eval_cache::EvalInputManager::new();
+                input_manager.register(dotenv_tracker.clone());
+                let eval_inputs = Arc::new(input_manager);
+                let resources = Arc::new(devenv_eval_cache::ResourceManager::new(
+                    port_allocator.clone(),
+                ));
+                let eval_context =
+                    devenv_eval_cache::EvalContext::new(resources, eval_inputs.clone());
+
+                let mut primops = devenv_nix_backend::PrimopRegistry::new();
+                primops.add(devenv_nix_backend::LoadDotenvPrimop::new(
+                    paths.root.clone(),
+                    dotenv_tracker,
+                ));
+                primops.add(devenv_nix_backend::AllocatePortPrimop::new(
+                    port_allocator.clone(),
+                ));
+
                 // Phase 2: long-lived backend.
                 let cnix = devenv_nix_backend::NixCBackend::new(
                     paths.clone(),
@@ -698,10 +726,18 @@ impl Devenv {
                     gc_registration,
                     bootstrap_args.clone(),
                     port_allocator.clone(),
+                    primops,
+                    eval_context,
                     Some(eval_cache_pool.clone()),
                     logger_setup,
                 )?;
-                Backend::<dyn Evaluator>::new(Arc::new(cnix) as Arc<dyn Evaluator>, bootstrap_args)
+                (
+                    Backend::<dyn Evaluator>::new(
+                        Arc::new(cnix) as Arc<dyn Evaluator>,
+                        bootstrap_args,
+                    ),
+                    eval_inputs,
+                )
             }
         };
 
@@ -723,6 +759,7 @@ impl Devenv {
             has_processes: OnceCell::new(),
             dev_env_cache: std::sync::RwLock::new(None),
             eval_cache_pool,
+            eval_inputs,
             secretspec: secretspec_cell,
             port_allocator,
             native_api_server: OnceCell::new(),
@@ -2064,10 +2101,9 @@ impl Devenv {
         envs: HashMap<String, String>,
         verbosity: VerbosityLevel,
     ) -> Result<(tasks::TasksStatus, BTreeMap<String, String>, Vec<String>)> {
-        // The Nix dotenv primop records the exact file and substitution inputs
-        // used to build this shell. Only task changes to those inputs require a
-        // fresh EvalState and shell evaluation.
-        let dotenv_inputs = self.require_cnix()?.dotenv_inputs_snapshot();
+        // Evaluation extensions record the external inputs used to build this
+        // shell. Only task changes to those inputs require a fresh EvalState.
+        let eval_inputs = self.eval_inputs.snapshot().into_diagnostic()?;
         let bash = self.get_bash_path().await?;
         let config = tasks::Config {
             roots,
@@ -2097,8 +2133,8 @@ impl Devenv {
         *self.task_exports.lock().unwrap() = exports;
         *self.task_messages.lock().unwrap() = messages;
         // Shell configuration is captured before these tasks execute. Rebuild
-        // it only when a task created, changed, or removed a dotenv input.
-        if self.require_cnix()?.dotenv_inputs_changed(&dotenv_inputs)? {
+        // it only when a task changed an observed eval input.
+        if self.eval_inputs.changed(&eval_inputs).into_diagnostic()? {
             self.refresh_dev_environment().await?;
         }
         Ok(ret)

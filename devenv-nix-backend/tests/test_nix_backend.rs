@@ -628,13 +628,13 @@ async fn test_dotenv_input_change_detection() {
         .dev_env(false, &gc_root)
         .await
         .expect("evaluate dotenv-enabled shell");
-    let snapshot = env.backend.dotenv_inputs_snapshot();
+    let snapshot = env.eval_inputs.snapshot().unwrap();
 
-    assert!(!snapshot.files.is_empty());
-    assert!(!env.backend.dotenv_inputs_changed(&snapshot).unwrap());
+    assert!(!snapshot.is_empty());
+    assert!(!env.eval_inputs.changed(&snapshot).unwrap());
 
     std::fs::write(env.path().join(".env"), "VALUE=after\n").expect("modify dotenv file");
-    assert!(env.backend.dotenv_inputs_changed(&snapshot).unwrap());
+    assert!(env.eval_inputs.changed(&snapshot).unwrap());
 }
 
 // ============================================================================
