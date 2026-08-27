@@ -12,7 +12,7 @@ use tracing_subscriber::{Layer, Registry, layer::SubscriberExt, util::Subscriber
 use super::devenv_layer::DevenvLayer;
 use super::span_ids::SpanIdLayer;
 use super::{
-    Level, OtlpProtocol, TraceOutputSpec, TracingGuard, create_filter, create_local_boxed_layer,
+    Level, OtlpProtocol, TraceOutputSpec, TracingGuard, create_filter, create_local_boxed_layers,
 };
 use url::Url;
 
@@ -39,7 +39,11 @@ impl Drop for OtelGuard {
 ///
 /// All layers (CLI, local exports, OTLP exports) are collected into a single
 /// `Vec<Box<dyn Layer>>` and composed onto one `Registry`.
-pub(super) fn init_tracing_unified(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
+pub(super) fn init_tracing_unified(
+    level: Level,
+    specs: &[TraceOutputSpec],
+    has_trace_export: bool,
+) -> TracingGuard {
     // The OTLP exporter and batch processor need a tokio runtime.
     // This is called before the application's main runtime exists, so we
     // create a lightweight dedicated runtime.
@@ -67,9 +71,7 @@ pub(super) fn init_tracing_unified(level: Level, specs: &[TraceOutputSpec]) -> T
         .iter()
         .filter(|s| matches!(s, TraceOutputSpec::Render(_, _)))
     {
-        if let Some(layer) = create_local_boxed_layer(spec) {
-            layers.push(layer);
-        }
+        layers.extend(create_local_boxed_layers(spec));
     }
 
     // OTLP layers — each gets its own provider but shares the runtime
@@ -103,7 +105,7 @@ pub(super) fn init_tracing_unified(level: Level, specs: &[TraceOutputSpec]) -> T
     }
 
     let _ = Registry::default()
-        .with(create_filter(level))
+        .with(create_filter(level, has_trace_export))
         .with(SpanIdLayer)
         .with(layers)
         .with(DevenvLayer::new())

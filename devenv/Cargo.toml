@@ -65,6 +65,7 @@ secretspec.workspace = true
 secrecy.workspace = true
 url.workspace = true
 valuable.workspace = true
+valuable-serde.workspace = true
 
 # Optional OpenTelemetry dependencies
 opentelemetry = { workspace = true, optional = true }

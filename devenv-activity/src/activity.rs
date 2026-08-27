@@ -261,7 +261,7 @@ impl Activity {
             })
             .ok();
 
-        let result = f();
+        let result = self.span.in_scope(f);
 
         ACTIVITY_STACK
             .try_with(|stack| {
@@ -318,8 +318,9 @@ impl Activity {
     ///
     /// For Operation activities, an optional detail string can be provided to show
     /// what is currently being processed (e.g., the current file or path name).
+    #[track_caller]
     pub fn progress(&self, done: u64, expected: u64, detail: Option<&str>) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         let event = match self.activity_type {
             ActivityType::Build => ActivityEvent::Build(Build::Progress {
                 id: self.id,
@@ -346,81 +347,98 @@ impl Activity {
             }),
             _ => return,
         };
+        crate::__trace_activity_event!(parent: &self.span, &event, caller);
         send_activity_event(event);
     }
 
     /// Update progress with bytes (for Fetch activities)
+    #[track_caller]
     pub fn progress_bytes(&self, current: u64, total: u64) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         if matches!(self.activity_type, ActivityType::Fetch(_)) {
-            send_activity_event(ActivityEvent::Fetch(Fetch::Progress {
+            let event = ActivityEvent::Fetch(Fetch::Progress {
                 id: self.id,
                 current,
                 total: Some(total),
                 timestamp: Timestamp::now(),
-            }));
+            });
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
+            send_activity_event(event);
         }
     }
 
     /// Update progress (indeterminate - for Fetch activities)
+    #[track_caller]
     pub fn progress_indeterminate(&self, current: u64) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         if matches!(self.activity_type, ActivityType::Fetch(_)) {
-            send_activity_event(ActivityEvent::Fetch(Fetch::Progress {
+            let event = ActivityEvent::Fetch(Fetch::Progress {
                 id: self.id,
                 current,
                 total: None,
                 timestamp: Timestamp::now(),
-            }));
+            });
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
+            send_activity_event(event);
         }
     }
 
     /// Update phase (for Build activities only)
+    #[track_caller]
     pub fn phase(&self, phase: impl Into<String>) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         let phase_str = phase.into();
         if matches!(self.activity_type, ActivityType::Build) {
-            send_activity_event(ActivityEvent::Build(Build::Phase {
+            let event = ActivityEvent::Build(Build::Phase {
                 id: self.id,
                 phase: phase_str,
                 timestamp: Timestamp::now(),
-            }));
+            });
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
+            send_activity_event(event);
         }
     }
 
     /// Log a line
+    #[track_caller]
     pub fn log(&self, line: impl Into<String>) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         let line_str = line.into();
         if !activity_sender_installed() {
-            tracing::info!("{}", line_str);
+            self.span.in_scope(|| tracing::info!("{}", line_str));
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, false) {
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
             send_activity_event(event);
         }
     }
 
     /// Log an error
+    #[track_caller]
     pub fn error(&self, line: impl Into<String>) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         let line_str = line.into();
         if !activity_sender_installed() {
-            tracing::warn!("{}", line_str);
+            self.span.in_scope(|| tracing::warn!("{}", line_str));
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
             send_activity_event(event);
         }
     }
 
     /// Set process status (for Process activities only)
+    #[track_caller]
     pub fn set_status(&self, status: ProcessStatus) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         if matches!(self.activity_type, ActivityType::Process) {
-            send_activity_event(ActivityEvent::Process(Process::Status {
+            let event = ActivityEvent::Process(Process::Status {
                 id: self.id,
                 status,
                 timestamp: Timestamp::now(),
-            }));
+            });
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
+            send_activity_event(event);
         }
     }
 
@@ -464,38 +482,45 @@ pub struct ActivityRef {
 
 impl ActivityRef {
     /// Log a line
+    #[track_caller]
     pub fn log(&self, line: impl Into<String>) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         let line_str = line.into();
         if !activity_sender_installed() {
-            tracing::info!("{}", line_str);
+            self.span.in_scope(|| tracing::info!("{}", line_str));
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, false) {
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
             send_activity_event(event);
         }
     }
 
     /// Log an error
+    #[track_caller]
     pub fn error(&self, line: impl Into<String>) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         let line_str = line.into();
         if !activity_sender_installed() {
-            tracing::warn!("{}", line_str);
+            self.span.in_scope(|| tracing::warn!("{}", line_str));
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
             send_activity_event(event);
         }
     }
 
     /// Set process status (for Process activities only)
+    #[track_caller]
     pub fn set_status(&self, status: ProcessStatus) {
-        let _guard = self.span.enter();
+        let caller = std::panic::Location::caller();
         if matches!(self.activity_type, ActivityType::Process) {
-            send_activity_event(ActivityEvent::Process(Process::Status {
+            let event = ActivityEvent::Process(Process::Status {
                 id: self.id,
                 status,
                 timestamp: Timestamp::now(),
-            }));
+            });
+            crate::__trace_activity_event!(parent: &self.span, &event, caller);
+            send_activity_event(event);
         }
     }
 
@@ -546,6 +571,10 @@ impl Drop for Activity {
         if outcome.is_error() {
             self.span.record("otel.status_code", "ERROR");
         }
+        // This explicit transition, rather than the final tracing span close,
+        // preserves ActivityRef semantics: borrowed span handles may outlive
+        // the owning activity, and into_ref() deliberately has no completion.
+        self.span.record("devenv.activity.complete", true);
 
         send_activity_event(make_complete_event(self.id, self.activity_type, outcome));
     }
