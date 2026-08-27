@@ -399,7 +399,7 @@ Target execution deliberately does not inherit the workstation's SecretSpec prov
 
 Target-only bootstrapping does not require `secretspec.enable` in `devenv.yaml`; only the committed `secretspec.toml` declaration is required on the workstation. Global `--secretspec-provider` and `--secretspec-profile` flags affect local execution, not target execution.
 
-Devenv never copies or explicitly forwards provider credentials. They must already be available to the **live installer** through workload identity, instance metadata, its SecretSpec global configuration, or another provider-native mechanism. Credentials that become available only after boot are not usable by this installer-time mode. A short-lived, machine-scoped bootstrap credential can also be provisioned independently, but forwarding the workstation's long-lived credential defeats the isolation this mode provides. OpenSSH can independently forward arbitrary environment variables through user or system `SendEnv`/`SetEnv` configuration; audit those settings if provider credentials exist in the workstation environment.
+Devenv never copies or explicitly forwards provider credentials. They must already be available to the **live installer** through workload identity, instance metadata, its SecretSpec global configuration, or another provider-native mechanism. Credentials that become available only after boot are not usable by this installer-time mode. A short-lived, machine-scoped bootstrap credential can also be provisioned independently, but forwarding the workstation's long-lived credential defeats the isolation this mode provides. For installs that transmit sensitive payloads, devenv clears inherited OpenSSH `SendEnv` rules so ambient workstation credentials cannot be forwarded even when the server accepts them.
 
 The resolver is the SecretSpec executable bundled with the same devenv release as the machines module, built for the target architecture. It does not use `pkgs.secretspec`, so an older or independently versioned nixpkgs package cannot drift from the manifest implementation in devenv. Providers that require helper commands can add target-architecture packages:
 
@@ -486,6 +486,8 @@ A single `devenv.nix` can declare machines for different systems, and `devenv ma
 By default, devenv builds locally. If the current host can't realize a derivation for the target's `system`, the build fails loudly rather than silently falling back to building somewhere else.
 
 Pass `--use-machines-as-builders` to change that. With the flag set, devenv adds every entry with `target.host` to Nix's remote-builder list, tagged with that entry's `system`. Nix can then route a build to a machine whose system matches the derivation—for example, an x86_64-linux builder can build for an x86_64-linux target while devenv itself runs on aarch64-darwin. The flag applies to builds performed by that `machines deploy` or `machines install` invocation; plain `devenv build` does not expose this flag.
+
+Nix's builder specification cannot represent arbitrary per-machine OpenSSH options. If a candidate builder has `target.sshOpts`, devenv rejects `--use-machines-as-builders` instead of silently connecting without them. Put builder-specific settings such as `IdentityFile` or `ProxyJump` in an SSH `Host` alias and use that alias in `target.host`.
 
 ```sh
 $ devenv machines deploy --use-machines-as-builders

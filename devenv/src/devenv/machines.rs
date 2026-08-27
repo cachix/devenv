@@ -43,6 +43,11 @@ const SENSITIVE_INSTALL_SSH_OPTS: &[&str] = &[
     "PermitLocalCommand=no",
     "-o",
     "RequestTTY=no",
+    "-o",
+    // SendEnv is additive across command-line and ssh_config sources. A
+    // negative wildcard removes every inherited name, including ambient
+    // provider credentials that an AcceptEnv-enabled server would receive.
+    "SendEnv=-*",
 ];
 
 /// Unique launcher installed in the NixOS system path for target-side
@@ -343,23 +348,38 @@ fn selected_host_identities(
 fn resolve_builders_config(
     meta: &BTreeMap<String, MachineMeta>,
     excluded: &HashSet<MachineHostIdentity>,
-) -> Option<String> {
+) -> Result<Option<String>> {
     let entries: Vec<String> = meta
-        .values()
-        .filter(|m| m.target.host.is_some())
-        .filter_map(|m| {
-            let host = m.target.host.as_deref()?;
-            let target = SshTarget::parse(host).ok()?;
+        .iter()
+        .filter(|(_, m)| m.target.host.is_some())
+        .map(|(name, m)| -> Result<Option<String>> {
+            let host = m
+                .target
+                .host
+                .as_deref()
+                .expect("builder candidates have target.host");
+            let target = SshTarget::parse(host)
+                .wrap_err_with(|| format!("Invalid machines.{name}.target.host"))?;
             if excluded.contains(&target.host_identity()) {
-                return None;
+                return Ok(None);
             }
-            Some(format!("{} {}", target.nix_copy_uri(), m.system))
+            if !m.target.ssh_opts.is_empty() {
+                bail!(
+                    "machines.{name}.target.sshOpts cannot be represented in Nix's per-builder configuration. \
+                     Move the required SSH settings to an ssh_config Host alias used by target.host, or remove \
+                     target.sshOpts before using --use-machines-as-builders."
+                );
+            }
+            Ok(Some(format!("{} {}", target.nix_copy_uri(), m.system)))
         })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
         .collect();
     if entries.is_empty() {
-        None
+        Ok(None)
     } else {
-        Some(entries.join(" ; "))
+        Ok(Some(entries.join(" ; ")))
     }
 }
 
@@ -368,7 +388,7 @@ fn configure_remote_builders(
     meta: &BTreeMap<String, MachineMeta>,
     excluded: &HashSet<MachineHostIdentity>,
 ) -> Result<()> {
-    let Some(builders) = resolve_builders_config(meta, excluded) else {
+    let Some(builders) = resolve_builders_config(meta, excluded)? else {
         return Ok(());
     };
     if devenv.cnix().is_none() {
@@ -2165,6 +2185,26 @@ impl Devenv {
         // Configure the live C-Nix builder settings before parallel jobs.
         if use_machines_as_builders {
             let meta = self.load_machines_meta().await?;
+            // Preserve the normal deploy validation order: a typo in the
+            // requested working set should be reported before unrelated
+            // builder metadata is inspected.
+            let missing: Vec<&str> = names
+                .iter()
+                .filter(|name| !meta.contains_key(*name))
+                .map(String::as_str)
+                .collect();
+            if !missing.is_empty() {
+                let available: Vec<String> = meta.keys().cloned().collect();
+                let available_str = if available.is_empty() {
+                    "(none defined in devenv.nix)".to_string()
+                } else {
+                    available.join(", ")
+                };
+                bail!(
+                    "Unknown machine(s): {}. Available: {available_str}",
+                    missing.join(", ")
+                );
+            }
             configure_remote_builders(self, &meta, &HashSet::new())?;
             return self
                 .machines_deploy_inner(names, max_concurrent, &meta)
@@ -2636,6 +2676,7 @@ mod tests {
             argv.windows(2)
                 .any(|pair| pair == ["-o", "ClearAllForwardings=yes"])
         );
+        assert!(argv.windows(2).any(|pair| pair == ["-o", "SendEnv=-*"]));
         let insecure_position = argv
             .iter()
             .position(|arg| arg == "StrictHostKeyChecking=no")
@@ -3181,7 +3222,11 @@ remote = "awssm"
     #[test]
     fn resolve_builders_config_empty() {
         let meta = BTreeMap::new();
-        assert!(resolve_builders_config(&meta, &HashSet::new()).is_none());
+        assert!(
+            resolve_builders_config(&meta, &HashSet::new())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -3246,7 +3291,9 @@ remote = "awssm"
             machine(Some("root@other.example.com"), true),
         );
         meta.insert("local".to_string(), machine(None, false));
-        let config = resolve_builders_config(&meta, &HashSet::new()).unwrap();
+        let config = resolve_builders_config(&meta, &HashSet::new())
+            .unwrap()
+            .unwrap();
         // Only machines with target.host are included.
         assert!(config.contains("ssh://root@server.example.com"));
         assert!(config.contains("x86_64-linux"));
@@ -3255,9 +3302,42 @@ remote = "awssm"
         // Selecting one machine excludes every alias for its physical host,
         // irrespective of SSH user, URI syntax, host case, or port.
         let excluded = selected_host_identities(&meta, &["server".to_string()]).unwrap();
-        let config = resolve_builders_config(&meta, &excluded).unwrap();
+        let config = resolve_builders_config(&meta, &excluded).unwrap().unwrap();
         assert!(!config.to_ascii_lowercase().contains("server.example.com"));
         assert!(config.contains("ssh://root@other.example.com"));
+    }
+
+    #[test]
+    fn resolve_builders_config_rejects_target_ssh_opts() {
+        let mut meta = BTreeMap::new();
+        meta.insert(
+            "builder".to_string(),
+            MachineMeta {
+                system: "x86_64-linux".to_string(),
+                target: MachineTarget {
+                    host: Some("builder-alias".to_string()),
+                    ssh_opts: vec!["-o".to_string(), "ProxyJump=bastion".to_string()],
+                },
+                has_nixos: true,
+                has_nix_darwin: false,
+                has_home_manager: false,
+                kexec_image: None,
+                kexec_post_ssh_port: None,
+                copy_host_keys: false,
+                secretspec: MachineSecretspec::default(),
+                bootstrap_secrets: Vec::new(),
+                extra_files: BTreeMap::new(),
+                encryption_keys: BTreeMap::new(),
+            },
+        );
+
+        let error = resolve_builders_config(&meta, &HashSet::new()).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("machines.builder.target.sshOpts")
+        );
+        assert!(error.to_string().contains("ssh_config Host alias"));
     }
 
     #[test]

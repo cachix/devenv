@@ -333,6 +333,11 @@ if ! grep -qx "StrictHostKeyChecking=no" ssh-args.log; then
   cat ssh-args.log
   exit 1
 fi
+if ! grep -qx "SendEnv=-\*" ssh-args.log; then
+  echo "sensitive SSH policy did not clear inherited SendEnv rules"
+  cat ssh-args.log
+  exit 1
+fi
 if grep -q "bootstrap-test-value" ssh-args.log; then
   echo "secret value leaked into SSH arguments"
   cat ssh-args.log
