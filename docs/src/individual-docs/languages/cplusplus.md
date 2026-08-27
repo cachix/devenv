@@ -11,7 +11,7 @@ languages.cplusplus = {
 This will automatically:
 
 - Use `clang` as the default C++ package.
-- Install it along with CMake ([`languages.cplusplus.cmake`](/reference/options.md#languagescpluspluscmake)), the C++ Language Server ([`languages.cplusplus.lsp`](/reference/options.md#languagescpluspluslspenable)) and the standalone command line tools for C++ development ([`languages.cplusplus.tools`](/reference/options.md#languagescplusplustoolsenable)).
+- Install it along with CMake ([`languages.cplusplus.cmake`](/reference/options/#languagescpluspluscmake)), the C++ Language Server ([`languages.cplusplus.lsp`](/reference/options/#languagescpluspluslspenable)) and the standalone command line tools for C++ development ([`languages.cplusplus.tools`](/reference/options/#languagescplusplustoolsenable)).
 
 Alternatively, you can manually specify packages:
 
@@ -61,7 +61,7 @@ There corresponds the following conan-flake options:
 }
 ```
 
-You can check [the list of available options](/reference/options.md#languagescplusplusconanenable). Observe that the [`languages.cplusplus.conan.config`](/reference/options.md#languagescplusplusconanconfig) option maps the whole of the options available in the [conan-flake](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
+You can check [the list of available options](/reference/options/#languagescplusplusconanenable). Observe that the [`languages.cplusplus.conan.config`](/reference/options/#languagescplusplusconanconfig) option maps the whole of the options available in the [conan-flake](https://flake.parts/options/conan-flake.html) module &mdash; check the [official module documentation](https://flake.parts/options/conan-flake.html#options) and see the examples in [conan-flake's README file](https://codeberg.org/tarcisio/conan-flake/src/branch/main/README.md) to help you setting up.
 
 Set your `devenv.nix` file accordingly. For example, the above is actually equivalent to the following:
 
@@ -87,7 +87,7 @@ Set your `devenv.nix` file accordingly. For example, the above is actually equiv
 By default, when `languages.cplusplus.conan` is enabled:
 
 - The C++ package is set to `config.stdenv.cc` &mdash; that is, the system C compiler configured for devenv to use for the developer environment.
-- Whenever devenv is configured without a C compiler toolchain (see the recipe [Skip the C compiler toolchain](../recipes/nix.md#skip-the-c-compiler-toolchain) for an example), the C++ package is defaulted to `pkgs.stdenv.cc` instead.
+- Whenever devenv is configured without a C compiler toolchain (see the recipe [Skip the C compiler toolchain](/recipes/nix/#skip-the-c-compiler-toolchain) for an example), the C++ package is defaulted to `pkgs.stdenv.cc` instead.
 - Conan is configured to use the `languages.cplusplus.cmake` package available in the developer shell; as can be seen from the above example, the devenv integration automatically takes care of the CMake part, and the `profiles.default.platformToolRequires` and `devShell.tools` options are not required to be set explicitly.
 
 ### In Action:
