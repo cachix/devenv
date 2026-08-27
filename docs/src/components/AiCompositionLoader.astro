@@ -1,0 +1,37 @@
+---
+import { technologyIconPath } from '../lib/technology-icon-path';
+const nixosIcon = technologyIconPath('nixos', '#8BB8FF');
+---
+
+<div
+  class="landing-ai-loader"
+  data-ai-composition-loader
+  role="status"
+  aria-labelledby="landing-ai-loader-title"
+  aria-describedby="landing-ai-loader-stage"
+  hidden
+>
+  <div class="landing-ai-loader-card">
+    <div class="landing-ai-visual" aria-hidden="true">
+      <span class="landing-ai-orbit is-outer"></span>
+      <span class="landing-ai-orbit is-inner"></span>
+      <div class="landing-ai-file">
+        <div class="landing-ai-file-header">
+          <span class="landing-ai-file-mark"><img src={nixosIcon} alt="" width="18" height="18" /></span>
+          <span>devenv.nix</span>
+          <span class="landing-ai-file-spark">✦</span>
+        </div>
+        <div class="landing-ai-file-body" data-ai-file-lines></div>
+        <span class="landing-ai-file-scan"></span>
+      </div>
+      <div class="landing-ai-ingredients" data-ai-ingredients></div>
+    </div>
+
+    <p class="landing-ai-eyebrow"><span></span> Composing with AI</p>
+    <h2 id="landing-ai-loader-title">Teaching your stack to speak Nix.</h2>
+    <p id="landing-ai-loader-stage" class="landing-ai-stage" data-ai-loader-stage aria-live="polite">
+      Reading your stack
+    </p>
+    <div class="landing-ai-progress" aria-hidden="true"><span></span></div>
+  </div>
+</div>

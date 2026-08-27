@@ -1,18 +1,29 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import CodeBlock from '../components/CodeBlock.astro';
+import TechnologyIcon from '../components/TechnologyIcon.astro';
+import AiCompositionLoader from '../components/AiCompositionLoader.astro';
 import { getHighlighter } from '../lib/highlighter';
 import { codeThemeNames } from '../lib/code-themes';
+import { createLandingEnvironmentCore, documentationComment } from '../lib/landing-environment-core';
+import { technologyIconPath } from '../lib/technology-icon-path';
+import options from '../data/options.json';
+import {
+  landingOptionCatalog,
+  technologyRegistry,
+  validateTechnologyRegistry,
+} from '../data/technology-registry';
 import { getCollection } from 'astro:content';
 const base = import.meta.env.BASE_URL;
 
 const docs = await getCollection('docs');
-const languageCount = docs.filter(
-  (entry) => entry.id.startsWith('languages/') && entry.id !== 'languages/index',
-).length;
-const serviceCount = docs.filter(
-  (entry) => entry.id.startsWith('services/') && entry.id !== 'services/index',
-).length;
+const languageTechnologies = technologyRegistry.filter((technology) => technology.kind === 'language');
+const serviceTechnologies = technologyRegistry.filter((technology) => technology.kind === 'service');
+const utilityTechnologies = technologyRegistry.filter((technology) => technology.kind === 'utility');
+const languageCount = languageTechnologies.length;
+const serviceCount = serviceTechnologies.length;
+const optionCatalog = landingOptionCatalog;
+const nixosIcon = technologyIconPath('nixos', '#8BB8FF');
 const posts = docs
   .filter((entry) => entry.id.startsWith('blog/') && !entry.data.draft)
   .sort((a, b) => (b.data.date?.valueOf() ?? 0) - (a.data.date?.valueOf() ?? 0));
@@ -25,58 +36,44 @@ const latestPostDate = latestPost?.data.date
       timeZone: 'UTC',
     }).format(latestPost.data.date)
   : null;
+const documentedTechnologyIds = docs
+  .map((entry) => entry.id)
+  .filter((id) => /^(languages|services)\//.test(id) && !/\/(index)$/.test(id));
+const registryValidation = validateTechnologyRegistry(documentedTechnologyIds, Object.keys(options));
+if (!registryValidation.valid) {
+  throw new Error(`Invalid technology registry: ${JSON.stringify(registryValidation)}`);
+}
 
-// simpleicons CDN — { slug, label }
-const langs = [
-  ['rust', 'Rust'], ['python', 'Python'], ['nodedotjs', 'Node.js'], ['go', 'Go'],
-  ['ruby', 'Ruby'], ['php', 'PHP'], ['typescript', 'TypeScript'], ['elixir', 'Elixir'],
-  ['kotlin', 'Kotlin'], ['swift', 'Swift'], ['haskell', 'Haskell'], ['scala', 'Scala'],
-  ['dotnet', '.NET'], ['lua', 'Lua'], ['erlang', 'Erlang'], ['ocaml', 'OCaml'],
-  ['perl', 'Perl'], ['dart', 'Dart'], ['cplusplus', 'C++'], ['nim', 'Nim'],
-  ['crystal', 'Crystal'], ['zig', 'Zig'], ['r', 'R'], ['julia', 'Julia'],
-];
-
-const services = [
-  ['postgresql', 'PostgreSQL'], ['redis', 'Redis'], ['mysql', 'MySQL'], ['mongodb', 'MongoDB'],
-  ['mariadb', 'MariaDB'], ['elasticsearch', 'Elasticsearch'], ['rabbitmq', 'RabbitMQ'],
-  ['minio', 'MinIO'], ['caddy', 'Caddy'], ['nginx', 'nginx'], ['clickhouse', 'ClickHouse'],
-  ['natsdotio', 'NATS'], ['meilisearch', 'Meilisearch'], ['apachecouchdb', 'CouchDB'],
-  ['influxdb', 'InfluxDB'], ['opensearch', 'OpenSearch'], ['keycloak', 'Keycloak'],
-  ['vault', 'Vault'], ['apachekafka', 'Kafka'],
-];
-
-const tools = [
-  ['docker', 'Docker'], ['nixos', 'Nix'], ['githubactions', 'GitHub Actions'],
-  ['vscodium', 'VS Code'], ['intellijidea', 'IntelliJ'], ['zedindustries', 'Zed'],
-  ['android', 'Android'], ['wordpress', 'WordPress'], ['terraform', 'Terraform'],
-  ['opentofu', 'OpenTofu'], ['claude', 'Claude Code'], ['linux', 'Linux'],
-  ['apple', 'macOS'],
-];
-
-// Duplicate for seamless loop
 const dup = <T,>(arr: T[]) => [...arr, ...arr];
 
 // Inline nix highlighting for the compose file-tree nodes.
 const hl = await getHighlighter();
 const nix = (code: string) =>
   hl.codeToHtml(code, { lang: 'nix', themes: codeThemeNames, defaultColor: false, structure: 'inline' });
-const initialPreview = `{ pkgs, ... }: {
-  languages.rust.enable = true;
-
-  services.postgres = {
-    enable = true;
-    initialDatabases = [{ name = "app"; }];
-  };
-
-  packages = [ pkgs.cargo-watch ];
-}`;
+const initialPrompt = 'Rust API with PostgreSQL, Redis, Docker, tests, and secrets';
+const initialEnvironmentCore = createLandingEnvironmentCore(optionCatalog);
+const initialPreview = initialEnvironmentCore.buildEnvironment(initialEnvironmentCore.selectPromptMatches(initialPrompt));
+const initialEnvironment = initialEnvironmentCore.parseEnvironment(initialPreview);
+const escapeHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+const initialPreviewHtml = initialEnvironment.lines.map((line, index) => {
+  const documentation = documentationComment(line);
+  const highlighted = nix(documentation.code || '\u00a0');
+  const link = documentation.url && documentation.label
+    ? `<a class="landing-code-doc-link" href="${escapeHtml(documentation.url)}" aria-label="Open ${escapeHtml(documentation.label.replace(/^#\s*/, ''))}">${escapeHtml(documentation.label)}</a>`
+    : '';
+  return `<span class="landing-code-line" data-entry-ids="${escapeHtml(initialEnvironment.lineEntryIds[index].join('|'))}">${highlighted}${link}</span>`;
+}).join('');
 ---
 
 <StarlightPage
   frontmatter={{
-    title: 'Your whole development environment, declared with Nix',
+    title: 'Your whole development environment, declared.',
     description:
-      'Declare packages, languages, services, tasks, secrets, and tooling with Nix. Give every developer—and CI—the same fast, reproducible environment.',
+      'Define packages, languages, services, tasks, secrets, and tooling once. Give every developer—and CI—the same fast, reproducible environment.',
     template: 'splash',
     hero: { tagline: '' },
   }}
@@ -86,121 +83,103 @@ const initialPreview = `{ pkgs, ... }: {
 <div class="not-content">
 
 <!-- ============ HERO ============ -->
-<section class="landing-hero">
+<section class="landing-hero" data-environment-hero>
+  <div class="landing-cosmos-glow is-blue" aria-hidden="true"></div>
+  <div class="landing-cosmos-glow is-violet" aria-hidden="true"></div>
   <div class="landing-hero-inner">
     {latestPost && (
-      <a href={`/blog/${latestPost.id.replace(/^blog\//, '')}/`} class="landing-blog-banner">
-        <span class="landing-blog-aside">
-          <span class="landing-blog-flag">Latest from the blog</span>
-          {latestPostDate && <span class="landing-blog-date">{latestPostDate}</span>}
+      <a href={`${base}blog/${latestPost.id.replace(/^blog\//, '')}/`} class="csk-latest-post landing-blog-banner">
+        <span class="csk-latest-post__aside">
+          <span class="csk-latest-post__label">Latest from the blog</span>
+          {latestPostDate && <span class="csk-latest-post__date">{latestPostDate}</span>}
         </span>
-        <span class="landing-blog-main">
-          <span class="landing-blog-title">{latestPost.data.title}</span>
-          {latestPost.data.description && (
-            <span class="landing-blog-desc">{latestPost.data.description}</span>
-          )}
-        </span>
-        <span class="landing-blog-cta" aria-hidden="true">Read post →</span>
+        <span class="csk-latest-post__title">{latestPost.data.title}</span>
+        <span class="csk-latest-post__action" aria-hidden="true">Read post →</span>
       </a>
     )}
 
-    <div class="landing-hero-head">
-      <p class="landing-badge">Developer Environments using Nix</p>
-      <h1 class="landing-hero-title">Your whole development<br>environment, declared.</h1>
-      <p class="landing-hero-subtitle">
+    <div class="landing-cosmos-head">
+      <h1 class="landing-cosmos-title">
+        <span class="is-primary">Your whole development</span><br />{' '}<span>environment, declared.</span>
+      </h1>
+      <p class="landing-cosmos-subtitle">
         Define packages, languages, services, tasks, secrets, and tooling once. Give every
         developer—and CI—the same fast, reproducible environment.
       </p>
-      <nav class="landing-hero-actions" aria-label="Documentation shortcuts">
-        <a href={`${base}getting-started/`} class="landing-btn landing-btn-primary">Get Started</a>
-        <a href={`${base}languages/`} class="landing-btn landing-btn-secondary">
-          Languages ({languageCount})
-        </a>
-        <a href={`${base}services/`} class="landing-btn landing-btn-secondary">
-          Services ({serviceCount})
-        </a>
-        <a href={`${base}processes/`} class="landing-btn landing-btn-secondary">Processes</a>
-        <a href={`${base}reference/options/`} class="landing-btn landing-btn-secondary">
-          Options Reference
-        </a>
-      </nav>
     </div>
 
-    <div class="landing-hero-split">
-      <!-- Prompt -->
-      <form class="landing-hero-prompt" id="generate">
-        <p class="landing-prompt-label">Describe your stack</p>
+    <form class="landing-cosmos-prompt" id="generate">
+      <div class="landing-command-bar">
+        <span class="landing-command-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="m12 2 1.4 5.1L18 9l-4.6 1.9L12 16l-1.4-5.1L6 9l4.6-1.9L12 2Z"/><path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15Z"/></svg>
+        </span>
         <input
           type="text"
           name="q"
           id="prompt-input"
-          class="landing-prompt-input"
-          placeholder="Rust API with PostgreSQL and Redis"
+          class="landing-command-input"
+          placeholder={initialPrompt}
           aria-label="Describe your environment"
         />
+        <button type="submit" class="landing-command-submit">Generate with AI <span aria-hidden="true">→</span></button>
+      </div>
+      <div class="landing-prompt-chips" id="prompt-chips">
+        <button type="button" class="landing-chip is-rust" data-chip="Rust API with PostgreSQL">Rust + Postgres</button>
+        <button type="button" class="landing-chip is-python" data-chip="Python with uv and PyTorch">Python ML</button>
+        <button type="button" class="landing-chip is-node" data-chip="Node.js with Redis">Node + Redis</button>
+        <button type="button" class="landing-chip is-go" data-chip="Go microservice with MySQL">Go + MySQL</button>
+        <button type="button" class="landing-chip is-ruby" data-chip="Ruby on Rails with React">Rails + React</button>
+      </div>
+      <span class="landing-compose-feedback" data-compose-feedback role="status" hidden></span>
+      <span class="sr-only" data-compose-message aria-live="polite">Ready to compose</span>
+    </form>
 
-        <div class="landing-prompt-chips" id="prompt-chips">
-          <button type="button" class="landing-chip" data-chip="Rust API with PostgreSQL">Rust + Postgres</button>
-          <button type="button" class="landing-chip" data-chip="Python with uv and PyTorch">Python ML</button>
-          <button type="button" class="landing-chip" data-chip="Node.js with Redis">Node + Redis</button>
-          <button type="button" class="landing-chip" data-chip="Go microservice with MySQL">Go + MySQL</button>
-          <button type="button" class="landing-chip" data-chip="Ruby on Rails with React">Rails + React</button>
-        </div>
-
-        <div class="landing-prompt-actions">
-          <a href={`${base}examples/`} class="landing-btn landing-btn-secondary">View examples</a>
-          <button type="submit" class="landing-btn landing-btn-primary">Generate config →</button>
-        </div>
-        <p class="landing-prompt-hint">
-          Generates a complete <code class="inline-code">devenv.nix</code> via{' '}
-          <a href="https://devenv.new/">devenv.new</a>
-        </p>
-      </form>
-
-      <!-- Live preview -->
-      <div class="landing-hero-preview">
-        <div class="landing-terminal" id="preview-terminal">
-          <div class="landing-terminal-header">
-            <div class="landing-terminal-dots">
-              <span></span><span></span><span></span>
+    <div class="landing-constellation-shell" data-constellation-shell>
+      <div class="landing-constellation-main">
+        <div class="landing-constellation-map" data-constellation-map>
+          <div class="landing-option-pantry" data-option-pantry>
+            <div class="landing-option-pantry-copy">
+              <strong>Ingredient streams</strong>
+              <span>Drag anything into the file. Send configured items back to remove them.</span>
             </div>
-            <span class="landing-terminal-title" id="preview-title">devenv.nix · preview</span>
-            <button type="button" class="landing-copy-btn" data-copy-target="preview-code">Copy</button>
+            <div class="landing-option-pantry-list" data-option-pantry-list></div>
+            <script is:inline type="application/json" id="landing-option-catalog" set:html={JSON.stringify(optionCatalog).replace(/</g, '\\u003c')}></script>
           </div>
-          <pre class="landing-terminal-body"><code
-            id="preview-code"
-            class="language-nix"
-            set:html={nix(initialPreview)}
-          /></pre>
-          <div class="landing-terminal-divider" id="preview-yaml-divider" hidden></div>
-          <div class="landing-terminal-header" id="preview-yaml-header" hidden>
-            <span class="landing-terminal-title" style="padding-left:0.75rem">devenv.yaml</span>
-            <button type="button" class="landing-copy-btn" data-copy-target="preview-yaml">Copy</button>
+          <div class="landing-cosmos-inspector" data-file-dropzone>
+            <div class="landing-file-stage" data-file-stage>
+              <div class="landing-terminal landing-file-card is-nix" id="preview-terminal">
+                <div class="landing-terminal-header">
+                  <span class="landing-file-icon" aria-hidden="true"><img src={nixosIcon} alt="" width="24" height="24" /></span>
+                  <span class="landing-terminal-title">devenv.nix</span>
+                  <button type="button" class="landing-copy-btn" data-copy-target="preview-code">Copy</button>
+                </div>
+                <pre class="landing-terminal-body"><code
+                  id="preview-code"
+                  class="language-nix"
+                  aria-live="polite"
+                  set:html={initialPreviewHtml}
+                /></pre>
+                <div class="landing-code-minimap" data-code-minimap aria-label="devenv.nix overview"></div>
+              </div>
+              <div class="landing-terminal landing-file-card is-yaml" id="preview-yaml-terminal" aria-hidden="true" hidden>
+                <div class="landing-terminal-header">
+                  <span class="landing-file-icon landing-yaml-file-icon" aria-hidden="true">Y</span>
+                  <span class="landing-terminal-title">devenv.yaml</span>
+                  <button type="button" class="landing-copy-btn" data-copy-target="preview-yaml">Copy</button>
+                </div>
+                <pre is:raw class="landing-terminal-body" id="preview-yaml-pre"><code id="preview-yaml" class="language-yaml" aria-live="polite"></code></pre>
+              </div>
+            </div>
+            <AiCompositionLoader />
           </div>
-          <pre is:raw class="landing-terminal-body" id="preview-yaml-pre" hidden><code id="preview-yaml" class="language-yaml"></code></pre>
         </div>
       </div>
     </div>
 
-    <!-- Metrics -->
-    <div class="landing-metrics">
-      <div class="landing-metric">
-        <div class="landing-metric-value">&lt;100ms</div>
-        <div class="landing-metric-label">cached shell startup</div>
-      </div>
-      <div class="landing-metric">
-        <div class="landing-metric-value">100k+</div>
-        <div class="landing-metric-label">prebuilt packages</div>
-      </div>
-      <div class="landing-metric">
-        <div class="landing-metric-value">{languageCount}</div>
-        <div class="landing-metric-label">languages</div>
-      </div>
-      <div class="landing-metric">
-        <div class="landing-metric-value">Linux · macOS · WSL</div>
-        <div class="landing-metric-label">x64 · ARM64</div>
-      </div>
-    </div>
+    <nav class="landing-cosmos-actions" aria-label="Documentation shortcuts">
+      <a href={`${base}getting-started/`} class="landing-btn landing-btn-primary">Build your environment <span aria-hidden="true">→</span></a>
+      <a href={`${base}examples/`} class="landing-btn landing-btn-secondary">Explore examples</a>
+    </nav>
   </div>
 </section>
 
@@ -210,10 +189,10 @@ const initialPreview = `{ pkgs, ... }: {
 
   <div class="landing-marquee">
     <div class="landing-marquee-track">
-      {dup(langs).map(([slug, label]) => (
+      {dup(languageTechnologies).map((technology) => (
         <div class="landing-marquee-item">
-          <img class="landing-marquee-icon" src={`https://cdn.simpleicons.org/${slug}/888888`} alt="" loading="lazy" width="18" height="18" />
-          <span>{label}</span>
+          <TechnologyIcon technology={technology} size="1.125rem" class="landing-marquee-icon" />
+          <span>{technology.label}</span>
         </div>
       ))}
     </div>
@@ -221,10 +200,10 @@ const initialPreview = `{ pkgs, ... }: {
 
   <div class="landing-marquee">
     <div class="landing-marquee-track is-reverse">
-      {dup(services).map(([slug, label]) => (
+      {dup(serviceTechnologies).map((technology) => (
         <div class="landing-marquee-item">
-          <img class="landing-marquee-icon" src={`https://cdn.simpleicons.org/${slug}/888888`} alt="" loading="lazy" width="18" height="18" />
-          <span>{label}</span>
+          <TechnologyIcon technology={technology} size="1.125rem" class="landing-marquee-icon" />
+          <span>{technology.label}</span>
         </div>
       ))}
     </div>
@@ -232,10 +211,10 @@ const initialPreview = `{ pkgs, ... }: {
 
   <div class="landing-marquee">
     <div class="landing-marquee-track is-slow">
-      {dup(tools).map(([slug, label]) => (
+      {dup(utilityTechnologies).map((technology) => (
         <div class="landing-marquee-item">
-          <img class="landing-marquee-icon" src={`https://cdn.simpleicons.org/${slug}/888888`} alt="" loading="lazy" width="18" height="18" />
-          <span>{label}</span>
+          <TechnologyIcon technology={technology} size="1.125rem" class="landing-marquee-icon" />
+          <span>{technology.label}</span>
         </div>
       ))}
     </div>
@@ -285,7 +264,7 @@ $EDITOR devenv.nix`} />
     <div class="landing-section-centered">
       <h2 class="landing-section-title">Your whole stack, declared together</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        Languages, services, processes, tasks, secrets — all declarative.
+        Languages, services, processes, tasks, and secrets. Everything is declarative.
       </p>
     </div>
 
@@ -293,7 +272,7 @@ $EDITOR devenv.nix`} />
       <a href={`${base}languages/`} class="landing-bento-card is-link landing-bento-2">
         <div class="landing-bento-big-num">{languageCount}</div>
         <p class="landing-bento-title">Languages</p>
-        <p class="landing-bento-desc">Python, Rust, Go, Node, Ruby, PHP, Java, Elixir, and more — with version pinning and LSP servers.</p>
+        <p class="landing-bento-desc">Python, Rust, Go, Node, Ruby, PHP, Java, Elixir, and more, with version pinning and LSP servers.</p>
       </a>
 
       <a href={`${base}services/`} class="landing-bento-card is-link landing-bento-2">
@@ -340,7 +319,7 @@ services.redis.enable = true;`} />
       </a>
 
       <a href={`${base}ad-hoc-developer-environments/`} class="landing-bento-card is-link landing-bento-3">
-        <p class="landing-bento-title">Ad-hoc shells — zero config</p>
+        <p class="landing-bento-title">Ad-hoc shells, zero config</p>
         <p class="landing-bento-desc">Spin up a temporary environment without writing a <code class="inline-code">devenv.nix</code>. Great for experiments, scripts, and CI matrices.</p>
         <CodeBlock class="landing-bento-mini-code" lang="bash" code={`$ devenv -O languages.python.enable:bool true \\
        -O languages.python.version:string "3.12" \\
@@ -602,7 +581,7 @@ STRIPE_SECRET_KEY = { required = true }`} />
         <div class="landing-secret-arrow" aria-hidden="true">↓</div>
         <div class="landing-secret-step">
           <span aria-hidden="true">🐚</span>
-          <span><code class="inline-code">$ secretspec run -- npm start</code> — exposed only to the app</span>
+          <span><code class="inline-code">$ secretspec run -- npm start</code>, exposed only to the app</span>
         </div>
       </div>
     </div>
@@ -692,7 +671,7 @@ in 12.4s`} />
     <div class="landing-cta-card">
       <h2 class="landing-section-title">Start building.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        Set up your first environment in minutes — or generate one from the hero above.
+        Set up your first environment in minutes, or generate one from the hero above.
       </p>
       <div class="landing-hero-actions">
         <a href={`${base}getting-started/`} class="landing-btn landing-btn-primary">Get Started</a>
@@ -705,118 +684,113 @@ in 12.4s`} />
 </div>
 
 <script>
-  // @ts-nocheck
+  import { createAiCompositionLoader } from '../lib/ai-composition-loader';
+  import { codeThemeNames } from '../lib/code-themes';
+  import { generateEnvironment, hasMeaningfulYaml } from '../lib/environment-generation';
+  import {
+    createLandingEnvironmentCore,
+    documentationComment,
+    patienceMatches,
+  } from '../lib/landing-environment-core';
+  import type {
+    EntryMeta,
+    EnvironmentEntry,
+    LandingOption,
+    ParsedEnvironment,
+  } from '../lib/landing-environment-core';
+  import { technologyIconPath } from '../lib/technology-icon-path';
+  import type { HighlighterCore } from '@shikijs/core';
+
+  type IconBounds = { left: number; top: number; width: number; height: number };
+  type DragOrigin = 'pantry' | 'file';
+  type Flight = {
+    id: string;
+    direction: 'in' | 'out';
+    fromRect: IconBounds | null;
+    source?: HTMLElement | IconBounds | null;
+    destination?: HTMLElement | IconBounds | null;
+  };
+
+  function requiredElement<T extends Element>(element: T | null) {
+    if (!element) throw new Error('Incomplete landing environment');
+    return element;
+  }
+
+  function displayColor(technology: Pick<EntryMeta, 'color' | 'darkColor'>) {
+    return document.documentElement.dataset.theme === 'dark' ? technology.darkColor : technology.color;
+  }
+
   // ── Live preview generator ──
   (function () {
-    var input = document.getElementById('prompt-input');
-    var output = document.getElementById('preview-code');
-    var form = document.getElementById('generate');
-    var chips = document.querySelectorAll('[data-chip]');
-    if (!input || !output || !form) return;
+    const input = requiredElement(document.querySelector<HTMLInputElement>('#prompt-input'));
+    const output = requiredElement(document.querySelector<HTMLElement>('#preview-code'));
+    const form = requiredElement(document.querySelector<HTMLFormElement>('#generate'));
+    const chips = document.querySelectorAll<HTMLButtonElement>('[data-chip]');
+    const pantry = requiredElement(document.querySelector<HTMLElement>('[data-option-pantry]'));
+    const pantryList = requiredElement(document.querySelector<HTMLElement>('[data-option-pantry-list]'));
+    const fileDropZone = requiredElement(document.querySelector<HTMLElement>('[data-file-dropzone]'));
+    const constellationMap = requiredElement(document.querySelector<HTMLElement>('[data-constellation-map]'));
+    const codeMinimap = requiredElement(document.querySelector<HTMLElement>('[data-code-minimap]'));
+    const constellationShell = requiredElement(document.querySelector<HTMLElement>('[data-constellation-shell]'));
+    const catalogElement = requiredElement(document.querySelector<HTMLScriptElement>('#landing-option-catalog'));
+    const submitBtn = requiredElement(form.querySelector<HTMLButtonElement>('button[type="submit"]'));
+    const commandBar = requiredElement(form.querySelector<HTMLElement>('.landing-command-bar'));
+    const composeMessage = requiredElement(document.querySelector<HTMLElement>('[data-compose-message]'));
+    const composeFeedback = requiredElement(document.querySelector<HTMLElement>('[data-compose-feedback]'));
+    const aiCompositionLoader = requiredElement(document.querySelector<HTMLElement>('[data-ai-composition-loader]'));
+    const fileStage = requiredElement(document.querySelector<HTMLElement>('[data-file-stage]'));
+    const yamlTerminal = requiredElement(document.querySelector<HTMLElement>('#preview-yaml-terminal'));
+    const yamlCode = requiredElement(document.querySelector<HTMLElement>('#preview-yaml'));
 
-    var LANGS = {
-      rust:        { test: /\b(rust|cargo|rustc)\b/i,                              key: 'rust',       extra: 'channel = "stable";' },
-      python:      { test: /\b(python|django|flask|fastapi|pytorch|torch|uv|pip|ml|machine learning|scikit)\b/i, key: 'python',     extra: 'version = "3.12";\n    venv.enable = true;' },
-      javascript:  { test: /\b(node|node\.js|nodejs|javascript|js|react|vue|svelte|next|nest|express)\b/i,       key: 'javascript', extra: 'package = pkgs.nodejs_22;' },
-      typescript:  { test: /\btypescript|ts\b/i,                                    key: 'typescript', extra: '' },
-      go:          { test: /\b(go|golang)\b/i,                                      key: 'go',         extra: '' },
-      ruby:        { test: /\b(ruby|rails)\b/i,                                     key: 'ruby',       extra: 'version = "3.3";' },
-      php:         { test: /\bphp|laravel|symfony\b/i,                              key: 'php',        extra: '' },
-      java:        { test: /\b(java|kotlin|gradle|maven|spring)\b/i,                key: 'java',       extra: '' },
-      elixir:      { test: /\b(elixir|phoenix)\b/i,                                 key: 'elixir',     extra: '' },
-      haskell:     { test: /\bhaskell\b/i,                                          key: 'haskell',    extra: '' },
-      c:           { test: /\b(c\+\+|cpp|clang|gcc)\b/i,                            key: 'c',          extra: '' },
-    };
+    const OPTION_CATALOG = JSON.parse(catalogElement.textContent || '[]') as LandingOption[];
+    var environmentCore = createLandingEnvironmentCore(OPTION_CATALOG);
+    var CATALOG_BY_ID = environmentCore.catalogById;
+    var OPTION_TEMPLATES = environmentCore.optionTemplates;
+    var selectPromptMatches = environmentCore.selectPromptMatches;
+    var buildEnvironment = environmentCore.buildEnvironment;
+    var buildEnvironmentYaml = environmentCore.buildEnvironmentYaml;
+    var parseEnvironment = environmentCore.parseEnvironment;
+    var metaForEntry = environmentCore.metaForEntry;
+    var addEnvironmentEntry = environmentCore.addEnvironmentEntry;
+    var removeEnvironmentEntry = environmentCore.removeEnvironmentEntry;
+    var aiLoader = createAiCompositionLoader(aiCompositionLoader, OPTION_CATALOG);
 
-    var SERVICES = {
-      postgres:      { test: /\b(postgres|postgresql|pgsql|pg)\b/i,           key: 'postgres',      extra: 'initialDatabases = [{ name = "app"; }];' },
-      mysql:         { test: /\b(mysql|mariadb)\b/i,                          key: 'mysql',         extra: '' },
-      redis:         { test: /\bredis|cache\b/i,                              key: 'redis',         extra: '' },
-      mongodb:       { test: /\bmongo|mongodb\b/i,                            key: 'mongodb',       extra: '' },
-      elasticsearch: { test: /\b(elastic|elasticsearch|opensearch)\b/i,       key: 'elasticsearch', extra: '' },
-      rabbitmq:      { test: /\brabbit|rabbitmq|amqp\b/i,                     key: 'rabbitmq',      extra: '' },
-      minio:         { test: /\bminio|s3\b/i,                                 key: 'minio',         extra: '' },
-      caddy:         { test: /\bcaddy|nginx|reverse proxy\b/i,                key: 'caddy',         extra: '' },
-      nats:          { test: /\bnats\b/i,                                     key: 'nats',          extra: '' },
-      meilisearch:   { test: /\bmeili|meilisearch|search engine\b/i,          key: 'meilisearch',   extra: '' },
-    };
-
-    var PACKAGES = {
-      'cargo-watch': /\b(watch|hot reload|live reload)\b/i,
-      'docker':      /\bdocker|container\b/i,
-      'jq':          /\bjq|json\b/i,
-      'ripgrep':     /\bripgrep|rg|grep\b/i,
-      'awscli2':     /\baws\b/i,
-      'terraform':   /\bterraform|tf\b/i,
-    };
-
-    function build(q) {
-      var langs = [];
-      Object.keys(LANGS).forEach(function (k) {
-        if (LANGS[k].test.test(q)) langs.push(LANGS[k]);
-      });
-
-      var services = [];
-      Object.keys(SERVICES).forEach(function (k) {
-        if (SERVICES[k].test.test(q)) services.push(SERVICES[k]);
-      });
-
-      var packages = [];
-      Object.keys(PACKAGES).forEach(function (k) {
-        if (PACKAGES[k].test(q)) packages.push(k);
-      });
-
-      // Default state
-      if (langs.length === 0 && services.length === 0 && packages.length === 0) {
-        return '{ pkgs, ... }: {\n  languages.rust.enable = true;\n\n  services.postgres = {\n    enable = true;\n    initialDatabases = [{ name = "app"; }];\n  };\n\n  packages = [ pkgs.cargo-watch ];\n}';
-      }
-
-      var parts = ['{ pkgs, ... }: {'];
-
-      langs.forEach(function (l) {
-        if (l.extra) {
-          parts.push('  languages.' + l.key + ' = {');
-          parts.push('    enable = true;');
-          l.extra.split('\n').forEach(function (line) {
-            parts.push('    ' + line);
-          });
-          parts.push('  };');
-        } else {
-          parts.push('  languages.' + l.key + '.enable = true;');
-        }
-        parts.push('');
-      });
-
-      services.forEach(function (s) {
-        if (s.extra) {
-          parts.push('  services.' + s.key + ' = {');
-          parts.push('    enable = true;');
-          parts.push('    ' + s.extra);
-          parts.push('  };');
-        } else {
-          parts.push('  services.' + s.key + '.enable = true;');
-        }
-        parts.push('');
-      });
-
-      if (packages.length > 0) {
-        parts.push('  packages = [');
-        packages.forEach(function (p) {
-          parts.push('    pkgs.' + p);
-        });
-        parts.push('  ];');
-      }
-
-      // trim trailing blank
-      while (parts[parts.length - 1] === '') parts.pop();
-
-      parts.push('}');
-      return parts.join('\n');
+    function appendDocumentationLink(line: string, element: HTMLElement) {
+      var documentation = documentationComment(line);
+      if (!documentation.url || !documentation.label || element.querySelector('.landing-code-doc-link')) return;
+      var link = document.createElement('a');
+      link.className = 'landing-code-doc-link';
+      link.href = documentation.url;
+      link.textContent = documentation.label;
+      link.setAttribute('aria-label', 'Open ' + documentation.label.replace(/^#\s*/, ''));
+      element.append(document.createTextNode(documentation.code.trim() ? '  ' : ''), link);
     }
 
-    var hlPromise;
-    var themeNames;
-    function getHighlighter() {
+    function renderYaml(text: string, highlighter: HighlighterCore | null) {
+      var lines = text.split('\n');
+      var documentation = lines.map(documentationComment);
+      var highlightedLines = highlighter
+        ? highlighter.codeToHtml(documentation.map(function (line) { return line.code; }).join('\n'), {
+            lang: 'yaml',
+            themes: codeThemeNames,
+            defaultColor: false,
+            structure: 'inline',
+          }).split(/<br\s*\/?>/)
+        : [];
+      var fragment = document.createDocumentFragment();
+      lines.forEach(function (line, index) {
+        var element = document.createElement('span');
+        element.className = 'landing-yaml-code-line';
+        if (highlighter) element.innerHTML = highlightedLines[index] || '&nbsp;';
+        else element.textContent = documentation[index].code || '\u00a0';
+        appendDocumentationLink(line, element);
+        fragment.appendChild(element);
+      });
+      yamlCode.replaceChildren(fragment);
+    }
+
+    var hlPromise: Promise<HighlighterCore> | null = null;
+    function getHighlighter(): Promise<HighlighterCore> {
       if (!hlPromise) {
         hlPromise = Promise.all([
           import('@shikijs/core'),
@@ -826,81 +800,939 @@ in 12.4s`} />
           import('../lib/code-themes'),
         ]).then(function (m) {
           var core = m[0], onig = m[1], nix = m[2], yaml = m[3], themes = m[4];
-          themeNames = themes.codeThemeNames;
           return core.createHighlighterCore({
             themes: themes.codeThemes,
             langs: [nix.default, yaml.default],
-            engine: onig.createOnigurumaEngine(import('shiki/wasm')),
+            engine: onig.createOnigurumaEngine(fetch(`${import.meta.env.BASE_URL}shiki/onig.wasm`)),
           });
         });
       }
       return hlPromise;
     }
 
-    function setNix(text) {
-      output.textContent = text;
-      output.classList.add('is-ready');
-      getHighlighter()
-        .then(function (hl) {
-          output.innerHTML = hl.codeToHtml(text, {
-            lang: 'nix',
-            themes: themeNames,
-            defaultColor: false,
-            structure: 'inline',
-          });
-        })
-        .catch(function () {
-          // The readable plain-text preview is already rendered.
+    function setNodeContent(node: HTMLElement, entry: Pick<EnvironmentEntry, 'id'>, meta: EntryMeta) {
+      var icon = document.createElement('span');
+      icon.className = 'landing-env-node-icon';
+      if (meta.icon) {
+        var image = document.createElement('img');
+        image.src = technologyIconPath(meta.icon, displayColor(meta));
+        image.alt = '';
+        image.width = 24;
+        image.height = 24;
+        image.addEventListener('error', function () {
+          icon.textContent = meta.glyph || '·';
+        }, { once: true });
+        icon.appendChild(image);
+      } else {
+        icon.textContent = meta.glyph ?? '·';
+      }
+
+      var copy = document.createElement('span');
+      var label = document.createElement('strong');
+      var option = document.createElement('small');
+      label.textContent = meta.label;
+      option.textContent = entry.id;
+      copy.append(label, option);
+      node.replaceChildren(icon, copy);
+      node.setAttribute('aria-label', meta.label + ', ' + entry.id);
+      node.title = entry.id;
+    }
+
+    function highlightEntries(ids: string[], active: boolean) {
+      highlightedEntryIds = active ? ids.slice() : [];
+      var correlatedIds = new Set(active ? ids : []);
+      var primaryId = ids[0];
+      var primaryMeta = primaryId ? metaForEntry({ id: primaryId, snippet: '' }) : null;
+      output.querySelectorAll<HTMLElement>('.landing-line-node[data-entry-id]').forEach(function (node) {
+        node.classList.toggle('is-correlated', correlatedIds.has(node.getAttribute('data-entry-id') || ''));
+      });
+      output.querySelectorAll<HTMLElement>('.landing-code-line').forEach(function (line) {
+        var lineIds = (line.getAttribute('data-entry-ids') || '').split('|');
+        var correlated = active && lineIds.some(function (id) { return correlatedIds.has(id); });
+        line.classList.toggle('is-correlated', correlated);
+        if (correlated && primaryMeta) {
+          line.style.setProperty('--correlation-color', displayColor(primaryMeta));
+        } else {
+          line.style.removeProperty('--correlation-color');
+        }
+      });
+      codeMinimap.querySelectorAll<HTMLElement>('[data-minimap-entry]').forEach(function (marker) {
+        marker.classList.toggle('is-correlated', correlatedIds.has(marker.getAttribute('data-minimap-entry') || ''));
+      });
+      pantryList.querySelectorAll<HTMLElement>('[data-pantry-entry]').forEach(function (option) {
+        option.classList.toggle('is-correlated', correlatedIds.has(option.getAttribute('data-pantry-entry') || ''));
+      });
+
+      constellationMap.classList.toggle('has-correlation', correlatedIds.size > 0);
+      if (!active || !primaryMeta) {
+        constellationMap.style.removeProperty('--correlation-color');
+        return;
+      }
+      constellationMap.style.setProperty('--correlation-color', displayColor(primaryMeta));
+    }
+
+    function highlightEntry(id: string | null, active: boolean) {
+      highlightEntries(id ? [id] : [], active);
+    }
+
+    function revealEntry(id: string | null) {
+      if (!id) return;
+      var line = Array.from(output.querySelectorAll<HTMLElement>('.landing-code-line')).find(function (candidate) {
+        return (candidate.getAttribute('data-entry-ids') || '').split('|').indexOf(id) !== -1;
+      });
+      var scroller = output.closest<HTMLElement>('.landing-terminal-body');
+      if (!line || !scroller || scroller.scrollHeight <= scroller.clientHeight) return;
+      var target = line.offsetTop - scroller.clientHeight / 2 + line.offsetHeight / 2;
+      scroller.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    }
+
+    function bindMinimapMarker(marker: HTMLButtonElement) {
+      marker.addEventListener('pointerenter', function () {
+        highlightEntry(marker.getAttribute('data-minimap-entry'), true);
+      });
+      marker.addEventListener('pointerleave', function () {
+        highlightEntry(marker.getAttribute('data-minimap-entry'), false);
+      });
+      marker.addEventListener('focus', function () {
+        highlightEntry(marker.getAttribute('data-minimap-entry'), true);
+      });
+      marker.addEventListener('blur', function () {
+        highlightEntry(marker.getAttribute('data-minimap-entry'), false);
+      });
+      marker.addEventListener('click', function () {
+        revealEntry(marker.getAttribute('data-minimap-entry'));
+      });
+    }
+
+    function syncMinimap(environment: ParsedEnvironment) {
+      var reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var currentMarkers = new Map<string, HTMLButtonElement>();
+      codeMinimap.querySelectorAll<HTMLButtonElement>('[data-minimap-entry]').forEach(function (marker) {
+        var id = marker.getAttribute('data-minimap-entry');
+        if (id) currentMarkers.set(id, marker);
+      });
+      var oldPositions = new Map<string, number>();
+      currentMarkers.forEach(function (marker, id) {
+        oldPositions.set(id, marker.getBoundingClientRect().top);
+      });
+      var fragment = document.createDocumentFragment();
+
+      environment.entries.forEach(function (entry) {
+        var meta = metaForEntry(entry);
+        var start = Math.min.apply(null, entry.lineIndexes);
+        var span = Math.max.apply(null, entry.lineIndexes) - start + 1;
+        var marker = currentMarkers.get(entry.id);
+        if (!marker) {
+          marker = document.createElement('button');
+          marker.type = 'button';
+          marker.setAttribute('data-minimap-entry', entry.id);
+          marker.classList.add('is-entering');
+          bindMinimapMarker(marker);
+        }
+        marker.setAttribute('aria-label', 'Reveal ' + meta.label + ' in devenv.nix');
+        marker.title = meta.label + ' · ' + entry.id;
+        marker.style.top = (start + span / 2) / Math.max(environment.lines.length, 1) * 100 + '%';
+        marker.style.setProperty('--minimap-color', displayColor(meta));
+        fragment.appendChild(marker);
+      });
+
+      codeMinimap.replaceChildren(fragment);
+      requestAnimationFrame(function () {
+        codeMinimap.querySelectorAll<HTMLButtonElement>('[data-minimap-entry]').forEach(function (marker) {
+          var id = marker.getAttribute('data-minimap-entry');
+          if (!id) return;
+          var oldTop = oldPositions.get(id);
+          if (!reducedMotion && oldTop !== undefined) {
+            var delta = oldTop - marker.getBoundingClientRect().top;
+            if (delta) {
+              marker.animate([
+                { transform: 'translateY(calc(-50% + ' + delta + 'px))' },
+                { transform: 'translateY(-50%)' },
+              ], { duration: 380, easing: 'cubic-bezier(0.2, 0.75, 0.2, 1)' });
+            }
+          }
+          if (marker.classList.contains('is-entering')) {
+            marker.classList.remove('is-entering');
+          }
         });
+      });
     }
 
-    function update() {
-      var q = (input.value || input.placeholder || '').trim();
-      setNix(build(q));
+    function bindNode(node: HTMLButtonElement) {
+      node.draggable = true;
+      node.addEventListener('pointerenter', function () {
+        highlightEntry(node.getAttribute('data-entry-id'), true);
+      });
+      node.addEventListener('pointerleave', function () {
+        highlightEntry(node.getAttribute('data-entry-id'), false);
+      });
+      node.addEventListener('focus', function () {
+        highlightEntry(node.getAttribute('data-entry-id'), true);
+      });
+      node.addEventListener('blur', function () {
+        highlightEntry(node.getAttribute('data-entry-id'), false);
+      });
+      node.addEventListener('click', function () {
+        var id = node.getAttribute('data-entry-id');
+        if (id) removeEntry(id);
+      });
+      node.addEventListener('dragstart', function (event) {
+        beginDrag(event, node.getAttribute('data-entry-id'), 'file');
+      });
+      node.addEventListener('dragend', endDrag);
     }
 
-    input.addEventListener('input', update);
+    function syncNodes(entries: EnvironmentEntry[]) {
+      var currentNodes = new Map<string, HTMLButtonElement>();
+      output.querySelectorAll<HTMLButtonElement>('.landing-line-node[data-entry-id]').forEach(function (node) {
+        var id = node.getAttribute('data-entry-id');
+        if (id) currentNodes.set(id, node);
+      });
+      var liveIds = new Set(entries.map(function (entry) { return entry.id; }));
 
-    // Chips fill input
+      currentNodes.forEach(function (node, id) {
+        if (!liveIds.has(id)) node.remove();
+      });
+
+      var lines = output.querySelectorAll<HTMLElement>('.landing-code-line');
+      entries.forEach(function (entry) {
+        var node = currentNodes.get(entry.id);
+        var meta = metaForEntry(entry);
+        if (!node) {
+          node = document.createElement('button');
+          node.type = 'button';
+          node.className = 'landing-line-node';
+          node.setAttribute('data-entry-id', entry.id);
+          bindNode(node);
+        }
+
+        setNodeContent(node, entry, meta);
+        requiredElement(node.querySelector<HTMLElement>('strong')).textContent = 'Remove ' + meta.label;
+        node.setAttribute('aria-label', 'Remove ' + meta.label + ' from devenv.nix');
+        node.title = 'Remove ' + meta.label;
+        node.style.setProperty('--node-color', displayColor(meta));
+        var destinationLine = lines[entry.lineIndexes[0]];
+        if (destinationLine) destinationLine.appendChild(node);
+      });
+
+      syncPantry(entries);
+      if (highlightedEntryIds.length) highlightEntries(highlightedEntryIds, true);
+    }
+
+    var renderedEnvironment: ParsedEnvironment = { text: '', lines: [], lineEntryIds: [], entries: [] };
+    var renderVersion = 0;
+    var pendingFlights: Flight[] = [];
+    var pendingDepartureTone: 'remove' | null = null;
+    var highlightedEntryIds: string[] = [];
+    var draggedEntryId: string | null = null;
+    var dragOrigin: DragOrigin | null = null;
+    var draggedSourceRect: IconBounds | null = null;
+
+    function iconRect(element: HTMLElement | IconBounds | null | undefined): IconBounds | null {
+      if (!element) return null;
+      if (!(element instanceof HTMLElement)) return element;
+      var icon = element.matches('.landing-env-node-icon') ? element : element.querySelector<HTMLElement>('.landing-env-node-icon');
+      if (!icon) return null;
+      var rect = icon.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    }
+
+    function settledIconRect(element: HTMLElement | IconBounds | null | undefined): IconBounds | null {
+      if (!element) return null;
+      if (!('matches' in element)) return element;
+      var icon = element.matches('.landing-env-node-icon') ? element : element.querySelector<HTMLElement>('.landing-env-node-icon');
+      if (!icon) return iconRect(element);
+      var rect = icon.getBoundingClientRect();
+      var style = getComputedStyle(icon);
+      var width = parseFloat(style.width) || rect.width;
+      var height = parseFloat(style.height) || rect.height;
+      var left = rect.left + rect.width / 2 - width / 2;
+      var top = rect.top + rect.height / 2 - height / 2;
+      var line = icon.closest('.landing-code-line');
+      if (line) {
+        var transform = getComputedStyle(line).transform;
+        if (transform && transform !== 'none') {
+          var matrix = new DOMMatrixReadOnly(transform);
+          left -= matrix.m41;
+          top -= matrix.m42;
+        }
+      }
+      return { left: left, top: top, width: width, height: height };
+    }
+
+    function beginDrag(event: DragEvent, id: string | null, origin: DragOrigin) {
+      if (!id) return;
+      draggedEntryId = id;
+      dragOrigin = origin;
+      draggedSourceRect = iconRect(event.currentTarget instanceof HTMLElement ? event.currentTarget : null);
+      constellationShell.classList.add('is-dragging');
+      constellationShell.classList.toggle('is-adding', origin === 'pantry');
+      constellationShell.classList.toggle('is-removing', origin === 'file');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = origin === 'pantry' ? 'copy' : 'move';
+        event.dataTransfer.setData('text/devenv-entry', id);
+      }
+    }
+
+    function endDrag() {
+      draggedEntryId = null;
+      dragOrigin = null;
+      draggedSourceRect = null;
+      constellationShell.classList.remove('is-dragging', 'is-adding', 'is-removing');
+      fileDropZone.classList.remove('is-drop-target');
+      pantry.classList.remove('is-drop-target');
+    }
+
+    function pantryDestination(id: string, preferred?: HTMLElement | IconBounds | null): { element: HTMLElement | null; rect: IconBounds | null } {
+      var preferredRect = settledIconRect(preferred);
+      if (preferredRect) return { element: preferred instanceof HTMLElement ? preferred : null, rect: preferredRect };
+      var candidates = Array.from(pantryList.querySelectorAll<HTMLElement>('[data-pantry-entry="' + CSS.escape(id) + '"]'));
+      var visible = candidates.find(function (button) {
+        var rect = button.getBoundingClientRect();
+        return rect.right > 0 && rect.left < innerWidth && rect.bottom > 0 && rect.top < innerHeight;
+      });
+      if (visible) return { element: visible, rect: settledIconRect(visible) };
+      var band = candidates[0] && candidates[0].closest('.landing-option-band');
+      if (!band) return { element: candidates[0], rect: settledIconRect(candidates[0]) };
+      var bandRect = band.getBoundingClientRect();
+      var nearest = candidates.slice().sort(function (left, right) {
+        var center = bandRect.left + bandRect.width / 2;
+        return Math.abs(left.getBoundingClientRect().left - center) - Math.abs(right.getBoundingClientRect().left - center);
+      })[0];
+      var nearestRect = settledIconRect(nearest);
+      if (!nearestRect) return { element: null, rect: null };
+      var nearestCenter = nearestRect.left + nearestRect.width / 2;
+      var edgeCenter = nearestCenter < bandRect.left + bandRect.width / 2
+        ? bandRect.left + nearestRect.width / 2
+        : bandRect.right - nearestRect.width / 2;
+      return {
+        element: null,
+        rect: {
+          left: edgeCenter - nearestRect.width / 2,
+          top: nearestRect.top,
+          width: nearestRect.width,
+          height: nearestRect.height,
+        },
+      };
+    }
+
+    function pantryDestinationRect(id: string, preferred?: HTMLElement | IconBounds | null) {
+      return pantryDestination(id, preferred).rect;
+    }
+
+    function inlineDestination(node: HTMLElement | null) {
+      var rect = settledIconRect(node);
+      var terminalBody = node && node.closest('.landing-terminal-body');
+      if (!rect || !terminalBody) return { rect: rect, clipped: false };
+      var bounds = terminalBody.getBoundingClientRect();
+      var centerX = rect.left + rect.width / 2;
+      var centerY = rect.top + rect.height / 2;
+      var targetX = Math.min(bounds.right - rect.width / 2, Math.max(bounds.left + rect.width / 2, centerX));
+      var targetY = Math.min(bounds.bottom - rect.height / 2, Math.max(bounds.top + rect.height / 2, centerY));
+      return {
+        rect: {
+          left: targetX - rect.width / 2,
+          top: targetY - rect.height / 2,
+          width: rect.width,
+          height: rect.height,
+        },
+        clipped: targetX !== centerX || targetY !== centerY,
+      };
+    }
+
+    function flightKeyframes(from: IconBounds, to: IconBounds) {
+      var startX = from.left + from.width / 2;
+      var startY = from.top + from.height / 2;
+      var endX = to.left + to.width / 2;
+      var endY = to.top + to.height / 2;
+      var deltaX = endX - startX;
+      var deltaY = endY - startY;
+      var distance = Math.hypot(deltaX, deltaY);
+      var lift = Math.min(110, Math.max(38, distance * 0.16));
+      var controlX = startX + deltaX * 0.48;
+      var controlY = Math.min(startY, endY) - lift;
+      var targetScale = to.width / Math.max(from.width, 1);
+      var frames: Keyframe[] = [];
+
+      for (var index = 0; index <= 10; index += 1) {
+        var progress = index / 10;
+        var inverse = 1 - progress;
+        var x = inverse * inverse * startX + 2 * inverse * progress * controlX + progress * progress * endX;
+        var y = inverse * inverse * startY + 2 * inverse * progress * controlY + progress * progress * endY;
+        var scale = (1 + (targetScale - 1) * progress) * (1 + Math.sin(Math.PI * progress) * 0.1);
+        var rotation = Math.sin(Math.PI * progress) * (deltaX < 0 ? -4 : 4);
+        frames.push({
+          transform: 'translate3d(' + (x - startX) + 'px, ' + (y - startY) + 'px, 0) scale(' + scale + ') rotate(' + rotation + 'deg)',
+          opacity: 1,
+          offset: progress,
+        });
+      }
+
+      return { frames: frames, duration: Math.min(680, Math.max(460, 360 + distance * 0.32)) };
+    }
+
+    function settleNode(node: HTMLElement, line: HTMLElement | null) {
+      node.classList.remove('is-materializing');
+      node.animate([
+        { transform: 'scale(0.84)', opacity: 0.72, offset: 0 },
+        { transform: 'scale(1.16)', opacity: 1, offset: 0.58 },
+        { transform: 'scale(0.97)', opacity: 1, offset: 0.82 },
+        { transform: 'scale(1)', opacity: 1, offset: 1 },
+      ], { duration: 360, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
+      if (!line) return;
+      line.style.setProperty('--node-color', node.style.getPropertyValue('--node-color'));
+      line.classList.add('is-docking');
+      setTimeout(function () {
+        line.classList.remove('is-docking');
+        line.style.removeProperty('--node-color');
+      }, 520);
+    }
+
+    async function animateFlight(flight: Flight) {
+      var inlineNode = output.querySelector<HTMLElement>('.landing-line-node[data-entry-id="' + CSS.escape(flight.id) + '"]');
+      var from = flight.fromRect;
+      var inlineTarget = flight.direction === 'in' ? inlineDestination(inlineNode) : null;
+      var pantryTarget = flight.direction === 'out' ? pantryDestination(flight.id, flight.destination) : null;
+      var to = inlineTarget ? inlineTarget.rect : pantryTarget && pantryTarget.rect;
+      if (!from || !to || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        if (inlineNode && flight.direction === 'in') inlineNode.classList.remove('is-materializing');
+        return Promise.resolve();
+      }
+
+      if (flight.source instanceof HTMLElement) flight.source.classList.add('is-launching');
+      if (pantryTarget && pantryTarget.element) pantryTarget.element.classList.add('is-awaiting-return');
+
+      var meta = metaForEntry({ id: flight.id, snippet: '' });
+      var carrier = document.createElement('span');
+      carrier.className = 'landing-flying-ingredient' + (flight.direction === 'out' ? ' is-removing' : '');
+      carrier.style.setProperty('--node-color', displayColor(meta));
+      var content = document.createElement('span');
+      setNodeContent(content, { id: flight.id }, meta);
+      if (content.firstElementChild) carrier.appendChild(content.firstElementChild);
+      carrier.style.left = from.left + 'px';
+      carrier.style.top = from.top + 'px';
+      carrier.style.width = from.width + 'px';
+      carrier.style.height = from.height + 'px';
+      document.body.appendChild(carrier);
+
+      var flightMotion = flightKeyframes(from, to);
+      var animation = carrier.animate(flightMotion.frames, {
+        duration: flightMotion.duration,
+        easing: 'cubic-bezier(0.2, 0.72, 0.18, 1)',
+        fill: 'forwards',
+      });
+      try {
+        await animation.finished;
+      } catch {}
+
+      carrier.style.opacity = '0';
+      if (flight.direction === 'in' && inlineNode) {
+        settleNode(inlineNode, inlineNode.closest('.landing-code-line'));
+        if (inlineTarget && inlineTarget.clipped) {
+          var marker = codeMinimap.querySelector<HTMLElement>('[data-minimap-entry="' + CSS.escape(flight.id) + '"]');
+          if (marker) {
+            marker.classList.add('is-receiving');
+            var receivingMarker = marker;
+            setTimeout(function () { receivingMarker.classList.remove('is-receiving'); }, 720);
+          }
+        }
+      }
+      if (pantryTarget && pantryTarget.element) {
+        pantryTarget.element.classList.remove('is-awaiting-return');
+        var returnedIcon = pantryTarget.element.querySelector<HTMLElement>('.landing-env-node-icon');
+        if (returnedIcon) {
+          returnedIcon.animate([
+            { transform: 'scale(0.72)', opacity: 0.55 },
+            { transform: 'scale(1.12)', opacity: 1, offset: 0.62 },
+            { transform: 'scale(1)', opacity: 1 },
+          ], { duration: 320, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
+        }
+      }
+      if (flight.source instanceof HTMLElement) flight.source.classList.remove('is-launching');
+      carrier.remove();
+    }
+
+    async function animatePendingFlights(): Promise<void> {
+      var flights = pendingFlights;
+      pendingFlights = [];
+      if (!flights.length) return;
+      var reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      flights.forEach(function (flight) {
+        if (flight.direction !== 'in') return;
+        var inlineNode = output.querySelector<HTMLElement>('.landing-line-node[data-entry-id="' + CSS.escape(flight.id) + '"]');
+        if (inlineNode) inlineNode.classList.add('is-materializing');
+      });
+      await Promise.all(flights.map(function (flight, index) {
+        return new Promise(function (resolve) {
+          setTimeout(function () {
+            animateFlight(flight).then(resolve);
+          }, reducedMotion ? 0 : index * 85);
+        });
+      }));
+    }
+
+    function queueEnvironmentFlights(environment: ParsedEnvironment, recompose = false) {
+      var currentIds = new Set(renderedEnvironment.entries.map(function (entry) { return entry.id; }));
+      var nextIds = new Set(environment.entries.map(function (entry) { return entry.id; }));
+      var removals: Flight[] = renderedEnvironment.entries.filter(function (entry) { return !nextIds.has(entry.id); }).map(function (entry) {
+        var inlineNode = output.querySelector<HTMLElement>('.landing-line-node[data-entry-id="' + CSS.escape(entry.id) + '"]');
+        return { id: entry.id, direction: 'out', fromRect: iconRect(inlineNode) };
+      });
+      var additions: Flight[] = environment.entries.filter(function (entry) {
+        return CATALOG_BY_ID[entry.id] && (recompose || !currentIds.has(entry.id));
+      }).map(function (entry) {
+        return { id: entry.id, direction: 'in', fromRect: pantryDestinationRect(entry.id) };
+      });
+      pendingFlights = removals.concat(additions);
+    }
+
+    function addEntry(id: string, source?: HTMLElement | IconBounds | null) {
+      if (isComposing) return;
+      var nextText = addEnvironmentEntry(currentText, id);
+      if (nextText === currentText) return;
+      pendingFlights.push({ id: id, direction: 'in', fromRect: iconRect(source) || draggedSourceRect, source: source });
+      commitManualText(nextText, 'Added ' + metaForEntry({ id: id, snippet: '' }).label);
+    }
+
+    function removeEntry(id: string, destination?: HTMLElement | IconBounds | null) {
+      if (isComposing) return;
+      var baseEnvironment = parseEnvironment(currentText);
+      var entry = baseEnvironment.entries.find(function (candidate) { return candidate.id === id; });
+      if (!entry) return;
+      var nextText = removeEnvironmentEntry(currentText, id);
+      if (nextText === currentText) return;
+      var inlineNode = output.querySelector<HTMLElement>('.landing-line-node[data-entry-id="' + CSS.escape(id) + '"]');
+      pendingFlights.push({
+        id: id,
+        direction: 'out',
+        fromRect: iconRect(inlineNode),
+        destination: destination,
+      });
+      pendingDepartureTone = 'remove';
+      commitManualText(nextText, 'Removed ' + metaForEntry({ id: id, snippet: '' }).label);
+    }
+
+    function renderPantryOption(id: string, clone: boolean) {
+        var entry = { id: id, snippet: OPTION_TEMPLATES[id].join('\n') };
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'landing-pantry-option';
+        button.setAttribute('data-pantry-entry', id);
+        if (clone) {
+          button.setAttribute('aria-hidden', 'true');
+          button.tabIndex = -1;
+        }
+        button.draggable = true;
+        setNodeContent(button, entry, metaForEntry(entry));
+        button.addEventListener('click', function () {
+          if (button.classList.contains('is-active')) removeEntry(id, button);
+          else addEntry(id, button);
+        });
+        button.addEventListener('pointerenter', function () {
+          highlightEntry(id, true);
+        });
+        button.addEventListener('pointerleave', function () { highlightEntry(id, false); });
+        button.addEventListener('focus', function () {
+          highlightEntry(id, true);
+        });
+        button.addEventListener('blur', function () { highlightEntry(id, false); });
+        button.addEventListener('dragstart', function (event) { beginDrag(event, id, 'pantry'); });
+        button.addEventListener('dragend', endDrag);
+        return button;
+    }
+
+    function renderPantryLane(kinds: LandingOption['kind'][], label: string, reverse: boolean) {
+      var ids = OPTION_CATALOG.filter(function (item) { return kinds.indexOf(item.kind) !== -1; }).map(function (item) { return item.id; });
+      var lane = document.createElement('div');
+      var laneLabel = document.createElement('span');
+      var viewport = document.createElement('div');
+      var track = document.createElement('div');
+      lane.className = 'landing-option-lane';
+      laneLabel.className = 'landing-option-lane-label';
+      laneLabel.textContent = label + ' ' + ids.length;
+      viewport.className = 'landing-option-band';
+      track.className = 'landing-option-band-track' + (reverse ? ' is-reverse' : '');
+      track.style.setProperty('--band-duration', Math.max(48, ids.length * 2.8) + 's');
+      ids.concat(ids).forEach(function (id, index) {
+        track.appendChild(renderPantryOption(id, index >= ids.length));
+      });
+      viewport.appendChild(track);
+      lane.append(laneLabel, viewport);
+      pantryList.appendChild(lane);
+    }
+
+    function renderPantry() {
+      renderPantryLane(['language'], 'Languages', false);
+      renderPantryLane(['service', 'utility'], 'Services + tools', true);
+    }
+
+    function syncPantry(entries: EnvironmentEntry[]) {
+      var activeIds = new Set(entries.map(function (entry) { return entry.id; }));
+      pantryList.querySelectorAll<HTMLButtonElement>('[data-pantry-entry]').forEach(function (button) {
+        var id = button.getAttribute('data-pantry-entry');
+        if (!id) return;
+        var active = activeIds.has(id);
+        var meta = metaForEntry({ id: id, snippet: '' });
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+        button.setAttribute('aria-label', active ? 'Remove ' + meta.label + ' from devenv.nix' : 'Add ' + meta.label + ' to devenv.nix');
+        button.title = active ? 'Remove ' + meta.label : 'Add ' + meta.label;
+      });
+    }
+
+    fileDropZone.addEventListener('dragover', function (event) {
+      if (dragOrigin !== 'pantry') return;
+      event.preventDefault();
+      fileDropZone.classList.add('is-drop-target');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    });
+    fileDropZone.addEventListener('dragleave', function (event) {
+      if (!(event.relatedTarget instanceof Node) || !fileDropZone.contains(event.relatedTarget)) fileDropZone.classList.remove('is-drop-target');
+    });
+    fileDropZone.addEventListener('drop', function (event) {
+      event.preventDefault();
+      var id = draggedEntryId || (event.dataTransfer && event.dataTransfer.getData('text/devenv-entry'));
+      if (id) addEntry(id, draggedSourceRect);
+      endDrag();
+    });
+    pantry.addEventListener('dragover', function (event) {
+      if (dragOrigin !== 'file') return;
+      event.preventDefault();
+      pantry.classList.add('is-drop-target');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    });
+    pantry.addEventListener('dragleave', function (event) {
+      if (!(event.relatedTarget instanceof Node) || !pantry.contains(event.relatedTarget)) pantry.classList.remove('is-drop-target');
+    });
+    pantry.addEventListener('drop', function (event) {
+      event.preventDefault();
+      var id = draggedEntryId || (event.dataTransfer && event.dataTransfer.getData('text/devenv-entry'));
+      if (id) removeEntry(id);
+      endDrag();
+    });
+
+    function animateDepartingLines(lines: HTMLElement[]) {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var terminalBody = output.closest<HTMLElement>('.landing-terminal-body');
+      if (!terminalBody) return;
+      var terminalRect = terminalBody.getBoundingClientRect();
+      var layer = document.createElement('span');
+      layer.className = 'landing-code-ghost-layer';
+      layer.style.left = terminalRect.left + 'px';
+      layer.style.top = terminalRect.top + 'px';
+      layer.style.width = terminalRect.width + 'px';
+      layer.style.height = terminalRect.height + 'px';
+      var remaining = 0;
+      lines.forEach(function (line, index) {
+        var rect = line.getBoundingClientRect();
+        if (rect.bottom < terminalRect.top || rect.top > terminalRect.bottom) return;
+        remaining += 1;
+        var ghost = line.cloneNode(true) as HTMLElement;
+        ghost.querySelectorAll<HTMLElement>('.landing-line-node').forEach(function (node) { node.remove(); });
+        ghost.className = 'landing-code-line landing-code-line-ghost';
+        var style = getComputedStyle(line);
+        ghost.style.left = (rect.left - terminalRect.left) + 'px';
+        ghost.style.top = (rect.top - terminalRect.top) + 'px';
+        ghost.style.width = rect.width + 'px';
+        ghost.style.height = rect.height + 'px';
+        ghost.style.font = style.font;
+        ghost.style.lineHeight = style.lineHeight;
+        ghost.style.whiteSpace = style.whiteSpace;
+        layer.appendChild(ghost);
+        var animation = ghost.animate([
+          { opacity: 0.9, transform: 'translate3d(0, 0, 0)', filter: 'saturate(1)' },
+          { opacity: 0.72, transform: 'translate3d(0.3rem, 0, 0)', filter: 'grayscale(0.2) saturate(0.75)', offset: 0.42 },
+          { opacity: 0, transform: 'translate3d(0.85rem, -0.12rem, 0)', filter: 'grayscale(0.8) saturate(0.3)' },
+        ], { duration: 260, delay: index * 16, easing: 'cubic-bezier(0.4, 0, 0.8, 0.35)', fill: 'forwards' });
+        animation.finished.then(function () {
+          ghost.remove();
+          remaining -= 1;
+          if (!remaining) layer.remove();
+        }, function () {
+          ghost.remove();
+          remaining -= 1;
+          if (!remaining) layer.remove();
+        });
+      });
+      if (remaining) document.body.appendChild(layer);
+    }
+
+    function revealInsertedLine(line: HTMLElement, lineIndex: number) {
+      var delay = 80 + Math.min(lineIndex * 18, 160);
+      setTimeout(function () {
+        if (!line.isConnected) return;
+        line.classList.remove('is-entering');
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        Array.from(line.children).filter(function (child) {
+          return !child.classList.contains('landing-line-node');
+        }).forEach(function (token, tokenIndex) {
+          token.animate([
+            { opacity: 0, transform: 'translateY(0.22em)', filter: 'blur(2px)' },
+            { opacity: 1, transform: 'translateY(0)', filter: 'blur(0)' },
+          ], {
+            duration: 280,
+            delay: tokenIndex * 18,
+            easing: 'cubic-bezier(0.2, 0.75, 0.2, 1)',
+            fill: 'both',
+          });
+        });
+      }, delay);
+    }
+
+    function commitEnvironment(environment: ParsedEnvironment, highlighter: HighlighterCore | null, version: number): Promise<void> | undefined {
+      if (version !== renderVersion) return;
+      var previewHeight = Math.min(48, Math.max(38, 10 + environment.lines.length * 1.2));
+      constellationMap.style.setProperty('--preview-height', previewHeight + 'rem');
+      var oldElements = Array.from(output.querySelectorAll<HTMLElement>(':scope > .landing-code-line'));
+      var matches = patienceMatches(renderedEnvironment.lines, environment.lines);
+      var oldForNew = new Map(matches.map(function (match) { return [match.after, match.before]; }));
+      var matchedOld = new Set(matches.map(function (match) { return match.before; }));
+      var oldPositions = new Map<number, number>();
+      oldElements.forEach(function (element, index) { oldPositions.set(index, element.offsetTop); });
+      if (pendingDepartureTone === 'remove') {
+        animateDepartingLines(oldElements.filter(function (_element, index) { return !matchedOld.has(index); }));
+      }
+      pendingDepartureTone = null;
+      var fragment = document.createDocumentFragment();
+      var reused: { element: HTMLElement; oldTop: number | undefined }[] = [];
+      var highlightedText = environment.lines.map(function (line) { return documentationComment(line).code; }).join('\n');
+      var highlightedLines = highlighter
+        ? highlighter.codeToHtml(highlightedText, { lang: 'nix', themes: codeThemeNames, defaultColor: false, structure: 'inline' }).split(/<br\s*\/?>/)
+        : [];
+
+      environment.lines.forEach(function (line, index) {
+        var oldIndex = oldForNew.get(index);
+        var element = oldIndex === undefined ? document.createElement('span') : oldElements[oldIndex];
+        element.className = 'landing-code-line';
+        element.setAttribute('data-entry-ids', environment.lineEntryIds[index].join('|'));
+        if (oldIndex === undefined) {
+          element.classList.add('is-entering');
+          if (highlighter) {
+            element.innerHTML = highlightedLines[index] || '&nbsp;';
+          } else {
+            element.textContent = documentationComment(line).code || '\u00a0';
+          }
+          appendDocumentationLink(line, element);
+        } else {
+          reused.push({ element: element, oldTop: oldPositions.get(oldIndex) });
+        }
+        fragment.appendChild(element);
+      });
+
+      output.replaceChildren(fragment);
+      reused.forEach(function (item) {
+        var offset = (item.oldTop ?? item.element.offsetTop) - item.element.offsetTop;
+        if (!offset) return;
+        item.element.style.transition = 'none';
+        item.element.style.transform = 'translateY(' + offset + 'px)';
+      });
+      output.getBoundingClientRect();
+      requestAnimationFrame(function () {
+        reused.forEach(function (item) {
+          item.element.style.transition = '';
+          item.element.style.transform = '';
+        });
+        output.querySelectorAll<HTMLElement>('.landing-code-line.is-entering').forEach(function (line, index) {
+          revealInsertedLine(line, index);
+        });
+      });
+
+      renderedEnvironment = environment;
+      syncMinimap(environment);
+      syncNodes(environment.entries);
+      var flightAnimations = animatePendingFlights();
+      output.classList.add('is-ready');
+      return flightAnimations;
+    }
+
+    function setNix(text: string) {
+      var environment = parseEnvironment(text);
+      var version = ++renderVersion;
+      return getHighlighter().then(
+        function (highlighter) { return commitEnvironment(environment, highlighter, version); },
+        function () { return commitEnvironment(environment, null, version); },
+      );
+    }
+
+    var initialPrompt = input.placeholder.trim();
+    var initialIds = selectPromptMatches(initialPrompt);
+    var initialText = buildEnvironment(initialIds);
+    var initialYaml = buildEnvironmentYaml(initialIds);
+    var currentText = initialText;
+    var currentYaml = initialYaml;
+    var currentYamlSource: 'registry' | 'ai' = 'registry';
+    var yamlRenderVersion = 0;
+    var yamlHideTimer: ReturnType<typeof setTimeout> | null = null;
+    var compositionRun = 0;
+    var isComposing = false;
+    var livePreviewTimer: ReturnType<typeof setTimeout> | null = null;
+    var activeGeneration: AbortController | null = null;
+
+    function setSubmitLabel(label: string) {
+      var arrow = document.createElement('span');
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '→';
+      submitBtn.replaceChildren(document.createTextNode(label + ' '), arrow);
+    }
+
+    function setComposeState(state: 'ready' | 'composing' | 'evaluating' | 'error', message: string) {
+      isComposing = state === 'composing' || state === 'evaluating';
+      composeMessage.textContent = message;
+      commandBar.setAttribute('data-state', state);
+      constellationShell.classList.toggle('is-composing', isComposing);
+      constellationShell.classList.toggle('is-evaluating', state === 'evaluating');
+      form.classList.toggle('is-ai-disabled', isComposing);
+      form.toggleAttribute('inert', isComposing);
+      pantry.toggleAttribute('inert', isComposing);
+      fileStage.toggleAttribute('inert', isComposing);
+      fileDropZone.setAttribute('aria-busy', String(isComposing));
+      input.readOnly = isComposing;
+      submitBtn.disabled = isComposing;
+      composeFeedback.hidden = state !== 'error';
+      composeFeedback.textContent = state === 'error' ? message : '';
+      setSubmitLabel(state === 'composing' ? 'Generating' : state === 'evaluating' ? 'Mapping result' : state === 'error' ? 'Try again' : 'Generate with AI');
+    }
+
+    function commitManualText(text: string, message: string) {
+      currentText = text;
+      if (currentYamlSource === 'registry') {
+        currentYaml = buildEnvironmentYaml(parseEnvironment(text).entries.map(function (entry) { return entry.id; }));
+        showYaml(currentYaml);
+      }
+      setComposeState('ready', message);
+      return setNix(text);
+    }
+
+    async function composePrompt(prompt: string) {
+      if (isComposing) return;
+      if (livePreviewTimer) {
+        clearTimeout(livePreviewTimer);
+        livePreviewTimer = null;
+      }
+      var run = ++compositionRun;
+      var controller = new AbortController();
+      var timeout = setTimeout(function () { controller.abort(); }, 45000);
+      activeGeneration = controller;
+      aiLoader.open(selectPromptMatches(prompt, false));
+      setComposeState('composing', 'Asking AI to generate your environment');
+      try {
+        var generated = await generateEnvironment(prompt, controller.signal);
+        if (run !== compositionRun) return;
+        aiLoader.setStage(hasMeaningfulYaml(generated.yaml) ? 'Coordinating both project files' : 'Pinning every ingredient to its line');
+        setComposeState('evaluating', 'Mapping generated lines to ingredients');
+        var environment = parseEnvironment(generated.nix);
+        await aiLoader.finish();
+        if (run !== compositionRun) return;
+        queueEnvironmentFlights(environment, true);
+        currentText = generated.nix;
+        currentYaml = generated.yaml;
+        currentYamlSource = 'ai';
+        await setNix(generated.nix);
+        if (run !== compositionRun) return;
+        showYaml(generated.yaml);
+        setComposeState('ready', environment.entries.length + ' AI-generated ingredients ready');
+      } catch (error) {
+        if (run !== compositionRun) return;
+        await aiLoader.dismiss();
+        var message = error instanceof Error && error.name === 'AbortError'
+          ? 'AI generation took too long. Your live preview is still here.'
+          : (error instanceof Error && error.message ? error.message : 'AI generation failed') + '. Your live preview is still here.';
+        setComposeState('error', message);
+      } finally {
+        clearTimeout(timeout);
+        if (activeGeneration === controller) {
+          aiLoader.close();
+          activeGeneration = null;
+        }
+      }
+    }
+
+    input.addEventListener('input', function () {
+      commandBar.classList.toggle('has-value', Boolean(input.value.trim()));
+      if (livePreviewTimer) clearTimeout(livePreviewTimer);
+      livePreviewTimer = setTimeout(function () {
+        livePreviewTimer = null;
+        var prompt = input.value.trim();
+        var selectedIds = prompt ? selectPromptMatches(prompt, false) : selectPromptMatches(initialPrompt);
+        var nextText = buildEnvironment(selectedIds);
+        var nextYaml = buildEnvironmentYaml(selectedIds);
+        if (nextText === currentText && nextYaml === currentYaml && currentYamlSource === 'registry') return;
+        compositionRun += 1;
+        if (activeGeneration) activeGeneration.abort();
+        currentYaml = nextYaml;
+        currentYamlSource = 'registry';
+        showYaml(nextYaml);
+        queueEnvironmentFlights(parseEnvironment(nextText));
+        currentText = nextText;
+        setComposeState('ready', selectedIds.length ? selectedIds.length + ' locally inferred ingredients' : 'No ingredients inferred yet');
+        setNix(nextText);
+      }, 140);
+    });
+
+    output.addEventListener('pointerover', function (event) {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest('.landing-line-node')) return;
+      var line = event.target.closest<HTMLElement>('.landing-code-line[data-entry-ids]');
+      if (!line || (event.relatedTarget instanceof Node && line.contains(event.relatedTarget))) return;
+      var ids = (line.getAttribute('data-entry-ids') || '').split('|').filter(Boolean);
+      if (ids.length) highlightEntries(ids, true);
+    });
+
+    output.addEventListener('pointerout', function (event) {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest('.landing-line-node')) return;
+      var line = event.target.closest<HTMLElement>('.landing-code-line[data-entry-ids]');
+      if (!line || (event.relatedTarget instanceof Node && line.contains(event.relatedTarget))) return;
+      var ids = (line.getAttribute('data-entry-ids') || '').split('|').filter(Boolean);
+      if (ids.length) highlightEntries(ids, false);
+    });
+
     chips.forEach(function (chip) {
       chip.addEventListener('click', function () {
+        if (isComposing) return;
         input.value = chip.getAttribute('data-chip') || '';
+        commandBar.classList.add('has-value');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         input.focus();
-        update();
       });
     });
 
-    // Submit → API call, render inline
-    var submitBtn = form.querySelector('button[type="submit"]');
-    var preview = document.getElementById('preview-terminal');
-    var title = document.getElementById('preview-title');
-    var yamlPre = document.getElementById('preview-yaml-pre');
-    var yamlCode = document.getElementById('preview-yaml');
-    var yamlHeader = document.getElementById('preview-yaml-header');
-    var yamlDivider = document.getElementById('preview-yaml-divider');
-
-    function showYaml(text) {
-      if (text && text.trim() && !/^# See/.test(text.trim())) {
-        yamlCode.textContent = text;
-        yamlPre.hidden = false;
-        yamlHeader.hidden = false;
-        yamlDivider.hidden = false;
+    function showYaml(text: string, animate = true) {
+      var version = ++yamlRenderVersion;
+      var visible = hasMeaningfulYaml(text);
+      if (yamlHideTimer) {
+        clearTimeout(yamlHideTimer);
+        yamlHideTimer = null;
+      }
+      if (visible) {
+        renderYaml(text, null);
+        yamlTerminal.hidden = false;
+        yamlTerminal.setAttribute('aria-hidden', 'false');
+        yamlTerminal.getBoundingClientRect();
+        if (animate) requestAnimationFrame(function () { fileDropZone.classList.add('has-yaml'); });
+        else fileDropZone.classList.add('has-yaml');
         getHighlighter()
           .then(function (hl) {
-            yamlCode.innerHTML = hl.codeToHtml(text, {
-              lang: 'yaml',
-              themes: themeNames,
-              defaultColor: false,
-              structure: 'inline',
-            });
+            if (version !== yamlRenderVersion) return;
+            renderYaml(text, hl);
           })
           .catch(function () {
             // The readable plain-text preview is already rendered.
           });
       } else {
-        yamlPre.hidden = true;
-        yamlHeader.hidden = true;
-        yamlDivider.hidden = true;
+        fileDropZone.classList.remove('has-yaml');
+        yamlTerminal.setAttribute('aria-hidden', 'true');
+        if (!animate) {
+          yamlTerminal.hidden = true;
+          yamlCode.textContent = '';
+          return;
+        }
+        yamlHideTimer = setTimeout(function () {
+          if (fileDropZone.classList.contains('has-yaml')) return;
+          yamlTerminal.hidden = true;
+          yamlCode.textContent = '';
+          yamlHideTimer = null;
+        }, 680);
       }
     }
 
@@ -911,52 +1743,37 @@ in 12.4s`} />
         input.focus();
         return;
       }
-
-      var originalText = submitBtn.textContent;
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Generating…';
-      title.textContent = 'devenv.nix · generating…';
-      setNix('# Talking to devenv.new …\n');
-
-      // Dev: route through Vite proxy to avoid CORS. Prod: hit devenv.new directly (requires CORS headers there).
-      var apiBase = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
-        ? '/__devenv_api'
-        : 'https://devenv.new';
-
-      fetch(apiBase + '/api/generate?q=' + encodeURIComponent(q), {
-        method: 'POST',
-        mode: 'cors',
-      })
-        .then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
-        .then(function (data) {
-          setNix(data.devenv_nix || '');
-          showYaml(data.devenv_yaml || '');
-          title.textContent = 'devenv.nix · generated';
-        })
-        .catch(function () {
-          // CORS or network — fall back to opening devenv.new in new tab
-          title.textContent = 'devenv.nix · opening devenv.new…';
-          setNix('# Could not generate inline (CORS).\n# Opening devenv.new in a new tab…\n');
-          window.open('https://devenv.new/?q=' + encodeURIComponent(q), '_blank', 'noopener');
-        })
-        .finally(function () {
-          submitBtn.disabled = false;
-          submitBtn.textContent = originalText;
-        });
+      composePrompt(q);
     });
 
-    // The initial preview is highlighted at build time. Subsequent edits use
-    // the browser highlighter through the input listener above.
+    renderPantry();
+    var renderedInitialEnvironment = parseEnvironment(initialText);
+    renderedEnvironment = renderedInitialEnvironment;
+    syncMinimap(renderedInitialEnvironment);
+    syncNodes(renderedInitialEnvironment.entries);
+    output.classList.add('is-ready');
+    showYaml(initialYaml, false);
+    setComposeState('ready', renderedInitialEnvironment.entries.length + ' declarations ready to explore');
+
+    new MutationObserver(function () {
+      syncMinimap(renderedEnvironment);
+      syncNodes(renderedEnvironment.entries);
+      pantryList.querySelectorAll<HTMLButtonElement>('[data-pantry-entry]').forEach(function (button) {
+        var id = button.getAttribute('data-pantry-entry');
+        if (!id) return;
+        var entry = { id: id, snippet: OPTION_TEMPLATES[id].join('\n') };
+        setNodeContent(button, entry, metaForEntry(entry));
+      });
+      syncPantry(renderedEnvironment.entries);
+      if (highlightedEntryIds.length) highlightEntries(highlightedEntryIds, true);
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   })();
 
   // ── Speed bars animate on view ──
   (function () {
     var container = document.getElementById('speed-bars');
     if (!container) return;
-    var fills = container.querySelectorAll('.landing-bar-fill');
+    var fills = container.querySelectorAll<HTMLElement>('.landing-bar-fill');
     var observer = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (!entry.isIntersecting) return;
@@ -972,10 +1789,11 @@ in 12.4s`} />
 
   // ── Secret provider switcher ──
   (function () {
-    var tabs = document.querySelectorAll('#secret-tabs .landing-provider-tab');
+    var tabs = document.querySelectorAll<HTMLButtonElement>('#secret-tabs .landing-provider-tab');
     var name = document.getElementById('secret-provider-name');
     if (!tabs.length || !name) return;
-    var labels = {
+    var providerName = name;
+    var labels: Record<string, string> = {
       keychain:    'macOS Keychain',
       onepassword: '1Password vault',
       lastpass:    'LastPass vault',
@@ -987,19 +1805,26 @@ in 12.4s`} />
         tabs.forEach(function (t) { t.classList.remove('is-active'); });
         tab.classList.add('is-active');
         var key = tab.getAttribute('data-provider') || 'keychain';
-        name.textContent = labels[key] || key;
+        providerName.textContent = labels[key] || key;
       });
     });
   })();
 
   // ── Copy buttons ──
   (function () {
-    var buttons = document.querySelectorAll('.landing-copy-btn');
+    var buttons = document.querySelectorAll<HTMLButtonElement>('.landing-copy-btn');
     buttons.forEach(function (btn) {
       btn.addEventListener('click', function () {
         var target = document.getElementById(btn.getAttribute('data-copy-target') || '');
         if (!target) return;
-        var text = target.textContent || '';
+        var renderedLines = target.querySelectorAll('.landing-code-line, .landing-yaml-code-line');
+        var text = renderedLines.length
+          ? Array.from(renderedLines).map(function (line) {
+              var cleanLine = line.cloneNode(true) as HTMLElement;
+              cleanLine.querySelectorAll<HTMLElement>('.landing-line-node').forEach(function (node) { node.remove(); });
+              return (cleanLine.textContent || '').replace(/\u00a0/g, '');
+            }).join('\n')
+          : target.textContent || '';
         if (navigator.clipboard) {
           navigator.clipboard.writeText(text).then(function () {
             btn.textContent = 'Copied';

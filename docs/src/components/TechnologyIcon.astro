@@ -1,0 +1,83 @@
+---
+import type { TechnologyDefinition } from '../data/technology-registry';
+import { technologyIconPath } from '../lib/technology-icon-path';
+
+interface Props {
+  technology: TechnologyDefinition;
+  size?: string;
+  class?: string;
+}
+
+const { technology, size = '1.25rem', class: className } = Astro.props;
+const iconUrl = technology.icon ? technologyIconPath(technology.icon, technology.color) : null;
+const darkColor = technology.darkColor ?? technology.color;
+const darkIconUrl = technology.icon && darkColor !== technology.color
+  ? technologyIconPath(technology.icon, darkColor)
+  : null;
+---
+
+<span
+  class:list={['technology-icon', className]}
+  style={`--technology-color: ${technology.color}; --technology-dark-color: ${darkColor}; --technology-size: ${size}`}
+  aria-hidden="true"
+>
+  {iconUrl ? (
+    <>
+      <img class:list={['technology-icon-image', 'is-light', { 'has-dark': darkIconUrl }]} src={iconUrl} alt="" width="24" height="24" loading="lazy" />
+      {darkIconUrl && <img class="technology-icon-image is-dark" src={darkIconUrl} alt="" width="24" height="24" loading="lazy" />}
+      <span data-icon-fallback hidden>{technology.glyph}</span>
+    </>
+  ) : (
+    <span>{technology.glyph}</span>
+  )}
+</span>
+
+<script>
+  document.querySelectorAll<HTMLImageElement>('.technology-icon img').forEach((image) => {
+    const showFallback = () => {
+      const icon = image.closest<HTMLElement>('.technology-icon');
+      icon?.querySelectorAll<HTMLImageElement>('img').forEach((candidate) => { candidate.hidden = true; });
+      const fallback = icon?.querySelector('[data-icon-fallback]');
+      if (fallback instanceof HTMLElement) fallback.hidden = false;
+    };
+    if (image.complete && image.naturalWidth === 0) showFallback();
+    else image.addEventListener('error', showFallback, { once: true });
+  });
+</script>
+
+<style>
+  .technology-icon {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: var(--technology-size);
+    height: var(--technology-size);
+    color: var(--technology-color);
+    font-family: var(--font-mono);
+    font-size: calc(var(--technology-size) * 0.42);
+    font-weight: 650;
+    line-height: 1;
+  }
+
+  .technology-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  :global([data-theme='dark']) .technology-icon {
+    color: var(--technology-dark-color);
+  }
+
+  .technology-icon-image.is-dark {
+    display: none;
+  }
+
+  :global([data-theme='dark']) .technology-icon-image.is-light.has-dark {
+    display: none;
+  }
+
+  :global([data-theme='dark']) .technology-icon-image.is-dark {
+    display: block;
+  }
+</style>

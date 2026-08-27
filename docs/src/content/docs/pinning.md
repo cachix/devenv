@@ -31,7 +31,7 @@ $ cat devenv.lock
 Pinning a nixpkgs input selects one revision of the whole package collection. To select an exact version of an
 individual package instead, add the [nixpkgs-multiverse](https://github.com/fzakaria/nixpkgs-multiverse) input:
 
-```shell-session
+```shellsession
 $ devenv inputs add nixpkgs-multiverse github:fzakaria/nixpkgs-multiverse
 ```
 

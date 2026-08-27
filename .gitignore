@@ -24,6 +24,8 @@ proptest-regressions/
 
 # JavaScript
 node_modules/
+/docs/public/technology-icons/
+/docs/public/shiki/
 
 **/.claude/settings.local.json
 .claude
