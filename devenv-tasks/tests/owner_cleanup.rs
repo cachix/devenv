@@ -400,18 +400,27 @@ async fn assert_devenv_tasks_does_not_remove_native_api_socket(supervisor: &str)
         .owner_command_with_supervisor(supervisor)
         .spawn()
         .expect("spawn devenv-tasks");
-    tokio::time::sleep(Duration::from_millis(250)).await;
-    if owner.try_wait().expect("poll devenv-tasks").is_none() {
+
+    // External supervision exits on idle, so let the short-lived process finish
+    // normally. On slower runners it may still be starting after 250 ms, and
+    // interrupting it here would turn a successful run into SIGINT.
+    let status = if supervisor == "external" {
+        tokio::time::timeout(Duration::from_secs(10), owner.wait())
+            .await
+            .expect("external devenv-tasks did not exit")
+            .expect("wait for external devenv-tasks")
+    } else {
+        tokio::time::sleep(Duration::from_millis(250)).await;
         signal::kill(
             Pid::from_raw(owner.id().expect("owner pid") as i32),
             Signal::SIGINT,
         )
         .expect("stop devenv-tasks");
-    }
-    let status = tokio::time::timeout(Duration::from_secs(10), owner.wait())
-        .await
-        .expect("devenv-tasks did not exit")
-        .expect("wait for devenv-tasks");
+        tokio::time::timeout(Duration::from_secs(10), owner.wait())
+            .await
+            .expect("native devenv-tasks did not exit")
+            .expect("wait for native devenv-tasks")
+    };
     assert!(
         status.success() || supervisor == "native",
         "devenv-tasks failed: {status}"
