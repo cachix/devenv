@@ -1,6 +1,5 @@
 ---
-import { technologyIconPath } from '../lib/technology-icon-path';
-const nixosIcon = technologyIconPath('nixos', '#8BB8FF');
+import DevenvMark from './DevenvMark.astro';
 ---
 
 <div
@@ -17,7 +16,7 @@ const nixosIcon = technologyIconPath('nixos', '#8BB8FF');
       <span class="landing-ai-orbit is-inner"></span>
       <div class="landing-ai-file">
         <div class="landing-ai-file-header">
-          <span class="landing-ai-file-mark"><img src={nixosIcon} alt="" width="18" height="18" /></span>
+          <span class="landing-ai-file-mark"><DevenvMark /></span>
           <span>devenv.nix</span>
           <span class="landing-ai-file-spark">✦</span>
         </div>

@@ -1,12 +1,12 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import CodeBlock from '../components/CodeBlock.astro';
+import DevenvMark from '../components/DevenvMark.astro';
 import TechnologyIcon from '../components/TechnologyIcon.astro';
 import AiCompositionLoader from '../components/AiCompositionLoader.astro';
 import { getHighlighter } from '../lib/highlighter';
 import { codeThemeNames } from '../lib/code-themes';
 import { createLandingEnvironmentCore, documentationComment } from '../lib/landing-environment-core';
-import { technologyIconPath } from '../lib/technology-icon-path';
 import options from '../data/options.json';
 import {
   landingOptionCatalog,
@@ -23,7 +23,6 @@ const utilityTechnologies = technologyRegistry.filter((technology) => technology
 const languageCount = languageTechnologies.length;
 const serviceCount = serviceTechnologies.length;
 const optionCatalog = landingOptionCatalog;
-const nixosIcon = technologyIconPath('nixos', '#8BB8FF');
 const posts = docs
   .filter((entry) => entry.id.startsWith('blog/') && !entry.data.draft)
   .sort((a, b) => (b.data.date?.valueOf() ?? 0) - (a.data.date?.valueOf() ?? 0));
@@ -149,7 +148,7 @@ const initialPreviewHtml = initialEnvironment.lines.map((line, index) => {
             <div class="landing-file-stage" data-file-stage>
               <div class="landing-terminal landing-file-card is-nix" id="preview-terminal">
                 <div class="landing-terminal-header">
-                  <span class="landing-file-icon" aria-hidden="true"><img src={nixosIcon} alt="" width="24" height="24" /></span>
+                  <span class="landing-file-icon" aria-hidden="true"><DevenvMark /></span>
                   <span class="landing-terminal-title">devenv.nix</span>
                   <button type="button" class="landing-copy-btn" data-copy-target="preview-code">Copy</button>
                 </div>
@@ -958,7 +957,7 @@ in 12.4s`} />
       });
     }
 
-    function bindNode(node: HTMLButtonElement) {
+    function bindNode(node: HTMLAnchorElement) {
       node.draggable = true;
       node.addEventListener('pointerenter', function () {
         highlightEntry(node.getAttribute('data-entry-id'), true);
@@ -972,47 +971,91 @@ in 12.4s`} />
       node.addEventListener('blur', function () {
         highlightEntry(node.getAttribute('data-entry-id'), false);
       });
-      node.addEventListener('click', function () {
-        var id = node.getAttribute('data-entry-id');
-        if (id) removeEntry(id);
-      });
       node.addEventListener('dragstart', function (event) {
         beginDrag(event, node.getAttribute('data-entry-id'), 'file');
       });
       node.addEventListener('dragend', endDrag);
     }
 
+    function bindRemoveControl(control: HTMLButtonElement) {
+      control.addEventListener('pointerenter', function () {
+        highlightEntry(control.getAttribute('data-entry-id'), true);
+      });
+      control.addEventListener('pointerleave', function () {
+        highlightEntry(control.getAttribute('data-entry-id'), false);
+      });
+      control.addEventListener('focus', function () {
+        highlightEntry(control.getAttribute('data-entry-id'), true);
+      });
+      control.addEventListener('blur', function () {
+        highlightEntry(control.getAttribute('data-entry-id'), false);
+      });
+      control.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var id = control.getAttribute('data-entry-id');
+        if (id) removeEntry(id);
+      });
+    }
+
     function syncNodes(entries: EnvironmentEntry[]) {
-      var currentNodes = new Map<string, HTMLButtonElement>();
-      output.querySelectorAll<HTMLButtonElement>('.landing-line-node[data-entry-id]').forEach(function (node) {
+      var currentNodes = new Map<string, HTMLAnchorElement>();
+      var currentRemoveControls = new Map<string, HTMLButtonElement>();
+      output.querySelectorAll<HTMLAnchorElement>('.landing-line-node[data-entry-id]').forEach(function (node) {
         var id = node.getAttribute('data-entry-id');
         if (id) currentNodes.set(id, node);
+      });
+      output.querySelectorAll<HTMLButtonElement>('.landing-line-remove[data-entry-id]').forEach(function (control) {
+        var id = control.getAttribute('data-entry-id');
+        if (id) currentRemoveControls.set(id, control);
       });
       var liveIds = new Set(entries.map(function (entry) { return entry.id; }));
 
       currentNodes.forEach(function (node, id) {
         if (!liveIds.has(id)) node.remove();
       });
+      currentRemoveControls.forEach(function (control, id) {
+        if (!liveIds.has(id)) control.remove();
+      });
 
       var lines = output.querySelectorAll<HTMLElement>('.landing-code-line');
       entries.forEach(function (entry) {
         var node = currentNodes.get(entry.id);
+        var removeControl = currentRemoveControls.get(entry.id);
         var meta = metaForEntry(entry);
         if (!node) {
-          node = document.createElement('button');
-          node.type = 'button';
+          node = document.createElement('a');
           node.className = 'landing-line-node';
           node.setAttribute('data-entry-id', entry.id);
           bindNode(node);
         }
+        if (!removeControl) {
+          removeControl = document.createElement('button');
+          removeControl.type = 'button';
+          removeControl.className = 'landing-line-remove';
+          removeControl.textContent = '×';
+          removeControl.setAttribute('data-entry-id', entry.id);
+          bindRemoveControl(removeControl);
+        }
 
         setNodeContent(node, entry, meta);
-        requiredElement(node.querySelector<HTMLElement>('strong')).textContent = 'Remove ' + meta.label;
-        node.setAttribute('aria-label', 'Remove ' + meta.label + ' from devenv.nix');
-        node.title = 'Remove ' + meta.label;
+        requiredElement(node.querySelector<HTMLElement>('strong')).textContent = 'Open ' + meta.label + ' docs';
+        node.href = environmentCore.documentationUrl(CATALOG_BY_ID[entry.id]) || 'https://devenv.sh/reference/options/';
+        node.target = '_blank';
+        node.rel = 'noopener noreferrer';
+        node.setAttribute('aria-label', 'Open ' + meta.label + ' documentation');
+        node.title = 'Open ' + meta.label + ' documentation';
         node.style.setProperty('--node-color', displayColor(meta));
-        var destinationLine = lines[entry.lineIndexes[0]];
-        if (destinationLine) destinationLine.appendChild(node);
+        removeControl.setAttribute('aria-label', 'Remove ' + meta.label + ' from devenv.nix');
+        removeControl.title = 'Remove ' + meta.label;
+        removeControl.style.setProperty('--node-color', displayColor(meta));
+        var iconLine = lines[Math.min.apply(null, entry.lineIndexes)];
+        var finalLine = lines[Math.max.apply(null, entry.lineIndexes)];
+        if (iconLine) iconLine.appendChild(node);
+        if (iconLine && finalLine) {
+          iconLine.appendChild(removeControl);
+          var blockHeight = finalLine.offsetTop - iconLine.offsetTop + finalLine.offsetHeight;
+          removeControl.style.top = blockHeight / 2 + 'px';
+        }
       });
 
       syncPantry(entries);
@@ -1428,7 +1471,7 @@ in 12.4s`} />
         if (rect.bottom < terminalRect.top || rect.top > terminalRect.bottom) return;
         remaining += 1;
         var ghost = line.cloneNode(true) as HTMLElement;
-        ghost.querySelectorAll<HTMLElement>('.landing-line-node').forEach(function (node) { node.remove(); });
+        ghost.querySelectorAll<HTMLElement>('.landing-line-node, .landing-line-remove').forEach(function (node) { node.remove(); });
         ghost.className = 'landing-code-line landing-code-line-ghost';
         var style = getComputedStyle(line);
         ghost.style.left = (rect.left - terminalRect.left) + 'px';
@@ -1464,7 +1507,7 @@ in 12.4s`} />
         line.classList.remove('is-entering');
         if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
         Array.from(line.children).filter(function (child) {
-          return !child.classList.contains('landing-line-node');
+          return !child.classList.contains('landing-line-node') && !child.classList.contains('landing-line-remove');
         }).forEach(function (token, tokenIndex) {
           token.animate([
             { opacity: 0, transform: 'translateY(0.22em)', filter: 'blur(2px)' },
@@ -1671,7 +1714,7 @@ in 12.4s`} />
 
     output.addEventListener('pointerover', function (event) {
       if (!(event.target instanceof Element)) return;
-      if (event.target.closest('.landing-line-node')) return;
+      if (event.target.closest('.landing-line-node, .landing-line-remove')) return;
       var line = event.target.closest<HTMLElement>('.landing-code-line[data-entry-ids]');
       if (!line || (event.relatedTarget instanceof Node && line.contains(event.relatedTarget))) return;
       var ids = (line.getAttribute('data-entry-ids') || '').split('|').filter(Boolean);
@@ -1680,7 +1723,7 @@ in 12.4s`} />
 
     output.addEventListener('pointerout', function (event) {
       if (!(event.target instanceof Element)) return;
-      if (event.target.closest('.landing-line-node')) return;
+      if (event.target.closest('.landing-line-node, .landing-line-remove')) return;
       var line = event.target.closest<HTMLElement>('.landing-code-line[data-entry-ids]');
       if (!line || (event.relatedTarget instanceof Node && line.contains(event.relatedTarget))) return;
       var ids = (line.getAttribute('data-entry-ids') || '').split('|').filter(Boolean);
@@ -1821,7 +1864,7 @@ in 12.4s`} />
         var text = renderedLines.length
           ? Array.from(renderedLines).map(function (line) {
               var cleanLine = line.cloneNode(true) as HTMLElement;
-              cleanLine.querySelectorAll<HTMLElement>('.landing-line-node').forEach(function (node) { node.remove(); });
+              cleanLine.querySelectorAll<HTMLElement>('.landing-line-node, .landing-line-remove').forEach(function (node) { node.remove(); });
               return (cleanLine.textContent || '').replace(/\u00a0/g, '');
             }).join('\n')
           : target.textContent || '';

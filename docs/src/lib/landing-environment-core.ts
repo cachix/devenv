@@ -283,6 +283,32 @@ export function createLandingEnvironmentCore(catalog: LandingOption[]) {
     return item.lines;
   }
 
+  function groupedNamespace(id: string): 'languages' | 'services' | null {
+    if (id.startsWith('languages.')) return 'languages';
+    if (id.startsWith('services.')) return 'services';
+    return null;
+  }
+
+  function groupedModuleLines(item: LandingOption, selectedIds: string[]) {
+    const namespace = groupedNamespace(item.id);
+    if (!namespace) return decorateLines(item, contextualLines(item, selectedIds));
+    const lines = contextualLines(item, selectedIds).map((line, index) => index === 0
+      ? line.replace(new RegExp(`^\\s*${namespace}\\.`), '    ')
+      : `  ${line}`);
+    return decorateLines(item, lines);
+  }
+
+  function namespaceBlock(lines: string[], namespace: 'languages' | 'services') {
+    const start = lines.findIndex((line) => new RegExp(`^\\s*${namespace}\\s*=\\s*\\{`).test(line));
+    if (start === -1) return null;
+    let depth = 0;
+    for (let index = start; index < lines.length; index += 1) {
+      depth += (lines[index].match(/{/g) ?? []).length - (lines[index].match(/}/g) ?? []).length;
+      if (index > start && depth <= 0) return { start, end: index };
+    }
+    return null;
+  }
+
   function selectPromptMatches(query: string, useFallback = true) {
     const prompt = normalizePrompt(query);
     const selected = new Set<string>();
@@ -315,10 +341,24 @@ export function createLandingEnvironmentCore(catalog: LandingOption[]) {
   function buildEnvironment(selectedIds: string[]) {
     const parts = ['{ pkgs, ... }: {'];
     const packages = selectedIds.filter((id) => id.startsWith('packages.'));
+    const emittedNamespaces = new Set<string>();
     selectedIds.forEach((id) => {
       if (id.startsWith('packages.')) return;
       const item = catalogById[id];
       if (!item) return;
+      const namespace = groupedNamespace(id);
+      if (namespace) {
+        if (emittedNamespaces.has(namespace)) return;
+        emittedNamespaces.add(namespace);
+        const ids = selectedIds.filter((candidate) => groupedNamespace(candidate) === namespace && catalogById[candidate]);
+        parts.push(`  ${namespace} = {`);
+        ids.forEach((candidate) => {
+          parts.push(...groupedModuleLines(catalogById[candidate], selectedIds), '');
+        });
+        if (parts[parts.length - 1] === '') parts.pop();
+        parts.push('  };', '');
+        return;
+      }
       parts.push(...decorateLines(item, contextualLines(item, selectedIds)), '');
     });
     if (packages.length) {
@@ -389,7 +429,9 @@ export function createLandingEnvironmentCore(catalog: LandingOption[]) {
       const syntaxLine = line.replace(/\s+#\s+https:\/\/devenv\.sh\/\S+\s*$/, '');
       const trimmed = syntaxLine.trim();
       const indentation = syntaxLine.length - syntaxLine.trimStart().length;
-      while (scopes.length && indentation <= scopes[scopes.length - 1].indent) scopes.pop();
+      if (trimmed) {
+        while (scopes.length && indentation <= scopes[scopes.length - 1].indent) scopes.pop();
+      }
       if (/^packages\s*=/.test(trimmed)) inPackages = true;
 
       if (inPackages) {
@@ -461,6 +503,7 @@ export function createLandingEnvironmentCore(catalog: LandingOption[]) {
     const closingIndex = lines.findLastIndex((line) => line.trim() === '}');
     if (closingIndex === -1) return text;
 
+    const namespace = groupedNamespace(id);
     if (id.startsWith('packages.')) {
       const packageName = id.slice('packages.'.length);
       const packageStart = lines.findIndex((line) => /^\s*packages\s*=\s*\[/.test(line));
@@ -474,6 +517,16 @@ export function createLandingEnvironmentCore(catalog: LandingOption[]) {
         }
       } else {
         lines.splice(closingIndex, 0, '', ...optionTemplates[id]);
+      }
+    } else if (namespace) {
+      const selectedIds = [...environment.entries.map((entry) => entry.id), id];
+      const template = groupedModuleLines(catalogById[id], selectedIds);
+      const block = namespaceBlock(lines, namespace);
+      if (block) {
+        const prefix = block.end > block.start + 1 ? [''] : [];
+        lines.splice(block.end, 0, ...prefix, ...template);
+      } else {
+        lines.splice(closingIndex, 0, '', `  ${namespace} = {`, ...template, '  };');
       }
     } else {
       lines.splice(closingIndex, 0, '', ...optionTemplates[id]);
@@ -515,6 +568,16 @@ export function createLandingEnvironmentCore(catalog: LandingOption[]) {
         removedLines.add(firstLine - 1);
       }
       lines = lines.filter((_line, index) => !removedLines.has(index));
+    }
+
+    const namespace = groupedNamespace(id);
+    if (namespace) {
+      lines = cleanEnvironmentLines(lines);
+      const remaining = parseEnvironment(lines.join('\n')).entries;
+      if (!remaining.some((candidate) => candidate.id.startsWith(`${namespace}.`))) {
+        const block = namespaceBlock(lines, namespace);
+        if (block) lines.splice(block.start, block.end - block.start + 1);
+      }
     }
 
     return cleanEnvironmentLines(lines).join('\n');

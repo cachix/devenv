@@ -464,9 +464,8 @@
   background: rgba(84, 132, 199, 0.12);
 }
 
-.landing-ai-file-mark img {
-  width: 1rem;
-  height: 1rem;
+.landing-ai-file-mark .devenv-mark {
+  width: 1.05rem;
 }
 
 .landing-ai-file-spark {
@@ -1139,9 +1138,28 @@
   background: rgba(106, 166, 255, 0.08);
 }
 
-.landing-file-icon img {
-  width: 1.2rem;
-  height: 1.2rem;
+.devenv-mark {
+  position: relative;
+  display: inline-block;
+  width: 1.3rem;
+  aspect-ratio: 129 / 98;
+}
+
+.devenv-mark-image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.devenv-mark-image.is-dark,
+[data-theme='dark'] .devenv-mark-image.is-light {
+  display: none;
+}
+
+[data-theme='dark'] .devenv-mark-image.is-dark {
+  display: block;
 }
 
 .landing-yaml-file-icon {
@@ -3142,6 +3160,7 @@
 }
 
 .landing-code-line {
+  position: relative;
   display: block;
   min-height: 1.62em;
   margin: 0 -0.35rem;
@@ -3201,7 +3220,7 @@
 }
 
 .landing-code-line[data-entry-ids]:not([data-entry-ids='']) {
-  cursor: crosshair;
+  cursor: default;
 }
 
 .landing-code-line.is-correlated {
@@ -3235,6 +3254,8 @@
   padding: 0;
   border: 0;
   background: transparent;
+  color: inherit;
+  text-decoration: none;
   vertical-align: middle;
   cursor: pointer;
   transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -3280,52 +3301,50 @@
   box-shadow: 0 0 0 0.28rem color-mix(in srgb, var(--node-color), transparent 84%), 0 0.35rem 1.2rem color-mix(in srgb, var(--node-color), transparent 62%);
 }
 
-.landing-line-node::after {
-  content: '×';
+.landing-line-remove {
   position: absolute;
-  inset: 0;
-  display: grid;
+  z-index: 7;
+  top: 50%;
+  right: 0.35rem;
+  display: inline-grid;
   place-items: center;
-  border: 1px solid #ff5b6b;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 91, 107, 0.62);
   border-radius: 50%;
-  background: rgba(82, 15, 25, 0.9);
+  background: rgba(82, 15, 25, 0.82);
   color: #ff7180;
   font-family: var(--font-mono);
-  font-size: 1rem;
+  font-size: 1.08rem;
   line-height: 1;
+  vertical-align: middle;
   opacity: 0;
-  box-shadow: 0 0 0 0.24rem rgba(255, 91, 107, 0.1), 0 0.35rem 1.2rem rgba(255, 51, 72, 0.25);
-  transform: scale(0.62) rotate(-18deg);
-  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 0 0 0.2rem rgba(255, 91, 107, 0.08);
+  transform: translateY(-50%) scale(0.68) rotate(-16deg);
+  transition: opacity 0.15s ease, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.15s ease, box-shadow 0.15s ease;
   pointer-events: none;
+  cursor: pointer;
 }
 
-.landing-line-node:hover::after,
-.landing-line-node:focus-visible::after {
+.landing-code-line.is-correlated > .landing-line-remove,
+.landing-line-remove:focus-visible {
   opacity: 1;
-  transform: scale(1) rotate(0);
+  transform: translateY(-50%) scale(1.16) rotate(0);
+  pointer-events: auto;
 }
 
-.landing-line-node:hover .landing-env-node-icon,
-.landing-line-node:focus-visible .landing-env-node-icon {
-  border-color: #ff5b6b;
-  background: rgba(92, 20, 30, 0.78);
-  opacity: 0.2;
-  filter: grayscale(0.8) saturate(0.35);
-  box-shadow: 0 0 0 0.28rem rgba(255, 91, 107, 0.12);
+.landing-line-remove:hover,
+.landing-line-remove:focus-visible {
+  outline: none;
+  background: rgba(112, 20, 35, 0.96);
+  box-shadow: 0 0 0 0.25rem rgba(255, 91, 107, 0.12), 0 0.3rem 1rem rgba(255, 51, 72, 0.25);
 }
 
-.landing-code-line:has(.landing-line-node:hover),
-.landing-code-line:has(.landing-line-node:focus-visible) {
-  border-left-color: #ff5b6b;
-  background: rgba(255, 91, 107, 0.1);
-  box-shadow: inset 0.65rem 0 1.4rem -1rem #ff5b6b;
-}
-
-.landing-line-node:hover > span:last-child,
-.landing-line-node:focus-visible > span:last-child {
-  border-color: rgba(255, 91, 107, 0.58);
-  background: color-mix(in srgb, #ff5b6b, #0b1018 90%);
+[data-theme='light'] .landing-line-remove {
+  background: rgba(255, 238, 240, 0.96);
+  color: #c82f45;
 }
 
 .landing-line-node > span:last-child {
@@ -3367,6 +3386,14 @@
 [data-theme='light'] .landing-line-node strong,
 [data-theme='light'] .landing-line-node small {
   color: #33445d;
+}
+
+@media (hover: none) {
+  .landing-code-line[data-entry-ids]:not([data-entry-ids='']) > .landing-line-remove {
+    opacity: 0.72;
+    transform: translateY(-50%) scale(1.16);
+    pointer-events: auto;
+  }
 }
 
 .landing-line-node strong {
@@ -3592,6 +3619,7 @@
   .landing-bar-fill,
   .landing-option-band-track,
   .landing-line-node,
+  .landing-line-remove,
   .landing-flying-ingredient,
   .landing-flying-ingredient::before,
   .landing-code-line-ghost {

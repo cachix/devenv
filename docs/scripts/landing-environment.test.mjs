@@ -65,6 +65,26 @@ test('prompt matching covers exact aliases and semantic stack requests', () => {
   ]);
 });
 
+test('languages and services always render inside namespace blocks', () => {
+  const language = core.buildEnvironment(['languages.rust']);
+  assert.match(language, /  languages = \{\n/);
+  assert.match(language, /    rust = \{\n/);
+  assert.doesNotMatch(language, /languages\.rust/);
+
+  const service = core.buildEnvironment(['services.redis']);
+  assert.match(service, /  services = \{\n/);
+  assert.match(service, /    redis\.enable = true;/);
+  assert.doesNotMatch(service, /services\.redis/);
+
+  const combined = core.buildEnvironment(['languages.rust', 'languages.javascript', 'services.redis']);
+  assert.equal(combined.match(/  languages = \{/g)?.length, 1);
+  assert.equal(combined.match(/  services = \{/g)?.length, 1);
+  assert.deepEqual(
+    core.parseEnvironment(combined).entries.map((entry) => entry.id),
+    ['languages.rust', 'languages.javascript', 'services.redis'],
+  );
+});
+
 test('catalog YAML contributions merge into one project file', () => {
   const catalog = landingOptionCatalog.map((option) => {
     if (option.id === 'languages.rust') {
