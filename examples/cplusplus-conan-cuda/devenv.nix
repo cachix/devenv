@@ -19,7 +19,8 @@
               cuda_cuxxfilt
               libcublas
               libnvfatbin
-              libnvptxcompiler;
+              libnvptxcompiler
+              ;
           };
           env = {
             LD_LIBRARY_PATH = "/usr/lib/wsl/lib";
