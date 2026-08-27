@@ -70,11 +70,52 @@ pub fn paths_under(base: &Path) -> DevenvPaths {
     paths
 }
 
-/// Copy the bundled lock fixture into `dest_dir`. Tests that exercise
-/// eval/build paths use this to skip an `update()` round-trip.
-pub fn copy_fixture_lock(dest: &Path) {
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/devenv.lock");
-    std::fs::copy(&fixture, dest).expect("copy fixture lock");
+/// Write a test lock derived from the workspace flake lock.
+///
+/// The workspace flake does not contain a `devenv` input because it builds the
+/// local modules directly. Backend tests do need that input, so point it at the
+/// current checkout. Keeping the rest of the graph unchanged means `nix flake
+/// update` also updates these tests without an `update()` round-trip per test.
+pub fn write_test_lock(dest: &Path) {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir
+        .parent()
+        .expect("devenv-nix-backend is inside the workspace")
+        .canonicalize()
+        .expect("canonicalize workspace root");
+    let workspace_root = workspace_root.to_string_lossy().into_owned();
+
+    let mut lock: serde_json::Value = serde_json::from_slice(include_bytes!("../../../flake.lock"))
+        .expect("parse workspace flake.lock");
+    let nodes = lock
+        .get_mut("nodes")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("flake.lock nodes");
+    nodes
+        .get_mut("root")
+        .and_then(|root| root.get_mut("inputs"))
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("flake.lock root inputs")
+        .insert("devenv".to_string(), serde_json::json!("devenv"));
+    nodes.insert(
+        "devenv".to_string(),
+        serde_json::json!({
+            "locked": {
+                "dir": "src/modules",
+                "path": workspace_root,
+                "type": "path"
+            },
+            "original": {
+                "dir": "src/modules",
+                "path": workspace_root,
+                "type": "path"
+            },
+            "parent": []
+        }),
+    );
+
+    let file = std::fs::File::create(dest).expect("create test lock");
+    serde_json::to_writer_pretty(file, &lock).expect("write test lock");
 }
 
 fn run_git(dir: &Path, args: &[&str]) {
@@ -140,7 +181,7 @@ pub struct TestEnv {
 }
 
 impl TestEnv {
-    /// Default env: standard yaml, minimal nix, fixture lock, default options.
+    /// Default env: standard yaml, minimal nix, workspace lock, default options.
     pub async fn new() -> Self {
         Self::builder().build().await
     }
@@ -161,7 +202,7 @@ pub struct TestEnvBuilder {
     lock_file: Option<PathBuf>,
     extra_files: Vec<(String, String)>,
     nix_options: NixOptions,
-    fixture_lock: bool,
+    workspace_lock: bool,
 }
 
 impl Default for TestEnvBuilder {
@@ -172,7 +213,7 @@ impl Default for TestEnvBuilder {
             lock_file: None,
             extra_files: Vec::new(),
             nix_options: NixOptions::default(),
-            fixture_lock: true,
+            workspace_lock: true,
         }
     }
 }
@@ -205,10 +246,10 @@ impl TestEnvBuilder {
         self
     }
 
-    /// Skip the fixture lock copy. Use in tests that exercise the
+    /// Skip the workspace lock. Use in tests that exercise the
     /// `update()` path or that intentionally start without a lock.
     pub fn no_lock(mut self) -> Self {
-        self.fixture_lock = false;
+        self.workspace_lock = false;
         self
     }
 
@@ -236,8 +277,8 @@ impl TestEnvBuilder {
         }
         let config = Config::load_from(&path).expect("load config");
 
-        if self.fixture_lock {
-            copy_fixture_lock(&paths.lock_file);
+        if self.workspace_lock {
+            write_test_lock(&paths.lock_file);
         }
 
         (temp_dir, cwd_guard, paths, config, self.nix_options)
