@@ -4314,24 +4314,35 @@ echo 'after invalid bytes'
 
 /// Test that independent oneshot tasks run in parallel, not sequentially.
 /// Two tasks that both declare `before = ["root"]` but have no dependency on each other
-/// should run concurrently, so total time ≈ max(task_time) rather than sum(task_times).
+/// should run concurrently and be able to meet at a synchronization barrier.
 #[tokio::test]
 async fn test_independent_oneshot_tasks_run_in_parallel() -> Result<(), Error> {
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks.db");
 
-    // Each task records its start/end timestamps (nanoseconds since epoch) to a file,
-    // with a sleep in between. If the tasks run in parallel, their time windows overlap.
-    let ts_a = temp_dir.path().join("timestamps_a");
-    let ts_b = temp_dir.path().join("timestamps_b");
-    let task_a = create_script(&format!(
-        "#!/bin/sh\npython3 -c 'import time; print(time.time())' > {ts}\nsleep 0.5\npython3 -c 'import time; print(time.time())' >> {ts}",
-        ts = ts_a.display()
-    ))?;
-    let task_b = create_script(&format!(
-        "#!/bin/sh\npython3 -c 'import time; print(time.time())' > {ts}\nsleep 0.5\npython3 -c 'import time; print(time.time())' >> {ts}",
-        ts = ts_b.display()
-    ))?;
+    // Each task creates a marker and waits for the other task's marker. This is a
+    // synchronization barrier: both tasks can succeed only if they overlap.
+    let marker_a = temp_dir.path().join("task_a_started");
+    let marker_b = temp_dir.path().join("task_b_started");
+    let create_barrier_task = |own: &std::path::Path, peer: &std::path::Path| {
+        create_script(&format!(
+            "#!/bin/sh\n\
+             touch \"{own}\"\n\
+             attempts=0\n\
+             while [ ! -e \"{peer}\" ]; do\n\
+               attempts=$((attempts + 1))\n\
+               if [ \"$attempts\" -ge 200 ]; then\n\
+                 echo \"timed out waiting for {peer}\" >&2\n\
+                 exit 1\n\
+               fi\n\
+               sleep 0.01\n\
+             done",
+            own = own.display(),
+            peer = peer.display(),
+        ))
+    };
+    let task_a = create_barrier_task(&marker_a, &marker_b)?;
+    let task_b = create_barrier_task(&marker_b, &marker_a)?;
     let task_root = create_script("#!/bin/sh\ntrue")?;
 
     let shutdown = Shutdown::new();
@@ -4377,29 +4388,6 @@ async fn test_independent_oneshot_tasks_run_in_parallel() -> Result<(), Error> {
             name
         );
     }
-
-    // Parse start/end timestamps from each task's file
-    let parse_timestamps = |path: &std::path::Path| -> (f64, f64) {
-        let content = std::fs::read_to_string(path).unwrap();
-        let mut lines = content.lines();
-        let start: f64 = lines.next().unwrap().parse().unwrap();
-        let end: f64 = lines.next().unwrap().parse().unwrap();
-        (start, end)
-    };
-
-    let (start_a, end_a) = parse_timestamps(&ts_a);
-    let (start_b, end_b) = parse_timestamps(&ts_b);
-
-    // If tasks ran in parallel, their execution windows must overlap:
-    // overlap exists when max(start_a, start_b) < min(end_a, end_b)
-    let overlap_start = start_a.max(start_b);
-    let overlap_end = end_a.min(end_b);
-    assert!(
-        overlap_start < overlap_end,
-        "Independent tasks should run in parallel (execution windows must overlap).\n\
-         Task A: {start_a:.3}..{end_a:.3}\n\
-         Task B: {start_b:.3}..{end_b:.3}",
-    );
 
     Ok(())
 }
