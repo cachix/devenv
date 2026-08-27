@@ -1,18 +1,19 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   inherit (lib) getExe;
   getCommand = package: baseNameOf (getExe package);
   cfg = config.languages.cplusplus;
 in
 {
-  stdenv = pkgs.overrideCC
-    (
-      pkgs.llvmPackages.libcxxStdenv.override {
-        targetPlatform.useLLVM = true;
-        targetPlatform.linker = "lld";
-      }
-    )
-    pkgs.llvmPackages.clangUseLLVM;
+  stdenv = pkgs.overrideCC (pkgs.llvmPackages.libcxxStdenv.override {
+    targetPlatform.useLLVM = true;
+    targetPlatform.linker = "lld";
+  }) pkgs.llvmPackages.clangUseLLVM;
 
   languages.cplusplus = {
     enable = true;
