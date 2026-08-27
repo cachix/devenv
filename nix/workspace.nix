@@ -5,7 +5,6 @@
 
   openssl,
   dbus,
-  protobuf,
   pkg-config,
   llvmPackages,
   cachix,

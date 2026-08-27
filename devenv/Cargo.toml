@@ -24,7 +24,6 @@ devenv-tui.workspace = true
 devenv-cache-core.workspace = true
 devenv-reload.workspace = true
 devenv-shell.workspace = true
-devenv-snix-backend = { workspace = true, optional = true }
 devenv-nix-backend.workspace = true
 tokio-shutdown.workspace = true
 
@@ -98,4 +97,3 @@ test-all = [
   "devenv-tui/test-all",
 ]
 test-mcp = []
-snix = ["dep:devenv-snix-backend", "devenv-core/snix"]

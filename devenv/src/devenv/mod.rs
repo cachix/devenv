@@ -703,27 +703,6 @@ impl Devenv {
                 )?;
                 Backend::<dyn Evaluator>::new(Arc::new(cnix) as Arc<dyn Evaluator>, bootstrap_args)
             }
-            #[cfg(feature = "snix")]
-            NixBackendType::Snix => {
-                let bootstrap_args = Arc::new(build_bootstrap_args(
-                    &config,
-                    &options.imports,
-                    &shell_settings.profiles,
-                    options.from_external,
-                    options.require_version_match,
-                    options.is_testing,
-                    secretspec_data.as_ref(),
-                    "",
-                )?);
-
-                let snix = devenv_snix_backend::SnixBackend::new(
-                    nix_settings.clone(),
-                    paths.clone(),
-                    bootstrap_args.clone(),
-                    port_allocator.clone(),
-                )?;
-                Backend::<dyn Evaluator>::new(Arc::new(snix) as Arc<dyn Evaluator>, bootstrap_args)
-            }
         };
 
         Ok(Self {

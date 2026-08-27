@@ -92,7 +92,6 @@ in
     pkgs.cargo-edit # Adds the set-version command
     pkgs.cargo-insta # Snapshot testing for Rust
     pkgs.cargo-nextest # Test runner with process isolation
-    pkgs.protobuf # snix
     inputs.crate2nix.packages.${system}.default # Generate Cargo.nix from Cargo.lock
     inputs.ghostty.packages.${system}.libghostty-vt.dev # pkg-config provider for libghostty-vt-sys
   ];

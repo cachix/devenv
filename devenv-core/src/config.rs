@@ -65,8 +65,6 @@ impl CachixAuthToken {
 pub enum NixBackendType {
     #[default]
     Nix,
-    #[cfg(feature = "snix")]
-    Snix,
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

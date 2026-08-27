@@ -5,7 +5,6 @@
   nix,
   openssl,
   dbus,
-  protobuf,
   pkg-config,
   llvmPackages,
   rustPlatform,
@@ -26,22 +25,6 @@ let
     llvmPackages.clang-unwrapped
   ];
 
-  protoSetup = ''
-    # Create proto directory structure that snix expects
-    if [ -d "$NIX_BUILD_TOP/cargo-vendor-dir" ]; then
-      pushd "$NIX_BUILD_TOP/cargo-vendor-dir"
-      mkdir -p snix/{castore,store,build}/protos
-
-      # Link proto files to the expected locations
-      [ -d snix-castore-*/protos ] && cp snix-castore-*/protos/*.proto snix/castore/protos/ 2>/dev/null || true
-      [ -d snix-store-*/protos ] && cp snix-store-*/protos/*.proto snix/store/protos/ 2>/dev/null || true
-      [ -d snix-build-*/protos ] && cp snix-build-*/protos/*.proto snix/build/protos/ 2>/dev/null || true
-
-      popd
-    fi
-    export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
-  '';
-
   tracingUnstable = attrs: {
     extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
       "--cfg"
@@ -61,19 +44,13 @@ let
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
 
-  # Override for crates needing protobuf
-  protobufOverride = attrs: {
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ protobuf ];
-    preConfigure = (attrs.preConfigure or "") + protoSetup;
-  };
-
   # Override for crates needing dbus (Linux only)
   dbusOverride = attrs: {
     buildInputs = (attrs.buildInputs or [ ]) ++ lib.optional stdenv.hostPlatform.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
   };
 
-  # Shared override for crates linking against nix, openssl, protobuf, dbus, and bindgen.
+  # Shared override for crates linking against nix, openssl, dbus, and bindgen.
   devenvBase = attrs: {
     buildInputs =
       (attrs.buildInputs or [ ])
@@ -85,10 +62,8 @@ let
       ++ lib.optional stdenv.hostPlatform.isLinux dbus;
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
       pkg-config
-      protobuf
       rustPlatform.bindgenHook
     ];
-    preConfigure = (attrs.preConfigure or "") + protoSetup;
     extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
       "--cfg"
       "tracing_unstable"
@@ -123,22 +98,6 @@ in
       "tracing_unstable"
     ];
   };
-
-  # devenv-snix-backend needs protobuf
-  devenv-snix-backend = attrs: {
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ protobuf ];
-    preConfigure = (attrs.preConfigure or "") + protoSetup;
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
-      "--cfg"
-      "tracing_unstable"
-    ];
-  };
-
-  # snix crates need protobuf
-  snix-castore = protobufOverride;
-  snix-store = protobufOverride;
-  snix-build = protobufOverride;
-  snix-glue = protobufOverride;
 
   # secretspec needs dbus on Linux
   secretspec = dbusOverride;
