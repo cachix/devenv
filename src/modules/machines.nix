@@ -199,7 +199,11 @@ let
       throw (outerConfig.lib._mkInputError homeManagerInputArgs)
     else
       let
-        machinePkgs = import inputs.nixpkgs { inherit (machine) system; };
+        # devenv's default nixpkgs input is the devenv-nixpkgs flake, whose
+        # root is not itself importable as a nixpkgs package set. Both it and
+        # a regular nixpkgs flake expose the package set through
+        # legacyPackages.
+        machinePkgs = inputs.nixpkgs.legacyPackages.${machine.system};
         evaluated = homeManager.lib.homeManagerConfiguration {
           pkgs = machinePkgs;
           extraSpecialArgs = { inherit inputs self; };
