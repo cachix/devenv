@@ -741,9 +741,9 @@ async fn spawn_file_watcher(config: &ProcessConfig) -> FileWatcher {
 }
 
 async fn next_file_change(file_watcher: &mut FileWatcher) -> usize {
-    file_watcher.recv().await;
+    file_watcher.recv_batch().await;
     let mut drained = 0;
-    while file_watcher.try_recv().is_ok() {
+    while file_watcher.try_recv_batch().is_ok() {
         drained += 1;
     }
     drained

@@ -7,7 +7,9 @@ pub use config::Config;
 pub use coordinator::{CoordinatorError, ShellCoordinator};
 
 // Re-export file watcher types
-pub use devenv_event_sources::{FileChangeEvent, FileWatcher, FileWatcherConfig, WatcherHandle};
+pub use devenv_event_sources::{
+    FileChangeBatch, FileChangeEvent, FileWatcher, FileWatcherConfig, WatcherHandle,
+};
 
 // Re-export types from devenv-shell for backwards compatibility
 pub use devenv_shell::{

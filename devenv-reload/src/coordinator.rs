@@ -6,7 +6,7 @@
 use crate::builder::{BuildContext, BuildTrigger, ShellBuilder};
 use crate::config::Config;
 use devenv_activity::Activity;
-use devenv_event_sources::{FileWatcher, FileWatcherConfig};
+use devenv_event_sources::{FileChangeBatch, FileWatcher, FileWatcherConfig};
 use devenv_mailbox::{FrontendCommand, FrontendEvent};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -29,7 +29,7 @@ pub enum CoordinatorError {
 }
 
 enum Event {
-    FileChange(PathBuf),
+    FileChange(FileChangeBatch),
     /// Reload build completed (env written to file)
     ReloadBuildComplete {
         result: Result<(), crate::builder::BuildError>,
@@ -101,12 +101,6 @@ async fn snapshot_watched_path_states(
     watcher_handle: &devenv_event_sources::WatcherHandle,
 ) -> HashMap<PathBuf, WatchedPathState> {
     capture_watched_path_states(watcher_handle.watched_paths()).await
-}
-
-fn push_unique_path(paths: &mut Vec<PathBuf>, path: &Path) {
-    if !paths.iter().any(|p| p == path) {
-        paths.push(path.to_path_buf());
-    }
 }
 
 fn launch_reload_build<B: ShellBuilder + 'static>(
@@ -222,7 +216,7 @@ impl ShellCoordinator {
         // Track watched path state (kind + content hash) to detect real changes.
         let mut path_states = snapshot_watched_path_states(&watcher_handle).await;
         // Track changes that arrive while a build is running.
-        let mut deferred_changes: Vec<PathBuf> = Vec::new();
+        let mut deferred_changes: HashSet<PathBuf> = HashSet::new();
         // Track if reload is ready (waiting for user to apply)
         let mut reload_ready = false;
         // Track if file watching is paused
@@ -255,9 +249,9 @@ impl ShellCoordinator {
                         None => break,
                     }
                 }
-                change = watcher.recv(), if watcher_alive => {
+                change = watcher.recv_batch(), if watcher_alive => {
                     match change {
-                        Some(change) => Event::FileChange(change.path),
+                        Some(change) => Event::FileChange(change),
                         None => {
                             watcher_alive = false;
                             continue;
@@ -275,38 +269,47 @@ impl ShellCoordinator {
             };
 
             match event {
-                Event::FileChange(path) => {
-                    // A logical target may be subscribed through an existing
-                    // ancestor while it is missing. Advance that OS anchor
-                    // even when paused or when the target's content state is
-                    // still Missing (for example, after an intermediate
-                    // directory appears).
-                    watcher_handle.refresh(&path).await;
+                Event::FileChange(change) => {
+                    let paths = if change.rescan {
+                        watcher_handle.watched_paths()
+                    } else {
+                        change.paths
+                    };
 
                     // Ignore file changes when paused
                     if paused {
-                        tracing::trace!("File watching paused, ignoring change: {:?}", path);
-                        continue;
-                    }
-                    let new_state = capture_watched_path_states(vec![path.clone()])
-                        .await
-                        .remove(&path)
-                        .unwrap_or(WatchedPathState::Unreadable);
-                    if let Some(old_state) = path_states.get(&path)
-                        && *old_state == new_state
-                    {
-                        tracing::trace!("Watched path unchanged: {:?}", path);
+                        tracing::trace!("File watching paused, ignoring changes: {:?}", paths);
                         continue;
                     }
 
-                    if matches!(
-                        new_state,
-                        WatchedPathState::Missing | WatchedPathState::Unreadable
-                    ) {
-                        tracing::warn!(
-                            "Watched path became unavailable, forcing reload: {:?}",
-                            path
-                        );
+                    let new_states = capture_watched_path_states(paths).await;
+                    let mut changed_paths = Vec::new();
+                    for (path, new_state) in new_states {
+                        if path_states
+                            .get(&path)
+                            .is_some_and(|old_state| *old_state == new_state)
+                        {
+                            tracing::trace!("Watched path unchanged: {:?}", path);
+                            continue;
+                        }
+
+                        if matches!(
+                            new_state,
+                            WatchedPathState::Missing | WatchedPathState::Unreadable
+                        ) {
+                            tracing::warn!(
+                                "Watched path became unavailable, forcing reload: {:?}",
+                                path
+                            );
+                        }
+
+                        tracing::debug!("File content changed: {:?}", path);
+                        path_states.insert(path.clone(), new_state);
+                        changed_paths.push(path);
+                    }
+
+                    if changed_paths.is_empty() {
+                        continue;
                     }
 
                     // Content actually changed: no longer in ready state.
@@ -315,23 +318,21 @@ impl ShellCoordinator {
                     // otherwise the status line gets stuck on "Reload ready".
                     reload_ready = false;
 
-                    // Update stored path state
-                    path_states.insert(path.clone(), new_state);
-
-                    tracing::debug!("File content changed: {:?}", path);
-
                     // If a build is already running, drop the event.
                     // spawn_blocking tasks cannot actually be cancelled, so
                     // aborting and restarting would accumulate zombie builds
                     // that can cascade into more file changes (fork bomb).
                     if current_build.is_some() {
-                        push_unique_path(&mut deferred_changes, &path);
-                        tracing::debug!("Build in progress, deferring file change: {:?}", path);
+                        tracing::debug!(
+                            "Build in progress, deferring file changes: {:?}",
+                            changed_paths
+                        );
+                        deferred_changes.extend(changed_paths);
                         continue;
                     }
 
-                    // Track the file that triggered this rebuild
-                    pending_changes.push(path.clone());
+                    let trigger = changed_paths[0].clone();
+                    pending_changes.extend(changed_paths);
 
                     // Notify TUI that build has started
                     let relative_files: Vec<PathBuf> = pending_changes
@@ -360,7 +361,7 @@ impl ShellCoordinator {
                     let ctx = BuildContext {
                         cwd: cwd.clone(),
                         env: std::env::vars().collect(),
-                        trigger: BuildTrigger::FileChanged(path),
+                        trigger: BuildTrigger::FileChanged(trigger),
                         watcher: watcher_handle.clone(),
                         reload_file: Some(reload_file.clone()),
                     };
@@ -417,8 +418,7 @@ impl ShellCoordinator {
                         continue;
                     }
 
-                    let mut changed_files = Vec::new();
-                    std::mem::swap(&mut changed_files, &mut deferred_changes);
+                    let changed_files: Vec<_> = deferred_changes.drain().collect();
 
                     // Use first deferred path as trigger; include all deferred
                     // paths in UI reporting for this catch-up rebuild.

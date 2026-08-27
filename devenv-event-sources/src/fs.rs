@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -22,24 +22,392 @@ pub struct FileChangeEvent {
     pub path: PathBuf,
 }
 
+#[derive(Debug, Clone)]
+pub struct FileChangeBatch {
+    /// Logical dependencies affected by one throttled OS-event batch.
+    pub paths: Vec<PathBuf>,
+    /// The native watcher lost path information and every dependency must be
+    /// checked. Keeping this as one event avoids flooding the bounded channel.
+    pub rescan: bool,
+}
+
+type RegistrationId = usize;
+type SharedPath = Arc<Path>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WatchRegistration {
     /// Existing path registered with the OS watcher.
-    anchor: PathBuf,
+    anchor: SharedPath,
     /// Canonical path expected in filesystem events. This differs from the
     /// logical target when the configured path passes through a symlink.
-    event_target: PathBuf,
+    event_target: SharedPath,
     /// Whether a missing target may use an existing ancestor as its anchor.
     watch_missing: bool,
     /// Events from the anchor must be filtered to the event target. This is
     /// true for missing targets watched through an existing ancestor.
     filtered_anchor: bool,
+    /// The logical target does not exist yet. These registrations require a
+    /// prefix check when an intermediate path appears; existing files use the
+    /// exact-target index instead.
+    pending: bool,
     /// Recursion mode for the OS anchor. Missing-file fallback anchors are
     /// always non-recursive.
     anchor_recursive: bool,
     /// Whether the logical target should be watched recursively when it exists.
     /// Fallback ancestors are always subscribed non-recursively.
     recursive: bool,
+}
+
+#[derive(Debug)]
+struct RegistrationRecord {
+    target: SharedPath,
+    registration: WatchRegistration,
+}
+
+#[derive(Debug, Default)]
+struct SpecialAnchorIndex {
+    /// Registrations whose logical target differs from an unfiltered anchor.
+    unfiltered: Vec<RegistrationId>,
+    /// Existing aliases whose logical and event paths differ.
+    exact: HashMap<SharedPath, Vec<RegistrationId>>,
+    /// Missing logical targets. This is expected to stay tiny (normally dotenv
+    /// paths), so prefix checks are isolated here instead of scanning all eval
+    /// inputs.
+    pending: Vec<RegistrationId>,
+}
+
+#[derive(Debug, Default)]
+struct AnchorUsage {
+    registrations: u32,
+    recursive_count: u32,
+}
+
+impl AnchorUsage {
+    fn recursive(&self) -> bool {
+        self.recursive_count != 0
+    }
+}
+
+#[derive(Debug, Default)]
+struct RegistrationState {
+    /// Maps logical paths to stable IDs. The path allocation is shared with the
+    /// corresponding record and all secondary indexes.
+    target_ids: HashMap<SharedPath, RegistrationId>,
+    records: Vec<RegistrationRecord>,
+    /// Anchor counters for native anchors equal to a logical target, indexed by
+    /// the same stable ID as `records`. Keeping this dense preserves the small
+    /// primary HashMap value used by event routing.
+    target_anchor_usage: Vec<AnchorUsage>,
+    /// Native anchors which are not themselves logical targets. On Linux this
+    /// normally contains shared parent directories; missing paths also use an
+    /// existing ancestor here. Anchors equal to a logical target are stored in
+    /// `target_anchor_usage` instead of duplicating the hash key.
+    extra_anchors: HashMap<SharedPath, AnchorUsage>,
+    /// Allocated only when target lookup alone cannot route an event (missing
+    /// paths and aliases). Normal files and directories need no secondary
+    /// per-anchor allocation.
+    special_anchors: HashMap<SharedPath, SpecialAnchorIndex>,
+}
+
+fn remove_id(ids: &mut Vec<RegistrationId>, id: RegistrationId) {
+    if let Some(index) = ids.iter().position(|candidate| *candidate == id) {
+        ids.swap_remove(index);
+    }
+}
+
+impl RegistrationState {
+    fn registration(&self, target: &Path) -> Option<&WatchRegistration> {
+        self.target_ids
+            .get(target)
+            .and_then(|id| self.records.get(*id))
+            .map(|record| &record.registration)
+    }
+
+    fn anchor_mode(&self, anchor: &Path) -> Option<bool> {
+        self.target_ids
+            .get(anchor)
+            .and_then(|id| {
+                let usage = &self.target_anchor_usage[*id];
+                (usage.registrations != 0).then_some(usage)
+            })
+            .or_else(|| self.extra_anchors.get(anchor))
+            .map(AnchorUsage::recursive)
+    }
+
+    fn anchors(&self) -> impl Iterator<Item = (&SharedPath, &AnchorUsage)> {
+        self.target_ids
+            .iter()
+            .filter_map(|(path, id)| {
+                let usage = &self.target_anchor_usage[*id];
+                (usage.registrations != 0).then_some((path, usage))
+            })
+            .chain(self.extra_anchors.iter())
+    }
+
+    #[cfg(test)]
+    fn anchor_count(&self) -> usize {
+        self.target_ids
+            .values()
+            .filter(|id| self.target_anchor_usage[**id].registrations != 0)
+            .count()
+            + self.extra_anchors.len()
+    }
+
+    fn has_anchor(&self, anchor: &Path) -> bool {
+        self.anchor_mode(anchor).is_some()
+    }
+
+    fn interned_path(&self, path: &Path) -> Option<&SharedPath> {
+        self.target_ids
+            .get_key_value(path)
+            .map(|(path, _)| path)
+            .or_else(|| self.extra_anchors.get_key_value(path).map(|(path, _)| path))
+    }
+
+    fn add_anchor_usage(&mut self, anchor: SharedPath, recursive: bool) {
+        let usage = if let Some(id) = self.target_ids.get(anchor.as_ref()) {
+            &mut self.target_anchor_usage[*id]
+        } else {
+            self.extra_anchors.entry(anchor).or_default()
+        };
+        usage.registrations += 1;
+        if recursive {
+            usage.recursive_count += 1;
+        }
+    }
+
+    fn remove_anchor_usage(&mut self, anchor: &Path, recursive: bool) {
+        if let Some(id) = self.target_ids.get(anchor) {
+            let usage = &mut self.target_anchor_usage[*id];
+            usage.registrations -= 1;
+            if recursive {
+                usage.recursive_count -= 1;
+            }
+            return;
+        }
+
+        let remove = self.extra_anchors.get_mut(anchor).is_some_and(|usage| {
+            usage.registrations -= 1;
+            if recursive {
+                usage.recursive_count -= 1;
+            }
+            usage.registrations == 0
+        });
+        if remove {
+            self.extra_anchors.remove(anchor);
+        }
+    }
+
+    fn directly_indexed(target: &Path, registration: &WatchRegistration) -> bool {
+        if registration.pending {
+            false
+        } else if registration.filtered_anchor {
+            target == registration.event_target.as_ref()
+        } else {
+            target == registration.anchor.as_ref()
+        }
+    }
+
+    fn add_to_indexes(&mut self, id: RegistrationId) {
+        let (anchor, anchor_recursive, directly_indexed) = {
+            let record = &self.records[id];
+            (
+                record.registration.anchor.clone(),
+                record.registration.anchor_recursive,
+                Self::directly_indexed(record.target.as_ref(), &record.registration),
+            )
+        };
+        self.add_anchor_usage(anchor, anchor_recursive);
+
+        if directly_indexed {
+            return;
+        }
+
+        let registration = &self.records[id].registration;
+        let index = self
+            .special_anchors
+            .entry(registration.anchor.clone())
+            .or_default();
+        if !registration.filtered_anchor {
+            index.unfiltered.push(id);
+        } else if registration.pending {
+            index.pending.push(id);
+        } else {
+            index
+                .exact
+                .entry(registration.event_target.clone())
+                .or_default()
+                .push(id);
+        }
+    }
+
+    fn remove_from_indexes(&mut self, id: RegistrationId, registration: &WatchRegistration) {
+        self.remove_anchor_usage(registration.anchor.as_ref(), registration.anchor_recursive);
+
+        let target = self.records[id].target.as_ref();
+        if !Self::directly_indexed(target, registration)
+            && let Some(index) = self.special_anchors.get_mut(registration.anchor.as_ref())
+        {
+            if !registration.filtered_anchor {
+                remove_id(&mut index.unfiltered, id);
+            } else if registration.pending {
+                remove_id(&mut index.pending, id);
+            } else if let Some(ids) = index.exact.get_mut(registration.event_target.as_ref()) {
+                remove_id(ids, id);
+                if ids.is_empty() {
+                    index.exact.remove(registration.event_target.as_ref());
+                }
+            }
+            if index.unfiltered.is_empty() && index.exact.is_empty() && index.pending.is_empty() {
+                self.special_anchors.remove(registration.anchor.as_ref());
+            }
+        }
+    }
+
+    /// Insert or replace one registration. Returns whether the native pathset
+    /// changed; index-only changes are immediately visible to event dispatch.
+    fn insert(&mut self, target: SharedPath, mut registration: WatchRegistration) -> bool {
+        let existing_id = self.target_ids.get(target.as_ref()).copied();
+        let target = existing_id
+            .map(|id| self.records[id].target.clone())
+            .unwrap_or(target);
+
+        // Reuse allocations for the overwhelmingly common equal target/event
+        // paths and shared Linux parent anchors.
+        if registration.event_target.as_ref() == target.as_ref() {
+            registration.event_target = target.clone();
+        }
+        if registration.anchor.as_ref() == target.as_ref() {
+            registration.anchor = target.clone();
+        } else if registration.anchor.as_ref() == registration.event_target.as_ref() {
+            registration.anchor = registration.event_target.clone();
+        } else if let Some(anchor) = self.interned_path(registration.anchor.as_ref()) {
+            registration.anchor = anchor.clone();
+        }
+
+        if let Some(id) = existing_id {
+            if self.records[id].registration == registration {
+                return false;
+            }
+
+            let old = self.records[id].registration.clone();
+            let old_anchor_before = self.anchor_mode(old.anchor.as_ref());
+            let new_anchor_before = self.anchor_mode(registration.anchor.as_ref());
+            self.remove_from_indexes(id, &old);
+            self.records[id].registration = registration.clone();
+            self.add_to_indexes(id);
+
+            old_anchor_before != self.anchor_mode(old.anchor.as_ref())
+                || new_anchor_before != self.anchor_mode(registration.anchor.as_ref())
+        } else {
+            let anchor_before = self.anchor_mode(registration.anchor.as_ref());
+            let id = self.records.len();
+            let anchor_usage = self
+                .extra_anchors
+                .remove(target.as_ref())
+                .unwrap_or_default();
+            self.target_ids.insert(target.clone(), id);
+            self.records.push(RegistrationRecord {
+                target,
+                registration: registration.clone(),
+            });
+            self.target_anchor_usage.push(anchor_usage);
+            self.add_to_indexes(id);
+            anchor_before != self.anchor_mode(registration.anchor.as_ref())
+        }
+    }
+
+    fn affected_targets(&self, event_path: &Path, affected: &mut HashSet<RegistrationId>) {
+        // Existing exact files and exact native roots use the primary
+        // path-to-ID table directly.
+        if let Some(id) = self.target_ids.get(event_path) {
+            let registration = &self.records[*id].registration;
+            if (registration.filtered_anchor && !registration.pending)
+                || (!registration.filtered_anchor && registration.anchor.as_ref() == event_path)
+            {
+                affected.insert(*id);
+            }
+        }
+
+        // All native anchors that can produce this event are ancestors of the
+        // event path. Directory depth is small and independent of watch count.
+        for (depth, ancestor) in event_path.ancestors().enumerate() {
+            if depth != 0
+                && let Some(id) = self.target_ids.get(ancestor)
+            {
+                let registration = &self.records[*id].registration;
+                if !registration.filtered_anchor && registration.anchor.as_ref() == ancestor {
+                    affected.insert(*id);
+                }
+            }
+
+            let Some(index) = self.special_anchors.get(ancestor) else {
+                continue;
+            };
+
+            affected.extend(index.unfiltered.iter().copied());
+            if event_path == ancestor {
+                affected.extend(index.exact.values().flatten().copied());
+            } else if let Some(ids) = index.exact.get(event_path) {
+                affected.extend(ids.iter().copied());
+            }
+
+            for id in &index.pending {
+                let target = self.records[*id].registration.event_target.as_ref();
+                if event_path.starts_with(target) || target.starts_with(event_path) {
+                    affected.insert(*id);
+                }
+            }
+        }
+    }
+
+    fn invalidated_anchor(&self, event_path: &Path) -> Option<SharedPath> {
+        self.target_ids
+            .get_key_value(event_path)
+            .and_then(|(path, id)| {
+                (self.target_anchor_usage[*id].registrations != 0).then(|| path.clone())
+            })
+            .or_else(|| {
+                self.extra_anchors
+                    .get_key_value(event_path)
+                    .map(|(path, _)| path.clone())
+            })
+    }
+
+    fn paths_for_ids(&self, ids: &HashSet<RegistrationId>) -> Vec<PathBuf> {
+        ids.iter()
+            .filter_map(|id| self.records.get(*id))
+            .map(|record| record.target.to_path_buf())
+            .collect()
+    }
+
+    fn targets_needing_refresh(
+        &self,
+        ids: &HashSet<RegistrationId>,
+        may_change_watch: bool,
+        refresh: &mut HashSet<RegistrationId>,
+    ) {
+        refresh.extend(ids.iter().copied().filter(|id| {
+            self.records.get(*id).is_some_and(|record| {
+                record.registration.pending
+                    || (may_change_watch && record.registration.watch_missing)
+            })
+        }));
+    }
+
+    fn logical_targets_for_ids(&self, ids: &HashSet<RegistrationId>) -> Vec<(SharedPath, bool)> {
+        ids.iter()
+            .filter_map(|id| self.records.get(*id))
+            .map(|record| (record.target.clone(), record.registration.recursive))
+            .collect()
+    }
+
+    fn watched_paths(&self) -> Vec<PathBuf> {
+        self.records
+            .iter()
+            .map(|record| record.target.to_path_buf())
+            .collect()
+    }
 }
 
 pub struct FileWatcherConfig<'a> {
@@ -74,15 +442,20 @@ impl Default for FileWatcherConfig<'_> {
 /// but no events fire.
 #[derive(Clone)]
 pub struct WatcherHandle {
-    /// Logical content dependencies keyed by their snapshot target.
-    registrations: Arc<Mutex<HashMap<PathBuf, WatchRegistration>>>,
+    registrations: Arc<Mutex<RegistrationState>>,
     operation_lock: Arc<AsyncMutex<()>>,
     config: Option<Arc<Config>>,
     recursive: bool,
 }
 
-fn direct_registration(path: &Path, recursive: bool) -> (PathBuf, WatchRegistration) {
-    let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+fn direct_target(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn direct_registration_from_target(
+    target: SharedPath,
+    recursive: bool,
+) -> (SharedPath, WatchRegistration) {
     let (anchor, filtered_anchor, anchor_recursive) = existing_target_anchor(&target, recursive);
     (
         target.clone(),
@@ -91,13 +464,18 @@ fn direct_registration(path: &Path, recursive: bool) -> (PathBuf, WatchRegistrat
             event_target: target,
             watch_missing: false,
             filtered_anchor,
+            pending: false,
             anchor_recursive,
             recursive,
         },
     )
 }
 
-fn existing_target_anchor(target: &Path, recursive: bool) -> (PathBuf, bool, bool) {
+fn direct_registration(path: &Path, recursive: bool) -> (SharedPath, WatchRegistration) {
+    direct_registration_from_target(direct_target(path).into(), recursive)
+}
+
+fn existing_target_anchor(target: &SharedPath, recursive: bool) -> (SharedPath, bool, bool) {
     // An inotify watch on a file follows its inode and is lost on atomic
     // replacement, while a non-recursive parent watch remains stable and
     // reports direct-child writes and renames. FSEvents does not reliably
@@ -108,12 +486,13 @@ fn existing_target_anchor(target: &Path, recursive: bool) -> (PathBuf, bool, boo
             target
                 .parent()
                 .map(Path::to_path_buf)
-                .unwrap_or_else(|| target.to_path_buf()),
+                .unwrap_or_else(|| target.to_path_buf())
+                .into(),
             true,
             false,
         )
     } else {
-        (target.to_path_buf(), false, recursive)
+        (target.clone(), false, recursive)
     }
 }
 
@@ -121,7 +500,7 @@ fn existing_target_anchor(target: &Path, recursive: bool) -> (PathBuf, bool, boo
 ///
 /// Canonicalising the existing prefix also makes a missing target line up with
 /// paths reported through symlinked ancestors (notably /tmp on macOS).
-fn logical_registration(path: &Path, recursive: bool) -> Option<(PathBuf, WatchRegistration)> {
+fn logical_registration(path: &Path, recursive: bool) -> Option<(SharedPath, WatchRegistration)> {
     let absolute;
     let path = if path.is_absolute() {
         path
@@ -131,7 +510,10 @@ fn logical_registration(path: &Path, recursive: bool) -> Option<(PathBuf, WatchR
     };
 
     let Some(parent) = path.parent() else {
-        let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let target: SharedPath = path
+            .canonicalize()
+            .unwrap_or_else(|_| path.to_path_buf())
+            .into();
         return Some((
             target.clone(),
             WatchRegistration {
@@ -139,6 +521,7 @@ fn logical_registration(path: &Path, recursive: bool) -> Option<(PathBuf, WatchR
                 event_target: target.clone(),
                 watch_missing: true,
                 filtered_anchor: false,
+                pending: false,
                 anchor_recursive: recursive,
                 recursive,
             },
@@ -153,12 +536,21 @@ fn logical_registration(path: &Path, recursive: bool) -> Option<(PathBuf, WatchR
     let anchor = ancestor
         .canonicalize()
         .unwrap_or_else(|_| ancestor.to_path_buf());
-    let target = anchor.join(suffix);
-    let event_target = target.canonicalize().unwrap_or_else(|_| target.clone());
-    let (anchor, filtered_anchor, anchor_recursive) = if target.exists() {
+    let target_path = anchor.join(suffix);
+    let (event_target_path, pending) = match target_path.canonicalize() {
+        Ok(path) => (path, false),
+        Err(_) => (target_path.clone(), true),
+    };
+    let target: SharedPath = target_path.into();
+    let event_target = if event_target_path == target.as_ref() {
+        target.clone()
+    } else {
+        event_target_path.into()
+    };
+    let (anchor, filtered_anchor, anchor_recursive) = if !pending {
         existing_target_anchor(&event_target, recursive)
     } else {
-        (anchor, true, false)
+        (anchor.into(), true, false)
     };
     Some((
         target,
@@ -167,85 +559,24 @@ fn logical_registration(path: &Path, recursive: bool) -> Option<(PathBuf, WatchR
             event_target,
             watch_missing: true,
             filtered_anchor,
+            pending,
             anchor_recursive,
             recursive,
         },
     ))
 }
 
-fn subscription_paths(
-    registrations: &HashMap<PathBuf, WatchRegistration>,
-) -> HashMap<PathBuf, bool> {
-    let mut paths = HashMap::new();
-    for registration in registrations.values() {
-        paths
-            .entry(registration.anchor.clone())
-            .and_modify(|existing| *existing |= registration.anchor_recursive)
-            .or_insert(registration.anchor_recursive);
-    }
-    paths
-}
-
-fn set_pathset(config: &Config, paths: &HashMap<PathBuf, bool>) {
-    config.pathset(paths.iter().map(|(path, recursive)| {
-        if *recursive {
-            WatchedPath::recursive(path)
+fn set_pathset<'a>(
+    config: &Config,
+    paths: impl IntoIterator<Item = (&'a SharedPath, &'a AnchorUsage)>,
+) {
+    config.pathset(paths.into_iter().map(|(path, index)| {
+        if index.recursive() {
+            WatchedPath::recursive(path.as_ref())
         } else {
-            WatchedPath::non_recursive(path)
+            WatchedPath::non_recursive(path.as_ref())
         }
     }));
-}
-
-fn event_affects_target(event_path: &Path, registration: &WatchRegistration) -> bool {
-    if registration.filtered_anchor {
-        event_path.starts_with(&registration.event_target)
-            || registration.event_target.starts_with(event_path)
-    } else {
-        event_path.starts_with(&registration.anchor)
-    }
-}
-
-fn add_affected_targets(
-    event_path: Option<&Path>,
-    registrations: &HashMap<PathBuf, WatchRegistration>,
-    affected: &mut HashSet<PathBuf>,
-) {
-    let Some(event_path) = event_path else {
-        // inotify queue overflows are reported as pathless filesystem events.
-        // Every logical dependency must be checked because the lost paths are
-        // unknowable.
-        affected.extend(registrations.keys().cloned());
-        return;
-    };
-
-    let event_path = event_path
-        .canonicalize()
-        .unwrap_or_else(|_| event_path.to_path_buf());
-    for (target, registration) in registrations {
-        if event_affects_target(&event_path, registration) {
-            affected.insert(target.clone());
-        }
-    }
-}
-
-fn add_invalidated_targets(
-    event_path: Option<&Path>,
-    registrations: &HashMap<PathBuf, WatchRegistration>,
-    invalidated: &mut HashSet<PathBuf>,
-) {
-    let Some(event_path) = event_path else {
-        invalidated.extend(registrations.keys().cloned());
-        return;
-    };
-
-    let event_path = event_path
-        .canonicalize()
-        .unwrap_or_else(|_| event_path.to_path_buf());
-    for (target, registration) in registrations {
-        if event_path == registration.anchor {
-            invalidated.insert(target.clone());
-        }
-    }
 }
 
 fn event_kind_may_invalidate_watch(kind: &FileEventKind) -> bool {
@@ -272,8 +603,7 @@ impl WatcherHandle {
     /// Redundant pathset updates signal the fs worker to reconcile native
     /// watches, which can disrupt platform backends.
     pub async fn watch(&self, path: &Path) {
-        self.watch_registrations(std::iter::once(direct_registration(path, self.recursive)))
-            .await;
+        self.watch_direct_paths(std::iter::once(path)).await;
     }
 
     /// Adds a logical dependency, using its nearest existing ancestor only as
@@ -298,12 +628,7 @@ impl WatcherHandle {
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
     {
-        self.watch_registrations(
-            paths
-                .into_iter()
-                .map(|path| direct_registration(path.as_ref(), self.recursive)),
-        )
-        .await;
+        self.watch_direct_paths(paths).await;
     }
 
     /// Adds many logical dependencies in one watcher reconciliation.
@@ -320,35 +645,101 @@ impl WatcherHandle {
         .await;
     }
 
+    /// Resolve and insert direct registrations in bounded chunks. Holding the
+    /// operation lock makes each inserted chunk visible to subsequent chunks,
+    /// so duplicate targets are rejected before allocating their full
+    /// registration. The registration-state lock is never held across path
+    /// canonicalization or metadata syscalls, and the native pathset is still
+    /// reconciled only once.
+    async fn watch_direct_paths<I, P>(&self, paths: I)
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        const RESOLUTION_BATCH_SIZE: usize = 256;
+
+        let _op = self.operation_lock.lock().await;
+        let mut ready = self.config.as_ref().map(|config| config.fs_ready());
+        let mut paths = paths.into_iter();
+        let mut targets = Vec::with_capacity(RESOLUTION_BATCH_SIZE);
+        let mut new_targets = Vec::with_capacity(RESOLUTION_BATCH_SIZE);
+        let mut registrations: Vec<(SharedPath, WatchRegistration)> =
+            Vec::with_capacity(RESOLUTION_BATCH_SIZE);
+        let mut changed = false;
+
+        loop {
+            targets.clear();
+            for path in paths.by_ref().take(RESOLUTION_BATCH_SIZE) {
+                targets.push(direct_target(path.as_ref()));
+            }
+            if targets.is_empty() {
+                break;
+            }
+
+            new_targets.clear();
+            {
+                let state = self.registrations.lock().unwrap();
+                new_targets.extend(targets.drain(..).filter_map(|target| {
+                    (!state.target_ids.contains_key(target.as_path()))
+                        .then(|| SharedPath::from(target))
+                }));
+            }
+            if new_targets.is_empty() {
+                continue;
+            }
+
+            // existing_target_anchor may perform metadata syscalls on Linux;
+            // resolve those without holding the registration-state lock.
+            registrations.clear();
+            registrations.extend(
+                new_targets
+                    .drain(..)
+                    .map(|target| direct_registration_from_target(target, self.recursive)),
+            );
+            let mut state = self.registrations.lock().unwrap();
+            for (target, registration) in registrations.drain(..) {
+                changed |= state.insert(target, registration);
+            }
+        }
+
+        if changed && let Some(ref config) = self.config {
+            let state = self.registrations.lock().unwrap();
+            set_pathset(config, state.anchors());
+        }
+
+        if changed && let Some(ref mut rx) = ready {
+            let _ = rx.changed().await;
+        }
+    }
+
     async fn watch_registrations<I>(&self, new_registrations: I)
     where
-        I: IntoIterator<Item = (PathBuf, WatchRegistration)>,
+        I: IntoIterator<Item = (SharedPath, WatchRegistration)>,
     {
+        // Registration resolution performs metadata/canonicalization syscalls;
+        // finish the lazy iterator before taking either watcher lock.
+        let new_registrations: Vec<_> = new_registrations.into_iter().collect();
         let _op = self.operation_lock.lock().await;
         // Subscribe BEFORE updating pathset so we don't miss the ready signal.
         let mut ready = self.config.as_ref().map(|c| c.fs_ready());
 
         let changed = {
-            let mut registrations = self.registrations.lock().unwrap();
-            let before = subscription_paths(&registrations);
+            let mut state = self.registrations.lock().unwrap();
+            let mut changed = false;
             for (target, mut registration) in new_registrations {
-                if registrations
-                    .get(&target)
-                    .is_some_and(|existing| existing.watch_missing)
+                if let Some(existing) = state.registration(target.as_ref())
+                    && existing.watch_missing
+                    && !registration.watch_missing
                 {
                     // A generic cached-input watch must not downgrade a
                     // logical watch for the same path.
-                    registration = logical_registration(&target, registration.recursive)
-                        .map(|(_, registration)| registration)
-                        .unwrap_or(registration);
+                    registration = existing.clone();
                 }
-                registrations.insert(target, registration);
+                changed |= state.insert(target, registration);
             }
-            let after = subscription_paths(&registrations);
-            let changed = after != before;
 
             if changed && let Some(ref config) = self.config {
-                set_pathset(config, &after);
+                set_pathset(config, state.anchors());
             }
 
             changed
@@ -369,25 +760,63 @@ impl WatcherHandle {
     /// input must not turn it into a missing-file watch, while logical targets
     /// need their anchor advanced when intermediate directories appear.
     pub async fn refresh(&self, target: &Path) {
+        self.refresh_many(std::iter::once(target)).await;
+    }
+
+    /// Re-resolve several logical dependencies and reconcile native watches at
+    /// most once. Direct watches are rejected by the ID lookup without walking
+    /// or cloning the complete registration set.
+    pub async fn refresh_many<I, P>(&self, targets: I)
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let logical_targets: Vec<(SharedPath, bool)> = {
+            let state = self.registrations.lock().unwrap();
+            targets
+                .into_iter()
+                .filter_map(|target| {
+                    let target = target.as_ref();
+                    let id = *state.target_ids.get(target)?;
+                    let record = &state.records[id];
+                    record
+                        .registration
+                        .watch_missing
+                        .then(|| (record.target.clone(), record.registration.recursive))
+                })
+                .collect()
+        };
+
+        self.refresh_logical_targets(logical_targets).await;
+    }
+
+    async fn refresh_logical_targets(&self, logical_targets: Vec<(SharedPath, bool)>) {
+        if logical_targets.is_empty() {
+            return;
+        }
+
         let _op = self.operation_lock.lock().await;
+        let refreshed: Vec<_> = logical_targets
+            .into_iter()
+            .filter_map(|(target, recursive)| logical_registration(target.as_ref(), recursive))
+            .collect();
         let mut ready = self.config.as_ref().map(|config| config.fs_ready());
 
         let changed = {
-            let mut registrations = self.registrations.lock().unwrap();
-            let before = subscription_paths(&registrations);
-            let Some(registration) = registrations.get_mut(target) else {
-                return;
-            };
-            if !registration.watch_missing {
-                return;
+            let mut state = self.registrations.lock().unwrap();
+            let mut changed = false;
+            for (target, registration) in refreshed {
+                // A target could only change kind while this operation held the
+                // operation lock; retain the guard for defensive correctness.
+                if state
+                    .registration(target.as_ref())
+                    .is_some_and(|current| current.watch_missing)
+                {
+                    changed |= state.insert(target, registration);
+                }
             }
-            if let Some((_, refreshed)) = logical_registration(target, registration.recursive) {
-                *registration = refreshed;
-            }
-            let after = subscription_paths(&registrations);
-            let changed = before != after;
             if changed && let Some(ref config) = self.config {
-                set_pathset(config, &after);
+                set_pathset(config, state.anchors());
             }
             changed
         };
@@ -402,34 +831,41 @@ impl WatcherHandle {
     /// Native watch roots can become stale after an atomic rename. On macOS,
     /// changing any root restarts the FSEvents stream, so keeping this
     /// targeted is important.
-    async fn rewatch_targets(&self, targets: &HashSet<PathBuf>) {
+    async fn rewatch_anchors(&self, anchors: &HashSet<SharedPath>) {
         let _op = self.operation_lock.lock().await;
         let Some(config) = self.config.as_ref() else {
             return;
         };
 
-        let (without_targets, all_paths) = {
-            let registrations = self.registrations.lock().unwrap();
-            let all_paths = subscription_paths(&registrations);
-            let mut without_targets = all_paths.clone();
-            for target in targets {
-                if let Some(registration) = registrations.get(target) {
-                    without_targets.remove(&registration.anchor);
-                }
-            }
-            (without_targets, all_paths)
+        let active_anchors: HashSet<_> = {
+            let state = self.registrations.lock().unwrap();
+            anchors
+                .iter()
+                .filter(|anchor| state.has_anchor(anchor.as_ref()))
+                .cloned()
+                .collect()
         };
-
-        if without_targets == all_paths {
+        if active_anchors.is_empty() {
             return;
         }
 
         let mut ready = config.fs_ready();
-        set_pathset(config, &without_targets);
+        {
+            let state = self.registrations.lock().unwrap();
+            set_pathset(
+                config,
+                state
+                    .anchors()
+                    .filter(|(path, _)| !active_anchors.contains(path.as_ref())),
+            );
+        }
         let _ = ready.changed().await;
 
         let mut ready = config.fs_ready();
-        set_pathset(config, &all_paths);
+        {
+            let state = self.registrations.lock().unwrap();
+            set_pathset(config, state.anchors());
+        }
         let _ = ready.changed().await;
     }
 
@@ -440,14 +876,26 @@ impl WatcherHandle {
     /// since a full FSEvents restart is disruptive.
     pub async fn rewatch_all(&self) {
         let _op = self.operation_lock.lock().await;
+        let logical_targets: Vec<_> = {
+            let state = self.registrations.lock().unwrap();
+            if state.records.is_empty() {
+                return;
+            }
+            state
+                .records
+                .iter()
+                .filter(|record| record.registration.watch_missing)
+                .map(|record| (record.target.clone(), record.registration.recursive))
+                .collect()
+        };
+        // Resolve paths before opening the native unwatch/rewatch gap.
+        let refreshed: Vec<_> = logical_targets
+            .into_iter()
+            .filter_map(|(target, recursive)| logical_registration(target.as_ref(), recursive))
+            .collect();
         let mut ready = self.config.as_ref().map(|c| c.fs_ready());
 
         {
-            let registrations = self.registrations.lock().unwrap();
-            if registrations.is_empty() {
-                return;
-            }
-
             if let Some(ref config) = self.config {
                 // Clear forces the fs worker to unwatch everything
                 config.pathset(std::iter::empty::<WatchedPath>());
@@ -463,18 +911,12 @@ impl WatcherHandle {
         let mut ready = self.config.as_ref().map(|c| c.fs_ready());
 
         {
-            let mut registrations = self.registrations.lock().unwrap();
-            for (target, registration) in registrations.iter_mut() {
-                if registration.watch_missing
-                    && let Some((_, refreshed)) =
-                        logical_registration(target, registration.recursive)
-                {
-                    *registration = refreshed;
-                }
+            let mut state = self.registrations.lock().unwrap();
+            for (target, registration) in refreshed {
+                state.insert(target, registration);
             }
-            let paths = subscription_paths(&registrations);
             if let Some(ref config) = self.config {
-                set_pathset(config, &paths);
+                set_pathset(config, state.anchors());
             }
         }
 
@@ -485,7 +927,7 @@ impl WatcherHandle {
 
     /// Returns logical content dependencies, never their fallback OS anchors.
     pub fn watched_paths(&self) -> Vec<PathBuf> {
-        self.registrations.lock().unwrap().keys().cloned().collect()
+        self.registrations.lock().unwrap().watched_paths()
     }
 }
 
@@ -494,10 +936,11 @@ impl WatcherHandle {
 /// Uses watchexec's fs worker for file events with manual filtering and
 /// throttling, without the full Watchexec event loop.
 pub struct FileWatcher {
-    rx: mpsc::Receiver<FileChangeEvent>,
+    rx: mpsc::Receiver<FileChangeBatch>,
     // Kept alive so rx.recv() blocks (instead of returning None)
     // when no watcher task is running.
-    _tx: mpsc::Sender<FileChangeEvent>,
+    _tx: mpsc::Sender<FileChangeBatch>,
+    legacy_pending: VecDeque<PathBuf>,
     handle: WatcherHandle,
     tasks: Vec<JoinHandle<()>>,
 }
@@ -517,9 +960,9 @@ impl FileWatcher {
     /// When paths is empty, the watcher starts idle but accepts new paths
     /// at runtime via `WatcherHandle::watch()`.
     pub async fn new(config: FileWatcherConfig<'_>, name: &str) -> Self {
-        let (tx, rx) = mpsc::channel::<FileChangeEvent>(100);
+        let (tx, rx) = mpsc::channel::<FileChangeBatch>(100);
 
-        let registrations = Arc::new(Mutex::new(HashMap::new()));
+        let registrations = Arc::new(Mutex::new(RegistrationState::default()));
         let operation_lock = Arc::new(AsyncMutex::new(()));
 
         macro_rules! empty_watcher {
@@ -533,6 +976,7 @@ impl FileWatcher {
                         config: None,
                         recursive: config.recursive,
                     },
+                    legacy_pending: VecDeque::new(),
                     tasks: Vec::new(),
                 }
             };
@@ -541,20 +985,20 @@ impl FileWatcher {
         // Canonicalize watch paths to resolve symlinks.
         // On macOS, /tmp -> /private/tmp and /var -> /private/var;
         // FSEvents reports events using resolved paths.
-        let initial_registrations: Vec<(PathBuf, WatchRegistration)> = config
+        let initial_registrations: Vec<(SharedPath, WatchRegistration)> = config
             .paths
             .iter()
             .map(|path| direct_registration(path, config.recursive))
             .collect();
         let paths: Vec<PathBuf> = initial_registrations
             .iter()
-            .map(|(_, registration)| registration.anchor.clone())
+            .map(|(_, registration)| registration.anchor.to_path_buf())
             .collect();
 
         {
-            let mut watched = registrations.lock().unwrap();
+            let mut state = registrations.lock().unwrap();
             for (target, registration) in initial_registrations {
-                watched.insert(target, registration);
+                state.insert(target, registration);
             }
         }
 
@@ -600,10 +1044,7 @@ impl FileWatcher {
         // fs worker to finish registering OS watches.
         let mut fs_ready = wx_config.fs_ready();
 
-        set_pathset(
-            &wx_config,
-            &subscription_paths(&registrations.lock().unwrap()),
-        );
+        set_pathset(&wx_config, registrations.lock().unwrap().anchors());
 
         let handle = WatcherHandle {
             registrations: registrations.clone(),
@@ -683,11 +1124,26 @@ impl FileWatcher {
         let filter_task = tokio::spawn(async move {
             use watchexec::filter::Filterer;
 
+            let mut batch = Vec::new();
+            let mut raw_event_paths = HashMap::new();
+            let mut event_paths = HashMap::new();
+            let mut affected = HashSet::new();
+            let mut refresh = HashSet::new();
+            let mut invalidated = HashSet::new();
+            let mut event_affected = HashSet::new();
+
             loop {
+                batch.clear();
+                raw_event_paths.clear();
+                event_paths.clear();
+                affected.clear();
+                refresh.clear();
+                invalidated.clear();
+                event_affected.clear();
                 let Ok((event, priority)) = ev_r.recv().await else {
                     break;
                 };
-                let mut batch = vec![(event, priority)];
+                batch.push((event, priority));
 
                 // Collect more events within the throttle window.
                 let deadline = Instant::now() + throttle;
@@ -702,8 +1158,7 @@ impl FileWatcher {
                     }
                 }
 
-                let mut affected = HashSet::new();
-                let mut invalidated = HashSet::new();
+                let mut rescan = false;
                 for (event, priority) in &batch {
                     if !filterer.check_event(event, *priority).unwrap_or(true) {
                         continue;
@@ -715,31 +1170,72 @@ impl FileWatcher {
                     let mut saw_path = false;
                     for (path, _) in event.paths() {
                         saw_path = true;
-                        let registrations = event_registrations.lock().unwrap();
-                        add_affected_targets(Some(path), &registrations, &mut affected);
-                        if may_invalidate_watch {
-                            add_invalidated_targets(Some(path), &registrations, &mut invalidated);
-                        }
+                        raw_event_paths
+                            .entry(path.to_path_buf())
+                            .and_modify(|invalidate| *invalidate |= may_invalidate_watch)
+                            .or_insert(may_invalidate_watch);
                     }
                     if !saw_path {
-                        let registrations = event_registrations.lock().unwrap();
-                        add_affected_targets(None, &registrations, &mut affected);
-                        if may_invalidate_watch {
-                            add_invalidated_targets(None, &registrations, &mut invalidated);
+                        // inotify queue overflows are pathless. Preserve that
+                        // information as one rescan instead of enqueueing every
+                        // watched path separately.
+                        rescan = true;
+                    }
+                }
+
+                // Native backends often emit several event kinds for the same
+                // path. Deduplicate before the comparatively expensive
+                // canonicalization syscall.
+                event_paths.reserve(raw_event_paths.len());
+                for (path, may_invalidate_watch) in raw_event_paths.drain() {
+                    let canonical = path.canonicalize().unwrap_or(path);
+                    event_paths
+                        .entry(canonical)
+                        .and_modify(|invalidate| *invalidate |= may_invalidate_watch)
+                        .or_insert(may_invalidate_watch);
+                }
+
+                let (paths, refresh_targets) = {
+                    let state = event_registrations.lock().unwrap();
+                    if !rescan {
+                        for (path, may_invalidate_watch) in &event_paths {
+                            event_affected.clear();
+                            state.affected_targets(path, &mut event_affected);
+                            state.targets_needing_refresh(
+                                &event_affected,
+                                *may_invalidate_watch,
+                                &mut refresh,
+                            );
+                            affected.extend(event_affected.iter().copied());
+                            if *may_invalidate_watch
+                                && let Some(anchor) = state.invalidated_anchor(path)
+                            {
+                                invalidated.insert(anchor);
+                            }
                         }
                     }
-                }
+                    (
+                        state.paths_for_ids(&affected),
+                        state.logical_targets_for_ids(&refresh),
+                    )
+                };
 
-                if !invalidated.is_empty() {
-                    event_handle.rewatch_targets(&invalidated).await;
-                }
-
-                for path in affected {
-                    // Use send().await instead of try_send to apply backpressure
-                    // rather than silently dropping events when the channel is full.
-                    if watch_tx.send(FileChangeEvent { path }).await.is_err() {
-                        return;
+                if rescan {
+                    event_handle.rewatch_all().await;
+                } else {
+                    event_handle.refresh_logical_targets(refresh_targets).await;
+                    if !invalidated.is_empty() {
+                        event_handle.rewatch_anchors(&invalidated).await;
                     }
+                }
+
+                if (rescan || !paths.is_empty())
+                    && watch_tx
+                        .send(FileChangeBatch { paths, rescan })
+                        .await
+                        .is_err()
+                {
+                    return;
                 }
             }
         });
@@ -752,6 +1248,7 @@ impl FileWatcher {
         Self {
             rx,
             _tx: tx,
+            legacy_pending: VecDeque::new(),
             handle,
             tasks: vec![fs_task, filter_task, error_task],
         }
@@ -762,10 +1259,54 @@ impl FileWatcher {
     }
 
     pub async fn recv(&mut self) -> Option<FileChangeEvent> {
-        self.rx.recv().await
+        loop {
+            if let Some(path) = self.legacy_pending.pop_front() {
+                return Some(FileChangeEvent { path });
+            }
+            let batch = self.rx.recv().await?;
+            self.legacy_pending.extend(if batch.rescan {
+                self.handle.watched_paths()
+            } else {
+                batch.paths
+            });
+        }
     }
 
     pub fn try_recv(&mut self) -> Result<FileChangeEvent, tokio::sync::mpsc::error::TryRecvError> {
+        loop {
+            if let Some(path) = self.legacy_pending.pop_front() {
+                return Ok(FileChangeEvent { path });
+            }
+            let batch = self.rx.try_recv()?;
+            self.legacy_pending.extend(if batch.rescan {
+                self.handle.watched_paths()
+            } else {
+                batch.paths
+            });
+        }
+    }
+
+    /// Receive one throttled batch without expanding rescan notifications into
+    /// one channel item per watched path.
+    pub async fn recv_batch(&mut self) -> Option<FileChangeBatch> {
+        if !self.legacy_pending.is_empty() {
+            return Some(FileChangeBatch {
+                paths: self.legacy_pending.drain(..).collect(),
+                rescan: false,
+            });
+        }
+        self.rx.recv().await
+    }
+
+    pub fn try_recv_batch(
+        &mut self,
+    ) -> Result<FileChangeBatch, tokio::sync::mpsc::error::TryRecvError> {
+        if !self.legacy_pending.is_empty() {
+            return Ok(FileChangeBatch {
+                paths: self.legacy_pending.drain(..).collect(),
+                rescan: false,
+            });
+        }
         self.rx.try_recv()
     }
 }
@@ -799,6 +1340,26 @@ mod tests {
 
     const WATCH_TIMEOUT: Duration = Duration::from_secs(30);
     const NO_EVENT_TIMEOUT: Duration = Duration::from_millis(500);
+
+    fn indexed_file_registration(
+        target: PathBuf,
+        anchor: SharedPath,
+        recursive: bool,
+    ) -> (SharedPath, WatchRegistration) {
+        let target: SharedPath = target.into();
+        (
+            target.clone(),
+            WatchRegistration {
+                anchor,
+                event_target: target,
+                watch_missing: true,
+                filtered_anchor: true,
+                pending: false,
+                anchor_recursive: recursive,
+                recursive,
+            },
+        )
+    }
 
     async fn assert_no_event(watcher: &mut FileWatcher, context: &str) {
         let result = tokio::time::timeout(NO_EVENT_TIMEOUT, watcher.recv()).await;
@@ -862,11 +1423,15 @@ mod tests {
         let (logical_target, registration) =
             logical_registration(&target, true).expect("resolve logical registration");
 
-        assert_eq!(logical_target, target);
-        assert_eq!(registration.anchor, base);
+        assert_eq!(logical_target.as_ref(), target);
+        assert_eq!(registration.anchor.as_ref(), base);
         assert!(registration.watch_missing);
         assert!(registration.filtered_anchor);
-        assert!(!subscription_paths(&HashMap::from([(logical_target, registration,)]))[&base]);
+        assert!(registration.pending);
+
+        let mut state = RegistrationState::default();
+        state.insert(logical_target, registration);
+        assert_eq!(state.anchor_mode(base.as_path()), Some(false));
     }
 
     #[test]
@@ -874,42 +1439,142 @@ mod tests {
         let temp_dir = TempDir::new().expect("create temp dir");
         let base = temp_dir.path().canonicalize().expect("canonicalize");
         let target = base.join("config").join(".env");
-        let (_, registration) =
+        let (logical_target, registration) =
             logical_registration(&target, false).expect("resolve logical registration");
+        let mut state = RegistrationState::default();
+        state.insert(logical_target, registration);
 
-        assert!(!event_affects_target(
-            &base.join("target/debug/deps/example.rlib"),
-            &registration,
-        ));
-        assert!(event_affects_target(&base.join("config"), &registration,));
-        assert!(event_affects_target(&target, &registration));
+        let mut affected = HashSet::new();
+        state.affected_targets(&base.join("target/debug/deps/example.rlib"), &mut affected);
+        assert!(affected.is_empty());
+        state.affected_targets(&base.join("config"), &mut affected);
+        assert_eq!(affected.len(), 1);
+        affected.clear();
+        state.affected_targets(&target, &mut affected);
+        assert_eq!(affected.len(), 1);
     }
 
     #[test]
-    fn test_pathless_filesystem_event_affects_every_logical_target() {
+    fn test_registration_state_returns_all_logical_targets_for_rescan() {
         let first = PathBuf::from("/tmp/first");
         let second = PathBuf::from("/tmp/second");
-        let registrations = HashMap::from([
-            direct_registration(&first, false),
-            direct_registration(&second, false),
-        ]);
+        let mut state = RegistrationState::default();
+        let (target, registration) = direct_registration(&first, false);
+        state.insert(target, registration);
+        let (target, registration) = direct_registration(&second, false);
+        state.insert(target, registration);
+
+        assert_eq!(
+            state.watched_paths().into_iter().collect::<HashSet<_>>(),
+            HashSet::from([first, second])
+        );
+    }
+
+    #[test]
+    fn test_large_exact_file_set_uses_compact_primary_index() {
+        let anchor: SharedPath = PathBuf::from("/project/src").into();
+        let mut state = RegistrationState::default();
+        for index in 0..10_000 {
+            let (target, registration) = indexed_file_registration(
+                PathBuf::from(format!("/project/src/file-{index}.nix")),
+                anchor.clone(),
+                false,
+            );
+            state.insert(target, registration);
+        }
+
+        assert_eq!(state.records.len(), 10_000);
+        assert_eq!(state.anchor_count(), 1);
+        assert!(state.special_anchors.is_empty());
+        let interned_anchor = state
+            .interned_path(anchor.as_ref())
+            .expect("anchor")
+            .clone();
+        assert!(
+            state
+                .records
+                .iter()
+                .all(|record| Arc::ptr_eq(&record.registration.anchor, &interned_anchor))
+        );
+
+        let expected = PathBuf::from("/project/src/file-7319.nix");
         let mut affected = HashSet::new();
+        state.affected_targets(&expected, &mut affected);
+        assert_eq!(state.paths_for_ids(&affected), vec![expected]);
+    }
 
-        add_affected_targets(None, &registrations, &mut affected);
+    #[test]
+    fn test_anchor_subscription_modes_update_incrementally() {
+        let anchor: SharedPath = PathBuf::from("/project/src").into();
+        let (first, registration) =
+            indexed_file_registration(PathBuf::from("/project/src/a.nix"), anchor.clone(), false);
+        let (second, recursive_registration) =
+            indexed_file_registration(PathBuf::from("/project/src/b.nix"), anchor.clone(), true);
+        let mut state = RegistrationState::default();
 
-        assert_eq!(affected, HashSet::from([first, second]));
+        assert!(state.insert(first, registration));
+        assert_eq!(state.anchor_mode(anchor.as_ref()), Some(false));
+        assert!(state.insert(second, recursive_registration));
+        assert_eq!(state.anchor_mode(anchor.as_ref()), Some(true));
+    }
+
+    #[test]
+    fn test_exact_target_keeps_anchor_usage_in_primary_index() {
+        let target: SharedPath = PathBuf::from("/project/devenv.nix").into();
+        let registration = WatchRegistration {
+            anchor: target.clone(),
+            event_target: target.clone(),
+            watch_missing: false,
+            filtered_anchor: false,
+            pending: false,
+            anchor_recursive: false,
+            recursive: false,
+        };
+        let mut state = RegistrationState::default();
+
+        assert!(state.insert(target.clone(), registration));
+        assert_eq!(state.anchor_count(), 1);
+        assert!(state.extra_anchors.is_empty());
+        assert_eq!(state.anchor_mode(target.as_ref()), Some(false));
+    }
+
+    #[test]
+    fn test_new_target_absorbs_existing_extra_anchor_usage() {
+        let anchor: SharedPath = PathBuf::from("/project").into();
+        let (dependent, registration) =
+            indexed_file_registration(PathBuf::from("/project/devenv.nix"), anchor.clone(), false);
+        let mut state = RegistrationState::default();
+        assert!(state.insert(dependent, registration));
+        assert_eq!(state.extra_anchors.len(), 1);
+
+        let registration = WatchRegistration {
+            anchor: anchor.clone(),
+            event_target: anchor.clone(),
+            watch_missing: false,
+            filtered_anchor: false,
+            pending: false,
+            anchor_recursive: false,
+            recursive: false,
+        };
+        assert!(!state.insert(anchor.clone(), registration));
+
+        assert!(state.extra_anchors.is_empty());
+        assert_eq!(state.anchor_count(), 1);
+        assert_eq!(
+            state.target_anchor_usage[state.target_ids[anchor.as_ref()]].registrations,
+            2
+        );
     }
 
     #[test]
     fn test_descendant_rename_does_not_invalidate_directory_anchor() {
         let directory = PathBuf::from("/tmp/project");
         let file = directory.join("devenv.nix");
-        let registrations = HashMap::from([direct_registration(&directory, true)]);
-        let mut invalidated = HashSet::new();
+        let mut state = RegistrationState::default();
+        let (target, registration) = direct_registration(&directory, true);
+        state.insert(target, registration);
 
-        add_invalidated_targets(Some(&file), &registrations, &mut invalidated);
-
-        assert!(invalidated.is_empty());
+        assert!(state.invalidated_anchor(&file).is_none());
     }
 
     #[test]
@@ -918,15 +1583,17 @@ mod tests {
         let file = temp_dir.path().join("devenv.nix");
         fs::write(&file, "{}\n").expect("create watched file");
         let file = file.canonicalize().expect("canonicalize watched file");
-        let registrations = HashMap::from([direct_registration(&file, false)]);
-        let mut invalidated = HashSet::new();
-
-        add_invalidated_targets(Some(&file), &registrations, &mut invalidated);
+        let mut state = RegistrationState::default();
+        let (target, registration) = direct_registration(&file, false);
+        state.insert(target, registration);
 
         if cfg!(target_os = "linux") {
-            assert!(invalidated.is_empty());
+            assert!(state.invalidated_anchor(&file).is_none());
         } else {
-            assert_eq!(invalidated, HashSet::from([file]));
+            assert_eq!(
+                state.invalidated_anchor(&file).as_deref(),
+                Some(file.as_path())
+            );
         }
     }
 
@@ -945,8 +1612,8 @@ mod tests {
         let (target, registration) =
             logical_registration(&link.join(".env"), false).expect("resolve logical registration");
 
-        assert_eq!(target, real.join(".env"));
-        assert_eq!(registration.anchor, real);
+        assert_eq!(target.as_ref(), real.join(".env"));
+        assert_eq!(registration.anchor.as_ref(), real);
         assert!(registration.filtered_anchor);
     }
 
@@ -974,10 +1641,11 @@ mod tests {
                 .registrations
                 .lock()
                 .unwrap()
-                .get(&target)
+                .registration(&target)
                 .expect("logical registration")
-                .anchor,
-            base,
+                .anchor
+                .as_ref(),
+            base.as_path(),
         );
 
         // The eval cache can independently register the same path. Its direct
@@ -988,10 +1656,11 @@ mod tests {
                 .registrations
                 .lock()
                 .unwrap()
-                .get(&target)
+                .registration(&target)
                 .expect("logical registration")
-                .anchor,
-            base,
+                .anchor
+                .as_ref(),
+            base.as_path(),
         );
 
         fs::create_dir(&target_dir).expect("create intermediate directory");
@@ -1012,10 +1681,11 @@ mod tests {
                 .registrations
                 .lock()
                 .unwrap()
-                .get(&target)
+                .registration(&target)
                 .expect("logical registration")
-                .anchor,
-            target_dir,
+                .anchor
+                .as_ref(),
+            target_dir.as_path(),
         );
 
         File::create(&target)
@@ -1034,10 +1704,11 @@ mod tests {
                 .registrations
                 .lock()
                 .unwrap()
-                .get(&target)
+                .registration(&target)
                 .expect("logical registration")
-                .anchor,
-            existing_anchor,
+                .anchor
+                .as_ref(),
+            existing_anchor.as_path(),
         );
 
         // A full rewatch retains the platform-appropriate existing-target
@@ -1048,10 +1719,11 @@ mod tests {
                 .registrations
                 .lock()
                 .unwrap()
-                .get(&target)
+                .registration(&target)
                 .expect("logical registration")
-                .anchor,
-            existing_anchor,
+                .anchor
+                .as_ref(),
+            existing_anchor.as_path(),
         );
     }
 
@@ -1237,8 +1909,12 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
-        let event = tokio::time::timeout(WATCH_TIMEOUT, watcher.recv()).await;
-        assert!(event.is_ok());
+        let batch = tokio::time::timeout(WATCH_TIMEOUT, watcher.recv_batch())
+            .await
+            .expect("timeout")
+            .expect("batch");
+        assert!(!batch.rescan);
+        assert_eq!(batch.paths, vec![file_path]);
     }
 
     #[tokio::test]
