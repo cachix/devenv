@@ -1,8 +1,7 @@
-{
-  pkgs,
-  config,
-  lib,
-  ...
+{ pkgs
+, config
+, lib
+, ...
 }:
 let
   cfg = config.process.managers.overmind;
@@ -18,10 +17,11 @@ let
     );
   tmuxPackage =
     if needsDarwinTmuxAllocator then
-      pkgs.tmux.overrideAttrs (oldAttrs: {
-        buildInputs = (oldAttrs.buildInputs or [ ]) ++ [ pkgs.jemalloc ];
-        configureFlags = (oldAttrs.configureFlags or [ ]) ++ [ "--enable-jemalloc" ];
-      })
+      pkgs.tmux.overrideAttrs
+        (oldAttrs: {
+          buildInputs = (oldAttrs.buildInputs or [ ]) ++ [ pkgs.jemalloc ];
+          configureFlags = (oldAttrs.configureFlags or [ ]) ++ [ "--enable-jemalloc" ];
+        })
     else
       pkgs.tmux;
   defaultOvermindPackage =
