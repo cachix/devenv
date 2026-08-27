@@ -109,25 +109,6 @@ fn push_unique_path(paths: &mut Vec<PathBuf>, path: &Path) {
     }
 }
 
-fn reconcile_post_rewatch_drift(
-    before_rewatch: &HashMap<PathBuf, WatchedPathState>,
-    after_rewatch: &HashMap<PathBuf, WatchedPathState>,
-    deferred_changes: &mut Vec<PathBuf>,
-) -> usize {
-    let mut drift_count = 0;
-
-    for (path, before_state) in before_rewatch {
-        if let Some(after_state) = after_rewatch.get(path)
-            && before_state != after_state
-        {
-            drift_count += 1;
-            push_unique_path(deferred_changes, path);
-        }
-    }
-
-    drift_count
-}
-
 fn launch_reload_build<B: ShellBuilder + 'static>(
     builder: Arc<B>,
     event_tx: mpsc::Sender<Event>,
@@ -295,6 +276,13 @@ impl ShellCoordinator {
 
             match event {
                 Event::FileChange(path) => {
+                    // A logical target may be subscribed through an existing
+                    // ancestor while it is missing. Advance that OS anchor
+                    // even when paused or when the target's content state is
+                    // still Missing (for example, after an intermediate
+                    // directory appears).
+                    watcher_handle.refresh(&path).await;
+
                     // Ignore file changes when paused
                     if paused {
                         tracing::trace!("File watching paused, ignoring change: {:?}", path);
@@ -388,28 +376,10 @@ impl ShellCoordinator {
                 Event::ReloadBuildComplete { result, activity } => {
                     current_build = None;
 
-                    let before_rewatch = snapshot_watched_path_states(&watcher_handle).await;
-
-                    // Refresh all inotify watches. Editors using atomic save
-                    // (write temp + rename) replace the file inode, which
-                    // silently invalidates the kernel-level inotify watch.
-                    // The watchexec diff logic won't re-watch paths it thinks
-                    // are already watched, so we force a full refresh.
-                    watcher_handle.rewatch_all().await;
-
-                    let after_rewatch = snapshot_watched_path_states(&watcher_handle).await;
-                    let rewatch_drift_count = reconcile_post_rewatch_drift(
-                        &before_rewatch,
-                        &after_rewatch,
-                        &mut deferred_changes,
-                    );
-                    if rewatch_drift_count > 0 {
-                        tracing::warn!(
-                            "Detected {} watched-path changes during rewatch gap; scheduling catch-up rebuild",
-                            rewatch_drift_count
-                        );
-                    }
-                    path_states = after_rewatch;
+                    // The build may discover new dependencies or change a
+                    // missing target into a file. Snapshot logical targets
+                    // once; OS subscriptions are maintained independently.
+                    path_states = snapshot_watched_path_states(&watcher_handle).await;
 
                     let watched_set: HashSet<PathBuf> = path_states.keys().cloned().collect();
                     deferred_changes.retain(|p| watched_set.contains(p));
@@ -617,31 +587,5 @@ mod tests {
         let after = capture_watched_path_state(&path);
         assert!(matches!(after, WatchedPathState::Directory(_)));
         assert_ne!(before, after);
-    }
-
-    #[test]
-    fn test_reconcile_post_rewatch_drift_enqueues_changed_paths() {
-        let mut before = HashMap::new();
-        let mut after = HashMap::new();
-
-        let a = PathBuf::from("/tmp/a");
-        let b = PathBuf::from("/tmp/b");
-        let c = PathBuf::from("/tmp/c");
-
-        before.insert(a.clone(), WatchedPathState::File("h1".to_string()));
-        before.insert(b.clone(), WatchedPathState::Directory("d1".to_string()));
-        before.insert(c.clone(), WatchedPathState::Missing);
-
-        after.insert(a.clone(), WatchedPathState::File("h2".to_string()));
-        after.insert(b.clone(), WatchedPathState::Directory("d1".to_string()));
-        after.insert(c.clone(), WatchedPathState::File("h3".to_string()));
-
-        let mut deferred_changes = vec![a.clone()];
-        let drift = reconcile_post_rewatch_drift(&before, &after, &mut deferred_changes);
-
-        assert_eq!(drift, 2);
-        assert_eq!(deferred_changes.len(), 2);
-        assert!(deferred_changes.contains(&a));
-        assert!(deferred_changes.contains(&c));
     }
 }

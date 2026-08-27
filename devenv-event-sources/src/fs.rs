@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -16,7 +16,30 @@ use watchexec_filterer_globset::GlobsetFilterer;
 
 #[derive(Debug, Clone)]
 pub struct FileChangeEvent {
+    /// The logical dependency affected by the OS event. This can differ from
+    /// the subscribed path when a missing dependency is watched through its
+    /// nearest existing ancestor.
     pub path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WatchRegistration {
+    /// Existing path registered with the OS watcher.
+    anchor: PathBuf,
+    /// Canonical path expected in filesystem events. This differs from the
+    /// logical target when the configured path passes through a symlink.
+    event_target: PathBuf,
+    /// Whether a missing target may use an existing ancestor as its anchor.
+    watch_missing: bool,
+    /// Events from the anchor must be filtered to the event target. This is
+    /// true for missing targets watched through an existing ancestor.
+    filtered_anchor: bool,
+    /// Recursion mode for the OS anchor. Missing-file fallback anchors are
+    /// always non-recursive.
+    anchor_recursive: bool,
+    /// Whether the logical target should be watched recursively when it exists.
+    /// Fallback ancestors are always subscribed non-recursively.
+    recursive: bool,
 }
 
 pub struct FileWatcherConfig<'a> {
@@ -51,42 +74,213 @@ impl Default for FileWatcherConfig<'_> {
 /// but no events fire.
 #[derive(Clone)]
 pub struct WatcherHandle {
-    watched_paths: Arc<Mutex<HashSet<PathBuf>>>,
+    /// Logical content dependencies keyed by their snapshot target.
+    registrations: Arc<Mutex<HashMap<PathBuf, WatchRegistration>>>,
     operation_lock: Arc<AsyncMutex<()>>,
     config: Option<Arc<Config>>,
+    recursive: bool,
+}
+
+fn direct_registration(path: &Path, recursive: bool) -> (PathBuf, WatchRegistration) {
+    let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let (anchor, filtered_anchor, anchor_recursive) = existing_target_anchor(&target, recursive);
+    (
+        target.clone(),
+        WatchRegistration {
+            anchor,
+            event_target: target,
+            watch_missing: false,
+            filtered_anchor,
+            anchor_recursive,
+            recursive,
+        },
+    )
+}
+
+fn existing_target_anchor(target: &Path, recursive: bool) -> (PathBuf, bool, bool) {
+    // An inotify watch on a file follows its inode and is lost on atomic
+    // replacement, while a non-recursive parent watch remains stable and
+    // reports direct-child writes and renames. FSEvents does not reliably
+    // report in-place child writes from a non-recursive parent, so macOS keeps
+    // the exact file root and refreshes it only after a replacement event.
+    if cfg!(target_os = "linux") && target.is_file() {
+        (
+            target
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| target.to_path_buf()),
+            true,
+            false,
+        )
+    } else {
+        (target.to_path_buf(), false, recursive)
+    }
+}
+
+/// Resolve a logical dependency without replacing it with its watch anchor.
+///
+/// Canonicalising the existing prefix also makes a missing target line up with
+/// paths reported through symlinked ancestors (notably /tmp on macOS).
+fn logical_registration(path: &Path, recursive: bool) -> Option<(PathBuf, WatchRegistration)> {
+    let absolute;
+    let path = if path.is_absolute() {
+        path
+    } else {
+        absolute = std::env::current_dir().ok()?.join(path);
+        &absolute
+    };
+
+    let Some(parent) = path.parent() else {
+        let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        return Some((
+            target.clone(),
+            WatchRegistration {
+                anchor: target.clone(),
+                event_target: target.clone(),
+                watch_missing: true,
+                filtered_anchor: false,
+                anchor_recursive: recursive,
+                recursive,
+            },
+        ));
+    };
+
+    let mut ancestor = parent;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent()?;
+    }
+    let suffix = path.strip_prefix(ancestor).ok()?;
+    let anchor = ancestor
+        .canonicalize()
+        .unwrap_or_else(|_| ancestor.to_path_buf());
+    let target = anchor.join(suffix);
+    let event_target = target.canonicalize().unwrap_or_else(|_| target.clone());
+    let (anchor, filtered_anchor, anchor_recursive) = if target.exists() {
+        existing_target_anchor(&event_target, recursive)
+    } else {
+        (anchor, true, false)
+    };
+    Some((
+        target,
+        WatchRegistration {
+            anchor,
+            event_target,
+            watch_missing: true,
+            filtered_anchor,
+            anchor_recursive,
+            recursive,
+        },
+    ))
+}
+
+fn subscription_paths(
+    registrations: &HashMap<PathBuf, WatchRegistration>,
+) -> HashMap<PathBuf, bool> {
+    let mut paths = HashMap::new();
+    for registration in registrations.values() {
+        paths
+            .entry(registration.anchor.clone())
+            .and_modify(|existing| *existing |= registration.anchor_recursive)
+            .or_insert(registration.anchor_recursive);
+    }
+    paths
+}
+
+fn set_pathset(config: &Config, paths: &HashMap<PathBuf, bool>) {
+    config.pathset(paths.iter().map(|(path, recursive)| {
+        if *recursive {
+            WatchedPath::recursive(path)
+        } else {
+            WatchedPath::non_recursive(path)
+        }
+    }));
+}
+
+fn event_affects_target(event_path: &Path, registration: &WatchRegistration) -> bool {
+    if registration.filtered_anchor {
+        event_path.starts_with(&registration.event_target)
+            || registration.event_target.starts_with(event_path)
+    } else {
+        event_path.starts_with(&registration.anchor)
+    }
+}
+
+fn add_affected_targets(
+    event_path: Option<&Path>,
+    registrations: &HashMap<PathBuf, WatchRegistration>,
+    affected: &mut HashSet<PathBuf>,
+) {
+    let Some(event_path) = event_path else {
+        // inotify queue overflows are reported as pathless filesystem events.
+        // Every logical dependency must be checked because the lost paths are
+        // unknowable.
+        affected.extend(registrations.keys().cloned());
+        return;
+    };
+
+    let event_path = event_path
+        .canonicalize()
+        .unwrap_or_else(|_| event_path.to_path_buf());
+    for (target, registration) in registrations {
+        if event_affects_target(&event_path, registration) {
+            affected.insert(target.clone());
+        }
+    }
+}
+
+fn add_invalidated_targets(
+    event_path: Option<&Path>,
+    registrations: &HashMap<PathBuf, WatchRegistration>,
+    invalidated: &mut HashSet<PathBuf>,
+) {
+    let Some(event_path) = event_path else {
+        invalidated.extend(registrations.keys().cloned());
+        return;
+    };
+
+    let event_path = event_path
+        .canonicalize()
+        .unwrap_or_else(|_| event_path.to_path_buf());
+    for (target, registration) in registrations {
+        if event_path == registration.anchor {
+            invalidated.insert(target.clone());
+        }
+    }
+}
+
+fn event_kind_may_invalidate_watch(kind: &FileEventKind) -> bool {
+    matches!(
+        kind,
+        FileEventKind::Remove(_)
+            | FileEventKind::Any
+            | FileEventKind::Other
+            | FileEventKind::Modify(ModifyKind::Name(_))
+    )
+}
+
+fn event_may_invalidate_watch(event: &watchexec_events::Event) -> bool {
+    event.tags.iter().any(|tag| match tag {
+        Tag::FileEventKind(kind) => event_kind_may_invalidate_watch(kind),
+        _ => false,
+    })
 }
 
 impl WatcherHandle {
     /// Adds a path to watch and waits for the OS watch to be registered.
     ///
     /// Only updates the watchexec pathset when a new path is actually added.
-    /// Redundant pathset updates signal the fs worker to reconcile its inotify
-    /// watches, which can break existing watches.
+    /// Redundant pathset updates signal the fs worker to reconcile native
+    /// watches, which can disrupt platform backends.
     pub async fn watch(&self, path: &Path) {
-        let _op = self.operation_lock.lock().await;
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        self.watch_registrations(std::iter::once(direct_registration(path, self.recursive)))
+            .await;
+    }
 
-        // Subscribe BEFORE updating pathset so we don't miss the ready signal.
-        let mut ready = self.config.as_ref().map(|c| c.fs_ready());
-
-        {
-            let mut paths = self.watched_paths.lock().unwrap();
-            if !paths.insert(canonical.clone()) {
-                return;
-            }
-
-            if let Some(ref config) = self.config {
-                config.pathset(
-                    paths
-                        .iter()
-                        .map(|p| WatchedPath::non_recursive(p.as_path())),
-                );
-            }
-        }
-
-        if let Some(ref mut rx) = ready {
-            let _ = rx.changed().await;
-        }
+    /// Adds a logical dependency, using its nearest existing ancestor only as
+    /// the OS subscription anchor while the dependency is missing.
+    pub async fn watch_logical(&self, path: &Path) {
+        self.watch_registrations(logical_registration(path, self.recursive))
+            .await;
     }
 
     /// Adds many paths to watch in a single reconciliation and waits for the
@@ -104,26 +298,57 @@ impl WatcherHandle {
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
     {
+        self.watch_registrations(
+            paths
+                .into_iter()
+                .map(|path| direct_registration(path.as_ref(), self.recursive)),
+        )
+        .await;
+    }
+
+    /// Adds many logical dependencies in one watcher reconciliation.
+    pub async fn watch_logical_many<I, P>(&self, paths: I)
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        self.watch_registrations(
+            paths
+                .into_iter()
+                .filter_map(|path| logical_registration(path.as_ref(), self.recursive)),
+        )
+        .await;
+    }
+
+    async fn watch_registrations<I>(&self, new_registrations: I)
+    where
+        I: IntoIterator<Item = (PathBuf, WatchRegistration)>,
+    {
         let _op = self.operation_lock.lock().await;
         // Subscribe BEFORE updating pathset so we don't miss the ready signal.
         let mut ready = self.config.as_ref().map(|c| c.fs_ready());
 
         let changed = {
-            let mut watched = self.watched_paths.lock().unwrap();
-            let before = watched.len();
-            for p in paths {
-                let path = p.as_ref();
-                let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-                watched.insert(canonical);
+            let mut registrations = self.registrations.lock().unwrap();
+            let before = subscription_paths(&registrations);
+            for (target, mut registration) in new_registrations {
+                if registrations
+                    .get(&target)
+                    .is_some_and(|existing| existing.watch_missing)
+                {
+                    // A generic cached-input watch must not downgrade a
+                    // logical watch for the same path.
+                    registration = logical_registration(&target, registration.recursive)
+                        .map(|(_, registration)| registration)
+                        .unwrap_or(registration);
+                }
+                registrations.insert(target, registration);
             }
-            let changed = watched.len() != before;
+            let after = subscription_paths(&registrations);
+            let changed = after != before;
 
             if changed && let Some(ref config) = self.config {
-                config.pathset(
-                    watched
-                        .iter()
-                        .map(|p| WatchedPath::non_recursive(p.as_path())),
-                );
+                set_pathset(config, &after);
             }
 
             changed
@@ -138,23 +363,88 @@ impl WatcherHandle {
         }
     }
 
+    /// Re-resolves the OS anchor for an existing logical dependency.
+    ///
+    /// This is intentionally separate from `watch()`: refreshing a cached
+    /// input must not turn it into a missing-file watch, while logical targets
+    /// need their anchor advanced when intermediate directories appear.
+    pub async fn refresh(&self, target: &Path) {
+        let _op = self.operation_lock.lock().await;
+        let mut ready = self.config.as_ref().map(|config| config.fs_ready());
+
+        let changed = {
+            let mut registrations = self.registrations.lock().unwrap();
+            let before = subscription_paths(&registrations);
+            let Some(registration) = registrations.get_mut(target) else {
+                return;
+            };
+            if !registration.watch_missing {
+                return;
+            }
+            if let Some((_, refreshed)) = logical_registration(target, registration.recursive) {
+                *registration = refreshed;
+            }
+            let after = subscription_paths(&registrations);
+            let changed = before != after;
+            if changed && let Some(ref config) = self.config {
+                set_pathset(config, &after);
+            }
+            changed
+        };
+
+        if changed && let Some(ref mut rx) = ready {
+            let _ = rx.changed().await;
+        }
+    }
+
+    /// Re-register only anchors whose target may have been replaced.
+    ///
+    /// Native watch roots can become stale after an atomic rename. On macOS,
+    /// changing any root restarts the FSEvents stream, so keeping this
+    /// targeted is important.
+    async fn rewatch_targets(&self, targets: &HashSet<PathBuf>) {
+        let _op = self.operation_lock.lock().await;
+        let Some(config) = self.config.as_ref() else {
+            return;
+        };
+
+        let (without_targets, all_paths) = {
+            let registrations = self.registrations.lock().unwrap();
+            let all_paths = subscription_paths(&registrations);
+            let mut without_targets = all_paths.clone();
+            for target in targets {
+                if let Some(registration) = registrations.get(target) {
+                    without_targets.remove(&registration.anchor);
+                }
+            }
+            (without_targets, all_paths)
+        };
+
+        if without_targets == all_paths {
+            return;
+        }
+
+        let mut ready = config.fs_ready();
+        set_pathset(config, &without_targets);
+        let _ = ready.changed().await;
+
+        let mut ready = config.fs_ready();
+        set_pathset(config, &all_paths);
+        let _ = ready.changed().await;
+    }
+
     /// Force all watched paths to be re-registered with the OS.
     ///
-    /// On Linux, inotify watches track file inodes. When an editor does an
-    /// atomic save (write temp + rename), the inode changes and the old watch
-    /// becomes stale. The watchexec fs worker's diff logic skips paths already
-    /// in its pathset, so stale watches are never refreshed.
-    ///
-    /// This method forces a full refresh by briefly clearing the pathset
-    /// (causing the fs worker to drop all watches) and then re-setting it
-    /// (causing fresh watches to be created on current inodes).
+    /// This is an explicit recovery operation. Normal file replacement uses
+    /// stable parent watches on Linux and targeted re-registration on macOS,
+    /// since a full FSEvents restart is disruptive.
     pub async fn rewatch_all(&self) {
         let _op = self.operation_lock.lock().await;
         let mut ready = self.config.as_ref().map(|c| c.fs_ready());
 
         {
-            let paths = self.watched_paths.lock().unwrap();
-            if paths.is_empty() {
+            let registrations = self.registrations.lock().unwrap();
+            if registrations.is_empty() {
                 return;
             }
 
@@ -173,13 +463,18 @@ impl WatcherHandle {
         let mut ready = self.config.as_ref().map(|c| c.fs_ready());
 
         {
-            let paths = self.watched_paths.lock().unwrap();
+            let mut registrations = self.registrations.lock().unwrap();
+            for (target, registration) in registrations.iter_mut() {
+                if registration.watch_missing
+                    && let Some((_, refreshed)) =
+                        logical_registration(target, registration.recursive)
+                {
+                    *registration = refreshed;
+                }
+            }
+            let paths = subscription_paths(&registrations);
             if let Some(ref config) = self.config {
-                config.pathset(
-                    paths
-                        .iter()
-                        .map(|p| WatchedPath::non_recursive(p.as_path())),
-                );
+                set_pathset(config, &paths);
             }
         }
 
@@ -188,8 +483,9 @@ impl WatcherHandle {
         }
     }
 
+    /// Returns logical content dependencies, never their fallback OS anchors.
     pub fn watched_paths(&self) -> Vec<PathBuf> {
-        self.watched_paths.lock().unwrap().iter().cloned().collect()
+        self.registrations.lock().unwrap().keys().cloned().collect()
     }
 }
 
@@ -223,7 +519,7 @@ impl FileWatcher {
     pub async fn new(config: FileWatcherConfig<'_>, name: &str) -> Self {
         let (tx, rx) = mpsc::channel::<FileChangeEvent>(100);
 
-        let watched_paths = Arc::new(Mutex::new(HashSet::new()));
+        let registrations = Arc::new(Mutex::new(HashMap::new()));
         let operation_lock = Arc::new(AsyncMutex::new(()));
 
         macro_rules! empty_watcher {
@@ -232,9 +528,10 @@ impl FileWatcher {
                     rx,
                     _tx: tx,
                     handle: WatcherHandle {
-                        watched_paths,
+                        registrations,
                         operation_lock,
                         config: None,
+                        recursive: config.recursive,
                     },
                     tasks: Vec::new(),
                 }
@@ -244,16 +541,20 @@ impl FileWatcher {
         // Canonicalize watch paths to resolve symlinks.
         // On macOS, /tmp -> /private/tmp and /var -> /private/var;
         // FSEvents reports events using resolved paths.
-        let paths: Vec<PathBuf> = config
+        let initial_registrations: Vec<(PathBuf, WatchRegistration)> = config
             .paths
             .iter()
-            .map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()))
+            .map(|path| direct_registration(path, config.recursive))
+            .collect();
+        let paths: Vec<PathBuf> = initial_registrations
+            .iter()
+            .map(|(_, registration)| registration.anchor.clone())
             .collect();
 
         {
-            let mut wp = watched_paths.lock().unwrap();
-            for p in &paths {
-                wp.insert(p.clone());
+            let mut watched = registrations.lock().unwrap();
+            for (target, registration) in initial_registrations {
+                watched.insert(target, registration);
             }
         }
 
@@ -299,20 +600,16 @@ impl FileWatcher {
         // fs worker to finish registering OS watches.
         let mut fs_ready = wx_config.fs_ready();
 
-        if config.recursive {
-            wx_config.pathset(paths.iter().map(|p| p.as_path()));
-        } else {
-            wx_config.pathset(
-                paths
-                    .iter()
-                    .map(|p| WatchedPath::non_recursive(p.as_path())),
-            );
-        }
+        set_pathset(
+            &wx_config,
+            &subscription_paths(&registrations.lock().unwrap()),
+        );
 
         let handle = WatcherHandle {
-            watched_paths,
+            registrations: registrations.clone(),
             operation_lock,
             config: Some(wx_config.clone()),
+            recursive: config.recursive,
         };
 
         let mut watch_info = format!(
@@ -381,6 +678,8 @@ impl FileWatcher {
         // so we reimplement it here.
         let throttle = config.throttle;
         let watch_tx = tx.clone();
+        let event_registrations = registrations;
+        let event_handle = handle.clone();
         let filter_task = tokio::spawn(async move {
             use watchexec::filter::Filterer;
 
@@ -403,6 +702,8 @@ impl FileWatcher {
                     }
                 }
 
+                let mut affected = HashSet::new();
+                let mut invalidated = HashSet::new();
                 for (event, priority) in &batch {
                     if !filterer.check_event(event, *priority).unwrap_or(true) {
                         continue;
@@ -410,17 +711,34 @@ impl FileWatcher {
                     if !is_restart_worthy_event(event) {
                         continue;
                     }
+                    let may_invalidate_watch = event_may_invalidate_watch(event);
+                    let mut saw_path = false;
                     for (path, _) in event.paths() {
-                        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-                        // Use send().await instead of try_send to apply backpressure
-                        // rather than silently dropping events when the channel is full.
-                        if watch_tx
-                            .send(FileChangeEvent { path: canonical })
-                            .await
-                            .is_err()
-                        {
-                            return;
+                        saw_path = true;
+                        let registrations = event_registrations.lock().unwrap();
+                        add_affected_targets(Some(path), &registrations, &mut affected);
+                        if may_invalidate_watch {
+                            add_invalidated_targets(Some(path), &registrations, &mut invalidated);
                         }
+                    }
+                    if !saw_path {
+                        let registrations = event_registrations.lock().unwrap();
+                        add_affected_targets(None, &registrations, &mut affected);
+                        if may_invalidate_watch {
+                            add_invalidated_targets(None, &registrations, &mut invalidated);
+                        }
+                    }
+                }
+
+                if !invalidated.is_empty() {
+                    event_handle.rewatch_targets(&invalidated).await;
+                }
+
+                for path in affected {
+                    // Use send().await instead of try_send to apply backpressure
+                    // rather than silently dropping events when the channel is full.
+                    if watch_tx.send(FileChangeEvent { path }).await.is_err() {
+                        return;
                     }
                 }
             }
@@ -490,6 +808,19 @@ mod tests {
         );
     }
 
+    async fn wait_for_path(watcher: &mut FileWatcher, expected: &Path, context: &str) {
+        let deadline = tokio::time::Instant::now() + WATCH_TIMEOUT;
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            match tokio::time::timeout(remaining, watcher.recv()).await {
+                Ok(Some(event)) if event.path == expected => return,
+                Ok(Some(_)) => continue,
+                Ok(None) => panic!("watcher channel closed while waiting for {expected:?}"),
+                Err(_) => panic!("timeout waiting for {expected:?} after {context}"),
+            }
+        }
+    }
+
     #[test]
     fn test_restart_worthy_kind_filter() {
         use watchexec_events::filekind::{
@@ -520,6 +851,265 @@ mod tests {
         assert!(!is_restart_worthy_kind(&FileEventKind::Modify(
             ModifyKind::Metadata(MetadataKind::Any),
         )));
+    }
+
+    #[test]
+    fn test_missing_logical_target_keeps_ancestor_out_of_content_dependencies() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let base = temp_dir.path().canonicalize().expect("canonicalize");
+        let target = base.join("missing").join(".env");
+
+        let (logical_target, registration) =
+            logical_registration(&target, true).expect("resolve logical registration");
+
+        assert_eq!(logical_target, target);
+        assert_eq!(registration.anchor, base);
+        assert!(registration.watch_missing);
+        assert!(registration.filtered_anchor);
+        assert!(!subscription_paths(&HashMap::from([(logical_target, registration,)]))[&base]);
+    }
+
+    #[test]
+    fn test_missing_logical_target_filters_unrelated_parent_events() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let base = temp_dir.path().canonicalize().expect("canonicalize");
+        let target = base.join("config").join(".env");
+        let (_, registration) =
+            logical_registration(&target, false).expect("resolve logical registration");
+
+        assert!(!event_affects_target(
+            &base.join("target/debug/deps/example.rlib"),
+            &registration,
+        ));
+        assert!(event_affects_target(&base.join("config"), &registration,));
+        assert!(event_affects_target(&target, &registration));
+    }
+
+    #[test]
+    fn test_pathless_filesystem_event_affects_every_logical_target() {
+        let first = PathBuf::from("/tmp/first");
+        let second = PathBuf::from("/tmp/second");
+        let registrations = HashMap::from([
+            direct_registration(&first, false),
+            direct_registration(&second, false),
+        ]);
+        let mut affected = HashSet::new();
+
+        add_affected_targets(None, &registrations, &mut affected);
+
+        assert_eq!(affected, HashSet::from([first, second]));
+    }
+
+    #[test]
+    fn test_descendant_rename_does_not_invalidate_directory_anchor() {
+        let directory = PathBuf::from("/tmp/project");
+        let file = directory.join("devenv.nix");
+        let registrations = HashMap::from([direct_registration(&directory, true)]);
+        let mut invalidated = HashSet::new();
+
+        add_invalidated_targets(Some(&file), &registrations, &mut invalidated);
+
+        assert!(invalidated.is_empty());
+    }
+
+    #[test]
+    fn test_exact_file_event_invalidates_file_anchor() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file = temp_dir.path().join("devenv.nix");
+        fs::write(&file, "{}\n").expect("create watched file");
+        let file = file.canonicalize().expect("canonicalize watched file");
+        let registrations = HashMap::from([direct_registration(&file, false)]);
+        let mut invalidated = HashSet::new();
+
+        add_invalidated_targets(Some(&file), &registrations, &mut invalidated);
+
+        if cfg!(target_os = "linux") {
+            assert!(invalidated.is_empty());
+        } else {
+            assert_eq!(invalidated, HashSet::from([file]));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_missing_logical_target_normalizes_symlinked_ancestor() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let base = temp_dir.path().canonicalize().expect("canonicalize");
+        let real = base.join("real");
+        let link = base.join("link");
+        fs::create_dir(&real).expect("create real directory");
+        symlink(&real, &link).expect("create directory symlink");
+
+        let (target, registration) =
+            logical_registration(&link.join(".env"), false).expect("resolve logical registration");
+
+        assert_eq!(target, real.join(".env"));
+        assert_eq!(registration.anchor, real);
+        assert!(registration.filtered_anchor);
+    }
+
+    #[tokio::test]
+    async fn test_logical_watch_replaces_parent_anchor_when_file_appears() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let base = temp_dir.path().canonicalize().expect("canonicalize");
+        let target_dir = base.join("config");
+        let target = target_dir.join(".env");
+        let mut watcher = FileWatcher::new(
+            FileWatcherConfig {
+                paths: &[],
+                recursive: false,
+                ..Default::default()
+            },
+            "test-logical-watch",
+        )
+        .await;
+        let handle = watcher.handle();
+
+        handle.watch_logical(&target).await;
+        assert_eq!(handle.watched_paths(), vec![target.clone()]);
+        assert_eq!(
+            handle
+                .registrations
+                .lock()
+                .unwrap()
+                .get(&target)
+                .expect("logical registration")
+                .anchor,
+            base,
+        );
+
+        // The eval cache can independently register the same path. Its direct
+        // watch must not discard the dotenv watch's missing-file semantics.
+        handle.watch(&target).await;
+        assert_eq!(
+            handle
+                .registrations
+                .lock()
+                .unwrap()
+                .get(&target)
+                .expect("logical registration")
+                .anchor,
+            base,
+        );
+
+        fs::create_dir(&target_dir).expect("create intermediate directory");
+        let event = tokio::time::timeout(WATCH_TIMEOUT, watcher.recv())
+            .await
+            .expect("timeout")
+            .expect("event");
+        assert_eq!(event.path, target);
+
+        handle.refresh(&target).await;
+        let existing_anchor = if cfg!(target_os = "linux") {
+            target_dir.clone()
+        } else {
+            target.clone()
+        };
+        assert_eq!(
+            handle
+                .registrations
+                .lock()
+                .unwrap()
+                .get(&target)
+                .expect("logical registration")
+                .anchor,
+            target_dir,
+        );
+
+        File::create(&target)
+            .expect("create dotenv")
+            .write_all(b"VALUE=created\n")
+            .expect("write dotenv");
+        let event = tokio::time::timeout(WATCH_TIMEOUT, watcher.recv())
+            .await
+            .expect("timeout")
+            .expect("event");
+        assert_eq!(event.path, target);
+
+        handle.refresh(&target).await;
+        assert_eq!(
+            handle
+                .registrations
+                .lock()
+                .unwrap()
+                .get(&target)
+                .expect("logical registration")
+                .anchor,
+            existing_anchor,
+        );
+
+        // A full rewatch retains the platform-appropriate existing-target
+        // subscription and does not restore the broader fallback anchor.
+        handle.rewatch_all().await;
+        assert_eq!(
+            handle
+                .registrations
+                .lock()
+                .unwrap()
+                .get(&target)
+                .expect("logical registration")
+                .anchor,
+            existing_anchor,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_missing_logical_watch_ignores_unrelated_sibling() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let base = temp_dir.path().canonicalize().expect("canonicalize");
+        let target = base.join(".env");
+        let unrelated = base.join("unrelated.txt");
+        let mut watcher = FileWatcher::new(
+            FileWatcherConfig {
+                paths: &[],
+                recursive: false,
+                ..Default::default()
+            },
+            "test-logical-filter",
+        )
+        .await;
+
+        watcher.handle().watch_logical(&target).await;
+        fs::write(&unrelated, "unrelated").expect("write unrelated sibling");
+        assert_no_event(&mut watcher, "unrelated sibling of missing target").await;
+
+        fs::write(&target, "VALUE=created\n").expect("create logical target");
+        wait_for_path(&mut watcher, &target, "creating logical target").await;
+    }
+
+    #[tokio::test]
+    async fn test_atomic_file_replacement_keeps_watch_alive() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let base = temp_dir.path().canonicalize().expect("canonicalize");
+        let target = base.join("watched.nix");
+        let replacement = base.join("watched.nix.tmp");
+        fs::write(&target, "same content").expect("write target");
+
+        let paths = vec![target.clone()];
+        let mut watcher = FileWatcher::new(
+            FileWatcherConfig {
+                paths: &paths,
+                recursive: false,
+                ..Default::default()
+            },
+            "test-atomic-replacement",
+        )
+        .await;
+
+        // Replacing a file with identical content can be suppressed by the
+        // coordinator's hash comparison, but must not leave the native watch
+        // pointing at the old file.
+        fs::write(&replacement, "same content").expect("write replacement");
+        fs::rename(&replacement, &target).expect("replace target");
+        wait_for_path(&mut watcher, &target, "atomic replacement").await;
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        while watcher.try_recv().is_ok() {}
+
+        fs::write(&target, "changed content").expect("modify replacement");
+        wait_for_path(&mut watcher, &target, "modifying the replacement").await;
     }
 
     #[tokio::test]

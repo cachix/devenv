@@ -181,8 +181,10 @@ async fn run_build_reload_env(
 async fn add_watch_paths(devenv: &Devenv, watcher: &WatcherHandle) {
     match devenv.dotenv_watch_paths().await {
         Ok(paths) => {
-            let paths = paths.into_iter().filter_map(runtime_watch_target);
-            watcher.watch_many(paths).await;
+            let paths = paths
+                .into_iter()
+                .filter(|path| !path.starts_with("/nix/store"));
+            watcher.watch_logical_many(paths).await;
         }
         Err(e) => tracing::warn!("Failed to resolve dotenv watch paths: {}", e),
     }
@@ -208,7 +210,7 @@ async fn watch_by_key(pool: &sqlx::SqlitePool, key_hash: &str, watcher: &Watcher
                 .map(|i| i.path)
                 .filter(|p| watchable(p))
                 .collect();
-            watcher.watch_many(paths).await;
+            watcher.watch_logical_many(paths).await;
             true
         }
         Ok(_) => false,
@@ -223,7 +225,7 @@ async fn watch_all_tracked(pool: &sqlx::SqlitePool, watcher: &WatcherHandle) {
     match devenv_eval_cache::get_all_tracked_file_paths(pool).await {
         Ok(paths) => {
             let filtered: Vec<PathBuf> = paths.into_iter().filter(|p| watchable(p)).collect();
-            watcher.watch_many(filtered).await;
+            watcher.watch_logical_many(filtered).await;
         }
         Err(e) => {
             tracing::warn!("Failed to query all tracked files: {}", e);
@@ -233,18 +235,4 @@ async fn watch_all_tracked(pool: &sqlx::SqlitePool, watcher: &WatcherHandle) {
 
 fn watchable(path: &Path) -> bool {
     path.exists() && !path.starts_with("/nix/store")
-}
-
-/// Watch a dotenv file directly when it exists. For a missing file, watch its
-/// nearest existing parent so creating it triggers a rebuild; the next rebuild
-/// also adds a direct file watch.
-fn runtime_watch_target(path: PathBuf) -> Option<PathBuf> {
-    if path.starts_with("/nix/store") {
-        return None;
-    }
-    let mut target = path.as_path();
-    while !target.exists() {
-        target = target.parent()?;
-    }
-    Some(target.to_path_buf())
 }
