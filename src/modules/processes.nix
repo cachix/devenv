@@ -3,6 +3,7 @@ let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
   readyType = import ./lib/ready.nix { inherit lib; };
+  processManagerTypes = import ./lib/process-manager-types.nix { inherit lib; };
 
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
@@ -328,6 +329,31 @@ let
         '';
       };
 
+      supervisionMode = lib.mkOption {
+        type = types.enum [ "native" "external" ];
+        internal = true;
+        readOnly = true;
+        description = "Whether devenv or the selected process manager owns lifecycle policy.";
+        default =
+          let
+            readyIsExternal =
+              if config.ready == null then
+                config.ports == { }
+                && !lib.any (listen: listen.kind == "tcp") config.listen
+              else
+                !config.ready.notify
+                && config.ready.timeout == null
+                && (config.ready.exec != null || config.ready.http.get != null);
+            processComposeOwnsPolicy =
+              implementation == "process-compose"
+              && readyIsExternal
+              && config.restart.window == null
+              && config.watch.paths == [ ]
+              && config.watchdog == null;
+          in
+          if processComposeOwnsPolicy then "external" else "native";
+      };
+
     };
 
     config = lib.mkIf (implementation == "process-compose") {
@@ -408,6 +434,27 @@ in
           Additional arguments to pass to the process manager.
         '';
       };
+
+      capabilities = lib.mkOption {
+        type = processManagerTypes.capabilities;
+        internal = true;
+        readOnly = true;
+        description = "Capabilities of the selected process manager.";
+      };
+
+      adapter = lib.mkOption {
+        type = processManagerTypes.adapter;
+        internal = true;
+        readOnly = true;
+        description = "Runtime adapter settings of the selected process manager.";
+      };
+
+      stopCommand = lib.mkOption {
+        type = processManagerTypes.stopCommand;
+        internal = true;
+        readOnly = true;
+        description = "Manager-specific graceful stop command, if one is available.";
+      };
     };
 
     # INTERNAL
@@ -482,9 +529,42 @@ in
             Use tasks with process dependencies instead. See https://devenv.sh/tasks/
           '';
         }
+        {
+          assertion =
+            (config.process.managers.${implementation}.adapter.stop == "command")
+            == (config.process.managers.${implementation}.stopCommand != null);
+          message = ''
+            A process manager using the command stop adapter must provide process.managers.${implementation}.stopCommand,
+            and managers using another stop adapter must leave it null.
+          '';
+        }
+        {
+          assertion =
+            let
+              capabilities = config.process.managers.${implementation}.capabilities;
+              exposesClientOperations =
+                capabilities.devenv_attach
+                || capabilities.wait_ready
+                || capabilities.individual_control;
+            in
+            !exposesClientOperations
+            || config.process.managers.${implementation}.adapter.client != "none";
+          message = ''
+            A process manager exposing attach, readiness, or individual control must provide a client adapter.
+          '';
+        }
+        {
+          assertion =
+            config.process.managers.${implementation}.adapter.client != "native-api"
+            || implementation == "native";
+          message = "The native-api client adapter can only be used by the native process manager.";
+        }
       ];
 
       process.managers.${implementation}.enable = lib.mkDefault true;
+      process.manager.capabilities = config.process.managers.${implementation}.capabilities;
+      process.manager.adapter = config.process.managers.${implementation}.adapter;
+      process.manager.stopCommand = config.process.managers.${implementation}.stopCommand;
     }
 
     (lib.mkIf options.processes.isDefined (
@@ -526,10 +606,20 @@ in
         # Not used by the native manager (devenv 2.0+) which handles process tasks directly.
         process.taskCommandsBase =
           let
-            ignoreProcessDepsFlag = lib.optionalString (implementation != "native") " --ignore-process-deps";
+            commandLine = lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell;
           in
           lib.mapAttrs
-            (name: _: "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime}${ignoreProcessDepsFlag} devenv:processes:${name}")
+            (name: process:
+              let
+                runArgs = commandLine { } {
+                  task-file = config.task.config;
+                  mode = "all";
+                  cache-dir = config.devenv.dotfile;
+                  runtime-dir = config.devenv.runtime;
+                  supervisor = process.supervisionMode;
+                };
+              in
+              "${config.task.package}/bin/devenv-tasks run ${runArgs} devenv:processes:${name}")
             enabledProcesses;
 
         # With exec prefix for proper signal handling (derived from base)
