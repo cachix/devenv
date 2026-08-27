@@ -86,6 +86,11 @@ fn same_process_command(
 /// We use the `detect-coding-agent` crate to recognize well-known AI agents
 /// (Claude Code, Cursor, Aider, ...) from their environment variables.
 ///
+/// Only `AgentKind::Agent` counts. The crate's own `is_agent()` also matches
+/// `AgentKind::Hybrid`, which marks environments that *can* run an agent rather
+/// than ones that currently are, so it strips the TUI from humans at an
+/// interactive prompt.
+///
 /// Set `DEVENV_NO_AI_AGENT=1` to opt out of detection (forces normal output/TUI
 /// even when running under a detected agent). The result is cached for the
 /// process lifetime.
@@ -95,8 +100,13 @@ pub fn is_ai_agent() -> bool {
         if std::env::var_os("DEVENV_NO_AI_AGENT").is_some() {
             return false;
         }
-        detect_coding_agent::is_agent()
+        is_unattended_agent(detect_coding_agent::detect().map(|agent| agent.kind))
     })
+}
+
+/// Whether a detected coding environment runs without a human in the loop.
+fn is_unattended_agent(kind: Option<detect_coding_agent::AgentKind>) -> bool {
+    matches!(kind, Some(detect_coding_agent::AgentKind::Agent))
 }
 
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
@@ -3966,6 +3976,33 @@ fn native_manager_seedable(pid_status: Option<&processes::PidStatus>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_autonomous_agents_are_unattended() {
+        use detect_coding_agent::AgentKind;
+
+        assert!(is_unattended_agent(Some(AgentKind::Agent)));
+        assert!(!is_unattended_agent(Some(AgentKind::Interactive)));
+        assert!(!is_unattended_agent(Some(AgentKind::Hybrid)));
+        assert!(!is_unattended_agent(None));
+    }
+
+    #[test]
+    fn a_warp_terminal_prompt_is_not_an_agent() {
+        let env = |vars: &[(&str, &str)]| {
+            vars.iter()
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .collect()
+        };
+
+        // Hybrid terminal environment like Warp sets TERM_PROGRAM for every shell it starts, agent or human.
+        let warp = detect_coding_agent::detect_with_env(env(&[("TERM_PROGRAM", "WarpTerminal")]));
+        assert!(!is_unattended_agent(warp.map(|agent| agent.kind)));
+
+        // Agents with a dedicated marker still switch devenv to unattended output.
+        let claude_code = detect_coding_agent::detect_with_env(env(&[("CLAUDECODE", "1")]));
+        assert!(is_unattended_agent(claude_code.map(|agent| agent.kind)));
+    }
 
     #[test]
     fn identical_attached_process_commands_compare_by_kind_and_target() {
