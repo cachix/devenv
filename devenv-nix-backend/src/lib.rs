@@ -22,7 +22,10 @@ mod file_limit;
 pub mod lock;
 
 pub mod primops;
-pub use primops::{AllocatePortPrimop, LoadDotenvPrimop, PrimopRegistration, PrimopRegistry};
+pub use primops::{
+    AllocatePortPrimop, DotenvPlugin, LoadDotenvPrimop, NixEvalPlugin, NixEvalSetup,
+    PortAllocationPlugin, PrimopRegistration, PrimopRegistry,
+};
 
 use std::cell::RefCell;
 

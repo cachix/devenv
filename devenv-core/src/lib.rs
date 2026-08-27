@@ -26,10 +26,7 @@ pub use backend::Backend;
 pub use bootstrap_args::BootstrapArgs;
 pub use cachix::{CachixCacheInfo, CachixManager, CachixPaths};
 pub use config::Config;
-pub use dotenv::{
-    DotenvFileSpec, DotenvFileState, DotenvSpec, DotenvSubstitutionSpec, DotenvTracker,
-};
-pub use eval_op::{EvalOp, OpObserver};
+pub use eval_op::{EvalInputState, EvalOp, OpObserver};
 pub use evaluator::{BuildOptions, DevEnvOutput, Evaluator, PackageSearchResult, SearchResults};
 pub use internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 pub use nix_args::{CliOptionsConfig, NixArgs, SecretspecData};
@@ -37,7 +34,7 @@ pub use nix_config::NixConfig;
 pub use paths::DevenvPaths;
 pub use ports::{PortAllocation, PortAllocator, PortSpec};
 pub use realized::RealizedPathsObserver;
-pub use resource::{EvalInput, ReplayError, ReplayableResource};
+pub use resource::{ReplayError, ReplayableResource};
 pub use settings::{
     CacheOptions, CacheSettings, InputOverrides, NixOptions, NixSettings, SecretOptions,
     SecretSettings, ShellOptions, ShellSettings, VerbosityLevel, default_system, flag,

@@ -32,6 +32,33 @@ pub enum EvalOp {
     PathExists { source: PathBuf },
 }
 
+/// Exact state captured at the moment an evaluation input was consumed.
+///
+/// Primops use this when re-reading the input later could associate a stale
+/// evaluation result with newer file or environment state.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum EvalInputState {
+    File {
+        path: PathBuf,
+        content_sha256: Option<String>,
+    },
+    Env {
+        name: String,
+        content_sha256: Option<String>,
+    },
+}
+
+impl EvalInputState {
+    pub fn operation(&self) -> EvalOp {
+        match self {
+            Self::File { path, .. } => EvalOp::ReadFile {
+                source: path.clone(),
+            },
+            Self::Env { name, .. } => EvalOp::GetEnv { name: name.clone() },
+        }
+    }
+}
+
 /// Convert to the activity event type for serialization.
 impl From<EvalOp> for devenv_activity::EvalOp {
     fn from(op: EvalOp) -> Self {
@@ -103,12 +130,21 @@ impl EvalOp {
 pub trait OpObserver: Send + Sync + 'static {
     /// Called when an operation is observed during evaluation.
     fn record(&self, op: EvalOp);
+
+    /// Record both an input identity and the state actually consumed.
+    fn record_input_state(&self, input: EvalInputState) {
+        self.record(input.operation());
+    }
 }
 
 /// Wrapper to allow `Arc<dyn OpObserver>` to implement `OpObserver`.
 impl OpObserver for Arc<dyn OpObserver> {
     fn record(&self, op: EvalOp) {
         (**self).record(op);
+    }
+
+    fn record_input_state(&self, input: EvalInputState) {
+        (**self).record_input_state(input);
     }
 }
 

@@ -438,6 +438,13 @@ impl ReplayableResource for PortAllocator {
         }
     }
 
+    fn is_empty(&self) -> bool {
+        self.ports
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_empty()
+    }
+
     fn replay(&self, spec: &PortSpec) -> Result<(), ReplayError> {
         for alloc in &spec.allocations {
             self.allocate_exact(&alloc.process_name, &alloc.port_name, alloc.allocated_port)

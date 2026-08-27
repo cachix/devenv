@@ -1,7 +1,6 @@
 pub mod caching_eval;
 pub mod db;
 pub mod eval_context;
-pub mod eval_input_manager;
 pub mod eval_inputs;
 pub mod ffi_cache;
 pub mod resource_manager;
@@ -19,9 +18,8 @@ pub use caching_eval::{
     UncachedEvalState, UncachedReason,
 };
 pub use eval_context::EvalContext;
-pub use eval_input_manager::{EvalInputManager, EvalInputSpec};
-pub use ffi_cache::{CachingConfig, EvalCacheKey, InputTracker, ops_to_inputs};
-pub use resource_manager::{ResourceManager, ResourceSpec};
+pub use ffi_cache::{CachingConfig, EvalCacheKey, EvalInputTracker, ops_to_inputs};
+pub use resource_manager::{EvalResourceRegistry, EvalResourceSpec};
 
 // Re-export database query functions for file tracking
 pub use db::{get_all_tracked_file_paths, get_file_inputs_by_key_hash};

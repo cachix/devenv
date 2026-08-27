@@ -26,12 +26,11 @@ use std::time::SystemTime;
 use tracing::{debug, trace, warn};
 
 use crate::db::{self, EnvInputRow, EvalRow, FileInputRow, empty_to_none};
-use crate::eval_input_manager::{EvalInputManager, EvalInputSpec};
 use crate::eval_inputs::{
     EnvInputDesc, FileInputDesc, FileState, Input, check_env_state, check_file_state,
 };
-use crate::ffi_cache::{CachingConfig, EvalCacheKey, InputTracker};
-use crate::resource_manager::{ResourceManager, ResourceSpec};
+use crate::ffi_cache::{CachingConfig, EvalCacheKey, EvalInputTracker};
+use crate::resource_manager::{EvalResourceRegistry, EvalResourceSpec};
 use devenv_activity::Activity;
 use devenv_core::nix_log_bridge::NixLogBridge;
 
@@ -42,6 +41,8 @@ pub struct CachedEvalResult {
     pub json_output: String,
     /// The eval row ID (for updating timestamps).
     pub eval_id: i64,
+    /// File/env observations validated for this cache hit.
+    pub inputs: Vec<Input>,
 }
 
 /// Cache-layer failures (DB, IO, serde, cached-state restoration). Evaluation failures
@@ -148,6 +149,11 @@ impl CachingEvalService {
         Ok(Some(CachedEvalResult {
             json_output: eval_row.json_output,
             eval_id: eval_row.id,
+            inputs: file_rows
+                .into_iter()
+                .map(Into::into)
+                .chain(env_rows.into_iter().map(Into::into))
+                .collect(),
         }))
     }
 
@@ -354,13 +360,11 @@ impl CachingEvalService {
 pub struct CachedEval {
     service: Option<CachingEvalService>,
     log_bridge: Arc<NixLogBridge>,
-    config: CachingConfig,
     /// Long-lived observer that accumulates every op seen on the bridge since
     /// the last `clear()`. Snapshotted at each cache-miss `store` so every
     /// stored row records the full transitive input set of the session.
-    input_tracker: Arc<InputTracker>,
-    resource_manager: Option<Arc<ResourceManager>>,
-    eval_inputs: Option<Arc<EvalInputManager>>,
+    eval_inputs: Arc<EvalInputTracker>,
+    resources: Option<Arc<EvalResourceRegistry>>,
     on_cached_state_invalidation: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
@@ -373,15 +377,22 @@ impl CachedEval {
         log_bridge: Arc<NixLogBridge>,
         config: CachingConfig,
     ) -> Self {
-        let input_tracker = InputTracker::new();
-        log_bridge.add_observer(input_tracker.clone());
+        Self::with_cache_and_inputs(service, log_bridge, config, EvalInputTracker::new())
+    }
+
+    pub fn with_cache_and_inputs(
+        service: CachingEvalService,
+        log_bridge: Arc<NixLogBridge>,
+        config: CachingConfig,
+        eval_inputs: Arc<EvalInputTracker>,
+    ) -> Self {
+        eval_inputs.set_config(config.clone());
+        log_bridge.add_observer(eval_inputs.clone());
         Self {
             service: Some(service),
             log_bridge,
-            config,
-            input_tracker,
-            resource_manager: None,
-            eval_inputs: None,
+            eval_inputs,
+            resources: None,
             on_cached_state_invalidation: None,
         }
     }
@@ -391,37 +402,31 @@ impl CachedEval {
     /// Evaluation will always run, results won't be cached.
     /// Useful for testing or when caching should be disabled.
     pub fn without_cache(log_bridge: Arc<NixLogBridge>) -> Self {
-        let input_tracker = InputTracker::new();
-        log_bridge.add_observer(input_tracker.clone());
+        Self::without_cache_and_inputs(log_bridge, EvalInputTracker::new())
+    }
+
+    pub fn without_cache_and_inputs(
+        log_bridge: Arc<NixLogBridge>,
+        eval_inputs: Arc<EvalInputTracker>,
+    ) -> Self {
+        log_bridge.add_observer(eval_inputs.clone());
         Self {
             service: None,
             log_bridge,
-            config: CachingConfig::default(),
-            input_tracker,
-            resource_manager: None,
-            eval_inputs: None,
+            eval_inputs,
+            resources: None,
             on_cached_state_invalidation: None,
         }
     }
 
-    /// Set the resource manager for replaying side effects and input state across cache hits.
+    /// Set the resource registry for replaying side effects and input state across cache hits.
     ///
     /// When set, on cache miss: snapshots resource allocations (e.g., ports) and
     /// stores them alongside the cached eval result.
     /// On cache hit: replays resource allocations. If replay fails (e.g., port
     /// is now occupied), the cache entry is invalidated and evaluation re-runs.
-    pub fn with_resource_manager(mut self, resource_manager: Arc<ResourceManager>) -> Self {
-        self.resource_manager = Some(resource_manager);
-        self
-    }
-
-    /// Set the manager for inputs observed outside Nix's ordinary file/env log.
-    ///
-    /// On a cache hit, stored inputs are validated and restored into their live
-    /// trackers. This lets later orchestration retain the exact dependency set
-    /// even when evaluation itself was skipped.
-    pub fn with_eval_inputs(mut self, inputs: Arc<EvalInputManager>) -> Self {
-        self.eval_inputs = Some(inputs);
+    pub fn with_resources(mut self, resources: Arc<EvalResourceRegistry>) -> Self {
+        self.resources = Some(resources);
         self
     }
 
@@ -448,13 +453,13 @@ impl CachedEval {
         &self.log_bridge
     }
 
-    /// Get a reference to the persistent input tracker.
+    /// Get the persistent unified eval-input tracker.
     ///
-    /// Call `input_tracker().clear()` when the underlying `EvalState` is
+    /// Call `eval_inputs().clear()` when the underlying `EvalState` is
     /// invalidated (e.g. hot-reload) so the next session starts with a fresh
     /// input set.
-    pub fn input_tracker(&self) -> &Arc<InputTracker> {
-        &self.input_tracker
+    pub fn eval_inputs(&self) -> &Arc<EvalInputTracker> {
+        &self.eval_inputs
     }
 
     /// Replay resource allocations from a cached eval entry (public API).
@@ -465,36 +470,63 @@ impl CachedEval {
     ///
     /// Returns Ok(()) if replay succeeded or no resources were stored.
     /// Returns Err if replay failed (caller should re-evaluate).
-    pub async fn try_restore_cached_state(&self, eval_id: i64) -> Result<(), CacheError> {
+    pub async fn try_restore_cached_state(
+        &self,
+        cached: &CachedEvalResult,
+    ) -> Result<(), CacheError> {
+        if let Err(error) = self.validate_cached_inputs(
+            cached,
+            "evaluation inputs changed while restoring a cache hit",
+        ) {
+            if let Some(service) = &self.service {
+                self.handle_restore_failure(service, &error).await;
+            }
+            return Err(error);
+        }
         if let Some(service) = &self.service {
-            if let Err(error) = self.restore_cached_state(service, eval_id).await {
+            if let Err(error) = self.restore_cached_state(service, cached.eval_id).await {
                 self.handle_restore_failure(service, &error).await;
                 return Err(error);
             }
-            Ok(())
-        } else {
-            Ok(())
         }
+        if let Err(error) = self.validate_cached_inputs(
+            cached,
+            "evaluation inputs changed during cached-state replay",
+        ) {
+            if let Some(service) = &self.service {
+                self.handle_restore_failure(service, &error).await;
+            }
+            return Err(error);
+        }
+        self.eval_inputs.restore_inputs(&cached.inputs);
+        Ok(())
+    }
+
+    fn validate_cached_inputs(
+        &self,
+        cached: &CachedEvalResult,
+        changed_message: &str,
+    ) -> Result<(), CacheError> {
+        if self.eval_inputs.inputs_changed(&cached.inputs)? {
+            return Err(CacheError::CachedStateRestore(changed_message.to_owned()));
+        }
+        Ok(())
     }
 
     /// Clear all resource allocations (public API).
     ///
     /// Call this after a replay failure before re-evaluating, to ensure
-    /// the resource manager starts fresh.
+    /// the resource registry starts fresh.
     pub fn clear_cached_state(&self) {
-        if let Some(ref rm) = self.resource_manager {
-            rm.clear_all();
+        if let Some(ref resources) = self.resources {
+            resources.clear_all();
         }
-        if let Some(ref inputs) = self.eval_inputs {
-            inputs.clear_all();
-        }
+        self.eval_inputs.clear();
     }
 
     /// Clear inputs observed by the current evaluation session.
     pub fn clear_eval_inputs(&self) {
-        if let Some(ref inputs) = self.eval_inputs {
-            inputs.clear_all();
-        }
+        self.eval_inputs.clear();
     }
 
     /// Handle a cached-state restore failure by purging state-dependent cache
@@ -516,7 +548,7 @@ impl CachedEval {
     /// Replay resource allocations from a cached eval entry.
     ///
     /// Loads resource specs from the database and replays them through the
-    /// resource manager. Returns Ok(()) if all resources were successfully
+    /// resource registry. Returns Ok(()) if all resources were successfully
     /// re-acquired, or Err if any resource failed to replay.
     async fn restore_cached_state(
         &self,
@@ -525,11 +557,11 @@ impl CachedEval {
     ) -> Result<(), CacheError> {
         let spec_rows = db::get_resource_specs_by_eval_id(&service.pool, eval_id).await?;
 
-        let specs: Vec<ResourceSpec> = spec_rows
+        let specs: Vec<EvalResourceSpec> = spec_rows
             .into_iter()
             .map(|row| {
                 let data: serde_json::Value = serde_json::from_str(&row.spec)?;
-                Ok(ResourceSpec {
+                Ok(EvalResourceSpec {
                     type_id: row.type_id,
                     data,
                 })
@@ -543,23 +575,13 @@ impl CachedEval {
         );
 
         let mut resource_specs = Vec::new();
-        let mut input_specs = Vec::new();
         for spec in specs {
             if self
-                .resource_manager
+                .resources
                 .as_ref()
-                .is_some_and(|manager| manager.handles(&spec.type_id))
+                .is_some_and(|resources| resources.handles(&spec.type_id))
             {
                 resource_specs.push(spec);
-            } else if self
-                .eval_inputs
-                .as_ref()
-                .is_some_and(|manager| manager.handles(&spec.type_id))
-            {
-                input_specs.push(EvalInputSpec {
-                    type_id: spec.type_id,
-                    data: spec.data,
-                });
             } else {
                 return Err(CacheError::CachedStateRestore(format!(
                     "unknown cached evaluation state type: {}",
@@ -568,12 +590,7 @@ impl CachedEval {
             }
         }
 
-        if let Some(inputs) = &self.eval_inputs {
-            inputs
-                .restore_all(&input_specs)
-                .map_err(|error| CacheError::CachedStateRestore(error.to_string()))?;
-        }
-        if let Some(resources) = &self.resource_manager {
+        if let Some(resources) = &self.resources {
             resources
                 .replay_all(&resource_specs)
                 .map_err(|error| CacheError::CachedStateRestore(error.to_string()))?;
@@ -587,23 +604,13 @@ impl CachedEval {
         service: &CachingEvalService,
         eval_id: i64,
     ) -> Result<(), CacheError> {
-        let mut specs = self
-            .resource_manager
+        let specs = self
+            .resources
             .as_ref()
-            .map(|manager| manager.snapshot_all())
+            .map(|resources| resources.snapshot_all())
+            .transpose()
+            .map_err(|error| CacheError::CachedStateRestore(error.to_string()))?
             .unwrap_or_default();
-        if let Some(inputs) = &self.eval_inputs {
-            specs.extend(
-                inputs
-                    .snapshot_all()
-                    .map_err(|error| CacheError::CachedStateRestore(error.to_string()))?
-                    .into_iter()
-                    .map(|spec| ResourceSpec {
-                        type_id: spec.type_id,
-                        data: spec.data,
-                    }),
-            );
-        }
         if !specs.is_empty() {
             debug!(
                 eval_id = eval_id,
@@ -634,7 +641,7 @@ impl CachedEval {
             }
         };
 
-        if self.try_restore_cached_state(cached.eval_id).await.is_err() {
+        if self.try_restore_cached_state(&cached).await.is_err() {
             return None;
         }
 
@@ -687,6 +694,34 @@ impl CachedEval {
         inputs: Vec<Input>,
         eval_start: SystemTime,
     ) {
+        match self.eval_inputs.observed_inputs_changed() {
+            Ok(false) => {}
+            Ok(true) => {
+                debug!(
+                    key_hash = %key.key_hash,
+                    attr_name = %key.attr_name,
+                    "precisely observed input changed after it was consumed; refusing to cache stale result"
+                );
+                if let Some(callback) = &self.on_cached_state_invalidation {
+                    callback();
+                }
+                self.eval_inputs.clear_observed_input_states();
+                return;
+            }
+            Err(error) => {
+                debug!(
+                    key_hash = %key.key_hash,
+                    attr_name = %key.attr_name,
+                    error = %error,
+                    "failed to validate precisely observed input; refusing to cache result"
+                );
+                if let Some(callback) = &self.on_cached_state_invalidation {
+                    callback();
+                }
+                self.eval_inputs.clear_observed_input_states();
+                return;
+            }
+        }
         if any_input_modified_after(&inputs, eval_start).await {
             debug!(
                 key_hash = %key.key_hash,
@@ -735,7 +770,7 @@ impl CachedEval {
 
         let eval_start = SystemTime::now();
         let result = run_eval().await?;
-        let inputs = self.input_tracker.snapshot_inputs(&self.config);
+        let inputs = self.eval_inputs.snapshot_inputs();
         self.finalize_store(service, key, &result, inputs, eval_start)
             .await;
         Ok((result, false))
@@ -780,7 +815,7 @@ impl CachedEval {
 
         let eval_start = SystemTime::now();
         let result = run_eval().await?;
-        let inputs = self.input_tracker.snapshot_inputs(&self.config);
+        let inputs = self.eval_inputs.snapshot_inputs();
         let json = serde_json::to_string(&result).map_err(CacheError::from)?;
         self.finalize_store(service, key, &json, inputs, eval_start)
             .await;
@@ -1345,20 +1380,22 @@ mod tests {
 
         let log_bridge = devenv_core::nix_log_bridge::NixLogBridge::new();
 
-        // Create a port allocator and resource manager
+        // Create a port allocator and register it as an eval resource.
         let allocator = Arc::new(devenv_core::ports::PortAllocator::new());
         allocator.set_enabled(true);
-        let resource_manager = Arc::new(ResourceManager::new(allocator.clone()));
+        let mut resources = EvalResourceRegistry::new();
+        resources.register(allocator.clone());
+        let resources = Arc::new(resources);
 
         // Track whether the invalidation callback fires
         let callback_fired = Arc::new(AtomicBool::new(false));
         let callback_flag = callback_fired.clone();
 
-        // Build CachedEval with caching, resource manager, and callback
+        // Build CachedEval with caching, resources, and callback
         let service = CachingEvalService::new(pool.clone());
         let config = CachingConfig::default();
         let cached_eval = CachedEval::with_cache(service, log_bridge, config)
-            .with_resource_manager(resource_manager)
+            .with_resources(resources)
             .with_on_cached_state_invalidation(Arc::new(move || {
                 callback_flag.store(true, Ordering::Release);
             }));
@@ -1374,7 +1411,7 @@ mod tests {
         db::insert_resource_specs(
             service.pool(),
             eval_id1,
-            &[crate::resource_manager::ResourceSpec {
+            &[crate::resource_manager::EvalResourceSpec {
                 type_id: "ports".to_string(),
                 data: serde_json::json!({
                     "allocations": [{
@@ -1398,7 +1435,7 @@ mod tests {
         db::insert_resource_specs(
             service.pool(),
             eval_id2,
-            &[crate::resource_manager::ResourceSpec {
+            &[crate::resource_manager::EvalResourceSpec {
                 type_id: "ports".to_string(),
                 data: serde_json::json!({
                     "allocations": [{
@@ -1471,30 +1508,27 @@ mod tests {
 
     #[sqlx::test]
     async fn cache_hit_restores_eval_inputs_and_change_re_evaluates(pool: SqlitePool) {
-        use devenv_core::dotenv::{DotenvTracker, load_dotenv_tracked};
+        use devenv_core::dotenv::load_dotenv_tracked;
 
         let root = TempDir::new().unwrap();
         let dotenv_path = root.path().join(".env");
         std::fs::write(&dotenv_path, "VALUE=before\n").unwrap();
 
-        let tracker = Arc::new(DotenvTracker::default());
-        let mut inputs = EvalInputManager::new();
-        inputs.register(tracker.clone());
-        let inputs = Arc::new(inputs);
-        let cached_eval = CachedEval::with_cache(
+        let inputs = EvalInputTracker::new();
+        let cached_eval = CachedEval::with_cache_and_inputs(
             CachingEvalService::new(pool),
             NixLogBridge::new(),
             CachingConfig::default(),
-        )
-        .with_eval_inputs(inputs.clone());
+            inputs.clone(),
+        );
         let key = EvalCacheKey::from_test_string("(import /test {})", "config.dotenv");
         let activity = devenv_activity::activity!(INFO, evaluate, "test");
 
         let first_path = dotenv_path.clone();
-        let first_tracker = tracker.clone();
+        let first_inputs = inputs.clone();
         let (first, first_hit) = cached_eval
             .eval(&key, &activity, || async move {
-                let values = load_dotenv_tracked(&[first_path], false, &first_tracker)?;
+                let values = load_dotenv_tracked(&[first_path], false, first_inputs.as_ref())?;
                 Ok::<_, miette::Error>(values["VALUE"].clone())
             })
             .await
@@ -1502,8 +1536,8 @@ mod tests {
         assert_eq!(first, "before");
         assert!(!first_hit);
 
-        inputs.clear_all();
-        assert!(!inputs.has_inputs());
+        inputs.clear();
+        assert!(inputs.is_empty());
         let (second, second_hit) = cached_eval
             .eval(&key, &activity, || async {
                 Ok::<_, miette::Error>("should not run".to_string())
@@ -1512,20 +1546,90 @@ mod tests {
             .unwrap();
         assert_eq!(second, "before");
         assert!(second_hit);
-        assert!(inputs.has_inputs(), "cache hit must restore tracked inputs");
+        assert!(!inputs.is_empty(), "cache hit must restore tracked inputs");
 
         std::fs::write(&dotenv_path, "VALUE=after\n").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&dotenv_path)
+            .unwrap()
+            .set_modified(SystemTime::now() + std::time::Duration::from_secs(2))
+            .unwrap();
         let changed_path = dotenv_path.clone();
-        let changed_tracker = tracker.clone();
+        let changed_inputs = inputs.clone();
         let (third, third_hit) = cached_eval
             .eval(&key, &activity, || async move {
-                let values = load_dotenv_tracked(&[changed_path], false, &changed_tracker)?;
+                let values = load_dotenv_tracked(&[changed_path], false, changed_inputs.as_ref())?;
                 Ok::<_, miette::Error>(values["VALUE"].clone())
             })
             .await
             .unwrap();
         assert_eq!(third, "after");
         assert!(!third_hit);
+    }
+
+    #[sqlx::test]
+    async fn dotenv_substitution_change_before_store_refuses_stale_cache(pool: SqlitePool) {
+        use devenv_core::dotenv::load_dotenv_tracked;
+
+        let root = TempDir::new().unwrap();
+        let dotenv_path = root.path().join(".env");
+        let env_name = format!("DEVENV_PRECISE_INPUT_{}", std::process::id());
+        std::fs::write(&dotenv_path, format!("VALUE=${env_name}\n")).unwrap();
+        // SAFETY: This test uses a process-unique variable that no other test reads.
+        unsafe { std::env::set_var(&env_name, "before") };
+
+        let inputs = EvalInputTracker::new();
+        let cached_eval = CachedEval::with_cache_and_inputs(
+            CachingEvalService::new(pool),
+            NixLogBridge::new(),
+            CachingConfig::default(),
+            inputs.clone(),
+        );
+        let key = EvalCacheKey::from_test_string("(import /test {})", "config.dotenv.race");
+        let activity = devenv_activity::activity!(INFO, evaluate, "test");
+
+        let first_path = dotenv_path.clone();
+        let first_inputs = inputs.clone();
+        let changed_name = env_name.clone();
+        let (first, first_hit) = cached_eval
+            .eval(&key, &activity, || async move {
+                let values = load_dotenv_tracked(&[first_path], true, first_inputs.as_ref())?;
+                // SAFETY: See the process-unique variable note above.
+                unsafe { std::env::set_var(changed_name, "after") };
+                Ok::<_, miette::Error>(values["VALUE"].clone())
+            })
+            .await
+            .unwrap();
+        assert_eq!(first, "before");
+        assert!(!first_hit);
+
+        let second_path = dotenv_path.clone();
+        let second_inputs = inputs.clone();
+        let (second, second_hit) = cached_eval
+            .eval(&key, &activity, || async move {
+                let values = load_dotenv_tracked(&[second_path], true, second_inputs.as_ref())?;
+                Ok::<_, miette::Error>(values["VALUE"].clone())
+            })
+            .await
+            .unwrap();
+        assert_eq!(second, "after");
+        assert!(
+            !second_hit,
+            "the stale first result must not have been cached"
+        );
+
+        let (third, third_hit) = cached_eval
+            .eval(&key, &activity, || async {
+                Ok::<_, miette::Error>("should not run".to_owned())
+            })
+            .await
+            .unwrap();
+        assert_eq!(third, "after");
+        assert!(third_hit);
+
+        // SAFETY: Remove the process-unique variable created by this test.
+        unsafe { std::env::remove_var(env_name) };
     }
 
     /// Regression for #2745: if `devenv.nix` is modified while evaluation is
@@ -1620,7 +1724,7 @@ mod tests {
         assert!(!any_input_modified_after(&inputs, SystemTime::now()).await);
     }
 
-    /// The persistent `InputTracker` should observe every op dispatched
+    /// The persistent `EvalInputTracker` should observe every op dispatched
     /// through the bridge, across multiple evaluation scopes, without any
     /// lifecycle management in between. This is the invariant that makes
     /// per-attr DB rows record the union of session-wide file inputs.
@@ -1629,7 +1733,7 @@ mod tests {
         use devenv_core::eval_op::EvalOp;
         let bridge = NixLogBridge::new();
 
-        let tracker = InputTracker::new();
+        let tracker = EvalInputTracker::new();
         bridge.add_observer(tracker.clone());
 
         // First eval scope: bootstrap file

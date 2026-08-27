@@ -8050,6 +8050,10 @@ rec {
             packageId = "futures";
           }
           {
+            name = "hex";
+            packageId = "hex";
+          }
+          {
             name = "miette";
             packageId = "miette";
             features = [ "fancy" ];
@@ -8066,6 +8070,10 @@ rec {
           {
             name = "serde_json";
             packageId = "serde_json";
+          }
+          {
+            name = "sha2";
+            packageId = "sha2 0.11.0";
           }
           {
             name = "sqlx";

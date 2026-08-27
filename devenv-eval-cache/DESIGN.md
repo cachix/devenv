@@ -186,20 +186,22 @@ pub enum UncachedReason {
 
 ## Input Collection
 
-A single persistent `InputTracker` observes operations via `NixLogBridge`
-for the lifetime of the `CachedEval`. It is registered once at construction
-and accumulates every `EvalOp` dispatched through the bridge until the next
-`clear()` (invoked during hot-reload to drop stale entries).
+A single persistent `EvalInputTracker` collects both native Nix operations via
+`NixLogBridge` and ordinary file/env observations reported directly by
+primops. It lives for the lifetime of the `CachedEval` and accumulates input
+identities until the next `clear()` (invoked during hot-reload to drop stale
+entries). Primops may additionally report the exact hashed state they consumed
+so a parse-to-store change causes the cache store to be refused.
 
 ```rust
-// Registered inside CachedEval::with_cache / without_cache.
-let tracker = InputTracker::new();
+// Shared by the Nix log bridge, primops, and CachedEval.
+let tracker = EvalInputTracker::new();
 log_bridge.add_observer(tracker.clone());
 
 // ... multiple evaluations happen; tracker accumulates every op ...
 
 // At each cache-miss store:
-let inputs = tracker.snapshot_inputs(&config);
+let inputs = tracker.snapshot_inputs();
 
 // On hot-reload invalidation:
 tracker.clear();
@@ -212,6 +214,11 @@ effectively an input to every later attribute, so the "everything seen so
 far" set is the correct invalidation boundary. It also sidesteps Nix's
 internal `fileEvalCache`, whose cached and uncached evaluations are both
 reported as structured `evaluated-file` effects.
+
+On a cache hit, validated file/env descriptors are restored as identities,
+not retained as stale hashes. Identities from multiple attributes are merged
+(recursive path observation wins), and every later snapshot recaptures their
+current state. The same snapshot/change API is used around task execution.
 
 ### Observed Operations
 
@@ -233,7 +240,16 @@ Inputs are filtered before storage:
 - Skip `/nix/store/*` (immutable)
 - Skip non-absolute paths
 - Skip paths in `config.excluded_paths`
+- Skip environment variables in `config.excluded_envs`
 - Add paths from `config.extra_watch_paths`
+
+## Replayable Resources
+
+Evaluation side effects such as port allocations are registered separately in
+`EvalResourceRegistry`. Resources use stable type IDs and type-erased,
+serialized specs so the cache can snapshot, replay, and clear arbitrary
+`ReplayableResource` implementations without hardcoded dispatch. Empty
+resources are omitted from cache entries.
 
 ## Usage Flow
 
@@ -244,8 +260,9 @@ Inputs are filtered before storage:
 2. CachedEval.eval(key, || eval_fn())
    a. Check DB for key_hash → miss
    b. Run eval_fn() → JSON result
-   c. Snapshot the persistent InputTracker
-   d. Store (key_hash, inputs, result) in DB
+   c. Verify exact primop checkpoints and mid-eval file mtimes
+   d. Snapshot the persistent EvalInputTracker
+   e. Store (key_hash, inputs, result, resource specs) in DB
 3. Return (result, cache_hit=false)
 ```
 
@@ -257,7 +274,10 @@ Inputs are filtered before storage:
    a. Check DB for key_hash → found
    b. Load file_input and env_input rows
    c. Validate each input still matches
-   d. All valid → return cached JSON
+   d. Validate again immediately before resource replay
+   e. Replay registered resources
+   f. Validate once more after replay
+   g. Merge restored input identities and return cached JSON
 3. Return (result, cache_hit=true)
 ```
 

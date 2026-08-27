@@ -179,10 +179,9 @@ impl EnvInputDesc {
     /// Create a new EnvInputDesc by reading the current environment variable value.
     pub fn new(name: String) -> Result<Self, io::Error> {
         let value = std::env::var(&name).ok();
-        // Normalize: treat empty string same as not present (Nix semantics)
-        let content_hash = value
-            .filter(|v| !v.is_empty())
-            .map(|v| compute_string_hash(&v));
+        // Preserve presence separately from an empty value. Nix's getEnv does
+        // not distinguish them, but primops such as dotenv interpolation can.
+        let content_hash = value.map(|v| compute_string_hash(&v));
         Ok(Self { name, content_hash })
     }
 }
@@ -315,15 +314,10 @@ pub fn has_file_content_changed(file: &FileInputDesc) -> bool {
 
 /// Check if an environment variable has changed since it was cached.
 ///
-/// Note: In Nix, `builtins.getEnv "FOO"` returns "" for both unset and empty vars.
-/// We treat NotPresent and empty string as equivalent to match Nix semantics.
+/// Presence is preserved even for empty values because non-Nix input producers
+/// such as dotenv interpolation can distinguish empty from unset.
 pub fn check_env_state(env: &EnvInputDesc) -> io::Result<FileState> {
     let value = std::env::var(&env.name).ok();
-
-    // Normalize: treat empty string same as not present (Nix semantics)
-    let value = value.filter(|v| !v.is_empty());
-
-    // Compute hash of current value (None if not present or empty)
     let current_hash = value.map(|v| compute_string_hash(&v));
 
     if current_hash == env.content_hash {
@@ -634,5 +628,26 @@ mod tests {
         let duration_since_epoch = truncated_time.duration_since(UNIX_EPOCH).unwrap();
         // Test that sub-second precision is removed
         assert_eq!(duration_since_epoch.subsec_nanos(), 0);
+    }
+
+    #[test]
+    fn empty_environment_value_is_distinct_from_unset() {
+        let name = format!("DEVENV_EMPTY_INPUT_{}", std::process::id());
+        // SAFETY: This test uses a process-unique variable that no other test reads.
+        unsafe { std::env::remove_var(&name) };
+        let missing = EnvInputDesc::new(name.clone()).unwrap();
+        // SAFETY: See the process-unique variable note above.
+        unsafe { std::env::set_var(&name, "") };
+        let empty = EnvInputDesc::new(name.clone()).unwrap();
+
+        assert_eq!(missing.content_hash, None);
+        assert!(empty.content_hash.is_some());
+        assert!(matches!(
+            check_env_state(&missing),
+            Ok(FileState::Modified { .. })
+        ));
+
+        // SAFETY: Remove the process-unique variable created by this test.
+        unsafe { std::env::remove_var(name) };
     }
 }

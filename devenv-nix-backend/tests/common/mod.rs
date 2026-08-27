@@ -10,11 +10,11 @@ use std::sync::Arc;
 
 use devenv_core::{
     BootstrapArgs, CacheOptions, CacheSettings, CliOptionsConfig, Config, DevenvPaths, NixArgs,
-    NixOptions, NixSettings, PortAllocator, StoreSettings, default_system, dotenv::DotenvTracker,
+    NixOptions, NixSettings, PortAllocator, StoreSettings, default_system,
     paths::DEFAULT_LOCK_FILE,
 };
-use devenv_eval_cache::{EvalContext, EvalInputManager, ResourceManager};
-use devenv_nix_backend::{AllocatePortPrimop, LoadDotenvPrimop, NixCBackend, PrimopRegistry};
+use devenv_eval_cache::EvalInputTracker;
+use devenv_nix_backend::{DotenvPlugin, NixCBackend, NixEvalSetup, PortAllocationPlugin};
 use tempfile::TempDir;
 
 /// Default `devenv.yaml` for tests that don't care about flake input details.
@@ -176,7 +176,7 @@ pub fn bump_local_flake(dir: &Path, marker: &str) {
 pub struct TestEnv {
     pub temp_dir: TempDir,
     pub backend: NixCBackend,
-    pub eval_inputs: Arc<EvalInputManager>,
+    pub eval_inputs: Arc<EvalInputTracker>,
     pub config: Config,
     pub paths: DevenvPaths,
     _cwd_guard: CwdGuard,
@@ -366,7 +366,7 @@ fn init_backend_with_inputs(
     paths: DevenvPaths,
     config: Config,
     nix_cli: NixOptions,
-) -> miette::Result<(NixCBackend, Arc<EvalInputManager>)> {
+) -> miette::Result<(NixCBackend, Arc<EvalInputTracker>)> {
     let nix_settings = NixSettings::resolve(nix_cli, &config);
     let cache_settings = CacheSettings::resolve(CacheOptions::default());
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
@@ -379,17 +379,12 @@ fn init_backend_with_inputs(
 
     let bootstrap_args = test_bootstrap_args(&paths, &config);
     let port_allocator = Arc::new(PortAllocator::new());
-    let dotenv_tracker = Arc::new(DotenvTracker::default());
-    let mut inputs = EvalInputManager::new();
-    inputs.register(dotenv_tracker.clone());
-    let inputs = Arc::new(inputs);
-    let context = EvalContext::new(
-        Arc::new(ResourceManager::new(port_allocator.clone())),
-        inputs.clone(),
-    );
-    let mut primops = PrimopRegistry::new();
-    primops.add(LoadDotenvPrimop::new(paths.root.clone(), dotenv_tracker));
-    primops.add(AllocatePortPrimop::new(port_allocator.clone()));
+    let mut eval_setup = NixEvalSetup::new();
+    eval_setup
+        .install(DotenvPlugin::new(paths.root.clone()))
+        .install(PortAllocationPlugin::new(port_allocator));
+    let inputs = eval_setup.inputs();
+    let (primops, context) = eval_setup.finish();
 
     let backend = NixCBackend::new(
         paths,
@@ -401,7 +396,6 @@ fn init_backend_with_inputs(
         fetchers_settings,
         gc_registration,
         Arc::new(bootstrap_args),
-        port_allocator,
         primops,
         context,
         None,

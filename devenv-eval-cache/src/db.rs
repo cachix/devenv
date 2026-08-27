@@ -486,7 +486,7 @@ where
 pub async fn insert_resource_specs<'a, A>(
     conn: A,
     eval_id: i64,
-    specs: &[crate::resource_manager::ResourceSpec],
+    specs: &[crate::resource_manager::EvalResourceSpec],
 ) -> Result<(), sqlx::Error>
 where
     A: Acquire<'a, Database = Sqlite>,
@@ -841,7 +841,7 @@ mod tests {
         insert_resource_specs(
             &pool,
             eval_id_with,
-            &[crate::resource_manager::ResourceSpec {
+            &[crate::resource_manager::EvalResourceSpec {
                 type_id: "port".to_string(),
                 data: serde_json::json!({"port": 8080}),
             }],

@@ -628,13 +628,13 @@ async fn test_dotenv_input_change_detection() {
         .dev_env(false, &gc_root)
         .await
         .expect("evaluate dotenv-enabled shell");
-    let snapshot = env.eval_inputs.snapshot().unwrap();
+    let snapshot = env.eval_inputs.snapshot_inputs();
 
     assert!(!snapshot.is_empty());
-    assert!(!env.eval_inputs.changed(&snapshot).unwrap());
+    assert!(!env.eval_inputs.inputs_changed(&snapshot).unwrap());
 
     std::fs::write(env.path().join(".env"), "VALUE=after\n").expect("modify dotenv file");
-    assert!(env.eval_inputs.changed(&snapshot).unwrap());
+    assert!(env.eval_inputs.inputs_changed(&snapshot).unwrap());
 }
 
 // ============================================================================
@@ -1002,7 +1002,7 @@ fn evaluated_files(ops: &[EvalOp]) -> std::collections::HashSet<PathBuf> {
         .collect()
 }
 
-/// The persistent `InputTracker` must accumulate file deps across attribute
+/// The persistent `EvalInputTracker` must accumulate file deps across attribute
 /// evaluations. Nix reports both cached and uncached file evaluations as
 /// structured effects, and the tracker is the only place those dependencies
 /// survive across attribute evaluations. This invariant keeps later attrs' DB rows
@@ -1011,10 +1011,7 @@ fn evaluated_files(ops: &[EvalOp]) -> std::collections::HashSet<PathBuf> {
 #[nix_test]
 async fn test_input_tracker_accumulates_across_evals() {
     let env = TestEnv::new().await;
-    let tracker = env
-        .backend
-        .input_tracker()
-        .expect("input_tracker available");
+    let tracker = env.backend.eval_inputs().expect("input_tracker available");
 
     env.backend
         .eval(&["config.devenv.root"])
@@ -1052,10 +1049,7 @@ async fn test_nested_import_tracked_across_evals() {
         .build()
         .await;
 
-    let tracker = env
-        .backend
-        .input_tracker()
-        .expect("input_tracker available");
+    let tracker = env.backend.eval_inputs().expect("input_tracker available");
 
     // macOS may not auto-canonicalize through /private; suffix-match.
     let has_nested_child = |files: &std::collections::HashSet<PathBuf>| {

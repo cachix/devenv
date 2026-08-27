@@ -24,7 +24,7 @@
 //! let backend = NixCBackend::new(
 //!     paths, nix_settings, cache_settings, nixpkgs_config,
 //!     store, flake_settings, fetchers_settings, _gc,
-//!     bootstrap_args, port_allocator, eval_cache_pool, logger_setup,
+//!     bootstrap_args, primops, eval_context, eval_cache_pool, logger_setup,
 //! )?;
 //! ```
 
@@ -47,7 +47,7 @@ use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
 use devenv_core::realized::RealizedPathsObserver;
 use devenv_core::store::Store as StoreTrait;
 use devenv_core::store::StorePath as CoreStorePath;
-use devenv_core::{CacheSettings, DevenvPaths, NixSettings, PortAllocator, StoreSettings};
+use devenv_core::{CacheSettings, DevenvPaths, NixSettings, StoreSettings};
 use devenv_eval_cache::{
     self, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, EvalCacheKey,
     EvalContext,
@@ -154,7 +154,6 @@ pub struct NixCBackend {
     eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
 
     bootstrap_args: Arc<BootstrapArgs>,
-    port_allocator: Arc<PortAllocator>,
     primops: PrimopRegistry,
 
     cached_devenv_value: Mutex<Option<nix_bindings_expr::value::Value>>,
@@ -243,14 +242,11 @@ fn parse_logical_store_path(
 
 fn cache_key_for(
     bootstrap_args: &BootstrapArgs,
-    port_allocator: &PortAllocator,
+    primops: &PrimopRegistry,
     attr_name: &str,
 ) -> EvalCacheKey {
-    let cache_key_args = eval_cache_key_args(
-        bootstrap_args.as_str(),
-        port_allocator.is_enabled(),
-        port_allocator.is_strict(),
-    );
+    let cache_key_args =
+        eval_cache_key_args(bootstrap_args.as_str(), &primops.cache_key_fragment());
     EvalCacheKey::from_nix_args_str(&cache_key_args, attr_name)
 }
 
@@ -292,7 +288,6 @@ impl NixCBackend {
         fetchers_settings: FetchersSettings,
         gc_registration: ThreadRegistrationGuard,
         bootstrap_args: Arc<BootstrapArgs>,
-        port_allocator: Arc<PortAllocator>,
         primops: PrimopRegistry,
         eval_context: EvalContext,
         eval_cache_pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
@@ -334,7 +329,6 @@ impl NixCBackend {
             nix_log_bridge,
             eval_cache_pool,
             bootstrap_args,
-            port_allocator,
             primops,
             cached_devenv_value: Mutex::new(None),
             devenv_value_invalidated: Arc::new(AtomicBool::new(false)),
@@ -357,8 +351,7 @@ impl NixCBackend {
         }
         let cache_key_args = eval_cache_key_args(
             self.bootstrap_args.as_str(),
-            self.port_allocator.is_enabled(),
-            self.port_allocator.is_strict(),
+            &self.primops.cache_key_fragment(),
         );
 
         let cached_eval = if let Some(pool_cell) = &self.eval_cache_pool {
@@ -374,26 +367,36 @@ impl NixCBackend {
                 };
                 let service = CachingEvalService::with_config(pool.clone(), config.clone());
                 let invalidation_flag = self.devenv_value_invalidated.clone();
-                CachedEval::with_cache(service, self.nix_log_bridge.clone(), config)
-                    .with_on_cached_state_invalidation(Arc::new(move || {
-                        invalidation_flag.store(true, Ordering::Release);
-                    }))
+                CachedEval::with_cache_and_inputs(
+                    service,
+                    self.nix_log_bridge.clone(),
+                    config,
+                    eval_context.inputs().clone(),
+                )
+                .with_on_cached_state_invalidation(Arc::new(move || {
+                    invalidation_flag.store(true, Ordering::Release);
+                }))
             } else {
-                CachedEval::without_cache(self.nix_log_bridge.clone())
+                CachedEval::without_cache_and_inputs(
+                    self.nix_log_bridge.clone(),
+                    eval_context.inputs().clone(),
+                )
             }
         } else {
-            CachedEval::without_cache(self.nix_log_bridge.clone())
+            CachedEval::without_cache_and_inputs(
+                self.nix_log_bridge.clone(),
+                eval_context.inputs().clone(),
+            )
         }
-        .with_resource_manager(eval_context.resources().clone())
-        .with_eval_inputs(eval_context.inputs().clone());
+        .with_resources(eval_context.resources().clone());
 
         let caching_eval_state =
             CachingEvalState::new(self.eval_state.clone(), cached_eval, cache_key_args);
         let _ = self.caching_eval_state.set(caching_eval_state);
     }
 
-    fn cache_key(&self, attr_name: &str) -> EvalCacheKey {
-        cache_key_for(&self.bootstrap_args, &self.port_allocator, attr_name)
+    pub fn cache_key(&self, attr_name: &str) -> EvalCacheKey {
+        cache_key_for(&self.bootstrap_args, &self.primops, attr_name)
     }
 
     pub fn paths(&self) -> &DevenvPaths {
@@ -734,7 +737,7 @@ impl NixCBackend {
                             if drv_exists && out_exists {
                                 match caching_state
                                     .cached_eval()
-                                    .try_restore_cached_state(cached.eval_id)
+                                    .try_restore_cached_state(&cached)
                                     .await
                                 {
                                     Ok(()) => Some(paths),
@@ -1138,7 +1141,6 @@ impl NixCBackend {
             .take();
 
         if let Some(state) = self.caching_eval_state.get() {
-            state.cached_eval().input_tracker().clear();
             state.cached_eval().clear_eval_inputs();
         }
 
@@ -1169,10 +1171,10 @@ impl NixCBackend {
     }
 
     #[cfg(feature = "test-nix-store")]
-    pub fn input_tracker(&self) -> Option<&Arc<devenv_eval_cache::InputTracker>> {
+    pub fn eval_inputs(&self) -> Option<&Arc<devenv_eval_cache::EvalInputTracker>> {
         self.caching_eval_state
             .get()
-            .map(|state| state.cached_eval().input_tracker())
+            .map(|state| state.cached_eval().eval_inputs())
     }
 }
 
@@ -1229,7 +1231,7 @@ impl Evaluator for NixCBackend {
                             if std::path::Path::new(&path_str).exists() {
                                 match caching_state
                                     .cached_eval()
-                                    .try_restore_cached_state(cached.eval_id)
+                                    .try_restore_cached_state(&cached)
                                     .await
                                 {
                                     Ok(()) => Some(path_str),
@@ -1607,9 +1609,12 @@ pub fn apply_nix_settings(nix_settings: &NixSettings) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::{
         cache_key_for, core_config_watch_paths, logical_store_path_str, write_nixpkgs_config,
     };
+    use crate::primops::{AllocatePortPrimop, PrimopRegistry};
     use devenv_core::{PortAllocator, bootstrap_args::BootstrapArgs, config::NixpkgsConfig};
     use serde::Serialize;
     use tempfile::TempDir;
@@ -1639,13 +1644,15 @@ mod tests {
     #[test]
     fn cache_key_reflects_current_port_allocator_mode() {
         let args = BootstrapArgs::from_serializable(&TinyArgs { version: "test" }).unwrap();
-        let allocator = PortAllocator::new();
+        let allocator = Arc::new(PortAllocator::new());
+        let mut primops = PrimopRegistry::new();
+        primops.add(AllocatePortPrimop::new(allocator.clone()));
 
-        let shell_key = cache_key_for(&args, &allocator, "shell");
+        let shell_key = cache_key_for(&args, &primops, "shell");
         allocator.set_enabled(true);
-        let up_key = cache_key_for(&args, &allocator, "shell");
+        let up_key = cache_key_for(&args, &primops, "shell");
         allocator.set_strict(true);
-        let strict_key = cache_key_for(&args, &allocator, "shell");
+        let strict_key = cache_key_for(&args, &primops, "shell");
 
         assert_ne!(shell_key.key_hash, up_key.key_hash);
         assert_ne!(up_key.key_hash, strict_key.key_hash);

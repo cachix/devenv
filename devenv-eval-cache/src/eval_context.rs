@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::{EvalInputManager, ResourceManager};
+use crate::{EvalInputTracker, EvalResourceRegistry};
 
 /// State managers used by evaluation extensions and the eval cache.
 ///
@@ -11,20 +11,20 @@ use crate::{EvalInputManager, ResourceManager};
 /// inputs, which are observed and validated.
 #[derive(Clone)]
 pub struct EvalContext {
-    resources: Arc<ResourceManager>,
-    inputs: Arc<EvalInputManager>,
+    resources: Arc<EvalResourceRegistry>,
+    inputs: Arc<EvalInputTracker>,
 }
 
 impl EvalContext {
-    pub fn new(resources: Arc<ResourceManager>, inputs: Arc<EvalInputManager>) -> Self {
+    pub fn new(resources: Arc<EvalResourceRegistry>, inputs: Arc<EvalInputTracker>) -> Self {
         Self { resources, inputs }
     }
 
-    pub fn resources(&self) -> &Arc<ResourceManager> {
+    pub fn resources(&self) -> &Arc<EvalResourceRegistry> {
         &self.resources
     }
 
-    pub fn inputs(&self) -> &Arc<EvalInputManager> {
+    pub fn inputs(&self) -> &Arc<EvalInputTracker> {
         &self.inputs
     }
 }

@@ -44,56 +44,19 @@ pub trait ReplayableResource: Send + Sync {
     /// Called after evaluation completes.
     fn snapshot(&self) -> Self::Spec;
 
+    /// Return whether this resource has acquired any state during the current
+    /// evaluation.
+    ///
+    /// Empty resources are omitted from cache entries. This lets a registry
+    /// handle resource types generically without knowing their spec shape.
+    fn is_empty(&self) -> bool;
+
     /// Replay allocations from a cached spec.
     /// Called on cache hit before returning cached result.
     /// Returns Ok(()) if all resources re-acquired, Err if any unavailable.
     fn replay(&self, spec: &Self::Spec) -> Result<(), ReplayError>;
 
     /// Clear all allocations (for fresh eval after replay failure).
-    fn clear(&self);
-}
-
-/// An external input observed while evaluating Nix.
-///
-/// Unlike a [`ReplayableResource`], an input is not acquired. It is validated
-/// before a cached value is reused and restored into the live tracker after a
-/// cache hit so later orchestration can validate the same dependency set.
-pub trait EvalInput: Send + Sync {
-    /// The serializable state needed to validate this input later.
-    type Spec: Clone + Serialize + DeserializeOwned + Send + Sync;
-
-    /// Unique type identifier used for cache storage and dispatch.
-    const TYPE_ID: &'static str;
-
-    /// Snapshot the inputs observed by the current evaluation.
-    fn snapshot(&self) -> Self::Spec;
-
-    /// Return whether this input observed anything during the current
-    /// evaluation.
-    ///
-    /// Empty inputs do not need to be persisted with a cached evaluation.
-    fn is_empty(&self) -> bool;
-
-    /// Return whether a previously-recorded input state has changed.
-    ///
-    /// Errors describe a failure to inspect the input and are distinct from a
-    /// successfully determined change.
-    fn changed(&self, spec: &Self::Spec) -> Result<bool, ReplayError>;
-
-    /// Validate a previous snapshot without changing live state.
-    fn validate(&self, spec: &Self::Spec) -> Result<(), ReplayError> {
-        if self.changed(spec)? {
-            return Err(ReplayError::Unavailable(
-                "eval inputs changed since the cached eval".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    /// Validate and restore a cached snapshot into the live tracker.
-    fn restore(&self, spec: &Self::Spec) -> Result<(), ReplayError>;
-
-    /// Clear inputs recorded by the current evaluation session.
     fn clear(&self);
 }
 
@@ -111,10 +74,6 @@ pub enum ReplayError {
     /// Serialization/deserialization error.
     #[error("Serialization error: {0}")]
     Serialization(String),
-
-    /// An eval input could not be inspected for validation.
-    #[error("Eval input error: {0}")]
-    Input(String),
 }
 
 #[cfg(test)]
@@ -141,6 +100,10 @@ mod tests {
             TestSpec {
                 values: values.clone(),
             }
+        }
+
+        fn is_empty(&self) -> bool {
+            self.values.lock().unwrap().is_empty()
         }
 
         fn replay(&self, spec: &TestSpec) -> Result<(), ReplayError> {
