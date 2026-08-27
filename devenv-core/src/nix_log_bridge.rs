@@ -21,6 +21,7 @@
 //!
 //! This guard-based API ensures eval scopes are always properly closed.
 
+use arc_swap::ArcSwap;
 use devenv_activity::{
     Activity, ActivityLevel, ExpectedCategory, FetchKind, append_eval_log, append_eval_op, message,
     message_with_details, set_expected,
@@ -28,6 +29,7 @@ use devenv_activity::{
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tracing::{error, trace, warn};
 
@@ -35,15 +37,6 @@ use crate::eval_op::{EvalOp, OpObserver};
 use crate::internal_log::{
     ActivityType, Field, InternalLog, NixMessageKind, ResultType, Verbosity,
 };
-
-/// State for tracking the current evaluation activity.
-///
-/// The bridge stores only the activity ID, not the Activity itself.
-/// The caller owns the Activity and controls its lifecycle.
-struct EvalActivityState {
-    /// The current evaluation activity ID, used for logging evaluation effects.
-    current_eval_id: Option<u64>,
-}
 
 /// Tracks per-activity expected counts and computes category totals.
 ///
@@ -94,10 +87,10 @@ impl ExpectedCountTracker {
 pub struct NixLogBridge {
     /// Current active operations and their associated Nix activities (Build, Fetch, etc.)
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
-    /// State for the current evaluation activity (lazy creation + re-entrancy)
-    eval_state: Mutex<EvalActivityState>,
+    /// Current evaluation activity ID. Zero means no active evaluation.
+    current_eval_id: AtomicU64,
     /// Observers for file/env operations during eval (used by caching systems)
-    observers: Mutex<Vec<Arc<dyn OpObserver>>>,
+    observers: ArcSwap<Vec<Arc<dyn OpObserver>>>,
     /// Error messages to be printed after TUI exits, before entering REPL
     pre_repl_errors: Mutex<Vec<String>>,
     expected_counts: Mutex<ExpectedCountTracker>,
@@ -130,10 +123,8 @@ impl NixLogBridge {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
-            eval_state: Mutex::new(EvalActivityState {
-                current_eval_id: None,
-            }),
-            observers: Mutex::new(Vec::new()),
+            current_eval_id: AtomicU64::new(0),
+            observers: ArcSwap::from_pointee(Vec::new()),
             pre_repl_errors: Mutex::new(Vec::new()),
             expected_counts: Mutex::new(ExpectedCountTracker::default()),
         })
@@ -167,9 +158,11 @@ impl NixLogBridge {
     /// Observers are notified of file/env operations (EvalOp) as they are parsed
     /// from Nix log messages. This is used by caching systems to track dependencies.
     pub fn add_observer(&self, observer: Arc<dyn OpObserver>) {
-        if let Ok(mut guard) = self.observers.lock() {
-            guard.push(observer);
-        }
+        self.observers.rcu(|current| {
+            let mut next = (**current).clone();
+            next.push(Arc::clone(&observer));
+            next
+        });
     }
 
     /// Remove a previously-added observer by `Arc` identity.
@@ -179,9 +172,13 @@ impl NixLogBridge {
     /// Nix FFI call). Production code that needs a permanent observer should
     /// register it once at construction and leave it in place.
     pub fn remove_observer(&self, observer: &Arc<dyn OpObserver>) {
-        if let Ok(mut guard) = self.observers.lock() {
-            guard.retain(|o| !Arc::ptr_eq(o, observer));
-        }
+        self.observers.rcu(|current| {
+            current
+                .iter()
+                .filter(|candidate| !Arc::ptr_eq(candidate, observer))
+                .cloned()
+                .collect::<Vec<_>>()
+        });
     }
 
     /// Clear all observers.
@@ -190,9 +187,7 @@ impl NixLogBridge {
     /// scenarios. Production code registers long-lived observers at
     /// construction and lets them live for the bridge's lifetime.
     pub fn clear_observers(&self) {
-        if let Ok(mut guard) = self.observers.lock() {
-            guard.clear();
-        }
+        self.observers.store(Arc::new(Vec::new()));
     }
 
     /// Begin an evaluation scope.
@@ -200,8 +195,11 @@ impl NixLogBridge {
     /// Returns a guard that calls `end_eval` when dropped.
     /// The caller owns the Activity and controls its lifecycle.
     pub fn begin_eval(&self, activity_id: u64) -> EvalActivityGuard<'_> {
-        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
-        state.current_eval_id = Some(activity_id);
+        debug_assert_ne!(
+            activity_id, 0,
+            "activity IDs use zero as the empty sentinel"
+        );
+        self.current_eval_id.store(activity_id, Ordering::Release);
         // Scope recorded errors to this eval, so the pre-REPL replay shows
         // only this eval's failures, not ones left over from an earlier eval
         // or store init.
@@ -213,8 +211,7 @@ impl NixLogBridge {
 
     /// End the current evaluation scope (called by EvalActivityGuard on drop).
     fn end_eval(&self) {
-        let mut state = self.eval_state.lock().expect("eval_state mutex poisoned");
-        state.current_eval_id = None;
+        self.current_eval_id.store(0, Ordering::Release);
     }
 
     /// Get the parent activity ID for Nix activities.
@@ -224,9 +221,9 @@ impl NixLogBridge {
     /// during `apply_cachix_substituters()` (no eval session) to nest under
     /// the current phase activity (e.g., "Configuring shell").
     fn get_parent_activity_id(&self) -> Option<u64> {
-        let state = self.eval_state.lock().expect("eval_state mutex poisoned");
-        state
-            .current_eval_id
+        let id = self.current_eval_id.load(Ordering::Acquire);
+        (id != 0)
+            .then_some(id)
             .or_else(devenv_activity::current_activity_id)
     }
 
@@ -265,16 +262,6 @@ impl NixLogBridge {
                 fields,
                 ..
             } => {
-                // Eval dependencies are structured activities, so cache tracking
-                // and the UI do not depend on Nix's human-readable log output.
-                if let Some(op) = EvalOp::from_activity(typ, &fields) {
-                    if let Ok(guard) = self.observers.lock() {
-                        for observer in guard.iter() {
-                            observer.record(op.clone());
-                        }
-                    }
-                    self.op_to_current_eval(op);
-                }
                 self.handle_activity_start(id, typ, text, fields);
             }
             InternalLog::Stop { id } => {
@@ -310,7 +297,7 @@ impl NixLogBridge {
                     NixMessageKind::Warning => {
                         // TODO: Nix warnings need better handling
                         // Nix prints lots of warnings for innocuous things, e.g. ignored settings.
-                        let id = devenv_activity::current_activity_id().unwrap_or(0);
+                        let id = self.get_parent_activity_id().unwrap_or(0);
                         append_eval_log(id, msg);
                         warn!("{msg}");
                     }
@@ -330,13 +317,28 @@ impl NixLogBridge {
                         if activity_level <= ActivityLevel::Warn {
                             message(activity_level, msg);
                         } else {
-                            let id = devenv_activity::current_activity_id().unwrap_or(0);
+                            let id = self.get_parent_activity_id().unwrap_or(0);
                             append_eval_log(id, msg);
                         }
                     }
                 }
             }
         }
+    }
+
+    /// Process a dependency received from Nix's dedicated one-shot callback.
+    pub fn process_eval_effect(&self, kind: &str, subject: &str, detail: Option<&str>) {
+        if let Some(op) = EvalOp::from_effect(kind, subject, detail) {
+            self.process_eval_op(op);
+        }
+    }
+
+    fn process_eval_op(&self, op: EvalOp) {
+        let observers = self.observers.load();
+        for observer in observers.iter() {
+            observer.record(op.clone());
+        }
+        self.op_to_current_eval(op);
     }
 
     /// Insert an activity into the active activities map
@@ -642,11 +644,10 @@ impl NixLogBridge {
     /// Returns `true` if the op was attached to some activity, `false` if
     /// there is nothing to attach to (caller should fall back to `message()`).
     fn op_to_current_eval(&self, op: EvalOp) -> bool {
-        let id = {
-            let state = self.eval_state.lock().expect("eval_state mutex poisoned");
-            state.current_eval_id
-        };
-        let target = id.or_else(devenv_activity::current_activity_id);
+        let id = self.current_eval_id.load(Ordering::Acquire);
+        let target = (id != 0)
+            .then_some(id)
+            .or_else(devenv_activity::current_activity_id);
 
         let Some(id) = target else {
             return false;
@@ -674,7 +675,6 @@ pub fn activity_type_from_str(s: &str) -> ActivityType {
         "post-build-hook" => ActivityType::PostBuildHook,
         "build-waiting" => ActivityType::BuildWaiting,
         "fetch-tree" => ActivityType::FetchTree,
-        "eval-effect" => ActivityType::EvalEffect,
         _ => ActivityType::Unknown,
     }
 }
@@ -788,17 +788,6 @@ mod tests {
         }
     }
 
-    fn eval_effect(id: u64, fields: Vec<Field>) -> InternalLog {
-        InternalLog::Start {
-            id,
-            level: Verbosity::Info,
-            typ: ActivityType::EvalEffect,
-            text: String::new(),
-            parent: 0,
-            fields,
-        }
-    }
-
     #[test]
     fn process_internal_log_records_real_errors() {
         let bridge = NixLogBridge::new();
@@ -890,10 +879,6 @@ mod tests {
             ActivityType::Substitute
         );
         assert_eq!(activity_type_from_str("copy-path"), ActivityType::CopyPath);
-        assert_eq!(
-            activity_type_from_str("eval-effect"),
-            ActivityType::EvalEffect
-        );
         assert_eq!(
             activity_type_from_str("unknown-type"),
             ActivityType::Unknown
@@ -1051,20 +1036,14 @@ mod tests {
         let observer = MockObserver::new();
         bridge.add_observer(observer.clone());
 
-        bridge.process_internal_log(eval_effect(
-            1,
-            vec![
-                Field::String("evaluated-file".into()),
-                Field::String("/tmp/default.nix".into()),
-                Field::String("uncached".into()),
-            ],
-        ));
+        bridge.process_eval_effect("evaluated-file", "/tmp/default.nix", Some("uncached"));
 
         assert_eq!(observer.collected_ops().len(), 1);
         assert_eq!(
             observer.collected_ops()[0],
             EvalOp::EvaluatedFile {
-                source: "/tmp/default.nix".into()
+                source: "/tmp/default.nix".into(),
+                cached: false,
             }
         );
     }
@@ -1077,14 +1056,7 @@ mod tests {
         bridge.add_observer(obs1.clone());
         bridge.add_observer(obs2.clone());
 
-        bridge.process_internal_log(eval_effect(
-            1,
-            vec![
-                Field::String("evaluated-file".into()),
-                Field::String("/tmp/default.nix".into()),
-                Field::String("uncached".into()),
-            ],
-        ));
+        bridge.process_eval_effect("evaluated-file", "/tmp/default.nix", Some("uncached"));
 
         assert_eq!(obs1.collected_ops().len(), 1);
         assert_eq!(obs2.collected_ops().len(), 1);
@@ -1097,14 +1069,7 @@ mod tests {
         bridge.add_observer(observer.clone());
         bridge.clear_observers();
 
-        bridge.process_internal_log(eval_effect(
-            1,
-            vec![
-                Field::String("evaluated-file".into()),
-                Field::String("/tmp/default.nix".into()),
-                Field::String("uncached".into()),
-            ],
-        ));
+        bridge.process_eval_effect("evaluated-file", "/tmp/default.nix", Some("uncached"));
 
         assert_eq!(observer.collected_ops().len(), 0);
     }

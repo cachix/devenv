@@ -2468,6 +2468,7 @@ dependencies = [
 name = "devenv-activity"
 version = "2.2.3"
 dependencies = [
+ "arc-swap",
  "devenv-activity-macros",
  "humantime",
  "serde",
@@ -2509,6 +2510,7 @@ dependencies = [
 name = "devenv-core"
 version = "2.2.3"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "clap",
  "devenv-activity",

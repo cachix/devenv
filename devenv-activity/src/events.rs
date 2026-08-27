@@ -177,7 +177,11 @@ pub enum EvalOp {
         target: std::path::PathBuf,
     },
     /// Evaluated a Nix file.
-    EvaluatedFile { source: std::path::PathBuf },
+    EvaluatedFile {
+        source: std::path::PathBuf,
+        #[serde(default)]
+        cached: bool,
+    },
     /// Read a file's contents with `builtins.readFile`.
     ReadFile { source: std::path::PathBuf },
     /// List a directory's contents with `builtins.readDir`.
@@ -210,8 +214,9 @@ impl fmt::Display for EvalOp {
                 source.display(),
                 target.display()
             ),
-            EvalOp::EvaluatedFile { source } => {
-                write!(f, "evaluating file '{}'", source.display())
+            EvalOp::EvaluatedFile { source, cached } => {
+                let cached = if *cached { " (cached)" } else { "" };
+                write!(f, "evaluating file '{}'{cached}", source.display())
             }
             EvalOp::ReadFile { source } => write!(f, "readFile: '{}'", source.display()),
             EvalOp::ReadDir { source } => write!(f, "readDir: '{}'", source.display()),
@@ -721,6 +726,26 @@ mod tests {
                 _ => panic!("Expected Fetch::Start"),
             }
         }
+    }
+
+    #[test]
+    fn evaluated_file_serialization_preserves_cache_state() {
+        let cached = EvalOp::EvaluatedFile {
+            source: "/project/default.nix".into(),
+            cached: true,
+        };
+        let json = serde_json::to_string(&cached).unwrap();
+        assert!(json.contains(r#""cached":true"#));
+        assert_eq!(serde_json::from_str::<EvalOp>(&json).unwrap(), cached);
+
+        let legacy = r#"{"kind":"evaluated_file","source":"/project/default.nix"}"#;
+        assert_eq!(
+            serde_json::from_str::<EvalOp>(legacy).unwrap(),
+            EvalOp::EvaluatedFile {
+                source: "/project/default.nix".into(),
+                cached: false,
+            }
+        );
     }
 
     #[test]

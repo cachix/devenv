@@ -845,6 +845,7 @@ mod tests {
                 1,
                 devenv_activity::EvalOp::EvaluatedFile {
                     source: format!("/nix/store/abc-source/{source}").into(),
+                    cached: false,
                 },
             ));
         }

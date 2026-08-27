@@ -91,7 +91,7 @@ pub struct TaskActivity {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct EvaluatingActivity {
-    pub files_evaluated: usize,
+    pub files_read: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -618,25 +618,21 @@ impl ActivityModel {
                 self.handle_activity_log(id, line, false);
             }
             Evaluate::Op { id, op, .. } => {
-                // Log the op to the activity's log buffer
-                let line = op.to_string();
-                self.log_to_activity(id, line);
-
-                // Count file read operations for the progress display.
-                // Excludes recursively tracked sources, ReadDir, GetEnv.
-                let is_file_read = matches!(
+                // The progress count is derived only from structured Nix
+                // effects, never from their human-readable rendering.
+                let counts_as_file_read = matches!(
                     op,
-                    EvalOp::EvaluatedFile { .. }
+                    EvalOp::EvaluatedFile { cached: false, .. }
                         | EvalOp::ReadFile { .. }
                         | EvalOp::ReadFileType { .. }
                         | EvalOp::HashFile { .. }
                         | EvalOp::PathExists { .. }
                 );
-                if is_file_read
+                if counts_as_file_read
                     && let Some(activity) = self.activities.get_mut(&id)
                     && let ActivityVariant::Evaluating(eval) = &mut activity.variant
                 {
-                    eval.files_evaluated += 1;
+                    eval.files_read += 1;
                 }
             }
         }
@@ -1838,6 +1834,87 @@ mod tests {
             expected,
             timestamp: Timestamp::now(),
         }
+    }
+
+    fn files_read(model: &ActivityModel, id: u64) -> usize {
+        let activity = model.activities.get(&id).expect("evaluation activity");
+        let ActivityVariant::Evaluating(evaluating) = &activity.variant else {
+            panic!("activity {id} is not an evaluation");
+        };
+        evaluating.files_read
+    }
+
+    #[test]
+    fn eval_file_count_classifies_structured_effects() {
+        let mut model = ActivityModel::default();
+        let id = 42;
+
+        model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
+            id,
+            name: "Evaluating shell".to_string(),
+            level: ActivityLevel::Info,
+            parent: None,
+            timestamp: Timestamp::now(),
+        }));
+
+        let counted_effects = [
+            EvalOp::EvaluatedFile {
+                source: "/project/devenv.nix".into(),
+                cached: false,
+            },
+            EvalOp::ReadFile {
+                source: "/project/.env".into(),
+            },
+            EvalOp::ReadFileType {
+                source: "/project/config".into(),
+            },
+            EvalOp::HashFile {
+                source: "/project/source".into(),
+                algorithm: "sha256".to_string(),
+            },
+            EvalOp::PathExists {
+                source: "/project/devenv.local.nix".into(),
+            },
+        ];
+        for op in counted_effects {
+            model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Op {
+                id,
+                op,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        assert_eq!(files_read(&model, id), 5);
+        assert_eq!(model.get_log_line_count(id), 0);
+
+        let non_file_effects = [
+            EvalOp::EvaluatedFile {
+                source: "/project/devenv.nix".into(),
+                cached: true,
+            },
+            EvalOp::ReadDir {
+                source: "/project".into(),
+            },
+            EvalOp::GetEnv {
+                name: "HOME".to_string(),
+            },
+            EvalOp::CopiedSource {
+                source: "/project".into(),
+                target: "/nix/store/source".into(),
+            },
+            EvalOp::FilteredSource {
+                source: "/project".into(),
+                target: "/nix/store/filtered-source".into(),
+            },
+        ];
+        for op in non_file_effects {
+            model.apply_activity_event(ActivityEvent::Evaluate(Evaluate::Op {
+                id,
+                op,
+                timestamp: Timestamp::now(),
+            }));
+        }
+        assert_eq!(files_read(&model, id), 5);
+        assert_eq!(model.get_log_line_count(id), 0);
     }
 
     #[test]

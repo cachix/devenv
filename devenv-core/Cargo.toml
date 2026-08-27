@@ -8,6 +8,7 @@ license.workspace = true
 snix = []
 
 [dependencies]
+arc-swap.workspace = true
 devenv-activity.workspace = true
 dotenv.workspace = true
 nix-conf-parser.workspace = true

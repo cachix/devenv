@@ -8497,6 +8497,10 @@ rec {
         libName = "devenv_activity";
         dependencies = [
           {
+            name = "arc-swap";
+            packageId = "arc-swap";
+          }
+          {
             name = "devenv-activity-macros";
             packageId = "devenv-activity-macros";
           }
@@ -8647,6 +8651,10 @@ rec {
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-core; };
         libName = "devenv_core";
         dependencies = [
+          {
+            name = "arc-swap";
+            packageId = "arc-swap";
+          }
           {
             name = "async-trait";
             packageId = "async-trait";

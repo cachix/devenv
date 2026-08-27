@@ -21,6 +21,7 @@
 //! }
 //! ```
 
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use crate::events::ActivityEvent;
@@ -41,9 +42,7 @@ pub struct ActivityGuard;
 
 impl Drop for ActivityGuard {
     fn drop(&mut self) {
-        if let Ok(mut sender) = ACTIVITY_SENDER.lock() {
-            *sender = None;
-        }
+        ACTIVITY_SENDER.store(None);
     }
 }
 
@@ -53,9 +52,7 @@ impl ActivityHandle {
     /// Returns an [`ActivityGuard`] that clears the sender when dropped,
     /// allowing subsequent log/error calls to fall back to tracing.
     pub fn install(self) -> ActivityGuard {
-        if let Ok(mut sender) = ACTIVITY_SENDER.lock() {
-            *sender = Some(self.tx);
-        }
+        ACTIVITY_SENDER.store(Some(Arc::new(self.tx)));
         ActivityGuard
     }
 }

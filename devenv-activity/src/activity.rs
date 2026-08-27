@@ -15,7 +15,9 @@ use crate::events::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
     Operation, Process, ProcessStatus, Task,
 };
-use crate::stack::{ACTIVITY_SENDER, ACTIVITY_STACK, get_current_stack, send_activity_event};
+use crate::stack::{
+    ACTIVITY_STACK, activity_sender_installed, get_current_stack, send_activity_event,
+};
 
 /// Activity type for tracking which kind of activity this is
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -390,12 +392,7 @@ impl Activity {
     pub fn log(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
-        if ACTIVITY_SENDER
-            .lock()
-            .ok()
-            .and_then(|g| g.clone())
-            .is_none()
-        {
+        if !activity_sender_installed() {
             tracing::info!("{}", line_str);
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, false) {
@@ -407,12 +404,7 @@ impl Activity {
     pub fn error(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
-        if ACTIVITY_SENDER
-            .lock()
-            .ok()
-            .and_then(|g| g.clone())
-            .is_none()
-        {
+        if !activity_sender_installed() {
             tracing::warn!("{}", line_str);
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {
@@ -475,12 +467,7 @@ impl ActivityRef {
     pub fn log(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
-        if ACTIVITY_SENDER
-            .lock()
-            .ok()
-            .and_then(|g| g.clone())
-            .is_none()
-        {
+        if !activity_sender_installed() {
             tracing::info!("{}", line_str);
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, false) {
@@ -492,12 +479,7 @@ impl ActivityRef {
     pub fn error(&self, line: impl Into<String>) {
         let _guard = self.span.enter();
         let line_str = line.into();
-        if ACTIVITY_SENDER
-            .lock()
-            .ok()
-            .and_then(|g| g.clone())
-            .is_none()
-        {
+        if !activity_sender_installed() {
             tracing::warn!("{}", line_str);
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {

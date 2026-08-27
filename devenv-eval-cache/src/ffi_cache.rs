@@ -145,7 +145,7 @@ pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConf
             | EvalOp::ReadFileType { source }
             | EvalOp::HashFile { source, .. }
             | EvalOp::PathExists { source }
-            | EvalOp::EvaluatedFile { source } => (source, false),
+            | EvalOp::EvaluatedFile { source, .. } => (source, false),
             EvalOp::CopiedSource { source, .. } | EvalOp::FilteredSource { source, .. } => {
                 (source, true)
             }

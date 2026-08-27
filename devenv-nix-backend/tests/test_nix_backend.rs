@@ -5,10 +5,12 @@
 //! Builder defaults give a runnable backend with the bundled fixture lock;
 //! tests that exercise update/lock-creation use `.no_lock()`.
 
-use devenv_core::eval_op::EvalOp;
+use devenv_activity::{Activity, ActivityEvent, EvalOp as ActivityEvalOp, Evaluate};
+use devenv_core::eval_op::{EvalOp, OpObserver};
 use devenv_core::{BuildOptions, Evaluator};
 use devenv_nix_backend_macros::nix_test;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 mod common;
 use common::{DEFAULT_YAML, TestEnv};
@@ -784,10 +786,194 @@ async fn test_concurrent_build_operations() {
 // INPUT TRACKER
 // ============================================================================
 
+#[derive(Default)]
+struct EffectRecorder(Mutex<Vec<EvalOp>>);
+
+impl OpObserver for EffectRecorder {
+    fn record(&self, op: EvalOp) {
+        self.0.lock().expect("effect recorder lock").push(op);
+    }
+}
+
+/// Exercise the complete Nix-to-activity effect path with an expression whose
+/// effects are deliberately fixed: import one file twice, with one call to
+/// each filesystem/environment primop below. This catches missing effects and
+/// verifies both uncached and cached file-evaluation events.
+#[nix_test]
+async fn test_eval_effect_stream_has_expected_types_and_cache_states() {
+    let env = TestEnv::new().await;
+    let recorder = Arc::new(EffectRecorder::default());
+    let observer: Arc<dyn OpObserver> = recorder.clone();
+    env.backend.log_bridge().add_observer(observer.clone());
+    let payload = env.path().join("effect-payload.txt");
+    let source_dir = env.path().join("effect-source-dir");
+    let effect_file = env.path().join("effect-source.nix");
+    std::fs::write(&payload, "effect payload\n").expect("write effect payload");
+    std::fs::create_dir(&source_dir).expect("create source directory");
+    std::fs::write(source_dir.join("source.txt"), "source payload\n")
+        .expect("write source payload");
+
+    let payload = payload.canonicalize().expect("canonicalize payload path");
+    let directory = env
+        .path()
+        .canonicalize()
+        .expect("canonicalize project path");
+    let source_dir = source_dir
+        .canonicalize()
+        .expect("canonicalize source directory");
+    let payload_string = serde_json::to_string(&payload).expect("quote payload path");
+    let directory_string = serde_json::to_string(&directory).expect("quote directory path");
+    let source_dir_string = serde_json::to_string(&source_dir).expect("quote source path");
+    std::fs::write(
+        &effect_file,
+        format!(
+            r#"builtins.deepSeq [
+  (builtins.readFile {payload_string})
+  (builtins.pathExists {payload_string})
+  (builtins.readFileType {payload_string})
+  (builtins.hashFile "sha256" {payload_string})
+  (builtins.readDir {directory_string})
+  (builtins.getEnv "DEVENV_EFFECT_TEST_UNSET")
+  (builtins.path {{ path = {source_dir_string}; name = "devenv-effect-copy"; }})
+  (builtins.filterSource (_path: _type: true) {source_dir_string})
+] true
+"#,
+        ),
+    )
+    .expect("write effect source");
+
+    let (mut activity_rx, activity_handle) = devenv_activity::init();
+    let activity_channel = activity_handle.install();
+    let activity = devenv_activity::start!(Activity::evaluate("Evaluating effect fixture"));
+    let activity_id = activity.id();
+    let eval_scope = env.backend.log_bridge().begin_eval(activity_id);
+
+    let effect_file = effect_file
+        .canonicalize()
+        .expect("canonicalize effect path");
+    let effect_file_string = serde_json::to_string(&effect_file).expect("quote effect path");
+    {
+        let mut state_guard = env
+            .backend
+            .eval_state_handle()
+            .lock()
+            .expect("lock eval state");
+        let state = state_guard.as_mut().expect("eval state");
+        let value = state
+            .eval_from_string(
+                &format!("import {effect_file_string}"),
+                &env.path().to_string_lossy(),
+            )
+            .expect("evaluate effect fixture");
+        state.force(&value).expect("force effect fixture");
+
+        let cached_value = state
+            .eval_from_string(
+                &format!("import {effect_file_string}"),
+                &env.path().to_string_lossy(),
+            )
+            .expect("evaluate cached effect fixture");
+        state
+            .force(&cached_value)
+            .expect("force cached effect fixture");
+    }
+
+    drop(eval_scope);
+    env.backend.log_bridge().remove_observer(&observer);
+    drop(activity);
+    drop(activity_channel);
+
+    let events: Vec<_> = std::iter::from_fn(|| activity_rx.try_recv().ok()).collect();
+    let effects: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            ActivityEvent::Evaluate(Evaluate::Op { id, op, .. }) if *id == activity_id => {
+                Some(op.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let eval_logs: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            ActivityEvent::Evaluate(Evaluate::Log { id, line, .. }) if *id == activity_id => {
+                Some(line.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+
+    let effect_file_display = effect_file.to_string_lossy();
+    assert!(
+        eval_logs.iter().any(|line| {
+            line.contains("evaluating file") && line.contains(effect_file_display.as_ref())
+        }),
+        "the evaluation activity should retain Nix's ordinary file log: {eval_logs:?}"
+    );
+    assert!(
+        eval_logs.iter().any(|line| {
+            line.contains("evaluating file")
+                && line.contains(effect_file_display.as_ref())
+                && line.contains("(cached)")
+        }),
+        "the evaluation activity should include cached file logs: {eval_logs:?}"
+    );
+
+    let effect_types: Vec<_> = effects
+        .iter()
+        .map(|effect| match effect {
+            ActivityEvalOp::EvaluatedFile { cached: false, .. } => "evaluated-file-uncached",
+            ActivityEvalOp::EvaluatedFile { cached: true, .. } => "evaluated-file-cached",
+            ActivityEvalOp::ReadFile { .. } => "read-file",
+            ActivityEvalOp::PathExists { .. } => "path-exists",
+            ActivityEvalOp::ReadFileType { .. } => "read-file-type",
+            ActivityEvalOp::HashFile { .. } => "hash-file",
+            ActivityEvalOp::ReadDir { .. } => "read-dir",
+            ActivityEvalOp::GetEnv { .. } => "get-env",
+            ActivityEvalOp::CopiedSource { .. } => "copy-source",
+            ActivityEvalOp::FilteredSource { .. } => "filter-source",
+        })
+        .collect();
+    assert_eq!(effects.len(), 10);
+    assert_eq!(
+        effect_types,
+        [
+            "evaluated-file-uncached",
+            "read-file",
+            "path-exists",
+            "read-file-type",
+            "hash-file",
+            "read-dir",
+            "get-env",
+            "copy-source",
+            "filter-source",
+            "evaluated-file-cached",
+        ]
+    );
+
+    let observed = recorder.0.lock().expect("effect recorder lock");
+    let observed_types: Vec<_> = observed
+        .iter()
+        .map(|effect| match effect {
+            EvalOp::EvaluatedFile { cached: false, .. } => "evaluated-file-uncached",
+            EvalOp::EvaluatedFile { cached: true, .. } => "evaluated-file-cached",
+            EvalOp::ReadFile { .. } => "read-file",
+            EvalOp::PathExists { .. } => "path-exists",
+            EvalOp::ReadFileType { .. } => "read-file-type",
+            EvalOp::HashFile { .. } => "hash-file",
+            EvalOp::ReadDir { .. } => "read-dir",
+            EvalOp::GetEnv { .. } => "get-env",
+            EvalOp::CopiedSource { .. } => "copy-source",
+            EvalOp::FilteredSource { .. } => "filter-source",
+        })
+        .collect();
+    assert_eq!(observed_types, effect_types);
+}
+
 fn evaluated_files(ops: &[EvalOp]) -> std::collections::HashSet<PathBuf> {
     ops.iter()
         .filter_map(|op| match op {
-            EvalOp::EvaluatedFile { source } => Some(source.clone()),
+            EvalOp::EvaluatedFile { source, .. } => Some(source.clone()),
             _ => None,
         })
         .filter(|p| !p.starts_with("/nix/store"))

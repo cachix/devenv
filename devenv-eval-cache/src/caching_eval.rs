@@ -879,23 +879,11 @@ mod tests {
     use super::*;
     use crate::eval_inputs::FileInputDesc;
     use crate::ffi_cache::EvalCacheKey;
-    use devenv_core::internal_log::{ActivityType, Field, InternalLog, Verbosity};
     use std::time::SystemTime;
     use tempfile::TempDir;
 
-    fn evaluated_file_effect(id: u64, source: impl Into<String>) -> InternalLog {
-        InternalLog::Start {
-            id,
-            level: Verbosity::Info,
-            typ: ActivityType::EvalEffect,
-            text: String::new(),
-            parent: 0,
-            fields: vec![
-                Field::String("evaluated-file".into()),
-                Field::String(source.into()),
-                Field::String("uncached".into()),
-            ],
-        }
+    fn evaluated_file_effect(bridge: &NixLogBridge, source: impl AsRef<str>) {
+        bridge.process_eval_effect("evaluated-file", source.as_ref(), Some("uncached"));
     }
 
     #[test]
@@ -1438,10 +1426,7 @@ mod tests {
         cached_eval
             .eval(&key, &activity, || async {
                 // Tell the tracker Nix evaluated this file.
-                bridge_for_closure.process_internal_log(evaluated_file_effect(
-                    1,
-                    file_path.display().to_string(),
-                ));
+                evaluated_file_effect(&bridge_for_closure, file_path.display().to_string());
 
                 // Simulate a concurrent edit landing after eval_start by
                 // pushing mtime to a value strictly greater than now. Using
@@ -1522,7 +1507,7 @@ mod tests {
         bridge.add_observer(tracker.clone());
 
         // First eval scope: bootstrap file
-        bridge.process_internal_log(evaluated_file_effect(1, "/tmp/default.nix"));
+        evaluated_file_effect(&bridge, "/tmp/default.nix");
 
         assert_eq!(
             tracker.snapshot().len(),
@@ -1532,14 +1517,14 @@ mod tests {
 
         // Second eval scope: imports a nested file.
         // No remove/re-add of observers in between — tracker is persistent.
-        bridge.process_internal_log(evaluated_file_effect(2, "/tmp/nested/boop.nix"));
+        evaluated_file_effect(&bridge, "/tmp/nested/boop.nix");
 
         let ops = tracker.snapshot();
         assert_eq!(ops.len(), 2, "tracker should accumulate across scopes");
         assert!(
             ops.iter().any(|op| matches!(
                 op,
-                EvalOp::EvaluatedFile { source } if source.ends_with("boop.nix")
+                EvalOp::EvaluatedFile { source, .. } if source.ends_with("boop.nix")
             )),
             "tracker should contain the nested file"
         );
@@ -1549,7 +1534,7 @@ mod tests {
         assert!(tracker.is_empty());
 
         // Third eval scope after "reload": fresh set, still observed.
-        bridge.process_internal_log(evaluated_file_effect(3, "/tmp/default.nix"));
+        evaluated_file_effect(&bridge, "/tmp/default.nix");
         assert_eq!(tracker.snapshot().len(), 1);
     }
 }
