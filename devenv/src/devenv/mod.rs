@@ -1600,9 +1600,13 @@ impl Devenv {
     }
 
     async fn dotenv_config(&self) -> Result<DotenvConfig> {
+        const ATTR: &str = "devenv.config.dotenv";
+        let activity = devenv_activity::start!(
+            Activity::evaluate(format!("Reading {ATTR}")).level(ActivityLevel::Debug)
+        );
         let json = self
-            .backend
-            .eval_devenv(&["devenv.config.dotenv"])
+            .require_cnix()?
+            .eval_attr(ATTR, &activity)
             .await
             .wrap_err("Failed to evaluate dotenv configuration")?;
         serde_json::from_str(&json)
