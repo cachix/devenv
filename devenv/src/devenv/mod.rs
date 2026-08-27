@@ -2064,6 +2064,10 @@ impl Devenv {
         envs: HashMap<String, String>,
         verbosity: VerbosityLevel,
     ) -> Result<(tasks::TasksStatus, BTreeMap<String, String>, Vec<String>)> {
+        // The Nix dotenv primop records the exact file and substitution inputs
+        // used to build this shell. Only task changes to those inputs require a
+        // fresh EvalState and shell evaluation.
+        let dotenv_inputs = self.require_cnix()?.dotenv_inputs_snapshot();
         let bash = self.get_bash_path().await?;
         let config = tasks::Config {
             roots,
@@ -2092,10 +2096,11 @@ impl Devenv {
         let ret = (status, exports.clone(), messages.clone());
         *self.task_exports.lock().unwrap() = exports;
         *self.task_messages.lock().unwrap() = messages;
-        // Shell configuration is captured before these tasks execute. Rebuild it so
-        // task-created, changed, and removed dotenv values reach subsequent shell
-        // preparation on the shell, test, and reload paths.
-        self.refresh_dev_environment().await?;
+        // Shell configuration is captured before these tasks execute. Rebuild
+        // it only when a task created, changed, or removed a dotenv input.
+        if self.require_cnix()?.dotenv_inputs_changed(&dotenv_inputs)? {
+            self.refresh_dev_environment().await?;
+        }
         Ok(ret)
     }
 

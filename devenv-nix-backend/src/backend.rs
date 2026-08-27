@@ -39,7 +39,7 @@ use devenv_cache_core::compute_string_hash;
 use devenv_core::bootstrap_args::BootstrapArgs;
 use devenv_core::cachix::{NetrcPreservation, preserve_netrc_file};
 use devenv_core::config::NixpkgsConfig;
-use devenv_core::dotenv::{DotenvTracker, load_dotenv_tracked};
+use devenv_core::dotenv::{DotenvSpec, DotenvTracker, load_dotenv_tracked};
 use devenv_core::evaluator::eval_cache_key_args;
 use devenv_core::evaluator::{
     BuildOptions, DevEnvOutput, Evaluator, PackageSearchResult, SearchResults,
@@ -47,6 +47,7 @@ use devenv_core::evaluator::{
 use devenv_core::nix_args::NixpkgsConfigForNix;
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
 use devenv_core::realized::RealizedPathsObserver;
+use devenv_core::resource::ReplayableResource;
 use devenv_core::store::Store as StoreTrait;
 use devenv_core::store::StorePath as CoreStorePath;
 use devenv_core::{CacheSettings, DevenvPaths, NixSettings, PortAllocator, StoreSettings};
@@ -419,6 +420,16 @@ impl NixCBackend {
 
     pub fn eval_state_handle(&self) -> &Arc<Mutex<Option<EvalState>>> {
         &self.eval_state
+    }
+
+    /// Snapshot the dotenv inputs observed by the current Nix evaluation.
+    pub fn dotenv_inputs_snapshot(&self) -> DotenvSpec {
+        self.dotenv_tracker.snapshot()
+    }
+
+    /// Check whether the dotenv inputs in `snapshot` have changed on disk.
+    pub fn dotenv_inputs_changed(&self, snapshot: &DotenvSpec) -> Result<bool> {
+        self.dotenv_tracker.inputs_changed(snapshot)
     }
 
     /// Build a fresh transient `EvalState` against the same store and

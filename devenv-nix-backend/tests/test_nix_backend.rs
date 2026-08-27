@@ -615,6 +615,28 @@ async fn test_dev_env_after_invalidate_yaml_import() {
     .await;
 }
 
+#[nix_test]
+async fn test_dotenv_input_change_detection() {
+    let env = TestEnv::builder()
+        .nix(r#"{ ... }: { dotenv.enable = true; }"#)
+        .extra_file(".env", "VALUE=before\n")
+        .build()
+        .await;
+    let gc_root = env.path().join(".devenv/profile");
+
+    env.backend
+        .dev_env(false, &gc_root)
+        .await
+        .expect("evaluate dotenv-enabled shell");
+    let snapshot = env.backend.dotenv_inputs_snapshot();
+
+    assert!(!snapshot.files.is_empty());
+    assert!(!env.backend.dotenv_inputs_changed(&snapshot).unwrap());
+
+    std::fs::write(env.path().join(".env"), "VALUE=after\n").expect("modify dotenv file");
+    assert!(env.backend.dotenv_inputs_changed(&snapshot).unwrap());
+}
+
 // ============================================================================
 // GC
 // ============================================================================

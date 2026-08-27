@@ -53,6 +53,15 @@ impl DotenvTracker {
     fn record(&self, spec: DotenvSpec) {
         *self.spec.lock().unwrap() = spec;
     }
+
+    /// Return whether the dotenv inputs observed by an evaluation have changed.
+    ///
+    /// An empty spec means the dotenv primop did not observe any files, so there
+    /// is nothing to invalidate. Missing files and inherited variables used for
+    /// substitution are compared with the same rules as eval-cache replay.
+    pub fn inputs_changed(&self, spec: &DotenvSpec) -> Result<bool> {
+        Ok(capture_current_spec(spec)? != *spec)
+    }
 }
 
 impl ReplayableResource for DotenvTracker {
@@ -64,14 +73,8 @@ impl ReplayableResource for DotenvTracker {
     }
 
     fn replay(&self, spec: &Self::Spec) -> std::result::Result<(), ReplayError> {
-        let current = DotenvSpec {
-            files: capture_files(spec.files.iter().map(|file| file.path.as_path()))
-                .map_err(|error| ReplayError::Unavailable(error.to_string()))?,
-            substitution_environment: spec
-                .substitution_environment
-                .as_ref()
-                .map(|environment| capture_substitution_environment(&environment.variables)),
-        };
+        let current = capture_current_spec(spec)
+            .map_err(|error| ReplayError::Unavailable(error.to_string()))?;
 
         if &current != spec {
             return Err(ReplayError::Unavailable(
@@ -86,6 +89,16 @@ impl ReplayableResource for DotenvTracker {
     fn clear(&self) {
         self.record(DotenvSpec::default());
     }
+}
+
+fn capture_current_spec(spec: &DotenvSpec) -> Result<DotenvSpec> {
+    Ok(DotenvSpec {
+        files: capture_files(spec.files.iter().map(|file| file.path.as_path()))?,
+        substitution_environment: spec
+            .substitution_environment
+            .as_ref()
+            .map(|environment| capture_substitution_environment(&environment.variables)),
+    })
 }
 
 /// Load dotenv files with the same parser used by both the CLI runtime path
@@ -247,14 +260,25 @@ mod tests {
         let tracker = DotenvTracker::default();
         load_dotenv_tracked(&[present.clone(), missing.clone()], false, &tracker).unwrap();
         let spec = tracker.snapshot();
+        assert!(!tracker.inputs_changed(&spec).unwrap());
         assert!(tracker.replay(&spec).is_ok());
 
         fs::write(&present, "VALUE=two\n").unwrap();
+        assert!(tracker.inputs_changed(&spec).unwrap());
         assert!(tracker.replay(&spec).is_err());
 
         fs::write(&present, "VALUE=one\n").unwrap();
         fs::write(&missing, "LOCAL=yes\n").unwrap();
+        assert!(tracker.inputs_changed(&spec).unwrap());
         assert!(tracker.replay(&spec).is_err());
+    }
+
+    #[test]
+    fn empty_tracker_has_no_changed_inputs() {
+        let tracker = DotenvTracker::default();
+        let spec = tracker.snapshot();
+
+        assert!(!tracker.inputs_changed(&spec).unwrap());
     }
 
     #[test]
