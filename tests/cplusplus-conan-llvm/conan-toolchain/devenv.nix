@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   inherit (lib) getExe;
   getCommand = package: baseNameOf (getExe package);
@@ -14,14 +19,10 @@ in
         profiles.default = {
           settings.build_type = "Release";
         };
-        stdenv = pkgs.overrideCC
-          (
-            pkgs.llvmPackages.libcxxStdenv.override {
-              targetPlatform.useLLVM = true;
-              targetPlatform.linker = "lld";
-            }
-          )
-          pkgs.llvmPackages.clangUseLLVM;
+        stdenv = pkgs.overrideCC (pkgs.llvmPackages.libcxxStdenv.override {
+          targetPlatform.useLLVM = true;
+          targetPlatform.linker = "lld";
+        }) pkgs.llvmPackages.clangUseLLVM;
         remotes.local = {
           url = "./repo";
           local = true;
