@@ -40,6 +40,26 @@ pub struct PreparedActivity {
     display_name: Option<String>,
 }
 
+/// Borrowed scalar fields exported on an activity span.
+///
+/// Kept as one compact projection so span creation performs a single event
+/// match and never clones builder-owned strings. Collections stay in the
+/// structured activity event; only their cardinality is duplicated as a
+/// directly queryable scalar attribute.
+#[doc(hidden)]
+#[derive(Default)]
+pub struct ActivitySpanFields<'a> {
+    pub derivation_path: Option<&'a str>,
+    pub fetch_kind: Option<&'static str>,
+    pub url: Option<&'a str>,
+    pub command: Option<&'a str>,
+    pub task_name: Option<&'a str>,
+    pub process_name: Option<&'a str>,
+    pub process_port_count: Option<u64>,
+    pub process_ready_probe: Option<&'a str>,
+    pub operation_detail: Option<&'a str>,
+}
+
 impl PreparedActivity {
     fn new(
         event: ActivityEvent,
@@ -61,6 +81,7 @@ impl PreparedActivity {
         self
     }
 
+    #[inline]
     pub fn activity_name(&self) -> &str {
         match &self.event {
             ActivityEvent::Build(Build::Queued { name, .. } | Build::Start { name, .. })
@@ -77,6 +98,7 @@ impl PreparedActivity {
         }
     }
 
+    #[inline]
     pub fn activity_kind(&self) -> &'static str {
         match self.activity_type {
             ActivityType::Build => "build",
@@ -89,11 +111,62 @@ impl PreparedActivity {
         }
     }
 
+    #[inline]
     pub fn resolved_level(&self) -> ActivityLevel {
         self.level
     }
+    #[inline]
     pub fn event(&self) -> &ActivityEvent {
         &self.event
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    pub fn span_fields(&self) -> ActivitySpanFields<'_> {
+        match &self.event {
+            ActivityEvent::Build(
+                Build::Queued {
+                    derivation_path, ..
+                }
+                | Build::Start {
+                    derivation_path, ..
+                },
+            ) => ActivitySpanFields {
+                derivation_path: derivation_path.as_deref(),
+                ..ActivitySpanFields::default()
+            },
+            ActivityEvent::Fetch(Fetch::Start { kind, url, .. }) => ActivitySpanFields {
+                fetch_kind: Some(kind.as_str()),
+                url: url.as_deref(),
+                ..ActivitySpanFields::default()
+            },
+            ActivityEvent::Command(Command::Start { command, .. }) => ActivitySpanFields {
+                command: command.as_deref(),
+                ..ActivitySpanFields::default()
+            },
+            ActivityEvent::Task(Task::Start { .. }) => ActivitySpanFields {
+                task_name: self.display_name.as_deref(),
+                ..ActivitySpanFields::default()
+            },
+            ActivityEvent::Process(Process::Start {
+                name,
+                command,
+                ports,
+                ready_probe,
+                ..
+            }) => ActivitySpanFields {
+                command: command.as_deref(),
+                process_name: Some(name),
+                process_port_count: Some(ports.len() as u64),
+                process_ready_probe: ready_probe.as_deref(),
+                ..ActivitySpanFields::default()
+            },
+            ActivityEvent::Operation(Operation::Start { detail, .. }) => ActivitySpanFields {
+                operation_detail: detail.as_deref(),
+                ..ActivitySpanFields::default()
+            },
+            _ => ActivitySpanFields::default(),
+        }
     }
 
     pub fn finish(self, span: Span) -> Activity {
@@ -141,11 +214,11 @@ pub trait ActivityStart: Sized {
 /// ```
 #[macro_export]
 macro_rules! start {
-    ($builder:expr) => {{
+    ($builder:expr $(, $($($k:ident).+ = $v:expr),+ )?) => {{
         let __builder = $builder;
         let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
         let __prepared = $crate::ActivityStart::prepare(__builder, __id);
-        let __span = $crate::__create_activity_span!(&__prepared, __id);
+        let __span = $crate::__create_activity_span!(&__prepared, __id $(, $($($k).+ = $v),+ )?);
         __prepared.finish(__span)
     }};
 }
@@ -157,11 +230,11 @@ macro_rules! start {
 /// ```
 #[macro_export]
 macro_rules! queue {
-    ($builder:expr) => {{
+    ($builder:expr $(, $($($k:ident).+ = $v:expr),+ )?) => {{
         let __builder = $builder;
         let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
         let __prepared = __builder.prepare_queued(__id);
-        let __span = $crate::__create_activity_span!(&__prepared, __id);
+        let __span = $crate::__create_activity_span!(&__prepared, __id $(, $($($k).+ = $v),+ )?);
         __prepared.finish(__span)
     }};
 }
@@ -174,9 +247,10 @@ macro_rules! queue {
 /// ```
 #[macro_export]
 macro_rules! activity {
-    ($level:ident, $kind:ident, $name:expr) => {
+    ($level:ident, $kind:ident, $name:expr $(, $($($k:ident).+ = $v:expr),+ )?) => {
         $crate::start!(
             $crate::__activity_builder!($kind, $name).level($crate::__to_activity_level!($level))
+            $(, $($($k).+ = $v),+ )?
         )
     };
 }
@@ -247,6 +321,15 @@ macro_rules! __create_activity_span {
             "devenv.activity.event",
             "devenv.activity.complete",
             "devenv.outcome",
+            "devenv.derivation_path",
+            "devenv.fetch.kind",
+            "devenv.url",
+            "devenv.command",
+            "devenv.task.name",
+            "devenv.process.name",
+            "devenv.process.port_count",
+            "devenv.process.ready_probe",
+            "devenv.operation.detail",
             "otel.status_code",
             $($( stringify!($($k).+) ),+ )?
         ];
@@ -290,18 +373,11 @@ macro_rules! __create_activity_span {
             if tracing::__macro_support::__is_enabled(meta, interest) {
                 let __name = $prepared.activity_name();
                 let __kind = $prepared.activity_kind();
-                let __otel_name_owned;
-                let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
-                    __otel_name_owned = __name.to_ascii_lowercase();
-                    __otel_name_owned.as_str()
-                } else {
-                    __name
-                };
                 let fs = meta.fields();
                 // Serde conversion is deliberately inside the enabled branch:
                 // normal TUI/console operation never serializes activity data.
                 let __activity_event = tracing::enabled!(
-                    target: "devenv_activity::events",
+                    target: "devenv_activity::replay",
                     tracing::Level::DEBUG
                 )
                 .then(|| $crate::SerdeValue::from_serialize($prepared.event()).ok())
@@ -309,15 +385,31 @@ macro_rules! __create_activity_span {
                 let __activity_event = __activity_event
                     .as_ref()
                     .map($crate::SerdeValue::as_tracing_value);
+                let __fields = $prepared.span_fields();
+                // FIELD_NAMES and this value array have the same static order.
+                // Walking the field set once avoids a name lookup per field.
+                let mut __field_iter = fs.iter();
                 tracing::Span::new(
                     meta,
                     &fs.value_set(&[
-                        (&fs.field("activity_id").unwrap(), Some(&$id as &dyn tracing::field::Value)),
-                        (&fs.field("otel.name").unwrap(), Some(&__otel_name as &dyn tracing::field::Value)),
-                        (&fs.field("devenv.ui.message").unwrap(), Some(&__name as &dyn tracing::field::Value)),
-                        (&fs.field("devenv.activity.kind").unwrap(), Some(&__kind as &dyn tracing::field::Value)),
-                        (&fs.field("devenv.activity.event").unwrap(), __activity_event.as_ref().map(|event| event as &dyn tracing::field::Value)),
-                        $($( (&fs.field(stringify!($($k).+)).unwrap(), Some(&$v as &dyn tracing::field::Value)) ),+ )?
+                        (&__field_iter.next().unwrap(), Some(&$id as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), Some(&__name as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), Some(&__name as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), Some(&__kind as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __activity_event.as_ref().map(|event| event as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), None),
+                        (&__field_iter.next().unwrap(), None),
+                        (&__field_iter.next().unwrap(), __fields.derivation_path.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __fields.fetch_kind.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __fields.url.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __fields.command.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __fields.task_name.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __fields.process_name.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __fields.process_port_count.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __fields.process_ready_probe.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), __fields.operation_detail.as_ref().map(|value| value as &dyn tracing::field::Value)),
+                        (&__field_iter.next().unwrap(), None),
+                        $($( (&__field_iter.next().unwrap(), Some(&$v as &dyn tracing::field::Value)) ),+ )?
                     ]),
                 )
             } else {

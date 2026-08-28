@@ -444,6 +444,7 @@ impl Activity {
     pub fn set_status(&self, status: ProcessStatus) {
         let caller = std::panic::Location::caller();
         if matches!(self.activity_type, ActivityType::Process) {
+            self.span.record("devenv.process.status", status.as_str());
             let event = ActivityEvent::Process(Process::Status {
                 id: self.id,
                 status,
@@ -526,6 +527,7 @@ impl ActivityRef {
     pub fn set_status(&self, status: ProcessStatus) {
         let caller = std::panic::Location::caller();
         if matches!(self.activity_type, ActivityType::Process) {
+            self.span.record("devenv.process.status", status.as_str());
             let event = ActivityEvent::Process(Process::Status {
                 id: self.id,
                 status,

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::cell::RefCell;
 
 use opentelemetry::global;
-use opentelemetry::propagation::TextMapPropagator;
+use opentelemetry::propagation::{Injector, TextMapPropagator};
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::{ExporterBuildError, MetricExporter, SpanExporter, WithExportConfig};
 use opentelemetry_sdk::Resource;
@@ -17,6 +17,27 @@ use super::{
     Level, OtlpProtocol, TraceOutputSpec, TracingGuard, create_filter, create_local_boxed_layers,
 };
 use url::Url;
+
+thread_local! {
+    /// Prevent the dedicated exporter runtime from feeding its own transport
+    /// instrumentation back into the global OpenTelemetry layer.
+    static EXPORTER_DISPATCH_GUARD: RefCell<Option<tracing::dispatcher::DefaultGuard>> =
+        const { RefCell::new(None) };
+}
+
+fn isolate_exporter_thread() {
+    EXPORTER_DISPATCH_GUARD.with(|slot| {
+        *slot.borrow_mut() = Some(tracing::dispatcher::set_default(&tracing::Dispatch::new(
+            tracing::subscriber::NoSubscriber::default(),
+        )));
+    });
+}
+
+fn clear_exporter_thread_isolation() {
+    EXPORTER_DISPATCH_GUARD.with(|slot| {
+        slot.borrow_mut().take();
+    });
+}
 
 /// Guard that shuts down an OTEL tracer provider on drop.
 ///
@@ -61,6 +82,9 @@ pub(super) fn init_tracing_unified(
     specs: &[TraceOutputSpec],
     has_trace_export: bool,
 ) -> TracingGuard {
+    let has_activity_replay = specs
+        .iter()
+        .any(|spec| matches!(spec, TraceOutputSpec::Render(super::TraceFormat::Json, _)));
     // The OTLP exporter and batch processor need a tokio runtime.
     // This is called before the application's main runtime exists, so we
     // create a lightweight dedicated runtime.
@@ -71,6 +95,8 @@ pub(super) fn init_tracing_unified(
         .worker_threads(1)
         .enable_all()
         .thread_name("otel")
+        .on_thread_start(isolate_exporter_thread)
+        .on_thread_stop(clear_exporter_thread_isolation)
         .build()
         .expect("Failed to create OpenTelemetry runtime");
 
@@ -143,25 +169,33 @@ pub(super) fn init_tracing_unified(
     }
 
     let _ = Registry::default()
-        .with(create_filter(level, has_trace_export))
+        .with(create_filter(level, has_trace_export, has_activity_replay))
         .with(SpanIdLayer)
         .with(layers)
         .with(DevenvLayer::new())
         .try_init();
 
-    // Register trace context propagator so subprocesses inherit TRACEPARENT/TRACESTATE.
-    // HashMap<String, String> implements opentelemetry::propagation::Injector
-    // (lowercases keys), so we uppercase them for env var convention.
+    // Register trace context propagation without an intermediate HashMap/Vec.
+    // TraceContextPropagator produces only the two W3C keys, so map them to
+    // static environment names instead of allocating an uppercased copy.
     devenv_activity::register_trace_propagator({
         let propagator = TraceContextPropagator::new();
-        move || {
+        move |inject| {
+            struct EnvInjector<'a>(&'a mut dyn FnMut(&str, &str));
+
+            impl Injector for EnvInjector<'_> {
+                fn set(&mut self, key: &str, value: String) {
+                    let env_key = match key {
+                        "traceparent" => "TRACEPARENT",
+                        "tracestate" => "TRACESTATE",
+                        _ => key,
+                    };
+                    (self.0)(env_key, &value);
+                }
+            }
+
             let context = tracing::Span::current().context();
-            let mut headers: HashMap<String, String> = HashMap::new();
-            propagator.inject_context(&context, &mut headers);
-            headers
-                .into_iter()
-                .map(|(k, v)| (k.to_ascii_uppercase(), v))
-                .collect()
+            propagator.inject_context(&context, &mut EnvInjector(inject));
         }
     });
 
@@ -250,5 +284,27 @@ fn create_exporter(
             eprintln!("error: otlp-http-json requires the 'otlp-http-json' cargo feature");
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tracing_subscriber::Registry;
+
+    use super::{clear_exporter_thread_isolation, isolate_exporter_thread};
+
+    #[test]
+    fn exporter_thread_isolation_overrides_and_restores_dispatch() {
+        std::thread::spawn(|| {
+            tracing::subscriber::with_default(Registry::default(), || {
+                assert!(tracing::enabled!(target: "h2::proto", tracing::Level::TRACE));
+                isolate_exporter_thread();
+                assert!(!tracing::enabled!(target: "h2::proto", tracing::Level::TRACE));
+                clear_exporter_thread_isolation();
+                assert!(tracing::enabled!(target: "h2::proto", tracing::Level::TRACE));
+            });
+        })
+        .join()
+        .unwrap();
     }
 }

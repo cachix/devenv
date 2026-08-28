@@ -425,6 +425,21 @@ pub enum ProcessStatus {
 }
 
 impl ProcessStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NotStarted => "not_started",
+            Self::Waiting => "waiting",
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Ready => "ready",
+            Self::Restarting => "restarting",
+            Self::Stopping => "stopping",
+            Self::Stopped => "stopped",
+            Self::Exited => "exited",
+            Self::GaveUp => "gave_up",
+        }
+    }
+
     /// Whether the process is in an active (non-terminal, non-idle) state.
     pub fn is_active(&self) -> bool {
         matches!(

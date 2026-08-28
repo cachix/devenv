@@ -79,4 +79,6 @@ pub use stack::{
 pub use instrument::ActivityInstrument;
 
 // Trace context propagation
-pub use propagation::{register_trace_propagator, trace_propagation_env};
+pub use propagation::{
+    inject_trace_propagation_env, register_trace_propagator, trace_propagation_env,
+};

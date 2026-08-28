@@ -1,9 +1,10 @@
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use devenv_activity::{Activity, ActivityEvent, Build, start};
+use devenv_activity::{Activity, ActivityEvent, Build, FetchKind, ProcessStatus, start};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber, span};
 use tracing_subscriber::layer::{Context, SubscriberExt};
@@ -85,6 +86,17 @@ where
             fields,
         });
     }
+
+    fn on_record(&self, id: &span::Id, values: &span::Record<'_>, _ctx: Context<'_, S>) {
+        let mut spans = self.spans.lock().unwrap();
+        let Some(span) = spans
+            .iter_mut()
+            .find(|span| span.id == id.clone().into_u64())
+        else {
+            return;
+        };
+        values.record(&mut span.fields);
+    }
 }
 
 #[test]
@@ -98,7 +110,12 @@ fn native_span_and_updates_preserve_activity_data_and_callers() {
     let (start_line, progress_line, log_line) =
         tracing::dispatcher::with_default(&dispatch, || {
             let start_line = line!() + 1;
-            let activity = start!(Activity::build("example").id(42));
+            let activity = start!(
+                Activity::build("example")
+                    .derivation_path("/nix/store/example.drv")
+                    .id(42),
+                test.callsite = "preserved"
+            );
             let progress_line = line!() + 1;
             activity.progress(1, 2, None);
             let log_line = line!() + 1;
@@ -112,6 +129,14 @@ fn native_span_and_updates_preserve_activity_data_and_callers() {
     assert!(spans[0].file.unwrap().ends_with("tests/tracing.rs"));
     assert_eq!(spans[0].line, Some(start_line));
     assert!(spans[0].fields.valuable.contains(&"devenv.activity.event"));
+    assert_eq!(
+        spans[0].fields.values.get("devenv.derivation_path"),
+        Some(&"/nix/store/example.drv".to_string())
+    );
+    assert_eq!(
+        spans[0].fields.values.get("test.callsite"),
+        Some(&"preserved".to_string())
+    );
 
     let events = capture.events.lock().unwrap();
     assert_eq!(events.len(), 2);
@@ -162,6 +187,74 @@ fn native_span_and_updates_preserve_activity_data_and_callers() {
     ));
 }
 
+#[test]
+fn activity_spans_export_borrowed_semantic_fields() {
+    let capture = CaptureLayer::default();
+    let subscriber = Registry::default().with(capture.clone());
+    let dispatch = tracing::Dispatch::new(subscriber);
+
+    tracing::dispatcher::with_default(&dispatch, || {
+        drop(start!(
+            Activity::fetch(FetchKind::Download, "source").url("https://example.test/source")
+        ));
+        drop(start!(
+            Activity::command("execute command").command("echo hello")
+        ));
+        drop(start!(Activity::task("project:build")));
+        let process = start!(
+            Activity::process("web")
+                .command("run-web")
+                .ports(vec!["http:8080".to_string(), "admin:9000".to_string()])
+                .ready_probe("http: localhost:8080/health"),
+            devenv.process.status = tracing::field::Empty
+        );
+        process.set_status(ProcessStatus::Ready);
+        drop(process);
+        drop(start!(
+            Activity::operation("Reloading shell").detail("devenv.nix")
+        ));
+    });
+
+    let spans = capture.spans.lock().unwrap();
+    assert_eq!(spans.len(), 5);
+    assert_eq!(
+        spans[0].fields.values.get("devenv.fetch.kind"),
+        Some(&"download".to_string())
+    );
+    assert_eq!(
+        spans[0].fields.values.get("devenv.url"),
+        Some(&"https://example.test/source".to_string())
+    );
+    assert_eq!(
+        spans[1].fields.values.get("devenv.command"),
+        Some(&"echo hello".to_string())
+    );
+    assert_eq!(
+        spans[2].fields.values.get("devenv.task.name"),
+        Some(&"project:build".to_string())
+    );
+    assert_eq!(
+        spans[3].fields.values.get("devenv.process.name"),
+        Some(&"web".to_string())
+    );
+    assert_eq!(
+        spans[3].fields.values.get("devenv.process.port_count"),
+        Some(&"2".to_string())
+    );
+    assert_eq!(
+        spans[3].fields.values.get("devenv.process.ready_probe"),
+        Some(&"http: localhost:8080/health".to_string())
+    );
+    assert_eq!(
+        spans[3].fields.values.get("devenv.process.status"),
+        Some(&"ready".to_string())
+    );
+    assert_eq!(
+        spans[4].fields.values.get("devenv.operation.detail"),
+        Some(&"devenv.nix".to_string())
+    );
+}
+
 #[derive(Clone, Default)]
 struct NoExportLayer {
     saw_activity_span: Arc<AtomicBool>,
@@ -169,12 +262,27 @@ struct NoExportLayer {
     activity_events: Arc<AtomicUsize>,
 }
 
+#[derive(Clone, Default)]
+struct DisableActivitySpans;
+
+impl<S> Layer<S> for DisableActivitySpans
+where
+    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+{
+    fn enabled(&self, metadata: &tracing::Metadata<'_>, _ctx: Context<'_, S>) -> bool {
+        metadata.target() != "devenv_activity::spans"
+    }
+}
+
 impl<S> Layer<S> for NoExportLayer
 where
     S: Subscriber + for<'lookup> LookupSpan<'lookup>,
 {
     fn enabled(&self, metadata: &tracing::Metadata<'_>, _ctx: Context<'_, S>) -> bool {
-        metadata.target() != "devenv_activity::events"
+        !matches!(
+            metadata.target(),
+            "devenv_activity::events" | "devenv_activity::replay"
+        )
     }
 
     fn on_new_span(&self, attrs: &span::Attributes<'_>, _id: &span::Id, _ctx: Context<'_, S>) {
@@ -211,4 +319,22 @@ fn disabled_payload_target_skips_structured_values() {
     assert!(capture.saw_activity_span.load(Ordering::Relaxed));
     assert!(!capture.saw_serialized_start.load(Ordering::Relaxed));
     assert_eq!(capture.activity_events.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn disabled_activity_spans_do_not_evaluate_export_only_fields() {
+    let evaluated = Cell::new(false);
+    let subscriber = Registry::default().with(DisableActivitySpans);
+
+    tracing::subscriber::with_default(subscriber, || {
+        drop(start!(
+            Activity::operation("disabled span"),
+            test.export_only = {
+                evaluated.set(true);
+                "unused"
+            }
+        ));
+    });
+
+    assert!(!evaluated.get());
 }
