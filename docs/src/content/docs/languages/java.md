@@ -167,6 +167,7 @@ true
 
 
 The Java language server package to use.
+The Java language server package by default inherits the JDK from ` languages.java.jdk.package `.
 
 
 
@@ -178,7 +179,7 @@ package
 *Default:*
 
 ```nix
-pkgs.jdt-language-server
+pkgs.jdt-language-server.override { jdk = cfg.jdk.package; }
 ```
 
 *Declared by:*

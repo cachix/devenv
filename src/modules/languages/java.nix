@@ -50,9 +50,11 @@ in
       enable = mkEnableOption "Java Language Server" // { default = true; };
       package = mkOption {
         type = types.package;
-        default = pkgs.jdt-language-server;
-        defaultText = literalExpression "pkgs.jdt-language-server";
-        description = "The Java language server package to use.";
+        defaultText = literalExpression "pkgs.jdt-language-server.override { jdk = cfg.jdk.package; }";
+        description = ''
+          The Java language server package to use.
+          The Java language server package by default inherits the JDK from `languages.java.jdk.package`.
+        '';
       };
     };
   };
@@ -60,6 +62,7 @@ in
   config = mkIf cfg.enable {
     languages.java.maven.package = mkDefault mavenPackage;
     languages.java.gradle.package = mkDefault (pkgs.gradle.override { java = cfg.jdk.package; });
+    languages.java.lsp.package = mkDefault (pkgs.jdt-language-server.override { jdk = cfg.jdk.package; });
     packages = (optional cfg.enable cfg.jdk.package)
       ++ (optional cfg.maven.enable cfg.maven.package)
       ++ (optional cfg.gradle.enable cfg.gradle.package)
