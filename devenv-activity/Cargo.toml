@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Activity tracking system for devenv"
 
 [dependencies]
+arc-swap.workspace = true
 # Tracing integration
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["registry"] }

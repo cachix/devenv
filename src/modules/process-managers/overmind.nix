@@ -1,7 +1,31 @@
-{ pkgs, config, lib, ... }:
+{ pkgs
+, config
+, lib
+, ...
+}:
 let
   cfg = config.process.managers.overmind;
   processManagerTypes = import ../lib/process-manager-types.nix { inherit lib; };
+
+  # tmux 3.7c requires an explicit allocator choice on Darwin. Some nixpkgs
+  # revisions contain 3.7c without the corresponding packaging fix:
+  # https://github.com/NixOS/nixpkgs/commit/56d4d710bd0bc7bcf953f6616bdc3e48c21ec549
+  needsDarwinTmuxAllocator =
+    pkgs.stdenv.hostPlatform.isDarwin
+    && !lib.any (flag: flag == "--enable-jemalloc" || flag == "--disable-jemalloc") (
+      pkgs.tmux.configureFlags or [ ]
+    );
+  tmuxPackage =
+    if needsDarwinTmuxAllocator then
+      pkgs.tmux.overrideAttrs
+        (oldAttrs: {
+          buildInputs = (oldAttrs.buildInputs or [ ]) ++ [ pkgs.jemalloc ];
+          configureFlags = (oldAttrs.configureFlags or [ ]) ++ [ "--enable-jemalloc" ];
+        })
+    else
+      pkgs.tmux;
+  defaultOvermindPackage =
+    if needsDarwinTmuxAllocator then pkgs.overmind.override { tmux = tmuxPackage; } else pkgs.overmind;
 in
 {
   options.process.managers.overmind = {
@@ -11,7 +35,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.overmind;
+      default = defaultOvermindPackage;
       defaultText = lib.literalExpression "pkgs.overmind";
       description = "The overmind package to use.";
     };
@@ -34,7 +58,11 @@ in
       type = processManagerTypes.adapter;
       internal = true;
       readOnly = true;
-      default = { terminal = "none"; stop = "command"; client = "none"; };
+      default = {
+        terminal = "none";
+        stop = "command";
+        client = "none";
+      };
       description = "Runtime adapter settings of the overmind process manager.";
     };
 
@@ -71,14 +99,14 @@ in
           [ -S "$tmux_socket" ] || continue
 
           for _ in $(${lib.getExe' pkgs.coreutils "seq"} 1 100); do
-            sessions=$(${lib.getExe pkgs.tmux} -S "$tmux_socket" \
+            sessions=$(${lib.getExe tmuxPackage} -S "$tmux_socket" \
               list-sessions -F '#{session_name}' 2>/dev/null) || continue 2
 
             if printf '%s\n' "$sessions" \
               | ${lib.getExe' pkgs.gnugrep "grep"} -qxF "$session"; then
               ${lib.getExe' pkgs.coreutils "sleep"} 0.1
             else
-              ${lib.getExe pkgs.tmux} -S "$tmux_socket" kill-server \
+              ${lib.getExe tmuxPackage} -S "$tmux_socket" kill-server \
                 2>/dev/null || true
               continue 2
             fi
@@ -97,7 +125,9 @@ in
 
     process.manager.command = lib.mkDefault ''
       ${lib.getExe cfg.package} start \
-        ${(lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) {} config.process.manager.args} \
+        ${
+          (lib.cli.toCommandLineShellGNU or lib.cli.toGNUCommandLineShell) { } config.process.manager.args
+        } \
         "$@" &
     '';
 

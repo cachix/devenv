@@ -4,10 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[features]
-snix = []
-
 [dependencies]
+arc-swap.workspace = true
 devenv-activity.workspace = true
 dotenv.workspace = true
 nix-conf-parser.workspace = true

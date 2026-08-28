@@ -46,20 +46,15 @@ pub type SearchResults = std::collections::BTreeMap<String, PackageSearchResult>
 /// Build the eval-cache key suffix for the current invocation. Encodes
 /// CLI-side knobs that affect evaluation output but are not part of the
 /// Nix args themselves.
-pub fn eval_cache_key_args(
-    nix_args_str: &str,
-    port_allocation_enabled: bool,
-    strict_ports: bool,
-) -> String {
-    format!("{nix_args_str}:port_allocation={port_allocation_enabled}:strict_ports={strict_ports}")
+pub fn eval_cache_key_args(nix_args_str: &str, extension_fingerprint: &str) -> String {
+    format!("{nix_args_str}:eval_extensions={extension_fingerprint}")
 }
 
 /// "A thing that can talk to Nix."
 ///
 /// `eval` and `build` take attribute paths into the project's devenv
-/// config root. The evaluator owns the bootstrap-args wiring (passed at
-/// construction time) and the primop binding (set via the inherent
-/// `set_port_allocator` on the concrete backend).
+/// config root. The evaluator owns the bootstrap-args wiring and uses the
+/// evaluation extensions installed when its concrete backend is composed.
 #[async_trait(?Send)]
 pub trait Evaluator: Send + Sync {
     /// Backend name (for logging / debugging).
@@ -86,9 +81,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn eval_cache_key_args_includes_port_flags() {
-        let key = eval_cache_key_args("{ foo = 1; }", true, false);
-        assert!(key.contains("port_allocation=true"));
-        assert!(key.contains("strict_ports=false"));
+    fn eval_cache_key_args_includes_extension_fingerprint() {
+        let key = eval_cache_key_args("{ foo = 1; }", "allocatePort:enabled=true:strict=false");
+        assert!(key.contains("allocatePort:enabled=true:strict=false"));
     }
 }

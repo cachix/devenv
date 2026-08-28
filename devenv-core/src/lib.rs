@@ -26,10 +26,7 @@ pub use backend::Backend;
 pub use bootstrap_args::BootstrapArgs;
 pub use cachix::{CachixCacheInfo, CachixManager, CachixPaths};
 pub use config::Config;
-pub use dotenv::{
-    DotenvFileSpec, DotenvFileState, DotenvSpec, DotenvSubstitutionSpec, DotenvTracker,
-};
-pub use eval_op::{EvalOp, OpObserver};
+pub use eval_op::{EvalInputState, EvalOp, OpObserver};
 pub use evaluator::{BuildOptions, DevEnvOutput, Evaluator, PackageSearchResult, SearchResults};
 pub use internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 pub use nix_args::{CliOptionsConfig, NixArgs, SecretspecData};

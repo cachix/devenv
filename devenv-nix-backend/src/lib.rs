@@ -21,6 +21,12 @@ mod file_limit;
 
 pub mod lock;
 
+pub mod primops;
+pub use primops::{
+    AllocatePortPrimop, DotenvPlugin, LoadDotenvPrimop, NixEvalPlugin, NixEvalSetup,
+    PortAllocationPlugin, PrimopRegistration, PrimopRegistry,
+};
+
 use std::cell::RefCell;
 
 // Ensure Nix/GC is initialized exactly once across all threads

@@ -13,7 +13,8 @@ use devenv_core::{
     NixOptions, NixSettings, PortAllocator, StoreSettings, default_system,
     paths::DEFAULT_LOCK_FILE,
 };
-use devenv_nix_backend::NixCBackend;
+use devenv_eval_cache::EvalInputTracker;
+use devenv_nix_backend::{DotenvPlugin, NixCBackend, NixEvalSetup, PortAllocationPlugin};
 use tempfile::TempDir;
 
 /// Default `devenv.yaml` for tests that don't care about flake input details.
@@ -175,6 +176,7 @@ pub fn bump_local_flake(dir: &Path, marker: &str) {
 pub struct TestEnv {
     pub temp_dir: TempDir,
     pub backend: NixCBackend,
+    pub eval_inputs: Arc<EvalInputTracker>,
     pub config: Config,
     pub paths: DevenvPaths,
     _cwd_guard: CwdGuard,
@@ -293,10 +295,12 @@ impl TestEnvBuilder {
     /// Use when the test's purpose is to inspect that error.
     pub async fn try_build(self) -> miette::Result<TestEnv> {
         let (temp_dir, cwd_guard, paths, config, nix_cli) = self.build_files();
-        let backend = init_backend(paths.clone(), config.clone(), nix_cli)?;
+        let (backend, eval_inputs) =
+            init_backend_with_inputs(paths.clone(), config.clone(), nix_cli)?;
         Ok(TestEnv {
             temp_dir,
             backend,
+            eval_inputs,
             config,
             paths,
             _cwd_guard: cwd_guard,
@@ -355,6 +359,14 @@ pub fn init_backend(
     config: Config,
     nix_cli: NixOptions,
 ) -> miette::Result<NixCBackend> {
+    init_backend_with_inputs(paths, config, nix_cli).map(|(backend, _)| backend)
+}
+
+fn init_backend_with_inputs(
+    paths: DevenvPaths,
+    config: Config,
+    nix_cli: NixOptions,
+) -> miette::Result<(NixCBackend, Arc<EvalInputTracker>)> {
     let nix_settings = NixSettings::resolve(nix_cli, &config);
     let cache_settings = CacheSettings::resolve(CacheOptions::default());
     let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
@@ -366,7 +378,15 @@ pub fn init_backend(
     let logger_setup = devenv_nix_backend::logger::setup_nix_logger()?;
 
     let bootstrap_args = test_bootstrap_args(&paths, &config);
-    NixCBackend::new(
+    let port_allocator = Arc::new(PortAllocator::new());
+    let mut eval_setup = NixEvalSetup::new();
+    eval_setup
+        .install(DotenvPlugin::new(paths.root.clone()))
+        .install(PortAllocationPlugin::new(port_allocator));
+    let inputs = eval_setup.inputs();
+    let (primops, context) = eval_setup.finish();
+
+    let backend = NixCBackend::new(
         paths,
         nix_settings,
         cache_settings,
@@ -376,8 +396,10 @@ pub fn init_backend(
         fetchers_settings,
         gc_registration,
         Arc::new(bootstrap_args),
-        Arc::new(PortAllocator::new()),
+        primops,
+        context,
         None,
         logger_setup,
-    )
+    )?;
+    Ok((backend, inputs))
 }

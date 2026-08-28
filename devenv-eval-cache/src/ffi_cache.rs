@@ -9,8 +9,9 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::eval_inputs::{EnvInputDesc, FileInputDesc, Input};
-use devenv_core::eval_op::{EvalOp, OpObserver};
+use devenv_core::eval_op::{EvalInputState, EvalOp, OpObserver};
 pub use devenv_core::nix_args::NixArgs;
+use sha2::{Digest, Sha256};
 
 /// Cache key for an evaluation operation.
 ///
@@ -85,14 +86,51 @@ pub struct CachingConfig {
 /// checks can re-fire across attribute evaluations. The set keeps memory
 /// bounded to the distinct file/env universe of the session rather than the
 /// raw event count.
-pub struct InputTracker {
+pub struct EvalInputTracker {
     ops: Mutex<HashSet<EvalOp>>,
+    restored: Mutex<EvalInputIdentities>,
+    precise: Mutex<HashSet<EvalInputState>>,
+    config: Mutex<CachingConfig>,
 }
 
-impl InputTracker {
+#[derive(Clone, Debug, Default)]
+struct EvalInputIdentities {
+    paths: BTreeMap<PathBuf, bool>,
+    envs: BTreeSet<String>,
+}
+
+impl EvalInputIdentities {
+    fn clear(&mut self) {
+        self.paths.clear();
+        self.envs.clear();
+    }
+
+    fn is_empty(&self) -> bool {
+        self.paths.is_empty() && self.envs.is_empty()
+    }
+
+    fn insert_path(&mut self, path: PathBuf, recursive: bool) {
+        self.paths
+            .entry(path)
+            .and_modify(|existing| *existing |= recursive)
+            .or_insert(recursive);
+    }
+
+    fn merge(&mut self, other: Self) {
+        for (path, recursive) in other.paths {
+            self.insert_path(path, recursive);
+        }
+        self.envs.extend(other.envs);
+    }
+}
+
+impl EvalInputTracker {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             ops: Mutex::new(HashSet::new()),
+            restored: Mutex::new(EvalInputIdentities::default()),
+            precise: Mutex::new(HashSet::new()),
+            config: Mutex::new(CachingConfig::default()),
         })
     }
 
@@ -103,11 +141,117 @@ impl InputTracker {
     /// Clear the tracked ops. The tracker stays registered as an observer.
     pub fn clear(&self) {
         self.lock().clear();
+        self.restored
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clear();
+        self.precise
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clear();
     }
 
-    /// Snapshot current ops and convert them to `Input` descriptors.
-    pub fn snapshot_inputs(&self, config: &CachingConfig) -> Vec<Input> {
-        ops_to_inputs(self.lock().iter().cloned(), config)
+    /// Update filtering and extra-watch configuration for future snapshots.
+    pub fn set_config(&self, config: CachingConfig) {
+        *self
+            .config
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = config;
+    }
+
+    /// Snapshot every observed identity into fresh file/env descriptors.
+    pub fn snapshot_inputs(&self) -> Vec<Input> {
+        let config = self
+            .config
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        let mut identities = ops_to_identities(self.lock().iter().cloned(), &config);
+        let restored = self
+            .restored
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        identities.merge(restored);
+        identities_to_inputs(identities)
+    }
+
+    /// Merge identities restored from a cache hit into this EvalState session.
+    /// Descriptors are deliberately recaptured by [`Self::snapshot_inputs`]
+    /// rather than retained, so later misses never mix stale and fresh hashes.
+    pub fn restore_inputs(&self, inputs: &[Input]) {
+        let mut restored = self
+            .restored
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        for input in inputs {
+            match input {
+                Input::File(file) => restored.insert_path(file.path.clone(), file.recursive),
+                Input::Env(env) => {
+                    restored.envs.insert(env.name.clone());
+                }
+            }
+        }
+    }
+
+    /// Return whether any input in a checkpoint changed.
+    pub fn inputs_changed(&self, inputs: &[Input]) -> std::io::Result<bool> {
+        for input in inputs {
+            let changed = match input {
+                Input::File(file) => {
+                    let current =
+                        FileInputDesc::new(file.path.clone(), SystemTime::now(), file.recursive)?;
+                    current.content_hash != file.content_hash
+                        || current.is_directory != file.is_directory
+                }
+                Input::Env(env) => {
+                    EnvInputDesc::new(env.name.clone())?.content_hash != env.content_hash
+                }
+            };
+            if changed {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Return whether any precisely observed primop input changed since it was
+    /// consumed. Cache stores must refuse stale results when this is true.
+    pub fn observed_inputs_changed(&self) -> std::io::Result<bool> {
+        for observed in self
+            .precise
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .iter()
+        {
+            let current = match observed {
+                EvalInputState::File { path, .. } => EvalInputState::File {
+                    path: path.clone(),
+                    content_sha256: match std::fs::read(path) {
+                        Ok(contents) => Some(hex::encode(Sha256::digest(contents))),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                        Err(error) => return Err(error),
+                    },
+                },
+                EvalInputState::Env { name, .. } => EvalInputState::Env {
+                    name: name.clone(),
+                    content_sha256: std::env::var(name)
+                        .ok()
+                        .map(|value| hex::encode(Sha256::digest(value.as_bytes()))),
+                },
+            };
+            if current != *observed {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    pub fn clear_observed_input_states(&self) {
+        self.precise
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clear();
     }
 
     /// Snapshot the tracked ops as a `Vec` (for tests and diagnostics).
@@ -117,13 +261,53 @@ impl InputTracker {
 
     pub fn is_empty(&self) -> bool {
         self.lock().is_empty()
+            && self
+                .restored
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .is_empty()
+            && self
+                .precise
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .is_empty()
     }
 }
 
-impl OpObserver for InputTracker {
+impl OpObserver for EvalInputTracker {
     fn record(&self, op: EvalOp) {
         self.lock().insert(op);
     }
+
+    fn record_input_state(&self, input: EvalInputState) {
+        self.record(input.operation());
+        self.precise
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .insert(input);
+    }
+}
+
+fn identities_to_inputs(identities: EvalInputIdentities) -> Vec<Input> {
+    let fallback_time = SystemTime::now();
+    let mut inputs = Vec::with_capacity(identities.paths.len() + identities.envs.len());
+    inputs.extend(
+        identities
+            .paths
+            .into_iter()
+            .filter_map(|(path, recursive)| {
+                FileInputDesc::new(path, fallback_time, recursive)
+                    .ok()
+                    .map(Input::File)
+            }),
+    );
+    inputs.extend(
+        identities
+            .envs
+            .into_iter()
+            .filter_map(|name| EnvInputDesc::new(name).ok().map(Input::Env)),
+    );
+    inputs
 }
 
 /// Convert a list of operations to Input descriptors.
@@ -134,20 +318,29 @@ impl OpObserver for InputTracker {
 /// 3. Creates `FileInputDesc` and `EnvInputDesc` values
 /// 4. Adds extra watch paths
 pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConfig) -> Vec<Input> {
-    let fallback_time = SystemTime::now();
-    let mut paths: BTreeMap<PathBuf, bool> = BTreeMap::new();
-    let mut env_names: BTreeSet<String> = BTreeSet::new();
+    identities_to_inputs(ops_to_identities(ops, config))
+}
+
+fn ops_to_identities(
+    ops: impl IntoIterator<Item = EvalOp>,
+    config: &CachingConfig,
+) -> EvalInputIdentities {
+    let mut identities = EvalInputIdentities::default();
 
     for op in ops {
         let (source, recursive) = match op {
             EvalOp::ReadFile { source }
             | EvalOp::ReadDir { source }
+            | EvalOp::ReadFileType { source }
+            | EvalOp::HashFile { source, .. }
             | EvalOp::PathExists { source }
-            | EvalOp::EvaluatedFile { source } => (source, false),
-            EvalOp::TrackedPath { source } | EvalOp::CopiedSource { source, .. } => (source, true),
+            | EvalOp::EvaluatedFile { source, .. } => (source, false),
+            EvalOp::CopiedSource { source, .. } | EvalOp::FilteredSource { source, .. } => {
+                (source, true)
+            }
             EvalOp::GetEnv { name } => {
                 if !config.excluded_envs.contains(&name) {
-                    env_names.insert(name);
+                    identities.envs.insert(name);
                 }
                 continue;
             }
@@ -163,34 +356,15 @@ pub fn ops_to_inputs(ops: impl IntoIterator<Item = EvalOp>, config: &CachingConf
             continue;
         }
 
-        paths
-            .entry(source)
-            .and_modify(|existing| *existing |= recursive)
-            .or_insert(recursive);
+        identities.insert_path(source, recursive);
     }
 
     // Add extra watch paths. These are meant to trigger re-evaluation on any
     // change, so watch directories recursively.
     for path in &config.extra_watch_paths {
-        paths
-            .entry(path.clone())
-            .and_modify(|recursive| *recursive = true)
-            .or_insert(true);
+        identities.insert_path(path.clone(), true);
     }
-
-    let mut inputs = Vec::with_capacity(paths.len() + env_names.len());
-    inputs.extend(paths.into_iter().filter_map(|(path, recursive)| {
-        FileInputDesc::new(path, fallback_time, recursive)
-            .ok()
-            .map(Input::File)
-    }));
-    inputs.extend(
-        env_names
-            .into_iter()
-            .filter_map(|name| EnvInputDesc::new(name).ok().map(Input::Env)),
-    );
-
-    inputs
+    identities
 }
 
 #[cfg(test)]
@@ -203,13 +377,13 @@ mod tests {
 
     #[test]
     fn test_tracker_starts_empty() {
-        let tracker = InputTracker::new();
+        let tracker = EvalInputTracker::new();
         assert!(tracker.is_empty());
     }
 
     #[test]
     fn test_tracker_push_and_snapshot() {
-        let tracker = InputTracker::new();
+        let tracker = EvalInputTracker::new();
         tracker.record(EvalOp::GetEnv {
             name: "FOO".to_string(),
         });
@@ -220,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_tracker_deduplicates_on_insert() {
-        let tracker = InputTracker::new();
+        let tracker = EvalInputTracker::new();
         tracker.record(EvalOp::GetEnv {
             name: "A".to_string(),
         });
@@ -235,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_tracker_clear() {
-        let tracker = InputTracker::new();
+        let tracker = EvalInputTracker::new();
         tracker.record(EvalOp::GetEnv {
             name: "FOO".to_string(),
         });
@@ -246,6 +420,38 @@ mod tests {
             name: "BAR".to_string(),
         });
         assert_eq!(tracker.snapshot().len(), 1);
+    }
+
+    #[test]
+    fn restored_paths_merge_recursive_observations_before_capture() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(temp_dir.path().join("file"), b"contents").unwrap();
+        let path = temp_dir.path().to_path_buf();
+        let fallback = SystemTime::now();
+        let tracker = EvalInputTracker::new();
+        tracker.restore_inputs(&[
+            Input::File(FileInputDesc::new(path.clone(), fallback, false).unwrap()),
+            Input::File(FileInputDesc::new(path.clone(), fallback, true).unwrap()),
+        ]);
+
+        let inputs = tracker.snapshot_inputs();
+        assert_eq!(inputs.len(), 1);
+        assert!(matches!(&inputs[0], Input::File(file) if file.path == path && file.recursive));
+    }
+
+    #[test]
+    fn restored_inputs_are_recaptured_from_live_state() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("file");
+        std::fs::write(&path, b"before").unwrap();
+        let previous = FileInputDesc::new(path.clone(), SystemTime::now(), false).unwrap();
+        let old_hash = previous.content_hash.clone();
+        let tracker = EvalInputTracker::new();
+        tracker.restore_inputs(&[Input::File(previous)]);
+
+        std::fs::write(&path, b"after").unwrap();
+        let inputs = tracker.snapshot_inputs();
+        assert!(matches!(&inputs[0], Input::File(file) if file.content_hash != old_hash));
     }
 
     #[test]
@@ -331,5 +537,40 @@ mod tests {
             matches!(&inputs[0], Input::File(desc) if desc.path == source && desc.recursive),
             "a copied-source observation must subsume a weaker readDir observation"
         );
+    }
+
+    #[test]
+    fn test_ops_to_inputs_tracks_new_file_effects_and_filtered_sources() {
+        let temp_dir = TempDir::new().unwrap();
+        let file = temp_dir.path().join("source.txt");
+        std::fs::write(&file, b"source").unwrap();
+        let source = temp_dir.path().to_path_buf();
+
+        let inputs = ops_to_inputs(
+            vec![
+                EvalOp::ReadFileType {
+                    source: file.clone(),
+                },
+                EvalOp::HashFile {
+                    source: file.clone(),
+                    algorithm: "sha256".into(),
+                },
+                EvalOp::FilteredSource {
+                    source: source.clone(),
+                    target: PathBuf::from("/nix/store/example-source"),
+                },
+            ],
+            &CachingConfig::default(),
+        );
+
+        assert_eq!(inputs.len(), 2);
+        assert!(matches!(
+            &inputs[0],
+            Input::File(desc) if desc.path == source && desc.recursive
+        ));
+        assert!(matches!(
+            &inputs[1],
+            Input::File(desc) if desc.path == file && !desc.recursive
+        ));
     }
 }

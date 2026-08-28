@@ -31,25 +31,87 @@ pub fn next_id() -> u64 {
     ID_COUNTER.fetch_add(1, Ordering::Relaxed) | (1 << 63)
 }
 
+/// A fully-owned activity start event, ready to be traced and emitted.
+pub struct PreparedActivity {
+    event: ActivityEvent,
+    id: u64,
+    activity_type: ActivityType,
+    level: ActivityLevel,
+    display_name: Option<String>,
+}
+
+impl PreparedActivity {
+    fn new(
+        event: ActivityEvent,
+        id: u64,
+        activity_type: ActivityType,
+        level: ActivityLevel,
+    ) -> Self {
+        Self {
+            event,
+            id,
+            activity_type,
+            level,
+            display_name: None,
+        }
+    }
+
+    fn with_display_name(mut self, display_name: String) -> Self {
+        self.display_name = Some(display_name);
+        self
+    }
+
+    pub fn activity_name(&self) -> &str {
+        match &self.event {
+            ActivityEvent::Build(Build::Queued { name, .. } | Build::Start { name, .. })
+            | ActivityEvent::Fetch(Fetch::Start { name, .. })
+            | ActivityEvent::Evaluate(Evaluate::Start { name, .. })
+            | ActivityEvent::Command(Command::Start { name, .. })
+            | ActivityEvent::Process(Process::Start { name, .. })
+            | ActivityEvent::Operation(Operation::Start { name, .. }) => name,
+            ActivityEvent::Task(Task::Start { .. }) => self
+                .display_name
+                .as_deref()
+                .expect("prepared task activities have a display name"),
+            _ => unreachable!("prepared activities always contain start or queued events"),
+        }
+    }
+
+    pub fn activity_kind(&self) -> &'static str {
+        match self.activity_type {
+            ActivityType::Build => "build",
+            ActivityType::Fetch(_) => "fetch",
+            ActivityType::Evaluate => "evaluate",
+            ActivityType::Task => "task",
+            ActivityType::Command => "command",
+            ActivityType::Process => "process",
+            ActivityType::Operation => "operation",
+        }
+    }
+
+    pub fn resolved_level(&self) -> ActivityLevel {
+        self.level
+    }
+    pub fn event(&self) -> &ActivityEvent {
+        &self.event
+    }
+
+    pub fn finish(self, span: Span) -> Activity {
+        send_activity_event(self.event);
+        Activity::new(span, self.id, self.activity_type, self.level)
+    }
+}
+
 /// Trait implemented by all activity builders.
 pub trait ActivityStart: Sized {
-    /// The human-readable activity name (used for `otel.name` and `devenv.ui.message`).
-    fn activity_name(&self) -> &str;
-
-    /// The activity kind (e.g. `"build"`, `"fetch"`, `"operation"`).
-    fn activity_kind(&self) -> &'static str;
+    /// Return the pre-assigned activity ID, if one was set via `.id()`.
+    fn existing_id(&self) -> Option<u64>;
 
     /// Resolve the effective tracing level for this activity.
     fn resolved_level(&self) -> ActivityLevel;
 
-    /// Return the pre-assigned activity ID, if one was set via `.id()`.
-    fn existing_id(&self) -> Option<u64>;
-
-    /// Set the pre-assigned activity ID on the builder.
-    fn with_id(self, id: u64) -> Self;
-
-    /// Finalize the activity with a span created at the call site.
-    fn start_with_span(self, span: Span) -> Activity;
+    /// Consume the builder into its one typed start event.
+    fn prepare(self, id: u64) -> PreparedActivity;
 
     /// Start the activity, creating a tracing span.
     ///
@@ -59,8 +121,9 @@ pub trait ActivityStart: Sized {
     /// span creation (e.g. `activity!`, `#[instrument_activity]`).
     fn start(self) -> Activity {
         let id = self.existing_id().unwrap_or_else(crate::next_id);
-        let span = crate::__create_activity_span!(&self, id);
-        self.with_id(id).start_with_span(span)
+        let prepared = self.prepare(id);
+        let span = crate::__create_activity_span!(&prepared, id);
+        prepared.finish(span)
     }
 }
 
@@ -81,11 +144,9 @@ macro_rules! start {
     ($builder:expr) => {{
         let __builder = $builder;
         let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
-        let __span = $crate::__create_activity_span!(&__builder, __id);
-        $crate::ActivityStart::start_with_span(
-            $crate::ActivityStart::with_id(__builder, __id),
-            __span,
-        )
+        let __prepared = $crate::ActivityStart::prepare(__builder, __id);
+        let __span = $crate::__create_activity_span!(&__prepared, __id);
+        __prepared.finish(__span)
     }};
 }
 
@@ -99,8 +160,9 @@ macro_rules! queue {
     ($builder:expr) => {{
         let __builder = $builder;
         let __id = $crate::ActivityStart::existing_id(&__builder).unwrap_or_else($crate::next_id);
-        let __span = $crate::__create_activity_span!(&__builder, __id);
-        $crate::ActivityStart::with_id(__builder, __id).queue_with_span(__span)
+        let __prepared = __builder.prepare_queued(__id);
+        let __span = $crate::__create_activity_span!(&__prepared, __id);
+        __prepared.finish(__span)
     }};
 }
 
@@ -171,7 +233,7 @@ macro_rules! __to_activity_level {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __create_activity_span {
-    ($builder:expr, $id:expr $(, $($($k:ident).+ = $v:expr),+ )?) => {{
+    ($prepared:expr, $id:expr $(, $($($k:ident).+ = $v:expr),+ )?) => {{
         use tracing::__macro_support::Callsite as _;
         use tracing::callsite::{DefaultCallsite, Identifier};
         use tracing::field::FieldSet;
@@ -182,6 +244,8 @@ macro_rules! __create_activity_span {
             "otel.name",
             "devenv.ui.message",
             "devenv.activity.kind",
+            "devenv.activity.event",
+            "devenv.activity.complete",
             "devenv.outcome",
             "otel.status_code",
             $($( stringify!($($k).+) ),+ )?
@@ -191,7 +255,7 @@ macro_rules! __create_activity_span {
             ($lvl:expr, $CS:ident, $META:ident) => {
                 static $META: tracing::Metadata<'static> = tracing::Metadata::new(
                     "activity",
-                    module_path!(),
+                    "devenv_activity::spans",
                     $lvl,
                     Some(file!()),
                     Some(line!()),
@@ -209,7 +273,7 @@ macro_rules! __create_activity_span {
         def_callsite!(tracing::Level::DEBUG, CS_D, M_D);
         def_callsite!(tracing::Level::TRACE, CS_T, M_T);
 
-        let __level = $crate::ActivityStart::resolved_level($builder);
+        let __level = $prepared.resolved_level();
         let cs: &DefaultCallsite = match __level {
             $crate::ActivityLevel::Error => &CS_E,
             $crate::ActivityLevel::Warn => &CS_W,
@@ -224,8 +288,8 @@ macro_rules! __create_activity_span {
         } else {
             let meta = cs.metadata();
             if tracing::__macro_support::__is_enabled(meta, interest) {
-                let __name = $crate::ActivityStart::activity_name($builder);
-                let __kind = $crate::ActivityStart::activity_kind($builder);
+                let __name = $prepared.activity_name();
+                let __kind = $prepared.activity_kind();
                 let __otel_name_owned;
                 let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
                     __otel_name_owned = __name.to_ascii_lowercase();
@@ -234,6 +298,17 @@ macro_rules! __create_activity_span {
                     __name
                 };
                 let fs = meta.fields();
+                // Serde conversion is deliberately inside the enabled branch:
+                // normal TUI/console operation never serializes activity data.
+                let __activity_event = tracing::enabled!(
+                    target: "devenv_activity::events",
+                    tracing::Level::DEBUG
+                )
+                .then(|| $crate::SerdeValue::from_serialize($prepared.event()).ok())
+                .flatten();
+                let __activity_event = __activity_event
+                    .as_ref()
+                    .map($crate::SerdeValue::as_tracing_value);
                 tracing::Span::new(
                     meta,
                     &fs.value_set(&[
@@ -241,6 +316,7 @@ macro_rules! __create_activity_span {
                         (&fs.field("otel.name").unwrap(), Some(&__otel_name as &dyn tracing::field::Value)),
                         (&fs.field("devenv.ui.message").unwrap(), Some(&__name as &dyn tracing::field::Value)),
                         (&fs.field("devenv.activity.kind").unwrap(), Some(&__kind as &dyn tracing::field::Value)),
+                        (&fs.field("devenv.activity.event").unwrap(), __activity_event.as_ref().map(|event| event as &dyn tracing::field::Value)),
                         $($( (&fs.field(stringify!($($k).+)).unwrap(), Some(&$v as &dyn tracing::field::Value)) ),+ )?
                     ]),
                 )
@@ -300,37 +376,26 @@ impl BuildBuilder {
     /// Prefer the [`queue!`] macro for correct call-site metadata.
     pub fn queue(self) -> Activity {
         let id = self.existing_id().unwrap_or_else(next_id);
-        let span = crate::__create_activity_span!(&self, id);
-        self.with_id(id).queue_with_span(span)
+        let prepared = self.prepare_queued(id);
+        let span = crate::__create_activity_span!(&prepared, id);
+        prepared.finish(span)
     }
 
-    /// Queue a build with an externally-created span.
-    pub fn queue_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
+    #[doc(hidden)]
+    pub fn prepare_queued(self, id: u64) -> PreparedActivity {
         let level = self.resolved_level();
-
-        send_activity_event(ActivityEvent::Build(Build::Queued {
+        let event = ActivityEvent::Build(Build::Queued {
             id,
             name: self.name,
-            parent,
+            parent: self.parent.unwrap_or_else(current_activity_id),
             derivation_path: self.derivation_path,
             timestamp: Timestamp::now(),
-        }));
-
-        Activity::new(span, id, ActivityType::Build, level)
+        });
+        PreparedActivity::new(event, id, ActivityType::Build, level)
     }
 }
 
 impl ActivityStart for BuildBuilder {
-    fn activity_name(&self) -> &str {
-        &self.name
-    }
-
-    fn activity_kind(&self) -> &'static str {
-        "build"
-    }
-
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -341,25 +406,16 @@ impl ActivityStart for BuildBuilder {
         self.id
     }
 
-    fn with_id(mut self, id: u64) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    fn start_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
+    fn prepare(self, id: u64) -> PreparedActivity {
         let level = self.resolved_level();
-
-        send_activity_event(ActivityEvent::Build(Build::Start {
+        let event = ActivityEvent::Build(Build::Start {
             id,
             name: self.name,
-            parent,
+            parent: self.parent.unwrap_or_else(current_activity_id),
             derivation_path: self.derivation_path,
             timestamp: Timestamp::now(),
-        }));
-
-        Activity::new(span, id, ActivityType::Build, level)
+        });
+        PreparedActivity::new(event, id, ActivityType::Build, level)
     }
 }
 
@@ -407,14 +463,6 @@ impl FetchBuilder {
 }
 
 impl ActivityStart for FetchBuilder {
-    fn activity_name(&self) -> &str {
-        &self.name
-    }
-
-    fn activity_kind(&self) -> &'static str {
-        "fetch"
-    }
-
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -425,27 +473,18 @@ impl ActivityStart for FetchBuilder {
         self.id
     }
 
-    fn with_id(mut self, id: u64) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    fn start_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
+    fn prepare(self, id: u64) -> PreparedActivity {
         let level = self.resolved_level();
         let kind = self.kind;
-
-        send_activity_event(ActivityEvent::Fetch(Fetch::Start {
+        let event = ActivityEvent::Fetch(Fetch::Start {
             id,
             kind,
             name: self.name,
-            parent,
+            parent: self.parent.unwrap_or_else(current_activity_id),
             url: self.url,
             timestamp: Timestamp::now(),
-        }));
-
-        Activity::new(span, id, ActivityType::Fetch(kind), level)
+        });
+        PreparedActivity::new(event, id, ActivityType::Fetch(kind), level)
     }
 }
 
@@ -484,14 +523,6 @@ impl EvaluateBuilder {
 }
 
 impl ActivityStart for EvaluateBuilder {
-    fn activity_name(&self) -> &str {
-        &self.name
-    }
-
-    fn activity_kind(&self) -> &'static str {
-        "evaluate"
-    }
-
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -502,25 +533,16 @@ impl ActivityStart for EvaluateBuilder {
         self.id
     }
 
-    fn with_id(mut self, id: u64) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    fn start_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
+    fn prepare(self, id: u64) -> PreparedActivity {
         let level = self.resolved_level();
-
-        send_activity_event(ActivityEvent::Evaluate(Evaluate::Start {
+        let event = ActivityEvent::Evaluate(Evaluate::Start {
             id,
             name: self.name,
             level,
-            parent,
+            parent: self.parent.unwrap_or_else(current_activity_id),
             timestamp: Timestamp::now(),
-        }));
-
-        Activity::new(span, id, ActivityType::Evaluate, level)
+        });
+        PreparedActivity::new(event, id, ActivityType::Evaluate, level)
     }
 }
 
@@ -552,14 +574,6 @@ impl TaskBuilder {
 }
 
 impl ActivityStart for TaskBuilder {
-    fn activity_name(&self) -> &str {
-        &self.name
-    }
-
-    fn activity_kind(&self) -> &'static str {
-        "task"
-    }
-
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -570,21 +584,14 @@ impl ActivityStart for TaskBuilder {
         self.id
     }
 
-    fn with_id(mut self, id: u64) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    fn start_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
+    fn prepare(self, id: u64) -> PreparedActivity {
         let level = self.resolved_level();
-
-        send_activity_event(ActivityEvent::Task(Task::Start {
+        let name = self.name;
+        let event = ActivityEvent::Task(Task::Start {
             id,
             timestamp: Timestamp::now(),
-        }));
-
-        Activity::new(span, id, ActivityType::Task, level)
+        });
+        PreparedActivity::new(event, id, ActivityType::Task, level).with_display_name(name)
     }
 }
 
@@ -630,14 +637,6 @@ impl CommandBuilder {
 }
 
 impl ActivityStart for CommandBuilder {
-    fn activity_name(&self) -> &str {
-        &self.name
-    }
-
-    fn activity_kind(&self) -> &'static str {
-        "command"
-    }
-
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -648,25 +647,16 @@ impl ActivityStart for CommandBuilder {
         self.id
     }
 
-    fn with_id(mut self, id: u64) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    fn start_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
+    fn prepare(self, id: u64) -> PreparedActivity {
         let level = self.resolved_level();
-
-        send_activity_event(ActivityEvent::Command(Command::Start {
+        let event = ActivityEvent::Command(Command::Start {
             id,
             name: self.name,
-            parent,
+            parent: self.parent.unwrap_or_else(current_activity_id),
             command: self.command,
             timestamp: Timestamp::now(),
-        }));
-
-        Activity::new(span, id, ActivityType::Command, level)
+        });
+        PreparedActivity::new(event, id, ActivityType::Command, level)
     }
 }
 
@@ -726,14 +716,6 @@ impl ProcessBuilder {
 }
 
 impl ActivityStart for ProcessBuilder {
-    fn activity_name(&self) -> &str {
-        &self.name
-    }
-
-    fn activity_kind(&self) -> &'static str {
-        "process"
-    }
-
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -744,28 +726,19 @@ impl ActivityStart for ProcessBuilder {
         self.id
     }
 
-    fn with_id(mut self, id: u64) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    fn start_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
+    fn prepare(self, id: u64) -> PreparedActivity {
         let level = self.resolved_level();
-
-        send_activity_event(ActivityEvent::Process(Process::Start {
+        let event = ActivityEvent::Process(Process::Start {
             id,
             name: self.name,
-            parent,
+            parent: self.parent.unwrap_or_else(current_activity_id),
             command: self.command,
             ports: self.ports,
             ready_probe: self.ready_probe,
             level,
             timestamp: Timestamp::now(),
-        }));
-
-        Activity::new(span, id, ActivityType::Process, level)
+        });
+        PreparedActivity::new(event, id, ActivityType::Process, level)
     }
 }
 
@@ -811,14 +784,6 @@ impl OperationBuilder {
 }
 
 impl ActivityStart for OperationBuilder {
-    fn activity_name(&self) -> &str {
-        &self.name
-    }
-
-    fn activity_kind(&self) -> &'static str {
-        "operation"
-    }
-
     fn resolved_level(&self) -> ActivityLevel {
         self.level
             .or_else(current_activity_level)
@@ -829,25 +794,16 @@ impl ActivityStart for OperationBuilder {
         self.id
     }
 
-    fn with_id(mut self, id: u64) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    fn start_with_span(self, span: Span) -> Activity {
-        let id = self.id.unwrap_or_else(next_id);
-        let parent = self.parent.unwrap_or_else(current_activity_id);
+    fn prepare(self, id: u64) -> PreparedActivity {
         let level = self.resolved_level();
-
-        send_activity_event(ActivityEvent::Operation(Operation::Start {
+        let event = ActivityEvent::Operation(Operation::Start {
             id,
             name: self.name,
-            parent,
+            parent: self.parent.unwrap_or_else(current_activity_id),
             detail: self.detail,
             level,
             timestamp: Timestamp::now(),
-        }));
-
-        Activity::new(span, id, ActivityType::Operation, level)
+        });
+        PreparedActivity::new(event, id, ActivityType::Operation, level)
     }
 }

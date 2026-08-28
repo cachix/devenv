@@ -550,9 +550,9 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
 
 /// The activity sink for a run.
 ///
-/// Three mutually exclusive variants. `None` means tracing owns the terminal —
-/// `send_activity_event` then falls through to `tracing::trace!` only, which is
-/// exactly what `--trace-to <terminal>` wants.
+/// Three mutually exclusive variants. `None` means tracing owns the terminal;
+/// the first-party activity channel has no renderer, while the independently
+/// emitted activity spans and update events remain available to trace exports.
 enum Renderer {
     Tui(tokio_mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
     Console(tokio_mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),

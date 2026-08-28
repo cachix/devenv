@@ -37,8 +37,6 @@ devenv is a Rust CLI tool that creates fast, declarative, reproducible developer
 
 - **devenv-nix-backend/** - C FFI-based Nix backend using `nix-bindings-*` crates. Provides direct API access to Nix without subprocess spawning. This is the default backend.
 
-- **devenv-snix-backend/** - Experimental pure-Rust Nix evaluator backend using Snix (feature-gated with `snix`).
-
 - **devenv-tasks/** - DAG-based task execution system with caching, parallel execution, and privilege escalation support.
 
 - **devenv-activity/** - Tracing-based activity system that powers the TUI progress display. Use `#[instrument_activity("description")]` macro for TUI-visible operations.
@@ -66,7 +64,7 @@ devenv is a Rust CLI tool that creates fast, declarative, reproducible developer
 
 ### Key Patterns
 
-- **Dual Backend Architecture**: The `NixBackend` trait allows swapping between the FFI-based backend (default) and Snix backend.
+- **Backend Architecture**: The `NixBackend` trait keeps Nix evaluation behind a stable interface.
 - **Activity Tracing**: Use `#[instrument_activity("description")]` macro or `activity!(INFO, operation, "...")` for TUI-visible operations.
 - **Error Handling**: Use `miette` for errors with `bail!()` and `?`. Custom error types use `thiserror`.
 - **SQLite Migrations**: Both `devenv-eval-cache` and `devenv-tasks` use sqlx with migrations in `migrations/` directories.
@@ -86,7 +84,6 @@ Integration tests live in `tests/` and `examples/` directories. Each test is a d
 
 - **`devenv/test-all`** — Enables all feature-gated unit tests across the workspace.
 - **`devenv/test-mcp`** — Enables MCP-related tests.
-- **`devenv/snix`** — Enables the experimental Snix backend.
 - **`devenv-shell/test-pty`** — Enables PTY-based session tests (requires a real terminal).
 - **`deterministic-tui`** — Available on both `devenv-shell` and `devenv-tui`.
   Replaces spinner animation and elapsed time formatting with static placeholders (`[TIME]`, fixed spinner frame) so that TUI snapshot tests produce deterministic output.

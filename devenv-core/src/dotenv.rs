@@ -3,127 +3,81 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use dotenv::{EnvLoader, EnvSequence};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::resource::{ReplayError, ReplayableResource};
+use crate::eval_op::{EvalInputState, OpObserver};
 
-/// The state of dotenv inputs used by a Nix evaluation.
-///
-/// Only paths and hashes are persisted in the evaluation cache. Dotenv and
-/// inherited environment values are deliberately omitted.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DotenvSpec {
-    pub files: Vec<DotenvFileSpec>,
-    pub substitution_environment: Option<DotenvSubstitutionSpec>,
+/// Transient file state used to reject dotenv changes during a load.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DotenvFileSpec {
+    path: PathBuf,
+    state: DotenvFileState,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DotenvSubstitutionSpec {
-    /// Names consulted during interpolation. Values are represented only by
-    /// the combined hash below and are never persisted.
-    pub variables: Vec<String>,
-    pub sha256: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DotenvFileSpec {
-    pub path: PathBuf,
-    pub state: DotenvFileState,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
-pub enum DotenvFileState {
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum DotenvFileState {
     Missing,
     Present { sha256: String },
-}
-
-/// Tracks dotenv inputs read by the Nix primop.
-#[derive(Debug, Default)]
-pub struct DotenvTracker {
-    spec: Mutex<DotenvSpec>,
-}
-
-impl DotenvTracker {
-    fn record(&self, spec: DotenvSpec) {
-        *self.spec.lock().unwrap() = spec;
-    }
-}
-
-impl ReplayableResource for DotenvTracker {
-    type Spec = DotenvSpec;
-    const TYPE_ID: &'static str = "dotenv";
-
-    fn snapshot(&self) -> Self::Spec {
-        self.spec.lock().unwrap().clone()
-    }
-
-    fn replay(&self, spec: &Self::Spec) -> std::result::Result<(), ReplayError> {
-        let current = DotenvSpec {
-            files: capture_files(spec.files.iter().map(|file| file.path.as_path()))
-                .map_err(|error| ReplayError::Unavailable(error.to_string()))?,
-            substitution_environment: spec
-                .substitution_environment
-                .as_ref()
-                .map(|environment| capture_substitution_environment(&environment.variables)),
-        };
-
-        if &current != spec {
-            return Err(ReplayError::Unavailable(
-                "dotenv inputs changed since the cached evaluation".to_string(),
-            ));
-        }
-
-        self.record(spec.clone());
-        Ok(())
-    }
-
-    fn clear(&self) {
-        self.record(DotenvSpec::default());
-    }
 }
 
 /// Load dotenv files with the same parser used by both the CLI runtime path
 /// and the Nix primop.
 pub fn load_dotenv(paths: &[PathBuf], substitution: bool) -> Result<BTreeMap<String, String>> {
-    load_dotenv_inner(paths, substitution).map(|(variables, _)| variables)
+    load_dotenv_inner(paths, substitution).map(|(variables, _, _)| variables)
 }
 
-/// Load dotenv files and record their dependency hashes for evaluation-cache
-/// replay. This prevents cached Nix values from surviving a dotenv edit.
+/// Load dotenv files and report ordinary file/env observations to the
+/// evaluation input tracker. This prevents cached Nix values from surviving a
+/// dotenv or substitution-source edit.
 pub fn load_dotenv_tracked(
     paths: &[PathBuf],
     substitution: bool,
-    tracker: &DotenvTracker,
+    observer: &dyn OpObserver,
 ) -> Result<BTreeMap<String, String>> {
     let before = capture_files(paths.iter().map(PathBuf::as_path))?;
-    let (variables, substitution_environment) = load_dotenv_inner(paths, substitution)?;
+    let (variables, substitution_dependencies, substitutions) =
+        load_dotenv_inner(paths, substitution)?;
     let after = capture_files(paths.iter().map(PathBuf::as_path))?;
 
     if before != after {
         bail!("A dotenv file changed while it was being loaded; retry the command");
     }
 
-    // Use the exact inherited environment snapshot supplied to dotenv-ng,
-    // rather than a second capture that could race with evaluation.
-    tracker.record(DotenvSpec {
-        files: before,
-        substitution_environment,
-    });
+    for file in before {
+        observer.record_input_state(EvalInputState::File {
+            path: file.path,
+            content_sha256: match file.state {
+                DotenvFileState::Missing => None,
+                DotenvFileState::Present { sha256 } => Some(sha256),
+            },
+        });
+    }
+    for name in substitution_dependencies {
+        let content_sha256 = substitutions
+            .as_ref()
+            .and_then(|values| values.get(&name))
+            .map(|value| hex::encode(Sha256::digest(value.as_bytes())));
+        observer.record_input_state(EvalInputState::Env {
+            name,
+            content_sha256,
+        });
+    }
     Ok(variables)
 }
 
 fn load_dotenv_inner(
     paths: &[PathBuf],
     substitution: bool,
-) -> Result<(BTreeMap<String, String>, Option<DotenvSubstitutionSpec>)> {
+) -> Result<(
+    BTreeMap<String, String>,
+    Vec<String>,
+    Option<BTreeMap<String, String>>,
+)> {
     if paths.is_empty() {
-        return Ok((BTreeMap::new(), None));
+        return Ok((BTreeMap::new(), Vec::new(), None));
     }
 
     let substitutions = substitution.then(inherited_substitutions);
@@ -156,10 +110,9 @@ fn load_dotenv_inner(
         variables.insert(name, value);
     }
 
-    let substitution_environment = substitutions
-        .as_ref()
-        .map(|values| substitution_environment_spec(values, dependencies));
-    Ok((variables, substitution_environment))
+    let mut dependencies: Vec<_> = dependencies.into_iter().collect();
+    dependencies.sort();
+    Ok((variables, dependencies, substitutions))
 }
 
 fn capture_files<'a>(paths: impl IntoIterator<Item = &'a Path>) -> Result<Vec<DotenvFileSpec>> {
@@ -193,36 +146,6 @@ fn inherited_substitutions() -> BTreeMap<String, String> {
         .collect()
 }
 
-fn capture_substitution_environment(variables: &[String]) -> DotenvSubstitutionSpec {
-    substitution_environment_spec(&inherited_substitutions(), variables.iter().cloned())
-}
-
-fn substitution_environment_spec(
-    substitutions: &BTreeMap<String, String>,
-    variables: impl IntoIterator<Item = String>,
-) -> DotenvSubstitutionSpec {
-    let mut variables: Vec<_> = variables.into_iter().collect();
-    variables.sort();
-
-    let mut hasher = Sha256::new();
-    for name in &variables {
-        hasher.update(name.len().to_le_bytes());
-        hasher.update(name.as_bytes());
-        match substitutions.get(name) {
-            Some(value) => {
-                hasher.update([1]);
-                hasher.update(value.len().to_le_bytes());
-                hasher.update(value.as_bytes());
-            }
-            None => hasher.update([0]),
-        }
-    }
-    DotenvSubstitutionSpec {
-        variables,
-        sha256: hex::encode(hasher.finalize()),
-    }
-}
-
 fn is_valid_env_name(name: &str) -> bool {
     let mut chars = name.chars();
     match chars.next() {
@@ -235,39 +158,43 @@ fn is_valid_env_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::eval_op::EvalOp;
+    use std::sync::Mutex;
     use tempfile::TempDir;
 
+    #[derive(Default)]
+    struct RecordingObserver(Mutex<Vec<EvalOp>>);
+
+    impl OpObserver for RecordingObserver {
+        fn record(&self, op: EvalOp) {
+            self.0.lock().unwrap().push(op);
+        }
+    }
+
     #[test]
-    fn tracker_rejects_changed_and_new_files() {
+    fn tracked_load_records_present_and_missing_files() {
         let root = TempDir::new().unwrap();
         let present = root.path().join(".env");
         let missing = root.path().join(".env.local");
         fs::write(&present, "VALUE=one\n").unwrap();
 
-        let tracker = DotenvTracker::default();
-        load_dotenv_tracked(&[present.clone(), missing.clone()], false, &tracker).unwrap();
-        let spec = tracker.snapshot();
-        assert!(tracker.replay(&spec).is_ok());
-
-        fs::write(&present, "VALUE=two\n").unwrap();
-        assert!(tracker.replay(&spec).is_err());
-
-        fs::write(&present, "VALUE=one\n").unwrap();
-        fs::write(&missing, "LOCAL=yes\n").unwrap();
-        assert!(tracker.replay(&spec).is_err());
+        let observer = RecordingObserver::default();
+        load_dotenv_tracked(&[present.clone(), missing.clone()], false, &observer).unwrap();
+        let observations = observer.0.lock().unwrap();
+        assert!(observations.contains(&EvalOp::ReadFile { source: present }));
+        assert!(observations.contains(&EvalOp::ReadFile { source: missing }));
     }
 
     #[test]
-    fn tracker_spec_does_not_contain_values() {
+    fn tracked_load_records_substitution_names_without_values() {
         let root = TempDir::new().unwrap();
         let path = root.path().join(".env");
-        fs::write(&path, "SECRET=must-not-be-cached\n").unwrap();
+        fs::write(&path, "VALUE=$HOME\n").unwrap();
 
-        let tracker = DotenvTracker::default();
-        load_dotenv_tracked(&[path], false, &tracker).unwrap();
-        let json = serde_json::to_string(&tracker.snapshot()).unwrap();
-
-        assert!(!json.contains("must-not-be-cached"));
-        assert!(!json.contains("SECRET"));
+        let observer = RecordingObserver::default();
+        load_dotenv_tracked(&[path], true, &observer).unwrap();
+        assert!(observer.0.lock().unwrap().contains(&EvalOp::GetEnv {
+            name: "HOME".into()
+        }));
     }
 }

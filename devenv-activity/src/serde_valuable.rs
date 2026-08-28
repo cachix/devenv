@@ -32,6 +32,13 @@ impl SerdeValue {
     pub fn from_serialize<T: Serialize>(value: &T) -> Result<Self, serde_json::Error> {
         serde_json::to_value(value).map(SerdeValue)
     }
+
+    /// Borrow this value in the form accepted by tracing's structured-value
+    /// field support. This keeps exported macros from requiring downstream
+    /// crates to depend on or import `valuable` themselves.
+    pub fn as_tracing_value(&self) -> Value<'_> {
+        self.as_value()
+    }
 }
 
 impl Valuable for SerdeValue {

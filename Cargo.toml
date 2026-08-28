@@ -15,7 +15,6 @@ members = [
   "devenv-reload",
   "devenv-run-tests",
   "devenv-shell",
-  "devenv-snix-backend",
   "devenv-tasks",
   "devenv-tui",
   "nix-conf-parser",
@@ -31,6 +30,7 @@ homepage = "https://devenv.sh/"
 repository = "https://github.com/cachix/devenv/"
 
 [workspace.dependencies]
+arc-swap = "1.9.2"
 devenv = { path = "devenv" }
 devenv-activity = { path = "devenv-activity" }
 devenv-activity-macros = { path = "devenv-activity-macros" }
@@ -39,7 +39,6 @@ devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-event-sources = { path = "devenv-event-sources" }
 devenv-processes = { path = "devenv-processes" }
 devenv-mailbox = { path = "devenv-mailbox" }
-devenv-snix-backend = { path = "devenv-snix-backend" }
 devenv-nix-backend = { path = "devenv-nix-backend" }
 devenv-nix-backend-macros = { path = "devenv-nix-backend-macros" }
 devenv-tasks = { path = "devenv-tasks" }
@@ -66,9 +65,7 @@ base64 = "0.22"
 anyhow = "1.0.102"
 async-priority-channel = "0.2.0"
 async-trait = "0.1"
-# Pinned to 1.8.3: blake3 1.8.4 upgraded to digest 0.11 which is incompatible
-# with snix-castore (uses digest 0.10 APIs).
-blake3 = "=1.8.3"
+blake3 = "1.8.3"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.6.1", features = ["derive", "cargo", "env"] }
 clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
@@ -133,6 +130,7 @@ tracing-subscriber = { version = "0.3.23", features = [
   "valuable",
 ] }
 valuable = { version = "0.1", features = ["derive"] }
+valuable-serde = "0.1"
 json-subscriber = { version = "0.2.8" }
 tokio = { version = "1.52.1", features = [
   "process",
@@ -188,15 +186,6 @@ opentelemetry-otlp = { version = "0.32", default-features = false, features = [
   "trace",
 ] }
 tracing-opentelemetry = "0.33"
-
-# Optional snix dependencies
-snix-eval = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
-snix-glue = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
-snix-castore = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
-snix-store = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
-snix-build = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
-nix-compat = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
-nix-compat-derive = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
 
 # Ensure crossterm versions match between these
 iocraft = { version = "=0.8.3", features = ["unstable-output-streams"] }

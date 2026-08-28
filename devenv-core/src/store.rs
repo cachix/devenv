@@ -1,9 +1,8 @@
 //! Generic Nix store interface.
 //!
-//! Any "thing that talks to a Nix store" — local daemon, remote daemon,
-//! `rust-plugin://` (snix-backed), or a future Rust-native `snix-store` —
-//! implements this trait. Operations are limited to what consumers above
-//! the evaluator (cachix push, GC roots, copy-paths) need.
+//! Any "thing that talks to a Nix store" — local daemon, remote daemon, or a
+//! future backend — implements this trait. Operations are limited to what
+//! consumers above the evaluator (cachix push, GC roots, copy-paths) need.
 //!
 //! No evaluator concepts here. See [`crate::evaluator::Evaluator`].
 

@@ -860,8 +860,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // Show cached status or file count as suffix
             let suffix = if *cached {
                 Some("cached".to_string())
-            } else if eval_data.files_evaluated > 0 {
-                Some(format!("{} files", eval_data.files_evaluated))
+            } else if eval_data.files_read > 0 {
+                Some(format!("{} files", eval_data.files_read))
             } else {
                 activity.detail.clone()
             };
@@ -883,7 +883,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
-                    .with_empty_message("  → no files evaluated yet (press Ctrl-E to expand)");
+                    .with_empty_message("  → no files read yet (press Ctrl-E to expand)");
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
                 }

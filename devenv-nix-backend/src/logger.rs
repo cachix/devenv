@@ -3,9 +3,9 @@
 //! This module provides a bridge between the Nix C++ activity logger callbacks
 //! and the devenv Activity system via NixLogBridge.
 //!
-//! FFI callbacks receive raw field data which is converted to `InternalLog`
-//! and processed by the shared `NixLogBridge` for consistent behavior with
-//! the CLI backend.
+//! Activity callbacks are converted to `InternalLog` and processed by the
+//! shared `NixLogBridge`. High-volume evaluator effects use their dedicated
+//! one-shot callback and bypass the activity conversion entirely.
 //!
 //! # Eval Activity Tracking
 //!
@@ -25,6 +25,7 @@ use devenv_eval_cache::internal_log::{Field, InternalLog, Verbosity};
 use miette::Result;
 use nix_bindings_expr::logger::ActivityLoggerBuilder;
 use nix_bindings_util::context::Context;
+use std::ffi::{c_char, c_void};
 use std::sync::Arc;
 
 /// Result of setting up the Nix logger.
@@ -36,6 +37,35 @@ pub struct NixLoggerSetup {
     pub logger: nix_bindings_expr::logger::ActivityLogger,
     /// The bridge for tracking eval activities and input collection
     pub bridge: Arc<NixLogBridge>,
+}
+
+unsafe fn callback_str<'a>(value: *const c_char, len: usize) -> Option<&'a str> {
+    if value.is_null() {
+        return None;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(value.cast::<u8>(), len) };
+    std::str::from_utf8(bytes).ok()
+}
+
+unsafe extern "C" fn on_eval_effect_callback(
+    kind: *const c_char,
+    kind_len: usize,
+    subject: *const c_char,
+    subject_len: usize,
+    detail: *const c_char,
+    detail_len: usize,
+    user_data: *mut c_void,
+) {
+    let Some(bridge) = (unsafe { (user_data as *const NixLogBridge).as_ref() }) else {
+        return;
+    };
+    let (Some(kind), Some(subject)) = (unsafe { callback_str(kind, kind_len) }, unsafe {
+        callback_str(subject, subject_len)
+    }) else {
+        return;
+    };
+    let detail = unsafe { callback_str(detail, detail_len) };
+    bridge.process_eval_effect(kind, subject, detail);
 }
 
 /// Initialize the Nix activity logger with Activity system integration.
@@ -51,9 +81,9 @@ pub fn setup_nix_logger() -> Result<NixLoggerSetup> {
 
     let mut context = Context::new();
 
-    // Set verbosity to Talkative so we receive "evaluating file" messages
-    // These messages are emitted at lvlTalkative (4) and are needed to show
-    // the "Evaluating" activity in the UI
+    // Talkative is the lowest level that includes Nix's ordinary
+    // "evaluating file" messages. Dependencies themselves remain independent
+    // of verbosity because they use the dedicated callback.
     unsafe {
         nix_bindings_bindgen_raw::set_verbosity(
             context.ptr(),
@@ -73,6 +103,22 @@ pub fn setup_nix_logger() -> Result<NixLoggerSetup> {
         .on_log(on_log)
         .register(&mut context)
         .map_err(|e| miette::miette!("Failed to register Nix logger: {}", e))?;
+
+    // The bridge Arc keeps this stable until after `logger` is dropped. The
+    // logger is deliberately the first field in NixLoggerSetup so it clears
+    // all C++ callbacks before the bridge is released.
+    let err = unsafe {
+        nix_bindings_bindgen_raw::set_eval_effect_callback(
+            context.ptr(),
+            Some(on_eval_effect_callback),
+            Arc::as_ptr(&bridge).cast_mut().cast::<c_void>(),
+        )
+    };
+    if err != nix_bindings_bindgen_raw::err_NIX_OK {
+        return Err(miette::miette!(
+            "Failed to register Nix eval effect callback: error code {err}"
+        ));
+    }
 
     Ok(NixLoggerSetup { logger, bridge })
 }

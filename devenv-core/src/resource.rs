@@ -44,6 +44,13 @@ pub trait ReplayableResource: Send + Sync {
     /// Called after evaluation completes.
     fn snapshot(&self) -> Self::Spec;
 
+    /// Return whether this resource has acquired any state during the current
+    /// evaluation.
+    ///
+    /// Empty resources are omitted from cache entries. This lets a registry
+    /// handle resource types generically without knowing their spec shape.
+    fn is_empty(&self) -> bool;
+
     /// Replay allocations from a cached spec.
     /// Called on cache hit before returning cached result.
     /// Returns Ok(()) if all resources re-acquired, Err if any unavailable.
@@ -93,6 +100,10 @@ mod tests {
             TestSpec {
                 values: values.clone(),
             }
+        }
+
+        fn is_empty(&self) -> bool {
+            self.values.lock().unwrap().is_empty()
         }
 
         fn replay(&self, spec: &TestSpec) -> Result<(), ReplayError> {
