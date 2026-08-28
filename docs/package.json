@@ -7,13 +7,17 @@
   },
   "scripts": {
     "dev": "astro dev",
+    "test": "node --test scripts/*.test.mjs",
     "build": "astro check && astro build",
     "preview": "astro preview",
     "astro": "astro",
     "validate:urls": "node validate-urls.mjs",
     "validate:links": "node validate-links.mjs",
     "generate:skills-index": "node scripts/generate-skills-index.mjs",
-    "prebuild": "npm run generate:skills-index"
+    "generate:technology-icons": "node scripts/generate-technology-icons.mjs",
+    "generate:syntax-assets": "node scripts/generate-syntax-assets.mjs",
+    "predev": "npm run generate:technology-icons && npm run generate:syntax-assets",
+    "prebuild": "npm run generate:skills-index && npm run generate:technology-icons && npm run generate:syntax-assets"
   },
   "dependencies": {
     "@astrojs/mdx": "^7.0.5",
@@ -29,6 +33,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "simple-icons": "^16.28.0",
     "typescript": "6.0.3"
   }
 }
