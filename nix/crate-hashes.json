@@ -1,13 +1,13 @@
 {
+  "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-bindings-bindgen-raw@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
+  "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-bindings-expr@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
+  "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-bindings-fetchers@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
+  "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-bindings-flake@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
+  "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-bindings-store@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
+  "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-bindings-util@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
+  "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-cmd@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
   "git+https://github.com/Uzaaft/libghostty-rs.git?rev=46a9d2ac941ed600cf43c5e6299c8dfd1d3a1ef0#libghostty-vt-sys@0.2.1": "174p8h1jidygf0ilszvk15xwwi3r7b34d1ain30yiiq4n2k8b5cl",
   "git+https://github.com/Uzaaft/libghostty-rs.git?rev=46a9d2ac941ed600cf43c5e6299c8dfd1d3a1ef0#libghostty-vt@0.2.1": "174p8h1jidygf0ilszvk15xwwi3r7b34d1ain30yiiq4n2k8b5cl",
   "git+https://github.com/cachix/crossterm?rev=91e3df5ccee39f142acefb9e99de1bf43c2fea67#crossterm@0.29.0": "0wn6n3znzv1jxw9ghl6qgsancd2myafs7kxpvn3lm3wsxhpvv76l",
-  "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-bindgen-raw@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
-  "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-expr@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
-  "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-fetchers@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
-  "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-flake@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
-  "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-store@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
-  "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-bindings-util@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
-  "git+https://github.com/cachix/nix-bindings-rust.git?rev=84cbe7dc180b6b8c506cbe4de2cbfcf06514bfa8#nix-cmd@0.1.0": "1sjbrzny53a8na86rcsv40v4xb5ns74j4067yx24jrv63mi0f94d",
   "git+https://github.com/cachix/secretspec?rev=b90afe381452918134c40f9d91a7a7246c9fb9ca#secretspec@0.19.1": "18mqhkvq1p125c351z926q6lgi8ii20gibykv9glv1n9sx3gnjmh"
 }

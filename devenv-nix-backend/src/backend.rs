@@ -45,8 +45,8 @@ use devenv_core::evaluator::{
 use devenv_core::nix_args::NixpkgsConfigForNix;
 use devenv_core::nix_log_bridge::{EvalActivityGuard, NixLogBridge};
 use devenv_core::realized::RealizedPathsObserver;
-use devenv_core::store::Store as StoreTrait;
 use devenv_core::store::StorePath as CoreStorePath;
+use devenv_core::store::{GcOptions, Store as StoreTrait};
 use devenv_core::{CacheSettings, DevenvPaths, NixSettings, StoreSettings};
 use devenv_eval_cache::{
     self, CachedEval, CachingConfig, CachingEvalService, CachingEvalState, EvalCacheKey,
@@ -61,14 +61,14 @@ use nix_bindings_expr::{EvalCache, SearchParams, SearchResult, search};
 use nix_bindings_fetchers::FetchersSettings;
 use nix_bindings_flake::{EvalStateBuilderExt, FlakeSettings};
 use nix_bindings_store::build_env::BuildEnvironment;
-use nix_bindings_store::store::{GcAction, Store, TrustedFlag};
+use nix_bindings_store::store::{Store, TrustedFlag};
 use nix_bindings_util::settings;
 use nix_cmd::ReplExitStatus;
 use once_cell::sync::OnceCell;
 
 use crate::anyhow_ext::AnyhowToMiette;
 use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
-use crate::cnix_store::{CNixStore, remove_plain_paths};
+use crate::cnix_store::CNixStore;
 use crate::error::format_eval_error;
 use crate::primops::PrimopRegistry;
 use crate::umask_guard::UmaskGuard;
@@ -967,52 +967,14 @@ impl NixCBackend {
     }
 
     pub async fn gc(&self, paths: Vec<PathBuf>) -> Result<(u64, u64)> {
-        if paths.is_empty() {
-            return Ok((0, 0));
-        }
-
-        let mut store = self.cnix_store.inner().clone();
-        let mut total_deleted = 0u64;
-        let mut total_bytes_freed = 0u64;
-        let total_paths = paths.len() as u64;
-        let mut plain_paths: Vec<PathBuf> = Vec::new();
-
-        let activity = activity!(INFO, operation, "Deleting store paths");
-
-        for (i, path) in paths.iter().enumerate() {
-            let path_str = match path.to_str() {
-                Some(s) => s,
-                None => continue,
-            };
-            let path_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(path_str);
-            activity.progress(i as u64, total_paths, Some(path_name));
-
-            let store_path = match store.parse_store_path(path_str).to_miette() {
-                Ok(sp) => sp,
-                Err(_) => {
-                    plain_paths.push(path.clone());
-                    continue;
-                }
-            };
-
-            match store.collect_garbage(GcAction::DeleteSpecific, Some(&[&store_path]), false, 0) {
-                Ok((deleted, bytes_freed)) => {
-                    total_deleted += deleted.len() as u64;
-                    total_bytes_freed += bytes_freed;
-                }
-                Err(_) => continue,
-            }
-        }
-
-        // The store handle is not `Send`; drop it before awaiting.
-        drop(store);
-        remove_plain_paths(plain_paths).await;
-
-        activity.progress(total_paths, total_paths, None);
-        Ok((total_deleted, total_bytes_freed))
+        let stats = self
+            .cnix_store
+            .collect_garbage(GcOptions {
+                paths: Some(paths.into_iter().map(CoreStorePath::from).collect()),
+                max_freed: 0,
+            })
+            .await?;
+        Ok((stats.paths_deleted, stats.bytes_freed))
     }
 
     pub async fn is_trusted_user(&self) -> Result<bool> {

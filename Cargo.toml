@@ -49,13 +49,13 @@ devenv-cache-core = { path = "devenv-cache-core" }
 nix-conf-parser = { path = "nix-conf-parser" }
 tokio-shutdown = { path = "tokio-shutdown" }
 
-nix-bindings-flake = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
-nix-bindings-expr = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
-nix-bindings-store = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
-nix-bindings-util = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
-nix-bindings-fetchers = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
-nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
-nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.34" }
+nix-bindings-flake = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.35" }
+nix-bindings-expr = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.35" }
+nix-bindings-store = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.35" }
+nix-bindings-util = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.35" }
+nix-bindings-fetchers = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.35" }
+nix-cmd = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.35" }
+nix-bindings-bindgen-raw = { git = "https://github.com/cachix/nix-bindings-rust.git", branch = "2.35" }
 
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master" }
 libghostty-vt-sys = { git = "https://github.com/Uzaaft/libghostty-rs.git", branch = "master", default-features = false, features = [

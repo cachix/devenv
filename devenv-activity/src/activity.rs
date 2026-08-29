@@ -272,6 +272,18 @@ impl Activity {
         result
     }
 
+    /// Run a synchronous operation in this activity and complete the activity
+    /// as soon as the operation returns.
+    ///
+    /// Unlike [`in_scope`](Self::in_scope), this consumes the owning activity,
+    /// so it cannot accidentally remain active during a later phase.
+    pub fn scoped<F, R>(self, f: F) -> R
+    where
+        F: FnOnce(&Self) -> R,
+    {
+        self.in_scope(|| f(&self))
+    }
+
     /// Mark as failed
     pub fn fail(&self) {
         if let Ok(mut outcome) = self.outcome.lock() {
@@ -583,7 +595,7 @@ impl Drop for Activity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::{ActivityEvent, Process};
+    use crate::events::{ActivityEvent, Operation, Process};
 
     fn process_complete_id(event: &ActivityEvent) -> Option<u64> {
         match event {
@@ -631,6 +643,20 @@ mod tests {
             std::iter::from_fn(|| rx.try_recv().ok())
                 .any(|event| process_complete_id(&event) == Some(borrowed_id)),
             "the owning guard must retain completion ownership"
+        );
+
+        let scoped = crate::start!(Activity::operation("scoped"));
+        let scoped_id = scoped.id();
+        let result = scoped.scoped(|activity| {
+            activity.progress(1, 1, None);
+            42
+        });
+        assert_eq!(result, 42);
+        assert!(
+            std::iter::from_fn(|| rx.try_recv().ok()).any(|event| matches!(
+                event,
+                ActivityEvent::Operation(Operation::Complete { id, .. }) if id == scoped_id
+            ))
         );
 
         let proxy = crate::start!(Activity::process("proxy")).into_ref();
