@@ -30,8 +30,8 @@ pub mod lock;
 
 pub mod primops;
 pub use primops::{
-    AllocatePortPrimop, DotenvPlugin, LoadDotenvPrimop, NixEvalPlugin, NixEvalSetup,
-    PortAllocationPlugin, PrimopRegistration, PrimopRegistry,
+    AllocatePortPrimop, CliCapabilities, DotenvPlugin, LoadDotenvPrimop, NixEvalPlugin,
+    NixEvalSetup, PortAllocationPlugin, PrimopRegistration, PrimopRegistry,
 };
 
 /// Trigger the Nix interrupt flag to abort any in-progress Nix evaluation.

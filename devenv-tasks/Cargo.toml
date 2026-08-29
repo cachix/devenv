@@ -27,10 +27,15 @@ tracing.workspace = true
 sqlx.workspace = true
 shell-escape.workspace = true
 base64.workspace = true
+blake3.workspace = true
 ignore.workspace = true
+fd-lock.workspace = true
+uuid.workspace = true
 
 [target.'cfg(unix)'.dependencies]
+libc.workspace = true
 nix = { workspace = true, features = ["user", "signal"] }
+rustix.workspace = true
 
 [features]
 default = []
@@ -41,4 +46,5 @@ test-all = ["devenv-processes/test-all"]
 pretty_assertions.workspace = true
 proptest.workspace = true
 tokio-test.workspace = true
+tracing-subscriber.workspace = true
 nix = { workspace = true, features = ["signal"] }

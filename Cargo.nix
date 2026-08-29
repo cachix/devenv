@@ -8899,6 +8899,10 @@ rec {
             packageId = "base64";
           }
           {
+            name = "blake3";
+            packageId = "blake3";
+          }
+          {
             name = "clap";
             packageId = "clap";
             features = [ "derive" "cargo" "env" ];
@@ -8928,8 +8932,17 @@ rec {
             packageId = "devenv-processes";
           }
           {
+            name = "fd-lock";
+            packageId = "fd-lock";
+          }
+          {
             name = "ignore";
             packageId = "ignore";
+          }
+          {
+            name = "libc";
+            packageId = "libc";
+            target = { target, features }: (target."unix" or false);
           }
           {
             name = "miette";
@@ -8945,6 +8958,12 @@ rec {
           {
             name = "petgraph";
             packageId = "petgraph";
+          }
+          {
+            name = "rustix";
+            packageId = "rustix 1.1.4";
+            target = { target, features }: (target."unix" or false);
+            features = [ "fs" ];
           }
           {
             name = "serde";
@@ -8991,6 +9010,11 @@ rec {
             packageId = "tracing";
             features = [ "valuable" ];
           }
+          {
+            name = "uuid";
+            packageId = "uuid";
+            features = [ "v4" ];
+          }
         ];
         devDependencies = [
           {
@@ -9010,6 +9034,11 @@ rec {
           {
             name = "tokio-test";
             packageId = "tokio-test";
+          }
+          {
+            name = "tracing-subscriber";
+            packageId = "tracing-subscriber";
+            features = [ "env-filter" "json" "valuable" ];
           }
         ];
         features = {

@@ -1,5 +1,14 @@
-{ ... }:
+{ config, ... }:
 {
+  assertions = [
+    {
+      assertion =
+        builtins.hasAttr ".claude/settings.json" config.files
+        && !(builtins.hasAttr "${config.devenv.root}/.claude/settings.json" config.files);
+      message = "Claude settings must be managed through a project-relative files path";
+    }
+  ];
+
   claude.code = {
     enable = true;
 

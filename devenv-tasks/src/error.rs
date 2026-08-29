@@ -11,6 +11,10 @@ pub enum Error {
     TaskNotFound(String),
     #[error("Task {0} defined a status, but is missing a command")]
     MissingCommand(String),
+    #[error("Process task {0} cannot use a native builtin runner")]
+    BuiltinProcess(String),
+    #[error("Task {0} uses a native builtin runner but has no command fallback")]
+    MissingBuiltinFallback(String),
     #[error("Task dependencies not found: {}", format_tasks_not_found(.0))]
     TasksNotFound(Vec<(String, String)>),
     #[error(

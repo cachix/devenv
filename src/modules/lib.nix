@@ -80,6 +80,20 @@
     # Returns only the checksum value (no filename).
     _fileChecksum = path: "$(${pkgs.coreutils}/bin/cksum ${lib.escapeShellArg path} | ${pkgs.coreutils}/bin/cut -f1 -d' ')";
 
+    # Select the newest exact protocol version shared by a module and the CLI.
+    # An empty intersection deliberately keeps the module's legacy path.
+    _selectCliCapability = name: supportedVersions:
+      let
+        advertised = config.devenv.cli.capabilities.${name}.versions or [ ];
+        common = builtins.filter (version: builtins.elem version supportedVersions) advertised;
+      in
+      builtins.foldl'
+        (selected: version:
+          if selected == null || version > selected then version else selected
+        )
+        null
+        common;
+
     mkTests = folder:
       let
         mk = dir: {

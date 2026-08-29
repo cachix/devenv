@@ -1,9 +1,8 @@
 { pkgs, lib, config, ... }:
 
 let
-  inherit (builtins) dirOf mapAttrs;
-  inherit (lib) types optionalAttrs optionalString mkOption attrNames filter length mapAttrsToList concatStringsSep head assertMsg;
-  inherit (types) attrsOf submodule;
+  inherit (builtins) mapAttrs;
+  inherit (lib) types optionalAttrs optionalString mkOption attrNames filter length mapAttrsToList concatStringsSep head;
 
   formats = {
     ini = pkgs.formats.ini { };
@@ -22,8 +21,39 @@ let
 
   # State tracking for cleanup
   filesStateFile = "${config.devenv.state}/files.json";
-  currentManagedFiles = attrNames config.files;
-
+  root = lib.removeSuffix "/" (toString config.devenv.root);
+  normalizePath =
+    path:
+    let
+      relative =
+        if lib.hasPrefix "/" path then
+          if lib.hasPrefix "${root}/" path then lib.removePrefix "${root}/" path else null
+        else
+          path;
+      components =
+        if relative == null then
+          [ ]
+        else
+          filter (component: component != "" && component != ".") (lib.splitString "/" relative);
+    in
+    if components == [ ] || builtins.elem ".." components then
+      null
+    else
+      concatStringsSep "/" components;
+  originalPaths = attrNames config.files;
+  invalidManagedFiles = filter (path: normalizePath path == null) originalPaths;
+  validPaths = filter (path: normalizePath path != null) originalPaths;
+  normalizedFiles = builtins.listToAttrs (
+    map
+      (path: {
+        name = normalizePath path;
+        value = config.files.${path};
+      })
+      validPaths
+  );
+  currentManagedFiles = attrNames normalizedFiles;
+  filesBuiltinVersion = config.lib._selectCliCapability "task-builtin.files-reconcile" [ 1 ];
+  filesTask = config.tasks."devenv:files";
 
   copyModeType = types.enum [ "symlink" "seed" "copy" ];
 
@@ -101,142 +131,233 @@ let
 
         - `symlink` (default): symlink to the read-only file in the Nix store. Edits are not possible; devenv keeps the link pointed at the current contents.
         - `seed`: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. Useful for seeding configuration from templates the user then edits.
-        - `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. Useful when a tool must write to the file in place but devenv should remain the source of truth.
+        - `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. Source symlinks are followed. Contents and POSIX modes are preserved (with owner-write enabled); xattrs, ACLs, resource forks, and hard-link topology are not portable guarantees. Useful when a tool must write to the file in place but devenv should remain the source of truth.
       '';
     };
   };
 
-  # Track successfully created files for partial state saving
+  # The fallback runs on older CLIs too. Keep destination resolution rooted and
+  # reject symlinked parents before cleanup, mkdir, chmod, or copy can follow one.
+  legacySetupScript = ''
+    export PATH=${lib.makeBinPath [ pkgs.coreutils ]}:"$PATH"
+    configuredRoot=${lib.escapeShellArg root}
+    filesRoot=$(cd -- "$configuredRoot" && pwd -P)
+    filesStateFile=${lib.escapeShellArg filesStateFile}
+    mkdir -p -- "''${filesStateFile%/*}"
+
+    validateParents() {
+      local remaining="$1" parent="$filesRoot" component
+      while [[ "$remaining" == */* ]]; do
+        component="''${remaining%%/*}"
+        remaining="''${remaining#*/}"
+        parent="$parent/$component"
+        if [ -L "$parent" ] || { [ -e "$parent" ] && [ ! -d "$parent" ]; }; then
+          printf 'Unsafe managed file parent: %s\n' "$parent" >&2
+          return 1
+        fi
+      done
+    }
+
+    normalizeLegacyPath() {
+      local remaining="$1" component
+      managedPath=""
+      case "$remaining" in
+        "$configuredRoot/"*) remaining="''${remaining#"$configuredRoot/"}" ;;
+        "$filesRoot/"*) remaining="''${remaining#"$filesRoot/"}" ;;
+        /*) return 1 ;;
+      esac
+      while [ -n "$remaining" ]; do
+        component="''${remaining%%/*}"
+        if [[ "$remaining" == */* ]]; then
+          remaining="''${remaining#*/}"
+        else
+          remaining=""
+        fi
+        case "$component" in
+          ..) return 1 ;;
+          ""|.) continue ;;
+        esac
+        managedPath="''${managedPath:+$managedPath/}$component"
+      done
+      [ -n "$managedPath" ]
+    }
+  '';
+
   createSymlinkScript = filename: fileOption: ''
-    if [ -L "${filename}" ]; then
-      # Only update symlink if target changed (same content = same store path)
-      if [ "$(readlink "${filename}")" != "${fileOption.file}" ]; then
-        echo "Updating ${filename}"
-        ln -sf ${fileOption.file} "${filename}"
+    fileName=${lib.escapeShellArg filename}
+    filePath="$filesRoot/$fileName"
+    sourcePath=${lib.escapeShellArg (toString fileOption.file)}
+    validateParents "$fileName"
+    if [ -L "$filePath" ]; then
+      if [ "$(readlink -- "$filePath")" != "$sourcePath" ]; then
+        printf 'Updating %s\n' "$fileName"
+        ln -sfn -- "$sourcePath" "$filePath"
       fi
-      echo "${filename}" >> "$DEVENV_FILES_CREATED"
-    elif [ -f "${filename}" ]; then
-      echo "Conflicting file ${filename}" >&2
-    elif [ -e "${filename}" ]; then
-      echo "Conflicting non-file ${filename}" >&2
+      printf '%s\0' "$fileName" >> "$DEVENV_FILES_CREATED"
+    elif [ -e "$filePath" ]; then
+      printf 'Conflicting managed file %s\n' "$fileName" >&2
     else
-      echo "Creating ${filename}"
-      mkdir -p "${dirOf filename}"
-      ln -s ${fileOption.file} "${filename}"
-      echo "${filename}" >> "$DEVENV_FILES_CREATED"
+      printf 'Creating %s\n' "$fileName"
+      mkdir -p -- "''${filePath%/*}"
+      ln -s -- "$sourcePath" "$filePath"
+      printf '%s\0' "$fileName" >> "$DEVENV_FILES_CREATED"
     fi
   '';
 
-  # Copy the file into place as a writable file the user can edit.
-  # "seed" only creates the file when missing; "copy" overwrites it every time.
   createCopyScript = filename: fileOption: ''
-    # Drop a previous devenv-managed symlink into the store so we can seed a writable copy
-    if [ -L "${filename}" ] && [[ "$(readlink "${filename}")" == /nix/store/* ]]; then
-      rm "${filename}"
+    fileName=${lib.escapeShellArg filename}
+    filePath="$filesRoot/$fileName"
+    sourcePath=${lib.escapeShellArg (toString fileOption.file)}
+    validateParents "$fileName"
+    # A store link from a previous symlink configuration becomes writable.
+    if [ -L "$filePath" ] && [[ "$(readlink -- "$filePath")" == /nix/store/* ]]; then
+      rm -- "$filePath"
     fi
     ${optionalString (fileOption.copyMode == "copy") ''
-      if [ -e "${filename}" ] || [ -L "${filename}" ]; then
-        echo "Overwriting ${filename}"
-        rm -rf "${filename}"
+      if [ -e "$filePath" ] || [ -L "$filePath" ]; then
+        printf 'Overwriting %s\n' "$fileName"
+        rm -rf -- "$filePath"
       fi
     ''}
-    if [ -e "${filename}" ]; then
-      echo "Keeping existing ${filename}"
+    if [ -e "$filePath" ] || [ -L "$filePath" ]; then
+      printf 'Keeping existing %s\n' "$fileName"
     else
-      echo "Creating ${filename}"
-      mkdir -p "${dirOf filename}"
-      cp -RL ${fileOption.file} "${filename}"
-      chmod -R u+w "${filename}"
+      printf 'Creating %s\n' "$fileName"
+      mkdir -p -- "''${filePath%/*}"
+      cp -RL -- "$sourcePath" "$filePath"
+      chmod -R u+w -- "$filePath"
     fi
-    echo "${filename}" >> "$DEVENV_FILES_CREATED"
+    printf '%s\0' "$fileName" >> "$DEVENV_FILES_CREATED"
   '';
 
-  createFileScript = filename: fileOption:
-    if fileOption.copyMode == "symlink"
-    then createSymlinkScript filename fileOption
-    else createCopyScript filename fileOption;
+  createFileScript =
+    filename: fileOption:
+    if fileOption.copyMode == "symlink" then
+      createSymlinkScript filename fileOption
+    else
+      createCopyScript filename fileOption;
 
   cleanupScript = ''
-    # Read previously managed files from state
-    if [ -f '${filesStateFile}' ]; then
-      prevFiles=$(${pkgs.jq}/bin/jq -r '.managedFiles[]' '${filesStateFile}' 2>/dev/null || true)
-    else
-      prevFiles=""
-    fi
-
-    # Current files as newline-separated list
-    currentFiles='${concatStringsSep "\n" currentManagedFiles}'
-
-    # Find files that were previously managed but are no longer in config
-    for prevFile in $prevFiles; do
-      # Check if this file is still in current config
-      if ! echo "$currentFiles" | grep -qxF "$prevFile"; then
-        filePath="${config.devenv.root}/$prevFile"
-
-        # Only remove if it's a symlink pointing to nix store
-        if [ -L "$filePath" ]; then
-          target=$(readlink "$filePath")
-          if [[ "$target" == /nix/store/* ]]; then
-            echo "Removing orphaned file: $prevFile"
-            rm "$filePath" || echo "Warning: Failed to remove $filePath" >&2
-
-            # Remove empty parent directories up to devenv.root
-            parentDir=$(dirname "$filePath")
-            while [ "$parentDir" != "${config.devenv.root}" ] && [ -d "$parentDir" ]; do
-              if [ -z "$(ls -A "$parentDir")" ]; then
-                rmdir "$parentDir" 2>/dev/null || break
-                parentDir=$(dirname "$parentDir")
-              else
-                break
-              fi
-            done
-          fi
+    if [ -f "$filesStateFile" ]; then
+      while IFS= read -r -d $'\0' prevFile; do
+        if ! normalizeLegacyPath "$prevFile"; then
+          printf 'Forgetting unsafe legacy managed path: %s\n' "$prevFile" >&2
+          continue
         fi
-      fi
-    done
-
-    ${optionalString (config.files == {}) ''
-      # No files configured, save empty state
-      echo '{"managedFiles":[]}' > '${filesStateFile}'
-    ''}
+        ${optionalString (currentManagedFiles != [ ]) ''
+          case "$managedPath" in
+            ${concatStringsSep "|" (map lib.escapeShellArg currentManagedFiles)}) continue ;;
+          esac
+        ''}
+        # Invalid historic paths are forgotten without touching their targets.
+        validateParents "$managedPath" || continue
+        filePath="$filesRoot/$managedPath"
+        if [ -L "$filePath" ] && [[ "$(readlink -- "$filePath")" == /nix/store/* ]]; then
+          printf 'Removing orphaned file: %s\n' "$managedPath"
+          rm -- "$filePath"
+          parentDir="''${filePath%/*}"
+          while [ "$parentDir" != "$filesRoot" ]; do
+            rmdir -- "$parentDir" 2>/dev/null || break
+            parentDir="''${parentDir%/*}"
+          done
+        fi
+      done < <(${pkgs.jq}/bin/jq -j '.managedFiles[]? | select(type == "string") | ., "\u0000"' "$filesStateFile" 2>/dev/null || true)
+    fi
   '';
 
   saveStateScript = ''
-    # Save successfully created files to state (supports partial success)
-    if [ -f "$DEVENV_FILES_CREATED" ]; then
-      ${pkgs.jq}/bin/jq -nR '[inputs]' "$DEVENV_FILES_CREATED" | \
-        ${pkgs.jq}/bin/jq '{managedFiles: .}' > '${filesStateFile}'
-      rm "$DEVENV_FILES_CREATED"
-    else
-      echo '{"managedFiles":[]}' > '${filesStateFile}'
-    fi
+    ${pkgs.jq}/bin/jq -Rs 'split("\u0000") | map(select(length > 0)) | {managedFiles: .}' \
+      "$DEVENV_FILES_CREATED" > "$filesStateFile"
+    rm -- "$DEVENV_FILES_CREATED"
   '';
+
+  desiredFiles = mapAttrsToList
+    (path: file: {
+      inherit path;
+      source = toString file.file;
+      mode = file.copyMode;
+    })
+    normalizedFiles;
+  desiredDigest = builtins.hashString "sha256" (
+    builtins.toJSON {
+      version = 1;
+      root = toString config.devenv.root;
+      files = desiredFiles;
+    }
+  );
+  legacyReconcileScript = ''
+    ${legacySetupScript}
+    ${cleanupScript}
+    export DEVENV_FILES_CREATED=$(mktemp)
+    ${concatStringsSep "\n\n" (mapAttrsToList createFileScript normalizedFiles)}
+    ${saveStateScript}
+  '';
+
 in
 {
   options.files = mkOption {
     type = types.attrsOf fileType;
     default = { };
-    description = "A set of files that will be linked into devenv root.";
+    description = ''
+      A set of files that will be linked into devenv root.
+      Use relative paths within devenv root. Root-contained absolute paths are
+      accepted for compatibility, but discouraged because they are not reproducible.
+      Parent traversal and symlinked parent directories are not allowed.
+    '';
   };
 
   config = {
+    assertions = [
+      {
+        assertion = invalidManagedFiles == [ ];
+        message = ''
+          `files` paths must stay within `devenv.root` without parent traversal.
+          Invalid paths: ${concatStringsSep ", " invalidManagedFiles}
+        '';
+      }
+      {
+        assertion = length currentManagedFiles == length validPaths;
+        message = "Multiple `files` paths normalize to the same destination. Use one relative path per file.";
+      }
+    ];
+
+    warnings = map
+      (
+        path:
+        "files.${builtins.toJSON path} uses an absolute path. Use the reproducible relative path ${builtins.toJSON (normalizePath path)} instead."
+      )
+      (filter (path: lib.hasPrefix "/" path) validPaths);
+
     lib.fileSpecType = types.submodule fileSpecModule;
     lib.fileCopyModeType = copyModeType;
 
-    tasks."devenv:files:cleanup" = {
-      description = "Cleanup orphaned files";
-      exec = cleanupScript;
-      before = [ "devenv:files" "devenv:enterShell" ];
-    };
-
-    tasks."devenv:files" = optionalAttrs (config.files != { }) {
-      description = "Create files";
-      exec = ''
-        export DEVENV_FILES_CREATED=$(mktemp)
-        ${concatStringsSep "\n\n" (mapAttrsToList createFileScript config.files)}
-        ${saveStateScript}
-      '';
-      after = [ "devenv:files:cleanup" ];
+    tasks."devenv:files" = { options, ... }: {
+      description = "Reconcile managed files";
+      exec = legacyReconcileScript;
+      # The native runner replaces precisely this generated command. Existing
+      # task overrides (including exec = null) must keep their original meaning.
+      builtin =
+        if
+          filesBuiltinVersion == null
+          || filesTask.exec != legacyReconcileScript
+          || filesTask.package != pkgs.bash
+          || filesTask.binary != null
+          || filesTask.exports != [ ]
+          || filesTask.command == null
+          || toString filesTask.command != toString options.command.default
+        then
+          null
+        else
+          {
+            name = "files-reconcile";
+            version = filesBuiltinVersion;
+            input = {
+              root = toString config.devenv.root;
+              state_file = filesStateFile;
+              desired_digest = desiredDigest;
+              files = desiredFiles;
+            };
+          };
       before = [ "devenv:enterShell" ];
     };
 

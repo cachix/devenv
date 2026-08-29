@@ -13,6 +13,11 @@ test -d subdir
 # Verify state was saved
 test -f .devenv/state/files.json
 
+# Older modules (including Claude settings) persisted absolute attribute names.
+jq --arg root "$PWD" '{managedFiles: [.managedFiles[] | $root + "/" + .]}' \
+  .devenv/state/files.json > .devenv/state/legacy-files.json
+mv .devenv/state/legacy-files.json .devenv/state/files.json
+
 # Now modify config to remove b.txt and subdir/nested.txt
 cat > devenv.nix << 'EOF'
 { pkgs, ... }: {
@@ -34,6 +39,24 @@ cat > devenv.nix << 'EOF'
 
     # State should track only a.txt
     jq -e '.managedFiles | length == 1' "$DEVENV_ROOT/.devenv/state/files.json"
+  '';
+}
+EOF
+
+# Apply the partial removal, then remove the last managed file as a separate
+# transition. The reconciler task must still exist for an empty desired set.
+devenv shell true
+test -L a.txt
+test ! -e b.txt
+test ! -e subdir/nested.txt
+
+cat > devenv.nix << 'EOF'
+{ pkgs, ... }: {
+  enterTest = ''
+    test ! -e "$DEVENV_ROOT/a.txt" || { echo "a.txt not cleaned up"; exit 1; }
+    test ! -e "$DEVENV_ROOT/b.txt" || { echo "b.txt not cleaned up"; exit 1; }
+    test ! -d "$DEVENV_ROOT/subdir" || { echo "subdir not cleaned up"; exit 1; }
+    jq -e '.managedFiles | length == 0' "$DEVENV_ROOT/.devenv/state/files.json"
   '';
 }
 EOF

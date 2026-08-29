@@ -1,0 +1,5 @@
+[[profile.default.overrides]]
+filter = 'test(builtins::files) | binary(files_builtin_integration) | binary(files_builtin_crash_recovery)'
+# A regression opening a FIFO or following a symlink cycle must fail the test,
+# rather than consume the entire workflow timeout.
+slow-timeout = { period = "30s", terminate-after = 4 }

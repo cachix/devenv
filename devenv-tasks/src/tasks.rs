@@ -111,6 +111,12 @@ impl TasksBuilder {
             if task.status.is_some() && task.command.is_none() {
                 return Err(Error::MissingCommand(name));
             }
+            if task.r#type == TaskType::Process && task.builtin.is_some() {
+                return Err(Error::BuiltinProcess(name));
+            }
+            if task.builtin.is_some() && task.command.is_none() {
+                return Err(Error::MissingBuiltinFallback(name));
+            }
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
                 task,
                 self.verbosity,

@@ -39,6 +39,40 @@ pub trait PrimopRegistration: Send + Sync {
     fn register(&self, eval_state: &mut EvalState) -> Result<(String, Value)>;
 }
 
+/// Pure values describing the exact protocol versions implemented by the CLI.
+/// They share the established primop injection channel so new CLIs remain
+/// compatible with older bootstrap functions that do not accept new arguments.
+pub struct CliCapabilities {
+    expression: String,
+}
+
+impl CliCapabilities {
+    pub fn new(capabilities: impl serde::Serialize) -> Self {
+        Self {
+            expression: ser_nix::to_string(&capabilities)
+                .expect("CLI capability registry must serialize to Nix"),
+        }
+    }
+}
+
+impl PrimopRegistration for CliCapabilities {
+    fn name(&self) -> &'static str {
+        "capabilities"
+    }
+
+    fn cache_key_fragment(&self) -> String {
+        self.expression.clone()
+    }
+
+    fn register(&self, eval_state: &mut EvalState) -> Result<(String, Value)> {
+        let value = eval_state
+            .eval_from_string(&self.expression, "<devenv-cli-capabilities>")
+            .to_miette()
+            .wrap_err("Failed to evaluate CLI capabilities")?;
+        Ok((self.name().to_string(), value))
+    }
+}
+
 /// The primops made available to devenv's bootstrap expression.
 #[derive(Default)]
 pub struct PrimopRegistry {
@@ -305,6 +339,27 @@ impl PrimopRegistration for AllocatePortPrimop {
 mod tests {
     use super::*;
     use devenv_core::ReplayableResource;
+
+    #[derive(serde::Serialize)]
+    struct TestCapability {
+        versions: Vec<u32>,
+    }
+
+    #[test]
+    fn capability_versions_are_serialized_as_nix_values() {
+        let capabilities = CliCapabilities::new(std::collections::BTreeMap::from([(
+            "task-builtin.files-reconcile",
+            TestCapability { versions: vec![1] },
+        )]));
+
+        assert!(
+            capabilities.expression.contains("versions"),
+            "{}",
+            capabilities.expression
+        );
+        assert!(capabilities.expression.contains("1"));
+        assert!(!capabilities.expression.contains("serde_json"));
+    }
 
     #[test]
     fn port_plugin_installs_primop_resource_and_cache_state() {

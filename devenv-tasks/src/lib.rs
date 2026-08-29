@@ -1,3 +1,4 @@
+mod builtins;
 mod config;
 mod error;
 pub mod executor;
@@ -9,7 +10,8 @@ mod tasks;
 mod types;
 pub mod ui;
 
-pub use config::{Config, RunMode, TaskConfig};
+pub use builtins::capabilities as builtin_capabilities;
+pub use config::{Config, RunMode, TaskBuiltin, TaskConfig};
 pub use error::Error;
 pub use executor::{ExecutionContext, ExecutionResult, OutputCallback};
 pub use native_manager::{NativeApiServer, NativeProcessManager};

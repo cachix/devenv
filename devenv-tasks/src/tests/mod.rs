@@ -78,6 +78,221 @@ async fn test_task_name() -> Result<(), Error> {
 }
 
 #[tokio::test]
+async fn unsupported_builtin_uses_command_fallback() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let marker = temp_dir.path().join("fallback-ran");
+    let fallback = create_script(&format!("#!/bin/sh\ntouch '{}'", marker.display()))?;
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["devenv:test:fallback"],
+            "run_mode": "all",
+            "tasks": [{
+                "name": "devenv:test:fallback",
+                "command": fallback.to_str().unwrap(),
+                "builtin": {
+                    "name": "future-builtin",
+                    "version": 7,
+                    "input": { "unknown": true }
+                }
+            }]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(temp_dir.path().join("tasks.db"))
+    .build()
+    .await?;
+
+    tasks.run(false).await;
+
+    assert!(marker.exists(), "unsupported builtin must run its fallback");
+    assert_matches!(
+        inspect_tasks(&tasks).await.as_slice(),
+        [(name, TaskStatus::Completed(TaskCompleted::Success(_, _)))]
+            if name == "devenv:test:fallback"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_supported_builtin_does_not_use_command_fallback() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let marker = temp_dir.path().join("fallback-must-not-run");
+    let fallback = create_script(&format!("#!/bin/sh\ntouch '{}'", marker.display()))?;
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["devenv:test:malformed"],
+            "run_mode": "all",
+            "tasks": [{
+                "name": "devenv:test:malformed",
+                "command": fallback.to_str().unwrap(),
+                "builtin": {
+                    "name": "files-reconcile",
+                    "version": 1,
+                    "input": {}
+                }
+            }]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(temp_dir.path().join("tasks.db"))
+    .build()
+    .await?;
+
+    tasks.run(false).await;
+
+    assert!(
+        !marker.exists(),
+        "a recognized builtin failure must not retry a mutating fallback"
+    );
+    assert_matches!(
+        inspect_tasks(&tasks).await.as_slice(),
+        [(name, TaskStatus::Completed(TaskCompleted::Failed(_, failure)))]
+            if name == "devenv:test:malformed"
+                && failure.error.contains("invalid files-reconcile v1 input")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn supported_builtin_succeeds_without_command_fallback() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path().join("project");
+    let state_file = temp_dir.path().join("state/files.json");
+    let marker = temp_dir.path().join("fallback-must-not-run");
+    let fallback = create_script(&format!("#!/bin/sh\ntouch '{}'", marker.display()))?;
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["devenv:test:native"],
+            "run_mode": "all",
+            "tasks": [{
+                "name": "devenv:test:native",
+                "command": fallback.to_str().unwrap(),
+                "builtin": {
+                    "name": "files-reconcile",
+                    "version": 1,
+                    "input": {
+                        "root": root,
+                        "state_file": state_file,
+                        "desired_digest": "empty",
+                        "files": []
+                    }
+                }
+            }]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        Shutdown::new(),
+    )
+    .with_db_path(temp_dir.path().join("tasks.db"))
+    .build()
+    .await?;
+
+    tasks.run(false).await;
+
+    assert!(
+        !marker.exists(),
+        "a supported builtin must not run fallback"
+    );
+    assert_matches!(
+        inspect_tasks(&tasks).await.as_slice(),
+        [(name, TaskStatus::Completed(TaskCompleted::Success(_, _)))]
+            if name == "devenv:test:native"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn builtin_envelope_is_limited_to_oneshots_with_fallbacks() {
+    let temp_dir = TempDir::new().unwrap();
+    for (task, expected) in [
+        (
+            json!({
+                "name": "devenv:test:process",
+                "type": "process",
+                "command": "/bin/true",
+                "builtin": { "name": "files-reconcile", "version": 1 }
+            }),
+            "cannot use a native builtin runner",
+        ),
+        (
+            json!({
+                "name": "devenv:test:no-fallback",
+                "builtin": { "name": "files-reconcile", "version": 1 }
+            }),
+            "has no command fallback",
+        ),
+    ] {
+        let config = Config::try_from(json!({
+            "roots": [task["name"].as_str().unwrap()],
+            "run_mode": "all",
+            "tasks": [task]
+        }))
+        .unwrap();
+        let error = Tasks::builder(config, VerbosityLevel::Verbose, Shutdown::new())
+            .with_db_path(temp_dir.path().join("tasks.db"))
+            .build()
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+    }
+}
+
+#[tokio::test]
+async fn builtin_cache_tracks_changes_and_never_caches_failures() -> Result<(), Error> {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("project");
+    let watched = temp.path().join("watched");
+    fs::write(&watched, "first").await?;
+    let first_command = create_script("#!/bin/sh\nexit 97")?;
+    let second_command = create_script("#!/bin/sh\nexit 98")?;
+    for step in 0..8 {
+        if step == 2 || step == 5 {
+            fs::write(&watched, format!("changed at step {step}")).await?;
+        }
+        let input = if step == 5 {
+            json!({"root": 42})
+        } else {
+            json!({
+                "root": root,
+                "state_file": temp.path().join("state/files.json"),
+                "desired_digest": "empty",
+                "files": []
+            })
+        };
+        let config = Config::try_from(json!({
+            "roots": ["devenv:test:cached-builtin"],
+            "run_mode": "all",
+            "tasks": [{
+                "name": "devenv:test:cached-builtin",
+                "command": if step < 4 { first_command.to_str().unwrap() } else { second_command.to_str().unwrap() },
+                "exec_if_modified": [watched],
+                "builtin": { "name": "files-reconcile", "version": 1, "input": input }
+            }]
+        })).unwrap();
+        let tasks = Tasks::builder(config, VerbosityLevel::Quiet, Shutdown::new())
+            .with_db_path(temp.path().join("tasks.db"))
+            .build()
+            .await?;
+        tasks.run(false).await;
+        let statuses = inspect_tasks(&tasks).await;
+        let status = &statuses[0].1;
+        match step {
+            1 | 3 | 7 => assert_matches!(
+                status,
+                TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_)))
+            ),
+            5 => assert_matches!(status, TaskStatus::Completed(TaskCompleted::Failed(_, _))),
+            _ => assert_matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_basic_tasks() -> Result<(), Error> {
     // Create a unique tempdir for this test
     let temp_dir = TempDir::new().unwrap();

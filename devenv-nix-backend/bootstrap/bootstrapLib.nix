@@ -199,6 +199,12 @@ rec {
                     cli.requireVersionMatch = require_version_match;
                   }
                 )
+                (lib.optionalAttrs
+                  (builtins.hasAttr "cli" options.devenv && builtins.hasAttr "capabilities" options.devenv.cli)
+                  {
+                    cli.capabilities = primops.capabilities or { };
+                  }
+                )
                 (lib.optionalAttrs (builtins.hasAttr "tmpdir" options.devenv) {
                   tmpdir = devenv_tmpdir;
                 })

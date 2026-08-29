@@ -6,6 +6,7 @@
 
 let
   cfg = config.claude.code;
+  settingsRelativePath = ".claude/settings.json";
 
   # Tool permissions submodule (reused for both rules and backward compat)
   toolPermissionsSubmodule = lib.types.submodule {
@@ -925,7 +926,7 @@ in
 
     settingsPath = lib.mkOption {
       type = lib.types.str;
-      default = "${config.devenv.root}/.claude/settings.json";
+      default = "${config.devenv.root}/${settingsRelativePath}";
       internal = true;
       description = ''
         Path to the Claude Code settings file within the repository.
@@ -974,7 +975,7 @@ in
 
     (lib.mkIf cfg.enable {
       files = lib.mkMerge [
-        { "${cfg.settingsPath}".json = settingsContent; }
+        { "${settingsRelativePath}".json = settingsContent; }
 
         # MCP configuration file
         (lib.mkIf (cfg.mcpServers != { }) {

@@ -606,6 +606,35 @@ impl TaskState {
             }
         }
 
+        if let Some(builtin) = &self.task.builtin {
+            match crate::builtins::execute(builtin, cancellation.clone()).await {
+                Ok(Some(output)) => {
+                    self.cache_success(cache).await?;
+                    return Ok(TaskCompleted::Success(now.elapsed(), output));
+                }
+                Ok(None) => {
+                    tracing::debug!(
+                        task.name = %self.task.name,
+                        builtin.name = %builtin.name,
+                        builtin.version = builtin.version,
+                        "native task builtin is unsupported; using command fallback"
+                    );
+                }
+                Err(error) => {
+                    // A recognized builtin may already have changed state. Never
+                    // retry its mutating command fallback after dispatch.
+                    return Ok(TaskCompleted::Failed(
+                        now.elapsed(),
+                        TaskFailure {
+                            stdout: Vec::new(),
+                            stderr: Vec::new(),
+                            error: format!("Native task builtin failed: {error:#}"),
+                        },
+                    ));
+                }
+            }
+        }
+
         let Some(cmd) = &self.task.command else {
             task_activity.skipped();
             return Ok(TaskCompleted::Skipped(Skipped::NoCommand));
@@ -663,17 +692,7 @@ impl TaskState {
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {
-            let expanded_paths = find_files_matching_patterns(&self.task.exec_if_modified);
-            for path in &expanded_paths {
-                cache.update_file_state(&self.task.name, path).await?;
-            }
-            cache
-                .cleanup_stale_files(&self.task.name, &expanded_paths)
-                .await?;
-
-            if let Some(cmd) = &self.task.command {
-                cache.update_file_state(&self.task.name, cmd).await?;
-            }
+            self.cache_success(cache).await?;
         }
 
         if result.error.as_deref() == Some("Task cancelled") {
@@ -699,6 +718,27 @@ impl TaskState {
                 },
             ))
         }
+    }
+
+    /// Successful native and command executions share the same cache contract.
+    async fn cache_success(&self, cache: &TaskCache) -> Result<()> {
+        // File fingerprints are only consumed by exec_if_modified. In
+        // particular, ordinary files reconciliation must keep its no-write
+        // fast path without accessing the fallback command or task database.
+        if self.task.exec_if_modified.is_empty() {
+            return Ok(());
+        }
+        let mut paths = find_files_matching_patterns(&self.task.exec_if_modified);
+        if let Some(command) = &self.task.command {
+            paths.push(command.clone());
+        }
+        paths.sort_unstable();
+        paths.dedup();
+        for path in &paths {
+            cache.update_file_state(&self.task.name, path).await?;
+        }
+        cache.cleanup_stale_files(&self.task.name, &paths).await?;
+        Ok(())
     }
 }
 

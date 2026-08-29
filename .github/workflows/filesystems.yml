@@ -1,0 +1,43 @@
+name: Files runner filesystems
+
+on:
+  pull_request:
+    paths:
+      - 'devenv-tasks/**'
+      - 'Cargo.*'
+      - '.github/workflows/filesystems.yml'
+      - '.config/nextest.toml'
+  push:
+    branches: [main]
+    paths:
+      - 'devenv-tasks/**'
+      - 'Cargo.*'
+      - '.github/workflows/filesystems.yml'
+      - '.config/nextest.toml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  filesystems:
+    # Mount tests run on disposable hosted machines, not shared build workers.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: devenv
+      - name: Install Linux filesystem tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y btrfs-progs xfsprogs
+      - name: Run filesystem matrix
+        run: |
+          devenv_path=$(nix build -L --no-link --print-out-paths .#devenv)
+          "$devenv_path/bin/devenv" shell -- bash devenv-tasks/tests/filesystems.sh

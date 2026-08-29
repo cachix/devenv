@@ -725,6 +725,9 @@ impl Devenv {
                 // contribute executable primops and replayable resources while
                 // sharing one native file/env dependency tracker.
                 let mut eval_setup = devenv_nix_backend::NixEvalSetup::new();
+                eval_setup.add_primop(devenv_nix_backend::CliCapabilities::new(
+                    tasks::builtin_capabilities(),
+                ));
                 eval_setup
                     .install(devenv_nix_backend::DotenvPlugin::new(paths.root.clone()))
                     .install(devenv_nix_backend::PortAllocationPlugin::new(

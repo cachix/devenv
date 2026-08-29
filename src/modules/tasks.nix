@@ -86,6 +86,21 @@ let
             default = mkCommand config.exec false;
             description = "Path to the script to run.";
           };
+          builtin = lib.mkOption {
+            type = types.nullOr (types.submodule {
+              options = {
+                name = lib.mkOption { type = types.str; };
+                version = lib.mkOption { type = types.ints.unsigned; };
+                input = lib.mkOption {
+                  type = types.anything;
+                  default = { };
+                };
+              };
+            });
+            internal = true;
+            default = null;
+            description = "A versioned native runner with command fallback.";
+          };
           status = lib.mkOption {
             type = types.nullOr types.str;
             default = null;
@@ -119,6 +134,8 @@ let
               cwd = config.cwd;
               show_output = config.showOutput;
               inherit (config) process;
+            } // lib.optionalAttrs (config.builtin != null) {
+              builtin = config.builtin;
             };
             description = "Internal configuration for the task.";
           };

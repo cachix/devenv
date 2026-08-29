@@ -4,6 +4,18 @@ use crate::types::{DependencyKind, DependencySpec, TaskType};
 use devenv_processes::ProcessConfig;
 use serde::{Deserialize, Serialize};
 
+/// Optional native implementation for an ordinary oneshot task.
+///
+/// Older runners ignore this field and execute `command`. New runners do the
+/// same when they do not support the exact builtin name and version.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct TaskBuiltin {
+    pub name: String,
+    pub version: u32,
+    #[serde(default)]
+    pub input: serde_json::Value,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TaskConfig {
     pub name: String,
@@ -17,6 +29,8 @@ pub struct TaskConfig {
     pub before: Vec<String>,
     #[serde(default)]
     pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builtin: Option<TaskBuiltin>,
     #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
@@ -151,6 +165,46 @@ pub fn parse_dependency(dep: &str) -> Result<DependencySpec, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Deserialize)]
+    struct LegacyTaskConfig {
+        name: String,
+        command: Option<String>,
+    }
+
+    #[test]
+    fn task_builtin_envelope_is_ignored_by_legacy_deserializers() {
+        let task: TaskConfig = serde_json::from_value(serde_json::json!({
+            "name": "devenv:files",
+            "command": "/nix/store/legacy-files-reconcile",
+            "builtin": {
+                "name": "files-reconcile",
+                "version": 1,
+                "input": { "root": "/project" }
+            }
+        }))
+        .unwrap();
+
+        let serialized = serde_json::to_value(task).unwrap();
+        let legacy: LegacyTaskConfig = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(legacy.name, "devenv:files");
+        assert_eq!(
+            legacy.command.as_deref(),
+            Some("/nix/store/legacy-files-reconcile")
+        );
+    }
+
+    #[test]
+    fn task_config_without_builtin_remains_valid() {
+        let task: TaskConfig = serde_json::from_value(serde_json::json!({
+            "name": "devenv:files",
+            "command": "/nix/store/legacy-files-reconcile"
+        }))
+        .unwrap();
+
+        assert_eq!(task.builtin, None);
+    }
 
     #[test]
     fn test_parse_dependency_no_suffix() {

@@ -2552,6 +2552,7 @@ version = "2.2.3"
 dependencies = [
  "async-trait",
  "base64",
+ "blake3",
  "clap",
  "console",
  "devenv-activity",
@@ -2559,12 +2560,15 @@ dependencies = [
  "devenv-core",
  "devenv-mailbox",
  "devenv-processes",
+ "fd-lock",
  "ignore",
+ "libc",
  "miette",
  "nix 0.31.3",
  "petgraph",
  "pretty_assertions",
  "proptest",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "shell-escape",
@@ -2576,6 +2580,8 @@ dependencies = [
  "tokio-test",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

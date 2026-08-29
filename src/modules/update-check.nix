@@ -42,6 +42,18 @@ in
           Whether the CLI was built from a development (non-release) version.
         '';
       };
+      capabilities = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule {
+          options.versions = lib.mkOption {
+            type = lib.types.listOf lib.types.ints.unsigned;
+            default = [ ];
+            internal = true;
+          };
+        });
+        default = { };
+        internal = true;
+        description = "Exact native protocol versions supported by the invoking CLI.";
+      };
       requireVersionMatch = lib.mkOption {
         type = lib.types.bool;
         default = false;
