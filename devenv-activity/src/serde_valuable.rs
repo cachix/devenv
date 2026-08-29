@@ -67,7 +67,7 @@ impl<T: Serialize + ?Sized> Mappable for SerdeValuable<'_, T> {
 
 impl<T: Serialize + ?Sized> Listable for SerdeValuable<'_, T> {
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, None)
+        exact_len(self.0)
     }
 }
 
@@ -259,6 +259,192 @@ impl Serializer for KindProbe {
     }
 }
 
+/// The exact element count of a sequence value, as a `size_hint`.
+///
+/// `valuable-serde` announces `upper.unwrap_or(lower)` as the sequence length
+/// to the target serializer, and serde_json closes an array announced as empty
+/// before any element is written. The hint must therefore be exact.
+fn exact_len<T: Serialize + ?Sized>(value: &T) -> (usize, Option<usize>) {
+    let len = value.serialize(LenProbe).unwrap_or(0);
+    (len, Some(len))
+}
+
+/// Counts the elements of a sequence without walking into them.
+struct LenProbe;
+
+/// Element counter for [`LenProbe`].
+struct ElementCounter(usize);
+
+impl SerializeSeq for ElementCounter {
+    type Ok = usize;
+    type Error = Error;
+
+    fn serialize_element<T: Serialize + ?Sized>(&mut self, _: &T) -> Result<(), Error> {
+        self.0 += 1;
+        Ok(())
+    }
+
+    fn end(self) -> Result<usize, Error> {
+        Ok(self.0)
+    }
+}
+
+impl SerializeTuple for ElementCounter {
+    type Ok = usize;
+    type Error = Error;
+
+    fn serialize_element<T: Serialize + ?Sized>(&mut self, _: &T) -> Result<(), Error> {
+        self.0 += 1;
+        Ok(())
+    }
+
+    fn end(self) -> Result<usize, Error> {
+        Ok(self.0)
+    }
+}
+
+impl SerializeTupleStruct for ElementCounter {
+    type Ok = usize;
+    type Error = Error;
+
+    fn serialize_field<T: Serialize + ?Sized>(&mut self, _: &T) -> Result<(), Error> {
+        self.0 += 1;
+        Ok(())
+    }
+
+    fn end(self) -> Result<usize, Error> {
+        Ok(self.0)
+    }
+}
+
+macro_rules! probe_not_a_sequence {
+    ($($method:ident: $ty:ty),* $(,)?) => {
+        $(
+            fn $method(self, _: $ty) -> Result<usize, Error> {
+                Err(Error::Kind(Kind::Primitive))
+            }
+        )*
+    };
+}
+
+impl Serializer for LenProbe {
+    type Ok = usize;
+    type Error = Error;
+    type SerializeSeq = ElementCounter;
+    type SerializeTuple = ElementCounter;
+    type SerializeTupleStruct = ElementCounter;
+    type SerializeTupleVariant = Impossible<usize, Error>;
+    type SerializeMap = Impossible<usize, Error>;
+    type SerializeStruct = Impossible<usize, Error>;
+    type SerializeStructVariant = Impossible<usize, Error>;
+
+    probe_not_a_sequence! {
+        serialize_bool: bool,
+        serialize_i8: i8,
+        serialize_i16: i16,
+        serialize_i32: i32,
+        serialize_i64: i64,
+        serialize_i128: i128,
+        serialize_u8: u8,
+        serialize_u16: u16,
+        serialize_u32: u32,
+        serialize_u64: u64,
+        serialize_u128: u128,
+        serialize_f32: f32,
+        serialize_f64: f64,
+        serialize_char: char,
+        serialize_str: &str,
+        serialize_bytes: &[u8],
+    }
+
+    fn serialize_none(self) -> Result<usize, Error> {
+        Err(Error::Kind(Kind::Unit))
+    }
+
+    fn serialize_some<T: Serialize + ?Sized>(self, value: &T) -> Result<usize, Error> {
+        value.serialize(LenProbe)
+    }
+
+    fn serialize_unit(self) -> Result<usize, Error> {
+        Err(Error::Kind(Kind::Unit))
+    }
+
+    fn serialize_unit_struct(self, _: &'static str) -> Result<usize, Error> {
+        Err(Error::Kind(Kind::Unit))
+    }
+
+    fn serialize_unit_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+    ) -> Result<usize, Error> {
+        Err(Error::Kind(Kind::Primitive))
+    }
+
+    fn serialize_newtype_struct<T: Serialize + ?Sized>(
+        self,
+        _: &'static str,
+        value: &T,
+    ) -> Result<usize, Error> {
+        value.serialize(LenProbe)
+    }
+
+    fn serialize_newtype_variant<T: Serialize + ?Sized>(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: &T,
+    ) -> Result<usize, Error> {
+        Err(Error::Kind(Kind::Map))
+    }
+
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Error> {
+        Ok(ElementCounter(0))
+    }
+
+    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Error> {
+        Ok(ElementCounter(0))
+    }
+
+    fn serialize_tuple_struct(
+        self,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeTupleStruct, Error> {
+        Ok(ElementCounter(0))
+    }
+
+    fn serialize_tuple_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeTupleVariant, Error> {
+        Err(Error::Kind(Kind::Map))
+    }
+
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Error> {
+        Err(Error::Kind(Kind::Map))
+    }
+
+    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Error> {
+        Err(Error::Kind(Kind::Map))
+    }
+
+    fn serialize_struct_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeStructVariant, Error> {
+        Err(Error::Kind(Kind::Map))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Nested containers, borrowed from their parent
 // ---------------------------------------------------------------------------
@@ -298,7 +484,7 @@ impl<T: Serialize + ?Sized> Valuable for NestedSeq<'_, T> {
 
 impl<T: Serialize + ?Sized> Listable for NestedSeq<'_, T> {
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, None)
+        exact_len(self.0)
     }
 }
 
@@ -1418,6 +1604,52 @@ mod tests {
     fn top_level_sequence_and_primitive() {
         assert_eq!(via_visitor(&vec![1u8, 2, 3]), json!([1, 2, 3]));
         assert_eq!(via_visitor(&7u8), serde_json::Value::Null);
+    }
+
+    /// `serde_json::to_string` honours sequence length hints, unlike
+    /// `serde_json::to_value`.
+    #[test]
+    fn sequences_serialize_to_valid_json_text() {
+        #[derive(Serialize)]
+        struct Item {
+            id: u64,
+        }
+        #[derive(Serialize)]
+        struct Lists {
+            items: Vec<Item>,
+            empty: Vec<Item>,
+            pairs: Vec<(u64, u64)>,
+        }
+        let value = Lists {
+            items: vec![Item { id: 1 }, Item { id: 2 }],
+            empty: vec![],
+            pairs: vec![(1, 2)],
+        };
+        let text =
+            serde_json::to_string(&Serializable::new(SerdeValuable(&value).as_value())).unwrap();
+        assert_eq!(text, serde_json::to_string(&value).unwrap());
+
+        let event = ActivityEvent::Task(Task::Hierarchy {
+            tasks: vec![
+                TaskInfo {
+                    id: 1,
+                    name: "devenv:files".into(),
+                    show_output: false,
+                    is_process: false,
+                },
+                TaskInfo {
+                    id: 2,
+                    name: "devenv:enterShell".into(),
+                    show_output: true,
+                    is_process: false,
+                },
+            ],
+            edges: vec![(2, 1)],
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
+        });
+        let text =
+            serde_json::to_string(&Serializable::new(SerdeValuable(&event).as_value())).unwrap();
+        assert_eq!(text, serde_json::to_string(&event).unwrap());
     }
 
     #[test]

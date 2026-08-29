@@ -10,6 +10,7 @@
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
 - Interrupting devenv a second time no longer leaves processes running. The second Ctrl+C exits straight away instead of waiting for shutdown to finish, which used to abandon any process still shutting down. This was easy to hit, since a process that is slow to stop is given five seconds before it is killed.
 - Existing GC root symlinks are now updated atomically when their store path changes.
+- Fixed JSON trace output (`--trace-to json:...`) writing invalid JSON lines for activity events that contain lists, such as the task hierarchy event.
 
 ### Improvements
 
