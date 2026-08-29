@@ -1036,7 +1036,13 @@ impl ProcessRunner {
         if let Some(pid) = parent_id {
             builder = builder.parent(Some(pid));
         }
-        devenv_activity::start!(builder)
+        devenv_activity::start!(
+            builder,
+            devenv.process.status = tracing::field::Empty,
+            devenv.process.restart_count = tracing::field::Empty,
+            devenv.process.supervisor_phase = tracing::field::Empty,
+            devenv.process.exit_status = tracing::field::Empty
+        )
     }
 
     /// Register a process as waiting for dependencies.
@@ -1526,7 +1532,9 @@ impl ProcessRunner {
             );
 
             // Inject OTEL trace context so instrumented subprocesses join the trace.
-            cmd.envs(devenv_activity::trace_propagation_env());
+            devenv_activity::inject_trace_propagation_env(|key, value| {
+                cmd.env(key, value);
+            });
 
             // Record the scope so a force exit, which skips both teardown and
             // destructors, can still reach processes that would otherwise be

@@ -289,7 +289,28 @@ impl SupervisorRuntime {
     }
 
     fn publish_status(&self) {
-        let _ = self.status_tx.send(self.state.status());
+        let status = self.state.status();
+        let phase = match status.phase {
+            SupervisorPhase::Starting => "starting",
+            SupervisorPhase::Ready => "ready",
+            SupervisorPhase::Stopping => "stopping",
+            SupervisorPhase::Exited => "exited",
+            SupervisorPhase::GaveUp => "gave_up",
+        };
+        self.activity
+            .record("devenv.process.supervisor_phase", phase);
+        self.activity
+            .record("devenv.process.restart_count", status.restart_count as u64);
+        if let Some(exit_status) = status.exit_status {
+            self.activity.record(
+                "devenv.process.exit_status",
+                match exit_status {
+                    ExitStatus::Success => "success",
+                    ExitStatus::Failure => "failure",
+                },
+            );
+        }
+        let _ = self.status_tx.send(status);
     }
 
     fn give_up(&self, reason: &'static str) {
