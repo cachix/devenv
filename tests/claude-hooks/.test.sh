@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Checks the claude.code.hooks module output directly against the generated
+# .claude/settings.json - no `claude` binary or live session is involved.
+
 SETTINGS=".claude/settings.json"
 
 fail() {
