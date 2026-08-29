@@ -509,11 +509,19 @@ impl TaskState {
                 let status_activity = devenv_activity::start!(
                     Activity::command("check status")
                         .command(cmd)
-                        .level(ActivityLevel::Debug)
+                        .level(ActivityLevel::Debug),
+                    devenv.command.exit_code = tracing::field::Empty,
+                    devenv.command.stdout_bytes = tracing::field::Empty,
+                    devenv.command.stderr_bytes = tracing::field::Empty
                 );
 
                 match command.output().await {
                     Ok(output) => {
+                        if let Some(exit_code) = output.status.code() {
+                            status_activity.record("devenv.command.exit_code", exit_code as i64);
+                        }
+                        status_activity.record("devenv.command.stdout_bytes", output.stdout.len());
+                        status_activity.record("devenv.command.stderr_bytes", output.stderr.len());
                         // A nonzero exit is a normal status/cache miss: fall through
                         // to run the command. Only a spawn/execution error of the
                         // status probe itself (the `Err` arm below) is a real failure.
@@ -594,7 +602,11 @@ impl TaskState {
         let cmd_activity = devenv_activity::start!(
             Activity::command("execute command")
                 .command(cmd)
-                .level(ActivityLevel::Debug)
+                .level(ActivityLevel::Debug),
+            devenv.command.pid = tracing::field::Empty,
+            devenv.command.exit_code = tracing::field::Empty,
+            devenv.command.stdout_line_count = tracing::field::Empty,
+            devenv.command.stderr_line_count = tracing::field::Empty
         );
 
         self.validate_cwd()?;
@@ -621,6 +633,20 @@ impl TaskState {
         // Execute using the provided executor
         let callback = ActivityCallback::new(task_activity);
         let result = crate::executor::execute(ctx, &callback, cancellation).await;
+        if let Some(pid) = result.pid {
+            cmd_activity.record("devenv.command.pid", pid as u64);
+        }
+        if let Some(exit_code) = result.exit_code {
+            cmd_activity.record("devenv.command.exit_code", exit_code as i64);
+        }
+        cmd_activity.record(
+            "devenv.command.stdout_line_count",
+            result.stdout_lines.len(),
+        );
+        cmd_activity.record(
+            "devenv.command.stderr_line_count",
+            result.stderr_lines.len(),
+        );
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {

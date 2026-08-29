@@ -47,7 +47,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, debug_span, info, info_span, instrument, trace, warn};
+use tracing::{Instrument, debug, debug_span, info, instrument, trace, warn};
 
 /// Trailing guidance shown when the running manager doesn't recognise a process
 /// name because it was started under a different configuration.
@@ -1234,7 +1234,11 @@ impl Devenv {
                 devenv_activity::start!(
                     Activity::process(&info.name)
                         .parent(Some(parent_id))
-                        .ports(info.ports.clone())
+                        .ports(info.ports.clone()),
+                    devenv.process.status = tracing::field::Empty,
+                    devenv.process.restart_count = info.restart_count as u64,
+                    devenv.process.supervisor_phase = tracing::field::Empty,
+                    devenv.process.exit_status = tracing::field::Empty
                 )
                 .into_ref()
             });
@@ -1774,7 +1778,9 @@ impl Devenv {
         );
 
         // Inject OTEL trace context so instrumented subprocesses join the trace.
-        shell_cmd.envs(devenv_activity::trace_propagation_env());
+        devenv_activity::inject_trace_propagation_env(|key, value| {
+            shell_cmd.env(key, value);
+        });
 
         Ok(shell_cmd)
     }
@@ -2095,7 +2101,10 @@ impl Devenv {
         let config = tasks::Config {
             roots,
             tasks: task_configs,
-            run_mode: devenv_tasks::RunMode::All,
+            // Entry-point tasks need their prerequisites, never their downstream
+            // dependents. In particular, following edges out of enterShell pulls
+            // in enterTest and test-only hooks during ordinary shell entry.
+            run_mode: devenv_tasks::RunMode::Before,
             runtime_dir: self.devenv_runtime.clone(),
             cache_dir: self.devenv_state_dir(),
             sudo_context: None,
@@ -2212,14 +2221,48 @@ impl Devenv {
             )
             .await?;
         cmd.env("DEVENV_SKIP_TASKS", "1");
-        let output = async {
+        let subprocess_span = debug_span!(
+            target: "devenv_activity::spans",
+            "shell_capture_subprocess",
+            otel.name = "capturing shell environment subprocess",
+            devenv.activity.kind = "command",
+            devenv.shell.stage = "capture_environment",
+            devenv.command = %cmd.as_std().get_program().to_string_lossy(),
+            devenv.command.exit_code = tracing::field::Empty,
+            devenv.command.stdout_bytes = tracing::field::Empty,
+            devenv.command.stderr_bytes = tracing::field::Empty,
+            devenv.outcome = tracing::field::Empty,
+            otel.status_code = tracing::field::Empty
+        );
+        let output_result = async {
             cmd.output()
                 .await
                 .into_diagnostic()
                 .wrap_err("Failed to execute environment capture script")
         }
-        .instrument(info_span!("capture_env_subprocess"))
-        .await?;
+        .instrument(subprocess_span.clone())
+        .await;
+
+        match &output_result {
+            Ok(output) => {
+                if let Some(exit_code) = output.status.code() {
+                    subprocess_span.record("devenv.command.exit_code", exit_code as i64);
+                }
+                subprocess_span.record("devenv.command.stdout_bytes", output.stdout.len());
+                subprocess_span.record("devenv.command.stderr_bytes", output.stderr.len());
+                if output.status.success() {
+                    subprocess_span.record("devenv.outcome", "success");
+                } else {
+                    subprocess_span.record("devenv.outcome", "failed");
+                    subprocess_span.record("otel.status_code", "ERROR");
+                }
+            }
+            Err(_) => {
+                subprocess_span.record("devenv.outcome", "failed");
+                subprocess_span.record("otel.status_code", "ERROR");
+            }
+        }
+        let output = output_result?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
