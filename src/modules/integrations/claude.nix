@@ -88,6 +88,7 @@ let
           "TeammateIdle"
           "TaskCompleted"
           "ConfigChange"
+          "FileChanged"
         ];
         default = "PostToolUse";
         description = ''
@@ -109,16 +110,36 @@ let
           - TeammateIdle: Runs when a teammate agent becomes idle
           - TaskCompleted: Runs when a task is completed
           - ConfigChange: Runs when configuration changes
+          - FileChanged: Runs when a watched file changes on disk (see `matcher`)
         '';
       };
       matcher = lib.mkOption {
         type = lib.types.str;
         default = "";
-        description = "Regex pattern to match against tool names (for PreToolUse/PostToolUse hooks).";
+        description = ''
+          For most hook types, a regex pattern to match against tool names
+          (for PreToolUse/PostToolUse hooks).
+
+          For `FileChanged`, this is instead a glob pattern (or `|`-separated
+          list of glob patterns) matched against file paths relative to the
+          project root, e.g. `.env` or `*.md` or `.env|.env.local`. Claude
+          Code expands the glob(s) into the set of files it watches, and
+          fires the hook whenever one of them changes.
+        '';
       };
       command = lib.mkOption {
         type = lib.types.str;
         description = "The command to execute.";
+      };
+      timeout = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        description = ''
+          Seconds to wait before canceling the hook command.
+          Defaults to Claude Code's built-in default when unset (600 seconds
+          for a command hook, lower for some event types).
+        '';
+        example = 30;
       };
     };
   };
@@ -133,10 +154,12 @@ let
         (hook: {
           matcher = hook.matcher or "";
           hooks = [
-            {
+            ({
               type = "command";
               command = hook.command;
-            }
+            } // lib.optionalAttrs (hook.timeout or null != null) {
+              timeout = hook.timeout;
+            })
           ];
         })
         hooks;
@@ -149,6 +172,7 @@ let
         hook = {
           matcher = hook.matcher;
           command = hook.command;
+          timeout = hook.timeout;
         };
       }
     )
@@ -240,6 +264,7 @@ let
       TeammateIdle = buildHooks "TeammateIdle" (groupedHooks.TeammateIdle or [ ]);
       TaskCompleted = buildHooks "TaskCompleted" (groupedHooks.TaskCompleted or [ ]);
       ConfigChange = buildHooks "ConfigChange" (groupedHooks.ConfigChange or [ ]);
+      FileChanged = buildHooks "FileChanged" (groupedHooks.FileChanged or [ ]);
     };
     inherit (cfg)
       agent
@@ -321,12 +346,20 @@ in
             hookType = "PostToolUse";
             matcher = "^(Edit|MultiEdit|Write)$";
             command = "cargo test";
+            timeout = 120;
           };
           log-completion = {
             enable = true;
             name = "Log when Claude finishes";
             hookType = "Stop";
             command = "echo 'Claude finished responding' >> claude.log";
+          };
+          reload-direnv = {
+            enable = true;
+            name = "Reload direnv on .envrc changes";
+            hookType = "FileChanged";
+            matcher = ".envrc";
+            command = "direnv reload";
           };
         }
       '';
