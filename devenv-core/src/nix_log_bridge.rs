@@ -10,18 +10,20 @@
 //! # Eval Activity Tracking
 //!
 //! The bridge tracks which Activity evaluation effects should be attached to.
-//! The caller owns the Activity and passes its ID to `begin_eval()`.
+//! The caller owns the Activity and passes its ID and tracing span to
+//! `begin_eval_with_span()` when cross-thread trace parenting is needed.
 //!
 //! ## How It Works
 //!
 //! 1. Caller creates an Activity (e.g., `Activity::evaluate("Building shell")`)
-//! 2. Caller calls `begin_eval(activity.id())` which returns an `EvalActivityGuard`
+//! 2. Caller calls `begin_eval_with_span(activity.id(), activity.span())`, which
+//!    returns an `EvalActivityGuard`
 //! 3. Structured evaluation effects are appended to that activity
 //! 4. When the guard is dropped, `end_eval()` is called automatically
 //!
 //! This guard-based API ensures eval scopes are always properly closed.
 
-use arc_swap::ArcSwap;
+use arc_swap::{ArcSwap, ArcSwapOption};
 use devenv_activity::{
     Activity, ActivityLevel, ExpectedCategory, FetchKind, append_eval_log, append_eval_op, message,
     message_with_details, set_expected,
@@ -31,7 +33,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use tracing::{error, trace, warn};
+use tracing::{Span, error, trace, warn};
 
 use crate::eval_op::{EvalOp, OpObserver};
 use crate::internal_log::{
@@ -89,6 +91,8 @@ pub struct NixLogBridge {
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
     /// Current evaluation activity ID. Zero means no active evaluation.
     current_eval_id: AtomicU64,
+    /// Tracing parent for Nix callbacks that arrive on worker threads.
+    current_eval_span: ArcSwapOption<Span>,
     /// Observers for file/env operations during eval (used by caching systems)
     observers: ArcSwap<Vec<Arc<dyn OpObserver>>>,
     /// Error messages to be printed after TUI exits, before entering REPL
@@ -115,6 +119,30 @@ impl Drop for EvalActivityGuard<'_> {
     }
 }
 
+/// Restores the previous tracing parent for Nix worker callbacks on drop.
+///
+/// Nix emits callbacks from worker threads, so a thread-local tracing span is
+/// insufficient to associate them with the exact operation that triggered the
+/// work. This guard temporarily publishes that operation through `ArcSwap`.
+pub struct EvalTracingSpanGuard<'a> {
+    bridge: &'a NixLogBridge,
+    previous: Option<Arc<Span>>,
+    installed: Option<Arc<Span>>,
+}
+
+impl Drop for EvalTracingSpanGuard<'_> {
+    fn drop(&mut self) {
+        if self.installed.is_some() {
+            // Restore only if this stage is still current. The opening stage
+            // creates the eval session inside its body, which intentionally
+            // replaces this temporary parent with the longer-lived eval root.
+            self.bridge
+                .current_eval_span
+                .compare_and_swap(&self.installed, self.previous.take());
+        }
+    }
+}
+
 impl NixLogBridge {
     /// Create a new NixLogBridge.
     ///
@@ -124,6 +152,7 @@ impl NixLogBridge {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
             current_eval_id: AtomicU64::new(0),
+            current_eval_span: ArcSwapOption::empty(),
             observers: ArcSwap::from_pointee(Vec::new()),
             pre_repl_errors: Mutex::new(Vec::new()),
             expected_counts: Mutex::new(ExpectedCountTracker::default()),
@@ -195,10 +224,23 @@ impl NixLogBridge {
     /// Returns a guard that calls `end_eval` when dropped.
     /// The caller owns the Activity and controls its lifecycle.
     pub fn begin_eval(&self, activity_id: u64) -> EvalActivityGuard<'_> {
+        self.begin_eval_inner(activity_id, None)
+    }
+
+    /// Begin an evaluation scope and propagate its tracing span to Nix worker
+    /// callbacks. The span is borrowed by callbacks through `ArcSwap`; no lock
+    /// or per-callback allocation is required.
+    pub fn begin_eval_with_span(&self, activity_id: u64, span: Span) -> EvalActivityGuard<'_> {
+        let span = (!span.is_disabled()).then(|| Arc::new(span));
+        self.begin_eval_inner(activity_id, span)
+    }
+
+    fn begin_eval_inner(&self, activity_id: u64, span: Option<Arc<Span>>) -> EvalActivityGuard<'_> {
         debug_assert_ne!(
             activity_id, 0,
             "activity IDs use zero as the empty sentinel"
         );
+        self.current_eval_span.store(span);
         self.current_eval_id.store(activity_id, Ordering::Release);
         // Scope recorded errors to this eval, so the pre-REPL replay shows
         // only this eval's failures, not ones left over from an earlier eval
@@ -209,9 +251,67 @@ impl NixLogBridge {
         EvalActivityGuard { bridge: self }
     }
 
+    /// Temporarily use `span` as the tracing parent for Nix callbacks.
+    ///
+    /// The disabled-tracing path performs only `Span::is_disabled()`. When a
+    /// tracing subscriber is active, entering a stage allocates one `Arc` and
+    /// performs one atomic pointer swap; callbacks then read the parent without
+    /// locking or allocating.
+    pub fn enter_eval_tracing_span(&self, span: &Span) -> EvalTracingSpanGuard<'_> {
+        if span.is_disabled() {
+            return EvalTracingSpanGuard {
+                bridge: self,
+                previous: None,
+                installed: None,
+            };
+        }
+
+        let installed = Arc::new(span.clone());
+        let previous = self.current_eval_span.swap(Some(Arc::clone(&installed)));
+        EvalTracingSpanGuard {
+            bridge: self,
+            previous,
+            installed: Some(installed),
+        }
+    }
+
     /// End the current evaluation scope (called by EvalActivityGuard on drop).
     fn end_eval(&self) {
         self.current_eval_id.store(0, Ordering::Release);
+        self.current_eval_span.store(None);
+    }
+
+    /// Construct a callback activity under its native Nix parent when that
+    /// parent is represented by an active devenv activity. Root callbacks and
+    /// children of unrepresented Nix activities fall back to the eval span.
+    ///
+    /// The common root path remains lock-free. A native child performs one
+    /// short map lookup and clones only its parent's tracing span handle. The
+    /// closure retains its own macro expansion site, so source metadata still
+    /// points at the callback handler.
+    #[inline]
+    fn with_activity_parent<T>(
+        &self,
+        native_parent_id: u64,
+        create: impl FnOnce(Option<u64>) -> T,
+    ) -> T {
+        if native_parent_id != 0 {
+            let parent_span = self.active_activities.lock().ok().and_then(|activities| {
+                activities
+                    .get(&native_parent_id)
+                    .map(|info| info.activity.span())
+            });
+            if let Some(parent_span) = parent_span {
+                return parent_span.in_scope(|| create(Some(native_parent_id)));
+            }
+        }
+
+        let parent_id = self.get_parent_activity_id();
+        let parent = self.current_eval_span.load();
+        match parent.as_deref() {
+            Some(parent) => parent.in_scope(|| create(parent_id)),
+            None => create(parent_id),
+        }
     }
 
     /// Get the parent activity ID for Nix activities.
@@ -259,10 +359,11 @@ impl NixLogBridge {
                 id,
                 typ,
                 text,
+                parent,
                 fields,
                 ..
             } => {
-                self.handle_activity_start(id, typ, text, fields);
+                self.handle_activity_start(id, typ, text, parent, fields);
             }
             InternalLog::Stop { id } => {
                 self.handle_activity_stop(id, true);
@@ -368,10 +469,9 @@ impl NixLogBridge {
         activity_id: u64,
         activity_type: ActivityType,
         text: String,
+        native_parent_id: u64,
         fields: Vec<Field>,
     ) {
-        let parent_id = self.get_parent_activity_id();
-
         match activity_type {
             ActivityType::Build => {
                 let derivation_path = fields
@@ -381,12 +481,14 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let activity = devenv_activity::start!(
-                    Activity::build(derivation_name)
-                        .id(activity_id)
-                        .derivation_path(derivation_path)
-                        .parent(parent_id)
-                );
+                let activity = self.with_activity_parent(native_parent_id, |parent_id| {
+                    devenv_activity::start!(
+                        Activity::build(derivation_name)
+                            .id(activity_id)
+                            .derivation_path(derivation_path)
+                            .parent(parent_id)
+                    )
+                });
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
@@ -399,12 +501,14 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let activity = devenv_activity::queue!(
-                    Activity::build(derivation_name)
-                        .id(activity_id)
-                        .derivation_path(derivation_path)
-                        .parent(parent_id)
-                );
+                let activity = self.with_activity_parent(native_parent_id, |parent_id| {
+                    devenv_activity::queue!(
+                        Activity::build(derivation_name)
+                            .id(activity_id)
+                            .derivation_path(derivation_path)
+                            .parent(parent_id)
+                    )
+                });
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
@@ -413,13 +517,14 @@ impl NixLogBridge {
                     let package_name = extract_package_name(&store_path);
                     let substituter = fields.get(1).and_then(Self::extract_string_field);
 
-                    let mut builder = Activity::fetch(FetchKind::Query, package_name)
-                        .id(activity_id)
-                        .parent(parent_id);
+                    let mut builder =
+                        Activity::fetch(FetchKind::Query, package_name).id(activity_id);
                     if let Some(url) = substituter {
                         builder = builder.url(url);
                     }
-                    let activity = devenv_activity::start!(builder);
+                    let activity = self.with_activity_parent(native_parent_id, |parent_id| {
+                        devenv_activity::start!(builder.parent(parent_id))
+                    });
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }
@@ -438,28 +543,34 @@ impl NixLogBridge {
                     let activity = if is_local_copy {
                         // Local copy to the store - use the full source path as the name
                         let source_path = source_uri.as_ref().unwrap();
-                        devenv_activity::start!(
-                            Activity::fetch(FetchKind::Copy, source_path)
-                                .id(activity_id)
-                                .parent(parent_id)
-                        )
+                        self.with_activity_parent(native_parent_id, |parent_id| {
+                            devenv_activity::start!(
+                                Activity::fetch(FetchKind::Copy, source_path)
+                                    .id(activity_id)
+                                    .parent(parent_id)
+                            )
+                        })
                     } else if let Some(url) = source_uri {
                         // Remote download from substituter
                         let package_name = extract_package_name(&store_path);
-                        devenv_activity::start!(
-                            Activity::fetch(FetchKind::Download, package_name)
-                                .id(activity_id)
-                                .parent(parent_id)
-                                .url(url)
-                        )
+                        self.with_activity_parent(native_parent_id, |parent_id| {
+                            devenv_activity::start!(
+                                Activity::fetch(FetchKind::Download, package_name)
+                                    .id(activity_id)
+                                    .parent(parent_id)
+                                    .url(url)
+                            )
+                        })
                     } else {
                         // No source URI - treat as local copy with store path name
                         let package_name = extract_package_name(&store_path);
-                        devenv_activity::start!(
-                            Activity::fetch(FetchKind::Copy, package_name)
-                                .id(activity_id)
-                                .parent(parent_id)
-                        )
+                        self.with_activity_parent(native_parent_id, |parent_id| {
+                            devenv_activity::start!(
+                                Activity::fetch(FetchKind::Copy, package_name)
+                                    .id(activity_id)
+                                    .parent(parent_id)
+                            )
+                        })
                     };
 
                     self.insert_activity(activity_id, activity_type, activity);
@@ -471,23 +582,26 @@ impl NixLogBridge {
                     let package_name = extract_package_name(&store_path);
                     let substituter = fields.get(1).and_then(Self::extract_string_field);
 
-                    let mut builder = Activity::fetch(FetchKind::Download, package_name)
-                        .id(activity_id)
-                        .parent(parent_id);
+                    let mut builder =
+                        Activity::fetch(FetchKind::Download, package_name).id(activity_id);
                     if let Some(url) = substituter {
                         builder = builder.url(url);
                     }
-                    let activity = devenv_activity::start!(builder);
+                    let activity = self.with_activity_parent(native_parent_id, |parent_id| {
+                        devenv_activity::start!(builder.parent(parent_id))
+                    });
 
                     self.insert_activity(activity_id, activity_type, activity);
                 }
             }
             ActivityType::FetchTree => {
-                let activity = devenv_activity::start!(
-                    Activity::fetch(FetchKind::Tree, text)
-                        .id(activity_id)
-                        .parent(parent_id)
-                );
+                let activity = self.with_activity_parent(native_parent_id, |parent_id| {
+                    devenv_activity::start!(
+                        Activity::fetch(FetchKind::Tree, text)
+                            .id(activity_id)
+                            .parent(parent_id)
+                    )
+                });
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
@@ -495,13 +609,13 @@ impl NixLogBridge {
                 let url = fields.first().and_then(Self::extract_string_field);
                 let name = url.as_deref().unwrap_or(&text);
 
-                let mut builder = Activity::fetch(FetchKind::Download, name)
-                    .id(activity_id)
-                    .parent(parent_id);
+                let mut builder = Activity::fetch(FetchKind::Download, name).id(activity_id);
                 if let Some(url) = url {
                     builder = builder.url(url);
                 }
-                let activity = devenv_activity::start!(builder);
+                let activity = self.with_activity_parent(native_parent_id, |parent_id| {
+                    devenv_activity::start!(builder.parent(parent_id))
+                });
 
                 self.insert_activity(activity_id, activity_type, activity);
             }
@@ -509,6 +623,7 @@ impl NixLogBridge {
                 trace!(
                     activity_type = ?activity_type,
                     activity_id = activity_id,
+                    native_parent_id = native_parent_id,
                     text = text,
                     fields = ?fields,
                     "Unhandled Nix activity type",
@@ -776,7 +891,207 @@ fn parse_nix_error(msg: &str) -> (String, Option<String>) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+
+    use tracing::field::{Field as TracingField, Visit};
+    use tracing::{Subscriber, span};
+    use tracing_subscriber::layer::{Context, SubscriberExt};
+    use tracing_subscriber::registry::LookupSpan;
+    use tracing_subscriber::{Layer, Registry};
+
     use super::*;
+
+    #[derive(Clone, Default)]
+    struct ParentCapture {
+        parent: Arc<AtomicU64>,
+        stage: Arc<AtomicU64>,
+        child: Arc<Mutex<Option<(u64, &'static str, Option<&'static str>)>>>,
+        activities: Arc<Mutex<HashMap<u64, (u64, u64)>>>,
+    }
+
+    #[derive(Default)]
+    struct ActivityIdVisitor(Option<u64>);
+
+    impl Visit for ActivityIdVisitor {
+        fn record_debug(&mut self, _field: &TracingField, _value: &dyn std::fmt::Debug) {}
+
+        fn record_u64(&mut self, field: &TracingField, value: u64) {
+            if field.name() == "activity_id" {
+                self.0 = Some(value);
+            }
+        }
+    }
+
+    impl<S> Layer<S> for ParentCapture
+    where
+        S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+    {
+        fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
+            if attrs.metadata().name() == "eval_parent" {
+                self.parent
+                    .store(id.clone().into_u64(), AtomicOrdering::Relaxed);
+                return;
+            }
+            if attrs.metadata().name() == "native_stage" {
+                self.stage
+                    .store(id.clone().into_u64(), AtomicOrdering::Relaxed);
+                return;
+            }
+            if attrs.metadata().target() != "devenv_activity::spans" {
+                return;
+            }
+            let parent_id = attrs
+                .parent()
+                .map(|parent| parent.clone().into_u64())
+                .or_else(|| ctx.lookup_current().map(|parent| parent.id().into_u64()));
+            let parent_id = parent_id.unwrap_or_default();
+            let mut visitor = ActivityIdVisitor::default();
+            attrs.record(&mut visitor);
+            if let Some(activity_id) = visitor.0 {
+                self.activities
+                    .lock()
+                    .unwrap()
+                    .insert(activity_id, (id.clone().into_u64(), parent_id));
+            }
+            *self.child.lock().unwrap() = Some((
+                parent_id,
+                attrs.metadata().target(),
+                attrs.metadata().file(),
+            ));
+        }
+    }
+
+    #[test]
+    fn eval_span_context_parents_nix_callback_spans_without_mangling_source() {
+        let capture = ParentCapture::default();
+        let subscriber = Registry::default().with(capture.clone());
+
+        tracing::subscriber::with_default(subscriber, || {
+            let parent = tracing::info_span!("eval_parent");
+            let bridge = NixLogBridge::new();
+            let _guard = bridge.begin_eval_with_span(1, parent);
+            bridge.process_internal_log(InternalLog::Start {
+                id: 2,
+                level: Verbosity::Info,
+                typ: ActivityType::FileTransfer,
+                text: "download".to_string(),
+                parent: 0,
+                fields: vec![Field::String("https://example.test/source".to_string())],
+            });
+            bridge.process_internal_log(InternalLog::Stop { id: 2 });
+        });
+
+        let parent = capture.parent.load(AtomicOrdering::Relaxed);
+        let child = capture.child.lock().unwrap();
+        let (child_parent, target, file) = child.as_ref().expect("callback span was captured");
+        assert_eq!(*child_parent, parent);
+        assert_eq!(*target, "devenv_activity::spans");
+        assert!(file.unwrap().ends_with("src/nix_log_bridge.rs"));
+    }
+
+    #[test]
+    fn native_nix_activity_parent_is_preserved_in_trace_hierarchy() {
+        let capture = ParentCapture::default();
+        let subscriber = Registry::default().with(capture.clone());
+
+        tracing::subscriber::with_default(subscriber, || {
+            let eval_parent = tracing::info_span!("eval_parent");
+            let bridge = NixLogBridge::new();
+            let _guard = bridge.begin_eval_with_span(1, eval_parent);
+
+            bridge.process_internal_log(InternalLog::Start {
+                id: 2,
+                level: Verbosity::Info,
+                typ: ActivityType::FileTransfer,
+                text: "parent download".to_string(),
+                parent: 0,
+                fields: vec![Field::String("https://example.test/parent".to_string())],
+            });
+            bridge.process_internal_log(InternalLog::Start {
+                id: 3,
+                level: Verbosity::Info,
+                typ: ActivityType::FileTransfer,
+                text: "child download".to_string(),
+                parent: 2,
+                fields: vec![Field::String("https://example.test/child".to_string())],
+            });
+            bridge.process_internal_log(InternalLog::Stop { id: 3 });
+            bridge.process_internal_log(InternalLog::Stop { id: 2 });
+        });
+
+        let eval_parent = capture.parent.load(AtomicOrdering::Relaxed);
+        let activities = capture.activities.lock().unwrap();
+        let (native_parent_span, root_parent) = activities[&2];
+        let (_, child_parent) = activities[&3];
+        assert_eq!(root_parent, eval_parent);
+        assert_eq!(child_parent, native_parent_span);
+    }
+
+    #[test]
+    fn scoped_eval_span_parents_worker_thread_callbacks_to_the_exact_stage() {
+        let capture = ParentCapture::default();
+        let subscriber = Registry::default().with(capture.clone());
+
+        tracing::subscriber::with_default(subscriber, || {
+            let eval_parent = tracing::info_span!("eval_parent");
+            let bridge = NixLogBridge::new();
+            let _eval_guard = bridge.begin_eval_with_span(1, eval_parent);
+            let stage = tracing::info_span!("native_stage");
+            let _stage_guard = bridge.enter_eval_tracing_span(&stage);
+
+            let worker_bridge = Arc::clone(&bridge);
+            let dispatch = tracing::dispatcher::get_default(Clone::clone);
+            std::thread::spawn(move || {
+                tracing::dispatcher::with_default(&dispatch, || {
+                    worker_bridge.process_internal_log(InternalLog::Start {
+                        id: 2,
+                        level: Verbosity::Info,
+                        typ: ActivityType::FileTransfer,
+                        text: "download".to_string(),
+                        parent: 0,
+                        fields: vec![Field::String("https://example.test/source".to_string())],
+                    });
+                    worker_bridge.process_internal_log(InternalLog::Stop { id: 2 });
+                });
+            })
+            .join()
+            .unwrap();
+        });
+
+        let stage = capture.stage.load(AtomicOrdering::Relaxed);
+        let activities = capture.activities.lock().unwrap();
+        assert_eq!(activities[&2].1, stage);
+    }
+
+    #[test]
+    fn opening_stage_does_not_overwrite_the_eval_parent_it_creates() {
+        let capture = ParentCapture::default();
+        let subscriber = Registry::default().with(capture.clone());
+
+        tracing::subscriber::with_default(subscriber, || {
+            let bridge = NixLogBridge::new();
+            let stage = tracing::info_span!("native_stage");
+            let stage_guard = bridge.enter_eval_tracing_span(&stage);
+
+            let eval_parent = tracing::info_span!("eval_parent");
+            let _eval_guard = bridge.begin_eval_with_span(1, eval_parent);
+            drop(stage_guard);
+
+            bridge.process_internal_log(InternalLog::Start {
+                id: 2,
+                level: Verbosity::Info,
+                typ: ActivityType::FileTransfer,
+                text: "download".to_string(),
+                parent: 0,
+                fields: vec![Field::String("https://example.test/source".to_string())],
+            });
+            bridge.process_internal_log(InternalLog::Stop { id: 2 });
+        });
+
+        let eval_parent = capture.parent.load(AtomicOrdering::Relaxed);
+        let activities = capture.activities.lock().unwrap();
+        assert_eq!(activities[&2].1, eval_parent);
+    }
 
     /// An `Error`-level `Msg` — the verbosity real errors and mislabeled
     /// daemon lines share.

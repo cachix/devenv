@@ -53,7 +53,7 @@ where
 {
     let activity =
         devenv_activity::start!(Activity::evaluate("Validating lock").level(ActivityLevel::Info));
-    let _eval_guard = bridge.begin_eval(activity.id());
+    let _eval_guard = bridge.begin_eval_with_span(activity.id(), activity.span());
     activity.with_new_scope_sync(f)
 }
 

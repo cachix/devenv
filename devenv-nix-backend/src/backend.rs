@@ -65,6 +65,7 @@ use nix_bindings_store::store::{Store, TrustedFlag};
 use nix_bindings_util::settings;
 use nix_cmd::ReplExitStatus;
 use once_cell::sync::OnceCell;
+use tracing::Instrument;
 
 use crate::anyhow_ext::AnyhowToMiette;
 use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
@@ -298,8 +299,9 @@ impl NixCBackend {
 
         // Scope the lazy `«nix-internal»` load to the surrounding activity.
         let eval_state = {
-            let _eval_guard =
-                devenv_activity::current_activity_id().map(|id| logger_setup.bridge.begin_eval(id));
+            let current_span = tracing::Span::current();
+            let _eval_guard = devenv_activity::current_activity_id()
+                .map(|id| logger_setup.bridge.begin_eval_with_span(id, current_span));
             build_eval_state(
                 &store,
                 &paths.root,
@@ -444,7 +446,9 @@ impl NixCBackend {
         if guard.is_none() {
             bail!("EvalState is not available (hot-reload may have failed to create a new one)");
         }
-        let eval_activity = self.nix_log_bridge.begin_eval(activity.id());
+        let eval_activity = self
+            .nix_log_bridge
+            .begin_eval_with_span(activity.id(), activity.span());
         Ok(EvalSession {
             guard,
             _eval_activity: eval_activity,
@@ -571,68 +575,149 @@ impl NixCBackend {
     }
 
     fn build_shell_uncached(&self, activity: &Activity) -> Result<CachedShellPaths> {
-        let mut eval_state = self.eval_session(activity)?;
-        let devenv = self.get_or_eval_devenv(&mut eval_state)?;
+        macro_rules! shell_stage {
+            ($name:literal, $kind:literal, $stage:literal, $body:expr $(, $($field:ident).+ = $value:expr)*) => {{
+                let span = tracing::debug_span!(
+                    target: "devenv_activity::spans",
+                    "shell_stage",
+                    otel.name = $name,
+                    devenv.activity.kind = $kind,
+                    devenv.shell.stage = $stage,
+                    devenv.outcome = tracing::field::Empty,
+                    otel.status_code = tracing::field::Empty
+                    $(, $($field).+ = $value)*
+                );
+                let _nix_callback_parent =
+                    self.nix_log_bridge.enter_eval_tracing_span(&span);
+                let result = span.in_scope(|| $body);
+                if result.is_err() {
+                    span.record("devenv.outcome", "failed");
+                    span.record("otel.status_code", "ERROR");
+                } else {
+                    span.record("devenv.outcome", "success");
+                }
+                result
+            }};
+        }
 
-        let shell_drv = self.enriched(
-            eval_state.require_attrs_select(&devenv, "shell"),
-            "Failed to get shell attribute",
-        )?;
-        self.enriched(
-            eval_state.force(&shell_drv),
-            "Failed to force evaluation of shell derivation",
+        let mut eval_state = shell_stage!(
+            "opening shell evaluation session",
+            "operation",
+            "open_eval_session",
+            self.eval_session(activity)
         )?;
 
-        let drv_path_value = self.enriched(
-            eval_state.require_attrs_select(&shell_drv, "drvPath"),
-            "Failed to get drvPath from shell derivation",
-        )?;
-        let drv_path = self.enriched(
-            eval_state.require_string(&drv_path_value),
-            "Failed to extract drvPath as string",
+        let devenv = shell_stage!(
+            "evaluating devenv configuration",
+            "evaluate",
+            "evaluate_configuration",
+            self.get_or_eval_devenv(&mut eval_state)
         )?;
 
-        let out_path_value = self.enriched(
-            eval_state.require_attrs_select(&shell_drv, "outPath"),
-            "Failed to get outPath from shell derivation",
-        )?;
-
-        let realized = {
-            let _guard = UmaskGuard::restrictive();
+        let shell_drv = shell_stage!(
+            "selecting shell derivation",
+            "evaluate",
+            "select_derivation",
             self.enriched(
-                eval_state.realise_string(&out_path_value, false),
-                "Failed to realize shell derivation",
-            )?
-        };
+                eval_state.require_attrs_select(&devenv, "shell"),
+                "Failed to get shell attribute",
+            )
+        )?;
 
-        let store_path = realized
-            .paths
-            .first()
-            .ok_or_else(|| miette!("Shell derivation produced no output paths"))?;
+        shell_stage!(
+            "forcing shell derivation",
+            "evaluate",
+            "force_derivation",
+            self.enriched(
+                eval_state.force(&shell_drv),
+                "Failed to force evaluation of shell derivation",
+            )
+        )?;
 
-        let mut store = self.cnix_store.inner().clone();
-        let out_path = store
-            .real_path(store_path)
-            .to_miette()
-            .wrap_err("Failed to get store path")?;
+        let drv_path_value = shell_stage!(
+            "selecting shell drvPath",
+            "evaluate",
+            "select_drv_path",
+            self.enriched(
+                eval_state.require_attrs_select(&shell_drv, "drvPath"),
+                "Failed to get drvPath from shell derivation",
+            )
+        )?;
 
-        let drv_store_path = store
-            .parse_store_path(&drv_path)
-            .to_miette()
-            .wrap_err("Failed to parse derivation store path")?;
-        let (_build_env, env_store_path) = {
-            let _guard = UmaskGuard::restrictive();
-            BuildEnvironment::get_dev_environment(self.cnix_store.inner(), &drv_store_path)
-                .to_miette()
-                .wrap_err("Failed to get dev environment")?
-        };
+        let drv_path = shell_stage!(
+            "extracting shell drvPath",
+            "evaluate",
+            "extract_drv_path",
+            self.enriched(
+                eval_state.require_string(&drv_path_value),
+                "Failed to extract drvPath as string",
+            )
+        )?;
 
-        let env_path = Some(
-            store
-                .real_path(&env_store_path)
-                .to_miette()
-                .wrap_err("Failed to get env store path")?,
-        );
+        let out_path_value = shell_stage!(
+            "selecting shell outPath",
+            "evaluate",
+            "select_out_path",
+            self.enriched(
+                eval_state.require_attrs_select(&shell_drv, "outPath"),
+                "Failed to get outPath from shell derivation",
+            )
+        )?;
+
+        let realized = shell_stage!(
+            "realizing shell derivation",
+            "build",
+            "realize_derivation",
+            {
+                let _guard = UmaskGuard::restrictive();
+                self.enriched(
+                    eval_state.realise_string(&out_path_value, false),
+                    "Failed to realize shell derivation",
+                )
+            },
+            devenv.derivation_path = drv_path.as_str()
+        )?;
+
+        let (mut store, out_path) = shell_stage!(
+            "resolving realized shell path",
+            "operation",
+            "resolve_output_path",
+            {
+                let store_path = realized
+                    .paths
+                    .first()
+                    .ok_or_else(|| miette!("Shell derivation produced no output paths"))?;
+                let mut store = self.cnix_store.inner().clone();
+                let out_path = store
+                    .real_path(store_path)
+                    .to_miette()
+                    .wrap_err("Failed to get store path")?;
+                Ok::<_, miette::Report>((store, out_path))
+            }
+        )?;
+
+        let env_path = shell_stage!(
+            "extracting shell environment",
+            "operation",
+            "extract_environment",
+            {
+                let drv_store_path = store
+                    .parse_store_path(&drv_path)
+                    .to_miette()
+                    .wrap_err("Failed to parse derivation store path")?;
+                let (_build_env, env_store_path) = {
+                    let _guard = UmaskGuard::restrictive();
+                    BuildEnvironment::get_dev_environment(self.cnix_store.inner(), &drv_store_path)
+                        .to_miette()
+                        .wrap_err("Failed to get dev environment")?
+                };
+                let env_path = store
+                    .real_path(&env_store_path)
+                    .to_miette()
+                    .wrap_err("Failed to get env store path")?;
+                Ok::<_, miette::Report>(Some(env_path))
+            }
+        )?;
 
         Ok(CachedShellPaths {
             drv_path,
@@ -718,6 +803,44 @@ impl NixCBackend {
 
     /// Evaluate the dev shell, producing the bash env script (or JSON).
     pub async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<DevEnvOutput> {
+        let output_format = if json { "json" } else { "activation_script" };
+        let activity = devenv_activity::start!(
+            Activity::evaluate("Evaluating shell"),
+            devenv.shell.stage = "construct",
+            devenv.shell.output_format = output_format,
+            devenv.shell.environment_source = tracing::field::Empty,
+            devenv.shell.environment_bytes = tracing::field::Empty,
+            devenv.shell.input_count = tracing::field::Empty,
+            devenv.cache.hit = tracing::field::Empty,
+            devenv.cache.lookup_result = tracing::field::Empty
+        );
+
+        let result = self
+            .dev_env_inner(json, gc_root, &activity)
+            .in_activity(&activity)
+            .await;
+
+        match result {
+            Ok((output, cache_hit)) => {
+                activity.record("devenv.cache.hit", cache_hit);
+                if cache_hit {
+                    activity.cached();
+                }
+                Ok(output)
+            }
+            Err(error) => {
+                activity.fail();
+                Err(error)
+            }
+        }
+    }
+
+    async fn dev_env_inner(
+        &self,
+        json: bool,
+        gc_root: &Path,
+        activity: &Activity,
+    ) -> Result<(DevEnvOutput, bool)> {
         let caching_state = self
             .caching_eval_state
             .get()
@@ -725,73 +848,84 @@ impl NixCBackend {
 
         let cache_key = self.cache_key("shell");
 
-        let cached_paths: Option<CachedShellPaths> = if let Some(service) =
-            caching_state.cached_eval().service()
-        {
-            match service.get_cached(&cache_key).await {
-                Ok(Some(cached)) => {
-                    match serde_json::from_str::<CachedShellPaths>(&cached.json_output) {
-                        Ok(paths) => {
-                            let drv_exists = std::path::Path::new(&paths.drv_path).exists();
-                            let out_exists = std::path::Path::new(&paths.out_path).exists();
-                            if drv_exists && out_exists {
-                                match caching_state
-                                    .cached_eval()
-                                    .try_restore_cached_state(&cached)
-                                    .await
-                                {
-                                    Ok(()) => Some(paths),
-                                    Err(e) => {
-                                        tracing::warn!(error = %e, "Cached evaluation state restore failed for shell cache hit, re-evaluating");
-                                        None
+        let cache_span = tracing::debug_span!(
+            target: "devenv_activity::spans",
+            "shell_cache_lookup",
+            otel.name = "checking shell evaluation cache",
+            devenv.activity.kind = "operation",
+            devenv.shell.stage = "cache_lookup",
+            devenv.cache.lookup_result = tracing::field::Empty,
+            devenv.outcome = tracing::field::Empty
+        );
+        let (cached_paths, cache_lookup_result): (Option<CachedShellPaths>, &'static str) = async {
+            if let Some(service) = caching_state.cached_eval().service() {
+                match service.get_cached(&cache_key).await {
+                    Ok(Some(cached)) => {
+                        match serde_json::from_str::<CachedShellPaths>(&cached.json_output) {
+                            Ok(paths) => {
+                                let drv_exists = std::path::Path::new(&paths.drv_path).exists();
+                                let out_exists = std::path::Path::new(&paths.out_path).exists();
+                                if drv_exists && out_exists {
+                                    match caching_state
+                                        .cached_eval()
+                                        .try_restore_cached_state(&cached)
+                                        .await
+                                    {
+                                        Ok(()) => (Some(paths), "hit"),
+                                        Err(e) => {
+                                            tracing::warn!(error = %e, "Cached evaluation state restore failed for shell cache hit, re-evaluating");
+                                            (None, "restore_failed")
+                                        }
                                     }
+                                } else {
+                                    if let Err(db_err) = service.invalidate(&cache_key).await {
+                                        tracing::warn!(error = %db_err, "Failed to invalidate stale shell cache entry");
+                                    }
+                                    (None, "stale_paths")
                                 }
-                            } else {
-                                if let Err(db_err) = service.invalidate(&cache_key).await {
-                                    tracing::warn!(error = %db_err, "Failed to invalidate stale shell cache entry");
-                                }
-                                None
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to parse cached shell paths");
+                                (None, "invalid_payload")
                             }
                         }
-                        Err(e) => {
-                            tracing::warn!(error = %e, "Failed to parse cached shell paths");
-                            None
-                        }
+                    }
+                    Ok(None) => (None, "miss"),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Error checking eval cache for shell");
+                        (None, "lookup_failed")
                     }
                 }
-                Ok(None) => None,
-                Err(e) => {
-                    tracing::warn!(error = %e, "Error checking eval cache for shell");
-                    None
-                }
+            } else {
+                (None, "disabled")
             }
-        } else {
-            None
+        }
+        .instrument(cache_span.clone())
+        .await;
+        cache_span.record("devenv.cache.lookup_result", cache_lookup_result);
+        activity.record("devenv.cache.lookup_result", cache_lookup_result);
+        let cache_outcome = match cache_lookup_result {
+            "hit" => "cached",
+            "disabled" => "skipped",
+            _ => "success",
         };
-
-        let activity = activity!(INFO, evaluate, "Evaluating shell");
+        cache_span.record("devenv.outcome", cache_outcome);
 
         let (drv_path_str, out_path_str, env_path, cache_hit) = if let Some(paths) = cached_paths {
-            activity.cached();
             (paths.drv_path, paths.out_path, paths.env_path, true)
         } else {
-            let result = async {
-                caching_state
-                    .cached_eval()
-                    .eval_typed::<CachedShellPaths, _, _, _>(&cache_key, &activity, || async {
-                        self.build_shell_uncached(&activity)
-                    })
-                    .await
-            }
-            .in_activity(&activity)
-            .await;
+            let result = caching_state
+                .cached_eval()
+                .eval_typed::<CachedShellPaths, _, _, _>(&cache_key, activity, || async {
+                    self.build_shell_uncached(activity)
+                })
+                .await;
 
             match result {
-                Ok((paths, _)) => (paths.drv_path, paths.out_path, paths.env_path, false),
-                Err(e) => {
-                    activity.fail();
-                    return Err(eval_cache_error_into_miette(e));
+                Ok((paths, cache_hit)) => {
+                    (paths.drv_path, paths.out_path, paths.env_path, cache_hit)
                 }
+                Err(e) => return Err(eval_cache_error_into_miette(e)),
             }
         };
 
@@ -806,54 +940,135 @@ impl NixCBackend {
         // logical store path under a relocated/chroot store; gc-root creation
         // needs the logical form. See devenv #2499.
         let store_path = parse_logical_store_path(&mut store, &out_path_str)?;
+        let gc_root_span = tracing::debug_span!(
+            target: "devenv_activity::spans",
+            "shell_stage",
+            otel.name = "registering shell gc root",
+            devenv.activity.kind = "operation",
+            devenv.shell.stage = "register_gc_root",
+            devenv.outcome = tracing::field::Empty,
+            otel.status_code = tracing::field::Empty
+        );
+        let gc_root_result: Result<Store> = gc_root_span.in_scope(|| {
+            let mut store = self.cnix_store.inner().clone();
+            // `out_path_str` is the real_path-translated path, which differs from the
+            // logical store path under a relocated/chroot store; gc-root creation
+            // needs the logical form. See devenv #2499.
+            let store_path = parse_logical_store_path(&mut store, &out_path_str)?;
 
-        if gc_root.symlink_metadata().is_ok() {
-            std::fs::remove_file(gc_root)
-                .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
+            if gc_root.symlink_metadata().is_ok() {
+                std::fs::remove_file(gc_root)
+                    .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
+            }
+            store
+                .add_perm_root(&store_path, gc_root)
+                .to_miette()
+                .wrap_err("Failed to create GC root")?;
+            Ok(store)
+        });
+        if gc_root_result.is_err() {
+            gc_root_span.record("devenv.outcome", "failed");
+            gc_root_span.record("otel.status_code", "ERROR");
+        } else {
+            gc_root_span.record("devenv.outcome", "success");
         }
-        store
-            .add_perm_root(&store_path, gc_root)
-            .to_miette()
-            .wrap_err("Failed to create GC root")?;
+        let mut store = gc_root_result?;
 
         if !cache_hit {
             self.notify_realized(&[PathBuf::from(&out_path_str)]);
         }
 
-        let output_str = if let Some(env_path) = env_path.as_deref() {
-            if std::path::Path::new(env_path).exists() {
-                let env_json = std::fs::read_to_string(env_path)
-                    .into_diagnostic()
-                    .wrap_err("Failed to read cached env JSON")?;
-                let rust_env = RustBuildEnvironment::from_json(&env_json)
-                    .into_diagnostic()
-                    .wrap_err("Failed to parse cached env JSON")?;
+        let environment_source = if env_path
+            .as_deref()
+            .is_some_and(|path| std::path::Path::new(path).exists())
+        {
+            "cache_file"
+        } else if env_path.is_some() {
+            "derivation_missing_cache_file"
+        } else {
+            "derivation"
+        };
+        activity.record("devenv.shell.environment_source", environment_source);
+        let environment_span = tracing::debug_span!(
+            target: "devenv_activity::spans",
+            "shell_stage",
+            otel.name = "loading shell environment",
+            devenv.activity.kind = "operation",
+            devenv.shell.stage = "load_environment",
+            devenv.shell.environment_source = environment_source,
+            devenv.shell.environment_bytes = tracing::field::Empty,
+            devenv.outcome = tracing::field::Empty,
+            otel.status_code = tracing::field::Empty
+        );
+        let output_result: Result<String> = environment_span.in_scope(|| {
+            if let Some(env_path) = env_path.as_deref() {
+                if std::path::Path::new(env_path).exists() {
+                    let env_json = std::fs::read_to_string(env_path)
+                        .into_diagnostic()
+                        .wrap_err("Failed to read cached env JSON")?;
+                    let rust_env = RustBuildEnvironment::from_json(&env_json)
+                        .into_diagnostic()
+                        .wrap_err("Failed to parse cached env JSON")?;
 
-                if json {
-                    env_json
+                    if json {
+                        Ok(env_json)
+                    } else {
+                        Ok(rust_env.to_activation_script())
+                    }
                 } else {
-                    rust_env.to_activation_script()
+                    self.build_dev_environment(&mut store, &drv_path_str, json)
                 }
             } else {
-                self.build_dev_environment(&mut store, &drv_path_str, json)?
+                self.build_dev_environment(&mut store, &drv_path_str, json)
+            }
+        });
+        if output_result.is_err() {
+            environment_span.record("devenv.outcome", "failed");
+            environment_span.record("otel.status_code", "ERROR");
+        } else {
+            environment_span.record("devenv.outcome", "success");
+        }
+        let output_str = output_result?;
+        environment_span.record("devenv.shell.environment_bytes", output_str.len());
+        activity.record("devenv.shell.environment_bytes", output_str.len());
+
+        let inputs_span = tracing::debug_span!(
+            target: "devenv_activity::spans",
+            "shell_stage",
+            otel.name = "loading shell evaluation inputs",
+            devenv.activity.kind = "operation",
+            devenv.shell.stage = "load_inputs",
+            devenv.shell.input_count = tracing::field::Empty,
+            devenv.outcome = tracing::field::Empty,
+            otel.status_code = tracing::field::Empty
+        );
+        let (inputs, inputs_outcome) = if let Some(service) = caching_state.cached_eval().service()
+        {
+            match async { service.get_file_inputs(&cache_key).await }
+                .instrument(inputs_span.clone())
+                .await
+            {
+                Ok(inputs) => (inputs, "success"),
+                Err(error) => {
+                    inputs_span.record("otel.status_code", "ERROR");
+                    tracing::warn!(%error, "Failed to load shell evaluation inputs");
+                    (Vec::new(), "failed")
+                }
             }
         } else {
-            self.build_dev_environment(&mut store, &drv_path_str, json)?
+            (Vec::new(), "skipped")
         };
+        inputs_span.record("devenv.outcome", inputs_outcome);
+        inputs_span.record("devenv.shell.input_count", inputs.len());
+        activity.record("devenv.shell.input_count", inputs.len());
 
-        let inputs = if let Some(service) = caching_state.cached_eval().service() {
-            service
-                .get_file_inputs(&cache_key)
-                .await
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-
-        Ok(DevEnvOutput {
-            bash_env: output_str.as_bytes().to_vec(),
-            inputs,
-        })
+        Ok((
+            DevEnvOutput {
+                bash_env: output_str.into_bytes(),
+                inputs,
+            },
+            cache_hit,
+        ))
     }
 
     pub async fn prepare_repl(&self) -> Result<()> {
@@ -1063,8 +1278,9 @@ impl NixCBackend {
         // Open an eval scope on the bridge so substituter info fetches
         // (e.g. `nix-cache-info` downloads) fired from worker threads
         // inside the C call nest under the current TUI activity.
-        let _eval_guard =
-            devenv_activity::current_activity_id().map(|id| self.nix_log_bridge.begin_eval(id));
+        let current_span = tracing::Span::current();
+        let _eval_guard = devenv_activity::current_activity_id()
+            .map(|id| self.nix_log_bridge.begin_eval_with_span(id, current_span));
         if let Err(e) = apply_netrc_setting(store_settings) {
             tracing::warn!("Failed to set netrc-file: {}", e);
         }
