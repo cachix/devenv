@@ -342,6 +342,7 @@ macro_rules! __create_activity_span {
             "devenv.process.ready_probe",
             "devenv.operation.detail",
             "otel.status_code",
+            "otel.status_description",
             $($( stringify!($($k).+) ),+ )?
         ];
 
@@ -424,6 +425,7 @@ macro_rules! __create_activity_span {
                         __optional_value(&__fields.process_port_count),
                         __optional_value(&__ready_probe),
                         __optional_value(&__fields.operation_detail),
+                        None,
                         None,
                         $($( Some(&$v as &dyn tracing::field::Value) ),+ )?
                     ]),
