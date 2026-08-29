@@ -128,7 +128,7 @@ struct Instruments {
 
 impl Instruments {
     fn new() -> Self {
-        let meter = global::meter("devenv_nix_backend::gc");
+        let meter = global::meter("devenv_nix_backend::gc_boehm");
         Self {
             heap: meter
                 .u64_gauge("devenv.nix.gc.heap.size")
@@ -193,7 +193,7 @@ pub fn observe(stage: &'static str) -> HeapStats {
     INSTRUMENTS.record_heap(stage, stats);
 
     let span = tracing::info_span!(
-        target: "devenv_nix_backend::gc",
+        target: "devenv_nix_backend::gc_boehm",
         "boehm_gc_heap",
         stage,
         gc_heap_bytes = stats.heap_bytes,
@@ -216,7 +216,7 @@ pub fn collect(stage: &'static str) {
 
     let before = heap_stats();
     let span = tracing::info_span!(
-        target: "devenv_nix_backend::gc",
+        target: "devenv_nix_backend::gc_boehm",
         "boehm_gc_collection",
         stage,
         gc_forced = true,

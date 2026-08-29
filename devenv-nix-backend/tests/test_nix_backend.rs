@@ -407,15 +407,86 @@ async fn test_build_nonexistent_attribute() {
 async fn test_build_gc_root_already_exists() {
     let env = TestEnv::new().await;
     let gc_root_base = env.path().join("result");
+    let gc_root = env.path().join("result-shell");
 
     let opts = || BuildOptions {
         gc_root: Some(gc_root_base.clone()),
     };
 
     env.backend.build(&["shell"], opts()).await.expect("first");
+    let target = std::fs::read_link(&gc_root).expect("first GC root");
     env.backend.build(&["shell"], opts()).await.expect("second");
 
-    assert!(env.path().join("result-shell").exists());
+    assert_eq!(
+        std::fs::read_link(&gc_root).expect("second GC root"),
+        target,
+        "the GC root must keep pointing to the shell output"
+    );
+}
+
+#[nix_test]
+async fn test_build_refuses_gc_root_directory() {
+    let env = TestEnv::new().await;
+    let gc_root_base = env.path().join("result");
+    let gc_root = env.path().join("result-shell");
+    std::fs::create_dir(&gc_root).expect("create GC root directory");
+
+    env.backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base),
+            },
+        )
+        .await
+        .expect_err("a directory cannot be replaced with a GC root");
+
+    assert!(gc_root.is_dir());
+}
+
+#[nix_test]
+async fn test_build_replaces_invalid_gc_root() {
+    let env = TestEnv::new().await;
+    let gc_root_base = env.path().join("result");
+    let gc_root = env.path().join("result-shell");
+    std::fs::write(&gc_root, "not a GC root").expect("write invalid root");
+
+    env.backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base),
+            },
+        )
+        .await
+        .expect("replace invalid root");
+
+    assert!(gc_root.symlink_metadata().unwrap().file_type().is_symlink());
+}
+
+#[nix_test]
+async fn test_build_replaces_stale_gc_root() {
+    let env = TestEnv::new().await;
+    let gc_root_base = env.path().join("result");
+    let gc_root = env.path().join("result-shell");
+    let stale = "/nix/store/00000000000000000000000000000000-stale";
+    std::os::unix::fs::symlink(stale, &gc_root).expect("write stale root");
+
+    env.backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base),
+            },
+        )
+        .await
+        .expect("replace stale root");
+
+    assert!(gc_root.exists());
+    assert_ne!(
+        std::fs::read_link(&gc_root).expect("read replacement"),
+        PathBuf::from(stale)
+    );
 }
 
 #[nix_test]
