@@ -9,7 +9,6 @@ use nix_bindings_flake::{
 use nix_bindings_store::store::Store;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Once;
 
 pub mod backend;
 pub use backend::{NixCBackend, ProjectRoot};
@@ -27,22 +26,11 @@ pub use primops::{
     PortAllocationPlugin, PrimopRegistration, PrimopRegistry,
 };
 
-use std::cell::RefCell;
-
-// Ensure Nix/GC is initialized exactly once across all threads
-static NIX_INIT: Once = Once::new();
-
-// Thread-local storage to keep GC registration guards alive for the thread's lifetime
-thread_local! {
-    static GC_REGISTRATION: RefCell<Option<nix_bindings_expr::eval_state::ThreadRegistrationGuard>> = const { RefCell::new(None) };
-}
-
-/// Stack size for threads that run Nix evaluation.
-///
-/// Nix evaluation can be deeply recursive (e.g. large nixpkgs traversals),
-/// and the default 8MB thread stack is not always enough. Match the 64MB
-/// stack that the Nix CLI itself uses.
-pub const NIX_STACK_SIZE: usize = 64 * 1024 * 1024;
+pub mod gc;
+pub use gc::{
+    NIX_STACK_SIZE, init as nix_init, register_current_thread as gc_register_current_thread,
+    unregister_current_thread as gc_unregister_current_thread,
+};
 
 /// Trigger the Nix interrupt flag to abort any in-progress Nix evaluation.
 ///
@@ -53,66 +41,6 @@ pub const NIX_STACK_SIZE: usize = 64 * 1024 * 1024;
 /// and will be checked when the next evaluation starts.
 pub fn trigger_interrupt() {
     nix_bindings_util::trigger_interrupt();
-}
-
-/// Initialize the Nix expression library and Boehm GC.
-///
-/// This is safe to call multiple times - initialization only happens once.
-/// Must be called before any thread tries to register with GC.
-pub fn nix_init() {
-    NIX_INIT.call_once(|| {
-        // The Nix CLI does this in initNix(), which the C API does not call.
-        file_limit::bump_open_file_limit();
-
-        // Suppress Boehm GC "Repeated allocation of very large block" warnings.
-        // These are harmless and would otherwise be printed directly to stderr,
-        // bypassing our activity logger.
-        if std::env::var_os("GC_LARGE_ALLOC_WARN_INTERVAL").is_none() {
-            // SAFETY: Called once during single-threaded initialization (inside Once::call_once)
-            // before any worker threads are spawned.
-            unsafe { std::env::set_var("GC_LARGE_ALLOC_WARN_INTERVAL", "1000000") };
-        }
-        nix_bindings_expr::eval_state::init().expect("Failed to initialize Nix expression library");
-    });
-}
-
-/// Register the current thread with Boehm GC.
-///
-/// This must be called from any thread that will access Nix/GC-managed memory.
-/// Tokio worker threads should call this via `on_thread_start` to ensure
-/// the GC can properly scan their stacks during collection.
-///
-/// Without this, parallel GC marking can race with unregistered threads,
-/// causing memory corruption and crashes.
-///
-/// The registration is kept alive in thread-local storage until the thread exits.
-///
-/// Note: This function ensures Nix/GC is initialized before registering,
-/// so it's safe to call from any thread at any time.
-pub fn gc_register_current_thread() -> Result<()> {
-    use nix_bindings_expr::eval_state::gc_register_my_thread;
-
-    // Ensure GC is initialized before any thread tries to register.
-    // Without this, registering threads before GC_INIT() causes
-    // signal handlers to not be properly installed, leading to
-    // "Signals delivery fails" errors during stop-the-world collection.
-    nix_init();
-
-    GC_REGISTRATION.with(|reg| {
-        let mut guard = reg.borrow_mut();
-        if guard.is_none() {
-            match gc_register_my_thread() {
-                Ok(registration) => {
-                    *guard = Some(registration);
-                    Ok(())
-                }
-                Err(e) => Err(anyhow::anyhow!("Failed to register thread with GC: {}", e)),
-            }
-        } else {
-            // Already registered
-            Ok(())
-        }
-    })
 }
 
 // Activity logger integration with tracing

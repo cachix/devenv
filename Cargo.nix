@@ -7776,7 +7776,7 @@ rec {
             packageId = "opentelemetry-otlp";
             optional = true;
             usesDefaultFeatures = false;
-            features = [ "trace" ];
+            features = [ "trace" "metrics" ];
           }
           {
             name = "opentelemetry_sdk";
@@ -8448,6 +8448,10 @@ rec {
           {
             name = "once_cell";
             packageId = "once_cell";
+          }
+          {
+            name = "opentelemetry";
+            packageId = "opentelemetry";
           }
           {
             name = "ser_nix";

@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use opentelemetry::global;
 use opentelemetry::propagation::TextMapPropagator;
 use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_otlp::{ExporterBuildError, SpanExporter, WithExportConfig};
+use opentelemetry_otlp::{ExporterBuildError, MetricExporter, SpanExporter, WithExportConfig};
 use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::metrics::SdkMeterProvider;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -24,6 +26,21 @@ use url::Url;
 struct OtelGuard {
     provider: SdkTracerProvider,
     runtime_handle: tokio::runtime::Handle,
+}
+
+/// Guard that flushes and shuts down the OTEL meter provider on drop.
+struct OtelMetricsGuard {
+    provider: SdkMeterProvider,
+    runtime_handle: tokio::runtime::Handle,
+}
+
+impl Drop for OtelMetricsGuard {
+    fn drop(&mut self) {
+        let _guard = self.runtime_handle.enter();
+        if let Err(e) = self.provider.shutdown() {
+            eprintln!("warning: failed to shut down OpenTelemetry meter provider: {e}");
+        }
+    }
 }
 
 impl Drop for OtelGuard {
@@ -74,8 +91,11 @@ pub(super) fn init_tracing_unified(
         layers.extend(create_local_boxed_layers(spec));
     }
 
-    // OTLP layers — each gets its own provider but shares the runtime
+    // OTLP trace layers each get a provider. Metrics share one provider with
+    // one exporter per OTLP destination.
     let resource = Resource::builder().with_service_name("devenv").build();
+    let mut meter_provider = SdkMeterProvider::builder().with_resource(resource.clone());
+    let mut has_metric_exporter = false;
     for spec in specs {
         let (proto, url) = match spec {
             TraceOutputSpec::Otlp(p, u) => (*p, u),
@@ -89,6 +109,15 @@ pub(super) fn init_tracing_unified(
                 std::process::exit(1);
             }
         };
+        let metric_exporter = match create_metric_exporter(proto, url) {
+            Ok(exporter) => exporter,
+            Err(e) => {
+                eprintln!("error: failed to create OTLP metrics exporter: {e}");
+                std::process::exit(1);
+            }
+        };
+        meter_provider = meter_provider.with_periodic_exporter(metric_exporter);
+        has_metric_exporter = true;
 
         let provider = SdkTracerProvider::builder()
             .with_batch_exporter(exporter)
@@ -100,6 +129,15 @@ pub(super) fn init_tracing_unified(
         layers.push(Box::new(otel_layer));
         guards.push(Box::new(OtelGuard {
             provider,
+            runtime_handle: runtime_handle.clone(),
+        }));
+    }
+
+    if has_metric_exporter {
+        let meter_provider = meter_provider.build();
+        global::set_meter_provider(meter_provider.clone());
+        guards.push(Box::new(OtelMetricsGuard {
+            provider: meter_provider,
             runtime_handle: runtime_handle.clone(),
         }));
     }
@@ -131,6 +169,47 @@ pub(super) fn init_tracing_unified(
     guards.push(Box::new(runtime));
 
     TracingGuard { _inner: guards }
+}
+
+fn create_metric_exporter(
+    protocol: OtlpProtocol,
+    endpoint: &Url,
+) -> Result<MetricExporter, ExporterBuildError> {
+    match protocol {
+        #[cfg(feature = "otlp-grpc")]
+        OtlpProtocol::Grpc => MetricExporter::builder()
+            .with_tonic()
+            .with_endpoint(endpoint.as_str())
+            .build(),
+        #[cfg(not(feature = "otlp-grpc"))]
+        OtlpProtocol::Grpc => {
+            let _ = endpoint;
+            eprintln!("error: otlp-grpc requires the 'otlp-grpc' cargo feature");
+            std::process::exit(1);
+        }
+        #[cfg(feature = "otlp-http-protobuf")]
+        OtlpProtocol::HttpProtobuf => MetricExporter::builder()
+            .with_http()
+            .with_endpoint(endpoint.as_str())
+            .build(),
+        #[cfg(not(feature = "otlp-http-protobuf"))]
+        OtlpProtocol::HttpProtobuf => {
+            let _ = endpoint;
+            eprintln!("error: otlp-http-protobuf requires the 'otlp-http-protobuf' cargo feature");
+            std::process::exit(1);
+        }
+        #[cfg(feature = "otlp-http-json")]
+        OtlpProtocol::HttpJson => MetricExporter::builder()
+            .with_http()
+            .with_endpoint(endpoint.as_str())
+            .build(),
+        #[cfg(not(feature = "otlp-http-json"))]
+        OtlpProtocol::HttpJson => {
+            let _ = endpoint;
+            eprintln!("error: otlp-http-json requires the 'otlp-http-json' cargo feature");
+            std::process::exit(1);
+        }
+    }
 }
 
 fn create_exporter(

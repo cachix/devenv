@@ -184,6 +184,7 @@ opentelemetry = "0.32"
 opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.32", default-features = false, features = [
   "trace",
+  "metrics",
 ] }
 tracing-opentelemetry = "0.33"
 

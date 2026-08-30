@@ -795,6 +795,12 @@ impl NixCBackend {
             }
         };
 
+        crate::gc::collect(if cache_hit {
+            "shell_cache_hit"
+        } else {
+            "shell_evaluation"
+        });
+
         let mut store = self.cnix_store.inner().clone();
         // `out_path_str` is the real_path-translated path, which differs from the
         // logical store path under a relocated/chroot store; gc-root creation

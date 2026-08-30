@@ -2438,6 +2438,7 @@ dependencies = [
  "nix-bindings-util",
  "nix-cmd",
  "once_cell",
+ "opentelemetry",
  "ser_nix",
  "serde",
  "serde_json",
