@@ -329,6 +329,52 @@ async fn test_ctrl_alt_d_toggle_pause() {
     let _ = handle.await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_ctrl_alt_input_forwarded_in_alternate_screen() {
+    let (io, mut stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
+
+    cmd_tx
+        .send(spawn_cmd(
+            "stty raw -echo; printf '\\033[?1049hREADY'; \
+             bytes=$(dd bs=2 count=1 2>/dev/null | od -An -tx1); \
+             stty sane; printf '\\033[?1049lRECEIVED:%s\\n' \"$bytes\"",
+        ))
+        .await
+        .unwrap();
+
+    let ready = read_until(&mut stdout_ours, b"READY", Duration::from_secs(5));
+    assert!(
+        ready
+            .windows(b"READY".len())
+            .any(|window| window == b"READY"),
+        "alternate-screen application did not become ready: {:?}",
+        String::from_utf8_lossy(&ready)
+    );
+
+    // Legacy terminals encode Ctrl-Alt-D as ESC followed by Ctrl-D. Full-screen
+    // applications such as Neovim own this input while the alternate screen is active.
+    stdin_ours.write_all(&[0x1b, 0x04]).unwrap();
+    stdin_ours.flush().unwrap();
+
+    let received = read_until(&mut stdout_ours, b"RECEIVED: 1b 04", Duration::from_secs(5));
+    assert!(
+        received
+            .windows(b"RECEIVED: 1b 04".len())
+            .any(|window| window == b"RECEIVED: 1b 04"),
+        "alternate-screen application did not receive Ctrl-Alt-D: {:?}",
+        String::from_utf8_lossy(&received)
+    );
+
+    drop(stdin_ours);
+    drop(cmd_tx);
+    let _ = handle.await;
+}
+
 fn status_line_session() -> ShellSession {
     ShellSession::new(SessionConfig {
         show_status_line: true,

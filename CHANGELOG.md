@@ -6,6 +6,7 @@
 
 - Fixed environment capture accumulating unbounded `.devenv/shell-*.sh` files. Capture-specific activation scripts are now temporary, and non-interactive commands are passed as arguments instead of being embedded in persistent activation scripts ([#3149](https://github.com/cachix/devenv/issues/3149)).
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
+- Fixed reload-shell shortcuts intercepting Ctrl-Alt input from full-screen terminal applications such as Neovim ([#3107](https://github.com/cachix/devenv/issues/3107)).
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
 - Interrupting devenv a second time no longer leaves processes running. The second Ctrl+C exits straight away instead of waiting for shutdown to finish, which used to abandon any process still shutting down. This was easy to hit, since a process that is slow to stop is given five seconds before it is killed.
