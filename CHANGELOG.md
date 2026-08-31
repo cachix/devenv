@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed reload-shell shortcuts intercepting Ctrl-Alt input from full-screen terminal applications such as Neovim ([#3107](https://github.com/cachix/devenv/issues/3107)).
 - Fixed `showOutput = true` / `--show-output` being ignored when AI-agent auto-quiet (or `--quiet`) is active. Explicit task output now streams even at Quiet, without treating stdout as an error ([#3038](https://github.com/cachix/devenv/issues/3038)).
 - Fixed `devenv tasks run` skipping a process that a task depends on via `@completed` when that process has `start.enable = false`. The process now runs to completion as the dependency requires; `devenv up` still does not auto-start it ([#3005](https://github.com/cachix/devenv/issues/3005)).
 - Fixed `devenv tasks run --no-tui` staying silent until the run finished when AI-agent auto-quiet was active (`CLAUDECODE`, and similar). Quiet mode now prints task running/succeeded/failed lines incrementally, without streaming full task output ([#3115](https://github.com/cachix/devenv/issues/3115)).

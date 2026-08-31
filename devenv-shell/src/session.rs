@@ -2703,6 +2703,21 @@ mod tests {
     }
 
     #[test]
+    fn local_keybind_is_forwarded_when_application_owns_alternate_screen() {
+        let keybindings = ShellKeybindings::default();
+        // Legacy terminals encode Ctrl-Alt-D as ESC followed by Ctrl-D. Keep
+        // that shortcut at the prompt, but forward it to full-screen apps.
+        assert_eq!(
+            classify_stdin(&keybindings, &[0x1b, 0x04], true),
+            StdinDisposition::TogglePause
+        );
+        assert_eq!(
+            classify_stdin(&keybindings, &[0x1b, 0x04], false),
+            StdinDisposition::ForwardToPty
+        );
+    }
+
+    #[test]
     fn batched_stdin_error_toggle_defers_presentation_to_the_pty_frame() {
         assert!(present_stdin_error_immediately(
             StdinPresentation::Immediate,
