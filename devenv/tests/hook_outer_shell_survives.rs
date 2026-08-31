@@ -45,6 +45,58 @@ fn devenv_shim() -> (tempfile::TempDir, PathBuf) {
     (dir, calls)
 }
 
+/// A shimmed `devenv` that makes the hook activate `project` and records the
+/// spawned `devenv shell` argv with NUL separators, preserving exact argument
+/// boundaries (including empty arguments and embedded newlines).
+fn argv_recording_devenv_shim(project: &Path) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let calls = dir.path().join("calls");
+    let bin = dir.path().join("devenv");
+    fs::write(
+        &bin,
+        format!(
+            r#"#!/bin/sh
+case "$1" in
+  hook-should-activate)
+    printf '%s\n' {project:?}
+    ;;
+  shell)
+    printf '%s\0' "$@" > {calls:?}
+    ;;
+esac
+"#,
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+    (dir, calls)
+}
+
+fn generated_hook(shell: &str, args: &[String], dir: &Path) -> PathBuf {
+    let output = Command::new(devenv_bin())
+        .args(["hook", shell, "--"])
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "devenv hook {shell} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let path = dir.join(format!("hook.{shell}"));
+    fs::write(&path, output.stdout).unwrap();
+    path
+}
+
+fn nul_separated_args(path: &Path) -> Vec<String> {
+    let bytes = fs::read(path).unwrap();
+    let mut args = bytes.split(|byte| *byte == 0).collect::<Vec<_>>();
+    assert_eq!(args.pop(), Some(&[][..]), "recording must end in NUL");
+    args.into_iter()
+        .map(|arg| String::from_utf8(arg.to_vec()).unwrap())
+        .collect()
+}
+
 /// Shell name, the hook snippet that activates devenv, and a builder for the
 /// shell's PATH-override line.
 type ShellCase = (&'static str, String, fn(&Path) -> String);
@@ -95,6 +147,81 @@ fn fish_path_override(dir: &Path) -> String {
 
 fn run(shell: &str, script: &str) -> std::process::Output {
     Command::new(shell).arg("-c").arg(script).output().unwrap()
+}
+
+#[test]
+fn forwarded_shell_args_preserve_boundaries_in_every_shell() {
+    let project = fake_project();
+    let marker = project.path().join("argument-was-evaluated");
+    let args = vec![
+        "--no-tui".to_string(),
+        "--option".to_string(),
+        "example.value:string".to_string(),
+        format!(
+            "spaces 'single' \"double\" $HOME ; $(touch {}) \\\nnewline",
+            marker.display()
+        ),
+        String::new(),
+        "echo".to_string(),
+        "--literal-command-arg".to_string(),
+    ];
+
+    for shell in ["bash", "zsh", "fish", "nu"] {
+        if !have(shell) {
+            continue;
+        }
+        let hook_dir = tempfile::tempdir().unwrap();
+        let hook = generated_hook(shell, &args, hook_dir.path());
+        let (shim_dir, calls) = argv_recording_devenv_shim(project.path());
+        let script = match shell {
+            "fish" => format!(
+                "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 {path}\n\
+                 cd {project:?}\n\
+                 _devenv_hook\n",
+                path = fish_path_override(shim_dir.path()),
+                project = project.path(),
+            ),
+            "nu" => format!(
+                "hide-env -i DEVENV_ROOT\nhide-env -i _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 $env.PATH = ($env.PATH | prepend {shim:?})\n\
+                 cd {project:?}\n\
+                 _devenv_hook\n",
+                shim = shim_dir.path(),
+                project = project.path(),
+            ),
+            _ => format!(
+                "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 {path}\n\
+                 cd {project:?}\n\
+                 _devenv_hook\n",
+                path = posix_path_override(shim_dir.path()),
+                project = project.path(),
+            ),
+        };
+
+        let output = run(shell, &script);
+        assert!(
+            output.status.success(),
+            "[{shell}] generated hook failed.\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let mut expected = vec!["shell".to_string()];
+        expected.extend(args.iter().cloned());
+        assert_eq!(
+            nul_separated_args(&calls),
+            expected,
+            "[{shell}] forwarded arguments changed"
+        );
+        assert!(
+            !marker.exists(),
+            "[{shell}] evaluated shell syntax from a forwarded argument"
+        );
+    }
 }
 
 fn sibling_activation_shim(project_a: &Path, project_b: &Path) -> (tempfile::TempDir, PathBuf) {

@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use devenv_core::config::NixBackendType;
 use devenv_core::settings::{
@@ -718,7 +718,31 @@ impl Cli {
     /// (e.g. `devenv --profile test test`) isn't mistaken for the subcommand by
     /// clap's `subcommand_precedence_over_arg`.
     pub fn parse_preprocessed() -> Self {
-        Self::parse_from(preprocess_profile_args(env::args_os()))
+        Self::try_parse_preprocessed_from(env::args_os()).unwrap_or_else(|err| err.exit())
+    }
+
+    fn try_parse_preprocessed_from<I>(args: I) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = std::ffi::OsString>,
+    {
+        let args = preprocess_profile_args(args);
+        let cli = Self::try_parse_from(args.clone())?;
+
+        if let Commands::Hook { .. } = &cli.command {
+            // Most devenv options are global, so clap would otherwise accept
+            // `devenv hook fish --no-tui` as an option for this process even
+            // though it belongs to the shell that the generated hook starts
+            // later. Require one unambiguous ownership boundary instead.
+            let separator_follows_shell = args.get(3).is_some_and(|arg| arg == OsStr::new("--"));
+            if args.len() > 3 && !separator_follows_shell {
+                return Err(Self::command().error(
+                    clap::error::ErrorKind::ArgumentConflict,
+                    "shell arguments must follow `--`\n\n  devenv hook <SHELL> -- <SHELL_ARGS>...",
+                ));
+            }
+        }
+
+        Ok(cli)
     }
 }
 
@@ -732,6 +756,12 @@ where
     let mut out = Vec::new();
     let mut iter = args.into_iter().peekable();
     while let Some(arg) = iter.next() {
+        if arg == OsStr::new("--") {
+            out.push(arg);
+            out.extend(iter);
+            break;
+        }
+
         let kind = match arg.to_str() {
             Some("--profile") => Some(true), // long form, use `=`
             Some("-P") => Some(false),       // short form, no separator
@@ -907,11 +937,17 @@ pub enum Commands {
 
     #[command(
         about = "Print shell hook for auto-activation on directory change.",
-        long_about = "Print shell hook for auto-activation on directory change.\n\nfish and nushell load this automatically when devenv is installed via Nix.\nIf it doesn't load for you:\n\n  fish:    devenv hook fish | source       # in ~/.config/fish/config.fish\n  nushell: mkdir ($nu.default-config-dir | path join autoload); devenv hook nu | save --force ($nu.default-config-dir | path join autoload/devenv-hook.nu)\n\nBash and zsh have no equivalent, so always add this to your shell config:\n\n  bash:    eval \"$(devenv hook bash)\"     # in ~/.bashrc\n  zsh:     eval \"$(devenv hook zsh)\"      # in ~/.zshrc"
+        long_about = "Print shell hook for auto-activation on directory change.\n\nArguments for the activated `devenv shell` must follow `--`, for example:\n\n  devenv hook fish -- --no-tui | source\n\nfish and nushell load this automatically when devenv is installed via Nix.\nIf it doesn't load for you:\n\n  fish:    devenv hook fish | source       # in ~/.config/fish/config.fish\n  nushell: mkdir ($nu.default-config-dir | path join autoload); devenv hook nu | save --force ($nu.default-config-dir | path join autoload/devenv-hook.nu)\n\nBash and zsh have no equivalent, so always add this to your shell config:\n\n  bash:    eval \"$(devenv hook bash)\"     # in ~/.bashrc\n  zsh:     eval \"$(devenv hook zsh)\"      # in ~/.zshrc"
     )]
     Hook {
         #[arg(value_enum)]
         shell: HookShell,
+        #[arg(
+            last = true,
+            value_name = "SHELL_ARGS",
+            help = "Arguments forwarded verbatim to the activated `devenv shell`"
+        )]
+        shell_args: Vec<String>,
     },
 
     #[command(about = "Allow auto-activation for the current directory.")]
@@ -1775,6 +1811,81 @@ mod tests {
     fn preprocess_handles_multiple_profile_flags() {
         let out = preprocess_profile_args(osargs(["devenv", "--profile", "a", "-P", "b", "shell"]));
         assert_eq!(out, osargs(["devenv", "--profile=a", "-Pb", "shell"]));
+    }
+
+    #[test]
+    fn preprocess_leaves_arguments_after_separator_untouched() {
+        let out = preprocess_profile_args(osargs([
+            "devenv",
+            "hook",
+            "fish",
+            "--",
+            "--profile",
+            "backend",
+        ]));
+        assert_eq!(
+            out,
+            osargs(["devenv", "hook", "fish", "--", "--profile", "backend"])
+        );
+    }
+
+    #[test]
+    fn hook_captures_shell_args_verbatim() {
+        let cli = Cli::try_parse_preprocessed_from(osargs([
+            "devenv",
+            "hook",
+            "fish",
+            "--",
+            "--no-tui",
+            "--option",
+            "languages.rust.channel:string",
+            "nightly with spaces",
+            "--trace-to",
+            "pretty:stderr",
+            "--trace-to",
+            "json:file:/tmp/trace.json",
+            "--clean=HOME,PATH",
+            "echo",
+            "argument after command",
+        ]))
+        .unwrap();
+
+        let Commands::Hook { shell_args, .. } = cli.command else {
+            panic!("expected hook command");
+        };
+        assert_eq!(
+            shell_args,
+            [
+                "--no-tui",
+                "--option",
+                "languages.rust.channel:string",
+                "nightly with spaces",
+                "--trace-to",
+                "pretty:stderr",
+                "--trace-to",
+                "json:file:/tmp/trace.json",
+                "--clean=HOME,PATH",
+                "echo",
+                "argument after command",
+            ]
+        );
+    }
+
+    #[test]
+    fn hook_requires_separator_before_shell_args() {
+        for argv in [
+            osargs(["devenv", "hook", "fish", "--no-tui"]),
+            osargs(["devenv", "--no-tui", "hook", "fish"]),
+            osargs(["devenv", "--no-tui", "hook", "fish", "--", "--quiet"]),
+            osargs(["devenv", "hook", "fish", "--no-tui", "--", "--quiet"]),
+        ] {
+            let error = match Cli::try_parse_preprocessed_from(argv) {
+                Ok(_) => panic!("hook arguments without `--` should be rejected"),
+                Err(error) => error,
+            };
+            assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+            assert!(error.to_string().contains("must follow `--`"));
+        }
     }
 
     #[test]

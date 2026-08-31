@@ -60,7 +60,7 @@ _devenv_hook() {
         # Mark activated before launching so exiting the shell (or a SIGINT/
         # failure inside it) doesn't re-launch on the next prompt redraw.
         _DEVENV_HOOK_ACTIVATED="$PWD"
-        (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" _DEVENV_CALLER=hook _DEVENV_SHELL_HINT=@DEVENV_SHELL_HINT@ devenv shell)
+        (cd "$project_dir" && _DEVENV_HOOK_DIR="$project_dir" _DEVENV_CALLER=hook _DEVENV_SHELL_HINT=@DEVENV_SHELL_HINT@ devenv shell@DEVENV_SHELL_ARGS@)
         local exit_dir_file="$project_dir/.devenv/exit-dir"
         if [[ -f "$exit_dir_file" ]]; then
             local target_dir

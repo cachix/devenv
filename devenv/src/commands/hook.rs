@@ -9,6 +9,7 @@
 use devenv::cli::HookShell;
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
@@ -24,12 +25,12 @@ const HOOK_NU: &str = include_str!(concat!(env!("OUT_DIR"), "/hook.nu"));
 
 // ---- CLI entry points ----
 
-/// The hook script for `shell`.
+/// The hook script template for `shell`.
 ///
 /// The hook runs `devenv hook-should-activate` on every prompt — cheap with the
 /// static binary — so there's no per-directory activation cache to invalidate;
 /// `devenv allow`/`revoke` take effect on the next prompt automatically.
-fn hook_script(shell: &HookShell) -> &'static str {
+fn hook_template(shell: &HookShell) -> &'static str {
     match shell {
         HookShell::Bash => HOOK_BASH,
         HookShell::Zsh => HOOK_ZSH,
@@ -38,9 +39,38 @@ fn hook_script(shell: &HookShell) -> &'static str {
     }
 }
 
+fn quote_nushell_arg(arg: &str) -> String {
+    format!("\"{}\"", arg.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn quote_fish_arg(arg: &str) -> String {
+    format!("'{}'", arg.replace('\\', "\\\\").replace('\'', "\\'"))
+}
+
+fn hook_script(shell: &HookShell, shell_args: &[String]) -> String {
+    let rendered_args = shell_args
+        .iter()
+        .map(|arg| match shell {
+            HookShell::Nu => quote_nushell_arg(arg),
+            HookShell::Fish => quote_fish_arg(arg),
+            HookShell::Bash | HookShell::Zsh => {
+                shell_escape::escape(Cow::Borrowed(arg)).into_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let command_suffix = if rendered_args.is_empty() {
+        String::new()
+    } else {
+        format!(" {rendered_args}")
+    };
+
+    hook_template(shell).replace("@DEVENV_SHELL_ARGS@", &command_suffix)
+}
+
 /// Print the shell hook script for `shell` to stdout.
-pub fn print(shell: &HookShell) -> Result<()> {
-    let script = hook_script(shell);
+pub fn print(shell: &HookShell, shell_args: &[String]) -> Result<()> {
+    let script = hook_script(shell, shell_args);
     // `BrokenPipe` (e.g. `devenv hook fish | source` after `source` finishes
     // reading) is a normal lifecycle event, not a panic.
     let mut out = io::stdout().lock();
@@ -433,10 +463,14 @@ mod tests {
             HookShell::Fish,
             HookShell::Nu,
         ] {
-            let script = hook_script(&shell);
+            let script = hook_script(&shell, &[]);
             assert!(
                 !script.contains("@DEVENV_TRUST_DB@"),
                 "{shell:?} hook left an unsubstituted placeholder"
+            );
+            assert!(
+                !script.contains("@DEVENV_SHELL_ARGS@"),
+                "{shell:?} hook left an unsubstituted shell-args placeholder"
             );
             assert!(
                 script.contains("hook-should-activate"),
@@ -453,7 +487,7 @@ mod tests {
             (HookShell::Fish, "_DEVENV_SHELL_HINT=fish"),
             (HookShell::Nu, "_DEVENV_SHELL_HINT: \"nu\""),
         ] {
-            let script = hook_script(&shell);
+            let script = hook_script(&shell, &[]);
             assert!(
                 script.contains(expected),
                 "{shell:?} hook does not pass its shell hint"
@@ -463,6 +497,46 @@ mod tests {
                 "{shell:?} hook left an unsubstituted shell hint"
             );
         }
+    }
+
+    #[test]
+    fn test_hook_script_forwards_shell_args() {
+        let args = vec![
+            "--no-tui".to_string(),
+            "--from=path:/tmp/project with spaces".to_string(),
+        ];
+
+        for shell in [
+            HookShell::Bash,
+            HookShell::Zsh,
+            HookShell::Fish,
+            HookShell::Nu,
+        ] {
+            let script = hook_script(&shell, &args);
+            let expected = match shell {
+                HookShell::Nu => "devenv shell \"--no-tui\"",
+                HookShell::Fish => "devenv shell '--no-tui'",
+                HookShell::Bash | HookShell::Zsh => "devenv shell --no-tui",
+            };
+            assert!(
+                script.contains(expected),
+                "{shell:?} hook does not forward --no-tui"
+            );
+            assert!(
+                script.contains("path:/tmp/project with spaces"),
+                "{shell:?} hook does not forward the --from value"
+            );
+            assert!(
+                !script.contains("@DEVENV_SHELL_ARGS@"),
+                "{shell:?} hook left an unsubstituted shell-args placeholder"
+            );
+        }
+    }
+
+    #[test]
+    fn test_fish_arg_quoting_handles_backslashes_and_quotes() {
+        assert_eq!(quote_fish_arg(r"C:\"), r"'C:\\'");
+        assert_eq!(quote_fish_arg(r"a\'b\"), r"'a\\\'b\\'");
     }
 
     #[test]

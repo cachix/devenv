@@ -11,6 +11,7 @@
 
 ### Improvements
 
+- `devenv hook <shell>` can now pass arguments to its auto-activated `devenv shell`. Arguments following `--` are forwarded safely in Bash, Zsh, Fish, and Nushell, for example `devenv hook fish -- --no-tui` ([#3128](https://github.com/cachix/devenv/issues/3128)).
 - When the Nix daemon is running version 2.35 or newer, `devenv gc` now cleans up old environments in a single batch, making it much faster. It also shows clear progress while it runs.
 - File watching now uses substantially fewer allocations and less peak memory for large dependency sets, batches registrations and change bursts more efficiently, and keeps tracking files that are created later or replaced atomically.
 - Pinning several package versions no longer costs a separate nixpkgs fetch and evaluation for each one. `multiverse.pins { cmake = "3.26.4"; bun = "0.7.0"; }` resolves a whole set of versions, at exactly those versions, through the fewest nixpkgs revisions that can serve them and returns the packages.

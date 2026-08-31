@@ -51,6 +51,26 @@ devenv includes a built in shell hook that automatically activates your develope
   </TabItem>
 </Tabs>
 
+### Passing arguments to `devenv shell`
+
+:::tip[New in version 2.3]
+
+Place arguments for the auto-activated `devenv shell` after `--`. For example,
+to disable the TUI in shells started by the Fish hook without changing other
+`devenv` commands:
+
+```fish title="~/.config/fish/config.fish"
+devenv hook fish -- --no-tui | source
+```
+
+The same separator works in every supported shell:
+
+```bash title="~/.bashrc"
+eval "$(devenv hook bash -- --no-tui)"
+```
+
+:::
+
 
 ## Trusting a project
 

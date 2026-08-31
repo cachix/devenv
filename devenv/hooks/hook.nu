@@ -65,7 +65,7 @@ def --env _devenv_hook [] {
             # `try` nushell aborts the hook on that non-zero exit and never
             # follows the user to `exit-dir` below.
             try {
-                with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook", _DEVENV_SHELL_HINT: "nu" } { do { cd $dir; ^devenv shell } }
+                with-env { _DEVENV_HOOK_DIR: $dir, _DEVENV_CALLER: "hook", _DEVENV_SHELL_HINT: "nu" } { do { cd $dir; ^devenv shell@DEVENV_SHELL_ARGS@ } }
             }
             let exit_dir_file = ($dir + "/.devenv/exit-dir")
             if ($exit_dir_file | path exists) {

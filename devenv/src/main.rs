@@ -72,8 +72,8 @@ fn main_inner() -> Result<()> {
             Commands::Direnvrc => {
                 return commands::direnvrc::run();
             }
-            Commands::Hook { shell } => {
-                return commands::hook::print(shell);
+            Commands::Hook { shell, shell_args } => {
+                return commands::hook::print(shell, shell_args);
             }
             Commands::Allow => {
                 let home = devenv_core::paths::resolve_home()?;
