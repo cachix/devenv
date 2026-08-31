@@ -157,7 +157,7 @@ let
             ({
               type = "command";
               command = hook.command;
-            } // lib.optionalAttrs (hook.timeout or null != null) {
+            } // lib.optionalAttrs (hook.timeout != null) {
               timeout = hook.timeout;
             })
           ];
