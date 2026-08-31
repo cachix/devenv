@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 {
   dotenv.enable = true;
   dotenv.filename = [
@@ -24,4 +24,14 @@
     '';
     before = [ "devenv:enterShell" ];
   };
+
+  scripts.test-legacy-dotenv.exec = ''
+    result=$(${pkgs.nix}/bin/nix-instantiate --eval --strict \
+      ${./legacy-eval.nix} \
+      --arg modulePath ${inputs.devenv}/integrations/dotenv.nix \
+      --arg nixpkgsPath ${inputs.nixpkgs} \
+      --arg self "$PWD" \
+      --argstr root "$PWD")
+    test "$result" = true
+  '';
 }

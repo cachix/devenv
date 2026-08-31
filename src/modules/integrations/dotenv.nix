@@ -14,16 +14,77 @@ let
     { config
     , devenvPrimops ? { }
     , lib
+    , self ? null
     , ...
     }:
     let
-      loadDotenv = devenvPrimops.loadDotenv or (
-        _filenames: _substitution:
+      # Released CLIs before loadDotenv was added still resolve the devenv
+      # module input from main. Keep their original Nix parser available until
+      # those releases are outside the compatibility window.
+      parseLegacyLine = line:
+        let
+          parts = builtins.match "([[:space:]]*export[[:space:]]+)?([^[:space:]=#]+)[[:space:]]*=[[:space:]]*(.*)" line;
+        in
+        if parts != null && builtins.length parts == 3 then
+          {
+            name = builtins.elemAt parts 1;
+            value = builtins.elemAt parts 2;
+          }
+        else
+          null;
+
+      parseLegacyFile = content:
+        builtins.listToAttrs (
+          lib.filter (entry: entry != null) (
+            map parseLegacyLine (lib.splitString "\n" content)
+          )
+        );
+
+      legacyDotenvPath = filename:
+        if lib.hasPrefix "/" filename then
+          builtins.toPath filename
+        else if self != null then
+          self + ("/" + filename)
+        else
+          builtins.toPath "${config.devenv.root}/${filename}";
+
+      legacyLoadDotenv = filenames: substitution:
+        if substitution then
           throw ''
-            The dotenv integration requires the C-Nix devenv CLI. It is not
-            available through the flake integration or another standalone Nix evaluation.
+            dotenv.substitution requires a newer devenv CLI with the loadDotenv primop.
+            The current devenv CLI is ${config.devenv.cli.version}.
           ''
-      );
+        else
+          lib.foldl'
+            (resolved: filename:
+              let
+                path = legacyDotenvPath filename;
+              in
+              lib.recursiveUpdate resolved (
+                if builtins.pathExists path then
+                  parseLegacyFile (builtins.readFile path)
+                else
+                  { }
+              ))
+            { }
+            filenames;
+
+      hasLoadDotenv = devenvPrimops ? loadDotenv;
+      isLegacyCli =
+        config.devenv.cli.version != null
+        && !config.devenv.flakesIntegration
+        && !hasLoadDotenv;
+      loadDotenv =
+        if hasLoadDotenv then
+          devenvPrimops.loadDotenv
+        else if isLegacyCli then
+          legacyLoadDotenv
+        else
+          _filenames: _substitution:
+            throw ''
+              The dotenv integration requires the C-Nix devenv CLI. It is not
+              available through the flake integration or another standalone Nix evaluation.
+            '';
     in
     {
       _file = dotenvEnvModuleLocation;

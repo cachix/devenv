@@ -18,6 +18,7 @@ test -z "${REMOVED_BY_TASK+x}"
 test "$NIX_OWNED_SAME" = "before"
 test "$SHELL" != "/dotenv/shell"
 test "$DEVENV_CMDLINE" != "dotenv"
+test-legacy-dotenv
 
 # Direnv consumes this list to reload when a dotenv file changes.
 grep -Fx "$PWD/.env" .devenv/input-paths.txt
