@@ -51,6 +51,52 @@ $ devenv processes wait --timeout 120
 
 The default timeout is 120 seconds.
 
+## Friendly localhost URLs
+
+Enable the shared HTTP proxy to expose processes with named ports under
+`.localhost`:
+
+```nix title="devenv.nix"
+{ config, ... }:
+
+{
+  process.proxy.enable = true;
+
+  processes.web = {
+    exec = "python -m http.server $PORT";
+    ports.http.allocate = 8000;
+    env.PORT = builtins.toString config.processes.web.ports.http.value;
+  };
+}
+```
+
+By default, the process is available at
+`http://web.<project-name>.localhost`. Override that hostname for an individual
+process with a full `.localhost` hostname:
+
+```nix title="devenv.nix"
+{
+  processes.web.proxy.hostname = "app.localhost";
+}
+```
+
+For processes with multiple ports, named port routes are prefixed to the base
+hostname, such as `http://admin.app.localhost`. A port can override its own
+hostname independently:
+
+```nix title="devenv.nix"
+{
+  processes.web = {
+    proxy.hostname = "app.localhost";
+    ports.http.proxy.hostname = "public.localhost";
+    ports.admin.proxy.hostname = "control.localhost";
+  };
+}
+```
+
+Port-level hostnames take precedence over the process hostname. Ports without
+an override continue to use the process hostname as their base.
+
 ## Linux capabilities
 
 :::tip[New in devenv 2.3]

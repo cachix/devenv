@@ -89,12 +89,12 @@ fn capability_requests(
             if process.linux.capabilities.is_empty() {
                 return None;
             }
-            Some(processes::capabilities::CapabilityRequest {
+            Some(processes::capabilities::CapabilityRequest::new(
                 // The broker keys its allow list on this name and the manager
                 // launches by the same helper's output; they must not drift.
-                process: tasks::process_name(&task.name).to_string(),
-                capabilities: process.linux.capabilities.clone(),
-            })
+                tasks::process_name(&task.name),
+                process.linux.capabilities.clone(),
+            ))
         })
         .collect()
 }
@@ -278,6 +278,14 @@ fn should_attach_to_running_manager(
     interactivity: ClientInteractivity,
 ) -> bool {
     mode == ClientRunMode::Follow && interactivity == ClientInteractivity::Interactive
+}
+
+fn should_clear_proxy_routes(
+    manager_was_running: bool,
+    owns_foreground_manager: bool,
+    start_failed: bool,
+) -> bool {
+    owns_foreground_manager || (!manager_was_running && start_failed)
 }
 
 /// A shell command ready to be executed.
@@ -880,6 +888,44 @@ impl Devenv {
     fn process_runtime_dir(&self) -> Result<&PathBuf> {
         self.process_runtime_dir
             .get_or_try_init(|| processes::get_process_runtime_dir(&self.devenv_runtime))
+    }
+
+    fn proxy_owner(&self) -> String {
+        self.devenv_dotfile.to_string_lossy().into_owned()
+    }
+
+    async fn reconcile_proxy_routes(
+        &self,
+        task_configs: &mut [tasks::TaskConfig],
+        frontend: Option<&tokio::sync::mpsc::Sender<FrontendCommand>>,
+    ) -> Result<()> {
+        let enabled = self
+            .backend
+            .eval_devenv(&["devenv.config.process.proxy.enable"])
+            .await
+            .wrap_err("failed to evaluate whether the localhost proxy is enabled")?;
+        let enabled: bool = serde_json::from_str(&enabled)
+            .into_diagnostic()
+            .wrap_err("process.proxy.enable is not a boolean")?;
+        if !enabled {
+            // Reconcile a previous enabled configuration without starting the
+            // shared proxy when it is not already running.
+            crate::proxy::clear(&self.proxy_owner());
+            return Ok(());
+        }
+
+        let configured_name = self
+            .backend
+            .eval_devenv(&["devenv.config.name"])
+            .await
+            .wrap_err("failed to evaluate the project name for localhost proxy routes")?;
+        let project_name: Option<String> = serde_json::from_str(&configured_name)
+            .into_diagnostic()
+            .wrap_err("project name is not a string")?;
+        let project_name = crate::proxy::project_name(project_name, &self.devenv_root)?;
+        let owner = self.proxy_owner();
+        let routes = crate::proxy::project_routes(&project_name, &owner, task_configs)?;
+        crate::proxy::reconcile(&owner, routes, frontend).await
     }
 
     /// Build a `tasks::Config` with common fields filled in.
@@ -2568,7 +2614,7 @@ impl Devenv {
         }
 
         // ── Phase 2: Loading and running enterShell tasks ─────────────
-        let task_configs = self.load_tasks().await?;
+        let mut task_configs = self.load_tasks().await?;
         let (_status, exports, _messages) = self
             .run_tasks_with_roots(
                 vec!["devenv:enterShell".to_string()],
@@ -2579,9 +2625,28 @@ impl Devenv {
             .await?;
         envs.extend(exports);
 
+        // When enabled, named process ports become friendly localhost URLs.
+        // The proxy is shared across projects and starts lazily on the first
+        // `devenv up` that has at least one route.
+        self.reconcile_proxy_routes(&mut task_configs, options.frontend_command_tx.as_ref())
+            .await?;
+
         // ── Phase 3: Running processes ──────────────────────────────
-        self.start_processes(processes, task_mode, envs, options, Some(task_configs))
-            .await
+        let manager_was_running =
+            self.native_manager_running().await || self.external_process_manager_state_exists();
+        let owns_foreground_manager =
+            options.mode == ClientRunMode::Follow && !options.daemon && !manager_was_running;
+        let result = self
+            .start_processes(processes, task_mode, envs, options, Some(task_configs))
+            .await;
+        if should_clear_proxy_routes(
+            manager_was_running,
+            owns_foreground_manager,
+            result.is_err(),
+        ) {
+            crate::proxy::clear(&self.proxy_owner());
+        }
+        result
     }
 
     /// Start processes after shell environment and tasks are already configured.
@@ -3125,6 +3190,7 @@ impl Devenv {
     pub async fn down(&self) -> Result<()> {
         if let Some(server) = self.native_api_server.get() {
             server.manager().stop_all().await?;
+            crate::proxy::clear(&self.proxy_owner());
             return Ok(());
         }
 
@@ -3140,10 +3206,13 @@ impl Devenv {
                 // Stopping does not invoke the launcher, so a dummy path is sufficient.
                 Box::new(self.external_process_manager_control())
             } else {
+                crate::proxy::clear(&self.proxy_owner());
                 bail!("No process manager is running. Start processes first with `devenv up -d`")
             };
 
-        manager.stop().await
+        manager.stop().await?;
+        crate::proxy::clear(&self.proxy_owner());
+        Ok(())
     }
 
     pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
@@ -4425,6 +4494,13 @@ mod tests {
                 "{mode:?}, {interactivity:?}"
             );
         }
+    }
+
+    #[test]
+    fn attached_manager_routes_survive_failed_invocations() {
+        assert!(!should_clear_proxy_routes(true, false, true));
+        assert!(should_clear_proxy_routes(false, false, true));
+        assert!(should_clear_proxy_routes(false, true, false));
     }
 
     #[test]

@@ -261,6 +261,24 @@ let
                   '';
                 };
 
+                proxy = lib.mkOption {
+                  type = types.submodule {
+                    options.hostname = lib.mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Full `.localhost` proxy hostname for this process.";
+                    };
+                    options.port_hostnames = lib.mkOption {
+                      type = types.attrsOf types.str;
+                      default = { };
+                      description = "Full `.localhost` proxy hostnames keyed by port name.";
+                    };
+                  };
+                  default = { };
+                  internal = true;
+                  description = "Shared HTTP proxy configuration for this process.";
+                };
+
                 listen = lib.mkOption {
                   type = types.listOf listenType;
                   default = [ ];

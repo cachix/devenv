@@ -169,6 +169,7 @@ pub fn process_start_with(
         parent,
         command: None,
         ports: vec![],
+        urls: vec![],
         ready_probe: None,
         level,
         timestamp: Timestamp::now(),

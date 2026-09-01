@@ -104,6 +104,7 @@ pub struct MessageActivity {
 pub struct ProcessActivity {
     pub status: ProcessStatus,
     pub ports: Vec<String>,
+    pub urls: Vec<String>,
     /// Human-readable description of the readiness probe (e.g., "exec: pg_isready")
     pub ready_probe: Option<String>,
 }
@@ -751,6 +752,7 @@ impl ActivityModel {
                 parent,
                 command,
                 ports,
+                urls,
                 ready_probe,
                 level,
                 ..
@@ -758,6 +760,7 @@ impl ActivityModel {
                 let variant = ActivityVariant::Process(ProcessActivity {
                     status: ProcessStatus::Starting,
                     ports,
+                    urls,
                     ready_probe,
                 });
                 self.create_activity(id, name, parent, command, variant, level);
@@ -1985,6 +1988,7 @@ mod tests {
             parent: Some(100),
             command: None,
             ports: vec![],
+            urls: vec![],
             ready_probe: None,
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
@@ -2037,6 +2041,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: vec![],
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
@@ -2078,6 +2083,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: vec![],
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
@@ -2139,6 +2145,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: vec![],
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),

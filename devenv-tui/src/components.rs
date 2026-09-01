@@ -1150,6 +1150,7 @@ mod tests {
             ActivityVariant::Process(crate::model::ProcessActivity {
                 status: ProcessStatus::Ready,
                 ports: vec![],
+                urls: vec![],
                 ready_probe: None,
             }),
         )

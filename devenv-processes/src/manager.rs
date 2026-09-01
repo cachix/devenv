@@ -1036,7 +1036,8 @@ impl ProcessRunner {
 
         let mut builder = Activity::process(&config.name)
             .command(&config.exec)
-            .ports(ports);
+            .ports(ports)
+            .urls(config.proxy.urls.clone());
         if let Some(probe_desc) = probe_description(config) {
             builder = builder.ready_probe(probe_desc);
         }

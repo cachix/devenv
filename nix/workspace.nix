@@ -74,6 +74,8 @@ let
 
       # Include devenv-run-tests in the output
       devenvRunTests = cargoNix.workspaceMembers.devenv-run-tests.build;
+      # Keep the low-port capability boundary smaller than the main CLI.
+      devenvProxy = cargoNix.workspaceMembers.devenv-proxy.build;
 
       installPhase =
         let
@@ -86,6 +88,7 @@ let
 
           cp $src/bin/devenv $out/bin/
           cp $devenvRunTests/bin/devenv-run-tests $out/bin/
+          cp $devenvProxy/bin/devenv-proxy $out/bin/
           cp $src/bin/secretspec $out/bin/
 
           wrapProgram $out/bin/devenv \

@@ -757,6 +757,7 @@ pub struct ProcessBuilder {
     name: String,
     command: Option<String>,
     ports: Vec<String>,
+    urls: Vec<String>,
     ready_probe: Option<String>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
@@ -769,6 +770,7 @@ impl ProcessBuilder {
             name: name.into(),
             command: None,
             ports: Vec::new(),
+            urls: Vec::new(),
             ready_probe: None,
             id: None,
             parent: None,
@@ -783,6 +785,11 @@ impl ProcessBuilder {
 
     pub fn ports(mut self, ports: Vec<String>) -> Self {
         self.ports = ports;
+        self
+    }
+
+    pub fn urls(mut self, urls: Vec<String>) -> Self {
+        self.urls = urls;
         self
     }
 
@@ -826,6 +833,7 @@ impl ActivityStart for ProcessBuilder {
             parent: self.parent.unwrap_or_else(current_activity_id),
             command: self.command,
             ports: self.ports,
+            urls: self.urls,
             ready_probe: self.ready_probe,
             level,
             timestamp: Timestamp::now(),

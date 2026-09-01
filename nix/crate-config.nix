@@ -6,6 +6,7 @@
   openssl,
   dbus,
   pkg-config,
+  cmake,
   llvmPackages,
   rustPlatform,
   libghostty-vt,
@@ -108,6 +109,11 @@ in
 
   # openssl-sys needs openssl
   openssl-sys = opensslOverride;
+
+  # Pingora enables flate2's bundled zlib-ng backend.
+  libz-ng-sys = attrs: {
+    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ cmake ];
+  };
 
   # Crates that need tracing_unstable
   devenv-core = tracingUnstable;

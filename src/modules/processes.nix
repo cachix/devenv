@@ -30,6 +30,25 @@ let
         # Pass process name and port name for stable caching across evaluations
         default = allocatePort processName name config.allocate;
       };
+
+      proxy = lib.mkOption {
+        type = types.submodule {
+          options.hostname = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Full `.localhost` hostname to use for this port when
+              `process.proxy.enable` is enabled.
+
+              This takes precedence over `processes.<name>.proxy.hostname`
+              and the generated hostname.
+            '';
+            example = "admin.localhost";
+          };
+        };
+        default = { };
+        description = "Shared HTTP proxy configuration for this port.";
+      };
     };
   });
 
@@ -80,6 +99,26 @@ let
             admin.allocate = 9000;
           }
         '';
+      };
+
+      proxy = lib.mkOption {
+        type = types.submodule {
+          options.hostname = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Full `.localhost` hostname to use for this process when
+              `process.proxy.enable` is enabled.
+
+              By default, devenv derives the hostname from the process and
+              project names. Named ports without their own hostname override
+              are prefixed to this hostname.
+            '';
+            example = "app.localhost";
+          };
+        };
+        default = { };
+        description = "Shared HTTP proxy configuration for this process.";
       };
 
       env = lib.mkOption {
@@ -595,6 +634,11 @@ in
                 restart = process.restart;
                 listen = process.listen;
                 ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
+                proxy = process.proxy // {
+                  port_hostnames = lib.mapAttrs
+                    (_: portCfg: portCfg.proxy.hostname)
+                    (lib.filterAttrs (_: portCfg: portCfg.proxy.hostname != null) process.ports);
+                };
                 watch = process.watch // {
                   paths = map toString process.watch.paths;
                 };

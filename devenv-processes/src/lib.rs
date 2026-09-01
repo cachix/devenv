@@ -57,11 +57,13 @@ pub mod supervisor;
 pub mod supervisor_state;
 
 // Re-export config types at crate root
+#[cfg(target_os = "linux")]
+pub use capabilities::start_capability_daemon;
 pub use capabilities::{CapabilityRequest, maybe_run_capability_helper, start_capability_broker};
 pub use config::{
-    HttpGetProbe, HttpProbe, ListenKind, ListenSpec, ProcessConfig, ProcessType, ReadyConfig,
-    RestartConfig, RestartPolicy, ShutdownConfig, SocketActivationConfig, SupervisionMode,
-    WatchConfig, WatchdogConfig,
+    HttpGetProbe, HttpProbe, ListenKind, ListenSpec, ProcessConfig, ProcessProxyConfig,
+    ProcessType, ReadyConfig, RestartConfig, RestartPolicy, ShutdownConfig, SocketActivationConfig,
+    SupervisionMode, WatchConfig, WatchdogConfig,
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use devenv_mailbox::ProcessCommand;
