@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv --from` also loading the current directory's `devenv.local.nix`. Options set there for the local project, such as tuning a process the external project doesn't define, no longer leak into the external environment and break evaluation.
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
