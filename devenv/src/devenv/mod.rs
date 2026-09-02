@@ -1624,11 +1624,21 @@ impl Devenv {
         Ok(config.watch_paths(&self.devenv_root))
     }
 
-    #[instrument(skip(self))]
     pub async fn prepare_shell(
         &self,
         cmd: &Option<String>,
         args: &[String],
+    ) -> Result<process::Command> {
+        self.prepare_shell_with_script_dir(cmd, args, &self.devenv_dotfile)
+            .await
+    }
+
+    #[instrument(name = "prepare_shell", skip(self, script_dir))]
+    async fn prepare_shell_with_script_dir(
+        &self,
+        cmd: &Option<String>,
+        args: &[String],
+        script_dir: &Path,
     ) -> Result<process::Command> {
         // Reuse a DevEnv evaluated by `up()` phase 1 or an earlier
         // `prepare_shell` so we don't re-run "Configuring shell".
@@ -1693,24 +1703,20 @@ impl Devenv {
         let dotenv_messages = dotenv.message_script();
 
         // For non-interactive commands, always use bash directly
-        if cmd.is_some() {
+        if let Some(cmd) = cmd {
             let mut script = bash_init_script(&shell_env);
             script.push_str(&dotenv_activation);
             script.push_str(&task_exports);
             script.push_str(&dotenv_messages);
+            // Keep the content-addressed activation script independent of the
+            // command. In particular, environment capture uses a randomly named
+            // temporary helper whose path must not affect the script hash.
+            script.push_str("\nexec \"$@\"\n");
 
-            let command = format!(
-                "\nexec {} {}",
-                cmd.as_ref().unwrap(),
-                args.iter()
-                    .map(|arg| shell_escape::escape(std::borrow::Cow::Borrowed(arg)))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-            script.push_str(&command);
-
-            let script_path = write_executable_script(&self.devenv_dotfile, &script);
+            let script_path = write_executable_script(script_dir, &script);
             shell_cmd.arg(&script_path);
+            shell_cmd.arg(cmd);
+            shell_cmd.args(args);
         } else {
             // Interactive shell
             let script_path = if target_shell_path.is_some() {
@@ -2174,7 +2180,9 @@ impl Devenv {
         let script_path = temp_dir.path().join("script");
         let env_path = temp_dir.path().join("env");
 
-        let script = format!("env -0 > {}", env_path.to_string_lossy());
+        // Pass the output path as an argument so a TMPDIR containing spaces or
+        // shell metacharacters is never interpolated into shell source.
+        let script = r#"env -0 > "$1""#;
         fs::write(&script_path, script)
             .await
             .into_diagnostic()
@@ -2195,8 +2203,13 @@ impl Devenv {
         // run_enter_shell_tasks(). Running them inside this subprocess would
         // be redundant and, worse, a @completed task failure there would cause the
         // subprocess to exit non-zero, aborting the environment capture.
+        let env_path_arg = env_path.to_string_lossy().into_owned();
         let mut cmd = self
-            .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
+            .prepare_shell_with_script_dir(
+                &Some(script_path.to_string_lossy().into()),
+                &[env_path_arg],
+                temp_dir.path(),
+            )
             .await?;
         cmd.env("DEVENV_SKIP_TASKS", "1");
         let output = async {
