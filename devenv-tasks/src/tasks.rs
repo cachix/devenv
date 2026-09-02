@@ -1321,6 +1321,15 @@ impl Tasks {
             match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                 Ok(mut config) => {
                     if scheduled.contains(&index) {
+                        // Transient `devenv tasks run` includes a process because a
+                        // requested task depends on it, or because the process itself
+                        // was named. `start.enable` only gates `devenv up` autostart;
+                        // honouring it here would skip exec while treating `@completed`
+                        // as already satisfied (#3005). Explicit `devenv processes start`
+                        // / attach already override `start.enable` in `start_with_deps`.
+                        if !register_unscheduled_processes {
+                            config.start.enable = true;
+                        }
                         self.process_runner
                             .register_waiting(config.clone(), Some(orchestration_activity.id()))
                             .await;
@@ -4195,6 +4204,90 @@ mod schedule_tests {
             !tasks.dependency_parked("d").await,
             "a process that started then exited still satisfies @started after \
              an explicit stop; d must not be judged dependency-parked"
+        );
+
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn task_run_starts_auto_start_off_process_for_completed_dep() {
+        // Regression for https://github.com/cachix/devenv/issues/3005
+        let files = tempfile::tempdir().unwrap();
+        let process_ran = files.path().join("process-ran");
+        let task_ran = files.path().join("task-ran");
+
+        let process_script = executable_script(
+            files.path(),
+            "marker",
+            &format!("touch '{}'", process_ran.to_string_lossy()),
+        );
+        let mut marker =
+            process_task_with_command("marker", vec![], &process_script.to_string_lossy());
+        let mut process_cfg = no_restart_process_config(None);
+        process_cfg.start.enable = false;
+        marker.process = Some(process_cfg);
+
+        let task_script = executable_script(
+            files.path(),
+            "build",
+            &format!(
+                "test -f '{}' || exit 91\ntouch '{}'",
+                process_ran.to_string_lossy(),
+                task_ran.to_string_lossy(),
+            ),
+        );
+        let mut build = oneshot_task("repro:build", vec![]);
+        build.after = vec![format!("{PROCESS_TASK_PREFIX}marker@completed")];
+        build.command = Some(task_script.to_string_lossy().into_owned());
+
+        let (tasks, _tmp) =
+            build_test_tasks(vec![marker, build], vec!["repro:build".to_string()], false).await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(false))
+            .await
+            .expect("task run did not settle");
+
+        assert!(
+            process_ran.exists(),
+            "start.enable=false process did not run as a @completed dependency"
+        );
+        assert!(task_ran.exists(), "dependent task did not run");
+
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn process_mode_does_not_start_auto_start_off_process() {
+        let files = tempfile::tempdir().unwrap();
+        let process_ran = files.path().join("process-ran");
+        let process_script = executable_script(
+            files.path(),
+            "idle",
+            &format!("touch '{}'", process_ran.to_string_lossy()),
+        );
+        let mut idle = process_task_with_command("idle", vec![], &process_script.to_string_lossy());
+        let mut process_cfg = no_restart_process_config(None);
+        process_cfg.start.enable = false;
+        idle.process = Some(process_cfg);
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![idle],
+            vec![format!("{PROCESS_TASK_PREFIX}idle")],
+            false,
+        )
+        .await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(true))
+            .await
+            .expect("process mode run did not settle");
+
+        assert!(
+            !process_ran.exists(),
+            "start.enable=false process must not auto-start under devenv up"
+        );
+        assert_eq!(
+            tasks.process_runner().get_phase("idle").await,
+            Some(ProcessPhase::NotStarted),
         );
 
         tasks.process_runner().stop_all().await.unwrap();

@@ -48,6 +48,8 @@ let
 
                 Disabled processes are still visible in the TUI as stopped
                 and can be started manually by selecting them and pressing Enter.
+                They also run when pulled in as a task dependency, for example
+                `after = [ "devenv:processes:<name>@completed" ]`.
               '';
             };
           };

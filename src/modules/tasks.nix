@@ -195,7 +195,12 @@ let
                       enable = lib.mkOption {
                         type = types.bool;
                         default = true;
-                        description = "Whether to start this process automatically.";
+                        description = ''
+                          Whether to start this process automatically with `devenv up`.
+
+                          Disabled processes still run when pulled in as a task
+                          dependency (for example via `@completed`).
+                        '';
                       };
                     };
                   };

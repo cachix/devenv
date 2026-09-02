@@ -1,0 +1,2 @@
+# Invoke devenv from the test script so we can run both `tasks run` and `up`.
+use_shell: false
