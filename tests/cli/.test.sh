@@ -55,6 +55,22 @@ for path in "path:$from_test_dir" "path:./from-test"; do
   ! echo "$out" | grep -q "python3" || fail "--from=$path leaked local python3"
 done
 
+step "--from ignores the local devenv.local.nix"
+# A local devenv.local.nix must not be merged into an external --from project.
+# It references a process defined only by the local devenv.nix, so if it leaks
+# into the external project the eval fails on an undefined `exec`.
+cat > devenv.local.nix <<'EOF'
+{ ... }:
+{
+  processes.local-only.process-compose.disabled = true;
+}
+EOF
+out=$(devenv --from "path:$from_test_dir" info) \
+  || fail "--from failed with a local devenv.local.nix present"
+echo "$out" | grep -q "rust-toolchain" \
+  || fail "--from=$from_test_dir missing rust toolchain"
+rm -f devenv.local.nix
+
 step "--from works in a directory without devenv.nix"
 mkdir -p test-from-only && pushd test-from-only >/dev/null
 out=$(devenv --from "path:$from_test_dir" info)
