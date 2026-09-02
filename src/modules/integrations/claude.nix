@@ -120,11 +120,17 @@ let
           For most hook types, a regex pattern to match against tool names
           (for PreToolUse/PostToolUse hooks).
 
-          For `FileChanged`, this is instead a glob pattern (or `|`-separated
-          list of glob patterns) matched against file paths relative to the
-          project root, e.g. `.env` or `*.md` or `.env|.env.local`. Claude
-          Code expands the glob(s) into the set of files it watches, and
-          fires the hook whenever one of them changes.
+          For `FileChanged`, this value is used two different ways. First,
+          to build the watch list: it's split on `|` and each segment is
+          registered as a literal filename relative to the project root, e.g.
+          `.envrc|.env` watches exactly the files named `.envrc` and `.env`.
+          Segments are matched literally here, not as globs or regexes — a
+          value like `*.md` would watch a file literally named `*.md`, not
+          every Markdown file. Second, to filter which hooks run: once any
+          watched file changes, this same value is evaluated again as a
+          standard matcher (exact string, or regex depending on its
+          characters) against the *basename* of the changed file, to decide
+          whether this hook should fire for that particular file.
         '';
       };
       command = lib.mkOption {
