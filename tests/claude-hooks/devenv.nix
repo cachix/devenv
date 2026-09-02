@@ -5,8 +5,10 @@
     enable = true;
 
     hooks = {
-      # FileChanged: matcher is a glob against project-relative paths, not a
-      # tool-name regex, and has no explicit timeout (uses Claude Code's default).
+      # FileChanged: matcher is a literal filename (not a glob) relative to
+      # the project root, not a tool-name regex, and has no explicit timeout
+      # (uses Claude Code's default). See examples/claude-filechanged-* for
+      # the single-file, "|"-separated, and filtering-matcher cases.
       reload-direnv = {
         enable = true;
         name = "Reload direnv on .envrc changes";

@@ -20,15 +20,15 @@ pass() {
 test -f "$SETTINGS" || { echo "$SETTINGS does not exist" >&2; exit 1; }
 
 # FileChanged: the hook is grouped under a "FileChanged" key (not PostToolUse
-# or any tool-related event), keeps its glob matcher verbatim, and - since no
-# timeout was set - carries no "timeout" field at all.
+# or any tool-related event), keeps its literal-filename matcher verbatim,
+# and - since no timeout was set - carries no "timeout" field at all.
 [ "$(jq -r '.hooks.FileChanged[0].matcher' "$SETTINGS")" = ".envrc" ] \
   || fail "FileChanged hook matcher should be '.envrc'"
 [ "$(jq -r '.hooks.FileChanged[0].hooks[0].command' "$SETTINGS")" = "direnv reload" ] \
   || fail "FileChanged hook command mismatch"
 [ "$(jq -r '.hooks.FileChanged[0].hooks[0].timeout // "absent"' "$SETTINGS")" = "absent" ] \
   || fail "FileChanged hook should have no timeout field when unset"
-pass "FileChanged hook is generated under hooks.FileChanged with its glob matcher and no timeout"
+pass "FileChanged hook is generated under hooks.FileChanged with its literal-filename matcher and no timeout"
 
 # PostToolUse hook with an explicit timeout: the numeric value is passed through.
 [ "$(jq -r '.hooks.PostToolUse[0].hooks[0].timeout' "$SETTINGS")" = "120" ] \
