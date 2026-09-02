@@ -1321,13 +1321,16 @@ impl Tasks {
             match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                 Ok(mut config) => {
                     if scheduled.contains(&index) {
-                        // Transient `devenv tasks run` includes a process because a
-                        // requested task depends on it, or because the process itself
-                        // was named. `start.enable` only gates `devenv up` autostart;
-                        // honouring it here would skip exec while treating `@completed`
-                        // as already satisfied (#3005). Explicit `devenv processes start`
-                        // / attach already override `start.enable` in `start_with_deps`.
-                        if !register_unscheduled_processes {
+                        // Transient `devenv tasks run` pulls a process into the
+                        // schedule when a requested task depends on it.
+                        // `start.enable` only gates `devenv up` autostart — and
+                        // flake-compat's equivalent, which names every process as
+                        // a root so disabled ones register as NotStarted.
+                        // Honouring `start.enable` for dependency-included
+                        // processes skips exec while treating `@completed` as
+                        // already satisfied (#3005). Explicit `devenv processes
+                        // start` / attach already override in `start_with_deps`.
+                        if !register_unscheduled_processes && !self.roots.contains(&index) {
                             config.start.enable = true;
                         }
                         self.process_runner
@@ -4252,6 +4255,46 @@ mod schedule_tests {
             "start.enable=false process did not run as a @completed dependency"
         );
         assert!(task_ran.exists(), "dependent task did not run");
+
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn task_run_does_not_start_auto_start_off_process_when_it_is_the_root() {
+        // `devenv-tasks run devenv:processes:*` (flake-compat / containers /
+        // `config.ci`) names every process as a root, including
+        // `start.enable = false`, so they register as NotStarted.
+        let files = tempfile::tempdir().unwrap();
+        let process_ran = files.path().join("process-ran");
+        let process_script = executable_script(
+            files.path(),
+            "idle",
+            &format!("touch '{}'", process_ran.to_string_lossy()),
+        );
+        let mut idle = process_task_with_command("idle", vec![], &process_script.to_string_lossy());
+        let mut process_cfg = no_restart_process_config(None);
+        process_cfg.start.enable = false;
+        idle.process = Some(process_cfg);
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![idle],
+            vec![format!("{PROCESS_TASK_PREFIX}idle")],
+            false,
+        )
+        .await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(false))
+            .await
+            .expect("task run did not settle");
+
+        assert!(
+            !process_ran.exists(),
+            "start.enable=false process must not start when it is itself a tasks-run root"
+        );
+        assert_eq!(
+            tasks.process_runner().get_phase("idle").await,
+            Some(ProcessPhase::NotStarted),
+        );
 
         tasks.process_runner().stop_all().await.unwrap();
     }
