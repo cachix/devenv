@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv tasks run --no-tui` staying silent until the run finished when AI-agent auto-quiet was active (`CLAUDECODE`, and similar). Quiet mode now prints task running/succeeded/failed lines incrementally, without streaming full task output ([#3115](https://github.com/cachix/devenv/issues/3115)).
 - Fixed environment capture accumulating unbounded `.devenv/shell-*.sh` files. Capture-specific activation scripts are now temporary, and non-interactive commands are passed as arguments instead of being embedded in persistent activation scripts ([#3149](https://github.com/cachix/devenv/issues/3149)).
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
