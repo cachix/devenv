@@ -10,7 +10,7 @@ use devenv::{
     activity::{ActivityGuard, ActivityLevel},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
-        TraceOutputSpec,
+        TraceOutputSpec, UserConfigCommand,
     },
     is_ai_agent,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
@@ -68,6 +68,9 @@ fn main_inner() -> Result<()> {
         match &cli.command {
             Commands::Version => {
                 return commands::version::run();
+            }
+            Commands::UserConfig { command } => {
+                return run_user_config_command(command, cli.user_config.as_deref());
             }
             Commands::Direnvrc => {
                 return commands::direnvrc::run();
@@ -132,6 +135,37 @@ fn main_inner() -> Result<()> {
             Ok(cmd_result) => return cmd_result.exec(),
         }
     }
+}
+
+fn run_user_config_command(
+    command: &UserConfigCommand,
+    override_path: Option<&Path>,
+) -> Result<()> {
+    if matches!(command, UserConfigCommand::Schema) {
+        let schema = schemars::schema_for!(devenv_tui::UserConfig);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&schema).into_diagnostic()?
+        );
+        return Ok(());
+    }
+    let path = override_path.map(|path| {
+        devenv_core::paths::resolve_against(path, &env::current_dir().unwrap_or_default())
+    });
+    let path = devenv::user_config::path(path.as_deref())?;
+    match command {
+        UserConfigCommand::Path => println!("{}", path.display()),
+        UserConfigCommand::Validate => {
+            devenv_tui::UserConfig::load(&path)?;
+            println!("valid: {}", path.display());
+        }
+        UserConfigCommand::Show => {
+            let config = devenv::user_config::load(override_path.map(|_| path.as_path()))?;
+            print!("{}", config.to_yaml()?);
+        }
+        UserConfigCommand::Schema => unreachable!(),
+    }
+    Ok(())
 }
 
 /// Options for the frontend/renderer thread.
@@ -1419,7 +1453,8 @@ async fn dispatch_command(
             devenv::lsp::run(devenv, print_config).await?;
             Ok(CommandResult::Done)
         }
-        Commands::Direnvrc
+        Commands::UserConfig { .. }
+        | Commands::Direnvrc
         | Commands::Version
         | Commands::Hook { .. }
         | Commands::Allow

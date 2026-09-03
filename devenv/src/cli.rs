@@ -684,6 +684,15 @@ pub struct Cli {
     #[arg(
         long,
         global = true,
+        env = "DEVENV_USER_CONFIG",
+        value_hint = clap::ValueHint::FilePath,
+        help = "Use this user configuration file instead of the XDG default"
+    )]
+    pub user_config: Option<PathBuf>,
+
+    #[arg(
+        long,
+        global = true,
         help_heading = "Input overrides",
         help = "Source for devenv.nix (flake input reference or path)",
         long_help = "Source for devenv.nix.\n\nCan be either a filesystem path (with path: prefix) or a flake input reference.\n\nExamples:\n  --from github:cachix/devenv\n  --from github:cachix/devenv?dir=examples/simple\n  --from path:/absolute/path/to/project\n  --from path:./relative/path"
@@ -789,6 +798,12 @@ fn is_flag(arg: &std::ffi::OsString) -> bool {
 
 #[derive(Subcommand, Clone)]
 pub enum Commands {
+    #[command(about = "Inspect and validate the devenv user configuration.")]
+    UserConfig {
+        #[command(subcommand)]
+        command: UserConfigCommand,
+    },
+
     #[command(about = "Scaffold devenv.yaml, devenv.nix, and .gitignore.")]
     Init {
         target: Option<PathBuf>,
@@ -972,6 +987,7 @@ impl Commands {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Shell { .. } => "shell",
+            Self::UserConfig { .. } => "user-config",
             Self::Test { .. } => "test",
             Self::Container { .. } => "container",
             Self::Generate => "generate",
@@ -1009,9 +1025,24 @@ impl Commands {
     pub fn supports_tui(&self) -> bool {
         !matches!(
             self,
-            Self::Mcp { http: None } | Self::Lsp { .. } | Self::PrintPaths
+            Self::UserConfig { .. }
+                | Self::Mcp { http: None }
+                | Self::Lsp { .. }
+                | Self::PrintPaths
         )
     }
+}
+
+#[derive(Subcommand, Clone)]
+pub enum UserConfigCommand {
+    #[command(about = "Print the resolved user configuration path.")]
+    Path,
+    #[command(about = "Validate the user configuration file.")]
+    Validate,
+    #[command(about = "Print the resolved user configuration as YAML.")]
+    Show,
+    #[command(about = "Print the JSON Schema for the user configuration.")]
+    Schema,
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
@@ -1276,6 +1307,57 @@ mod tests {
     fn verify_cli() {
         use clap::CommandFactory;
         Cli::command().debug_assert()
+    }
+
+    #[test]
+    fn user_config_flag_is_global() {
+        for args in [
+            [
+                "devenv",
+                "--user-config",
+                "custom.yaml",
+                "user-config",
+                "path",
+            ],
+            [
+                "devenv",
+                "user-config",
+                "path",
+                "--user-config",
+                "custom.yaml",
+            ],
+        ] {
+            let cli = Cli::parse_from(args);
+            assert_eq!(cli.user_config, Some(PathBuf::from("custom.yaml")));
+            assert!(matches!(
+                cli.command,
+                Commands::UserConfig {
+                    command: UserConfigCommand::Path
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn user_config_flag_overrides_environment() {
+        let mut env = EnvVarGuard::new(&["DEVENV_USER_CONFIG"]);
+        env.set("DEVENV_USER_CONFIG", "environment.yaml");
+        let cli = Cli::parse_from([
+            "devenv",
+            "--user-config",
+            "flag.yaml",
+            "user-config",
+            "path",
+        ]);
+        assert_eq!(cli.user_config, Some(PathBuf::from("flag.yaml")));
+    }
+
+    #[test]
+    fn user_config_environment_is_used_without_flag() {
+        let mut env = EnvVarGuard::new(&["DEVENV_USER_CONFIG"]);
+        env.set("DEVENV_USER_CONFIG", "environment.yaml");
+        let cli = Cli::parse_from(["devenv", "user-config", "path"]);
+        assert_eq!(cli.user_config, Some(PathBuf::from("environment.yaml")));
     }
 
     fn cli_options(args: &[&str]) -> CliOptions {

@@ -9074,6 +9074,10 @@ rec {
             packageId = "devenv-shell";
           }
           {
+            name = "futures";
+            packageId = "futures";
+          }
+          {
             name = "human-repr";
             packageId = "human-repr";
           }
@@ -9087,6 +9091,15 @@ rec {
             packageId = "libc";
           }
           {
+            name = "miette";
+            packageId = "miette";
+            features = [ "fancy" ];
+          }
+          {
+            name = "schemars";
+            packageId = "schemars 1.2.1";
+          }
+          {
             name = "serde";
             packageId = "serde";
             features = [ "derive" ];
@@ -9094,6 +9107,10 @@ rec {
           {
             name = "serde_json";
             packageId = "serde_json";
+          }
+          {
+            name = "serde_yaml";
+            packageId = "serde_yaml";
           }
           {
             name = "thiserror";
@@ -9117,6 +9134,10 @@ rec {
             name = "tracing-subscriber";
             packageId = "tracing-subscriber";
             features = [ "env-filter" "json" "valuable" ];
+          }
+          {
+            name = "unicode-segmentation";
+            packageId = "unicode-segmentation";
           }
           {
             name = "unicode-width";

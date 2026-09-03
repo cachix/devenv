@@ -8,10 +8,15 @@ use std::{
 };
 
 const JSON_SCHEMA_PATH: &str = "docs/public/devenv.schema.json";
+const USER_CONFIG_SCHEMA_PATH: &str = "docs/public/devenv.user.schema.json";
 const YAML_OPTIONS_PATH: &str = "docs/src/content/docs/reference/yaml-options.md";
 
 pub fn default_json_schema_path() -> PathBuf {
     PathBuf::from(JSON_SCHEMA_PATH)
+}
+
+pub fn default_user_config_schema_path() -> PathBuf {
+    PathBuf::from(USER_CONFIG_SCHEMA_PATH)
 }
 
 pub fn default_yaml_options_path() -> PathBuf {
@@ -23,6 +28,17 @@ pub fn generate_json_schema(path: impl AsRef<Path>) -> Result<()> {
     let schema = serde_json::to_string_pretty(&schema)
         .into_diagnostic()
         .wrap_err("Failed to serialize JSON schema")?;
+    let path = path.as_ref();
+    fs::write(path, &schema)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to write JSON schema to {}", path.display()))
+}
+
+pub fn generate_user_config_schema(path: impl AsRef<Path>) -> Result<()> {
+    let schema = schema_for!(devenv::tui::UserConfig);
+    let schema = serde_json::to_string_pretty(&schema)
+        .into_diagnostic()
+        .wrap_err("Failed to serialize user configuration JSON schema")?;
     let path = path.as_ref();
     fs::write(path, &schema)
         .into_diagnostic()
