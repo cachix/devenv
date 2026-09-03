@@ -1139,6 +1139,100 @@ impl Devenv {
         Ok(())
     }
 
+    /// Reuse a running process manager for process-type task dependencies.
+    ///
+    /// `devenv tasks run` otherwise constructs a fresh runner and starts
+    /// `devenv:processes:*` deps locally, which crash-loops already-healthy
+    /// services started by `devenv up` (#3137). When a manager is running,
+    /// ask it to start those processes (already-running names are skipped),
+    /// wait until they are ready, and tell the local runner not to launch
+    /// them again.
+    ///
+    /// Returns `true` when a running manager will own process lifetime for
+    /// this task run (so the local runner must not `stop_all`).
+    async fn prepare_task_run_process_reuse(&self, config: &mut tasks::Config) -> Result<bool> {
+        let native_running = self.native_manager_running().await;
+        let external_running = self.processes_running().await;
+        if !native_running && !external_running {
+            return Ok(false);
+        }
+
+        let process_names =
+            tasks::scheduled_process_names(&config.tasks, &config.roots, config.run_mode);
+        debug!(
+            ?process_names,
+            native_running,
+            external_running,
+            "reusing running process manager for task process deps"
+        );
+
+        if native_running && !process_names.is_empty() {
+            self.attach_start_up_processes(&process_names).await?;
+            self.wait_for_named_processes_ready(&process_names).await?;
+        }
+
+        config.ignore_process_deps = true;
+        let process_task_names: HashSet<&str> = config
+            .tasks
+            .iter()
+            .filter(|task| task.r#type == devenv_tasks::TaskType::Process)
+            .map(|task| task.name.as_str())
+            .collect();
+        config.roots.retain(|root| {
+            let trimmed = root.trim();
+            !trimmed.starts_with(devenv_tasks::PROCESS_TASK_PREFIX)
+                && !process_task_names.contains(trimmed)
+        });
+
+        Ok(true)
+    }
+
+    /// Wait until each named process on the running native manager is ready.
+    ///
+    /// `Start` only schedules work; a skipped name may still be `Starting`.
+    /// `@ready` task deps must not run until the live process is healthy.
+    async fn wait_for_named_processes_ready(&self, names: &[String]) -> Result<()> {
+        let timeout = std::time::Duration::from_secs(120);
+        let started = std::time::Instant::now();
+        loop {
+            let mut pending = Vec::new();
+            for name in names {
+                match self
+                    .native_api_request(&processes::ApiRequest::Status { name: name.clone() })
+                    .await?
+                {
+                    processes::ApiResponse::ProcessDetail { info } => match info.phase {
+                        processes::ProcessPhase::Ready => {}
+                        processes::ProcessPhase::GaveUp => {
+                            bail!("Process {name} gave up (crash loop)")
+                        }
+                        processes::ProcessPhase::Exited => {
+                            bail!("Process {name} exited before becoming ready")
+                        }
+                        other => pending.push((name.clone(), other)),
+                    },
+                    processes::ApiResponse::Error { message: msg } => {
+                        Self::bail_if_stale_daemon(&msg)?;
+                        bail!("{msg}")
+                    }
+                    other => bail!("Unexpected response to status request: {:?}", other),
+                }
+            }
+            if pending.is_empty() {
+                return Ok(());
+            }
+            if started.elapsed() >= timeout {
+                let detail = pending
+                    .iter()
+                    .map(|(name, phase)| format!("{name}={phase}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                bail!("Timed out waiting for process dependencies to become ready: {detail}");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+
     /// Race a potentially long Start reply against client interruption. The
     /// response future owns only the client socket: dropping it disconnects
     /// the caller, while the daemon's per-connection task and scheduler-owned
@@ -2020,11 +2114,17 @@ impl Devenv {
             }
         }
 
-        let config = self.make_task_config(roots, tasks, run_mode, envs).await?;
+        let mut config = self.make_task_config(roots, tasks, run_mode, envs).await?;
+        let reused_manager = self.prepare_task_run_process_reuse(&mut config).await?;
 
         if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
             use valuable::Valuable;
             debug!(event = config_value.as_value(), "Loaded task config");
+        }
+
+        // Process-type roots were started (or skipped) on the running manager.
+        if reused_manager && config.roots.is_empty() {
+            return Ok("{}".to_string());
         }
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
@@ -2032,10 +2132,11 @@ impl Devenv {
             .build()
             .await?;
 
-        // Stop processes started as task dependencies. Without this they are
-        // orphaned: devenv spawns every process into its own session, so they
-        // survive the CLI's exit and are reparented to init.
-        let (status, outputs) = run_tasks(tasks, true).await?;
+        // Stop processes started as task dependencies, but never processes
+        // owned by an already-running manager we attached to. Without the
+        // stop, locally started processes are orphaned: devenv spawns every
+        // process into its own session, so they survive the CLI's exit.
+        let (status, outputs) = run_tasks(tasks, !reused_manager).await?;
 
         if status.has_failures() {
             miette::bail!("Some tasks failed");
