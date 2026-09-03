@@ -41,7 +41,7 @@ libc.workspace = true
 [features]
 default = []
 test-all = ["test-file-watcher"]
-test-file-watcher = ["devenv-event-sources/macos-kqueue"]
+test-file-watcher = []
 
 [dev-dependencies]
 sd-notify.workspace = true

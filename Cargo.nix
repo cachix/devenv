@@ -8308,12 +8308,6 @@ rec {
             features = [ "fancy" ];
           }
           {
-            name = "notify";
-            packageId = "notify";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
             name = "reqwest";
             packageId = "reqwest 0.13.4";
             features = [ "json" "query" "stream" ];
@@ -8343,21 +8337,11 @@ rec {
         ];
         devDependencies = [
           {
-            name = "notify";
-            packageId = "notify";
-            usesDefaultFeatures = false;
-            features = [ "macos_kqueue" ];
-          }
-          {
             name = "tempfile";
             packageId = "tempfile";
           }
         ];
-        features = {
-          "macos-kqueue" = [ "notify/macos_kqueue" ];
-          "notify" = [ "dep:notify" ];
-        };
-        resolvedDefaultFeatures = [ "default" "macos-kqueue" "notify" ];
+
       };
       "devenv-mailbox" = rec {
         crateName = "devenv-mailbox";
@@ -8659,7 +8643,6 @@ rec {
         ];
         features = {
           "test-all" = [ "test-file-watcher" ];
-          "test-file-watcher" = [ "devenv-event-sources/macos-kqueue" ];
         };
         resolvedDefaultFeatures = [ "default" "test-all" "test-file-watcher" ];
       };
@@ -19121,7 +19104,7 @@ rec {
           "serde" = [ "notify-types/serde" ];
           "serialization-compat-6" = [ "notify-types/serialization-compat-6" ];
         };
-        resolvedDefaultFeatures = [ "default" "fsevent-sys" "kqueue" "macos_fsevent" "macos_kqueue" "mio" ];
+        resolvedDefaultFeatures = [ "default" "fsevent-sys" "macos_fsevent" ];
       };
       "notify-types" = rec {
         crateName = "notify-types";

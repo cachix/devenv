@@ -2399,7 +2399,6 @@ dependencies = [
  "async-priority-channel",
  "devenv-activity",
  "miette",
- "notify",
  "reqwest 0.13.4",
  "tempfile",
  "tokio",

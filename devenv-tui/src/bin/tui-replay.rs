@@ -350,10 +350,14 @@ async fn run_reactive_backend(
                         ProcessStatus::Stopped,
                     )?;
                 }
+                // `FrontendCommand` carries a channel receiver, so its send
+                // error is not `Sync` and cannot be wrapped with `context`.
                 renderer_tx
                     .send(FrontendCommand::ExitRenderer)
                     .await
-                    .context("TUI closed before process-manager shutdown completed")?;
+                    .map_err(|_| {
+                        anyhow::anyhow!("TUI closed before process-manager shutdown completed")
+                    })?;
                 return Ok(());
             }
         };
@@ -417,7 +421,7 @@ async fn main() -> Result<()> {
         renderer_tx
             .send(FrontendCommand::SetAttached(true))
             .await
-            .context("failed to initialize attached replay mode")?;
+            .map_err(|_| anyhow::anyhow!("failed to initialize attached replay mode"))?;
     }
 
     let mut app = devenv_tui::TuiApp::new(activity_rx, renderer_rx, shutdown.clone());
@@ -476,7 +480,7 @@ async fn main() -> Result<()> {
                 renderer_tx
                     .send(FrontendCommand::ExitRenderer)
                     .await
-                    .context("TUI closed before replay completion")?;
+                    .map_err(|_| anyhow::anyhow!("TUI closed before replay completion"))?;
                 tui_task.await.context("TUI task panicked")??;
             }
         }

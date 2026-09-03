@@ -2183,6 +2183,10 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "FSEvents can attach stale content events to metadata-only changes"
+    )]
     #[tokio::test]
     async fn test_metadata_only_chmod_does_not_emit_change_event() {
         use std::os::unix::fs::PermissionsExt;

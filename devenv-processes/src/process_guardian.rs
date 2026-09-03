@@ -219,11 +219,20 @@ impl ProcessScopeRegistrationWrapper {
             .map_err(|_| std::io::Error::other("broker child PID exceeds i32::MAX"))?;
         let scope = ProcessScope::unix_session(pid)?;
         if GUARDIANS_ENABLED.load(Ordering::Relaxed) {
-            let (guardian, ready) =
-                ProcessGuardian::spawn(&self.state_dir, &self.process_name, &scope, &self.shutdown)
-                    .map_err(|error| {
-                        std::io::Error::other(format!("failed to start scope guardian: {error:?}"))
-                    })?;
+            let (guardian, ready) = match ProcessGuardian::spawn(
+                &self.state_dir,
+                &self.process_name,
+                &scope,
+                &self.shutdown,
+            ) {
+                Ok(result) => result,
+                Err(error) => {
+                    let _ = scope.force_kill();
+                    return Err(std::io::Error::other(format!(
+                        "failed to start scope guardian: {error:?}"
+                    )));
+                }
+            };
             if !guardian_became_ready(ready, GUARDIAN_READY_TIMEOUT) {
                 guardian.abort();
                 let _ = scope.signal(libc::SIGKILL);

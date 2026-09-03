@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
+use tokio::sync::oneshot::error::TryRecvError;
 
 const BROKER_ARG: &str = "--devenv-capability-broker";
 const MAX_MESSAGE: usize = 16 * 1024 * 1024;
@@ -95,23 +96,51 @@ pub(crate) fn validate_capabilities(names: &[String]) -> Result<()> {
     Ok(())
 }
 
+fn process_list(requests: &[CapabilityRequest]) -> String {
+    requests
+        .iter()
+        .map(|request| format!("'{}'", request.process))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// Authenticate once and start the root broker before a manager detaches.
+///
+/// `required_now` says whether a capability-bearing process starts in this
+/// invocation. When none does and sudo cannot prompt, the broker is skipped
+/// with a warning instead of failing the whole start. `stderr` receives the
+/// broker's diagnostics; a detached manager should point it at a log file so
+/// the broker never touches a terminal that may go away.
 pub async fn start_capability_broker(
     requests: &[CapabilityRequest],
+    required_now: bool,
     runtime_dir: &Path,
     frontend: Option<&tokio::sync::mpsc::Sender<devenv_mailbox::FrontendCommand>>,
+    stderr: Stdio,
 ) -> Result<Option<PathBuf>> {
     if requests.is_empty() {
         return Ok(None);
     }
     #[cfg(not(target_os = "linux"))]
-    bail!("process Linux capabilities are only supported on Linux");
+    {
+        let _ = (required_now, runtime_dir, frontend, stderr);
+        devenv_activity::message(
+            devenv_activity::ActivityLevel::Warn,
+            format!(
+                "Linux capabilities are only supported on Linux; starting {} without them",
+                process_list(requests)
+            ),
+        );
+        return Ok(None);
+    }
     #[cfg(target_os = "linux")]
     {
         for request in requests {
             validate_capabilities(&request.capabilities)?;
         }
-        ensure_sudo_authentication(requests, frontend).await?;
+        if !ensure_sudo_authentication(requests, required_now, frontend).await? {
+            return Ok(None);
+        }
         std::fs::create_dir_all(runtime_dir).into_diagnostic()?;
         let id = BROKER_ID.fetch_add(1, Ordering::Relaxed);
         let path = runtime_dir.join(format!(
@@ -131,15 +160,27 @@ pub async fn start_capability_broker(
             .arg(&path)
             .arg("--allow-json")
             .arg(allowed)
-            .stdin(Stdio::inherit())
+            // The broker never reads input. With sudo's `use_pty` an inherited
+            // terminal would be relayed to it, competing with the TUI for keys.
+            .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
+            .stderr(stderr)
+            // Keep terminal signals (Ctrl-C, hangup) away from the broker. Its
+            // lifetime is tied to the manager's socket connection instead, so a
+            // detached manager keeps its broker after the terminal closes. A
+            // new session is deliberately not created: sudo keys its cached
+            // credentials on the controlling terminal.
+            .process_group(0)
             .spawn()
             .into_diagnostic()
             .wrap_err("failed to start Linux capability broker through sudo")?;
+        let uid = unsafe { libc::getuid() };
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
-            if path.exists() {
+            // The broker binds as root and hands the socket over with chown as
+            // its last step before accepting, so ownership marks readiness.
+            // Connecting earlier fails with EACCES.
+            if std::fs::metadata(&path).is_ok_and(|meta| meta.uid() == uid) {
                 return Ok(Some(path));
             }
             if let Some(status) = child.try_wait().into_diagnostic()? {
@@ -154,25 +195,34 @@ pub async fn start_capability_broker(
     }
 }
 
+/// Returns whether the broker should be started. `false` means sudo could not
+/// prompt and no process needs capabilities right now.
 #[cfg(target_os = "linux")]
 async fn ensure_sudo_authentication(
     requests: &[CapabilityRequest],
+    required_now: bool,
     frontend: Option<&tokio::sync::mpsc::Sender<devenv_mailbox::FrontendCommand>>,
-) -> Result<()> {
+) -> Result<bool> {
     let cached = Command::new("sudo")
         .args(["-n", "true"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|status| status.success());
-    if cached {
-        display_capability_requests(requests)?;
-        return Ok(());
-    }
-    if !std::io::stderr().is_terminal() {
-        bail!(
-            "sudo authentication is required for Linux capabilities; run `sudo -v` before devenv in non-interactive environments"
+    if !cached && !std::io::stderr().is_terminal() {
+        if required_now {
+            bail!(
+                "sudo authentication is required for Linux capabilities; run `sudo -v` before devenv in non-interactive environments"
+            );
+        }
+        devenv_activity::message(
+            devenv_activity::ActivityLevel::Warn,
+            format!(
+                "sudo cannot prompt here, so {} cannot be started with Linux capabilities until devenv runs from a terminal or after `sudo -v`",
+                process_list(requests)
+            ),
         );
+        return Ok(false);
     }
 
     let mut resume = None;
@@ -196,15 +246,21 @@ async fn ensure_sudo_authentication(
     // The frontend has restored cooked terminal mode at this point. Keeping the
     // disclosure and sudo prompt in the same pause window ensures the TUI cannot
     // redraw over the explanation before the user has a chance to read it.
-    display_capability_requests(requests)?;
-    let status = Command::new("sudo").arg("-v").status().into_diagnostic();
+    let result = (|| {
+        display_capability_requests(requests)?;
+        if cached {
+            return Ok(true);
+        }
+        let status = Command::new("sudo").arg("-v").status().into_diagnostic()?;
+        if !status.success() {
+            bail!("sudo authentication failed for the Linux capability broker");
+        }
+        Ok(true)
+    })();
     if let Some(resume) = resume {
         let _ = resume.send(());
     }
-    if !status?.success() {
-        bail!("sudo authentication failed for the Linux capability broker");
-    }
-    Ok(())
+    result
 }
 
 #[cfg(target_os = "linux")]
@@ -388,7 +444,7 @@ impl CapabilityBrokerClient {
                     .insert(pid, sender);
                 Ok(Box::new(BrokerChild {
                     pid,
-                    exit: Mutex::new(Some(receiver)),
+                    exit: Some(receiver),
                     status: None,
                 }))
             }
@@ -413,7 +469,9 @@ impl Drop for CapabilityBrokerClient {
 
 struct BrokerChild {
     pid: u32,
-    exit: Mutex<Option<oneshot::Receiver<ProcessExit>>>,
+    /// Exit notification from the broker poll loop. Cleared once consumed so
+    /// the completed oneshot is never polled again.
+    exit: Option<oneshot::Receiver<ProcessExit>>,
     status: Option<ExitStatus>,
 }
 impl std::fmt::Debug for BrokerChild {
@@ -447,13 +505,19 @@ impl process_wrap::tokio::ChildWrapper for BrokerChild {
             if let Some(status) = self.status {
                 return Ok(status);
             }
-            let receiver = self.exit.lock().unwrap().take();
-            let exit = match receiver {
-                Some(receiver) => receiver
-                    .await
-                    .unwrap_or(ProcessExit::Signaled(libc::SIGKILL)),
-                None => return Ok(self.status.unwrap_or_else(|| ExitStatus::from_raw(0))),
+            let Some(receiver) = self.exit.as_mut() else {
+                return Err(std::io::Error::other(
+                    "capability child exit status already consumed",
+                ));
             };
+            // Poll the receiver in place. The supervisor drops and recreates
+            // this future whenever a control message wins its select loop, and
+            // a cancelled wait must not lose the exit notification. A dropped
+            // sender means the broker is gone and the child was killed with it.
+            let exit = receiver
+                .await
+                .unwrap_or(ProcessExit::Signaled(libc::SIGKILL));
+            self.exit = None;
             let status = exit_status(exit);
             self.status = Some(status);
             Ok(status)
@@ -463,20 +527,15 @@ impl process_wrap::tokio::ChildWrapper for BrokerChild {
         if let Some(status) = self.status {
             return Ok(Some(status));
         }
-        let exit = self
-            .exit
-            .lock()
-            .unwrap()
-            .as_mut()
-            .and_then(|rx| rx.try_recv().ok());
-        if let Some(exit) = exit {
-            let status = exit_status(exit);
-            self.status = Some(status);
-            *self.exit.lock().unwrap() = None;
-            Ok(Some(status))
-        } else {
-            Ok(None)
-        }
+        let exit = match self.exit.as_mut().map(|receiver| receiver.try_recv()) {
+            Some(Ok(exit)) => exit,
+            Some(Err(TryRecvError::Closed)) => ProcessExit::Signaled(libc::SIGKILL),
+            Some(Err(TryRecvError::Empty)) | None => return Ok(None),
+        };
+        self.exit = None;
+        let status = exit_status(exit);
+        self.status = Some(status);
+        Ok(Some(status))
     }
     fn start_kill(&mut self) -> std::io::Result<()> {
         self.signal(libc::SIGKILL)
@@ -512,6 +571,14 @@ fn run_broker(_args: Vec<OsString>) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 fn run_broker(args: Vec<OsString>) -> Result<()> {
+    // The broker outlives the terminal that started it: a detached manager
+    // keeps using it after a hangup, and Ctrl-C is handled by the manager,
+    // which stops its children through the socket. Only the socket connection
+    // ends the broker.
+    unsafe {
+        libc::signal(libc::SIGHUP, libc::SIG_IGN);
+        libc::signal(libc::SIGINT, libc::SIG_IGN);
+    }
     let (path, allowed_json) = match args.as_slice() {
         [socket_flag, path, allow_flag, allowed]
             if socket_flag == "--socket" && allow_flag == "--allow-json" =>
@@ -562,8 +629,27 @@ fn run_broker(args: Vec<OsString>) -> Result<()> {
         bail!("capability broker rejected client uid");
     }
     let mut known = HashSet::new();
+    let result = serve_manager(&mut stream, &allowed, uid, gid, &user, &mut known);
+    // Every exit path, including a failed write to the manager, tears down the
+    // children the broker launched and removes the socket.
+    kill_all(&known);
+    let _ = std::fs::remove_file(&path);
+    result
+}
+
+/// Serve one manager connection until it shuts down or disconnects. Children
+/// launched meanwhile are recorded in `known` for the caller to clean up.
+#[cfg(target_os = "linux")]
+fn serve_manager(
+    stream: &mut UnixStream,
+    allowed: &HashMap<String, HashSet<caps::Capability>>,
+    uid: libc::uid_t,
+    gid: libc::gid_t,
+    user: &CString,
+    known: &mut HashSet<u32>,
+) -> Result<()> {
     let mut exited = HashMap::new();
-    while let Ok(request) = read_message::<Request>(&mut stream) {
+    while let Ok(request) = read_message::<Request>(stream) {
         match request {
             Request::Launch(request) => {
                 let LaunchRequest {
@@ -585,11 +671,20 @@ fn run_broker(args: Vec<OsString>) -> Result<()> {
                         .get(&process)
                         .is_some_and(|granted| requested.is_subset(granted))
                 });
-                let launched = if authorized {
-                    launch_child(
+                // An unauthorized request is answered like any other launch
+                // failure. Ending the broker here would orphan the children it
+                // already launched.
+                let response = if !authorized {
+                    Response::Error {
+                        message: format!(
+                            "process '{process}' requested undeclared Linux capabilities"
+                        ),
+                    }
+                } else {
+                    match launch_child(
                         uid,
                         gid,
-                        &user,
+                        user,
                         &capabilities,
                         &program,
                         &args,
@@ -597,44 +692,35 @@ fn run_broker(args: Vec<OsString>) -> Result<()> {
                         &cwd,
                         &stdout,
                         &stderr,
-                    )
-                } else {
-                    bail!("process '{process}' requested undeclared Linux capabilities")
-                };
-                match launched {
-                    Ok(pid) => {
-                        known.insert(pid);
-                        write_message(&mut stream, &Response::Launched { pid })
-                            .into_diagnostic()?;
-                    }
-                    Err(error) => write_message(
-                        &mut stream,
-                        &Response::Error {
+                    ) {
+                        Ok(pid) => {
+                            known.insert(pid);
+                            Response::Launched { pid }
+                        }
+                        Err(error) => Response::Error {
                             message: format!("failed to launch '{process}': {error:?}"),
                         },
-                    )
-                    .into_diagnostic()?,
-                }
+                    }
+                };
+                write_message(stream, &response).into_diagnostic()?;
             }
             Request::Poll => {
-                reap(&mut known, &mut exited);
+                reap(known, &mut exited);
                 let processes = exited
                     .drain()
                     .map(|(pid, exit)| Exited { pid, exit })
                     .collect();
-                write_message(&mut stream, &Response::Exited { processes }).into_diagnostic()?;
+                write_message(stream, &Response::Exited { processes }).into_diagnostic()?;
             }
             Request::Shutdown => {
-                kill_all(&known);
-                let _ = write_message(&mut stream, &Response::Ok);
-                let _ = std::fs::remove_file(&path);
+                kill_all(known);
+                known.clear();
+                let _ = write_message(stream, &Response::Ok);
                 return Ok(());
             }
         }
-        reap(&mut known, &mut exited);
+        reap(known, &mut exited);
     }
-    kill_all(&known);
-    let _ = std::fs::remove_file(&path);
     Ok(())
 }
 
@@ -702,7 +788,8 @@ fn launch_child(
         let Err(error) = child_exec(
             uid, gid, user, &requested, program, args, env, cwd, stdout, stderr,
         );
-        eprintln!("capability child: {error:?}");
+        // Never panic in the forked child: stderr may be a closed terminal.
+        let _ = writeln!(std::io::stderr(), "capability child: {error:?}");
         unsafe { libc::_exit(126) };
     }
     u32::try_from(pid).into_diagnostic()
@@ -722,6 +809,14 @@ fn child_exec(
     stdout: &Path,
     stderr: &Path,
 ) -> Result<std::convert::Infallible> {
+    // The broker ignores terminal signals so it can survive a detached
+    // manager. Ignored dispositions survive exec, so restore them before the
+    // service inherits the broker's signal state.
+    for signal in [libc::SIGHUP, libc::SIGINT] {
+        if unsafe { libc::signal(signal, libc::SIG_DFL) } == libc::SIG_ERR {
+            return Err(std::io::Error::last_os_error()).into_diagnostic();
+        }
+    }
     if unsafe { libc::setsid() } < 0 {
         return Err(std::io::Error::last_os_error()).into_diagnostic();
     }
@@ -732,7 +827,9 @@ fn child_exec(
         caps::Capability::CAP_SETPCAP,
     ]);
     set_caps(&identity)?;
-    for cap in caps::all() {
+    // `caps::all()` is a static list; dropping a capability this kernel does
+    // not know fails with EINVAL. Probe the bounding set instead.
+    for cap in caps::runtime::thread_all_supported() {
         if !requested.contains(&cap) && cap != caps::Capability::CAP_SETPCAP {
             caps::drop(None, caps::CapSet::Bounding, cap).into_diagnostic()?;
         }
@@ -827,6 +924,9 @@ fn reap(known: &mut HashSet<u32>, exited: &mut HashMap<u32, ProcessExit>) {
 }
 #[cfg(target_os = "linux")]
 fn kill_all(known: &HashSet<u32>) {
+    if known.is_empty() {
+        return;
+    }
     for pid in known {
         let _ = unsafe { libc::kill(-(*pid as i32), libc::SIGTERM) };
     }
@@ -855,5 +955,50 @@ mod tests {
             caps::Capability::CAP_SYS_ADMIN
         );
         assert!(parse_capability("sys_ptrace").is_err());
+    }
+
+    fn broker_child() -> (oneshot::Sender<ProcessExit>, BrokerChild) {
+        let (sender, receiver) = oneshot::channel();
+        let child = BrokerChild {
+            pid: 1,
+            exit: Some(receiver),
+            status: None,
+        };
+        (sender, child)
+    }
+
+    /// The supervisor drops and recreates the wait future on every control
+    /// message; a cancelled wait must not turn a live child into a finished one.
+    #[tokio::test]
+    async fn wait_keeps_exit_channel_across_cancellation() {
+        use process_wrap::tokio::ChildWrapper;
+        use std::task::{Context, Poll, Waker};
+
+        let (sender, mut child) = broker_child();
+        {
+            let mut wait = child.wait();
+            let mut cx = Context::from_waker(Waker::noop());
+            assert!(matches!(wait.as_mut().poll(&mut cx), Poll::Pending));
+        }
+        assert!(child.try_wait().unwrap().is_none());
+
+        sender.send(ProcessExit::Exited(3)).unwrap();
+        let status = child.wait().await.unwrap();
+        assert_eq!(status.code(), Some(3));
+        assert_eq!(child.try_wait().unwrap(), Some(status));
+        assert_eq!(child.wait().await.unwrap(), status);
+    }
+
+    #[test]
+    fn try_wait_reports_lost_broker_as_killed() {
+        use process_wrap::tokio::ChildWrapper;
+
+        let (sender, mut child) = broker_child();
+        drop(sender);
+        let status = child
+            .try_wait()
+            .unwrap()
+            .expect("a closed channel ends the child");
+        assert_eq!(status.signal(), Some(libc::SIGKILL));
     }
 }

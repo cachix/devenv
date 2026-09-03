@@ -1443,7 +1443,15 @@ impl ProcessRunner {
             .then(|| config.watchdog.as_ref().map(|w| w.usec))
             .flatten();
 
-        if !config.listen.is_empty() && !config.linux.capabilities.is_empty() {
+        // Capabilities are a Linux feature. Elsewhere the process starts
+        // unprivileged, as it did before the broker existed.
+        let capabilities: &[String] = if cfg!(target_os = "linux") {
+            &config.linux.capabilities
+        } else {
+            &[]
+        };
+
+        if !config.listen.is_empty() && !capabilities.is_empty() {
             bail!(
                 "process '{}' cannot combine socket activation with Linux capabilities yet",
                 config.name
@@ -1516,7 +1524,7 @@ impl ProcessRunner {
             spawned_scope: None,
         };
 
-        if config.linux.capabilities.is_empty() {
+        if capabilities.is_empty() {
             job.set_spawn_hook(move |command_wrap, _ctx| {
                 let cmd = command_wrap.command_mut();
                 cmd.envs(&spawn_env);
@@ -1548,12 +1556,12 @@ impl ProcessRunner {
         } else {
             let broker = capability_broker.ok_or_else(|| {
                 miette::miette!(
-                    "process '{}' requires Linux capabilities but no privileged broker is available",
+                    "process '{}' requires Linux capabilities but no privileged broker is available; start the process manager from a terminal, or after `sudo -v`, to authenticate",
                     config.name
                 )
             })?;
             let process_name = config.name.clone();
-            let capabilities = config.linux.capabilities.clone();
+            let capabilities = capabilities.to_vec();
             let program = config.bash.clone();
             let mut args = vec!["-c".to_string(), config.exec.clone()];
             args.extend(config.args.clone());

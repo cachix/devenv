@@ -90,15 +90,24 @@ fn capability_requests(
                 return None;
             }
             Some(processes::capabilities::CapabilityRequest {
-                process: task
-                    .name
-                    .strip_prefix("devenv:processes:")
-                    .unwrap_or(&task.name)
-                    .to_string(),
+                // The broker keys its allow list on this name and the manager
+                // launches by the same helper's output; they must not drift.
+                process: tasks::process_name(&task.name).to_string(),
                 capabilities: process.linux.capabilities.clone(),
             })
         })
         .collect()
+}
+
+/// Whether this invocation starts a process that needs Linux capabilities.
+/// Disabled processes are declared to the broker for later starts but do not
+/// make authentication mandatory when sudo cannot prompt.
+fn capabilities_required_now(task_configs: &[tasks::TaskConfig]) -> bool {
+    task_configs.iter().any(|task| {
+        task.process
+            .as_ref()
+            .is_some_and(|process| process.start.enable && !process.linux.capabilities.is_empty())
+    })
 }
 
 /// Detect whether we are running inside an AI coding agent.
@@ -2716,6 +2725,7 @@ impl Devenv {
             // the caller still has a terminal. The manager may start disabled
             // processes later, after it has detached.
             let capability_requests = capability_requests(&task_configs);
+            let capabilities_required_now = capabilities_required_now(&task_configs);
 
             let mut config = self
                 .make_task_config(roots, task_configs, task_mode, envs)
@@ -2729,6 +2739,7 @@ impl Devenv {
                         config,
                         &launch_names,
                         &capability_requests,
+                        capabilities_required_now,
                         options.frontend_command_tx.as_ref(),
                     )
                     .await;
@@ -2773,8 +2784,10 @@ impl Devenv {
 
             config.capability_broker = processes::start_capability_broker(
                 &capability_requests,
+                capabilities_required_now,
                 self.process_runtime_dir()?,
                 options.frontend_command_tx.as_ref(),
+                std::process::Stdio::inherit(),
             )
             .await?;
 
@@ -2943,6 +2956,7 @@ impl Devenv {
         mut config: tasks::Config,
         launch_names: &[String],
         capability_requests: &[processes::CapabilityRequest],
+        capabilities_required_now: bool,
         frontend_command_tx: Option<&tokio::sync::mpsc::Sender<FrontendCommand>>,
     ) -> Result<ProcessStartOutcome> {
         let pid_file = self.native_manager_pid_file();
@@ -3011,15 +3025,26 @@ impl Devenv {
             return Ok(ProcessStartOutcome::Completed);
         }
 
+        let runtime_dir = self.process_runtime_dir()?;
+        let log_file_path = runtime_dir.join("daemon.log");
+
+        // The broker outlives this invocation, so its diagnostics go to the
+        // daemon log rather than to a terminal that may already be gone.
+        let broker_log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file_path)
+            .map_err(|e| miette!("Failed to create daemon log: {}", e))?;
         config.capability_broker = processes::start_capability_broker(
             capability_requests,
-            self.process_runtime_dir()?,
+            capabilities_required_now,
+            runtime_dir,
             frontend_command_tx,
+            std::process::Stdio::from(broker_log),
         )
         .await?;
 
         // Serialize the task config for the daemon
-        let runtime_dir = self.process_runtime_dir()?;
         let config_file = runtime_dir.join("daemon-config.json");
         let config_json = serde_json::to_string(&config)
             .map_err(|e| miette!("Failed to serialize task config: {}", e))?;
@@ -3031,7 +3056,6 @@ impl Devenv {
         let devenv_exe = std::env::current_exe()
             .map_err(|e| miette!("Failed to get current executable: {}", e))?;
 
-        let log_file_path = runtime_dir.join("daemon.log");
         let log_file = std::fs::File::create(&log_file_path)
             .map_err(|e| miette!("Failed to create daemon log: {}", e))?;
 
@@ -4207,6 +4231,33 @@ mod tests {
         assert_eq!(requests[0].capabilities, ["ipc_lock"]);
         assert_eq!(requests[1].process, "unrelated");
         assert_eq!(requests[1].capabilities, ["net_admin"]);
+    }
+
+    #[test]
+    fn capabilities_required_now_ignores_disabled_processes() {
+        let mut disabled = process_task("disabled", false);
+        disabled
+            .process
+            .as_mut()
+            .unwrap()
+            .linux
+            .capabilities
+            .push("net_bind_service".to_string());
+        let plain = process_task("plain", true);
+        assert!(!capabilities_required_now(&[
+            disabled.clone(),
+            plain.clone()
+        ]));
+
+        let mut enabled = process_task("enabled", true);
+        enabled
+            .process
+            .as_mut()
+            .unwrap()
+            .linux
+            .capabilities
+            .push("net_bind_service".to_string());
+        assert!(capabilities_required_now(&[disabled, plain, enabled]));
     }
 
     #[test]
