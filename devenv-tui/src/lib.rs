@@ -12,6 +12,7 @@ pub mod app;
 pub mod components;
 pub mod config;
 pub mod expanded_view;
+mod inline_terminal;
 pub mod model;
 pub mod view;
 

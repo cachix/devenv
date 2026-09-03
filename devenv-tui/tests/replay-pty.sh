@@ -44,12 +44,17 @@ command="exec \"$tui_replay\" --hold --attached --reactive --event-log \"$event_
 # Wait for the stopped fixture row before navigating: under load, selecting a
 # process while that row is still being inserted can clear or move the selection.
 "$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
+expect:Running processes
 expect:api
 expect:├
 expect:worker
-expect:processed deterministic job 1
 expect:disabled
+expect:processed deterministic job 1
 expect:stopped
+resize:72x18
+expect:^D
+resize:140x45
+expect:hide stopped
 send:/worker
 expect:Search processes: /worker
 send:\r
@@ -136,5 +141,98 @@ EOF
 [[ $(grep -Fc '"kind":"command","command":"stop_manager","process":"*"' "$event_log") -eq 1 ]]
 [[ $(grep -Fc '"status":"restarting"' "$event_log") -eq 2 ]]
 [[ $(grep -Fc '"status":"ready"' "$event_log") -eq 2 ]]
+
+transcript="$work_dir/configured-transcript"
+event_log="$work_dir/configured-events.jsonl"
+export TUI_REPLAY_EVENT_LOG=$event_log
+export TUI_REPLAY_TRANSCRIPT=$transcript
+user_config="$repo_root/devenv-tui/replays/user-config.yaml"
+command="exec \"$tui_replay\" --hold --attached --reactive --user-config \"$user_config\" --event-log \"$event_log\" \"$fixture\""
+
+"$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
+expect:Running processes
+expect:api
+expect:worker
+expect:disabled
+expect:processed deterministic job 1
+expect:stopped
+expect:CONFIGURED
+resize:64x18
+resize:132x42
+send:?api
+expect:/api 1 match
+send:\r
+expect:^R
+send:\x05
+expect:following
+send:/t
+expect:/t 1/3
+send:\r
+expect:n next
+send:n
+expect:2/3
+send:y
+expect:bGlzdGVuaW5nIG9uIGh0dHA6Ly8xMjcuMC4wLjE6ODA4MA==
+expect:Copied 1 line
+send:q
+expect:Running processes
+expect:→
+send:\x03
+expect:Detach
+send:c
+expect:^R
+send:\x03
+expect:Detach
+send:s
+EOF
+
+[[ $(grep -Fc '"kind":"command","command":"stop_manager","process":"*"' "$event_log") -eq 1 ]]
+[[ $(grep -Foc $'\033[?1000h' "$transcript") -ge 1 ]]
+[[ $(grep -Foc $'\033[?1006h' "$transcript") -ge 1 ]]
+
+transcript="$work_dir/mouse-disabled-transcript"
+event_log="$work_dir/mouse-disabled-events.jsonl"
+export TUI_REPLAY_EVENT_LOG=$event_log
+export TUI_REPLAY_TRANSCRIPT=$transcript
+user_config="$repo_root/devenv-tui/replays/mouse-disabled-user-config.yaml"
+command="exec \"$tui_replay\" --hold --attached --reactive --user-config \"$user_config\" --event-log \"$event_log\" \"$fixture\""
+
+"$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
+expect:Running processes
+expect:stopped
+send:/api
+expect:Search processes: /api
+send:\r
+expect:^E
+send:\x05
+expect:FOLLOWING
+send:q
+expect:Running processes
+send:\x03
+expect:Detach
+send:s
+EOF
+
+[[ $(grep -Foc $'\033[?1000h' "$transcript") -eq 0 ]]
+[[ $(grep -Foc $'\033[?1006h' "$transcript") -eq 0 ]]
+[[ $(grep -Fc '"kind":"command","command":"stop_manager","process":"*"' "$event_log") -eq 1 ]]
+
+transcript="$work_dir/piped-stdout-transcript"
+event_log="$work_dir/piped-stdout-events.jsonl"
+stdout_capture="$work_dir/stdout"
+export TUI_REPLAY_EVENT_LOG=$event_log
+export TUI_REPLAY_TRANSCRIPT=$transcript
+command="exec \"$tui_replay\" --hold --attached --reactive --event-log \"$event_log\" \"$fixture\" >\"$stdout_capture\""
+
+"$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
+expect:processed deterministic job 1
+send:\x03
+expect:Detach
+send:s
+EOF
+
+[[ ! -s $stdout_capture ]]
+[[ $(grep -Foc $'\033[6n' "$transcript") -ge 1 ]]
+[[ $(grep -Foc $'\033[6;1H' "$transcript") -ge 1 ]]
 
 echo "TUI replay PTY regression passed"
