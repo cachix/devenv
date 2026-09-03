@@ -223,13 +223,8 @@ in
           default = cfg.lsp.enable;
           defaultText = lib.literalExpression "config.languages.assembly.lsp.enable";
           description = ''
-            Whether to materialize a `.asm-lsp.toml` file at the workspace
-            root (`$DEVENV_ROOT`) on `devenv shell`/`enterShell`, derived
-            automatically from `languages.assembly.type` and `targetArch`.
-
-            The file is only rewritten when its content actually changes,
-            so it is safe to commit and won't dirty `git status` on every
-            shell entry.
+            Auto-generates `.asm-lsp.toml`, always located at the root of your project.
+            It's only rewritten if the content changes.
 
             Reference: https://github.com/bergercookie/asm-lsp#optional-configure-via-asm-lsptoml
           '';
@@ -241,11 +236,7 @@ in
           defaultText = lib.literalExpression "derived from `languages.assembly.type`";
           description = ''
             Override the asm-lsp `assembler` flavor. Leave `null` to derive
-            it automatically:
-              nasm → "nasm"
-              fasm → "fasm"
-              yasm → "nasm"  (closest match; yasm has no dedicated flavor)
-              arm / riscv → "gas" (the cross toolchain drives GNU as)
+            it automatically.
           '';
         };
 
@@ -255,11 +246,7 @@ in
           defaultText = lib.literalExpression "derived from `languages.assembly.targetArch`";
           description = ''
             Override the asm-lsp `instruction_set`. Leave `null` to derive
-            it automatically from `targetArch`:
-              x86_64  → "x86-64"
-              aarch64 → "arm64"
-              armv7l  → "arm"
-              riscv32 / riscv64 → "riscv"
+            it automatically from `targetArch`.
           '';
         };
 
@@ -268,14 +255,8 @@ in
           default = null;
           defaultText = lib.literalExpression ''type == "arm" || type == "riscv"'';
           description = ''
-            Whether asm-lsp should shell out to a C compiler for inline
-            diagnostics (`opts.diagnostics` / `opts.default_diagnostics`).
-            Left `null`, this is enabled only for `arm`/`riscv`: their
-            cross toolchains emit GAS syntax, which is what asm-lsp's
-            diagnostic compiler expects. For `nasm`/`fasm`/`yasm` (Intel
-            syntax) it defaults to disabled, since gcc/clang's integrated
-            assembler cannot parse that syntax and would otherwise report
-            spurious errors.
+            Enables diagnostics via C compiler. Enabled by default in
+            arm/riscv (GAS), disabled in nasm/fasm/yasm (Intel).
           '';
         };
 
