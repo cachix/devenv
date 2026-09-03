@@ -482,31 +482,57 @@ rec {
 
       build =
         options: config:
-        lib.concatMapAttrs (
-          name: option:
-          if lib.isOption option then
-            let
-              typeName = option.type.name or "";
-            in
-            if
-              builtins.elem typeName [
-                "output"
-                "outputOf"
-              ]
-            then
-              {
-                ${name} = config.${name};
-              }
+        lib.concatMapAttrs
+          (
+            name: option:
+            # Skip invisible options (e.g. renamed aliases from
+            # `mkRenamedOptionModule`, which forward reads to their target and
+            # trigger deprecation warnings).
+            if lib.isOption option && (option.visible or true) == false then
+              { }
+            else if lib.isOption option then
+              let
+                typeName = option.type.name or "";
+                elemType = option.type.nestedTypes.elemType or null;
+                elemTypeName = elemType.name or "";
+              in
+              if
+                builtins.elem typeName [
+                  "output"
+                  "outputOf"
+                ]
+              then
+                {
+                  ${name} = config.${name};
+                }
+              # Recurse into `attrsOf submodule` options (e.g. `machines`) so
+              # that output-typed sub-options inside each submodule entry become
+              # build targets under `build.<name>.<entry>.<sub>`. Without this,
+              # a `mkOption { type = attrsOf submodule; }` is opaque to the
+              # walker and none of its nested outputs are ever collected.
+              else if typeName == "attrsOf" && elemTypeName == "submodule" then
+                let
+                  subOptions = elemType.getSubOptions [ ];
+                  entries = config.${name} or { };
+                  perEntry = lib.mapAttrs
+                    (
+                      _entryName: entryConfig: build subOptions entryConfig
+                    )
+                    entries;
+                  filtered = lib.filterAttrs (_: v: v != { }) perEntry;
+                in
+                if filtered != { } then { ${name} = filtered; } else { }
+              else
+                { }
+            else if builtins.isAttrs option && !lib.isDerivation option then
+              let
+                v = build option config.${name};
+              in
+              if v != { } then { ${name} = v; } else { }
             else
               { }
-          else if builtins.isAttrs option && !lib.isDerivation option then
-            let
-              v = build option config.${name};
-            in
-            if v != { } then { ${name} = v; } else { }
-          else
-            { }
-        ) options;
+          )
+          options;
 
       # Helper to evaluate devenv for a specific system (for cross-compilation, e.g. macOS building Linux containers)
       evalForSystem =
