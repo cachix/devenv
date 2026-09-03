@@ -2054,10 +2054,10 @@ impl Devenv {
 
         let config = self.make_task_config(roots, tasks, run_mode, envs).await?;
 
-        if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
-            use valuable::Valuable;
-            debug!(event = config_value.as_value(), "Loaded task config");
-        }
+        debug!(
+            event = devenv_activity::SerdeValuable(&config).as_tracing_value(),
+            "Loaded task config"
+        );
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
             .with_refresh_task_cache(self.options.cache_settings.refresh_task_cache)
@@ -3589,7 +3589,8 @@ fn format_process_list(processes: &[processes::ProcessInfo]) -> String {
             process.name, process.phase, process.restart_count
         ));
         if !process.ports.is_empty() {
-            output.push_str(&format!(" ports: {}", process.ports.join(", ")));
+            let ports: Vec<String> = process.ports.iter().map(ToString::to_string).collect();
+            output.push_str(&format!(" ports: {}", ports.join(", ")));
         }
         output.push('\n');
     }
@@ -4172,7 +4173,16 @@ mod tests {
             name: "web".to_string(),
             phase: processes::ProcessPhase::Ready,
             restart_count: 1,
-            ports: vec!["http:8080".to_string(), "metrics:9090".to_string()],
+            ports: vec![
+                devenv_activity::PortBinding {
+                    name: "http".to_string(),
+                    port: 8080,
+                },
+                devenv_activity::PortBinding {
+                    name: "metrics".to_string(),
+                    port: 9090,
+                },
+            ],
         }]);
 
         assert!(output.contains("restarts: 1 ports: http:8080, metrics:9090\n"));

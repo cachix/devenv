@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::ops::Deref;
+use std::panic::Location;
 use std::sync::Arc;
 
 use tracing::Span;
@@ -88,6 +89,17 @@ fn make_log_event(
     Some(event)
 }
 
+/// Mirror an activity update into tracing under its span, then send it over
+/// the activity channel.
+///
+/// The tracing mirror only runs when an exporter enabled the
+/// `devenv_activity::events` target, and it borrows the event rather than
+/// serializing it. The channel always receives the typed event by value.
+fn emit(span: &Span, event: ActivityEvent, caller: &'static Location<'static>) {
+    crate::__trace_activity_event!(parent: span, &event, caller);
+    send_activity_event(event);
+}
+
 /// Create a complete event for the given activity type.
 fn make_complete_event(
     id: u64,
@@ -144,6 +156,9 @@ pub struct Activity {
     level: ActivityLevel,
     outcome: Arc<std::sync::Mutex<ActivityOutcome>>,
     complete_on_drop: bool,
+    /// Where the activity was started. The completion event emitted on drop
+    /// is attributed to this location.
+    caller: &'static Location<'static>,
 }
 
 impl Activity {
@@ -153,6 +168,7 @@ impl Activity {
         id: u64,
         activity_type: ActivityType,
         level: ActivityLevel,
+        caller: &'static Location<'static>,
     ) -> Self {
         Self {
             span,
@@ -161,6 +177,7 @@ impl Activity {
             level,
             outcome: Arc::new(std::sync::Mutex::new(ActivityOutcome::Success)),
             complete_on_drop: true,
+            caller,
         }
     }
 
@@ -359,8 +376,7 @@ impl Activity {
             }),
             _ => return,
         };
-        crate::__trace_activity_event!(parent: &self.span, &event, caller);
-        send_activity_event(event);
+        emit(&self.span, event, caller);
     }
 
     /// Update progress with bytes (for Fetch activities)
@@ -374,8 +390,7 @@ impl Activity {
                 total: Some(total),
                 timestamp: Timestamp::now(),
             });
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
         }
     }
 
@@ -390,8 +405,7 @@ impl Activity {
                 total: None,
                 timestamp: Timestamp::now(),
             });
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
         }
     }
 
@@ -406,8 +420,7 @@ impl Activity {
                 phase: phase_str,
                 timestamp: Timestamp::now(),
             });
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
         }
     }
 
@@ -420,8 +433,7 @@ impl Activity {
             self.span.in_scope(|| tracing::info!("{}", line_str));
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, false) {
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
         }
     }
 
@@ -434,8 +446,7 @@ impl Activity {
             self.span.in_scope(|| tracing::warn!("{}", line_str));
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
         }
     }
 
@@ -450,8 +461,35 @@ impl Activity {
                 status,
                 timestamp: Timestamp::now(),
             });
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
+        }
+    }
+
+    /// Record that the process exited (for Process activities only)
+    #[track_caller]
+    pub fn exited(&self, success: bool) {
+        let caller = std::panic::Location::caller();
+        if matches!(self.activity_type, ActivityType::Process) {
+            let event = ActivityEvent::Process(Process::Exited {
+                id: self.id,
+                success,
+                timestamp: Timestamp::now(),
+            });
+            emit(&self.span, event, caller);
+        }
+    }
+
+    /// Record that the supervisor restarted the process (for Process activities only)
+    #[track_caller]
+    pub fn restarted(&self, attempt: u64) {
+        let caller = std::panic::Location::caller();
+        if matches!(self.activity_type, ActivityType::Process) {
+            let event = ActivityEvent::Process(Process::Restarted {
+                id: self.id,
+                attempt,
+                timestamp: Timestamp::now(),
+            });
+            emit(&self.span, event, caller);
         }
     }
 
@@ -503,8 +541,7 @@ impl ActivityRef {
             self.span.in_scope(|| tracing::info!("{}", line_str));
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, false) {
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
         }
     }
 
@@ -517,8 +554,7 @@ impl ActivityRef {
             self.span.in_scope(|| tracing::warn!("{}", line_str));
         }
         if let Some(event) = make_log_event(self.id, self.activity_type, line_str, true) {
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
         }
     }
 
@@ -533,8 +569,35 @@ impl ActivityRef {
                 status,
                 timestamp: Timestamp::now(),
             });
-            crate::__trace_activity_event!(parent: &self.span, &event, caller);
-            send_activity_event(event);
+            emit(&self.span, event, caller);
+        }
+    }
+
+    /// Record that the process exited (for Process activities only)
+    #[track_caller]
+    pub fn exited(&self, success: bool) {
+        let caller = std::panic::Location::caller();
+        if matches!(self.activity_type, ActivityType::Process) {
+            let event = ActivityEvent::Process(Process::Exited {
+                id: self.id,
+                success,
+                timestamp: Timestamp::now(),
+            });
+            emit(&self.span, event, caller);
+        }
+    }
+
+    /// Record that the supervisor restarted the process (for Process activities only)
+    #[track_caller]
+    pub fn restarted(&self, attempt: u64) {
+        let caller = std::panic::Location::caller();
+        if matches!(self.activity_type, ActivityType::Process) {
+            let event = ActivityEvent::Process(Process::Restarted {
+                id: self.id,
+                attempt,
+                timestamp: Timestamp::now(),
+            });
+            emit(&self.span, event, caller);
         }
     }
 
@@ -590,7 +653,11 @@ impl Drop for Activity {
         // the owning activity, and into_ref() deliberately has no completion.
         self.span.record("devenv.activity.complete", true);
 
-        send_activity_event(make_complete_event(self.id, self.activity_type, outcome));
+        emit(
+            &self.span,
+            make_complete_event(self.id, self.activity_type, outcome),
+            self.caller,
+        );
     }
 }
 

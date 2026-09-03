@@ -1,8 +1,8 @@
 use crate::app::TuiConfig;
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
-    ExpectedCategory, Fetch, FetchKind, Message, Operation, Process, ProcessStatus, SetExpected,
-    Task,
+    ExpectedCategory, Fetch, FetchKind, Message, Operation, PortBinding, Process, ProcessStatus,
+    ReadyProbe, SetExpected, Task,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
@@ -103,9 +103,9 @@ pub struct MessageActivity {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProcessActivity {
     pub status: ProcessStatus,
-    pub ports: Vec<String>,
-    /// Human-readable description of the readiness probe (e.g., "exec: pg_isready")
-    pub ready_probe: Option<String>,
+    pub ports: Vec<PortBinding>,
+    /// The configured readiness probe, if any
+    pub ready_probe: Option<ReadyProbe>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -785,6 +785,13 @@ impl ActivityModel {
                         proc.status = status;
                     }
                 }
+            }
+            Process::Exited { id, success, .. } => {
+                let outcome = if success { "success" } else { "failure" };
+                self.handle_activity_log(id, format!("Process exited ({outcome})"), !success);
+            }
+            Process::Restarted { id, attempt, .. } => {
+                self.handle_activity_log(id, format!("Restarted (attempt {attempt})"), false);
             }
         }
     }

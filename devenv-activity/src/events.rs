@@ -3,12 +3,11 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use valuable::Valuable;
 
 use crate::Timestamp;
 
 /// All activity events - activity-first design
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "activity_kind", rename_all = "lowercase")]
 pub enum ActivityEvent {
     Build(Build),
@@ -27,7 +26,7 @@ pub enum ActivityEvent {
 /// Expected count announcement for aggregate activity tracking.
 /// Nix emits these events to announce how many items/bytes are expected
 /// before individual activities start (e.g., "expect 10 downloads").
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetExpected {
     /// The category of activity this expectation applies to
     pub category: ExpectedCategory,
@@ -37,7 +36,7 @@ pub struct SetExpected {
 }
 
 /// Categories for expected count tracking
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Valuable)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum ExpectedCategory {
     /// Build activities (derivations to build)
@@ -47,7 +46,7 @@ pub enum ExpectedCategory {
 }
 
 /// Build activity events - has Phase, Progress, Log
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Build {
     /// Build is queued, waiting for a build slot
@@ -102,7 +101,7 @@ pub enum Build {
 }
 
 /// Fetch activity events - has FetchKind, byte Progress
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Fetch {
     Start {
@@ -133,7 +132,7 @@ pub enum Fetch {
 }
 
 /// Type of fetch operation
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Valuable)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum FetchKind {
     /// Downloading store paths from substituter
@@ -163,7 +162,7 @@ impl FetchKind {
 /// cache invalidation and dependency tracking.
 ///
 /// Note: Duplicated in `devenv_core::eval_op::EvalOp`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EvalOp {
     /// Copied a file to the Nix store.
@@ -235,7 +234,7 @@ impl fmt::Display for EvalOp {
 }
 
 /// Evaluate activity events.
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Evaluate {
     Start {
@@ -270,7 +269,7 @@ pub enum Evaluate {
 }
 
 /// Information about a task in the hierarchy
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskInfo {
     pub id: u64,
     pub name: String,
@@ -281,7 +280,7 @@ pub struct TaskInfo {
 }
 
 /// Task activity events - has Progress, Log
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Task {
     /// Emit task hierarchy once upfront before execution
@@ -323,7 +322,7 @@ pub enum Task {
 }
 
 /// Command activity events - has Log only
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Command {
     Start {
@@ -352,8 +351,56 @@ pub enum Command {
     },
 }
 
+/// A named port a process listens on.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct PortBinding {
+    /// The port's name in the process configuration (e.g. `http`).
+    pub name: String,
+    pub port: u16,
+}
+
+impl fmt::Display for PortBinding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.name, self.port)
+    }
+}
+
+/// How a managed process signals that it is ready.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum ReadyProbe {
+    /// A command that exits 0 once the process is ready.
+    Exec,
+    /// An HTTP GET that succeeds once the process is ready.
+    ///
+    /// Boxed so that `Process::Start` stays within the activity event size bound.
+    Http(Box<HttpProbe>),
+    /// The process reports readiness over the systemd notify protocol.
+    Notify,
+}
+
+/// Target of an HTTP readiness probe.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct HttpProbe {
+    pub host: String,
+    pub port: u16,
+    pub path: String,
+}
+
+impl fmt::Display for ReadyProbe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReadyProbe::Exec => f.write_str("exec"),
+            ReadyProbe::Http(http) => {
+                write!(f, "http: {}:{}{}", http.host, http.port, http.path)
+            }
+            ReadyProbe::Notify => f.write_str("notify"),
+        }
+    }
+}
+
 /// Process activity events - for long-running managed processes
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Process {
     Start {
@@ -365,12 +412,12 @@ pub enum Process {
         /// The command being executed
         #[serde(skip_serializing_if = "Option::is_none")]
         command: Option<String>,
-        /// Ports this process listens on (e.g., ["http:8080", "admin:9000"])
+        /// Ports this process listens on
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        ports: Vec<String>,
-        /// Human-readable description of the readiness probe (e.g., "exec: pg_isready", "http: localhost:8080/health")
+        ports: Vec<PortBinding>,
+        /// How the process signals readiness, if a probe is configured
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        ready_probe: Option<String>,
+        ready_probe: Option<ReadyProbe>,
         #[serde(default)]
         level: ActivityLevel,
         timestamp: Timestamp,
@@ -395,10 +442,27 @@ pub enum Process {
         status: ProcessStatus,
         timestamp: Timestamp,
     },
+    /// The process exited. The supervisor decides afterwards whether to
+    /// restart it, which shows up as a `Restarted` event or a terminal status.
+    Exited {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        /// Whether the process exited with status 0.
+        success: bool,
+        timestamp: Timestamp,
+    },
+    /// The supervisor restarted the process.
+    Restarted {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        /// Restart count since the process was first started.
+        attempt: u64,
+        timestamp: Timestamp,
+    },
 }
 
 /// Status of a managed process
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProcessStatus {
     /// Process has `start.enable = false`; not started yet but can be started later.
@@ -473,7 +537,7 @@ impl ProcessStatus {
 }
 
 /// Operation activity events - generic devenv operations with log support
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Operation {
     Start {
@@ -514,7 +578,7 @@ pub enum Operation {
 }
 
 /// Message - standalone (not an activity)
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: u64,
     pub level: ActivityLevel,
@@ -527,7 +591,7 @@ pub struct Message {
 }
 
 /// Shell activity events - interactive shell with hot-reload capability
-#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Shell {
     /// Shell session started
@@ -585,7 +649,7 @@ pub enum Shell {
 }
 
 /// Outcome of an activity
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq, Valuable)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ActivityOutcome {
     #[default]
@@ -646,7 +710,6 @@ impl ActivityOutcome {
     strum::Display,
     serde_with::DeserializeFromStr,
     serde_with::SerializeDisplay,
-    Valuable,
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum ActivityLevel {
@@ -927,6 +990,59 @@ mod tests {
                 assert_eq!(outcome, ActivityOutcome::Failed);
             }
             _ => panic!("Expected Operation::Complete event"),
+        }
+    }
+
+    #[test]
+    fn process_start_keeps_typed_ports_and_probe() {
+        let event = ActivityEvent::Process(Process::Start {
+            id: 7,
+            name: "web".to_string(),
+            parent: None,
+            command: Some("serve".to_string()),
+            ports: vec![PortBinding {
+                name: "http".to_string(),
+                port: 8080,
+            }],
+            ready_probe: Some(ReadyProbe::Http(Box::new(HttpProbe {
+                host: "localhost".to_string(),
+                port: 8080,
+                path: "/health".to_string(),
+            }))),
+            level: ActivityLevel::Info,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
+        });
+
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(
+            json["ports"],
+            serde_json::json!([{ "name": "http", "port": 8080 }])
+        );
+        assert_eq!(
+            json["ready_probe"],
+            serde_json::json!({ "kind": "http", "host": "localhost", "port": 8080, "path": "/health" })
+        );
+
+        let parsed: ActivityEvent = serde_json::from_value(json).unwrap();
+        match parsed {
+            ActivityEvent::Process(Process::Start {
+                ports, ready_probe, ..
+            }) => {
+                assert_eq!(ports[0].to_string(), "http:8080");
+                assert_eq!(
+                    ready_probe.unwrap().to_string(),
+                    "http: localhost:8080/health"
+                );
+            }
+            _ => panic!("Expected Process::Start event"),
+        }
+
+        for (probe, text) in [
+            (ReadyProbe::Exec, r#"{"kind":"exec"}"#),
+            (ReadyProbe::Notify, r#"{"kind":"notify"}"#),
+        ] {
+            assert_eq!(serde_json::to_string(&probe).unwrap(), text);
+            assert_eq!(serde_json::from_str::<ReadyProbe>(text).unwrap(), probe);
         }
     }
 

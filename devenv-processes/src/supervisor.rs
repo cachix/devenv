@@ -432,7 +432,7 @@ impl SupervisorRuntime {
                 }
                 self.state.on_restart_complete(Instant::now());
                 let count = self.state.restart_count();
-                self.activity.log(format!("Restarted (attempt {count})"));
+                self.activity.restarted(count as u64);
                 self.probes.respawn();
             }
             Action::GiveUp { reason } => {
@@ -478,7 +478,7 @@ impl SupervisorRuntime {
                             self.name(),
                             count
                         );
-                        self.activity.log(format!("Restarted (attempt {count})"));
+                        self.activity.restarted(count as u64);
                         self.probes.respawn_tcp();
                     }
                     Action::GiveUp { reason } => {
@@ -547,7 +547,7 @@ impl SupervisorRuntime {
                 self.state.on_restart_complete(Instant::now());
                 let count = self.state.restart_count();
                 info!("Restarted process {} (attempt {})", self.name(), count);
-                self.activity.log(format!("Restarted (attempt {count})"));
+                self.activity.restarted(count as u64);
                 self.probes.respawn();
             }
             Action::GiveUp { reason } => {
@@ -601,6 +601,8 @@ impl SupervisorRuntime {
                 return Continuation::Exit;
             }
         };
+        self.activity
+            .exited(matches!(exit_status, ExitStatus::Success));
 
         self.scopes.cleanup(&self.config.shutdown).await;
 
@@ -617,13 +619,11 @@ impl SupervisorRuntime {
             Instant::now(),
         ) {
             Action::Restart => {
-                self.activity
-                    .log(format!("Process exited ({exit_status:?}), restarting"));
                 self.job.start().await;
                 self.state.on_restart_complete(Instant::now());
                 let count = self.state.restart_count();
                 info!("Restarted process {} (attempt {})", self.name(), count);
-                self.activity.log(format!("Restarted (attempt {count})"));
+                self.activity.restarted(count as u64);
                 self.probes.respawn();
             }
             Action::GiveUp { reason } => {

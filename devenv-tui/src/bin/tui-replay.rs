@@ -511,7 +511,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    const PROCESS: &str = r#"{"target":"devenv_activity::events","timestamp":"2025-01-14T10:00:00Z","fields":{"event":{"activity_kind":"process","event":"start","id":7,"name":"web","parent":null,"command":"serve","ports":["http:8080"],"ready_probe":"http: localhost:8080","level":"info","timestamp":"2025-01-14T10:00:00Z"}}}"#;
+    const PROCESS: &str = r#"{"target":"devenv_activity::events","timestamp":"2025-01-14T10:00:00Z","fields":{"event":{"activity_kind":"process","event":"start","id":7,"name":"web","parent":null,"command":"serve","ports":[{"name":"http","port":8080}],"ready_probe":{"kind":"http","host":"localhost","port":8080,"path":"/"},"level":"info","timestamp":"2025-01-14T10:00:00Z"}}}"#;
 
     #[test]
     fn rejects_non_json_trace() {

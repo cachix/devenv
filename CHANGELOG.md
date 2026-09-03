@@ -26,6 +26,8 @@
 - Added `processes.<name>.shutdown.signal` and `.grace` for the native manager and process-compose. The same settings apply to restarts, and PostgreSQL now uses SIGINT for fast shutdown.
 - Added process-manager capability checks. Detached mode is supported by process-compose, Honcho, Hivemind, and Overmind; unsupported operations now fail before launch, and mprocs remains foreground-only.
 - Process-manager metadata is compatible with older CLIs and Nix modules; no public Nix options changed.
+- Enabling `--trace-to` no longer serializes every activity event up front. Trace sinks now walk the typed event only when they write it, so tracing no longer allocates a JSON tree per Nix build log line on the Nix logger thread. Benchmarks of JSON activity export show 2.6× the throughput, 89% fewer allocation calls, and 78% fewer allocated bytes. With trace output disabled, lazy config logging eliminates serialization entirely—3,967 allocations and 287 KB for a representative 128-task config.
+- Process activities in `--trace-to json` output now carry structured `ports` and `ready_probe` fields, and process exits and supervisor restarts are exported as `exited` and `restarted` events instead of free-form log lines. The TUI and console show a `Process exited (success)` or `Process exited (failure)` line for every exit.
 
 ### Bug Fixes
 

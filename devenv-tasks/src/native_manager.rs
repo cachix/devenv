@@ -971,7 +971,12 @@ mod tests {
         assert_eq!(by_name["gave-up"].phase, ProcessPhase::GaveUp);
         assert_eq!(by_name["gave-up"].restart_count, 1);
         assert_eq!(by_name["idle"].phase, ProcessPhase::NotStarted);
-        assert_eq!(by_name["idle"].ports, ["http:48123"]);
+        let idle_ports: Vec<String> = by_name["idle"]
+            .ports
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(idle_ports, ["http:48123"]);
         assert_eq!(by_name["starting"].phase, ProcessPhase::Starting);
         assert_eq!(by_name["stopped"].phase, ProcessPhase::Stopped);
         assert_eq!(by_name["waiting"].phase, ProcessPhase::Waiting);

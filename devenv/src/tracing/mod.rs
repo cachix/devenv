@@ -371,7 +371,8 @@ mod tests {
         });
 
         assert_eq!(capture.spans.load(Ordering::Relaxed), 1);
-        assert_eq!(capture.events.load(Ordering::Relaxed), 1);
+        // Start, progress, and complete.
+        assert_eq!(capture.events.load(Ordering::Relaxed), 3);
     }
 
     #[test]

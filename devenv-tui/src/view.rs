@@ -994,24 +994,16 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 ProcessStatus::GaveUp => "gave up (crash loop)".into(),
             };
 
-            // Format ports: extract just the port numbers for brevity
-            let ports_suffix = if !process_data.ports.is_empty() {
+            // Format ports: show just the port numbers for brevity
+            let ports_suffix = if process_data.ports.is_empty() {
+                String::new()
+            } else {
                 let port_list: Vec<String> = process_data
                     .ports
                     .iter()
-                    .filter_map(|spec| {
-                        // spec is like "http:8080" or just "8080"
-                        // Extract the port number (last part after colon)
-                        spec.rsplit(':').next().map(|p| format!(":{}", p))
-                    })
+                    .map(|binding| format!(":{}", binding.port))
                     .collect();
-                if port_list.is_empty() {
-                    String::new()
-                } else {
-                    format!(" {}", port_list.join(", "))
-                }
-            } else {
-                String::new()
+                format!(" {}", port_list.join(", "))
             };
 
             let status_text = Some(format!("{}{}", status_str, ports_suffix));

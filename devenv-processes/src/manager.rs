@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use devenv_activity::{Activity, ProcessStatus};
+use devenv_activity::{Activity, HttpProbe, PortBinding, ProcessStatus, ReadyProbe};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
@@ -88,9 +88,9 @@ pub struct ProcessInfo {
     pub name: String,
     pub phase: ProcessPhase,
     pub restart_count: usize,
-    /// Configured ports, formatted as "name:port" (e.g. ["http:8080"]).
+    /// Configured ports.
     #[serde(default)]
-    pub ports: Vec<String>,
+    pub ports: Vec<PortBinding>,
 }
 
 /// Response sent by the native manager API socket.
@@ -543,15 +543,18 @@ impl NativeManagerClient {
 /// Display ports for a process: socket-activation `listen` specs plus declared
 /// `ports` not shadowed by a same-named listen spec; "name:port", deduped by
 /// name, sorted.
-pub fn display_ports(config: &ProcessConfig) -> Vec<String> {
-    let mut ports: Vec<String> = config
+/// The named ports a process listens on: declared TCP listen sockets first,
+/// then allocated ports that no listen socket already covers.
+pub fn port_bindings(config: &ProcessConfig) -> Vec<PortBinding> {
+    let mut ports: Vec<PortBinding> = config
         .listen
         .iter()
         .filter_map(|spec| {
-            spec.address.as_ref().and_then(|addr| {
-                addr.rsplit(':')
-                    .next()
-                    .map(|port| format!("{}:{}", spec.name, port))
+            let address = spec.address.as_ref()?;
+            let port = address.rsplit(':').next()?.parse().ok()?;
+            Some(PortBinding {
+                name: spec.name.clone(),
+                port,
             })
         })
         .collect();
@@ -559,26 +562,33 @@ pub fn display_ports(config: &ProcessConfig) -> Vec<String> {
         config.listen.iter().map(|s| s.name.as_str()).collect();
     for (name, port) in &config.ports {
         if !listen_names.contains(name.as_str()) {
-            ports.push(format!("{}:{}", name, port));
+            ports.push(PortBinding {
+                name: name.clone(),
+                port: *port,
+            });
         }
     }
     ports.sort();
     ports
 }
 
-/// Build a human-readable description of the readiness probe for TUI display.
-fn probe_description(config: &ProcessConfig) -> Option<String> {
+/// The configured readiness probe, if any.
+fn ready_probe(config: &ProcessConfig) -> Option<ReadyProbe> {
     let ready = config.ready.as_ref()?;
     if ready.exec.is_some() {
-        return Some("exec".to_string());
+        return Some(ReadyProbe::Exec);
     }
     if let Some(http) = &ready.http
         && let Some(get) = &http.get
     {
-        return Some(format!("http: {}:{}{}", get.host, get.port, get.path));
+        return Some(ReadyProbe::Http(Box::new(HttpProbe {
+            host: get.host.clone(),
+            port: get.port,
+            path: get.path.clone(),
+        })));
     }
     if ready.notify {
-        return Some("notify".to_string());
+        return Some(ReadyProbe::Notify);
     }
     None
 }
@@ -1026,19 +1036,17 @@ impl ProcessRunner {
             name: name.to_string(),
             phase,
             restart_count,
-            ports: display_ports(entry.config()),
+            ports: port_bindings(entry.config()),
         }
     }
 
     /// Create a TUI activity for a process without launching it.
     fn create_process_activity(&self, config: &ProcessConfig, parent_id: Option<u64>) -> Activity {
-        let ports = display_ports(config);
-
         let mut builder = Activity::process(&config.name)
             .command(&config.exec)
-            .ports(ports);
-        if let Some(probe_desc) = probe_description(config) {
-            builder = builder.ready_probe(probe_desc);
+            .ports(port_bindings(config));
+        if let Some(probe) = ready_probe(config) {
+            builder = builder.ready_probe(probe);
         }
         if let Some(pid) = parent_id {
             builder = builder.parent(Some(pid));
@@ -3148,7 +3156,11 @@ mod tests {
             ..test_config("ports-proc")
         };
 
-        assert_eq!(display_ports(&config), vec!["db:5432", "web:8080"]);
+        let ports: Vec<String> = port_bindings(&config)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(ports, ["db:5432", "web:8080"]);
     }
 
     #[test]

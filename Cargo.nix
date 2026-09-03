@@ -7970,6 +7970,10 @@ rec {
             packageId = "tokio";
             features = [ "process" "fs" "io-util" "macros" "rt-multi-thread" "sync" "time" "macros" "rt-multi-thread" ];
           }
+          {
+            name = "valuable-serde";
+            packageId = "valuable-serde";
+          }
         ];
         features = {
         };
