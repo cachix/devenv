@@ -79,6 +79,28 @@ fn same_process_command(
     )
 }
 
+fn capability_requests(
+    task_configs: &[tasks::TaskConfig],
+) -> Vec<processes::capabilities::CapabilityRequest> {
+    task_configs
+        .iter()
+        .filter_map(|task| {
+            let process = task.process.as_ref()?;
+            if process.linux.capabilities.is_empty() {
+                return None;
+            }
+            Some(processes::capabilities::CapabilityRequest {
+                process: task
+                    .name
+                    .strip_prefix("devenv:processes:")
+                    .unwrap_or(&task.name)
+                    .to_string(),
+                capabilities: process.linux.capabilities.clone(),
+            })
+        })
+        .collect()
+}
+
 /// Detect whether we are running inside an AI coding agent.
 ///
 /// LLM tools typically allocate a PTY so `is_terminal()` returns true, but their
@@ -877,6 +899,7 @@ impl Devenv {
             ignore_process_deps: false,
             exit_on_idle: Some(false),
             supervisor: devenv_processes::SupervisionMode::Native,
+            capability_broker: None,
         })
     }
 
@@ -2113,6 +2136,7 @@ impl Devenv {
             ignore_process_deps: false,
             exit_on_idle: Some(false),
             supervisor: devenv_processes::SupervisionMode::Native,
+            capability_broker: None,
         };
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
@@ -2688,14 +2712,26 @@ impl Devenv {
                 roots
             );
 
-            let config = self
+            // Authenticate for every declared capability-bearing process while
+            // the caller still has a terminal. The manager may start disabled
+            // processes later, after it has detached.
+            let capability_requests = capability_requests(&task_configs);
+
+            let mut config = self
                 .make_task_config(roots, task_configs, task_mode, envs)
                 .await?;
 
             if options.daemon {
                 // Spawn a separate daemon process via re-exec to avoid
                 // fork-safety issues in this multithreaded process.
-                return self.spawn_daemon_processes(config, &launch_names).await;
+                return self
+                    .spawn_daemon_processes(
+                        config,
+                        &launch_names,
+                        &capability_requests,
+                        options.frontend_command_tx.as_ref(),
+                    )
+                    .await;
             }
 
             // If a manager is already running (e.g. started by `devenv up -d`),
@@ -2734,6 +2770,13 @@ impl Devenv {
                 .await?;
                 return Ok(ProcessStartOutcome::Completed);
             }
+
+            config.capability_broker = processes::start_capability_broker(
+                &capability_requests,
+                self.process_runtime_dir()?,
+                options.frontend_command_tx.as_ref(),
+            )
+            .await?;
 
             let tasks_runner = Arc::new(
                 tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
@@ -2897,8 +2940,10 @@ impl Devenv {
     /// own process group. This does not create a new Unix session.
     async fn spawn_daemon_processes(
         &self,
-        config: tasks::Config,
+        mut config: tasks::Config,
         launch_names: &[String],
+        capability_requests: &[processes::CapabilityRequest],
+        frontend_command_tx: Option<&tokio::sync::mpsc::Sender<FrontendCommand>>,
     ) -> Result<ProcessStartOutcome> {
         let pid_file = self.native_manager_pid_file();
 
@@ -2965,6 +3010,13 @@ impl Devenv {
             info!(names = ?launch_names, "attached to running process manager");
             return Ok(ProcessStartOutcome::Completed);
         }
+
+        config.capability_broker = processes::start_capability_broker(
+            capability_requests,
+            self.process_runtime_dir()?,
+            frontend_command_tx,
+        )
+        .await?;
 
         // Serialize the task config for the daemon
         let runtime_dir = self.process_runtime_dir()?;
@@ -4124,6 +4176,37 @@ mod tests {
             }),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn capability_requests_include_disabled_processes_for_later_starts() {
+        let mut database = process_task("database", true);
+        database
+            .process
+            .as_mut()
+            .unwrap()
+            .linux
+            .capabilities
+            .push("ipc_lock".to_string());
+        let mut api = process_task("api", true);
+        api.after
+            .push("devenv:processes:database@ready".to_string());
+        let mut unrelated = process_task("unrelated", false);
+        unrelated
+            .process
+            .as_mut()
+            .unwrap()
+            .linux
+            .capabilities
+            .push("net_admin".to_string());
+
+        let requests = capability_requests(&[database, api, unrelated]);
+
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].process, "database");
+        assert_eq!(requests[0].capabilities, ["ipc_lock"]);
+        assert_eq!(requests[1].process, "unrelated");
+        assert_eq!(requests[1].capabilities, ["net_admin"]);
     }
 
     #[test]

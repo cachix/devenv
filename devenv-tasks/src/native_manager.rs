@@ -593,6 +593,7 @@ mod tests {
             ignore_process_deps: false,
             exit_on_idle: Some(false),
             supervisor: SupervisionMode::Native,
+            capability_broker: None,
         };
         let shutdown = tokio_shutdown::Shutdown::new();
         let tasks = Arc::new(

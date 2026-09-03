@@ -5953,7 +5953,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.52.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Console" ];
           }
@@ -8575,6 +8575,11 @@ rec {
           {
             name = "libc";
             packageId = "libc";
+            target = { target, features }: ("linux" == target."os" or null);
+          }
+          {
+            name = "libc";
+            packageId = "libc";
             target = { target, features }: ("macos" == target."os" or null);
           }
           {
@@ -10006,7 +10011,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.52.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Diagnostics_Debug" ];
           }
@@ -14480,7 +14485,7 @@ rec {
           }
           {
             name = "socket2";
-            packageId = "socket2 0.6.4";
+            packageId = "socket2 0.5.10";
             optional = true;
             features = [ "all" ];
           }
@@ -18598,54 +18603,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "fs" "term" ];
       };
-      "nix 0.30.1" = rec {
-        crateName = "nix";
-        version = "0.30.1";
-        edition = "2021";
-        sha256 = "1dixahq9hk191g0c2ydc0h1ppxj0xw536y6rl63vlnp06lx3ylkl";
-        authors = [
-          "The nix-rust Project Developers"
-        ];
-        dependencies = [
-          {
-            name = "bitflags";
-            packageId = "bitflags 2.13.0";
-          }
-          {
-            name = "cfg-if";
-            packageId = "cfg-if";
-          }
-          {
-            name = "libc";
-            packageId = "libc";
-            features = [ "extra_traits" ];
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "cfg_aliases";
-            packageId = "cfg_aliases 0.2.1";
-          }
-        ];
-        features = {
-          "aio" = [ "pin-utils" ];
-          "dir" = [ "fs" ];
-          "event" = [ "poll" ];
-          "memoffset" = [ "dep:memoffset" ];
-          "mount" = [ "uio" ];
-          "mqueue" = [ "fs" ];
-          "net" = [ "socket" ];
-          "pin-utils" = [ "dep:pin-utils" ];
-          "ptrace" = [ "process" ];
-          "sched" = [ "process" ];
-          "signal" = [ "process" ];
-          "socket" = [ "memoffset" ];
-          "ucontext" = [ "signal" ];
-          "user" = [ "feature" ];
-          "zerocopy" = [ "fs" "uio" ];
-        };
-        resolvedDefaultFeatures = [ "default" "process" "signal" ];
-      };
       "nix 0.31.3" = rec {
         crateName = "nix";
         version = "0.31.3";
@@ -22025,7 +21982,7 @@ rec {
           }
           {
             name = "socket2";
-            packageId = "socket2 0.6.4";
+            packageId = "socket2 0.5.10";
             target = { target, features }: (!((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null)));
           }
           {
@@ -22208,7 +22165,7 @@ rec {
           }
           {
             name = "socket2";
-            packageId = "socket2 0.6.4";
+            packageId = "socket2 0.5.10";
             target = { target, features }: (!((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null)));
           }
           {
@@ -22220,7 +22177,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.60.2";
+            packageId = "windows-sys 0.52.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_IO" "Win32_Networking_WinSock" ];
           }
@@ -24192,7 +24149,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.52.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Networking_WinSock" ];
           }
@@ -24505,7 +24462,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.52.0";
             usesDefaultFeatures = false;
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Security_Cryptography" ];
@@ -28876,7 +28833,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.52.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Storage_FileSystem" "Win32_Foundation" ];
           }
@@ -32029,9 +31986,14 @@ rec {
       };
       "watchexec" = rec {
         crateName = "watchexec";
-        version = "8.2.0";
+        version = "8.4.0";
         edition = "2021";
-        sha256 = "183r7ba2b6sgfx3ha85knp516nx5h0d44gvvzh9nn5vmgajc9qrx";
+        workspace_member = null;
+        src = pkgs.fetchgit {
+          url = "https://github.com/domenkozar/watchexec";
+          rev = "98b71e12a03f52e41e246cdf6186483247c58c4c";
+          sha256 = "1aka4xi0137qqcgqh5gkkam7mmyia279651svjxacmmgkml38b0y";
+        };
         authors = [
           "Félix Saparelli <felix@passcod.name>"
           "Matt Green <mattgreenrocks@gmail.com>"
@@ -32099,13 +32061,25 @@ rec {
             features = [ "Win32_System_Console" "Win32_Foundation" ];
           }
         ];
+        devDependencies = [
+          {
+            name = "tokio";
+            packageId = "tokio";
+            features = [ "macros" "time" ];
+          }
+        ];
 
       };
       "watchexec-events" = rec {
         crateName = "watchexec-events";
-        version = "6.1.0";
+        version = "6.1.2";
         edition = "2021";
-        sha256 = "0i5cf67slvzg9gzxxqha1c1gsvxz5kdk9lp700hx4l0hz93c11xd";
+        workspace_member = null;
+        src = pkgs.fetchgit {
+          url = "https://github.com/domenkozar/watchexec";
+          rev = "98b71e12a03f52e41e246cdf6186483247c58c4c";
+          sha256 = "1aka4xi0137qqcgqh5gkkam7mmyia279651svjxacmmgkml38b0y";
+        };
         libName = "watchexec_events";
         authors = [
           "Félix Saparelli <felix@passcod.name>"
@@ -32212,9 +32186,14 @@ rec {
       };
       "watchexec-signals" = rec {
         crateName = "watchexec-signals";
-        version = "5.0.1";
+        version = "5.1.1";
         edition = "2021";
-        sha256 = "07qh8y9yb8sc0hzyc9n5pjdlh6zbmsk76k6ka1sl68x32xv57m1z";
+        workspace_member = null;
+        src = pkgs.fetchgit {
+          url = "https://github.com/domenkozar/watchexec";
+          rev = "98b71e12a03f52e41e246cdf6186483247c58c4c";
+          sha256 = "1aka4xi0137qqcgqh5gkkam7mmyia279651svjxacmmgkml38b0y";
+        };
         libName = "watchexec_signals";
         authors = [
           "Félix Saparelli <felix@passcod.name>"
@@ -32227,7 +32206,7 @@ rec {
           }
           {
             name = "nix";
-            packageId = "nix 0.30.1";
+            packageId = "nix 0.31.3";
             target = { target, features }: (target."unix" or false);
             features = [ "signal" ];
           }
@@ -32247,9 +32226,14 @@ rec {
       };
       "watchexec-supervisor" = rec {
         crateName = "watchexec-supervisor";
-        version = "5.2.0";
+        version = "5.3.1";
         edition = "2021";
-        sha256 = "0lqcxvlz1ib0f40z4s7l8lrm637idf95wbvw24p8myzw5nnal457";
+        workspace_member = null;
+        src = pkgs.fetchgit {
+          url = "https://github.com/domenkozar/watchexec";
+          rev = "98b71e12a03f52e41e246cdf6186483247c58c4c";
+          sha256 = "1aka4xi0137qqcgqh5gkkam7mmyia279651svjxacmmgkml38b0y";
+        };
         libName = "watchexec_supervisor";
         authors = [
           "Félix Saparelli <felix@passcod.name>"
@@ -32998,7 +32982,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.61.2";
+            packageId = "windows-sys 0.52.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Storage_FileSystem" "Win32_System_Console" "Win32_System_SystemInformation" ];
           }
@@ -34242,7 +34226,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_NetworkManagement" "Win32_NetworkManagement_IpHelper" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_NetworkManagement" "Win32_NetworkManagement_IpHelper" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Security_Cryptography" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_Diagnostics" "Win32_System_Diagnostics_Debug" "Win32_System_IO" "Win32_System_SystemInformation" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
       };
       "windows-sys 0.60.2" = rec {
         crateName = "windows-sys";
@@ -34507,7 +34491,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
       };
       "windows-sys 0.61.2" = rec {
         crateName = "windows-sys";
@@ -34769,7 +34753,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Wdk" "Wdk_Foundation" "Wdk_Storage" "Wdk_Storage_FileSystem" "Wdk_System" "Wdk_System_IO" "Win32" "Win32_Devices" "Win32_Devices_Communication" "Win32_Foundation" "Win32_Globalization" "Win32_NetworkManagement" "Win32_NetworkManagement_IpHelper" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Security_Authentication" "Win32_Security_Authentication_Identity" "Win32_Security_Authorization" "Win32_Security_Credentials" "Win32_Security_Cryptography" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Com" "Win32_System_Console" "Win32_System_Diagnostics" "Win32_System_Diagnostics_Debug" "Win32_System_Diagnostics_ToolHelp" "Win32_System_IO" "Win32_System_JobObjects" "Win32_System_LibraryLoader" "Win32_System_Memory" "Win32_System_Pipes" "Win32_System_Registry" "Win32_System_SystemInformation" "Win32_System_SystemServices" "Win32_System_Threading" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Input" "Win32_UI_Input_KeyboardAndMouse" "Win32_UI_Shell" "default" ];
+        resolvedDefaultFeatures = [ "Wdk" "Wdk_Foundation" "Wdk_Storage" "Wdk_Storage_FileSystem" "Wdk_System" "Wdk_System_IO" "Win32" "Win32_Devices" "Win32_Devices_Communication" "Win32_Foundation" "Win32_Globalization" "Win32_NetworkManagement" "Win32_NetworkManagement_IpHelper" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Security_Authentication" "Win32_Security_Authentication_Identity" "Win32_Security_Authorization" "Win32_Security_Credentials" "Win32_Security_Cryptography" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Com" "Win32_System_Console" "Win32_System_Diagnostics" "Win32_System_Diagnostics_ToolHelp" "Win32_System_IO" "Win32_System_JobObjects" "Win32_System_LibraryLoader" "Win32_System_Memory" "Win32_System_Pipes" "Win32_System_Registry" "Win32_System_SystemInformation" "Win32_System_SystemServices" "Win32_System_Threading" "Win32_System_WindowsProgramming" "Win32_UI" "Win32_UI_Input" "Win32_UI_Input_KeyboardAndMouse" "Win32_UI_Shell" "default" ];
       };
       "windows-targets 0.52.6" = rec {
         crateName = "windows-targets";

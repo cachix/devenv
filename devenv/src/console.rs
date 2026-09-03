@@ -141,6 +141,10 @@ impl ConsoleOutput {
                 command = self.frontend_rx.recv() => match command {
                     Some(FrontendCommand::ExitRenderer) => exit_requested = true,
                     Some(FrontendCommand::SetAttached(_)) => {}
+                    Some(FrontendCommand::PauseForInteraction { ready, resume }) => {
+                        let _ = ready.send(());
+                        let _ = tokio::task::spawn_blocking(move || resume.recv()).await;
+                    }
                     // Shell commands follow ExitRenderer and remain queued for
                     // the session that takes terminal ownership next.
                     Some(FrontendCommand::Shell(_)) => {

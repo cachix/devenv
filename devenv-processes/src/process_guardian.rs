@@ -206,6 +206,36 @@ impl Clone for ProcessScopeRegistrationWrapper {
     }
 }
 
+impl ProcessScopeRegistrationWrapper {
+    /// Register a session leader spawned by the privileged capability broker.
+    pub(crate) fn register_external_session_child(
+        &self,
+        child: Box<dyn ChildWrapper>,
+    ) -> std::io::Result<Box<dyn ChildWrapper>> {
+        let pid = child
+            .id()
+            .ok_or_else(|| std::io::Error::other("broker child has no PID"))?;
+        let pid = i32::try_from(pid)
+            .map_err(|_| std::io::Error::other("broker child PID exceeds i32::MAX"))?;
+        let scope = ProcessScope::unix_session(pid)?;
+        if GUARDIANS_ENABLED.load(Ordering::Relaxed) {
+            let (guardian, ready) =
+                ProcessGuardian::spawn(&self.state_dir, &self.process_name, &scope, &self.shutdown)
+                    .map_err(|error| {
+                        std::io::Error::other(format!("failed to start scope guardian: {error:?}"))
+                    })?;
+            if !guardian_became_ready(ready, GUARDIAN_READY_TIMEOUT) {
+                guardian.abort();
+                let _ = scope.signal(libc::SIGKILL);
+                return Err(std::io::Error::other("scope guardian did not become ready"));
+            }
+            self.registry.attach(guardian);
+        }
+        self.registry.record(scope.clone());
+        Ok(crate::force_exit_registry::track_child(child, scope))
+    }
+}
+
 #[cfg(unix)]
 impl CommandWrapper for ProcessScopeRegistrationWrapper {
     fn pre_spawn(

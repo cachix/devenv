@@ -68,6 +68,24 @@ impl Default for ExitFlag {
     }
 }
 
+/// Cooperative flag used to release and reacquire the terminal temporarily.
+#[derive(Clone)]
+pub struct PauseFlag(Arc<AtomicBool>);
+
+impl PauseFlag {
+    fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+
+    fn set(&self, value: bool) {
+        self.0.store(value, Ordering::Release);
+    }
+
+    pub fn is_set(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
+
 impl ExitFlag {
     pub fn new() -> Self {
         Self(Arc::new(AtomicBool::new(false)))
@@ -207,6 +225,8 @@ impl TuiApp {
         let process_command_tx = self.event_tx;
 
         let exit_flag = ExitFlag::new();
+        let pause_flag = PauseFlag::new();
+        let pause_request = Arc::new(std::sync::Mutex::new(None));
 
         // Spawn event processor with batching for performance
         // This only writes to ActivityModel, never touches UiState
@@ -216,6 +236,8 @@ impl TuiApp {
             let model_version = model_version.clone();
             let render_shutdown = render_shutdown.clone();
             let exit_flag = exit_flag.clone();
+            let pause_flag = pause_flag.clone();
+            let pause_request = Arc::clone(&pause_request);
             let config = config.clone();
             let mut activity_rx = self.activity_rx;
             let mut frontend_rx = self.frontend_rx;
@@ -235,6 +257,14 @@ impl TuiApp {
                             Some(FrontendCommand::ExitRenderer) => exit_requested = true,
                             Some(FrontendCommand::SetAttached(attached)) => {
                                 config.attached.store(attached, Ordering::Relaxed);
+                            }
+                            Some(FrontendCommand::PauseForInteraction { ready, resume }) => {
+                                *pause_request.lock().unwrap_or_else(|e| e.into_inner()) =
+                                    Some((ready, resume));
+                                pause_flag.set(true);
+                                model_version.fetch_add(1, Ordering::Release);
+                                notify.notify_waiters();
+                                render_shutdown.notify_waiters();
                             }
                             // Shell commands arrive after ExitRenderer and are
                             // therefore left queued for ShellSession. Seeing
@@ -317,6 +347,7 @@ impl TuiApp {
                 config.clone(),
                 process_command_tx.clone(),
                 exit_flag.clone(),
+                pause_flag.clone(),
             )
             .await;
 
@@ -326,6 +357,25 @@ impl TuiApp {
             // - The terminal errored (e.g. the tty was revoked)
             if exit_flag.is_set() {
                 break;
+            }
+
+            if pause_flag.is_set() {
+                restore_terminal();
+                if let Some((ready, resume)) = pause_request
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .take()
+                {
+                    let _ = tokio::task::spawn_blocking(move || {
+                        let _ = ready.send(());
+                        let _ = resume.recv();
+                    })
+                    .await;
+                }
+                pause_flag.set(false);
+                model_version.fetch_add(1, Ordering::Release);
+                notify.notify_waiters();
+                continue;
             }
 
             if let Err(e) = view_result {
@@ -1108,7 +1158,8 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // This ensures the render loop completes its current frame before returning,
     // leaving the cursor at the correct position for the final render.
     let exit_flag = hooks.use_context::<ExitFlag>();
-    if exit_flag.is_set() {
+    let pause_flag = hooks.use_context::<PauseFlag>();
+    if exit_flag.is_set() || pause_flag.is_set() {
         system.exit();
     }
 
@@ -1177,6 +1228,7 @@ async fn run_view(
     config: Arc<TuiConfig>,
     event_tx: Option<ProcessCommandSender>,
     exit_flag: ExitFlag,
+    pause_flag: PauseFlag,
 ) -> std::io::Result<()> {
     // Copy view_mode in a block to ensure the guard is dropped before any await
     let view_mode = {
@@ -1209,7 +1261,9 @@ async fn run_view(
                                         ContextProvider(value: Context::owned(ui_state.clone())) {
                                             ContextProvider(value: Context::owned(event_tx.clone())) {
                                                 ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                                    MainView
+                                                    ContextProvider(value: Context::owned(pause_flag.clone())) {
+                                                        MainView
+                                                    }
                                                 }
                                             }
                                         }
@@ -1255,8 +1309,10 @@ async fn run_view(
                                         ContextProvider(value: Context::owned(ui_state.clone())) {
                                             ContextProvider(value: Context::owned(event_tx.clone())) {
                                                 ContextProvider(value: Context::owned(exit_flag.clone())) {
-                                                    ContextProvider(value: Context::owned(activity_id)) {
-                                                        ExpandedLogView
+                                                    ContextProvider(value: Context::owned(pause_flag.clone())) {
+                                                        ContextProvider(value: Context::owned(activity_id)) {
+                                                            ExpandedLogView
+                                                        }
                                                     }
                                                 }
                                             }

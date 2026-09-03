@@ -9,5 +9,9 @@
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-bindings-store@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-bindings-util@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=afb90e929fef2700b5cbbed7960334e2b91c1080#nix-cmd@0.1.0": "0s7k4lczb5lq3xm7im8pilcykrksc3iwzpc5gxdl8l96qiv0cm7j",
-  "git+https://github.com/cachix/secretspec?rev=2b63f45e0c17879c933b00f5a00600080415aa68#secretspec@0.20.0": "1w2q4dm246ajfw320wggfqr3p5191p1mrz5pnpi7r7akmf53ja8h"
+  "git+https://github.com/cachix/secretspec?rev=2b63f45e0c17879c933b00f5a00600080415aa68#secretspec@0.20.0": "1w2q4dm246ajfw320wggfqr3p5191p1mrz5pnpi7r7akmf53ja8h",
+  "git+https://github.com/domenkozar/watchexec?rev=98b71e12a03f52e41e246cdf6186483247c58c4c#watchexec-events@6.1.2": "1aka4xi0137qqcgqh5gkkam7mmyia279651svjxacmmgkml38b0y",
+  "git+https://github.com/domenkozar/watchexec?rev=98b71e12a03f52e41e246cdf6186483247c58c4c#watchexec-signals@5.1.1": "1aka4xi0137qqcgqh5gkkam7mmyia279651svjxacmmgkml38b0y",
+  "git+https://github.com/domenkozar/watchexec?rev=98b71e12a03f52e41e246cdf6186483247c58c4c#watchexec-supervisor@5.3.1": "1aka4xi0137qqcgqh5gkkam7mmyia279651svjxacmmgkml38b0y",
+  "git+https://github.com/domenkozar/watchexec?rev=98b71e12a03f52e41e246cdf6186483247c58c4c#watchexec@8.4.0": "1aka4xi0137qqcgqh5gkkam7mmyia279651svjxacmmgkml38b0y"
 }
