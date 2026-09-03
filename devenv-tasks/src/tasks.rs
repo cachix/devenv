@@ -4,7 +4,7 @@ use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
     DepSatisfaction, DependencyKind, OneshotStatus, Output, Outputs, PROCESS_TASK_PREFIX, Skipped,
-    TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel,
+    TaskCompleted, TaskFailure, TaskStatus, TaskType, TasksStatus, VerbosityLevel, process_name,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
 use devenv_processes::{
@@ -1673,6 +1673,153 @@ fn process_has_ready_config(task: &crate::TaskConfig) -> bool {
     task.process
         .as_ref()
         .is_some_and(|p| p.has_readiness_probe())
+}
+
+/// Resolve CLI task roots the same way [`Tasks::resolve_namespace_roots`] does:
+/// exact name first, then a namespace prefix.
+fn resolve_config_root_indices<'a>(
+    tasks: &'a [crate::TaskConfig],
+    roots: &[String],
+    name_to_index: &HashMap<&'a str, NodeIndex>,
+) -> Vec<NodeIndex> {
+    let mut resolved = Vec::new();
+    for name in roots {
+        let trimmed = name.trim();
+        if trimmed.is_empty()
+            || trimmed == ":"
+            || trimmed.starts_with(':')
+            || trimmed.contains("::")
+        {
+            continue;
+        }
+        if let Some(&index) = name_to_index.get(trimmed) {
+            resolved.push(index);
+            continue;
+        }
+        let search_prefix: Cow<str> = if trimmed.ends_with(':') {
+            Cow::Borrowed(trimmed)
+        } else {
+            Cow::Owned(format!("{trimmed}:"))
+        };
+        for task in tasks {
+            if task.name.starts_with(&*search_prefix)
+                && let Some(&index) = name_to_index.get(task.name.as_str())
+            {
+                resolved.push(index);
+            }
+        }
+    }
+    resolved
+}
+
+/// Short process names (`postgres`, not `devenv:processes:postgres`) that
+/// `run_mode` would schedule for `roots`.
+///
+/// Used by `devenv tasks run` to ask an already-running process manager to
+/// bring those processes up (or skip them if they are already healthy)
+/// instead of starting a second manager.
+pub fn scheduled_process_names(
+    tasks: &[crate::TaskConfig],
+    roots: &[String],
+    run_mode: RunMode,
+) -> Vec<String> {
+    if tasks.is_empty() || roots.is_empty() {
+        return Vec::new();
+    }
+
+    let mut graph: DiGraph<&str, ()> = DiGraph::new();
+    let mut name_to_index: HashMap<&str, NodeIndex> = HashMap::new();
+    let mut task_type: HashMap<&str, TaskType> = HashMap::new();
+
+    for task in tasks {
+        let index = graph.add_node(task.name.as_str());
+        name_to_index.insert(task.name.as_str(), index);
+        task_type.insert(task.name.as_str(), task.r#type);
+    }
+
+    for task in tasks {
+        let Some(&task_index) = name_to_index.get(task.name.as_str()) else {
+            continue;
+        };
+        for dep_name in &task.after {
+            if let Ok(dep_spec) = parse_dependency(dep_name)
+                && let Some(&dep_index) = name_to_index.get(dep_spec.name.as_str())
+            {
+                graph.add_edge(dep_index, task_index, ());
+            }
+        }
+        for before_name in &task.before {
+            if let Ok(dep_spec) = parse_dependency(before_name)
+                && let Some(&before_index) = name_to_index.get(dep_spec.name.as_str())
+            {
+                graph.add_edge(task_index, before_index, ());
+            }
+        }
+    }
+
+    let resolved_roots = resolve_config_root_indices(tasks, roots, &name_to_index);
+    if resolved_roots.is_empty() {
+        return Vec::new();
+    }
+
+    let mut visited: HashSet<NodeIndex> = HashSet::new();
+    let mut to_visit: Vec<NodeIndex> = resolved_roots.clone();
+
+    match run_mode {
+        RunMode::Single => {
+            visited = resolved_roots.into_iter().collect();
+        }
+        RunMode::After => {
+            while let Some(node) = to_visit.pop() {
+                if visited.insert(node) {
+                    to_visit.extend(graph.neighbors_directed(node, petgraph::Direction::Outgoing));
+                }
+            }
+        }
+        RunMode::Before => {
+            while let Some(node) = to_visit.pop() {
+                if visited.insert(node) {
+                    to_visit.extend(graph.neighbors_directed(node, petgraph::Direction::Incoming));
+                }
+            }
+        }
+        RunMode::All => {
+            while let Some(node) = to_visit.pop() {
+                if visited.insert(node) {
+                    to_visit.extend(graph.neighbors_directed(node, petgraph::Direction::Incoming));
+                }
+            }
+            for &root_index in &resolved_roots {
+                to_visit
+                    .extend(graph.neighbors_directed(root_index, petgraph::Direction::Outgoing));
+            }
+            while let Some(node) = to_visit.pop() {
+                if visited.insert(node) {
+                    to_visit.extend(graph.neighbors_directed(node, petgraph::Direction::Outgoing));
+                }
+            }
+            to_visit.extend(visited.iter().copied());
+            while let Some(node) = to_visit.pop() {
+                for neighbor in graph.neighbors_directed(node, petgraph::Direction::Incoming) {
+                    if visited.insert(neighbor) {
+                        to_visit.push(neighbor);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut names: Vec<String> = visited
+        .into_iter()
+        .filter_map(|index| {
+            let name = graph[index];
+            (task_type.get(name) == Some(&TaskType::Process))
+                .then(|| process_name(name).to_string())
+        })
+        .collect();
+    names.sort();
+    names.dedup();
+    names
 }
 
 /// Compute the hierarchy edges for displaying tasks from task configurations.
@@ -4366,6 +4513,73 @@ mod schedule_tests {
         assert!(names.contains(&"ns:task:setup".to_string()));
         assert!(!names.contains(&"ns:proc:b".to_string()));
         assert_eq!(names.len(), 2);
+    }
+
+    #[test]
+    fn scheduled_process_names_includes_after_process_deps() {
+        let names = scheduled_process_names(
+            &[
+                oneshot_task("test:repro", vec!["devenv:processes:postgres"]),
+                process_task("devenv:processes:postgres", vec![]),
+                process_task("devenv:processes:redis", vec![]),
+            ],
+            &["test:repro".to_string()],
+            RunMode::Before,
+        );
+        assert_eq!(names, vec!["postgres"]);
+    }
+
+    #[test]
+    fn scheduled_process_names_includes_transitive_process_deps() {
+        let names = scheduled_process_names(
+            &[
+                oneshot_task("test:repro", vec!["test:migrate"]),
+                oneshot_task("test:migrate", vec!["devenv:processes:postgres@ready"]),
+                process_task("devenv:processes:postgres", vec![]),
+            ],
+            &["test:repro".to_string()],
+            RunMode::Before,
+        );
+        assert_eq!(names, vec!["postgres"]);
+    }
+
+    #[test]
+    fn scheduled_process_names_single_mode_skips_deps() {
+        let names = scheduled_process_names(
+            &[
+                oneshot_task("test:repro", vec!["devenv:processes:postgres"]),
+                process_task("devenv:processes:postgres", vec![]),
+            ],
+            &["test:repro".to_string()],
+            RunMode::Single,
+        );
+        assert!(names.is_empty());
+    }
+
+    #[test]
+    fn scheduled_process_names_includes_process_roots() {
+        let names = scheduled_process_names(
+            &[process_task("devenv:processes:postgres", vec![])],
+            &["devenv:processes:postgres".to_string()],
+            RunMode::Before,
+        );
+        assert_eq!(names, vec!["postgres"]);
+    }
+
+    #[test]
+    fn scheduled_process_names_follows_before_edges() {
+        let mut setup = oneshot_task("app:setup", vec![]);
+        setup.before = vec!["devenv:processes:web".to_string()];
+        let names = scheduled_process_names(
+            &[
+                oneshot_task("test:repro", vec!["devenv:processes:web"]),
+                process_task("devenv:processes:web", vec![]),
+                setup,
+            ],
+            &["test:repro".to_string()],
+            RunMode::Before,
+        );
+        assert_eq!(names, vec!["web"]);
     }
 }
 
