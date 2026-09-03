@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::{self, IsTerminal, LineWriter, Write};
 use std::sync::{Arc, Mutex, MutexGuard};
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::filter::filter_fn;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry, util::SubscriberInitExt};
 
@@ -241,23 +241,15 @@ where
                 .pretty(),
         )],
         TraceFormat::Json => vec![
-            Box::new(
-                create_json_layer(writer.clone()).with_filter(filter_fn(|metadata| {
-                    metadata.target() != "devenv_activity::events"
-                })),
-            ),
-            // Both JSON layers live inside a `Vec<Layer>`. Give this adapter
-            // its own per-layer filter so tracing-subscriber's registry can
-            // see that activity events rejected by the generic JSON layer are
-            // still enabled for this layer.
-            Box::new(
-                ActivityJsonLayer::new(writer).with_filter(filter_fn(|metadata| {
-                    matches!(
-                        metadata.target(),
-                        "devenv_activity::spans" | "devenv_activity::events"
-                    )
-                })),
-            ),
+            // Filter at the writer boundary rather than with a per-layer
+            // filter. These layers are collected in a runtime `Vec<Layer>`,
+            // where per-layer filter state can hide activity spans from the
+            // adapter's context and prevent lifecycle records from being
+            // generated.
+            Box::new(create_json_layer(writer.clone().with_filter(|metadata| {
+                metadata.target() != "devenv_activity::events"
+            }))),
+            Box::new(ActivityJsonLayer::new(writer)),
         ],
     }
 }
