@@ -874,7 +874,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         && let Some(selected_id) = ui.selected_activity
                         && *scroll_view_active.read()
                     {
-                        let previews_fit = process_previews_fit(&model, &display, ui.terminal_size);
+                        let previews_fit = process_previews_fit(&model, &display, &ui);
                         let heights = activity_heights.read();
                         scroll_selected_into_view(
                             &mut scroll_handle.write(),
@@ -991,7 +991,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                     && *scroll_view_active.read()
                                 {
                                     let previews_fit =
-                                        process_previews_fit(&model, &display, ui.terminal_size);
+                                        process_previews_fit(&model, &display, &ui);
                                     let heights = activity_heights.read();
                                     scroll_selected_into_view(
                                         &mut scroll_handle.write(),
@@ -1011,7 +1011,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             {
                                 let display = model.get_display_activities(&ui);
                                 let previews_fit =
-                                    process_previews_fit(&model, &display, ui.terminal_size);
+                                    process_previews_fit(&model, &display, &ui);
                                 activate_selected_activity(&model, &mut ui, previews_fit);
                             }
                         }
@@ -1058,7 +1058,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                     && *scroll_view_active.read()
                                 {
                                     let previews_fit =
-                                        process_previews_fit(&model, &display, ui.terminal_size);
+                                        process_previews_fit(&model, &display, &ui);
                                     let heights = activity_heights.read();
                                     scroll_selected_into_view(
                                         &mut scroll_handle.write(),
@@ -1078,7 +1078,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             {
                                 let display = model.get_display_activities(&ui);
                                 let previews_fit =
-                                    process_previews_fit(&model, &display, ui.terminal_size);
+                                    process_previews_fit(&model, &display, &ui);
                                 if !hide_selected_preview(&model, &mut ui, previews_fit) {
                                     ui.selected_activity = None;
                                 }
@@ -1124,7 +1124,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let is_shutting_down = shutdown.is_cancelled();
     let rendered = if let Ok(model_guard) = activity_model.read() {
         let display = model_guard.get_display_activities(&ui);
-        let previews_fit = process_previews_fit(&model_guard, &display, ui.terminal_size);
+        let previews_fit = process_previews_fit(&model_guard, &display, &ui);
 
         // Prune stale entries and compute total content height in a single lock
         let total_content_height: i32 = {
