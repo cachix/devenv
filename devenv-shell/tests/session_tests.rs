@@ -5,7 +5,7 @@ use devenv_shell::vt_utils::{DEFAULT_MAX_SCROLLBACK, active_point, row_plain_tex
 use devenv_shell::{
     CommandBuilder, PtySize, SessionConfig, SessionIo, ShellCommand, ShellEvent, ShellSession,
 };
-use libghostty_vt::terminal::{Options as TerminalOptions, Terminal};
+use libghostty_vt::terminal::Terminal;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -343,12 +343,8 @@ fn status_line_session() -> ShellSession {
 
 /// Render captured stdout through a virtual terminal and return visible viewport row texts.
 fn render(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
-    let mut vt = Terminal::new(TerminalOptions {
-        cols: cols as u16,
-        rows: rows as u16,
-        max_scrollback: 0,
-    })
-    .unwrap();
+    let mut vt = Terminal::new(cols as u16, rows as u16).unwrap();
+    vt.set_scrollback_max_bytes(Some(0)).unwrap();
     vt.vt_write(stdout_bytes);
     (0..rows)
         .map(|y| {
@@ -362,12 +358,9 @@ fn render(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
 /// Render captured stdout and return ALL lines (scrollback + viewport).
 /// Tests that scrolled-off content was correctly pushed into native scrollback.
 fn render_all_lines(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
-    let mut vt = Terminal::new(TerminalOptions {
-        cols: cols as u16,
-        rows: rows as u16,
-        max_scrollback: DEFAULT_MAX_SCROLLBACK,
-    })
-    .unwrap();
+    let mut vt = Terminal::new(cols as u16, rows as u16).unwrap();
+    vt.set_scrollback_max_bytes(Some(DEFAULT_MAX_SCROLLBACK))
+        .unwrap();
     vt.vt_write(stdout_bytes);
     let total = vt.total_rows().unwrap_or(0);
     (0..total)
@@ -474,12 +467,9 @@ async fn test_wrapped_line_preserved_in_scrollback() {
 
     let collected = read_until(&mut stdout_ours, b"DONE", Duration::from_secs(5));
 
-    let mut vt = Terminal::new(TerminalOptions {
-        cols: 80,
-        rows: 24,
-        max_scrollback: DEFAULT_MAX_SCROLLBACK,
-    })
-    .unwrap();
+    let mut vt = Terminal::new(80, 24).unwrap();
+    vt.set_scrollback_max_bytes(Some(DEFAULT_MAX_SCROLLBACK))
+        .unwrap();
     vt.vt_write(&collected);
 
     let total = vt.total_rows().unwrap_or(0);

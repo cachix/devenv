@@ -8197,6 +8197,11 @@ rec {
             name = "tempfile";
             packageId = "tempfile";
           }
+          {
+            name = "tracing-subscriber";
+            packageId = "tracing-subscriber";
+            features = [ "env-filter" "json" "valuable" ];
+          }
         ];
         features = {
           "clap" = [ "dep:clap" ];
@@ -17504,8 +17509,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/Uzaaft/libghostty-rs.git";
-          rev = "46a9d2ac941ed600cf43c5e6299c8dfd1d3a1ef0";
-          sha256 = "174p8h1jidygf0ilszvk15xwwi3r7b34d1ain30yiiq4n2k8b5cl";
+          rev = "5988a0b78b4aa804d1c12e66bbfe662bd97d81c0";
+          sha256 = "1nx6ny3ch0rhg242k063rpzqahxq3kmdqrbrvf1f2s89v1vdjyml";
         };
         libName = "libghostty_vt";
         dependencies = [
@@ -17548,8 +17553,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/Uzaaft/libghostty-rs.git";
-          rev = "46a9d2ac941ed600cf43c5e6299c8dfd1d3a1ef0";
-          sha256 = "174p8h1jidygf0ilszvk15xwwi3r7b34d1ain30yiiq4n2k8b5cl";
+          rev = "5988a0b78b4aa804d1c12e66bbfe662bd97d81c0";
+          sha256 = "1nx6ny3ch0rhg242k063rpzqahxq3kmdqrbrvf1f2s89v1vdjyml";
         };
         libName = "libghostty_vt_sys";
         buildDependencies = [

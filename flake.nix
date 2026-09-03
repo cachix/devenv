@@ -62,7 +62,10 @@
     inputs.nixpkgs.follows = "nixpkgs";
   };
   inputs.ghostty = {
-    url = "github:ghostty-org/ghostty";
+    # Keep this in sync with the Ghostty revision pinned by libghostty-rs.
+    # libghostty-vt is pre-1.0 and its C ABI changes without compatibility
+    # guarantees.
+    url = "github:ghostty-org/ghostty/22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018";
     flake = false;
   };
 

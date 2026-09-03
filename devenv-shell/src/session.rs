@@ -32,9 +32,7 @@ use libghostty_vt::selection::Selection;
 use libghostty_vt::style::{PaletteIndex, RgbColor};
 #[cfg(test)]
 use libghostty_vt::style::{StyleColor, Underline};
-use libghostty_vt::terminal::{
-    Mode, Options as TerminalOptions, Point, PointCoordinate, PointSpace, Terminal,
-};
+use libghostty_vt::terminal::{Mode, Point, PointCoordinate, PointSpace, Terminal};
 use portable_pty::PtySize;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -1890,11 +1888,8 @@ impl ShellSession {
             // it is drained into the child PTY immediately after each feed.
             let virtual_pty_replies = RefCell::new(VirtualPtyReplies::default());
             // Create the VT on this thread (Terminal is !Send)
-            let mut vt = Terminal::new(TerminalOptions {
-                cols: pty_size.cols,
-                rows: pty_size.rows,
-                max_scrollback: DEFAULT_MAX_SCROLLBACK,
-            })?;
+            let mut vt = Terminal::new(pty_size.cols, pty_size.rows)?;
+            vt.set_scrollback_max_bytes(Some(DEFAULT_MAX_SCROLLBACK))?;
             vt.on_pty_write({
                 let virtual_pty_replies = &virtual_pty_replies;
                 move |_term, data| virtual_pty_replies.borrow_mut().capture(data)
@@ -2669,12 +2664,10 @@ mod tests {
         rows: u16,
         max_scrollback: usize,
     ) -> Terminal<'static, 'cb> {
-        Terminal::new(TerminalOptions {
-            cols,
-            rows,
-            max_scrollback,
-        })
-        .expect("terminal")
+        let mut vt = Terminal::new(cols, rows).expect("terminal");
+        vt.set_scrollback_max_bytes(Some(max_scrollback))
+            .expect("set scrollback limit");
+        vt
     }
 
     fn test_vt<'cb>(max_scrollback: usize) -> Terminal<'static, 'cb> {
