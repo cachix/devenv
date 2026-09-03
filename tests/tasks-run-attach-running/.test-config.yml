@@ -1,0 +1,3 @@
+# Run outside the shell: the point of the test is the `devenv tasks run` path
+# against a daemon started with `devenv up -d`.
+use_shell: false
