@@ -1,9 +1,11 @@
 use crate::{
-    config::Action,
+    config::{Action, KeyContext, KeyMatch, KeySequenceState},
+    config::{TuiPreferences, TuiRunContext},
     expanded_view::ExpandedLogView,
+    inline_terminal::InlineTerminal,
     model::{ActivityModel, RenderContext, UiState, ViewMode},
     view::{
-        ActivityHeights, SUMMARY_BAR_HEIGHT, ScrollState, activity_shows_inline_logs,
+        ActivityHeights, ScrollState, activity_shows_inline_logs, available_activity_height,
         process_previews_fit, view,
     },
 };
@@ -129,6 +131,8 @@ impl Default for TuiConfig {
 /// Builder for creating and running the TUI application.
 pub struct TuiApp {
     config: TuiConfig,
+    preferences: TuiPreferences,
+    run_context: TuiRunContext,
     activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
     frontend_rx: mpsc::Receiver<FrontendCommand>,
     shutdown: Arc<Shutdown>,
@@ -144,6 +148,8 @@ impl TuiApp {
     ) -> Self {
         Self {
             config: TuiConfig::default(),
+            preferences: TuiPreferences::default(),
+            run_context: TuiRunContext::default(),
             activity_rx,
             frontend_rx,
             shutdown,
@@ -154,6 +160,18 @@ impl TuiApp {
     /// Set the event sender for frontend input and process-control commands.
     pub fn with_event_sender(mut self, tx: mpsc::Sender<FrontendEvent>) -> Self {
         self.event_tx = Some(tx);
+        self
+    }
+
+    pub fn with_preferences(mut self, preferences: TuiPreferences) -> Self {
+        self.config.max_log_lines_per_build = preferences.behavior.log_history_lines;
+        self.config.log_viewport_collapsed = preferences.behavior.log_preview_lines;
+        self.preferences = preferences;
+        self
+    }
+
+    pub fn with_run_context(mut self, context: TuiRunContext) -> Self {
+        self.run_context = context;
         self
     }
 
@@ -300,7 +318,15 @@ impl TuiApp {
         // UiState is separate from ActivityModel to avoid lock contention.
         // The event processor only writes to ActivityModel, never UiState.
         // UiState is only modified by the UI thread.
-        let ui_state = Arc::new(RwLock::new(UiState::new()));
+        let viewport = self.preferences.viewport;
+        let mut ui_state = UiState::new();
+        ui_state.hide_stopped_processes = self.preferences.behavior.hide_stopped_processes;
+        ui_state
+            .set_preferences(self.preferences)
+            .map_err(io::Error::other)?;
+        let mut inline_terminal = InlineTerminal::new(viewport)?;
+        ui_state.run_context = Arc::new(self.run_context);
+        let ui_state = Arc::new(RwLock::new(ui_state));
 
         // Main loop - runs until backend signals completion via exit_flag.
         // The render loop exits cooperatively: the component checks exit_flag
@@ -318,6 +344,7 @@ impl TuiApp {
                 config.clone(),
                 process_command_tx.clone(),
                 exit_flag.clone(),
+                &mut inline_terminal,
             )
             .await;
 
@@ -347,33 +374,10 @@ impl TuiApp {
         // frontend mailbox; there is no intermediate queue to flush.
         drop(process_command_tx);
 
-        // Final render pass to ensure all drained events are displayed.
-        // Clear previous inline render, then render final state.
         {
             let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
                 let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
-
-                // Measure the last inline render's height so we clear the right
-                // number of lines. Rendered once here at cleanup, not every frame.
-                // Measured at the width that frame was painted at: a resize since
-                // then would make the current width clear the wrong line count.
-                let painted_width = ui.terminal_size.width;
-                let mut measure = element! {
-                    View(width: painted_width) {
-                        #(vec![view(&model_guard, &ui, RenderContext::Normal, None, false).into()])
-                    }
-                };
-                let lines_to_clear = measure.render(Some(painted_width as usize)).height() as u16;
-
-                if lines_to_clear > 0 {
-                    let mut stderr = io::stderr();
-                    let _ = execute!(
-                        stderr,
-                        cursor::MoveToPreviousLine(lines_to_clear),
-                        terminal::Clear(terminal::ClearType::FromCursorDown)
-                    );
-                }
 
                 {
                     // Collect standalone error messages (no parent) from message_log
@@ -403,7 +407,8 @@ impl TuiApp {
                         }
                     };
                     let canvas = element.render(Some(terminal_width as usize));
-                    let _ = canvas.write_ansi(io::stderr());
+                    inline_terminal.commit(&canvas)?;
+                    inline_terminal.suspend()?;
 
                     // Print full error messages in red (not truncated by TUI width)
                     let has_errors = !standalone_errors.is_empty()
@@ -446,6 +451,7 @@ impl TuiApp {
                 }
             }
         }
+        inline_terminal.suspend()?;
 
         Ok(renderer_rx)
     }
@@ -468,6 +474,7 @@ pub(crate) fn request_interrupt_prompt(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn handle_interrupt_prompt_key(
     key_event: &KeyEvent,
     ui_state: &Arc<RwLock<UiState>>,
@@ -575,7 +582,13 @@ pub fn restore_terminal() {
     let _ = execute!(stderr, event::PopKeyboardEnhancementFlags);
 
     // Show cursor (TUI may have hidden it)
-    let _ = execute!(stderr, cursor::Show);
+    let _ = execute!(
+        stderr,
+        terminal::EndSynchronizedUpdate,
+        terminal::EnableLineWrap,
+        ResetColor,
+        cursor::Show
+    );
 
     // Ensure output is flushed
     let _ = stderr.flush();
@@ -617,6 +630,36 @@ fn activity_navigation_action(
         KeyCode::Char('u') if control => Some((false, half_page)),
         _ => None,
     }
+}
+
+fn canonical_key_event(action: Action) -> KeyEvent {
+    let (code, modifiers) = match action {
+        Action::MoveDown => (KeyCode::Down, KeyModifiers::NONE),
+        Action::MoveUp => (KeyCode::Up, KeyModifiers::NONE),
+        Action::HalfPageDown => (KeyCode::Char('d'), KeyModifiers::CONTROL),
+        Action::HalfPageUp => (KeyCode::Char('u'), KeyModifiers::CONTROL),
+        Action::Activate | Action::Accept => (KeyCode::Enter, KeyModifiers::NONE),
+        Action::Expand => (KeyCode::Right, KeyModifiers::NONE),
+        Action::Collapse => (KeyCode::Left, KeyModifiers::NONE),
+        Action::OpenLogs => (KeyCode::Char('e'), KeyModifiers::CONTROL),
+        Action::Search => (KeyCode::Char('/'), KeyModifiers::NONE),
+        Action::RestartProcess => (KeyCode::Char('r'), KeyModifiers::CONTROL),
+        Action::StopProcess => (KeyCode::Char('x'), KeyModifiers::CONTROL),
+        Action::ToggleStopped => (KeyCode::Char('h'), KeyModifiers::CONTROL),
+        Action::Cancel | Action::Back => (KeyCode::Esc, KeyModifiers::NONE),
+        Action::NextMatch | Action::LineDown => (KeyCode::Down, KeyModifiers::NONE),
+        Action::PreviousMatch | Action::LineUp => (KeyCode::Up, KeyModifiers::NONE),
+        Action::PageDown => (KeyCode::PageDown, KeyModifiers::NONE),
+        Action::PageUp => (KeyCode::PageUp, KeyModifiers::NONE),
+        Action::Top => (KeyCode::Home, KeyModifiers::NONE),
+        Action::Bottom => (KeyCode::End, KeyModifiers::NONE),
+        Action::Copy => (KeyCode::Char('y'), KeyModifiers::NONE),
+        Action::Quit => (KeyCode::Char('q'), KeyModifiers::NONE),
+        Action::StopManager => (KeyCode::Char('s'), KeyModifiers::NONE),
+    };
+    let mut event = KeyEvent::new(KeyEventKind::Press, code);
+    event.modifiers = modifiers;
+    event
 }
 
 /// Scroll the viewport so the selected activity is visible.
@@ -675,8 +718,20 @@ fn update_process_search_selection(
     }
 }
 
+fn cancel_process_search(model: &ActivityModel, ui_state: &mut UiState) {
+    ui_state.cancel_process_search();
+    if ui_state
+        .selected_activity
+        .is_some_and(|id| !model.is_selectable(id, ui_state))
+    {
+        ui_state.selected_activity = None;
+    }
+}
+
 fn handle_process_search_key(
     key_event: &KeyEvent,
+    action: Option<Action>,
+    key_consumed: bool,
     model: &ActivityModel,
     display: &[crate::model::DisplayActivity],
     ui_state: &mut UiState,
@@ -684,33 +739,15 @@ fn handle_process_search_key(
     if ui_state.process_search.is_none() {
         return false;
     }
-    match key_event.code {
-        KeyCode::Esc => {
-            ui_state.cancel_process_search();
-            if ui_state
-                .selected_activity
-                .is_some_and(|id| !model.is_selectable(id, ui_state))
-            {
-                ui_state.selected_activity = None;
-            }
+    match action {
+        Some(Action::Cancel) => {
+            cancel_process_search(model, ui_state);
         }
-        KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-            ui_state.cancel_process_search();
-            if ui_state
-                .selected_activity
-                .is_some_and(|id| !model.is_selectable(id, ui_state))
-            {
-                ui_state.selected_activity = None;
-            }
+        None if crate::config::is_emergency_interrupt(key_event.code, key_event.modifiers) => {
+            cancel_process_search(model, ui_state);
         }
-        KeyCode::Enter => ui_state.finish_process_search(),
-        KeyCode::Backspace => {
-            if let Some(search) = &mut ui_state.process_search {
-                search.query.pop();
-            }
-            update_process_search_selection(model, display, ui_state);
-        }
-        KeyCode::Down | KeyCode::Up => {
+        Some(Action::Accept) => ui_state.finish_process_search(),
+        Some(Action::NextMatch | Action::PreviousMatch) => {
             let query = ui_state
                 .process_search
                 .as_ref()
@@ -723,19 +760,28 @@ fn handle_process_search_key(
             {
                 ui_state.selected_activity = None;
             }
-            let forward = matches!(key_event.code, KeyCode::Down);
-            ui_state.select_activity(&matches, forward);
+            ui_state.select_activity(&matches, action == Some(Action::NextMatch));
         }
-        KeyCode::Char(character)
-            if !key_event.modifiers.contains(KeyModifiers::CONTROL)
-                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
+        None if !key_consumed && key_event.code == KeyCode::Backspace => {
+            if let Some(search) = &mut ui_state.process_search {
+                search.query.pop();
+            }
+            update_process_search_selection(model, display, ui_state);
+        }
+        None if !key_consumed
+            && matches!(key_event.code, KeyCode::Char(_))
+            && !key_event.modifiers.contains(KeyModifiers::CONTROL)
+            && !key_event.modifiers.contains(KeyModifiers::ALT) =>
         {
+            let KeyCode::Char(character) = key_event.code else {
+                unreachable!()
+            };
             if let Some(search) = &mut ui_state.process_search {
                 search.query.push(character);
             }
             update_process_search_selection(model, display, ui_state);
         }
-        _ => {}
+        Some(_) | None => {}
     }
 
     true
@@ -859,6 +905,38 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     // Get optional command sender for process control
     let event_tx = hooks.use_context::<Option<ProcessCommandSender>>();
+    let keymap = ui_state.read().ok().map(|ui| ui.keymap().clone());
+    let key_sequence = hooks.use_state(KeySequenceState::default);
+    let key_sequence_wake = hooks.use_ref(|| Arc::new(Notify::new()));
+    let key_sequence_wake_for_timer = key_sequence_wake.read().clone();
+    hooks.use_future({
+        let ui_state = ui_state.clone();
+        let notify = notify.clone();
+        let mut key_sequence = key_sequence;
+        async move {
+            loop {
+                key_sequence_wake_for_timer.notified().await;
+                loop {
+                    let remaining = key_sequence.read().remaining_timeout();
+                    let Some(remaining) = remaining else {
+                        break;
+                    };
+                    tokio::select! {
+                        _ = tokio::time::sleep(remaining) => {
+                            if key_sequence.write().expire() {
+                                if let Ok(mut ui) = ui_state.write() {
+                                    ui.pending_key = None;
+                                }
+                                notify.notify_one();
+                            }
+                            break;
+                        }
+                        _ = key_sequence_wake_for_timer.notified() => {}
+                    }
+                }
+            }
+        }
+    });
 
     // Handle keyboard events - only UI state updates, no activity model writes
     hooks.use_terminal_events({
@@ -870,18 +948,76 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let attached_flag = config.attached.clone();
         let mut scroll_handle = scroll_handle;
         let scroll_view_active = scroll_view_active;
+        let keymap = keymap.clone();
+        let mut key_sequence = key_sequence;
+        let key_sequence_wake = key_sequence_wake.read().clone();
 
         move |event| {
-            if let TerminalEvent::Key(key_event) = event
-                && key_event.kind != KeyEventKind::Release
+            if let TerminalEvent::Key(raw_key_event) = event
+                && raw_key_event.kind != KeyEventKind::Release
             {
+                let context = ui_state
+                    .read()
+                    .map(|ui| {
+                        if ui.interrupt_prompt_active() {
+                            KeyContext::Prompt
+                        } else if ui.process_search.is_some() {
+                            KeyContext::ProcessSearch
+                        } else {
+                            KeyContext::Main
+                        }
+                    })
+                    .unwrap_or(KeyContext::Main);
+                let emergency_interrupt = crate::config::is_emergency_interrupt(
+                    raw_key_event.code,
+                    raw_key_event.modifiers,
+                );
+                let (key_match, pending_key) = {
+                    let mut sequence = key_sequence.write();
+                    let key_match = if emergency_interrupt {
+                        sequence.clear();
+                        KeyMatch::None
+                    } else if let Some(keymap) = keymap.as_deref() {
+                        sequence.input_key(
+                            keymap,
+                            context,
+                            raw_key_event.code,
+                            raw_key_event.modifiers,
+                        )
+                    } else {
+                        KeyMatch::None
+                    };
+                    (key_match, sequence.pending_label())
+                };
+                key_sequence_wake.notify_one();
+                if let Ok(mut ui) = ui_state.write() {
+                    ui.pending_key = pending_key;
+                }
+                let action = match key_match {
+                    KeyMatch::Action(action) => Some(action),
+                    KeyMatch::Prefix | KeyMatch::None => None,
+                };
+                let key_event = if emergency_interrupt {
+                    raw_key_event.clone()
+                } else {
+                    action
+                        .map(canonical_key_event)
+                        .unwrap_or_else(|| KeyEvent::new(KeyEventKind::Press, KeyCode::Null))
+                };
                 debug!("Key event: {:?}", key_event);
                 let search_handled = if let Ok(model) = activity_model.read()
                     && let Ok(mut ui) = ui_state.write()
                     && ui.process_search.is_some()
                 {
                     let display = model.get_display_activities(&ui);
-                    let handled = handle_process_search_key(&key_event, &model, &display, &mut ui);
+                    let handled = handle_process_search_key(
+                        &raw_key_event,
+                        action,
+                        key_match != KeyMatch::None,
+                        &model,
+                        &display,
+                        &mut ui,
+                    );
                     if handled
                         && let Some(selected_id) = ui.selected_activity
                         && *scroll_view_active.read()
@@ -903,8 +1039,9 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     false
                 };
                 if !search_handled
-                    && !handle_interrupt_prompt_key(
-                        &key_event,
+                    && !handle_interrupt_prompt_action(
+                        action,
+                        emergency_interrupt,
                         &ui_state,
                         &shutdown,
                         event_tx.as_ref(),
@@ -912,7 +1049,10 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 {
                     match key_event.code {
                         KeyCode::Char('c')
-                            if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                            if crate::config::is_emergency_interrupt(
+                                key_event.code,
+                                key_event.modifiers,
+                            ) =>
                         {
                             if !request_interrupt_prompt(
                                 event_tx.as_ref(),
@@ -1002,8 +1142,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 if let Some(selected_id) = ui.selected_activity
                                     && *scroll_view_active.read()
                                 {
-                                    let previews_fit =
-                                        process_previews_fit(&model, &display, &ui);
+                                    let previews_fit = process_previews_fit(&model, &display, &ui);
                                     let heights = activity_heights.read();
                                     scroll_selected_into_view(
                                         &mut scroll_handle.write(),
@@ -1022,8 +1161,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 && let Ok(mut ui) = ui_state.write()
                             {
                                 let display = model.get_display_activities(&ui);
-                                let previews_fit =
-                                    process_previews_fit(&model, &display, &ui);
+                                let previews_fit = process_previews_fit(&model, &display, &ui);
                                 activate_selected_activity(&model, &mut ui, previews_fit);
                             }
                         }
@@ -1047,11 +1185,8 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 collapse_selected_activity(&model, &mut ui);
                             }
                         }
-                        _ if activity_navigation_action(
-                            &key_event,
-                            terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize,
-                        )
-                        .is_some() =>
+                        _ if activity_navigation_action(&key_event, terminal_height as usize)
+                            .is_some() =>
                         {
                             if let Ok(model) = activity_model.read()
                                 && let Ok(mut ui) = ui_state.write()
@@ -1061,7 +1196,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                     model.get_selectable_activity_ids_from_display(&display, &ui);
                                 let (forward, steps) = activity_navigation_action(
                                     &key_event,
-                                    terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize,
+                                    available_activity_height(&ui),
                                 )
                                 .unwrap();
                                 ui.select_activity_by(&selectable, steps, forward);
@@ -1069,8 +1204,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 if let Some(selected_id) = ui.selected_activity
                                     && *scroll_view_active.read()
                                 {
-                                    let previews_fit =
-                                        process_previews_fit(&model, &display, &ui);
+                                    let previews_fit = process_previews_fit(&model, &display, &ui);
                                     let heights = activity_heights.read();
                                     scroll_selected_into_view(
                                         &mut scroll_handle.write(),
@@ -1089,8 +1223,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 && let Ok(mut ui) = ui_state.write()
                             {
                                 let display = model.get_display_activities(&ui);
-                                let previews_fit =
-                                    process_previews_fit(&model, &display, &ui);
+                                let previews_fit = process_previews_fit(&model, &display, &ui);
                                 if !hide_selected_preview(&model, &mut ui, previews_fit) {
                                     ui.selected_activity = None;
                                 }
@@ -1153,7 +1286,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         };
 
         // Only enable ScrollView when content exceeds available terminal height.
-        let available_height = terminal_height.saturating_sub(SUMMARY_BAR_HEIGHT) as i32;
+        let available_height = available_activity_height(&ui) as i32;
         let scroll_handle_opt = if total_content_height > available_height {
             Some(scroll_handle)
         } else {
@@ -1189,6 +1322,7 @@ async fn run_view(
     config: Arc<TuiConfig>,
     event_tx: Option<ProcessCommandSender>,
     exit_flag: ExitFlag,
+    inline_terminal: &mut InlineTerminal,
 ) -> std::io::Result<()> {
     // Copy view_mode in a block to ensure the guard is dropped before any await
     let view_mode = {
@@ -1198,20 +1332,7 @@ async fn run_view(
 
     match view_mode {
         ViewMode::Main => {
-            // Consume in its own statement so the guard drops before any await
-            let pre_expand_height = ui_state.write().unwrap().pre_expand_height.take();
-            if let Some(height) = pre_expand_height
-                && height > 0
-            {
-                let mut stderr = io::stderr();
-                let _ = execute!(
-                    stderr,
-                    cursor::MoveToPreviousLine(height),
-                    terminal::Clear(terminal::ClearType::FromCursorDown)
-                );
-            }
-
-            let mut element = element! {
+            let element = element! {
                 ContextProvider(value: Context::owned(config.clone())) {
                     ContextProvider(value: Context::owned(shutdown.clone())) {
                         ContextProvider(value: Context::owned(notify.clone())) {
@@ -1233,30 +1354,14 @@ async fn run_view(
                 }
             };
 
-            element
-                .render_loop()
-                .output(Output::Stderr)
-                .ignore_ctrl_c()
-                .await
+            inline_terminal.resume()?;
+            inline_terminal.render_loop(element).await
         }
         ViewMode::ExpandedLogs { activity_id } => {
-            // Calculate height before switching to expanded view
-            // Use a block to ensure guards are dropped before await
-            let height = {
-                let ui = ui_state.read().unwrap();
-                let model = activity_model.read().unwrap();
-                // The width the frame being cleared was painted at, like the
-                // cleanup pass in `TuiApp::run`.
-                let terminal_width = ui.terminal_size.width;
-                let mut normal_view = element! {
-                    View(width: terminal_width) {
-                        #(vec![view(&model, &ui, RenderContext::Normal, None, shutdown.is_cancelled()).into()])
-                    }
-                };
-                normal_view.render(Some(terminal_width as usize)).height() as u16
-            };
-            ui_state.write().unwrap().pre_expand_height = Some(height);
-
+            let mouse_enabled = ui_state
+                .read()
+                .map(|ui| ui.preferences.behavior.mouse)
+                .unwrap_or(true);
             let mut element = element! {
                 ContextProvider(value: Context::owned(config.clone())) {
                     ContextProvider(value: Context::owned(shutdown.clone())) {
@@ -1281,7 +1386,15 @@ async fn run_view(
                 }
             };
 
-            element.fullscreen().ignore_ctrl_c().await
+            inline_terminal.suspend()?;
+            let mut render_loop = element.fullscreen().ignore_ctrl_c();
+            if !mouse_enabled {
+                render_loop = render_loop.disable_mouse_capture();
+            }
+            let result = render_loop.await;
+            let resume_result = inline_terminal.resume();
+            inline_terminal.invalidate();
+            result.and(resume_result)
         }
     }
 }
@@ -1421,6 +1534,8 @@ mod tests {
         let e = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('e'));
         assert!(handle_process_search_key(
             &e,
+            None,
+            false,
             &model,
             &display,
             &mut ui_state
@@ -1437,6 +1552,22 @@ mod tests {
         let escape = KeyEvent::new(KeyEventKind::Press, KeyCode::Esc);
         assert!(handle_process_search_key(
             &escape,
+            Some(Action::Cancel),
+            true,
+            &model,
+            &display,
+            &mut ui_state
+        ));
+        assert_eq!(ui_state.selected_activity, Some(1));
+        assert!(ui_state.process_search.is_none());
+
+        ui_state.start_process_search();
+        let mut ctrl_c = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('c'));
+        ctrl_c.modifiers = KeyModifiers::CONTROL;
+        assert!(handle_process_search_key(
+            &ctrl_c,
+            None,
+            false,
             &model,
             &display,
             &mut ui_state
@@ -1460,6 +1591,8 @@ mod tests {
         let down = KeyEvent::new(KeyEventKind::Press, KeyCode::Down);
         assert!(handle_process_search_key(
             &down,
+            Some(Action::NextMatch),
+            true,
             &model,
             &display,
             &mut ui_state
@@ -1469,6 +1602,8 @@ mod tests {
         let up = KeyEvent::new(KeyEventKind::Press, KeyCode::Up);
         assert!(handle_process_search_key(
             &up,
+            Some(Action::PreviousMatch),
+            true,
             &model,
             &display,
             &mut ui_state

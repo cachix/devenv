@@ -1,0 +1,29 @@
+version: 1
+tui:
+  viewport: top
+  theme:
+    palette:
+      surface: ansi:236
+    styles:
+      statusline:
+        background: surface
+  statusline:
+    layouts:
+      main:
+        left: [replay, summary]
+        center: []
+        right: [key_hints]
+    components:
+      replay:
+        type: text
+        text: CONFIGURED
+        required: true
+  keybindings:
+    main:
+      search: ["?"]
+shell:
+  keybindings:
+    toggle_pause: ["ctrl+alt+d"]
+    list_watched_files: ["ctrl+alt+w"]
+    toggle_error: ["ctrl+alt+e"]
+    reload: ["ctrl+alt+r"]

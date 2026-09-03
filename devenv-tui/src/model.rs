@@ -179,7 +179,6 @@ pub struct UiState {
     /// rather than the in-process "keep running vs quit".
     pub interrupt_prompt_attached: bool,
     pub view_mode: ViewMode,
-    pub pre_expand_height: Option<u16>,
 }
 
 impl UiState {
@@ -216,7 +215,6 @@ impl UiState {
             interrupt_prompt_active: false,
             interrupt_prompt_attached: false,
             view_mode: ViewMode::Main,
-            pre_expand_height: None,
         }
     }
 
