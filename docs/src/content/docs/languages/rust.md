@@ -488,6 +488,30 @@ false
 
 
 
+### languages.rust.rustdocflags
+
+
+
+Extra flags to pass to Rustdoc.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ### languages.rust.rustflags
 
 
