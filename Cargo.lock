@@ -249,7 +249,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -260,7 +260,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2702,7 +2702,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4670,7 +4670,7 @@ version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82cb6a9f675da968c63b6208c641b9dca58fc0133ae53375736b1767b0cab8bd"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5697,7 +5697,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6619,7 +6619,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8006,7 +8006,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8472,7 +8472,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -9060,7 +9060,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -9415,8 +9415,9 @@ dependencies = [
 
 [[package]]
 name = "watchexec"
-version = "8.4.0"
-source = "git+https://github.com/domenkozar/watchexec?branch=feat%2Fexternal-child-spawn#98b71e12a03f52e41e246cdf6186483247c58c4c"
+version = "8.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "578d47d6c02968128e8a88b787e956f1cd7de0a8ca7ad5a24dcd8cf807d478cc"
 dependencies = [
  "async-priority-channel",
  "atomic-take",
@@ -9431,13 +9432,14 @@ dependencies = [
  "watchexec-events",
  "watchexec-signals",
  "watchexec-supervisor",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
 name = "watchexec-events"
 version = "6.1.2"
-source = "git+https://github.com/domenkozar/watchexec?branch=feat%2Fexternal-child-spawn#98b71e12a03f52e41e246cdf6186483247c58c4c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13a38b76d05a5e217219a0dae9d328e9bebaf7951c65d7a0fc4fe2b97046a4a3"
 dependencies = [
  "notify-types",
  "watchexec-signals",
@@ -9475,7 +9477,8 @@ dependencies = [
 [[package]]
 name = "watchexec-signals"
 version = "5.1.1"
-source = "git+https://github.com/domenkozar/watchexec?branch=feat%2Fexternal-child-spawn#98b71e12a03f52e41e246cdf6186483247c58c4c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6467339984783a78be0b068788bbec1dc6dab56316e4da3db9480ecf6a101ad0"
 dependencies = [
  "miette",
  "nix 0.31.3",
@@ -9484,8 +9487,9 @@ dependencies = [
 
 [[package]]
 name = "watchexec-supervisor"
-version = "5.3.1"
-source = "git+https://github.com/domenkozar/watchexec?branch=feat%2Fexternal-child-spawn#98b71e12a03f52e41e246cdf6186483247c58c4c"
+version = "5.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ea7d764ea524ffd92213dcf8e4bca8fe603ebd3ef9e0caf07c3cae0461a5122"
 dependencies = [
  "futures",
  "process-wrap",
