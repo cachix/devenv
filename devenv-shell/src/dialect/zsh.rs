@@ -82,7 +82,25 @@ exit 1
         super::BashDialect.env_diff_helpers()
     }
 
-    fn reload_hook(&self, reload_file: &Path) -> String {
+    fn reload_hook(
+        &self,
+        reload_file: &Path,
+        keybindings: &crate::keybindings::ShellKeybindings,
+    ) -> String {
+        let reload_keybindings = if keybindings.reload_overridden() {
+            keybindings
+                .reload_bindings(self.name())
+                .iter()
+                .map(|binding| {
+                    format!(
+                        "bindkey $'{}' __devenv_reload_widget\n",
+                        binding.escaped_bytes()
+                    )
+                })
+                .collect::<String>()
+        } else {
+            "bindkey \"${DEVENV_RELOAD_KEYBIND:-\\e\\C-r}\" __devenv_reload_widget\n".to_string()
+        };
         // Zsh reload hook using precmd and zle widget
         format!(
             r#"
@@ -124,13 +142,14 @@ __devenv_reload_widget() {{
     zle reset-prompt
 }}
 zle -N __devenv_reload_widget
-bindkey "${{DEVENV_RELOAD_KEYBIND:-\\e\\C-r}}" __devenv_reload_widget
+{reload_keybindings}
 "#,
             reload_file = reload_file.to_string_lossy(),
             bash_reload_script = super::bash_reload_subprocess_script(
                 super::BashDialect.env_diff_helpers(),
                 &reload_file.to_string_lossy(),
             ),
+            reload_keybindings = reload_keybindings,
         )
     }
 

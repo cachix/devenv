@@ -1,4 +1,5 @@
 use crate::{
+    config::Action,
     expanded_view::ExpandedLogView,
     model::{ActivityModel, RenderContext, UiState, ViewMode},
     view::{
@@ -473,6 +474,28 @@ pub(crate) fn handle_interrupt_prompt_key(
     shutdown: &Arc<Shutdown>,
     event_tx: Option<&ProcessCommandSender>,
 ) -> bool {
+    let action = match key_event.code {
+        KeyCode::Char('s') => Some(Action::StopManager),
+        KeyCode::Char('q') => Some(Action::Quit),
+        KeyCode::Esc | KeyCode::Char('c') => Some(Action::Cancel),
+        _ => None,
+    };
+    handle_interrupt_prompt_action(
+        action,
+        crate::config::is_emergency_interrupt(key_event.code, key_event.modifiers),
+        ui_state,
+        shutdown,
+        event_tx,
+    )
+}
+
+pub(crate) fn handle_interrupt_prompt_action(
+    action: Option<Action>,
+    emergency_interrupt: bool,
+    ui_state: &Arc<RwLock<UiState>>,
+    shutdown: &Arc<Shutdown>,
+    event_tx: Option<&ProcessCommandSender>,
+) -> bool {
     let (prompt_active, attached) = ui_state
         .read()
         .map(|ui| (ui.interrupt_prompt_active(), ui.interrupt_prompt_attached()))
@@ -481,37 +504,26 @@ pub(crate) fn handle_interrupt_prompt_key(
         return false;
     }
 
-    match key_event.code {
-        // Ctrl-C: in attach mode this detaches (processes keep running); in
-        // process mode it quits (stops everything). Both raise the same
-        // shutdown interrupt — the foreground loop interprets it per mode.
-        KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+    match action {
+        _ if emergency_interrupt => {
             shutdown.handle_interrupt();
         }
-        // s: stop the whole process manager (attach mode only).
-        KeyCode::Char('s') if attached => {
+        Some(Action::StopManager) if attached => {
             if event_tx.is_some_and(|tx| enqueue_process_command(tx, ProcessCommand::StopManager))
                 && let Ok(mut ui) = ui_state.write()
             {
                 ui.clear_interrupt_prompt();
             }
         }
-        // q quits in process mode; in attach mode detach is Ctrl-C and stop is
-        // `s`, so q is not a shortcut there.
-        KeyCode::Char('q') if !attached => {
+        Some(Action::Quit) if !attached => {
             shutdown.handle_interrupt();
         }
-        KeyCode::Esc => {
+        Some(Action::Cancel) => {
             if let Ok(mut ui) = ui_state.write() {
                 ui.clear_interrupt_prompt();
             }
         }
-        KeyCode::Char('c') => {
-            if let Ok(mut ui) = ui_state.write() {
-                ui.clear_interrupt_prompt();
-            }
-        }
-        _ => {}
+        Some(_) | None => {}
     }
 
     true

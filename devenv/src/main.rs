@@ -1529,6 +1529,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell,
         shell_path,
         shell_cwd,
+        shell_keybindings: devenv_shell::keybindings::ShellKeybindings::default(),
     };
 
     ShellCoordinator::run(reload_config, builder, frontend_tx, event_rx)
