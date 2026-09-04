@@ -120,8 +120,9 @@ let
           For most hook types, a regex pattern to match against tool names
           (for PreToolUse/PostToolUse hooks).
 
-          For `FileChanged`, this single value always plays both roles below
-          at once, for every hook — never just one or the other:
+          For `FileChanged`, this single value serves two purposes and always
+          plays both roles below at once, for every hook — never just one or
+          the other:
           - Build the watch list: split on `|`, each segment registered as a
             literal filename relative to the project root, e.g. `.envrc|.env`
             watches exactly the files named `.envrc` and `.env`. Segments are
