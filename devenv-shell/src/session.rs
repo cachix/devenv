@@ -1724,8 +1724,17 @@ impl ShellSession {
         // writer) instead of crossterm::terminal::size() which always uses the
         // process's controlling terminal. That would make this work correctly even
         // with injected I/O and remove the need for the config.size guard.
+        //
+        // Like `get_terminal_size()`, this can come back `Ok` with a `0x0` size
+        // (observed transiently under WSL2, and consistently in some
+        // non-terminal-backed ptys). Ignore that instead of clobbering the
+        // already-valid size `ShellSession::new` computed, since a `0` in
+        // either dimension later crashes `libghostty_vt::Terminal::new` with
+        // "invalid value".
         if self.config.size.is_none()
             && let Ok((cols, rows)) = terminal::size()
+            && cols != 0
+            && rows != 0
         {
             self.size = PtySize {
                 rows,
