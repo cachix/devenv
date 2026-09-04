@@ -49,7 +49,10 @@ let
   # codegen via -Crelocation-model=static plus -Clink-arg=-no-pie to force a
   # non-PIE link, so the final musl host binary actually runs. These apply to
   # the host (musl) crate compiles only.
-  staticRustcOpts = [ "-Crelocation-model=static" "-Clink-arg=-no-pie" ];
+  staticRustcOpts = [
+    "-Crelocation-model=static"
+    "-Clink-arg=-no-pie"
+  ];
 
   # Build scripts (build.rs) are the real Tier 2 blocker. crate2nix compiles a
   # crate's build.rs *inside the musl host derivation*, but with NO `--target`
@@ -79,10 +82,13 @@ let
     "link-arg=-Wl,-dynamic-linker,${buildPackages.stdenv.cc.bintools.dynamicLinker}"
   ];
 
-  injectStatic = crate: crate // {
-    extraRustcOpts = (crate.extraRustcOpts or [ ]) ++ staticRustcOpts;
-    extraRustcOptsForBuildRs = (crate.extraRustcOptsForBuildRs or [ ]) ++ buildRsRustcOpts;
-  };
+  injectStatic =
+    crate:
+    crate
+    // {
+      extraRustcOpts = (crate.extraRustcOpts or [ ]) ++ staticRustcOpts;
+      extraRustcOptsForBuildRs = (crate.extraRustcOptsForBuildRs or [ ]) ++ buildRsRustcOpts;
+    };
 
   # Override the rust toolchain and bake the per-crate overrides into the
   # builder. We pass `defaultCrateOverrides` through unchanged to crate2nix so it

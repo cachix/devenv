@@ -59,7 +59,9 @@ let
   # [static-link-spike] Tell pkg-config to emit the static link line (Libs.private),
   # so the now-static Nix C++ libs (libnixstore/expr/util) are pulled in transitively
   # when crates link the C-API libs.
-  staticPkgConfig = { PKG_CONFIG_ALL_STATIC = "1"; };
+  staticPkgConfig = {
+    PKG_CONFIG_ALL_STATIC = "1";
+  };
 
   # [static-link-spike] The static Nix archives reference boost's *compiled*
   # component libs (iostreams/context/url), which boost's pkg-config doesn't
@@ -93,10 +95,13 @@ let
   ];
 
   # Override for crates needing nix C libraries
-  nixLibsOverride = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-  } // staticPkgConfig;
+  nixLibsOverride =
+    attrs:
+    {
+      buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
+      nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+    }
+    // staticPkgConfig;
 
   # Common overrides for crates needing openssl
   opensslOverride = attrs: {
@@ -131,31 +136,33 @@ let
   ];
 
   # Shared override for crates linking against nix, openssl, dbus, and bindgen.
-  devenvBase = attrs: {
-    buildInputs =
-      (attrs.buildInputs or [ ])
+  devenvBase =
+    attrs:
+    {
+      buildInputs =
+        (attrs.buildInputs or [ ])
         ++ [
-        openssl
-        libghostty-vt
-      ]
-      ++ nixLibs
-      ++ lib.optional stdenv.hostPlatform.isLinux dbus
-      ++ lib.optional stdenv.hostPlatform.isStatic mimallocNoOverride;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
-      pkg-config
-      rustPlatform.bindgenHook
-    ];
-    extraRustcOpts =
-      (attrs.extraRustcOpts or [ ])
-      ++ [
-        "--cfg"
-        "tracing_unstable"
-      ]
-      ++ lib.optional stripReleaseBinaries "-C strip=symbols"
-      ++ staticAllocLinkOpts
-      ++ staticBoostLinkOpts;
-  }
-  // staticPkgConfig;
+          openssl
+          libghostty-vt
+        ]
+        ++ nixLibs
+        ++ lib.optional stdenv.hostPlatform.isLinux dbus
+        ++ lib.optional stdenv.hostPlatform.isStatic mimallocNoOverride;
+      nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
+        pkg-config
+        rustPlatform.bindgenHook
+      ];
+      extraRustcOpts =
+        (attrs.extraRustcOpts or [ ])
+        ++ [
+          "--cfg"
+          "tracing_unstable"
+        ]
+        ++ lib.optional stripReleaseBinaries "-C strip=symbols"
+        ++ staticAllocLinkOpts
+        ++ staticBoostLinkOpts;
+    }
+    // staticPkgConfig;
 in
 {
   # Main devenv crate
@@ -174,17 +181,20 @@ in
   xtask = devenvBase;
 
   # devenv-nix-backend needs nix libs
-  devenv-nix-backend = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
-      pkg-config
-      rustPlatform.bindgenHook
-    ];
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
-      "--cfg"
-      "tracing_unstable"
-    ];
-  } // staticPkgConfig;
+  devenv-nix-backend =
+    attrs:
+    {
+      buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
+      nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
+        pkg-config
+        rustPlatform.bindgenHook
+      ];
+      extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
+        "--cfg"
+        "tracing_unstable"
+      ];
+    }
+    // staticPkgConfig;
 
   # secretspec needs dbus on Linux
   secretspec = dbusOverride;
@@ -238,13 +248,16 @@ in
   };
 
   # nix-bindings crates need pkg-config, nix libs, and bindgen
-  nix-bindings-bindgen-raw = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
-      pkg-config
-      rustPlatform.bindgenHook
-    ];
-  } // staticPkgConfig;
+  nix-bindings-bindgen-raw =
+    attrs:
+    {
+      buildInputs = (attrs.buildInputs or [ ]) ++ nixLibs;
+      nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [
+        pkg-config
+        rustPlatform.bindgenHook
+      ];
+    }
+    // staticPkgConfig;
 
   # libghostty-vt-sys has a pkg-config feature that finds the pre-built
   # library from the ghostty flake, so just provide pkg-config + the library.
@@ -254,12 +267,15 @@ in
   # `-lghostty-vt` (the .so, which our static `.dev` output doesn't ship) →
   # "cannot find -lghostty-vt". With `link-static` it probes the
   # `libghostty-vt-static` pkg-config module and links `libghostty-vt.a`.
-  libghostty-vt-sys = attrs: {
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-    buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
-  } // lib.optionalAttrs stdenv.hostPlatform.isStatic {
-    features = (attrs.features or [ ]) ++ [ "link-static" ];
-  };
+  libghostty-vt-sys =
+    attrs:
+    {
+      nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+      buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
+    }
+    // lib.optionalAttrs stdenv.hostPlatform.isStatic {
+      features = (attrs.features or [ ]) ++ [ "link-static" ];
+    };
 
   nix-bindings-util = nixLibsOverride;
   nix-bindings-store = nixLibsOverride;
