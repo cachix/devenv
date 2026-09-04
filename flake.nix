@@ -198,7 +198,7 @@
           # shell hook drop its caching.
           pkgsStatic = pkgs.pkgsStatic;
           rustToolchainStatic = pkgs.rust-bin.stable.latest.default.override {
-            targets = [ "x86_64-unknown-linux-musl" ];
+            targets = [ pkgsStatic.stdenv.hostPlatform.rust.rustcTarget ];
           };
           # [tier2] libghostty-vt links libc++ for its vendored simdutf, which
           # makes Zig build its bundled libc++ for the target. Ghostty's nix
