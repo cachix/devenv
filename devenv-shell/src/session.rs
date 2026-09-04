@@ -1558,8 +1558,10 @@ enum StdinPresentation {
     Deferred,
 }
 
-fn classify_stdin(data: &[u8]) -> StdinDisposition {
-    if data == KEYBIND_TOGGLE_PAUSE {
+fn classify_stdin(data: &[u8], local_keybindings_enabled: bool) -> StdinDisposition {
+    if !local_keybindings_enabled {
+        StdinDisposition::ForwardToPty
+    } else if data == KEYBIND_TOGGLE_PAUSE {
         StdinDisposition::TogglePause
     } else if data == KEYBIND_LIST_WATCHED {
         StdinDisposition::ListWatchedFiles
@@ -2022,6 +2024,7 @@ impl ShellSession {
                 Event::Stdin(data) => {
                     self.dispatch_stdin_event(
                         &data,
+                        !esc.in_alternate_screen,
                         StdinPresentation::Immediate,
                         StdinEventContext {
                             pty,
@@ -2100,6 +2103,7 @@ impl ShellSession {
                             Event::Stdin(stdin_data) => {
                                 self.dispatch_stdin_event(
                                     &stdin_data,
+                                    !esc.in_alternate_screen,
                                     StdinPresentation::Deferred,
                                     StdinEventContext {
                                         pty,
@@ -2301,6 +2305,7 @@ impl ShellSession {
     fn dispatch_stdin_event(
         &mut self,
         data: &[u8],
+        local_keybindings_enabled: bool,
         presentation: StdinPresentation,
         context: StdinEventContext<'_, '_, '_>,
     ) -> Result<(), SessionError> {
@@ -2311,7 +2316,7 @@ impl ShellSession {
             vt,
             renderer,
         } = context;
-        match classify_stdin(data) {
+        match classify_stdin(data, local_keybindings_enabled) {
             StdinDisposition::TogglePause => {
                 if let Err(e) =
                     coordinator_tx.try_send(FrontendEvent::Shell(ShellEvent::TogglePause))
@@ -2603,7 +2608,7 @@ mod tests {
 
         let mut pty_writes = Vec::new();
         let mut shell_events = Vec::new();
-        match classify_stdin(&data) {
+        match classify_stdin(&data, true) {
             StdinDisposition::TogglePause => shell_events.push(ShellEvent::TogglePause),
             StdinDisposition::ForwardToPty => pty_writes.extend_from_slice(&data),
             other => panic!("unexpected keybinding disposition: {other:?}"),
@@ -2612,6 +2617,14 @@ mod tests {
         assert!(pty_writes.is_empty());
         assert!(matches!(shell_events.as_slice(), [ShellEvent::TogglePause]));
         assert_eq!(pty_output_byte(rx.try_recv().unwrap()), b'l');
+    }
+
+    #[test]
+    fn local_keybind_is_forwarded_when_application_owns_alternate_screen() {
+        assert_eq!(
+            classify_stdin(&KEYBIND_TOGGLE_PAUSE, false),
+            StdinDisposition::ForwardToPty
+        );
     }
 
     #[test]
