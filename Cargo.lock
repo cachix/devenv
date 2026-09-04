@@ -2324,6 +2324,7 @@ name = "devenv-cache-core"
 version = "2.2.3"
 dependencies = [
  "blake3",
+ "fd-lock",
  "libsqlite3-sys",
  "miette",
  "serde_json",

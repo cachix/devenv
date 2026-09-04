@@ -69,7 +69,7 @@ use tracing::Instrument;
 
 use crate::anyhow_ext::AnyhowToMiette;
 use crate::build_environment::BuildEnvironment as RustBuildEnvironment;
-use crate::cnix_store::CNixStore;
+use crate::cnix_store::{CNixStore, remove_existing_gc_root};
 use crate::error::format_eval_error;
 use crate::primops::PrimopRegistry;
 use crate::umask_guard::UmaskGuard;
@@ -956,10 +956,7 @@ impl NixCBackend {
             // needs the logical form. See devenv #2499.
             let store_path = parse_logical_store_path(&mut store, &out_path_str)?;
 
-            if gc_root.symlink_metadata().is_ok() {
-                std::fs::remove_file(gc_root)
-                    .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
-            }
+            remove_existing_gc_root(gc_root)?;
             store
                 .add_perm_root(&store_path, gc_root)
                 .to_miette()
@@ -1490,10 +1487,7 @@ impl Evaluator for NixCBackend {
                     sanitized_attr
                 ));
 
-                if attr_gc_root.symlink_metadata().is_ok() {
-                    std::fs::remove_file(&attr_gc_root)
-                        .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
-                }
+                remove_existing_gc_root(&attr_gc_root)?;
 
                 store
                     .add_perm_root(&store_path, &attr_gc_root)

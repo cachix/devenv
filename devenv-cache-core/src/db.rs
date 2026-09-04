@@ -1,12 +1,13 @@
 use crate::error::{CacheError, CacheResult};
-use libsqlite3_sys::SQLITE_IOERR_SHMMAP;
+use libsqlite3_sys::{SQLITE_BUSY, SQLITE_IOERR_DELETE_NOENT, SQLITE_IOERR_SHMMAP, SQLITE_LOCKED};
 use sqlx::migrate::{MigrateError, Migrator};
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
 };
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 /// Database connection manager
 #[derive(Debug, Clone)]
@@ -25,6 +26,13 @@ impl Database {
             std::fs::create_dir_all(parent)?;
         }
 
+        // Serialize create + migrate across processes. Concurrent cold
+        // `devenv shell` entries race on this window: sqlite3_open(CREATE) and
+        // PRAGMA journal_mode=WAL can return SQLITE_BUSY before busy_timeout is
+        // installed, and a migration error used to delete the database out from
+        // under the process that created it (#3133).
+        let _init_lock = acquire_init_lock(&path).await?;
+
         trace!("Running migrations");
 
         // Try WAL journal mode first, falling back to DELETE (the default) on
@@ -42,12 +50,7 @@ impl Database {
             // Same shm-mmap failure, just surfacing during migration instead of
             // at connect time (SQLite can defer opening the `-shm` file until
             // the first real transaction).
-            let is_shmmap = match &err {
-                MigrateError::Execute(e) => is_shmmap_error(e),
-                MigrateError::ExecuteMigration(e, _) => is_shmmap_error(e),
-                _ => false,
-            };
-            if is_shmmap {
+            if migrate_error_is_shmmap(&err) {
                 pool.close().await;
                 let pool = fall_back_to_delete_mode(&path, &err).await?;
                 migrator
@@ -57,10 +60,27 @@ impl Database {
                 return Ok(Self { pool, _path: path });
             }
 
+            // A lock/busy error means another connection is using the file.
+            // Never delete it — that is how concurrent cold entry turned a
+            // recoverable SQLITE_BUSY into SQLITE_IOERR_DELETE_NOENT (#3133).
+            if migrate_error_is_busy(&err) {
+                warn!(
+                    error = %err,
+                    path = %path.display(),
+                    "database locked during migration, retrying without recreating"
+                );
+                migrator
+                    .run(&pool)
+                    .await
+                    .map_err(|e| CacheError::Database(e.into()))?;
+                return Ok(Self { pool, _path: path });
+            }
+
             // Some other migration failure (corruption, a partially-applied
-            // prior migration run, etc). Delete and recreate once, retrying
-            // with the same (WAL) journal mode, since this isn't a
-            // filesystem/environment limitation.
+            // prior migration run, etc). Delete and recreate once. No other
+            // process is in Database::new while we hold the init lock; this
+            // remains last-resort recovery if a process that already opened
+            // the pool is still using the file.
             error!(error = %err, "Failed to migrate the database. Attempting to recreate the database.");
             pool.close().await;
             remove_sqlite_files(&path);
@@ -147,11 +167,107 @@ fn remove_sqlite_files(path: &Path) {
 /// `mmap(MAP_SHARED)` its `-shm` coordination file. See
 /// https://github.com/cachix/devenv/issues/2947.
 fn is_shmmap_error(error: &sqlx::Error) -> bool {
-    let sqlx::Error::Database(db_err) = error else {
-        return false;
-    };
+    sqlite_error_code(error) == Some(SQLITE_IOERR_SHMMAP)
+}
 
-    db_err.code().and_then(|code| code.parse::<i32>().ok()) == Some(SQLITE_IOERR_SHMMAP)
+fn sqlite_error_code(error: &sqlx::Error) -> Option<i32> {
+    match error {
+        sqlx::Error::Database(db_err) => db_err.code()?.parse().ok(),
+        _ => None,
+    }
+}
+
+/// SQLITE_BUSY / SQLITE_LOCKED, plus the I/O error SQLite emits when a
+/// concurrent creator deletes the journal/WAL file out from under us.
+fn is_busy_error(error: &sqlx::Error) -> bool {
+    match error {
+        sqlx::Error::PoolTimedOut => true,
+        _ => matches!(
+            sqlite_error_code(error),
+            Some(SQLITE_BUSY) | Some(SQLITE_LOCKED) | Some(SQLITE_IOERR_DELETE_NOENT)
+        ),
+    }
+}
+
+fn migrate_error_sqlx(err: &MigrateError) -> Option<&sqlx::Error> {
+    match err {
+        MigrateError::Execute(e) | MigrateError::ExecuteMigration(e, _) => Some(e),
+        _ => None,
+    }
+}
+
+fn migrate_error_is_shmmap(err: &MigrateError) -> bool {
+    migrate_error_sqlx(err).is_some_and(is_shmmap_error)
+}
+
+fn migrate_error_is_busy(err: &MigrateError) -> bool {
+    migrate_error_sqlx(err).is_some_and(is_busy_error)
+}
+
+/// Held for the duration of `Database::new`. Dropping it unblocks the next waiter.
+struct InitLock {
+    _release: std::sync::mpsc::Sender<()>,
+}
+
+fn init_lock_path(db_path: &Path) -> PathBuf {
+    let mut path = db_path.as_os_str().to_owned();
+    path.push(".init.lock");
+    PathBuf::from(path)
+}
+
+/// Acquire an exclusive flock on a sibling of the SQLite file.
+///
+/// Must not lock the `.db` itself: SQLite uses POSIX locks on that file.
+/// The lock is held on a dedicated OS thread so waiting does not stall
+/// the tokio runtime (a blocking flock on a worker thread deadlocks other
+/// tasks that already hold the lock and are awaiting I/O).
+async fn acquire_init_lock(db_path: &Path) -> CacheResult<InitLock> {
+    let lock_path = init_lock_path(db_path);
+    let (acquired_tx, acquired_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+
+    let _ = std::thread::spawn(move || {
+        let file = match OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)
+        {
+            Ok(file) => file,
+            Err(e) => {
+                let _ = acquired_tx.send(Err(e));
+                return;
+            }
+        };
+        let mut lock = fd_lock::RwLock::new(file);
+        let _guard = match lock.write() {
+            Ok(guard) => guard,
+            Err(e) => {
+                let _ = acquired_tx.send(Err(e));
+                return;
+            }
+        };
+        if acquired_tx.send(Ok(())).is_err() {
+            return;
+        }
+        let _ = release_rx.recv();
+        debug!(path = %lock_path.display(), "released cache init lock");
+    });
+
+    match acquired_rx.await {
+        Ok(Ok(())) => Ok(InitLock {
+            _release: release_tx,
+        }),
+        Ok(Err(e)) => Err(CacheError::initialization(format!(
+            "failed to lock {} for cache init: {e}",
+            db_path.display()
+        ))),
+        Err(_) => Err(CacheError::initialization(format!(
+            "cache init lock task ended for {}",
+            db_path.display()
+        ))),
+    }
 }
 
 #[cfg(test)]
@@ -217,6 +333,79 @@ mod tests {
 
         // Close database
         db.close().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+    async fn concurrent_cold_open_succeeds() {
+        // Several processes creating the same missing database must all
+        // succeed. This is the eval-cache / task-cache race on a cold
+        // `.devenv/` (#3133).
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let migrations_dir = temp_dir.path().join("migrations");
+        std::fs::create_dir_all(&migrations_dir).unwrap();
+        std::fs::write(
+            migrations_dir.join("20250507000001_test.sql"),
+            "CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)",
+        )
+        .unwrap();
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let path = db_path.clone();
+            let dir = migrations_dir.clone();
+            handles.push(tokio::spawn(async move {
+                let migrator = Migrator::new(dir).await.unwrap();
+                Database::new(path, &migrator).await
+            }));
+        }
+
+        let mut dbs = Vec::new();
+        for handle in handles {
+            let db = handle
+                .await
+                .unwrap()
+                .expect("concurrent cold Database::new should succeed");
+            sqlx::query("SELECT 1").fetch_one(db.pool()).await.unwrap();
+            dbs.push(db);
+        }
+
+        let (journal_mode,): (String,) = sqlx::query_as("PRAGMA journal_mode")
+            .fetch_one(dbs[0].pool())
+            .await
+            .unwrap();
+        assert_eq!(journal_mode, "wal");
+
+        for db in dbs {
+            db.close().await;
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_warm_open_succeeds() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let migrator = create_migrator(&temp_dir).await;
+        let warm = Database::new(db_path.clone(), &migrator).await.unwrap();
+        warm.close().await;
+
+        let migrations_dir = temp_dir.path().join("migrations");
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let path = db_path.clone();
+            let dir = migrations_dir.clone();
+            handles.push(tokio::spawn(async move {
+                let migrator = Migrator::new(dir).await.unwrap();
+                Database::new(path, &migrator).await
+            }));
+        }
+        for handle in handles {
+            let db = handle
+                .await
+                .unwrap()
+                .expect("concurrent warm Database::new should succeed");
+            db.close().await;
+        }
     }
 
     async fn create_migrator(temp_dir: &TempDir) -> Migrator {

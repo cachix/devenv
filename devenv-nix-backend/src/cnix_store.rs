@@ -32,6 +32,18 @@ impl CNixStore {
 unsafe impl Send for CNixStore {}
 unsafe impl Sync for CNixStore {}
 
+/// Remove `gc_root` so Nix can recreate the symlink.
+///
+/// Concurrent `devenv` processes can both observe the symlink and then race
+/// on `remove_file`; treat `NotFound` as success (#3133).
+pub(crate) fn remove_existing_gc_root(gc_root: &Path) -> Result<()> {
+    match std::fs::remove_file(gc_root) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(miette!("Failed to remove existing GC root: {e}")),
+    }
+}
+
 /// Delete paths that aren't store paths (plain files or directories).
 ///
 /// Offloaded because `remove_dir_all` recurses over the whole tree, which
@@ -150,10 +162,7 @@ impl StoreTrait for CNixStore {
             .parse_store_path(store_path.as_str())
             .to_miette()
             .wrap_err("Failed to parse store path")?;
-        if gc_root.symlink_metadata().is_ok() {
-            std::fs::remove_file(gc_root)
-                .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
-        }
+        remove_existing_gc_root(gc_root)?;
         store
             .add_perm_root(&parsed, gc_root)
             .to_miette()
