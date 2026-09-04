@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed concurrent `devenv shell` entries into a project without `.devenv/` failing with `database is locked` (and related task-cache init / GC-root races). First-time eval and task cache initialization now takes a process lock so a concurrent creator can wait instead of deleting the database, and removing an existing GC root ignores a concurrent delete ([#3133](https://github.com/cachix/devenv/issues/3133)).
 - Fixed environment capture accumulating unbounded `.devenv/shell-*.sh` files. Capture-specific activation scripts are now temporary, and non-interactive commands are passed as arguments instead of being embedded in persistent activation scripts ([#3149](https://github.com/cachix/devenv/issues/3149)).
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.

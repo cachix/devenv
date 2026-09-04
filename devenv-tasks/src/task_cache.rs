@@ -645,6 +645,28 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn test_cold_cache_allows_concurrent_open() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().to_path_buf();
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let dir = cache_dir.clone();
+            handles.push(tokio::spawn(async move { TaskCache::new(&dir).await }));
+        }
+        for handle in handles {
+            let cache = handle
+                .await
+                .unwrap()
+                .expect("concurrent cold cache open should succeed");
+            sqlx::query("SELECT 1")
+                .fetch_one(cache.db.pool())
+                .await
+                .unwrap();
+        }
+    }
+
+    #[sqlx::test]
     async fn test_file_modification_detection() {
         let db_temp_dir = TempDir::new().unwrap();
         let db_path = db_temp_dir.path().join("tasks-file-mod.db");
