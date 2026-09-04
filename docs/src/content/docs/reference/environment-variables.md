@@ -82,6 +82,12 @@ Enable (`true`) or disable (`false`) the interactive terminal interface.
 Mirrors the `--tui` / `--no-tui` flags.
 Enabled by default when the session is interactive.
 
+### [`DEVENV_QUIET`](#devenv_quiet)
+
+Enable (`true`) or disable (`false`) quiet mode.
+Mirrors the `--quiet` / `-q` flag.
+Defaults to `false`.
+
 ### [`DEVENV_TRACE_TO`](#devenv_trace_to)
 <small class="added-in">Added in <code>2.1</code></small>
 
