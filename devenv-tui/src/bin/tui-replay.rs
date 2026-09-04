@@ -37,6 +37,9 @@ struct Args {
     #[arg(long)]
     attached: bool,
 
+    #[arg(long, value_name = "PATH")]
+    user_config: Option<PathBuf>,
+
     /// Respond deterministically to process restart/stop commands from the TUI.
     ///
     /// Process names and IDs are discovered from Process::Start events in the
@@ -394,6 +397,12 @@ async fn main() -> Result<()> {
 
     // Validation deliberately happens before the TUI enters raw mode.
     let events = load_trace_file(&args.trace_file)?;
+    let preferences = args
+        .user_config
+        .as_ref()
+        .map(devenv_tui::UserConfig::load)
+        .transpose()?
+        .map(|config| config.tui);
     let processes = reactive_processes(&events);
     if args.reactive && processes.is_empty() {
         bail!("--reactive requires at least one process start event in the trace");
@@ -425,6 +434,9 @@ async fn main() -> Result<()> {
     }
 
     let mut app = devenv_tui::TuiApp::new(activity_rx, renderer_rx, shutdown.clone());
+    if let Some(preferences) = preferences {
+        app = app.with_preferences(preferences);
+    }
     if args.reactive {
         app = app.with_event_sender(event_tx);
     } else {

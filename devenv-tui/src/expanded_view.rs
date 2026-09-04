@@ -7,11 +7,15 @@
 
 use crate::TuiConfig;
 use crate::app::{
-    ExitFlag, PauseFlag, ProcessCommandSender, handle_interrupt_prompt_key,
+    ExitFlag, PauseFlag, ProcessCommandSender, handle_interrupt_prompt_action,
     request_interrupt_prompt,
 };
 use crate::components::{COLOR_COMPLETED, COLOR_INTERACTIVE};
+use crate::config::{Action, KeyContext, KeyMatch, KeySequenceState, StatuslinePosition};
 use crate::model::{ActivityModel, UiState, ViewMode};
+use crate::statusline::{
+    StatuslineData, StatuslineMode, action_key_hints, interrupt_prompt_key_hints, render_statusline,
+};
 use base64::Engine;
 use crossterm::event::MouseButton;
 use human_repr::HumanCount;
@@ -119,6 +123,13 @@ struct ExpandedViewUi<'a> {
     interrupt_prompt: (bool, bool),
 }
 
+struct ExpandedCustomization {
+    preferences: Arc<crate::config::TuiPreferences>,
+    keymap: Arc<crate::config::Keymap>,
+    context: Arc<crate::config::TuiRunContext>,
+    pending_key: Option<String>,
+}
+
 impl Selection {
     /// Create a selection from anchor and cursor, normalizing so start <= end.
     fn from_anchor_cursor(anchor: (usize, usize), cursor: (usize, usize)) -> Self {
@@ -183,7 +194,11 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // The offset is measured in visual rows (one per terminal row); a single
     // log line may span multiple visual rows when wrapped.
     let mut scroll_offset = hooks.use_state(|| 0usize);
-    let mut follow_tail = hooks.use_state(|| true);
+    let default_follow = ui_state
+        .read()
+        .map(|ui| ui.preferences.behavior.follow_logs)
+        .unwrap_or(true);
+    let mut follow_tail = hooks.use_state(|| default_follow);
     let mut scroll_anchor = hooks.use_state(|| None::<ScrollAnchor>);
     let mut log_search = hooks.use_state(|| None::<LogSearchState>);
     let mut copy_notice = hooks.use_state(|| None::<CopyNotice>);
@@ -194,10 +209,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     hooks.use_future(async move {
         loop {
             copy_notice_wake_for_timer.notified().await;
-            loop {
-                let Some(Some(deadline)) = copy_notice_deadline.try_get() else {
-                    break;
-                };
+            while let Some(Some(deadline)) = copy_notice_deadline.try_get() {
                 tokio::time::sleep_until(deadline).await;
                 let Some(latest_deadline) = copy_notice_deadline.try_get() else {
                     return;
@@ -218,6 +230,38 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let mut selection_anchor = hooks.use_state(|| None::<(usize, usize)>);
     let mut selection_cursor = hooks.use_state(|| None::<(usize, usize)>);
     let mut is_selecting = hooks.use_state(|| false);
+    let keymap = ui_state.read().ok().map(|ui| ui.keymap().clone());
+    let key_sequence = hooks.use_state(KeySequenceState::default);
+    let key_sequence_wake = hooks.use_ref(|| Arc::new(Notify::new()));
+    let key_sequence_wake_for_timer = key_sequence_wake.read().clone();
+    hooks.use_future({
+        let ui_state = ui_state.clone();
+        let notify = notify.clone();
+        let mut key_sequence = key_sequence;
+        async move {
+            loop {
+                key_sequence_wake_for_timer.notified().await;
+                loop {
+                    let remaining = key_sequence.read().remaining_timeout();
+                    let Some(remaining) = remaining else {
+                        break;
+                    };
+                    tokio::select! {
+                        _ = tokio::time::sleep(remaining) => {
+                            if key_sequence.write().expire() {
+                                if let Ok(mut ui) = ui_state.write() {
+                                    ui.pending_key = None;
+                                }
+                                notify.notify_one();
+                            }
+                            break;
+                        }
+                        _ = key_sequence_wake_for_timer.notified() => {}
+                    }
+                }
+            }
+        }
+    });
 
     // Redraw when notified of activity model changes (throttled)
     // This handles new log lines being added
@@ -248,8 +292,22 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         return element!(View).into_any();
     };
 
-    let viewport_height = calculate_viewport_height(height);
     let content_width = content_width_for(width);
+    let (statusline_position, statusline_enabled, prompt_active) = ui_state
+        .read()
+        .map(|ui| {
+            (
+                ui.preferences.statusline.position,
+                ui.preferences.statusline.enabled,
+                ui.interrupt_prompt_active(),
+            )
+        })
+        .unwrap_or((StatuslinePosition::Inline, true, false));
+    let footer_visible = statusline_enabled
+        || prompt_active
+        || log_search.read().is_some()
+        || copy_notice.get().is_some();
+    let viewport_height = calculate_viewport_height(height, footer_visible);
 
     // Memoize the wrap layout: rebuilding it on every render walks the entire
     // log buffer, and we'd clone the result again for event handlers. The Arc
@@ -294,13 +352,60 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         let command_tx = command_tx.clone();
         let notify = notify.clone();
         let attached = config.attached.load(std::sync::atomic::Ordering::Relaxed);
+        let keymap = keymap.clone();
+        let mut key_sequence = key_sequence;
+        let key_sequence_wake = key_sequence_wake.read().clone();
+        let mouse_enabled = ui_state
+            .read()
+            .map(|ui| ui.preferences.behavior.mouse)
+            .unwrap_or(true);
         move |event| match event {
             TerminalEvent::Key(key_event) => {
                 if key_event.kind == KeyEventKind::Release {
                     return;
                 }
+                let prompt_active = ui_state
+                    .read()
+                    .map(|ui| ui.interrupt_prompt_active())
+                    .unwrap_or(false);
+                let search_editing = log_search
+                    .read()
+                    .as_ref()
+                    .is_some_and(|search| search.editing);
+                let context = if prompt_active {
+                    KeyContext::Prompt
+                } else if search_editing {
+                    KeyContext::LogSearch
+                } else {
+                    KeyContext::Logs
+                };
+                let emergency_interrupt =
+                    crate::config::is_emergency_interrupt(key_event.code, key_event.modifiers);
+                let (key_match, pending_key) = {
+                    let mut sequence = key_sequence.write();
+                    let key_match = if emergency_interrupt {
+                        sequence.clear();
+                        KeyMatch::None
+                    } else if let Some(keymap) = keymap.as_deref() {
+                        sequence.input_key(keymap, context, key_event.code, key_event.modifiers)
+                    } else {
+                        KeyMatch::None
+                    };
+                    (key_match, sequence.pending_label())
+                };
+                key_sequence_wake.notify_one();
+                if let Ok(mut ui) = ui_state.write() {
+                    ui.pending_key = pending_key;
+                }
+                let action = match key_match {
+                    KeyMatch::Action(action) => Some(action),
+                    KeyMatch::Prefix | KeyMatch::None => None,
+                };
                 handle_key_event(
                     key_event,
+                    action,
+                    key_match != KeyMatch::None,
+                    emergency_interrupt,
                     &ui_state,
                     &shutdown,
                     command_tx.as_ref(),
@@ -339,7 +444,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .read()
                     .map(|ui| ui.interrupt_prompt_active())
                     .unwrap_or(false);
-                if !prompt_active {
+                if mouse_enabled && !prompt_active {
                     handle_mouse_event(
                         mouse_event,
                         &mut scroll_offset,
@@ -348,6 +453,8 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         state.buffer_start_line,
                         total_visual_rows,
                         viewport_height,
+                        statusline_position,
+                        footer_visible,
                         &visual_rows_for_events,
                         &mut selection_anchor,
                         &mut selection_cursor,
@@ -393,7 +500,13 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         editing: search.editing,
     });
 
-    render_expanded_view(
+    let customization = ui_state.read().ok().map(|ui| ExpandedCustomization {
+        preferences: ui.preferences.clone(),
+        keymap: ui.keymap().clone(),
+        context: ui.run_context.clone(),
+        pending_key: ui.pending_key.clone(),
+    });
+    render_expanded_view_custom(
         &state,
         &visual_rows,
         width,
@@ -408,6 +521,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             },
             interrupt_prompt: (interrupt_prompt_active, interrupt_prompt_attached),
         },
+        customization.as_ref(),
     )
 }
 
@@ -498,8 +612,8 @@ fn build_visual_rows(logs: &VecDeque<String>, content_width: usize) -> Vec<Visua
 }
 
 /// Calculate the viewport height (total height minus header and footer)
-fn calculate_viewport_height(terminal_height: u16) -> usize {
-    (terminal_height as usize).saturating_sub(2) // header + footer
+fn calculate_viewport_height(terminal_height: u16, footer_visible: bool) -> usize {
+    (terminal_height as usize).saturating_sub(1 + usize::from(footer_visible))
 }
 
 fn resolved_scroll_offset(
@@ -571,6 +685,7 @@ fn follow_at_bottom(
     scroll_anchor.set(None);
 }
 
+#[cfg(test)]
 fn keyboard_scroll_action(key_event: &KeyEvent, viewport_height: usize) -> Option<LogScrollAction> {
     let control = key_event.modifiers.contains(KeyModifiers::CONTROL);
     let half_page = viewport_height.div_ceil(2).max(1);
@@ -806,6 +921,8 @@ fn focus_search_match(
 #[allow(clippy::too_many_arguments)]
 fn handle_log_search_key(
     key_event: &KeyEvent,
+    action: Option<Action>,
+    key_consumed: bool,
     log_search: &mut State<Option<LogSearchState>>,
     logs: &VecDeque<String>,
     buffer_start_line: usize,
@@ -822,8 +939,8 @@ fn handle_log_search_key(
     let current_search = log_search.read().clone();
 
     if let Some(mut search) = current_search.clone().filter(|search| search.editing) {
-        if matches!(key_event.code, KeyCode::Esc)
-            || matches!(key_event.code, KeyCode::Char('c')) && control
+        if action == Some(Action::Cancel)
+            || crate::config::is_emergency_interrupt(key_event.code, key_event.modifiers)
         {
             scroll_offset.set(search.origin.offset);
             follow_tail.set(search.origin.scroll_mode.follow_tail);
@@ -831,8 +948,8 @@ fn handle_log_search_key(
             log_search.set(None);
             return true;
         }
-        match key_event.code {
-            KeyCode::Enter => {
+        match action {
+            Some(Action::Accept) => {
                 if search.query.is_empty() {
                     scroll_offset.set(search.origin.offset);
                     follow_tail.set(search.origin.scroll_mode.follow_tail);
@@ -843,7 +960,7 @@ fn handle_log_search_key(
                     log_search.set(Some(search));
                 }
             }
-            KeyCode::Backspace => {
+            None if !key_consumed && key_event.code == KeyCode::Backspace => {
                 search.query.pop();
                 let matches = find_log_matches(logs, buffer_start_line, &search.query);
                 let chosen = choose_search_match(
@@ -868,7 +985,14 @@ fn handle_log_search_key(
                 }
                 log_search.set(Some(search));
             }
-            KeyCode::Char(character) if !control && !alt => {
+            None if !key_consumed
+                && matches!(key_event.code, KeyCode::Char(_))
+                && !control
+                && !alt =>
+            {
+                let KeyCode::Char(character) = key_event.code else {
+                    unreachable!()
+                };
                 search.query.push(character);
                 let matches = find_log_matches(logs, buffer_start_line, &search.query);
                 let chosen = choose_search_match(
@@ -893,12 +1017,12 @@ fn handle_log_search_key(
                 }
                 log_search.set(Some(search));
             }
-            _ => {}
+            Some(_) | None => {}
         }
         return true;
     }
 
-    if matches!(key_event.code, KeyCode::Char('/')) && !control && !alt {
+    if action == Some(Action::Search) {
         log_search.set(Some(LogSearchState {
             query: String::new(),
             current: None,
@@ -918,18 +1042,15 @@ fn handle_log_search_key(
         return false;
     };
 
-    match key_event.code {
-        KeyCode::Esc => {
+    match action {
+        Some(Action::Cancel) => {
             log_search.set(None);
             true
         }
-        KeyCode::Char('n') | KeyCode::Char('N') if !control && !alt => {
+        Some(Action::NextMatch | Action::PreviousMatch) => {
             let matches = find_log_matches(logs, buffer_start_line, &search.query);
-            let chosen = adjacent_search_match(
-                &matches,
-                search.current,
-                matches!(key_event.code, KeyCode::Char('n')),
-            );
+            let chosen =
+                adjacent_search_match(&matches, search.current, action == Some(Action::NextMatch));
             search.current = chosen.map(search_cursor);
             if let Some(chosen) = chosen {
                 focus_search_match(
@@ -946,7 +1067,7 @@ fn handle_log_search_key(
             log_search.set(Some(search));
             true
         }
-        _ => false,
+        Some(_) | None => false,
     }
 }
 
@@ -1011,10 +1132,17 @@ impl SelectionState<'_> {
     }
 }
 
+fn back_clears_selection(key_event: &KeyEvent, has_selection: bool) -> bool {
+    has_selection && key_event.code == KeyCode::Esc
+}
+
 /// Handle keyboard input - updates local scroll state, no model lock needed
 #[allow(clippy::too_many_arguments)]
 fn handle_key_event(
     key_event: KeyEvent,
+    action: Option<Action>,
+    key_consumed: bool,
+    emergency_interrupt: bool,
     ui_state: &Arc<RwLock<UiState>>,
     shutdown: &Arc<Shutdown>,
     command_tx: Option<&ProcessCommandSender>,
@@ -1030,7 +1158,7 @@ fn handle_key_event(
     copy_feedback: &mut CopyFeedbackState<'_>,
     sel: &mut SelectionState<'_>,
 ) {
-    if handle_interrupt_prompt_key(&key_event, ui_state, shutdown, command_tx) {
+    if handle_interrupt_prompt_action(action, emergency_interrupt, ui_state, shutdown, command_tx) {
         return;
     }
 
@@ -1051,6 +1179,8 @@ fn handle_key_event(
 
     if handle_log_search_key(
         &key_event,
+        action,
+        key_consumed,
         log_search,
         sel.logs,
         buffer_start_line,
@@ -1065,7 +1195,22 @@ fn handle_key_event(
         return;
     }
 
-    if let Some(action) = keyboard_scroll_action(&key_event, viewport_height) {
+    let scroll_action = match action {
+        Some(Action::LineDown) => Some(LogScrollAction::Forward(1)),
+        Some(Action::LineUp) => Some(LogScrollAction::Backward(1)),
+        Some(Action::HalfPageDown) => {
+            Some(LogScrollAction::Forward(viewport_height.div_ceil(2).max(1)))
+        }
+        Some(Action::HalfPageUp) => Some(LogScrollAction::Backward(
+            viewport_height.div_ceil(2).max(1),
+        )),
+        Some(Action::PageDown) => Some(LogScrollAction::Forward(viewport_height)),
+        Some(Action::PageUp) => Some(LogScrollAction::Backward(viewport_height)),
+        Some(Action::Top) => Some(LogScrollAction::Top),
+        Some(Action::Bottom) => Some(LogScrollAction::Bottom),
+        _ => None,
+    };
+    if let Some(action) = scroll_action {
         apply_scroll_action(
             action,
             current_scroll_offset,
@@ -1079,33 +1224,16 @@ fn handle_key_event(
         return;
     }
 
-    match key_event.code {
-        // Esc: clear selection first, then exit
-        KeyCode::Esc => {
-            if sel.has_selection {
+    match action {
+        Some(Action::Back) => {
+            if back_clears_selection(&key_event, sel.has_selection) {
                 sel.clear();
             } else if let Ok(mut ui) = ui_state.write() {
                 ui.view_mode = ViewMode::Main;
             }
         }
 
-        // q: always exit
-        KeyCode::Char('q') => {
-            if let Ok(mut ui) = ui_state.write() {
-                ui.view_mode = ViewMode::Main;
-            }
-        }
-
-        KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-            if let Ok(mut ui) = ui_state.write() {
-                ui.view_mode = ViewMode::Main;
-            }
-        }
-
-        KeyCode::Char('y')
-            if !key_event.modifiers.contains(KeyModifiers::CONTROL)
-                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
-        {
+        Some(Action::Copy) => {
             let selection = match (sel.anchor, sel.cursor) {
                 (Some(anchor), Some(cursor)) => Some(Selection::from_anchor_cursor(anchor, cursor)),
                 _ => None,
@@ -1120,8 +1248,7 @@ fn handle_key_event(
             }
         }
 
-        // Ctrl+C: copy selection if active, otherwise open the quit prompt
-        KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+        _ if emergency_interrupt => {
             if sel.has_selection {
                 if let (Some(anchor), Some(cursor)) = (sel.anchor, sel.cursor) {
                     let selection = Selection::from_anchor_cursor(anchor, cursor);
@@ -1137,7 +1264,7 @@ fn handle_key_event(
             }
         }
 
-        _ => {}
+        Some(_) | None => {}
     }
 }
 
@@ -1151,6 +1278,8 @@ fn handle_mouse_event(
     buffer_start_line: usize,
     total_visual_rows: usize,
     viewport_height: usize,
+    statusline_position: StatuslinePosition,
+    footer_visible: bool,
     visual_rows: &[VisualRow],
     selection_anchor: &mut State<Option<(usize, usize)>>,
     selection_cursor: &mut State<Option<(usize, usize)>>,
@@ -1171,8 +1300,13 @@ fn handle_mouse_event(
     // Map a terminal (row, col) to the logical (log_line_idx, visual_col)
     // selection coordinate. visual_col is a character offset into the *logical*
     // log line, accounting for the wrap segment that was clicked.
+    let content_start_row = match (statusline_position, footer_visible) {
+        (StatuslinePosition::Top, true) => 2,
+        (StatuslinePosition::Bottom | StatuslinePosition::Inline, _) => 1,
+        _ => 1,
+    };
     let map_to_logical = |row: usize, col: usize| -> Option<(usize, usize)> {
-        let visible_row_idx = row.checked_sub(1)?;
+        let visible_row_idx = row.checked_sub(content_start_row)?;
         let visual_row_idx = current_scroll_offset + visible_row_idx;
         let vrow = visual_rows.get(visual_row_idx)?;
         let col_in_segment = col.saturating_sub(LINE_NUM_PREFIX_WIDTH);
@@ -1187,8 +1321,7 @@ fn handle_mouse_event(
             let row = mouse_event.row as usize;
             let col = mouse_event.column as usize;
 
-            // Row 0 is header, last row is footer - ignore those
-            if row == 0 || row > viewport_height {
+            if row < content_start_row || row >= content_start_row + viewport_height {
                 return;
             }
 
@@ -1217,8 +1350,10 @@ fn handle_mouse_event(
             let row = mouse_event.row as usize;
             let col = mouse_event.column as usize;
 
-            // Clamp row to content area
-            let clamped_row = row.clamp(1, viewport_height);
+            let clamped_row = row.clamp(
+                content_start_row,
+                content_start_row + viewport_height.saturating_sub(1),
+            );
             let Some(pos) = map_to_logical(clamped_row, col) else {
                 return;
             };
@@ -1345,6 +1480,7 @@ fn expanded_footer_piece(content: impl Into<String>, color: Color) -> AnyElement
 }
 
 /// Render the expanded view UI
+#[cfg(test)]
 fn render_expanded_view(
     state: &ExpandedViewState,
     visual_rows: &[VisualRow],
@@ -1352,8 +1488,28 @@ fn render_expanded_view(
     height: u16,
     ui: ExpandedViewUi<'_>,
 ) -> AnyElement<'static> {
+    render_expanded_view_custom(state, visual_rows, width, height, ui, None)
+}
+
+fn render_expanded_view_custom(
+    state: &ExpandedViewState,
+    visual_rows: &[VisualRow],
+    width: u16,
+    height: u16,
+    ui: ExpandedViewUi<'_>,
+    customization: Option<&ExpandedCustomization>,
+) -> AnyElement<'static> {
     let (interrupt_prompt_active, interrupt_prompt_attached) = ui.interrupt_prompt;
-    let viewport_height = calculate_viewport_height(height);
+    let statusline_position = customization
+        .map(|customization| customization.preferences.statusline.position)
+        .unwrap_or_default();
+    let footer_visible = customization.is_none_or(|customization| {
+        customization.preferences.statusline.enabled
+            || interrupt_prompt_active
+            || ui.search.is_some()
+            || ui.copy_notice.is_some()
+    });
+    let viewport_height = calculate_viewport_height(height, footer_visible);
     let total_rows = visual_rows.len();
 
     let clamped_offset = resolved_scroll_offset(
@@ -1390,7 +1546,112 @@ fn render_expanded_view(
     };
     let compact_follow_status = if ui.scroll_mode.follow_tail { "F" } else { "P" };
 
-    let footer = if interrupt_prompt_active {
+    let configured_footer = customization
+        .filter(|customization| !customization.preferences.uses_default_statusline())
+        .map(|customization| {
+            let mode = if interrupt_prompt_active || ui.copy_notice.is_some() {
+                StatuslineMode::Prompt
+            } else if ui.search.is_some() {
+                StatuslineMode::Search
+            } else {
+                StatuslineMode::Logs
+            };
+            let (key_context, actions) = match mode {
+                StatuslineMode::Prompt => (KeyContext::Prompt, Vec::new()),
+                StatuslineMode::Search if ui.search.is_some_and(|search| search.editing) => (
+                    KeyContext::LogSearch,
+                    vec![
+                        Action::NextMatch,
+                        Action::PreviousMatch,
+                        Action::Accept,
+                        Action::Cancel,
+                    ],
+                ),
+                StatuslineMode::Search => (
+                    KeyContext::Logs,
+                    vec![
+                        Action::NextMatch,
+                        Action::PreviousMatch,
+                        Action::Search,
+                        Action::Back,
+                    ],
+                ),
+                StatuslineMode::Logs => (
+                    KeyContext::Logs,
+                    vec![
+                        Action::LineDown,
+                        Action::LineUp,
+                        Action::HalfPageDown,
+                        Action::HalfPageUp,
+                        Action::PageDown,
+                        Action::PageUp,
+                        Action::Top,
+                        Action::Bottom,
+                        Action::Search,
+                        Action::Copy,
+                        Action::Back,
+                    ],
+                ),
+                StatuslineMode::Main => unreachable!(),
+            };
+            let key_hints = if interrupt_prompt_active {
+                Some(interrupt_prompt_key_hints(
+                    &customization.keymap,
+                    interrupt_prompt_attached,
+                    width,
+                ))
+            } else {
+                action_key_hints(&customization.keymap, key_context, actions, width)
+            };
+            let search_result = ui.search.map(search_result_text);
+            let search_current = ui.search.and_then(|search| {
+                search.current.and_then(|current| {
+                    search
+                        .matches
+                        .iter()
+                        .position(|item| search_cursor(*item) == current)
+                        .map(|index| index + 1)
+                })
+            });
+            let data = StatuslineData {
+                context: (*customization.context).clone(),
+                log_mode: Some(follow_status.to_lowercase()),
+                log_current: Some(state.buffer_start_line + end),
+                log_total: Some(state.buffer_start_line + state.logs.len()),
+                retained_logs: Some(state.logs.len()),
+                discarded_logs: Some(state.buffer_start_line),
+                search_query: ui.search.map(|search| search.query.to_string()),
+                search_current,
+                search_total: ui.search.map(|search| search.matches.len()),
+                search_result,
+                prompt: if interrupt_prompt_active {
+                    Some(if interrupt_prompt_attached {
+                        "Detach or stop the process manager?".to_string()
+                    } else {
+                        "Quit devenv? Nothing has been stopped yet.".to_string()
+                    })
+                } else {
+                    ui.copy_notice.map(CopyNotice::message)
+                },
+                pending_key: customization.pending_key.clone(),
+                key_hints,
+                ..StatuslineData::default()
+            };
+            crate::view::build_configured_statusline(
+                render_statusline(
+                    mode,
+                    width.saturating_sub(2),
+                    &customization.preferences,
+                    &data,
+                ),
+                &customization.preferences.theme,
+                width,
+            )
+        });
+
+    let footer = if let Some(footer) = configured_footer {
+        footer
+    } else if interrupt_prompt_active {
         let compact = width < 120;
         let status = if width < 60 {
             format!("{compact_follow_status} ")
@@ -1492,7 +1753,7 @@ fn render_expanded_view(
             width: 100pct,
             overflow: Overflow::Hidden,
         ) {
-            View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+            View(flex_grow: 1.0_f32, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(content: prompt, color: prompt_color, weight: Weight::Bold)
             }
             View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 1) {
@@ -1579,7 +1840,7 @@ fn render_expanded_view(
                     color: Color::AnsiValue(245)
                 )
             }
-            View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+            View(flex_grow: 1.0_f32, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(content: format!("/{}", search.query), color: search_color)
             }
             View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
@@ -1644,30 +1905,39 @@ fn render_expanded_view(
         .into_any()
     };
 
-    element! {
-        View(
-            flex_direction: FlexDirection::Column,
-            height: height as u32,
-            width: width as u32
-        ) {
-            // Header
-            View(height: 1, padding_left: 1, padding_right: 1) {
-                Text(
-                    content: format!("\u{2500}\u{2500}\u{2500} {} \u{2500}\u{2500}\u{2500}", state.activity_name),
-                    color: Color::Cyan,
-                    weight: Weight::Bold
-                )
-            }
-            // Log content
-            View(flex_grow: 1.0, flex_direction: FlexDirection::Column) {
-                #(content_elements)
-            }
-            // Footer
-            View(height: 1, padding_left: 1, padding_right: 1) {
-                #(footer)
-            }
+    let header = element!(View(height: 1, padding_left: 1, padding_right: 1) {
+        Text(
+            content: format!("\u{2500}\u{2500}\u{2500} {} \u{2500}\u{2500}\u{2500}", state.activity_name),
+            color: Color::Cyan,
+            weight: Weight::Bold
+        )
+    })
+    .into_any();
+    let content = element!(View(flex_grow: 1.0_f32, flex_direction: FlexDirection::Column) {
+        #(content_elements)
+    })
+    .into_any();
+    let statusline = footer_visible.then(|| {
+        element!(View(height: 1, padding_left: 1, padding_right: 1) {
+            #(footer)
+        })
+        .into_any()
+    });
+    let children = match (statusline_position, statusline) {
+        (StatuslinePosition::Top, Some(statusline)) => vec![statusline, header, content],
+        (StatuslinePosition::Bottom | StatuslinePosition::Inline, Some(statusline)) => {
+            vec![header, content, statusline]
         }
-    }
+        (_, None) => vec![header, content],
+    };
+
+    element!(View(
+        flex_direction: FlexDirection::Column,
+        height: height as u32,
+        width: width as u32
+    ) {
+        #(children)
+    })
     .into_any()
 }
 
@@ -1933,6 +2203,19 @@ mod tests {
             Some(LogScrollAction::Backward(21))
         );
         assert_eq!(action(KeyCode::Char('d'), false), None);
+    }
+
+    #[test]
+    fn only_escape_clears_a_selection_before_leaving_logs() {
+        let escape = KeyEvent::new(KeyEventKind::Press, KeyCode::Esc);
+        let quit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'));
+        let mut ctrl_e = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('e'));
+        ctrl_e.modifiers = KeyModifiers::CONTROL;
+
+        assert!(back_clears_selection(&escape, true));
+        assert!(!back_clears_selection(&quit, true));
+        assert!(!back_clears_selection(&ctrl_e, true));
+        assert!(!back_clears_selection(&escape, false));
     }
 
     #[test]
@@ -2386,6 +2669,215 @@ mod tests {
         assert!(output.contains("Quit devenv? Nothing has been stopped yet"));
         assert!(output.contains("c:keep running"));
         assert!(output.contains("q:quit"));
+    }
+
+    #[test]
+    fn configured_interrupt_prompt_footer_stays_visible_and_contextual() {
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(VecDeque::new()),
+            buffer_start_line: 0,
+        };
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(160));
+        let mut preferences = crate::config::TuiPreferences::default();
+        preferences.statusline.enabled = false;
+        let customization = ExpandedCustomization {
+            preferences: Arc::new(preferences),
+            keymap: Arc::new(
+                crate::config::KeybindingsConfig::default()
+                    .resolve()
+                    .unwrap(),
+            ),
+            context: Arc::new(crate::config::TuiRunContext::default()),
+            pending_key: None,
+        };
+
+        let render = |attached| {
+            let mut element = render_expanded_view_custom(
+                &state,
+                &visual_rows,
+                160,
+                8,
+                expanded_ui(None, None, None, true, (true, attached)),
+                Some(&customization),
+            );
+            element.render(Some(160)).to_string()
+        };
+
+        let starting = render(false);
+        assert!(starting.contains("Quit devenv?"));
+        assert!(starting.contains("q quit"));
+        assert!(starting.contains("Ctrl-C quit"));
+        assert!(!starting.contains("s stop manager"));
+
+        let attached = render(true);
+        assert!(attached.contains("Detach or stop"));
+        assert!(attached.contains("s stop manager"));
+        assert!(attached.contains("Ctrl-C detach"));
+        assert!(!attached.contains("q quit"));
+    }
+
+    #[test]
+    fn statusline_position_applies_to_expanded_logs() {
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(VecDeque::from(["ready".to_string()])),
+            buffer_start_line: 0,
+        };
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(120));
+
+        let render = |position| {
+            let mut preferences = crate::config::TuiPreferences::default();
+            preferences.statusline.position = position;
+            let customization = ExpandedCustomization {
+                preferences: Arc::new(preferences),
+                keymap: Arc::new(
+                    crate::config::KeybindingsConfig::default()
+                        .resolve()
+                        .unwrap(),
+                ),
+                context: Arc::new(crate::config::TuiRunContext::default()),
+                pending_key: None,
+            };
+            let mut element = render_expanded_view_custom(
+                &state,
+                &visual_rows,
+                120,
+                8,
+                expanded_ui(None, None, None, true, (false, false)),
+                Some(&customization),
+            );
+            element.render(Some(120)).to_string()
+        };
+
+        for (position, expected_row) in [
+            (StatuslinePosition::Top, 0),
+            (StatuslinePosition::Bottom, 7),
+            (StatuslinePosition::Inline, 7),
+        ] {
+            let output = render(position);
+            assert_eq!(
+                output
+                    .lines()
+                    .position(|line| line.contains("FOLLOWING"))
+                    .unwrap(),
+                expected_row
+            );
+        }
+    }
+
+    #[test]
+    fn disabled_log_statusline_reclaims_the_footer_row() {
+        assert_eq!(calculate_viewport_height(8, true), 6);
+        assert_eq!(calculate_viewport_height(8, false), 7);
+    }
+
+    #[test]
+    fn configured_log_footer_keeps_mode_specific_actions() {
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(VecDeque::from(["ready".to_string()])),
+            buffer_start_line: 0,
+        };
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(400));
+        let matches = find_log_matches(&state.logs, 0, "ready");
+        let customization = ExpandedCustomization {
+            preferences: Arc::new(crate::config::TuiPreferences {
+                theme: crate::config::ThemeConfig {
+                    preset: crate::config::ThemePreset::Terminal,
+                    ..crate::config::ThemeConfig::default()
+                },
+                ..crate::config::TuiPreferences::default()
+            }),
+            keymap: Arc::new(
+                crate::config::KeybindingsConfig::default()
+                    .resolve()
+                    .unwrap(),
+            ),
+            context: Arc::new(crate::config::TuiRunContext::default()),
+            pending_key: None,
+        };
+
+        let mut logs = render_expanded_view_custom(
+            &state,
+            &visual_rows,
+            400,
+            8,
+            expanded_ui(None, None, None, true, (false, false)),
+            Some(&customization),
+        );
+        let logs = logs.render(Some(400)).to_string();
+        assert!(logs.contains("Home top"));
+        assert!(logs.contains("End bottom"));
+
+        let mut compact_logs = render_expanded_view_custom(
+            &state,
+            &visual_rows,
+            80,
+            8,
+            expanded_ui(None, None, None, true, (false, false)),
+            Some(&customization),
+        );
+        let compact_logs = compact_logs.render(Some(80)).to_string();
+        for key in ["^D", "^U", "^F", "^B", "g", "End", "/", "y", "q"] {
+            assert!(
+                compact_logs.contains(key),
+                "missing {key:?}: {compact_logs:?}"
+            );
+        }
+
+        let search = |editing| LogSearchView {
+            query: "ready",
+            matches: &matches,
+            current: Some(search_cursor(matches[0])),
+            editing,
+        };
+        let mut editing = render_expanded_view_custom(
+            &state,
+            &visual_rows,
+            400,
+            8,
+            expanded_ui(None, Some(search(true)), None, false, (false, false)),
+            Some(&customization),
+        );
+        let editing = editing.render(Some(400)).to_string();
+        assert!(editing.contains("Enter accept"));
+        assert!(editing.contains("Esc cancel"));
+
+        let mut selected = render_expanded_view_custom(
+            &state,
+            &visual_rows,
+            400,
+            8,
+            expanded_ui(None, Some(search(false)), None, false, (false, false)),
+            Some(&customization),
+        );
+        let selected = selected.render(Some(400)).to_string();
+        assert!(selected.contains("n next"));
+        assert!(selected.contains("Shift+N previous"));
+        assert!(selected.contains("/ search"));
+        assert!(selected.contains("q back"));
+
+        let mut copied = render_expanded_view_custom(
+            &state,
+            &visual_rows,
+            400,
+            8,
+            expanded_ui(
+                None,
+                None,
+                CopyNotice::from_text("ready"),
+                true,
+                (false, false),
+            ),
+            Some(&customization),
+        );
+        let copied = copied.render(Some(400)).to_string();
+        assert!(copied.contains("Copied 1 line"));
+        assert!(copied.contains("5B"));
     }
 
     #[test]

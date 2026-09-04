@@ -222,6 +222,7 @@ export default defineConfig({
           label: 'Tools',
           collapsed: true,
           items: [
+            { label: 'TUI customization', slug: 'tui-customization' },
             { label: 'LSP', slug: 'lsp' },
             { label: 'MCP', slug: 'mcp' },
             { label: 'REPL', slug: 'repl' },

@@ -107,6 +107,8 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
         // enhancement support.
         const KEYBOARD_PROBE: &[u8] = b"\x1b[?u\x1b[c";
         const PRIMARY_DEVICE_ATTRIBUTES: &[u8] = b"\x1b[?1;2c";
+        const CURSOR_POSITION_QUERY: &[u8] = b"\x1b[6n";
+        const CURSOR_POSITION: &[u8] = b"\x1b[6;1R";
         let mut probe_output = Vec::new();
         let mut buf = [0u8; 4096];
         'read: loop {
@@ -129,7 +131,19 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
                         }
                         probe_output.drain(..pos + KEYBOARD_PROBE.len());
                     }
-                    let keep = KEYBOARD_PROBE.len().saturating_sub(1);
+                    while let Some(pos) = find(&probe_output, CURSOR_POSITION_QUERY) {
+                        let Ok(mut writer) = terminal_writer.lock() else {
+                            break 'read;
+                        };
+                        if writer.write_all(CURSOR_POSITION).is_err() || writer.flush().is_err() {
+                            break 'read;
+                        }
+                        probe_output.drain(..pos + CURSOR_POSITION_QUERY.len());
+                    }
+                    let keep = KEYBOARD_PROBE
+                        .len()
+                        .max(CURSOR_POSITION_QUERY.len())
+                        .saturating_sub(1);
                     if probe_output.len() > keep {
                         probe_output.drain(..probe_output.len() - keep);
                     }

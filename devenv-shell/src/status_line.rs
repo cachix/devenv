@@ -12,6 +12,8 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
+use crate::keybindings::{ShellAction, ShellKeybindings};
+
 // ============================================================================
 // Shared UI constants - used by both devenv-shell and devenv-tui
 // ============================================================================
@@ -64,22 +66,6 @@ pub const PULSE_INTERVAL_MS: u64 = 500;
 pub const CHECKMARK: &str = "✓";
 /// Failure X character
 pub const XMARK: &str = "✗";
-
-/// Keybind labels (short, long) for status line actions.
-/// Short form uses ⌥ (Option symbol). Long form uses "Opt" on macOS, "Alt" elsewhere.
-/// When deterministic-tui is enabled, always use "Alt" for reproducible snapshots.
-#[cfg(feature = "deterministic-tui")]
-const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Alt-E");
-#[cfg(all(not(feature = "deterministic-tui"), target_os = "macos"))]
-const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Opt-E");
-#[cfg(all(not(feature = "deterministic-tui"), not(target_os = "macos")))]
-const KEYBIND_ERROR: (&str, &str) = ("^⌥E", "Ctrl-Alt-E");
-#[cfg(feature = "deterministic-tui")]
-const KEYBIND_PAUSE: (&str, &str) = ("^⌥D", "Ctrl-Alt-D");
-#[cfg(all(not(feature = "deterministic-tui"), target_os = "macos"))]
-const KEYBIND_PAUSE: (&str, &str) = ("^⌥D", "Ctrl-Opt-D");
-#[cfg(all(not(feature = "deterministic-tui"), not(target_os = "macos")))]
-const KEYBIND_PAUSE: (&str, &str) = ("^⌥D", "Ctrl-Alt-D");
 
 /// Current status state.
 #[derive(Debug, Clone, Default)]
@@ -281,11 +267,6 @@ fn format_changed_files(changed_files: &[PathBuf], max_len: usize) -> String {
     format!("{} files", files.len())
 }
 
-/// Select short or long keybind label based on terminal width.
-fn keybind_label(keybind: (&'static str, &'static str), use_short: bool) -> &'static str {
-    if use_short { keybind.0 } else { keybind.1 }
-}
-
 /// Build "in N.Ns" duration elements, or empty if no duration recorded.
 fn duration_elements(state: &StatusState) -> Vec<AnyElement<'static>> {
     let Some((num, unit)) = state.build_duration.map(format_duration_parts) else {
@@ -313,6 +294,7 @@ fn watching_elements(count: usize) -> Vec<AnyElement<'static>> {
 /// Status line manager using iocraft for rendering.
 pub struct StatusLine {
     state: StatusState,
+    keybindings: ShellKeybindings,
     enabled: bool,
     /// Current spinner frame index (animated manually since we don't use iocraft runtime)
     spinner_frame: usize,
@@ -502,6 +484,7 @@ impl StatusLine {
     pub fn new() -> Self {
         Self {
             state: StatusState::new(),
+            keybindings: ShellKeybindings::default(),
             enabled: true,
             spinner_frame: 0,
             last_spinner_update: Instant::now(),
@@ -532,6 +515,11 @@ impl StatusLine {
     /// Enable or disable the status line.
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
+    }
+
+    pub fn set_keybindings(&mut self, keybindings: ShellKeybindings) {
+        self.keybindings = keybindings;
+        self.cached_state = None;
     }
 
     /// Check if the status line is enabled.
@@ -628,7 +616,7 @@ impl StatusLine {
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
-                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
                             Text(content: spinner, color: COLOR_ACTIVE)
                         }
@@ -662,7 +650,7 @@ impl StatusLine {
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
-                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
                             Text(content: CHECKMARK, color: COLOR_COMPLETED)
                         }
@@ -681,7 +669,7 @@ impl StatusLine {
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
-                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
                             Text(content: CHECKMARK, color: COLOR_COMPLETED)
                         }
@@ -697,7 +685,9 @@ impl StatusLine {
             // Failed state
             let duration = duration_elements(&self.state);
             let watching = watching_elements(self.state.watched_file_count);
-            let keybind = keybind_label(KEYBIND_ERROR, use_short);
+            let keybind = self
+                .keybindings
+                .key_label(ShellAction::ToggleError, use_short);
             let error_action = if self.state.show_error {
                 " hide error"
             } else {
@@ -706,7 +696,7 @@ impl StatusLine {
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
-                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
                             Text(content: XMARK, color: COLOR_FAILED)
                         }
@@ -716,19 +706,27 @@ impl StatusLine {
                         #(watching)
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
-                        Text(content: keybind, color: COLOR_INTERACTIVE)
-                        Text(content: error_action)
+                        #(if let Some(keybind) = keybind {
+                            vec![
+                                element!(Text(content: keybind, color: COLOR_INTERACTIVE)).into_any(),
+                                element!(Text(content: error_action)).into_any(),
+                            ]
+                        } else {
+                            vec![]
+                        })
                     }
                 }
             }
             .into_any()
         } else if self.state.paused {
             // Paused state
-            let keybind = keybind_label(KEYBIND_PAUSE, use_short);
+            let keybind = self
+                .keybindings
+                .key_label(ShellAction::TogglePause, use_short);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
-                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 2) {
                             Text(content: "⏸", color: COLOR_SECONDARY)
                         }
@@ -736,20 +734,28 @@ impl StatusLine {
                         Text(content: "paused", weight: Weight::Bold, color: COLOR_ACTIVE)
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
-                        Text(content: keybind, color: COLOR_INTERACTIVE)
-                        Text(content: " resume")
+                        #(if let Some(keybind) = keybind {
+                            vec![
+                                element!(Text(content: keybind, color: COLOR_INTERACTIVE)).into_any(),
+                                element!(Text(content: " resume")).into_any(),
+                            ]
+                        } else {
+                            vec![]
+                        })
                     }
                 }
             }
             .into_any()
         } else if self.state.watched_file_count > 0 {
             // Watching state
-            let keybind = keybind_label(KEYBIND_PAUSE, use_short);
+            let keybind = self
+                .keybindings
+                .key_label(ShellAction::TogglePause, use_short);
             let count_str = self.state.watched_file_count.to_string();
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
-                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                    View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 2) {
                             Text(content: "👁", color: COLOR_SECONDARY)
                         }
@@ -759,8 +765,14 @@ impl StatusLine {
                         Text(content: " files", color: COLOR_SECONDARY)
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
-                        Text(content: keybind, color: COLOR_INTERACTIVE)
-                        Text(content: " pause")
+                        #(if let Some(keybind) = keybind {
+                            vec![
+                                element!(Text(content: keybind, color: COLOR_INTERACTIVE)).into_any(),
+                                element!(Text(content: " pause")).into_any(),
+                            ]
+                        } else {
+                            vec![]
+                        })
                     }
                 }
             }
@@ -933,6 +945,35 @@ mod tests {
             status_line.cached_state.as_ref().unwrap() as *const _,
             state_pointer
         );
+    }
+
+    #[test]
+    fn status_line_uses_configured_bindings_and_hides_unbound_actions() {
+        let mut keybindings = ShellKeybindings::default();
+        keybindings.replace(
+            ShellAction::TogglePause,
+            vec![crate::keybindings::ShellKeyChord::new(
+                crate::keybindings::ShellKeyCode::Function(12),
+                false,
+                false,
+                false,
+            )],
+        );
+        keybindings.replace(ShellAction::ToggleError, Vec::new());
+
+        let mut status_line = StatusLine::new();
+        status_line.set_keybindings(keybindings);
+        status_line.state_mut().set_paused(true);
+        let paused = String::from_utf8_lossy(&uncached_content(&status_line, 80)).into_owned();
+        assert!(paused.contains("F12"));
+        assert!(paused.contains(" resume"));
+
+        status_line
+            .state_mut()
+            .set_build_failed(vec![PathBuf::from("devenv.nix")], "error".to_string());
+        let failed = String::from_utf8_lossy(&uncached_content(&status_line, 80)).into_owned();
+        assert!(!failed.contains("show error"));
+        assert!(!failed.contains("hide error"));
     }
 
     #[test]

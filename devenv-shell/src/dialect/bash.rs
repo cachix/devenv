@@ -232,7 +232,21 @@ __devenv_apply_reverse_diff() {
 "#
     }
 
-    fn reload_hook(&self, reload_file: &Path) -> String {
+    fn reload_hook(
+        &self,
+        reload_file: &Path,
+        keybindings: &crate::keybindings::ShellKeybindings,
+    ) -> String {
+        let reload_keybindings = keybindings
+            .reload_bindings(self.name())
+            .iter()
+            .map(|binding| {
+                format!(
+                    "bind -x '\"{}\":__devenv_reload_apply'\n",
+                    binding.escaped_bytes()
+                )
+            })
+            .collect::<String>();
         format!(
             r#"
 __devenv_reload_apply() {{
@@ -273,8 +287,10 @@ __devenv_reload_hook() {{
 if [[ "$PROMPT_COMMAND" != *"__devenv_reload_hook"* ]]; then
     PROMPT_COMMAND="${{PROMPT_COMMAND:+$PROMPT_COMMAND;}}__devenv_reload_hook"
 fi
+{reload_keybindings}
 "#,
-            reload_file.to_string_lossy()
+            reload_file.to_string_lossy(),
+            reload_keybindings = reload_keybindings,
         )
     }
 

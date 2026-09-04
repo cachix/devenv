@@ -48,7 +48,7 @@ use devenv::{
     activity::{ActivityGuard, ActivityLevel},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
-        TraceOutputSpec,
+        TraceOutputSpec, UserConfigCommand,
     },
     is_ai_agent,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
@@ -109,6 +109,9 @@ fn main_inner() -> Result<()> {
         match &cli.command {
             Commands::Version => {
                 return commands::version::run();
+            }
+            Commands::UserConfig { command } => {
+                return run_user_config_command(command, cli.user_config.as_deref());
             }
             Commands::Direnvrc => {
                 return commands::direnvrc::run();
@@ -175,9 +178,43 @@ fn main_inner() -> Result<()> {
     }
 }
 
+fn run_user_config_command(
+    command: &UserConfigCommand,
+    override_path: Option<&Path>,
+) -> Result<()> {
+    if matches!(command, UserConfigCommand::Schema) {
+        let schema = schemars::schema_for!(devenv_tui::UserConfig);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&schema).into_diagnostic()?
+        );
+        return Ok(());
+    }
+    let path = override_path.map(|path| {
+        devenv_core::paths::resolve_against(path, &env::current_dir().unwrap_or_default())
+    });
+    let path = devenv::user_config::path(path.as_deref())?;
+    match command {
+        UserConfigCommand::Path => println!("{}", path.display()),
+        UserConfigCommand::Validate => {
+            devenv_tui::UserConfig::load(&path)?;
+            println!("valid: {}", path.display());
+        }
+        UserConfigCommand::Show => {
+            let config = devenv::user_config::load(override_path.map(|_| path.as_path()))?;
+            print!("{}", config.to_yaml()?);
+        }
+        UserConfigCommand::Schema => unreachable!(),
+    }
+    Ok(())
+}
+
 /// Options for the frontend/renderer thread.
 struct FrontendOptions {
     tui_allowed: bool,
+    tui_preferences: Arc<devenv_tui::TuiPreferences>,
+    tui_context: Arc<devenv_tui::TuiRunContext>,
+    shell_keybindings: devenv_shell::keybindings::ShellKeybindings,
     tracing_owns_terminal: bool,
     log_level: devenv_tracing::Level,
     tracing_specs: Vec<TraceOutputSpec>,
@@ -194,6 +231,7 @@ struct BackendOptions {
     /// Whether an interactive reloadable shell will use the PTY session.
     /// This is decided before the frontend/backend split so both sides agree.
     use_pty: bool,
+    shell_keybindings: devenv_shell::keybindings::ShellKeybindings,
 }
 
 /// Everything needed to execute a config-backed command.
@@ -384,8 +422,6 @@ fn enter_discovered_project_root() -> Result<()> {
 
 /// Prepare a config-backed CLI command for execution.
 fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCommand> {
-    let command = cli.command;
-
     // --- Project discovery and working directory ---
 
     // Source priority: explicit `--from` / `-O` overrides > a local devenv.nix
@@ -394,6 +430,10 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     // supplied.
     // Has to run before Config::load() reads "./devenv.yaml".
     let original_cwd = env::current_dir().ok();
+    let user_config_path = cli.user_config.as_deref().map(|path| {
+        devenv_core::paths::resolve_against(path, original_cwd.as_deref().unwrap_or(Path::new(".")))
+    });
+    let command = cli.command;
     let has_overrides = !cli.input_overrides.nix_module_options.is_empty();
     let mut from_source = cli.from.clone();
     let mut project_root = None;
@@ -424,7 +464,10 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         }
     }
 
-    let discovered_root = project_root.filter(|r| Some(r.as_path()) != original_cwd.as_deref());
+    let discovered_root = project_root
+        .as_ref()
+        .filter(|r| Some(r.as_path()) != original_cwd.as_deref())
+        .cloned();
     // When discovery moves us into a parent root, remember the directory the
     // user actually invoked from so the interactive shell and `-- cmd` still
     // run there. The devenv environment is root-scoped; the cwd is not.
@@ -455,8 +498,19 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             .tui_preference()
             .resolve(env::var_os("CI").is_some() || is_ai_agent());
 
-    let frontend = FrontendOptions {
+    let terminal_interactive = terminal::can_use_stdin_interactively();
+    let shell_interactive = matches!(&command, Commands::Shell { cmd: None, .. });
+    let (tui_preferences, shell_keybindings) = load_user_preferences(
         tui_allowed,
+        shell_interactive,
+        terminal_interactive,
+        user_config_path.as_deref(),
+    )?;
+    let mut frontend = FrontendOptions {
+        tui_allowed,
+        tui_preferences: Arc::new(tui_preferences),
+        tui_context: Arc::new(devenv_tui::TuiRunContext::default()),
+        shell_keybindings: shell_keybindings.clone(),
         tracing_owns_terminal,
         log_level,
         tracing_specs,
@@ -525,6 +579,13 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         &config,
         shell_hint,
     );
+    frontend.tui_context = Arc::new(devenv_tui::TuiRunContext {
+        profiles: shell_settings.profiles.clone(),
+        project_root: project_root.or_else(|| env::current_dir().ok()),
+        command: Some(command.as_str().to_string()),
+        shell: Some(shell_settings.shell.clone()),
+        started_at: Some(Instant::now()),
+    });
     let cache_settings = CacheSettings::resolve(devenv_core::CacheOptions::from(cli.cache_args));
     let secret_settings =
         SecretSettings::resolve(devenv_core::SecretOptions::from(cli.secret_args), &config);
@@ -582,11 +643,33 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             nix_debugger,
             strict_ports,
             use_pty,
+            shell_keybindings,
         },
         discovered_root,
         test_environment,
         shutdown,
     })
+}
+
+fn load_user_preferences(
+    tui_allowed: bool,
+    shell_interactive: bool,
+    terminal_interactive: bool,
+    path: Option<&Path>,
+) -> Result<(
+    devenv_tui::TuiPreferences,
+    devenv_shell::keybindings::ShellKeybindings,
+)> {
+    if terminal_interactive && (tui_allowed || shell_interactive) {
+        let config = devenv::user_config::load(path)?;
+        let shell_keybindings = config.shell.resolve()?;
+        Ok((config.tui, shell_keybindings))
+    } else {
+        Ok((
+            devenv_tui::TuiPreferences::default(),
+            devenv_shell::keybindings::ShellKeybindings::default(),
+        ))
+    }
 }
 
 /// The activity sink for a run.
@@ -595,7 +678,11 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
 /// the first-party activity channel has no renderer, while the independently
 /// emitted activity spans and update events remain available to trace exports.
 enum Renderer {
-    Tui(tokio_mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
+    Tui {
+        activity_rx: tokio_mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>,
+        preferences: Arc<devenv_tui::TuiPreferences>,
+        context: Arc<devenv_tui::TuiRunContext>,
+    },
     Console(tokio_mpsc::UnboundedReceiver<devenv_activity::ActivityEvent>),
     None,
 }
@@ -607,7 +694,14 @@ impl Renderer {
     fn init(frontend: &FrontendOptions) -> (Self, Option<ActivityGuard>) {
         if frontend.tui_allowed && terminal::can_use_stdin_interactively() {
             let (rx, handle) = devenv_activity::init();
-            (Renderer::Tui(rx), Some(handle.install()))
+            (
+                Renderer::Tui {
+                    activity_rx: rx,
+                    preferences: frontend.tui_preferences.clone(),
+                    context: frontend.tui_context.clone(),
+                },
+                Some(handle.install()),
+            )
         } else if !frontend.tracing_owns_terminal {
             let (rx, handle) = devenv_activity::init();
             (Renderer::Console(rx), Some(handle.install()))
@@ -626,7 +720,11 @@ impl Renderer {
         verbosity: VerbosityLevel,
     ) -> Result<tokio_mpsc::Receiver<FrontendCommand>> {
         match self {
-            Renderer::Tui(activity_rx) => {
+            Renderer::Tui {
+                activity_rx,
+                preferences,
+                context,
+            } => {
                 let filter_level = if matches!(verbosity, VerbosityLevel::Verbose) {
                     ActivityLevel::Debug
                 } else {
@@ -636,6 +734,8 @@ impl Renderer {
                     .block_on(async {
                         devenv_tui::TuiApp::new(activity_rx, frontend_rx, shutdown.clone())
                             .with_event_sender(event_tx)
+                            .with_preferences((*preferences).clone())
+                            .with_run_context((*context).clone())
                             .filter_level(filter_level)
                             .run()
                             .await
@@ -775,7 +875,8 @@ fn backend_thread_main(
 
 fn frontend_thread_main(
     renderer: Renderer,
-    session_interactive: Option<bool>,
+    session_status_line: Option<bool>,
+    shell_keybindings: devenv_shell::keybindings::ShellKeybindings,
     frontend_rx: tokio_mpsc::Receiver<FrontendCommand>,
     event_tx: tokio_mpsc::Sender<FrontendEvent>,
     verbosity: VerbosityLevel,
@@ -787,11 +888,12 @@ fn frontend_thread_main(
     // takes it over on this same thread, so terminal ownership never crosses
     // a thread boundary. Its exit code reaches the backend through the
     // session's event mailbox.
-    if let Some(interactive) = session_interactive {
+    if let Some(show_status_line) = session_status_line {
         current_thread_runtime("session")?
             .block_on(
                 ShellSession::with_defaults()
-                    .with_status_line(interactive)
+                    .with_status_line(show_status_line)
+                    .with_keybindings(shell_keybindings)
                     .with_shutdown_token(shutdown.cancellation_token())
                     .run(frontend_rx, event_tx, SessionIo::default()),
             )
@@ -799,6 +901,17 @@ fn frontend_thread_main(
             .wrap_err("Shell session error")?;
     }
     Ok(())
+}
+
+fn shell_session_status_line(
+    command: &Commands,
+    use_pty: bool,
+    status_line_enabled: bool,
+) -> Option<bool> {
+    match command {
+        Commands::Shell { cmd, .. } if use_pty => Some(cmd.is_none() && status_line_enabled),
+        _ => None,
+    }
 }
 
 /// Single entry point for all command execution. Process replacement
@@ -815,7 +928,8 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
     } = prepared;
 
     let (renderer, _activity_guard) = Renderer::init(&frontend);
-    let tui = matches!(&renderer, Renderer::Tui(_));
+    let tui = matches!(&renderer, Renderer::Tui { .. });
+    let shell_keybindings = frontend.shell_keybindings.clone();
 
     let _tracing_guard = devenv_tracing::init_tracing(frontend.log_level, &frontend.tracing_specs);
 
@@ -860,10 +974,11 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
     // renderer -> PTY shell transition.
     let (frontend_tx, frontend_rx) = tokio_mpsc::channel(16);
     let (event_tx, event_rx) = tokio_mpsc::channel(16);
-    let session_interactive = match &backend_options.command {
-        Commands::Shell { cmd, .. } if backend_options.use_pty => Some(cmd.is_none()),
-        _ => None,
-    };
+    let session_status_line = shell_session_status_line(
+        &backend_options.command,
+        backend_options.use_pty,
+        frontend.tui_preferences.statusline.enabled,
+    );
 
     // Eval futures are !Send and run on the block_on task, so the thread
     // itself needs the Nix stack size too, not just the GC-registered workers.
@@ -898,7 +1013,8 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
                 let _notice = ExitNotice(events_tx, Event::FrontendExited);
                 frontend_thread_main(
                     renderer,
-                    session_interactive,
+                    session_status_line,
+                    shell_keybindings,
                     frontend_rx,
                     event_tx,
                     verbosity,
@@ -981,6 +1097,7 @@ async fn run_backend(
         nix_debugger,
         strict_ports: config_strict_ports,
         use_pty,
+        shell_keybindings,
     } = backend;
 
     let devenv = Devenv::new(devenv_options, shutdown.clone()).await?;
@@ -1014,6 +1131,7 @@ async fn run_backend(
             task_exports,
             task_messages,
             shell_cwd,
+            shell_keybindings,
             frontend_tx,
             event_rx: event_rx
                 .take()
@@ -1464,7 +1582,8 @@ async fn dispatch_command(
             devenv::lsp::run(devenv, print_config).await?;
             Ok(CommandResult::Done)
         }
-        Commands::Direnvrc
+        Commands::UserConfig { .. }
+        | Commands::Direnvrc
         | Commands::Version
         | Commands::Hook { .. }
         | Commands::Allow
@@ -1491,6 +1610,7 @@ struct ReloadShellArgs {
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
     shell_cwd: Option<PathBuf>,
+    shell_keybindings: devenv_shell::keybindings::ShellKeybindings,
     frontend_tx: tokio_mpsc::Sender<FrontendCommand>,
     event_rx: tokio_mpsc::Receiver<FrontendEvent>,
 }
@@ -1519,6 +1639,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         task_exports,
         task_messages,
         shell_cwd,
+        shell_keybindings,
         frontend_tx,
         event_rx,
     } = args;
@@ -1539,6 +1660,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell,
         shell_path,
         shell_cwd,
+        shell_keybindings,
     };
 
     ShellCoordinator::run(reload_config, builder, frontend_tx, event_rx)
@@ -1667,6 +1789,29 @@ mod tests {
     use std::sync::Mutex;
 
     static PROCESS_STATE_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn only_interactive_tui_and_shell_commands_load_user_configuration() {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join("invalid.yaml");
+        fs::write(&path, "not: valid: yaml").unwrap();
+        assert!(load_user_preferences(false, false, true, Some(&path)).is_ok());
+        assert!(load_user_preferences(true, false, false, Some(&path)).is_ok());
+        assert!(load_user_preferences(false, true, false, Some(&path)).is_ok());
+        assert!(load_user_preferences(true, false, true, Some(&path)).is_err());
+        assert!(load_user_preferences(false, true, true, Some(&path)).is_err());
+    }
+
+    #[test]
+    fn tui_statusline_setting_controls_interactive_shell_statusline() {
+        let shell = Commands::Shell {
+            cmd: None,
+            args: Vec::new(),
+        };
+        assert_eq!(shell_session_status_line(&shell, true, true), Some(true));
+        assert_eq!(shell_session_status_line(&shell, true, false), Some(false));
+        assert_eq!(shell_session_status_line(&shell, false, false), None);
+    }
 
     #[test]
     fn shell_hint_is_only_accepted_from_hook_invocations() {

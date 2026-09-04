@@ -8,6 +8,7 @@ use crate::escape_state::{
     EscapeState, cleanup_forwarded_modes as escape_state_cleanup,
     process_escape_events as escape_state_process,
 };
+use crate::keybindings::{ShellAction, ShellKeybindings};
 use crate::protocol::{ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
@@ -42,11 +43,6 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_util::sync::CancellationToken;
-
-/// Keybind byte sequences (ESC + Ctrl key).
-const KEYBIND_TOGGLE_PAUSE: [u8; 2] = [0x1b, 0x04]; // Ctrl-Alt-D
-const KEYBIND_LIST_WATCHED: [u8; 2] = [0x1b, 0x17]; // Ctrl-Alt-W
-const KEYBIND_TOGGLE_ERROR: [u8; 2] = [0x1b, 0x05]; // Ctrl-Alt-E
 
 /// PTY reads are deliberately bounded so a busy child cannot turn the event
 /// channel into an unbounded allocation queue. The reader blocks once all of
@@ -1441,6 +1437,7 @@ pub struct SessionConfig {
     pub show_status_line: bool,
     /// Initial terminal size (auto-detected if None).
     pub size: Option<PtySize>,
+    pub keybindings: ShellKeybindings,
 }
 
 impl Default for SessionConfig {
@@ -1448,6 +1445,7 @@ impl Default for SessionConfig {
         Self {
             show_status_line: true,
             size: None,
+            keybindings: ShellKeybindings::default(),
         }
     }
 }
@@ -1558,15 +1556,20 @@ enum StdinPresentation {
     Deferred,
 }
 
-fn classify_stdin(data: &[u8]) -> StdinDisposition {
-    if data == KEYBIND_TOGGLE_PAUSE {
-        StdinDisposition::TogglePause
-    } else if data == KEYBIND_LIST_WATCHED {
-        StdinDisposition::ListWatchedFiles
-    } else if data == KEYBIND_TOGGLE_ERROR {
-        StdinDisposition::ToggleError
-    } else {
-        StdinDisposition::ForwardToPty
+fn classify_stdin(
+    keybindings: &ShellKeybindings,
+    data: &[u8],
+    local_keybindings_enabled: bool,
+) -> StdinDisposition {
+    if !local_keybindings_enabled {
+        return StdinDisposition::ForwardToPty;
+    }
+
+    match keybindings.action_for_input(data) {
+        Some(ShellAction::TogglePause) => StdinDisposition::TogglePause,
+        Some(ShellAction::ListWatchedFiles) => StdinDisposition::ListWatchedFiles,
+        Some(ShellAction::ToggleError) => StdinDisposition::ToggleError,
+        Some(ShellAction::Reload) | None => StdinDisposition::ForwardToPty,
     }
 }
 
@@ -1590,6 +1593,7 @@ impl ShellSession {
         let size = config.size.unwrap_or_else(get_terminal_size);
         let mut status_line = StatusLine::new();
         status_line.set_enabled(config.show_status_line);
+        status_line.set_keybindings(config.keybindings.clone());
 
         Self {
             config,
@@ -1621,6 +1625,12 @@ impl ShellSession {
     pub fn with_status_line(mut self, show: bool) -> Self {
         self.config.show_status_line = show;
         self.status_line.set_enabled(show);
+        self
+    }
+
+    pub fn with_keybindings(mut self, keybindings: ShellKeybindings) -> Self {
+        self.status_line.set_keybindings(keybindings.clone());
+        self.config.keybindings = keybindings;
         self
     }
 
@@ -1810,14 +1820,11 @@ impl ShellSession {
         std::thread::Builder::new()
             .name("session-pty".into())
             .spawn(move || {
-                loop {
+                while let Ok(mut buf) = pty_buffer_rx.recv() {
                     // When all buffers are awaiting rendering, wait here
                     // rather than allocating another event payload. Dropping
                     // the renderer's return sender disconnects this receive
                     // during session shutdown.
-                    let Ok(mut buf) = pty_buffer_rx.recv() else {
-                        break;
-                    };
                     buf.resize(PTY_READ_BUFFER_BYTES, 0);
                     match pty_reader.read(&mut buf) {
                         Ok(0) => {
@@ -2022,6 +2029,7 @@ impl ShellSession {
                 Event::Stdin(data) => {
                     self.dispatch_stdin_event(
                         &data,
+                        !esc.in_alternate_screen,
                         StdinPresentation::Immediate,
                         StdinEventContext {
                             pty,
@@ -2100,6 +2108,7 @@ impl ShellSession {
                             Event::Stdin(stdin_data) => {
                                 self.dispatch_stdin_event(
                                     &stdin_data,
+                                    !esc.in_alternate_screen,
                                     StdinPresentation::Deferred,
                                     StdinEventContext {
                                         pty,
@@ -2301,6 +2310,7 @@ impl ShellSession {
     fn dispatch_stdin_event(
         &mut self,
         data: &[u8],
+        local_keybindings_enabled: bool,
         presentation: StdinPresentation,
         context: StdinEventContext<'_, '_, '_>,
     ) -> Result<(), SessionError> {
@@ -2311,7 +2321,7 @@ impl ShellSession {
             vt,
             renderer,
         } = context;
-        match classify_stdin(data) {
+        match classify_stdin(&self.config.keybindings, data, local_keybindings_enabled) {
             StdinDisposition::TogglePause => {
                 if let Err(e) =
                     coordinator_tx.try_send(FrontendEvent::Shell(ShellEvent::TogglePause))
@@ -2589,8 +2599,9 @@ mod tests {
     #[test]
     fn batched_stdin_keybind_is_local_not_pty_input() {
         let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(Event::Stdin(KEYBIND_TOGGLE_PAUSE.to_vec()))
-            .unwrap();
+        let keybindings = ShellKeybindings::default();
+        let toggle_pause = keybindings.bindings(ShellAction::TogglePause)[0].terminal_bytes();
+        tx.send(Event::Stdin(toggle_pause)).unwrap();
         tx.send(Event::PtyOutput(b"later".to_vec())).unwrap();
 
         // Model the pending PTY output that opened a render batch, then the
@@ -2603,7 +2614,7 @@ mod tests {
 
         let mut pty_writes = Vec::new();
         let mut shell_events = Vec::new();
-        match classify_stdin(&data) {
+        match classify_stdin(&keybindings, &data, true) {
             StdinDisposition::TogglePause => shell_events.push(ShellEvent::TogglePause),
             StdinDisposition::ForwardToPty => pty_writes.extend_from_slice(&data),
             other => panic!("unexpected keybinding disposition: {other:?}"),
@@ -2612,6 +2623,74 @@ mod tests {
         assert!(pty_writes.is_empty());
         assert!(matches!(shell_events.as_slice(), [ShellEvent::TogglePause]));
         assert_eq!(pty_output_byte(rx.try_recv().unwrap()), b'l');
+    }
+
+    #[test]
+    fn configurable_stdin_keybindings_replace_and_disable_defaults() {
+        let mut keybindings = ShellKeybindings::default();
+        keybindings.replace(
+            ShellAction::TogglePause,
+            vec![crate::keybindings::ShellKeyChord::new(
+                crate::keybindings::ShellKeyCode::Function(12),
+                false,
+                false,
+                false,
+            )],
+        );
+        keybindings.replace(
+            ShellAction::ListWatchedFiles,
+            vec![crate::keybindings::ShellKeyChord::new(
+                crate::keybindings::ShellKeyCode::Char('l'),
+                false,
+                true,
+                false,
+            )],
+        );
+        keybindings.replace(ShellAction::ToggleError, Vec::new());
+
+        assert_eq!(
+            classify_stdin(&keybindings, b"\x1b[24~", true),
+            StdinDisposition::TogglePause
+        );
+        assert_eq!(
+            classify_stdin(&keybindings, &[0x1b, 0x04], true),
+            StdinDisposition::ForwardToPty
+        );
+        assert_eq!(
+            classify_stdin(&keybindings, &[0x1b, b'l'], true),
+            StdinDisposition::ListWatchedFiles
+        );
+        assert_eq!(
+            classify_stdin(&keybindings, &[0x1b, 0x17], true),
+            StdinDisposition::ForwardToPty
+        );
+        assert_eq!(
+            classify_stdin(&keybindings, &[0x1b, 0x05], true),
+            StdinDisposition::ForwardToPty
+        );
+    }
+
+    #[test]
+    fn configurable_stdin_keybindings_are_forwarded_in_alternate_screen() {
+        let mut keybindings = ShellKeybindings::default();
+        keybindings.replace(
+            ShellAction::TogglePause,
+            vec![crate::keybindings::ShellKeyChord::new(
+                crate::keybindings::ShellKeyCode::Function(12),
+                false,
+                false,
+                false,
+            )],
+        );
+
+        assert_eq!(
+            classify_stdin(&keybindings, b"\x1b[24~", true),
+            StdinDisposition::TogglePause
+        );
+        assert_eq!(
+            classify_stdin(&keybindings, b"\x1b[24~", false),
+            StdinDisposition::ForwardToPty
+        );
     }
 
     #[test]
@@ -2736,6 +2815,7 @@ mod tests {
                 pixel_width: 0,
                 pixel_height: 0,
             }),
+            keybindings: ShellKeybindings::default(),
         });
         let old_native_rows = session.size.rows;
         let old_content_rows = session.pty_size().rows;

@@ -1,8 +1,13 @@
 use crate::{
     components::{LOG_VIEWPORT_FAILED, LOG_VIEWPORT_SHOW_OUTPUT, *},
+    config::StatuslinePosition,
     model::{
         Activity, ActivityModel, ActivitySummary, ActivityVariant, DisplayActivity,
         NixActivityState, RenderContext, TaskDisplayStatus, TerminalSize, UiState,
+    },
+    statusline::{
+        RenderedSegment, StatuslineData, StatuslineMode, action_key_hints,
+        interrupt_prompt_key_hints, render_statusline, separator_style,
     },
 };
 use devenv_activity::{ActivityLevel, ProcessStatus};
@@ -14,9 +19,30 @@ use iocraft::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
+use unicode_width::UnicodeWidthStr;
 
 /// Height reserved for the bottom summary bar (1 line content + 1 line margin_top).
 pub const SUMMARY_BAR_HEIGHT: u16 = 2;
+
+pub(crate) fn summary_bar_height(ui_state: &UiState) -> u16 {
+    if ui_state.preferences.statusline.enabled
+        || ui_state.interrupt_prompt_active()
+        || ui_state.process_search.is_some()
+    {
+        SUMMARY_BAR_HEIGHT
+    } else {
+        0
+    }
+}
+
+pub(crate) fn available_activity_height(ui_state: &UiState) -> usize {
+    usize::from(
+        ui_state
+            .terminal_size
+            .height
+            .saturating_sub(summary_bar_height(ui_state)),
+    )
+}
 
 /// Map from activity_id to rendered height in lines.
 pub type ActivityHeights = Ref<HashMap<u64, i32>>;
@@ -80,8 +106,9 @@ fn tree_positions_for_depths(depths: &[usize]) -> Vec<TreePosition> {
 pub(crate) fn process_previews_fit(
     model: &ActivityModel,
     activities: &[DisplayActivity],
-    terminal_size: TerminalSize,
+    ui_state: &UiState,
 ) -> bool {
+    let terminal_size = ui_state.terminal_size;
     let activity_rows: usize = activities
         .iter()
         .map(|display| non_process_activity_height(model, display, terminal_size))
@@ -97,11 +124,12 @@ pub(crate) fn process_previews_fit(
                     ExpandedContentComponent::new(Some(logs.as_ref()))
                         .with_terminal_width(terminal_size.width)
                         .with_border_indent(display.depth * 2)
+                        .with_max_lines(model.config().log_viewport_collapsed)
                         .visual_height()
                 })
         })
         .sum();
-    let available_rows = terminal_size.height.saturating_sub(SUMMARY_BAR_HEIGHT) as usize;
+    let available_rows = available_activity_height(ui_state);
 
     preview_rows > 0 && activity_rows + preview_rows <= available_rows
 }
@@ -203,11 +231,12 @@ pub fn view(
     scroll: Option<ScrollState>,
     shutting_down: bool,
 ) -> impl Into<AnyElement<'static>> {
+    let live_layout = scroll.is_some();
     let (scroll_handle, active_activities, process_previews_fit) = match scroll {
         Some(s) => (s.handle, s.display_activities, s.process_previews_fit),
         None => {
             let activities = model.get_display_activities(ui_state);
-            let previews_fit = process_previews_fit(model, &activities, ui_state.terminal_size);
+            let previews_fit = process_previews_fit(model, &activities, ui_state);
             (None, activities, previews_fit)
         }
     };
@@ -308,6 +337,7 @@ pub fn view(
                     show_inline_logs,
                     logs: activity_logs,
                     log_line_count: model.get_log_line_count(activity.id),
+                    log_preview_lines: model.config().log_viewport_collapsed,
                     completed,
                     cached,
                     render_context,
@@ -335,10 +365,14 @@ pub fn view(
     };
 
     // Show summary (nav bar) only in normal render context
-    let show_summary = render_context == RenderContext::Normal;
+    let show_summary = render_context == RenderContext::Normal && summary_bar_height(ui_state) > 0;
 
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
+            preferences: ui_state.preferences.clone(),
+            keymap: ui_state.keymap().clone(),
+            run_context: ui_state.run_context.clone(),
+            pending_key: ui_state.pending_key.clone(),
             summary: summary.clone(),
             selected: selected_activity.cloned(),
             showing_logs: selected_id.is_some_and(|id| {
@@ -384,12 +418,38 @@ pub fn view(
     }
     .into_any();
 
+    let statusline_position = ui_state.preferences.statusline.position;
+    let sticky_statusline = show_summary && statusline_position != StatuslinePosition::Inline;
+    let flowing_statusline =
+        show_summary && live_layout && statusline_position == StatuslinePosition::Inline;
+    let mut summary_bar = show_summary.then(|| {
+        element! {
+            View(
+                height: 1,
+                flex_shrink: 0.0,
+                padding_left: 1,
+                padding_right: 1
+            ) {
+                #(summary_view)
+            }
+        }
+        .into_any()
+    });
+    let mut summary_gap =
+        show_summary.then(|| element!(View(height: 1, flex_shrink: 0.0)).into_any());
     let mut children = vec![];
+
+    if statusline_position == StatuslinePosition::Top
+        && let Some(summary_bar) = summary_bar.take()
+    {
+        children.push(summary_bar);
+        children.push(summary_gap.take().unwrap());
+    }
 
     // Activity list: wrap in ScrollView for Normal render with scroll_handle,
     // use plain layout for Final render
     if let Some(handle) = scroll_handle {
-        let scroll_height = terminal_size.height.saturating_sub(SUMMARY_BAR_HEIGHT) as u32;
+        let scroll_height = available_activity_height(ui_state) as u32;
         children.push(
             element! {
                 View(height: scroll_height) {
@@ -403,7 +463,7 @@ pub fn view(
     } else {
         children.push(
             element! {
-                View(flex_grow: 1.0, width: 100pct) {
+                View(flex_grow: if flowing_statusline { 0.0_f32 } else { 1.0_f32 }, width: 100pct) {
                     #(activity_list)
                 }
             }
@@ -411,32 +471,22 @@ pub fn view(
         );
     }
 
-    // Summary line at bottom (only in normal render context)
-    if show_summary {
-        children.push(
-            element! {
-                View(
-                    height: 1,
-                    flex_shrink: 0.0,
-                    margin_top: 1,
-                    padding_left: 1,
-                    padding_right: 1
-                ) {
-                    #(summary_view)
-                }
-            }
-            .into_any(),
-        );
+    if let Some(summary_gap) = summary_gap {
+        children.push(summary_gap);
+    }
+    if let Some(summary_bar) = summary_bar {
+        children.push(summary_bar);
     }
 
     element! {
         ContextProvider(value: Context::owned(terminal_size)) {
             View(
                 flex_direction: FlexDirection::Column,
+                height: if sticky_statusline { Size::Length(terminal_size.height as u32) } else { Size::Auto },
                 max_height: terminal_size.height as u32,
                 width: 100pct,
                 overflow: Overflow::Hidden,
-                justify_content: JustifyContent::FlexEnd,
+                justify_content: if flowing_statusline { JustifyContent::FlexStart } else { JustifyContent::FlexEnd },
             ) {
                 #(children)
             }
@@ -463,6 +513,7 @@ struct ActivityRenderContext {
     logs: Option<Arc<VecDeque<String>>>,
     /// Total log line count (not affected by buffer rotation)
     log_line_count: usize,
+    log_preview_lines: usize,
     /// Completion state: None = active, Some(true) = success, Some(false) = failed
     completed: Option<bool>,
     /// Whether this activity's result was cached
@@ -602,6 +653,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         show_inline_logs,
         logs,
         log_line_count,
+        log_preview_lines,
         completed,
         cached,
         render_context,
@@ -654,6 +706,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
                 return ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
+                    .with_max_lines(*log_preview_lines)
                     .with_empty_message("  → no build logs yet (press Ctrl-E to expand)")
                     .render_with_main_line(main_line);
             }
@@ -734,6 +787,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 };
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
+                    .with_max_lines(*log_preview_lines)
                     .with_empty_message(empty_message);
                 if task_failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
@@ -883,6 +937,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
+                    .with_max_lines(*log_preview_lines)
                     .with_empty_message("  → no files read yet (press Ctrl-E to expand)");
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
@@ -959,6 +1014,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
+                    .with_max_lines(*log_preview_lines)
                     .with_empty_message("  → no output yet");
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
@@ -1048,6 +1104,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .with_terminal_width(terminal_width)
                     .with_border_indent(*depth * 2)
                     .with_line_prefix(process_preview_prefix(*depth, tree_position))
+                    .with_max_lines(*log_preview_lines)
                     .with_empty_message("→ no output yet");
                 if process_failed && *render_context == RenderContext::Final {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
@@ -1124,7 +1181,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                             Text(content: " ")
                                         }
                                     }
-                                    View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                                    View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                                         Text(content: line.clone(), color: COLOR_HIERARCHY)
                                     }
                                 }
@@ -1145,7 +1202,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                         Text(content: icon, color: icon_color)
                                     }
                                 }
-                                View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                                View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                                     Text(content: activity.name.clone(), color: selected_text_color)
                                 }
                             }
@@ -1162,7 +1219,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                         Text(content: icon, color: icon_color)
                                     }
                                 }
-                                View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                                View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                                     Text(content: activity.name.clone(), color: selected_text_color)
                                 }
                             }
@@ -1190,7 +1247,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 Text(content: icon, color: icon_color)
                             }
                         }
-                        View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                        View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                             Text(content: activity.name.clone(), color: selected_text_color)
                         }
                     }
@@ -1205,7 +1262,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 Text(content: icon, color: icon_color)
                             }
                         }
-                        View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                        View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                             Text(content: activity.name.clone(), color: selected_text_color)
                         }
                     }
@@ -1232,6 +1289,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 /// Context for summary view rendering
 #[derive(Clone)]
 struct SummaryViewContext {
+    preferences: Arc<crate::config::TuiPreferences>,
+    keymap: Arc<crate::config::Keymap>,
+    run_context: Arc<crate::config::TuiRunContext>,
+    pending_key: Option<String>,
     summary: ActivitySummary,
     selected: Option<Activity>,
     showing_logs: bool,
@@ -1260,6 +1321,10 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 /// Build the summary view with colored counts
 fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> AnyElement<'static> {
     let SummaryViewContext {
+        preferences,
+        keymap,
+        run_context,
+        pending_key,
         summary,
         selected,
         showing_logs,
@@ -1289,6 +1354,119 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let selected_has_logs = *selected_has_logs;
     let selected_preview_focused = *selected_preview_focused;
     let process_previews_fit = *process_previews_fit;
+    let has_selection = selected.is_some();
+    let is_process =
+        matches!(selected, Some(a) if matches!(a.variant, ActivityVariant::Process(_)));
+    let is_stoppable = matches!(
+        selected,
+        Some(a) if matches!(&a.variant, ActivityVariant::Process(p) if p.status.is_stoppable())
+    );
+    let is_restartable = matches!(
+        selected,
+        Some(a) if matches!(&a.variant, ActivityVariant::Process(p) if p.status.is_restartable())
+    );
+    let show_hide_toggle = summary.stopped_processes > 0 || hide_stopped_processes;
+
+    let configured_statusline = !preferences.uses_default_statusline();
+    if configured_statusline {
+        let (mode, prompt, key_hints) = if interrupt_prompt_active {
+            (
+                StatuslineMode::Prompt,
+                Some(if interrupt_prompt_attached {
+                    "Detach or stop the process manager?".to_string()
+                } else {
+                    "Quit devenv? Nothing has been stopped yet.".to_string()
+                }),
+                Some(interrupt_prompt_key_hints(
+                    keymap,
+                    interrupt_prompt_attached,
+                    terminal_width,
+                )),
+            )
+        } else if process_search.is_some() {
+            (StatuslineMode::Search, None, None)
+        } else {
+            (StatuslineMode::Main, None, None)
+        };
+        let key_context = match mode {
+            StatuslineMode::Main => crate::config::KeyContext::Main,
+            StatuslineMode::Search => crate::config::KeyContext::ProcessSearch,
+            StatuslineMode::Prompt => crate::config::KeyContext::Prompt,
+            StatuslineMode::Logs => crate::config::KeyContext::Logs,
+        };
+        let actions = match mode {
+            StatuslineMode::Main => {
+                let mut actions = vec![
+                    crate::config::Action::MoveDown,
+                    crate::config::Action::MoveUp,
+                    crate::config::Action::HalfPageDown,
+                    crate::config::Action::HalfPageUp,
+                ];
+                if has_selection {
+                    actions.push(crate::config::Action::Activate);
+                    if selected_disclosure == Some(true) || is_process && !showing_logs {
+                        actions.push(crate::config::Action::Expand);
+                    }
+                    if selected_disclosure == Some(false) || is_process && showing_logs {
+                        actions.push(crate::config::Action::Collapse);
+                    }
+                    if selected_has_logs || is_process {
+                        actions.push(crate::config::Action::OpenLogs);
+                    }
+                    if is_stoppable {
+                        actions.push(crate::config::Action::StopProcess);
+                    }
+                    if is_restartable {
+                        actions.push(crate::config::Action::RestartProcess);
+                    }
+                    actions.push(crate::config::Action::Cancel);
+                }
+                if show_hide_toggle {
+                    actions.push(crate::config::Action::ToggleStopped);
+                }
+                if process_search_available {
+                    actions.push(crate::config::Action::Search);
+                }
+                actions
+            }
+            StatuslineMode::Search => vec![
+                crate::config::Action::NextMatch,
+                crate::config::Action::PreviousMatch,
+                crate::config::Action::Accept,
+                crate::config::Action::Cancel,
+            ],
+            StatuslineMode::Prompt => Vec::new(),
+            StatuslineMode::Logs => Vec::new(),
+        };
+        let key_hints =
+            key_hints.or_else(|| action_key_hints(keymap, key_context, actions, terminal_width));
+        let data = StatuslineData {
+            summary: summary.clone(),
+            selected: selected.cloned(),
+            context: (**run_context).clone(),
+            hidden_processes: if hide_stopped_processes {
+                summary.stopped_processes
+            } else {
+                0
+            },
+            search_query: process_search.clone(),
+            search_total: Some(process_search_matches),
+            search_result: Some(match process_search_matches {
+                0 => "no matches".to_string(),
+                1 => "1 match".to_string(),
+                count => format!("{count} matches"),
+            }),
+            prompt,
+            pending_key: pending_key.clone(),
+            key_hints,
+            ..StatuslineData::default()
+        };
+        return build_configured_statusline(
+            render_statusline(mode, terminal_width.saturating_sub(2), preferences, &data),
+            &preferences.theme,
+            terminal_width,
+        );
+    }
 
     if interrupt_prompt_active {
         if interrupt_prompt_attached {
@@ -1307,7 +1485,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                 justify_content: JustifyContent::SpaceBetween,
                 width: 100pct
             ) {
-                View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+                View(flex_grow: 1.0_f32, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
                     Text(content: prompt_text, color: Color::Yellow, weight: Weight::Bold)
                 }
                 View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
@@ -1341,7 +1519,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             justify_content: JustifyContent::SpaceBetween,
             width: 100pct
         ) {
-            View(flex_grow: 1.0, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+            View(flex_grow: 1.0_f32, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(content: prompt_text, color: Color::Yellow, weight: Weight::Bold)
             }
             View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
@@ -1379,7 +1557,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             width: 100pct,
             overflow: Overflow::Hidden,
         ) {
-            View(flex_grow: 1.0, flex_shrink: 0.0, min_width: 0, overflow: Overflow::Hidden) {
+            View(flex_grow: 1.0_f32, flex_shrink: 0.0, min_width: 0, overflow: Overflow::Hidden) {
                 Text(content: prompt, color: prompt_color, weight: Weight::Bold)
             }
             View(flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
@@ -1391,19 +1569,6 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
 
     let mut children = vec![];
     let mut has_content = false;
-
-    // Derive capabilities from selected activity
-    let has_selection = selected.is_some();
-    let is_process =
-        matches!(selected, Some(a) if matches!(a.variant, ActivityVariant::Process(_)));
-    let is_stoppable = matches!(
-        selected,
-        Some(a) if matches!(&a.variant, ActivityVariant::Process(p) if p.status.is_stoppable())
-    );
-    let is_restartable = matches!(
-        selected,
-        Some(a) if matches!(&a.variant, ActivityVariant::Process(p) if p.status.is_restartable())
-    );
 
     // Determine display mode based on terminal width
     let use_symbols = terminal_width < if has_selection { 120 } else { 100 };
@@ -1609,8 +1774,6 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     // once summary counts and the hide-stopped action are present. Keep the
     // compact tier through 159 columns; very narrow terminals use keys only.
     let use_short_text = terminal_width < if has_selection { 200 } else { 160 };
-    let show_hide_toggle = summary.stopped_processes > 0 || hide_stopped_processes;
-
     let up_arrow_color = if can_go_up {
         COLOR_INTERACTIVE
     } else {
@@ -1867,7 +2030,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
     let content_width = terminal_width.saturating_sub(2) as u32;
     if terminal_width < 60 {
         return element!(View(flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: content_width) {
-            View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+            View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                 #(children)
             }
             View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 1) {
@@ -1876,7 +2039,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         }).into_any();
     }
     element!(View(flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
-        View(flex_direction: FlexDirection::Row, flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+        View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
             #(children)
         }
         View(
@@ -1889,6 +2052,98 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
             #(help_children)
         }
     }).into_any()
+}
+
+pub(crate) fn build_configured_statusline(
+    statusline: crate::statusline::RenderedStatusline,
+    theme: &crate::config::ThemeConfig,
+    terminal_width: u16,
+) -> AnyElement<'static> {
+    let separator = statusline.separator;
+    let group_width = |segments: &[RenderedSegment]| {
+        segments
+            .iter()
+            .map(|segment| UnicodeWidthStr::width(segment.content.as_str()))
+            .sum::<usize>()
+            + UnicodeWidthStr::width(separator.as_str()) * segments.len().saturating_sub(1)
+    };
+    let inner_width = usize::from(terminal_width.saturating_sub(2));
+    let left_width = group_width(&statusline.left);
+    let center_width = group_width(&statusline.center);
+    let right_width = group_width(&statusline.right);
+    let left_center_gap = usize::from(left_width > 0 && center_width > 0);
+    let center_right_gap = usize::from(center_width > 0 && right_width > 0);
+    let left_right_gap = usize::from(center_width == 0 && left_width > 0 && right_width > 0);
+    let right_start = inner_width.saturating_sub(right_width);
+    let center_target = inner_width.saturating_sub(center_width) / 2;
+    let center_min = left_width.saturating_add(left_center_gap);
+    let center_max = right_start.saturating_sub(center_width.saturating_add(center_right_gap));
+    let center_start = if center_min <= center_max {
+        center_target.clamp(center_min, center_max)
+    } else {
+        center_min
+    };
+    let first_spacer = if center_width > 0 {
+        center_start.saturating_sub(left_width)
+    } else {
+        right_start.saturating_sub(left_width).max(left_right_gap)
+    };
+    let second_spacer = if center_width > 0 {
+        right_start.saturating_sub(center_start.saturating_add(center_width))
+    } else {
+        0
+    };
+    let separator_style = separator_style(theme);
+    let build_group = |segments: Vec<RenderedSegment>| {
+        let mut children = Vec::new();
+        for (index, segment) in segments.into_iter().enumerate() {
+            if index > 0 {
+                children.push(
+                    element!(View(background_color: separator_style.background, flex_shrink: 0.0) {
+                        Text(
+                            content: separator.clone(),
+                            color: separator_style.foreground,
+                            weight: if separator_style.bold { Weight::Bold } else if separator_style.dim { Weight::Light } else { Weight::Normal },
+                            decoration: if separator_style.underline { TextDecoration::Underline } else { TextDecoration::None },
+                            italic: separator_style.italic,
+                            invert: separator_style.reverse,
+                        )
+                    })
+                    .into_any(),
+                );
+            }
+            let style = segment.style;
+            children.push(
+                element!(View(background_color: style.background, flex_shrink: 0.0) {
+                    Text(
+                        content: segment.content,
+                        color: style.foreground,
+                        weight: if style.bold { Weight::Bold } else if style.dim { Weight::Light } else { Weight::Normal },
+                        decoration: if style.underline { TextDecoration::Underline } else { TextDecoration::None },
+                        italic: style.italic,
+                        invert: style.reverse,
+                    )
+                })
+                .into_any(),
+            );
+        }
+        children
+    };
+    let left = build_group(statusline.left);
+    let center = build_group(statusline.center);
+    let right = build_group(statusline.right);
+    element!(View(
+        flex_direction: FlexDirection::Row,
+        width: terminal_width.saturating_sub(2) as u32,
+        overflow: Overflow::Hidden,
+    ) {
+        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, overflow: Overflow::Hidden) { #(left) }
+        View(width: first_spacer as u32, flex_shrink: 0.0)
+        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, overflow: Overflow::Hidden) { #(center) }
+        View(width: second_spacer as u32, flex_shrink: 0.0)
+        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, overflow: Overflow::Hidden) { #(right) }
+    })
+    .into_any()
 }
 
 fn process_search_prompt_color(matches: usize) -> Color {
@@ -2004,20 +2259,51 @@ mod tests {
         model.apply_activity_event(process_start(2, "server"));
         model.apply_activity_event(process_log(2, "listening", false));
 
-        let ui_state = UiState::new();
+        let mut ui_state = UiState::new();
+        ui_state.set_terminal_size(80, 7);
         let display = model.get_display_activities(&ui_state);
 
         // The task occupies four rows (its main row plus three output rows),
         // and the process with its preview occupies two more. The five-row
         // viewport therefore cannot show automatic previews without scrolling.
-        assert!(!process_previews_fit(
+        assert!(!process_previews_fit(&model, &display, &ui_state));
+    }
+
+    #[test]
+    fn configured_log_preview_lines_control_preview_fit() {
+        let config = Arc::new(crate::app::TuiConfig {
+            log_viewport_collapsed: 2,
+            ..crate::app::TuiConfig::default()
+        });
+        let mut model = ActivityModel::with_config(config);
+        model.apply_activity_event(process_start(1, "server"));
+        for line in 0..5 {
+            model.apply_activity_event(process_log(1, format!("line {line}"), false));
+        }
+
+        let mut ui_state = UiState::new();
+        ui_state.set_terminal_size(80, 5);
+        let display = model.get_display_activities(&ui_state);
+
+        assert!(process_previews_fit(&model, &display, &ui_state));
+
+        let mut element: AnyElement<'static> = view(
             &model,
-            &display,
-            TerminalSize {
-                width: 80,
-                height: 7,
-            },
-        ));
+            &ui_state,
+            RenderContext::Normal,
+            Some(ScrollState {
+                handle: None,
+                display_activities: display,
+                process_previews_fit: true,
+            }),
+            false,
+        )
+        .into();
+        let rendered = element.render(Some(80)).to_string();
+
+        assert!(!rendered.contains("line 2"));
+        assert!(rendered.contains("line 3"));
+        assert!(rendered.contains("line 4"));
     }
 
     fn summary_ctx(
@@ -2026,6 +2312,14 @@ mod tests {
         stopped_processes: usize,
     ) -> SummaryViewContext {
         SummaryViewContext {
+            preferences: Arc::new(crate::config::TuiPreferences::default()),
+            keymap: Arc::new(
+                crate::config::KeybindingsConfig::default()
+                    .resolve()
+                    .unwrap(),
+            ),
+            run_context: Arc::new(crate::config::TuiRunContext::default()),
+            pending_key: None,
             summary: ActivitySummary {
                 stopped_processes,
                 ..ActivitySummary::default()
@@ -2056,6 +2350,191 @@ mod tests {
         assert!(output.contains("stopped"));
         assert!(output.contains("keep running"));
         assert!(output.contains("quit"));
+    }
+
+    #[test]
+    fn configured_interrupt_prompts_remain_visible_and_contextual() {
+        let mut hidden = summary_ctx(false, true, 0);
+        let mut preferences = crate::config::TuiPreferences::default();
+        preferences.statusline.enabled = false;
+        hidden.preferences = Arc::new(preferences);
+        let hidden_output = build_summary_view_impl(&hidden, 160)
+            .render(Some(160))
+            .to_string();
+        assert!(hidden_output.contains("Quit devenv?"));
+        assert!(hidden_output.contains("q quit"));
+        assert!(hidden_output.contains("Ctrl-C quit"));
+        assert!(!hidden_output.contains("s stop manager"));
+
+        let mut attached = summary_ctx(false, true, 0);
+        attached.interrupt_prompt_attached = true;
+        let mut preferences = crate::config::TuiPreferences::default();
+        preferences.theme.preset = crate::config::ThemePreset::Terminal;
+        attached.preferences = Arc::new(preferences);
+        let attached_output = build_summary_view_impl(&attached, 160)
+            .render(Some(160))
+            .to_string();
+        assert!(attached_output.contains("Detach or stop"));
+        assert!(attached_output.contains("s stop manager"));
+        assert!(attached_output.contains("Ctrl-C detach"));
+        assert!(!attached_output.contains("q quit"));
+    }
+
+    #[test]
+    fn configured_statusline_paints_separator_background() {
+        let background = Color::Blue;
+        let segment = |name: &str| RenderedSegment {
+            name: name.to_string(),
+            content: name.to_string(),
+            style: crate::statusline::SegmentStyle {
+                background: Some(background),
+                ..crate::statusline::SegmentStyle::default()
+            },
+        };
+        let statusline = crate::statusline::RenderedStatusline {
+            left: vec![segment("one"), segment("two")],
+            separator: " │ ".to_string(),
+            ..crate::statusline::RenderedStatusline::default()
+        };
+        let mut theme = crate::config::ThemeConfig::default();
+        theme.styles.insert(
+            "statusline".to_string(),
+            crate::config::StyleConfig {
+                background: Some(crate::config::ColorSpec("blue".to_string())),
+                ..crate::config::StyleConfig::default()
+            },
+        );
+
+        let mut element = build_configured_statusline(statusline, &theme, 40);
+        let canvas = element.render(Some(40));
+        let separator_column = (0..canvas.width())
+            .find(|column| canvas.cell(*column, 0).and_then(|cell| cell.text()) == Some("│"))
+            .unwrap();
+        assert_eq!(
+            canvas.cell(separator_column, 0).unwrap().background_color,
+            Some(background)
+        );
+    }
+
+    #[test]
+    fn configured_center_zone_uses_the_terminal_midpoint() {
+        let segment = |name: &str| RenderedSegment {
+            name: name.to_string(),
+            content: name.to_string(),
+            style: crate::statusline::SegmentStyle::default(),
+        };
+        let statusline = crate::statusline::RenderedStatusline {
+            left: vec![segment("L")],
+            center: vec![segment("CENTER")],
+            right: vec![segment("RIGHT-RIGHT")],
+            separator: " | ".to_string(),
+        };
+        let mut element =
+            build_configured_statusline(statusline, &crate::config::ThemeConfig::default(), 42);
+        let output = element.render(Some(42)).to_string();
+        let line = output.lines().next().unwrap();
+        let center = line.find("CENTER").unwrap();
+
+        assert_eq!(
+            center + UnicodeWidthStr::width("CENTER") / 2,
+            20,
+            "{line:?}"
+        );
+        assert_eq!(line.find("RIGHT-RIGHT").unwrap(), 29, "{line:?}");
+    }
+
+    #[test]
+    fn disabled_statusline_only_reserves_rows_for_interactions() {
+        let mut ui = UiState::new();
+        let mut preferences = crate::config::TuiPreferences::default();
+        preferences.statusline.enabled = false;
+        ui.set_preferences(preferences).unwrap();
+
+        assert_eq!(summary_bar_height(&ui), 0);
+        assert_eq!(
+            available_activity_height(&ui),
+            usize::from(ui.terminal_size.height)
+        );
+
+        ui.start_process_search();
+        assert_eq!(summary_bar_height(&ui), SUMMARY_BAR_HEIGHT);
+        ui.process_search = None;
+        ui.show_interrupt_prompt(false);
+        assert_eq!(summary_bar_height(&ui), SUMMARY_BAR_HEIGHT);
+    }
+
+    #[test]
+    fn configured_statusline_keeps_contextual_process_actions() {
+        let mut model = ActivityModel::default();
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id: 1,
+            name: "api".to_string(),
+            parent: None,
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+        let mut ctx = summary_ctx(false, false, 1);
+        ctx.preferences = Arc::new(crate::config::TuiPreferences {
+            theme: crate::config::ThemeConfig {
+                preset: crate::config::ThemePreset::Terminal,
+                ..crate::config::ThemeConfig::default()
+            },
+            ..crate::config::TuiPreferences::default()
+        });
+        ctx.keymap = Arc::new(ctx.preferences.keybindings.resolve().unwrap());
+        ctx.selected = model.get_activity(1).cloned();
+        ctx.selected_has_logs = true;
+        ctx.process_search_available = true;
+
+        let output = build_summary_view_impl(&ctx, 400)
+            .render(Some(400))
+            .to_string();
+        for hint in [
+            "Ctrl+E logs",
+            "Ctrl+X stop",
+            "Ctrl+R restart",
+            "Esc cancel",
+            "Ctrl+H toggle stopped",
+            "/ search",
+        ] {
+            assert!(output.contains(hint), "missing {hint:?}: {output:?}");
+        }
+
+        for width in [80, 120, 200] {
+            let output = build_summary_view_impl(&ctx, width)
+                .render(Some(width as usize))
+                .to_string();
+            for key in ["^E", "^X", "^R", "Esc", "^H", "/"] {
+                assert!(
+                    output.contains(key),
+                    "missing {key:?} at width {width}: {output:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn configured_statusline_does_not_restore_unbound_key_hints() {
+        let mut ctx = summary_ctx(false, false, 0);
+        let mut preferences = crate::config::TuiPreferences::default();
+        for action in ["move_down", "move_up", "half_page_down", "half_page_up"] {
+            preferences
+                .keybindings
+                .main
+                .insert(action.to_string(), Vec::new());
+        }
+        ctx.keymap = Arc::new(preferences.keybindings.resolve().unwrap());
+        ctx.preferences = Arc::new(preferences);
+
+        let output = build_summary_view_impl(&ctx, 160)
+            .render(Some(160))
+            .to_string();
+        assert!(!output.contains("navigate"));
+        assert!(!output.contains("↑↓/jk"));
+        assert!(!output.contains("Ctrl-D/U"));
     }
 
     #[test]
@@ -2349,6 +2828,75 @@ mod tests {
             rendered_hidden.contains("(2 hidden)"),
             "hidden count should appear next to the Running processes label: {rendered_hidden}"
         );
+    }
+
+    #[test]
+    fn statusline_position_controls_terminal_placement() {
+        let mut model = ActivityModel::default();
+        model.apply_activity_event(ActivityEvent::Process(Process::Start {
+            id: 1,
+            name: "api".to_string(),
+            parent: None,
+            command: None,
+            ports: vec![],
+            ready_probe: None,
+            level: ActivityLevel::Info,
+            timestamp: Timestamp::now(),
+        }));
+        model.apply_activity_event(process_log(1, "ready", false));
+
+        let statusline_row = |position: StatuslinePosition, open: bool| {
+            let mut ui_state = UiState::new();
+            ui_state.set_terminal_size(100, 12);
+            let mut preferences = crate::config::TuiPreferences::default();
+            preferences.statusline.position = position;
+            ui_state.set_preferences(preferences).unwrap();
+            ui_state.process_previews_hidden = !open;
+            ui_state.inline_logs_activity = open.then_some(1);
+
+            let display_activities = model.get_display_activities(&ui_state);
+            let child: AnyElement<'static> = view(
+                &model,
+                &ui_state,
+                RenderContext::Normal,
+                Some(ScrollState {
+                    handle: None,
+                    display_activities,
+                    process_previews_fit: false,
+                }),
+                false,
+            )
+            .into();
+            let mut element: AnyElement<'static> = element! {
+                View(
+                    width: ui_state.terminal_size.width,
+                    height: ui_state.terminal_size.height
+                ) {
+                    #(vec![child])
+                }
+            }
+            .into();
+            let output = element
+                .render(Some(ui_state.terminal_size.width as usize))
+                .to_string();
+            let row = output
+                .lines()
+                .position(|line| line.contains("1 process"))
+                .unwrap();
+            (row, output)
+        };
+
+        for open in [false, true] {
+            let (bottom_row, bottom_output) = statusline_row(StatuslinePosition::Bottom, open);
+            assert_eq!(bottom_row, 11, "{bottom_output:?}");
+            let (top_row, top_output) = statusline_row(StatuslinePosition::Top, open);
+            assert_eq!(top_row, 0, "{top_output:?}");
+        }
+
+        let (collapsed_row, collapsed_output) = statusline_row(StatuslinePosition::Inline, false);
+        let (open_row, open_output) = statusline_row(StatuslinePosition::Inline, true);
+        assert_eq!(collapsed_row, 2, "{collapsed_output:?}");
+        assert_eq!(open_row, 3, "{open_output:?}");
     }
 
     #[test]

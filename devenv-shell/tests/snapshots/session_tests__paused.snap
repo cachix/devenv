@@ -3,4 +3,4 @@ source: devenv-shell/tests/session_tests.rs
 assertion_line: 472
 expression: "rows[23]"
 ---
- ⏸  devenv paused                                             Ctrl-Alt-D resume
+ ⏸  devenv paused                                             Ctrl+Alt+D resume

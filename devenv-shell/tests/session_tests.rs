@@ -1,6 +1,7 @@
 #![cfg(feature = "test-pty")]
 
 use devenv_mailbox::{FrontendCommand, FrontendEvent, ProcessCommand};
+use devenv_shell::keybindings::{ShellAction, ShellKeyChord, ShellKeyCode, ShellKeybindings};
 use devenv_shell::vt_utils::{DEFAULT_MAX_SCROLLBACK, active_point, row_plain_text, screen_point};
 use devenv_shell::{
     CommandBuilder, PtySize, SessionConfig, SessionIo, ShellCommand, ShellEvent, ShellSession,
@@ -34,6 +35,7 @@ fn test_session() -> ShellSession {
             pixel_width: 0,
             pixel_height: 0,
         }),
+        ..SessionConfig::default()
     })
 }
 
@@ -329,6 +331,105 @@ async fn test_ctrl_alt_d_toggle_pause() {
     let _ = handle.await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_custom_shell_keybinding_replaces_default() {
+    let (io, mut stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, mut event_rx) = mpsc::channel(10);
+    let mut keybindings = ShellKeybindings::default();
+    let binding = ShellKeyChord::new(ShellKeyCode::Function(12), false, false, false);
+    keybindings.replace(ShellAction::TogglePause, vec![binding.clone()]);
+    let session = ShellSession::new(SessionConfig {
+        show_status_line: false,
+        size: Some(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        }),
+        keybindings,
+    });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
+
+    cmd_tx
+        .send(spawn_cmd("printf 'READY\\n'; read unused"))
+        .await
+        .unwrap();
+    let ready = read_until(&mut stdout_ours, b"READY", Duration::from_secs(5));
+    assert!(ready.windows(5).any(|window| window == b"READY"));
+
+    stdin_ours.write_all(&binding.terminal_bytes()).unwrap();
+    stdin_ours.flush().unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(5), event_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        event,
+        FrontendEvent::Shell(ShellEvent::TogglePause)
+    ));
+
+    let _ = stdin_ours.write_all(b"\n");
+    drop(stdin_ours);
+    drop(cmd_tx);
+    let _ = handle.await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_custom_shell_keybinding_is_forwarded_in_alternate_screen() {
+    let (io, mut stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+    let mut keybindings = ShellKeybindings::default();
+    let binding = ShellKeyChord::new(ShellKeyCode::Function(12), false, false, false);
+    keybindings.replace(ShellAction::TogglePause, vec![binding.clone()]);
+    let session = ShellSession::new(SessionConfig {
+        show_status_line: false,
+        size: Some(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        }),
+        keybindings,
+    });
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
+
+    cmd_tx
+        .send(spawn_cmd(
+            "stty raw -echo; printf '\\033[?1049hREADY'; dd bs=1 count=5 2>/dev/null | od -An -t x1; printf 'CAPTURED'; dd bs=1 count=1 2>/dev/null >/dev/null; printf '\\033[?1049l'",
+        ))
+        .await
+        .unwrap();
+    let mut collected = read_until(&mut stdout_ours, b"READY", Duration::from_secs(5));
+    assert!(
+        collected.windows(5).any(|window| window == b"READY"),
+        "alternate-screen application did not become ready: {:?}",
+        String::from_utf8_lossy(&collected)
+    );
+
+    stdin_ours.write_all(&binding.terminal_bytes()).unwrap();
+    stdin_ours.flush().unwrap();
+    collected.extend(read_until(
+        &mut stdout_ours,
+        b"CAPTURED",
+        Duration::from_secs(5),
+    ));
+    assert!(
+        collected
+            .windows(b"1b 5b 32 34 7e".len())
+            .any(|window| window == b"1b 5b 32 34 7e"),
+        "custom keybinding was not forwarded: {:?}",
+        String::from_utf8_lossy(&collected)
+    );
+
+    stdin_ours.write_all(b"x").unwrap();
+    stdin_ours.flush().unwrap();
+    drop(stdin_ours);
+    drop(cmd_tx);
+    assert_eq!(handle.await.unwrap().unwrap(), Some(0));
+}
+
 fn status_line_session() -> ShellSession {
     ShellSession::new(SessionConfig {
         show_status_line: true,
@@ -338,6 +439,7 @@ fn status_line_session() -> ShellSession {
             pixel_width: 0,
             pixel_height: 0,
         }),
+        ..SessionConfig::default()
     })
 }
 
@@ -372,19 +474,8 @@ fn render_all_lines(stdout_bytes: &[u8], cols: usize, rows: usize) -> Vec<String
         .collect()
 }
 
-/// Normalize platform-specific keybind labels in status-line snapshots so a
-/// single `.snap` file works on Linux and macOS. On macOS the long form
-/// renders `Ctrl-Opt-E`/`Ctrl-Opt-D`; elsewhere it's `Ctrl-Alt-*`. The guard
-/// must be kept alive for the duration of the snapshot assertions.
-fn bind_keybind_filters() -> insta::internals::SettingsBindDropGuard {
-    let mut settings = insta::Settings::clone_current();
-    settings.add_filter(r"Ctrl-Opt-([A-Z])", "Ctrl-Alt-$1");
-    settings.bind_to_scope()
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_status_line_rendered_on_last_row() {
-    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -521,7 +612,6 @@ async fn test_overflow_viewport_shows_tail() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_overflow_status_line_protected() {
-    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -579,7 +669,6 @@ async fn test_overflow_status_line_protected() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_build_lifecycle_status_line() {
-    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -635,7 +724,6 @@ async fn test_build_lifecycle_status_line() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_build_failed_error_toggle() {
-    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
@@ -692,7 +780,6 @@ async fn test_build_failed_error_toggle() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_watching_paused_status_line() {
-    let _keybind_guard = bind_keybind_filters();
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);

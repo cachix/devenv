@@ -2,4 +2,4 @@
 source: devenv-shell/tests/session_tests.rs
 expression: "rows[23]"
 ---
- 👁  devenv watching 1 files                                    Ctrl-Alt-D pause
+ 👁  devenv watching 1 files                                    Ctrl+Alt+D pause

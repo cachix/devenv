@@ -157,6 +157,10 @@ pub struct Activity {
 /// UI state - lives outside the RwLock, managed by the UI thread.
 #[derive(Debug)]
 pub struct UiState {
+    pub preferences: Arc<crate::config::TuiPreferences>,
+    keymap: Arc<crate::config::Keymap>,
+    pub run_context: Arc<crate::config::TuiRunContext>,
+    pub pending_key: Option<String>,
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
     pub inline_logs_activity: Option<u64>,
@@ -185,7 +189,13 @@ impl UiState {
     /// Create a new UiState, querying the terminal for its size.
     pub fn new() -> Self {
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+        let preferences = crate::config::TuiPreferences::default();
+        let keymap = preferences.keybindings.resolve().unwrap();
         Self {
+            preferences: Arc::new(preferences),
+            keymap: Arc::new(keymap),
+            run_context: Arc::new(crate::config::TuiRunContext::default()),
+            pending_key: None,
             viewport: ViewportConfig {
                 current: 10,
                 min: 10,
@@ -216,6 +226,20 @@ impl UiState {
     /// Record the size the current frame is rendered at.
     pub fn set_terminal_size(&mut self, width: u16, height: u16) {
         self.terminal_size = TerminalSize { width, height };
+    }
+
+    pub fn set_preferences(
+        &mut self,
+        preferences: crate::config::TuiPreferences,
+    ) -> Result<(), crate::config::UserConfigError> {
+        let keymap = preferences.keybindings.resolve()?;
+        self.preferences = Arc::new(preferences);
+        self.keymap = Arc::new(keymap);
+        Ok(())
+    }
+
+    pub fn keymap(&self) -> &Arc<crate::config::Keymap> {
+        &self.keymap
     }
 
     pub fn show_interrupt_prompt(&mut self, attached: bool) {

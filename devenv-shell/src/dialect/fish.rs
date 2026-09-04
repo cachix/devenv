@@ -68,7 +68,21 @@ exit 1
         super::BashDialect.env_diff_helpers()
     }
 
-    fn reload_hook(&self, reload_file: &Path) -> String {
+    fn reload_hook(
+        &self,
+        reload_file: &Path,
+        keybindings: &crate::keybindings::ShellKeybindings,
+    ) -> String {
+        let reload_keybindings = keybindings
+            .reload_bindings(self.name())
+            .iter()
+            .map(|binding| {
+                format!(
+                    "bind (string unescape '{}') __devenv_reload_keybind_handler\n",
+                    binding.escaped_bytes()
+                )
+            })
+            .collect::<String>();
         // Fish reload hook using key binding and pre-prompt path restore.
         //
         // For reload, we shell out to bash to handle the env diff
@@ -132,13 +146,14 @@ function __devenv_reload_keybind_handler
     __devenv_reload_apply
     commandline -f repaint
 end
-bind \e\cr __devenv_reload_keybind_handler
+{reload_keybindings}
 "#,
             reload_file = reload_file.to_string_lossy(),
             bash_reload_script = super::bash_reload_subprocess_script(
                 super::BashDialect.env_diff_helpers(),
                 &reload_file.to_string_lossy(),
             ),
+            reload_keybindings = reload_keybindings,
         )
     }
 

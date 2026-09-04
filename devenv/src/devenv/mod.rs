@@ -1769,6 +1769,7 @@ impl Devenv {
 
                 let env_diff_helpers = dialect.env_diff_helpers();
                 let target_path_str = target_shell_path.as_deref().unwrap();
+                let shell_keybindings = devenv_shell::keybindings::ShellKeybindings::default();
 
                 let rcfile_ctx = RcfileContext {
                     env_script_path: &env_script_path,
@@ -1776,6 +1777,7 @@ impl Devenv {
                     reload_hook: "",
                     target_shell_path: Some(target_path_str),
                     init_dir: &self.devenv_dotfile,
+                    shell_keybindings: &shell_keybindings,
                 };
 
                 let rcfile_content = dialect.rcfile_content(&rcfile_ctx);
