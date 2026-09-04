@@ -742,8 +742,25 @@ impl Cli {
             // `devenv hook fish --no-tui` as an option for this process even
             // though it belongs to the shell that the generated hook starts
             // later. Require one unambiguous ownership boundary instead.
-            let separator_follows_shell = args.get(3).is_some_and(|arg| arg == OsStr::new("--"));
-            if args.len() > 3 && !separator_follows_shell {
+            let hook_index = args
+                .iter()
+                .enumerate()
+                .skip(1)
+                .find_map(|(index, arg)| {
+                    if arg != OsStr::new("hook") {
+                        return None;
+                    }
+                    let candidate =
+                        std::iter::once(args[0].clone()).chain(args[index..].iter().cloned());
+                    Self::try_parse_from(candidate)
+                        .is_ok_and(|cli| matches!(cli.command, Commands::Hook { .. }))
+                        .then_some(index)
+                })
+                .expect("parsed hook command must contain the hook subcommand");
+            let separator_follows_shell = args
+                .get(hook_index + 2)
+                .is_some_and(|arg| arg == OsStr::new("--"));
+            if args.len() > hook_index + 2 && !separator_follows_shell {
                 return Err(Self::command().error(
                     clap::error::ErrorKind::ArgumentConflict,
                     "shell arguments must follow `--`\n\n  devenv hook <SHELL> -- <SHELL_ARGS>...",
@@ -1957,8 +1974,6 @@ mod tests {
     fn hook_requires_separator_before_shell_args() {
         for argv in [
             osargs(["devenv", "hook", "fish", "--no-tui"]),
-            osargs(["devenv", "--no-tui", "hook", "fish"]),
-            osargs(["devenv", "--no-tui", "hook", "fish", "--", "--quiet"]),
             osargs(["devenv", "hook", "fish", "--no-tui", "--", "--quiet"]),
         ] {
             let error = match Cli::try_parse_preprocessed_from(argv) {
@@ -1967,6 +1982,28 @@ mod tests {
             };
             assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
             assert!(error.to_string().contains("must follow `--`"));
+        }
+    }
+
+    #[test]
+    fn hook_accepts_global_options_before_subcommand() {
+        for (case, argv) in [
+            osargs(["devenv", "--no-tui", "hook", "fish"]),
+            osargs(["devenv", "--no-tui", "hook", "fish", "--", "--quiet"]),
+            osargs([
+                "devenv",
+                "--override-input",
+                "devenv",
+                "git+file:/tmp/devenv?dir=src/modules",
+                "hook",
+                "bash",
+            ]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            Cli::try_parse_preprocessed_from(argv)
+                .unwrap_or_else(|error| panic!("hook global option case {case}: {error}"));
         }
     }
 
