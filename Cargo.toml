@@ -160,9 +160,9 @@ url = "2"
 human-repr = "1.1"
 insta = { version = "1.47", features = ["filters", "json"] }
 notify = { version = "8", default-features = false }
-watchexec = "8.2"
+watchexec = "8.4.1"
 watchexec-filterer-globset = "8.0"
-watchexec-supervisor = "5.2"
+watchexec-supervisor = "5.4.0"
 signal-hook = "0.4"
 signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }
 socket2 = "0.6"

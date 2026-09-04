@@ -11,6 +11,7 @@
   libghostty-vt,
   gitRev ? "",
   isRelease ? false,
+  stripReleaseBinaries ? false,
 }:
 
 let
@@ -64,10 +65,13 @@ let
       pkg-config
       rustPlatform.bindgenHook
     ];
-    extraRustcOpts = (attrs.extraRustcOpts or [ ]) ++ [
-      "--cfg"
-      "tracing_unstable"
-    ];
+    extraRustcOpts =
+      (attrs.extraRustcOpts or [ ])
+      ++ [
+        "--cfg"
+        "tracing_unstable"
+      ]
+      ++ lib.optional stripReleaseBinaries "-C strip=symbols";
   };
 in
 {

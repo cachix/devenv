@@ -7,7 +7,8 @@
 
 use crate::TuiConfig;
 use crate::app::{
-    ExitFlag, ProcessCommandSender, handle_interrupt_prompt_key, request_interrupt_prompt,
+    ExitFlag, PauseFlag, ProcessCommandSender, handle_interrupt_prompt_key,
+    request_interrupt_prompt,
 };
 use crate::components::{COLOR_COMPLETED, COLOR_INTERACTIVE};
 use crate::model::{ActivityModel, UiState, ViewMode};
@@ -360,7 +361,9 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     // Check if we should exit (backend done or view mode changed)
     let exit_flag = hooks.use_context::<ExitFlag>();
+    let pause_flag = hooks.use_context::<PauseFlag>();
     let should_exit = exit_flag.is_set()
+        || pause_flag.is_set()
         || ui_state
             .read()
             .map(|ui| !matches!(ui.view_mode, ViewMode::ExpandedLogs { .. }))

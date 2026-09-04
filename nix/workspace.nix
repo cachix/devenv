@@ -40,7 +40,11 @@ let
     };
 
   # Import crate2nix generated file with overrides
-  crateConfig = callPackage ./crate-config.nix { inherit gitRev isRelease libghostty-vt; };
+  crateConfig = callPackage ./crate-config.nix {
+    inherit gitRev isRelease libghostty-vt;
+    # crate2nix does not apply Cargo's profile.release.strip setting.
+    stripReleaseBinaries = cargoProfile == "release";
+  };
 
   cargoNix = callPackage ../Cargo.nix {
     inherit buildRustCrateForPkgs;

@@ -42,6 +42,9 @@ fn main() {
     if let Some(code) = devenv_processes::maybe_run_process_guardian() {
         process::exit(code);
     }
+    if let Some(code) = devenv_processes::maybe_run_capability_helper() {
+        process::exit(code);
+    }
     // Handle shell completion requests (COMPLETE=bash devenv)
     // Use "devenv" as completer so scripts work after installation (not absolute path)
     CompleteEnv::with_factory(Cli::command)
@@ -618,6 +621,10 @@ impl Renderer {
                         match frontend_rx.recv().await {
                             Some(FrontendCommand::ExitRenderer) | None => break,
                             Some(FrontendCommand::SetAttached(_)) => {}
+                            Some(FrontendCommand::PauseForInteraction { ready, resume }) => {
+                                let _ = ready.send(());
+                                let _ = tokio::task::spawn_blocking(move || resume.recv()).await;
+                            }
                             Some(FrontendCommand::Shell(_)) => {
                                 unreachable!("shell command received before renderer exit")
                             }

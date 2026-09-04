@@ -40,6 +40,7 @@ pub fn get_process_runtime_dir(runtime_dir: &Path) -> Result<PathBuf> {
     Ok(dir)
 }
 
+pub mod capabilities;
 pub mod command;
 pub mod config;
 pub mod external_manager;
@@ -56,6 +57,7 @@ pub mod supervisor;
 pub mod supervisor_state;
 
 // Re-export config types at crate root
+pub use capabilities::{CapabilityRequest, maybe_run_capability_helper, start_capability_broker};
 pub use config::{
     HttpGetProbe, HttpProbe, ListenKind, ListenSpec, ProcessConfig, ProcessType, ReadyConfig,
     RestartConfig, RestartPolicy, ShutdownConfig, SocketActivationConfig, SupervisionMode,

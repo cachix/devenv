@@ -219,6 +219,13 @@ For specific privilege needs, use Linux capabilities instead:
 }
 ```
 
+On first launch, devenv shows the requested capabilities and authenticates
+with `sudo`. The service itself still runs as your user; only the listed Linux
+capabilities are retained. In non-interactive environments, authenticate with
+`sudo -v` before running `devenv up`. A privileged broker remains available
+for the manager's lifetime, so detached processes and automatic restarts remain
+non-interactive.
+
 ## git-hooks input is now optional
 
 The `git-hooks` input is no longer included by default. If you use `git-hooks.hooks` in your `devenv.nix`, add the input explicitly:

@@ -565,8 +565,13 @@ impl SupervisorRuntime {
             return Continuation::Exit;
         }
 
-        // Ignore an exit notification queued by the replaced run.
-        if self.job.is_running() {
+        // Ignore an exit notification queued by the replaced run. Query through
+        // the job queue so this works with delegated children as well.
+        let (running_tx, running_rx) = oneshot::channel();
+        self.job.run(move |ctx| {
+            let _ = running_tx.send(ctx.current.is_running());
+        });
+        if running_rx.await.unwrap_or(false) {
             trace!("Ignoring stale exit notification for {}", self.name());
             return Continuation::Continue;
         }

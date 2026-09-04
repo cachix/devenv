@@ -51,6 +51,44 @@ $ devenv processes wait --timeout 120
 
 The default timeout is 120 seconds.
 
+## Linux capabilities
+
+:::tip[New in devenv 2.3]
+:::
+
+On Linux, the native process manager can grant a process a limited set of
+kernel capabilities without running the service as root. For example, this
+allows a web server to bind to port 443:
+
+```nix title="devenv.nix"
+{
+  processes.web = {
+    exec = "caddy run";
+    linux.capabilities = [ "net_bind_service" ];
+  };
+}
+```
+
+Devenv displays the requested capabilities and authenticates with `sudo` before
+starting the manager. The service then runs with your user and group IDs, with
+only the requested capabilities retained. In a non-interactive environment,
+run `sudo -v` first; without it, `devenv up` fails only if a process that needs
+capabilities is part of that start. Processes declared with `start.enable =
+false` are reported with a warning and cannot be started later until the
+manager is restarted from a terminal. A privileged broker remains available
+for the lifetime of the manager, so detached processes and supervised restarts
+do not prompt again. The broker can launch only the capability-bearing
+processes declared in the evaluated configuration.
+
+On other platforms the option is ignored with a warning and the process starts
+without extra privileges, so a shared `devenv.nix` keeps working on macOS.
+
+The currently allowed capabilities are `net_bind_service`, `net_raw`,
+`net_admin`, `ipc_lock`, `sys_nice`, `sys_resource`, `sys_admin`, `chown`,
+`dac_override`, and `fowner`. The `cap_` prefix and uppercase spellings are
+also accepted. Linux capabilities cannot currently be combined with devenv
+socket activation on the same process.
+
 ## Attaching to running processes
 
 :::tip[New in devenv 2.2]
