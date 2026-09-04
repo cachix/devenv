@@ -158,17 +158,24 @@
                   staticComponents.nix-cli // { libs = staticComponents.nix-everything.libs; };
               # Build nixd against the same nix components as devenv, otherwise
               # it drags a second copy of the nix libraries into the closure.
+              # Only on glibc: under pkgsStatic this would rebuild nixd and nixf
+              # against the static Nix libs, where they fail to link (pcre2,
+              # lzma, bz2 and llhttp are not on the static link line). nixd only
+              # serves `devenv lsp`, so take the flake's own build on static.
               nixd =
-                let
-                  nixdPkgs = inputs.nixd.packages.${system};
-                  nixComponents = final.nix.libs;
-                in
-                nixdPkgs.nixd.override {
-                  llvmStatic = true;
-                  inherit nixComponents;
-                  nixf = nixdPkgs.nixf.override { inherit (nixComponents) nix-expr; };
-                  nixt = nixdPkgs.nixt.override { inherit nixComponents; };
-                };
+                if prev.stdenv.hostPlatform.isStatic then
+                  inputs.nixd.packages.${system}.nixd
+                else
+                  let
+                    nixdPkgs = inputs.nixd.packages.${system};
+                    nixComponents = final.nix.libs;
+                  in
+                  nixdPkgs.nixd.override {
+                    llvmStatic = true;
+                    inherit nixComponents;
+                    nixf = nixdPkgs.nixf.override { inherit (nixComponents) nix-expr; };
+                    nixt = nixdPkgs.nixt.override { inherit nixComponents; };
+                  };
               crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
               libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" {
                 optimize = "ReleaseSafe";
