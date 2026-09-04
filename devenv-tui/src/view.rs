@@ -1318,6 +1318,546 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
     build_summary_view_impl(&ctx, terminal_width)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FooterMode {
+    Full,
+    Compact,
+    Symbols,
+    Keys,
+}
+
+impl FooterMode {
+    fn uses_symbols(self) -> bool {
+        matches!(self, Self::Symbols | Self::Keys)
+    }
+
+    fn uses_short_text(self) -> bool {
+        self != Self::Full
+    }
+}
+
+struct FooterSpan {
+    content: String,
+    color: Option<Color>,
+    weight: Weight,
+}
+
+impl FooterSpan {
+    fn plain(content: impl Into<String>) -> Self {
+        Self {
+            content: content.into(),
+            color: None,
+            weight: Weight::Normal,
+        }
+    }
+
+    fn colored(content: impl Into<String>, color: Color) -> Self {
+        Self {
+            content: content.into(),
+            color: Some(color),
+            weight: Weight::Normal,
+        }
+    }
+
+    fn completed(content: impl Into<String>) -> Self {
+        Self {
+            content: content.into(),
+            color: Some(COLOR_COMPLETED),
+            weight: Weight::Bold,
+        }
+    }
+
+    fn width(&self) -> usize {
+        UnicodeWidthStr::width(self.content.as_str())
+    }
+
+    fn into_element(self) -> AnyElement<'static> {
+        let width = self.width() as u32;
+        element!(View(width: width, flex_shrink: 0.0) {
+            Text(
+                content: self.content,
+                color: self.color,
+                weight: self.weight,
+                wrap: TextWrap::NoWrap,
+            )
+        })
+        .into_any()
+    }
+}
+
+struct FooterContent {
+    spans: Vec<FooterSpan>,
+}
+
+impl FooterContent {
+    fn width(&self) -> usize {
+        self.spans.iter().map(FooterSpan::width).sum()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.spans.is_empty()
+    }
+
+    fn into_elements(self) -> Vec<AnyElement<'static>> {
+        self.spans
+            .into_iter()
+            .map(FooterSpan::into_element)
+            .collect()
+    }
+}
+
+struct FooterHelpContext {
+    has_selection: bool,
+    is_process: bool,
+    is_stoppable: bool,
+    is_restartable: bool,
+    show_hide_toggle: bool,
+    showing_logs: bool,
+    can_go_up: bool,
+    can_go_down: bool,
+    hide_stopped_processes: bool,
+    process_search_available: bool,
+    selected_disclosure: Option<bool>,
+    selected_has_logs: bool,
+    selected_preview_focused: bool,
+    process_previews_fit: bool,
+}
+
+fn build_summary_content(summary: &ActivitySummary, mode: FooterMode) -> FooterContent {
+    let compact = mode.uses_symbols();
+    let mut metrics = Vec::new();
+    let builds = summary.active_builds + summary.completed_builds + summary.failed_builds;
+    if builds > 0 {
+        let total = summary
+            .expected_builds
+            .map(|value| value as usize)
+            .unwrap_or(builds)
+            .max(builds);
+        metrics.push((
+            summary.completed_builds.to_string(),
+            if compact {
+                format!("/{total} builds")
+            } else {
+                format!(" of {total} builds")
+            },
+        ));
+    }
+    let downloads = summary.active_downloads + summary.completed_downloads;
+    if downloads > 0 {
+        let total = summary
+            .expected_downloads
+            .map(|value| value as usize)
+            .unwrap_or(downloads)
+            .max(downloads);
+        metrics.push((
+            summary.completed_downloads.to_string(),
+            if compact {
+                format!("/{total} downloads")
+            } else {
+                format!(" of {total} downloads")
+            },
+        ));
+    }
+    let queries = summary.active_queries + summary.completed_queries;
+    if queries > 0 {
+        metrics.push((
+            summary.completed_queries.to_string(),
+            if compact {
+                format!("/{queries} queries")
+            } else {
+                format!(" of {queries} queries")
+            },
+        ));
+    }
+    let tasks = summary.running_tasks + summary.completed_tasks + summary.failed_tasks;
+    if tasks > 0 {
+        metrics.push((
+            summary.completed_tasks.to_string(),
+            if compact {
+                format!("/{tasks} tasks")
+            } else {
+                format!(" of {tasks} tasks")
+            },
+        ));
+    }
+    if summary.total_processes > 0 {
+        let label = if summary.total_processes == 1 {
+            "process"
+        } else {
+            "processes"
+        };
+        metrics.push(if summary.running_processes == summary.total_processes {
+            (summary.total_processes.to_string(), format!(" {label}"))
+        } else {
+            (
+                summary.running_processes.to_string(),
+                if compact {
+                    format!("/{} {label}", summary.total_processes)
+                } else {
+                    format!(" of {} {label}", summary.total_processes)
+                },
+            )
+        });
+    }
+
+    let mut spans = Vec::new();
+    let separator = if compact { " │ " } else { "  │  " };
+    for (index, (count, label)) in metrics.into_iter().enumerate() {
+        if index > 0 {
+            spans.push(FooterSpan::colored(separator, COLOR_HIERARCHY));
+        }
+        spans.push(FooterSpan::completed(count));
+        spans.push(FooterSpan::plain(label));
+    }
+    FooterContent { spans }
+}
+
+fn build_help_content(ctx: &FooterHelpContext, mode: FooterMode) -> FooterContent {
+    let up_arrow_color = if ctx.can_go_up {
+        COLOR_INTERACTIVE
+    } else {
+        COLOR_HIERARCHY
+    };
+    let down_arrow_color = if ctx.can_go_down {
+        COLOR_INTERACTIVE
+    } else {
+        COLOR_HIERARCHY
+    };
+    let mut spans = vec![
+        FooterSpan::colored("↑", up_arrow_color),
+        FooterSpan::colored("↓", down_arrow_color),
+        FooterSpan::colored(" j", down_arrow_color),
+        FooterSpan::colored("/", COLOR_HIERARCHY),
+        FooterSpan::colored("k", up_arrow_color),
+        FooterSpan::colored(
+            if mode.uses_short_text() {
+                " ^D"
+            } else {
+                " Ctrl-D"
+            },
+            down_arrow_color,
+        ),
+        FooterSpan::colored("/", COLOR_HIERARCHY),
+        FooterSpan::colored(
+            if mode.uses_short_text() {
+                "^U"
+            } else {
+                "Ctrl-U"
+            },
+            up_arrow_color,
+        ),
+    ];
+
+    if ctx.has_selection && mode == FooterMode::Keys {
+        spans.push(FooterSpan::colored(" Enter", COLOR_INTERACTIVE));
+        if ctx.selected_has_logs || ctx.is_process {
+            spans.push(FooterSpan::colored(" ^E", COLOR_INTERACTIVE));
+        }
+        if ctx.is_stoppable {
+            spans.push(FooterSpan::colored(" ^X", COLOR_INTERACTIVE));
+        }
+        if ctx.is_restartable {
+            spans.push(FooterSpan::colored(" ^R", COLOR_INTERACTIVE));
+        }
+        if ctx.show_hide_toggle {
+            spans.push(FooterSpan::colored(" ^H", COLOR_INTERACTIVE));
+        }
+        if ctx.process_search_available {
+            spans.push(FooterSpan::colored(" /", COLOR_INTERACTIVE));
+        }
+        spans.push(FooterSpan::colored(" Esc", COLOR_INTERACTIVE));
+        return FooterContent { spans };
+    }
+
+    if ctx.has_selection {
+        if mode == FooterMode::Symbols {
+            spans.push(FooterSpan::plain(" • "));
+        } else if mode == FooterMode::Compact {
+            spans.push(FooterSpan::plain(" nav "));
+        } else {
+            spans.push(FooterSpan::plain(" navigate • "));
+        }
+        let directional_open =
+            ctx.selected_disclosure == Some(true) || ctx.is_process && !ctx.showing_logs;
+        let directional_close =
+            ctx.selected_disclosure == Some(false) || ctx.is_process && ctx.showing_logs;
+        spans.push(FooterSpan::colored(
+            if directional_open && mode == FooterMode::Full {
+                "Enter/l/→"
+            } else if directional_close && mode == FooterMode::Full {
+                "Enter/h/←"
+            } else {
+                "Enter"
+            },
+            COLOR_INTERACTIVE,
+        ));
+        spans.push(FooterSpan::plain(match ctx.selected_disclosure {
+            Some(true) if mode == FooterMode::Symbols => " ▾ • ",
+            Some(false) if mode == FooterMode::Symbols => " ▴ • ",
+            Some(true) => " expand ",
+            Some(false) => " collapse ",
+            None if ctx.is_process
+                && !ctx.showing_logs
+                && ctx.process_previews_fit
+                && mode == FooterMode::Symbols =>
+            {
+                " ◎ • "
+            }
+            None if ctx.is_process && ctx.showing_logs && mode == FooterMode::Symbols => " ▴ • ",
+            None if mode == FooterMode::Symbols => " ▾ • ",
+            None if ctx.is_process && !ctx.showing_logs && ctx.process_previews_fit => " focus ",
+            None if ctx.is_process
+                && ctx.showing_logs
+                && ctx.process_previews_fit
+                && !ctx.selected_preview_focused =>
+            {
+                " hide previews "
+            }
+            None if ctx.is_process && ctx.showing_logs => " hide preview ",
+            None if mode == FooterMode::Compact => " preview ",
+            None => " preview logs • ",
+        }));
+        if ctx.selected_has_logs || ctx.is_process {
+            spans.push(FooterSpan::colored(
+                if mode.uses_short_text() {
+                    "^E"
+                } else {
+                    "Ctrl-E"
+                },
+                COLOR_INTERACTIVE,
+            ));
+            spans.push(FooterSpan::plain(if mode == FooterMode::Symbols {
+                " ▼ • "
+            } else if mode == FooterMode::Compact {
+                " logs "
+            } else {
+                " full logs • "
+            }));
+        }
+        if ctx.is_process {
+            if ctx.is_stoppable {
+                spans.push(FooterSpan::colored(
+                    if mode.uses_short_text() {
+                        "^X"
+                    } else {
+                        "Ctrl-X"
+                    },
+                    COLOR_INTERACTIVE,
+                ));
+                spans.push(FooterSpan::plain(if mode == FooterMode::Symbols {
+                    " "
+                } else if mode == FooterMode::Compact {
+                    " stop "
+                } else {
+                    " stop process • "
+                }));
+            }
+            if ctx.is_restartable {
+                spans.push(FooterSpan::colored(
+                    if mode.uses_short_text() {
+                        "^R"
+                    } else {
+                        "Ctrl-R"
+                    },
+                    COLOR_INTERACTIVE,
+                ));
+                spans.push(FooterSpan::plain(if mode == FooterMode::Symbols {
+                    " "
+                } else if mode == FooterMode::Compact {
+                    " restart "
+                } else {
+                    " (re)start process • "
+                }));
+            }
+        }
+        if ctx.show_hide_toggle {
+            spans.push(FooterSpan::colored(
+                if mode.uses_short_text() {
+                    "^H"
+                } else {
+                    "Ctrl-H"
+                },
+                COLOR_INTERACTIVE,
+            ));
+            spans.push(FooterSpan::plain(if mode == FooterMode::Symbols {
+                " "
+            } else if mode == FooterMode::Compact {
+                if ctx.hide_stopped_processes {
+                    " show "
+                } else {
+                    " hide "
+                }
+            } else if ctx.hide_stopped_processes {
+                " show stopped • "
+            } else {
+                " hide stopped • "
+            }));
+        }
+        if ctx.process_search_available {
+            spans.push(FooterSpan::colored("/", COLOR_INTERACTIVE));
+            spans.push(FooterSpan::plain(if mode == FooterMode::Symbols {
+                " "
+            } else if mode == FooterMode::Compact {
+                " search "
+            } else {
+                " search processes • "
+            }));
+        }
+        spans.push(FooterSpan::colored("Esc", COLOR_INTERACTIVE));
+        spans.push(FooterSpan::plain(if ctx.showing_logs {
+            if mode == FooterMode::Symbols {
+                " ✕"
+            } else if mode == FooterMode::Compact {
+                " hide"
+            } else {
+                " hide logs"
+            }
+        } else {
+            " clear"
+        }));
+    } else {
+        let trail = ctx.show_hide_toggle || ctx.process_search_available;
+        if mode == FooterMode::Compact {
+            spans.push(FooterSpan::plain(if trail { " nav • " } else { " nav" }));
+        } else if mode == FooterMode::Full {
+            spans.push(FooterSpan::plain(if trail {
+                " navigate • "
+            } else {
+                " navigate"
+            }));
+        } else if trail {
+            spans.push(FooterSpan::plain(" • "));
+        }
+        if ctx.show_hide_toggle {
+            spans.push(FooterSpan::colored(
+                if mode.uses_short_text() {
+                    "^H"
+                } else {
+                    "Ctrl-H"
+                },
+                COLOR_INTERACTIVE,
+            ));
+            if mode != FooterMode::Symbols {
+                spans.push(FooterSpan::plain(if ctx.hide_stopped_processes {
+                    " show stopped"
+                } else {
+                    " hide stopped"
+                }));
+            }
+        }
+        if ctx.process_search_available {
+            if ctx.show_hide_toggle {
+                spans.push(FooterSpan::plain(" • "));
+            }
+            spans.push(FooterSpan::colored("/", COLOR_INTERACTIVE));
+            if mode != FooterMode::Symbols {
+                spans.push(FooterSpan::plain(" search"));
+            }
+        }
+    }
+    FooterContent { spans }
+}
+
+fn footer_modes(has_selection: bool, terminal_width: u16) -> &'static [FooterMode] {
+    if has_selection {
+        if terminal_width < 60 {
+            &[FooterMode::Keys]
+        } else if terminal_width < 120 {
+            &[FooterMode::Symbols, FooterMode::Keys]
+        } else if terminal_width < 200 {
+            &[FooterMode::Compact, FooterMode::Symbols, FooterMode::Keys]
+        } else {
+            &[
+                FooterMode::Full,
+                FooterMode::Compact,
+                FooterMode::Symbols,
+                FooterMode::Keys,
+            ]
+        }
+    } else if terminal_width < 100 {
+        &[FooterMode::Symbols]
+    } else if terminal_width < 160 {
+        &[FooterMode::Compact, FooterMode::Symbols]
+    } else {
+        &[FooterMode::Full, FooterMode::Compact, FooterMode::Symbols]
+    }
+}
+
+fn build_default_footer(
+    summary: &ActivitySummary,
+    help_ctx: &FooterHelpContext,
+    terminal_width: u16,
+) -> AnyElement<'static> {
+    let content_width = usize::from(terminal_width.saturating_sub(2));
+    let modes = footer_modes(help_ctx.has_selection, terminal_width);
+    let summary_allowed = !help_ctx.has_selection || terminal_width >= 72;
+    let fitted_mode = summary_allowed
+        .then(|| {
+            modes.iter().copied().find(|mode| {
+                let summary = build_summary_content(summary, *mode);
+                let help = build_help_content(help_ctx, *mode);
+                let gap = if summary.is_empty() || mode.uses_symbols() {
+                    1
+                } else {
+                    2
+                };
+                summary.width() + gap + help.width() <= content_width
+            })
+        })
+        .flatten();
+    let show_summary = fitted_mode.is_some();
+    let mode = fitted_mode
+        .or_else(|| {
+            modes
+                .iter()
+                .copied()
+                .find(|mode| build_help_content(help_ctx, *mode).width() <= content_width)
+        })
+        .unwrap_or_else(|| *modes.last().unwrap());
+    let summary = if show_summary {
+        build_summary_content(summary, mode)
+    } else {
+        FooterContent { spans: Vec::new() }
+    };
+    let help = build_help_content(help_ctx, mode);
+    let gap = if summary.is_empty() || mode.uses_symbols() {
+        1
+    } else {
+        2
+    };
+    let required_width = (summary.width() + gap + help.width()).min(content_width) as u32;
+    let left = summary.into_elements();
+    let right = help.into_elements();
+
+    if help_ctx.has_selection && terminal_width < 72 {
+        return element!(View(
+            flex_direction: FlexDirection::Row,
+            width: terminal_width.saturating_sub(2) as u32,
+            overflow: Overflow::Hidden,
+        ) {
+            #(right)
+        })
+        .into_any();
+    }
+
+    element!(View(
+        flex_direction: FlexDirection::Row,
+        width: required_width,
+        flex_grow: 1.0_f32,
+        flex_shrink: 0.0,
+        overflow: Overflow::Hidden,
+    ) {
+            View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
+                #(left)
+            }
+            View(width: gap as u32, flex_shrink: 0.0)
+            View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                #(right)
+            }
+    })
+    .into_any()
+}
+
 /// Build the summary view with colored counts
 fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> AnyElement<'static> {
     let SummaryViewContext {
@@ -1567,493 +2107,24 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
         .into_any();
     }
 
-    let mut children = vec![];
-    let mut has_content = false;
-
-    // Determine display mode based on terminal width
-    let use_symbols = terminal_width < if has_selection { 120 } else { 100 };
-
-    // Builds - only show if there are any builds (active, completed, or failed)
-    if summary.active_builds > 0 || summary.completed_builds > 0 || summary.failed_builds > 0 {
-        if has_content {
-            children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
-                Text(content: "│", color: COLOR_HIERARCHY)
-            }).into_any());
-        }
-        // Use expected count from SetExpected events if available, otherwise fall back to observed total
-        let observed_total =
-            summary.active_builds + summary.completed_builds + summary.failed_builds;
-        let total_builds = summary
-            .expected_builds
-            .map(|e| e as usize)
-            .unwrap_or(observed_total)
-            .max(observed_total);
-
-        // Format: "2 of 4 builds" or "2/4 builds" - protect numbers from truncation
-        if use_symbols {
-            children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_builds), color: COLOR_COMPLETED, weight: Weight::Bold)
-                Text(content: format!("/{}", total_builds))
-            }).into_any());
-        } else {
-            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_builds), color: COLOR_COMPLETED, weight: Weight::Bold)
-            }).into_any());
-            children.push(
-                element!(View(margin_right: 1, flex_shrink: 0.0) {
-                    Text(content: format!("of {}", total_builds))
-                })
-                .into_any(),
-            );
-        }
-
-        children.push(
-            element!(View(flex_shrink: 0.0) {
-                Text(content: "builds")
-            })
-            .into_any(),
-        );
-        has_content = true;
-    }
-
-    // Downloads - show if there are any downloads (active or done)
-    if summary.active_downloads > 0 || summary.completed_downloads > 0 {
-        if has_content {
-            children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
-                Text(content: "│", color: COLOR_HIERARCHY)
-            }).into_any());
-        }
-        // Use expected count from SetExpected events if available, otherwise fall back to observed total
-        let observed_total = summary.active_downloads + summary.completed_downloads;
-        let total_downloads = summary
-            .expected_downloads
-            .map(|e| e as usize)
-            .unwrap_or(observed_total)
-            .max(observed_total);
-
-        // Format: "3 of 7 downloads" or "3/7 downloads" - protect numbers from truncation
-        if use_symbols {
-            children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_downloads), color: COLOR_COMPLETED, weight: Weight::Bold)
-                Text(content: format!("/{}", total_downloads))
-            }).into_any());
-        } else {
-            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_downloads), color: COLOR_COMPLETED, weight: Weight::Bold)
-            }).into_any());
-            children.push(
-                element!(View(margin_right: 1, flex_shrink: 0.0) {
-                    Text(content: format!("of {}", total_downloads))
-                })
-                .into_any(),
-            );
-        }
-
-        children.push(
-            element!(View(flex_shrink: 0.0) {
-                Text(content: "downloads")
-            })
-            .into_any(),
-        );
-        has_content = true;
-    }
-
-    // Queries - show if there are any queries (active or done)
-    if summary.active_queries > 0 || summary.completed_queries > 0 {
-        if has_content {
-            children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
-                Text(content: "│", color: COLOR_HIERARCHY)
-            }).into_any());
-        }
-        let total_queries = summary.active_queries + summary.completed_queries;
-
-        // Format: "5 of 9 queries" or "5/9 queries" - protect numbers from truncation
-        if use_symbols {
-            children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_queries), color: COLOR_COMPLETED, weight: Weight::Bold)
-                Text(content: format!("/{}", total_queries))
-            }).into_any());
-        } else {
-            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_queries), color: COLOR_COMPLETED, weight: Weight::Bold)
-            }).into_any());
-            children.push(
-                element!(View(margin_right: 1, flex_shrink: 0.0) {
-                    Text(content: format!("of {}", total_queries))
-                })
-                .into_any(),
-            );
-        }
-
-        children.push(
-            element!(View(flex_shrink: 0.0) {
-                Text(content: "queries")
-            })
-            .into_any(),
-        );
-        has_content = true;
-    }
-
-    // Tasks - show if there are any tasks
-    if summary.running_tasks > 0 || summary.completed_tasks > 0 || summary.failed_tasks > 0 {
-        if has_content {
-            children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
-                Text(content: "│", color: COLOR_HIERARCHY)
-            }).into_any());
-        }
-        let total_tasks = summary.running_tasks + summary.completed_tasks + summary.failed_tasks;
-
-        // Format: "3 of 5 tasks" or "3/5 tasks"
-        if use_symbols {
-            children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_tasks), color: COLOR_COMPLETED, weight: Weight::Bold)
-                Text(content: format!("/{}", total_tasks))
-            }).into_any());
-        } else {
-            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_tasks), color: COLOR_COMPLETED, weight: Weight::Bold)
-            }).into_any());
-            children.push(
-                element!(View(margin_right: 1, flex_shrink: 0.0) {
-                    Text(content: format!("of {}", total_tasks))
-                })
-                .into_any(),
-            );
-        }
-
-        children.push(
-            element!(View(flex_shrink: 0.0) {
-                Text(content: "tasks")
-            })
-            .into_any(),
-        );
-        has_content = true;
-    }
-
-    // Processes - show if there are any tracked (running or stopped)
-    if summary.total_processes > 0 {
-        if has_content {
-            children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
-                Text(content: "│", color: COLOR_HIERARCHY)
-            }).into_any());
-        }
-
-        let running_all = summary.running_processes == summary.total_processes;
-        if running_all {
-            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.total_processes), color: COLOR_COMPLETED, weight: Weight::Bold)
-            }).into_any());
-        } else if use_symbols {
-            children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.running_processes), color: COLOR_COMPLETED, weight: Weight::Bold)
-                Text(content: format!("/{}", summary.total_processes))
-            }).into_any());
-        } else {
-            children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.running_processes), color: COLOR_COMPLETED, weight: Weight::Bold)
-            }).into_any());
-            children.push(
-                element!(View(margin_right: 1, flex_shrink: 0.0) {
-                    Text(content: format!("of {}", summary.total_processes))
-                })
-                .into_any(),
-            );
-        }
-
-        children.push(
-            element!(View(flex_shrink: 0.0) {
-                Text(content: if summary.total_processes == 1 { "process" } else { "processes" })
-            })
-            .into_any(),
-        );
-    }
-
-    // Build help text - always show, adapt based on terminal width
-    let mut help_children = vec![];
-    // The verbose process vocabulary can exceed even a 120-column terminal
-    // once summary counts and the hide-stopped action are present. Keep the
-    // compact tier through 159 columns; very narrow terminals use keys only.
-    let use_short_text = terminal_width < if has_selection { 200 } else { 160 };
-    let up_arrow_color = if can_go_up {
-        COLOR_INTERACTIVE
-    } else {
-        COLOR_HIERARCHY
+    let footer_help = FooterHelpContext {
+        has_selection,
+        is_process,
+        is_stoppable,
+        is_restartable,
+        show_hide_toggle,
+        showing_logs,
+        can_go_up,
+        can_go_down,
+        hide_stopped_processes,
+        process_search_available,
+        selected_disclosure,
+        selected_has_logs,
+        selected_preview_focused,
+        process_previews_fit,
     };
-    let down_arrow_color = if can_go_down {
-        COLOR_INTERACTIVE
-    } else {
-        COLOR_HIERARCHY
-    };
-
-    if has_selection {
-        // Show full navigation when something is selected
-        help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
-        help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
-        help_children.push(element!(Text(content: " j", color: down_arrow_color)).into_any());
-        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
-        help_children.push(element!(Text(content: "k", color: up_arrow_color)).into_any());
-        help_children.push(element!(Text(content: if use_short_text { " ^D" } else { " Ctrl-D" }, color: down_arrow_color)).into_any());
-        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
-        help_children.push(element!(Text(content: if use_short_text { "^U" } else { "Ctrl-U" }, color: up_arrow_color)).into_any());
-        if !use_symbols {
-            if use_short_text {
-                // Compact, single-space separators on narrow terminals (< 100
-                // cols): with several hints (e.g. a process is selected) the
-                // " • " bullets pushed the bar past the right edge.
-                help_children.push(element!(Text(content: " nav ")).into_any());
-            } else {
-                help_children.push(element!(Text(content: " navigate • ")).into_any());
-            }
-        } else {
-            help_children.push(element!(Text(content: " • ")).into_any());
-        }
-        let directional_open = selected_disclosure == Some(true) || is_process && !showing_logs;
-        let directional_close = selected_disclosure == Some(false) || is_process && showing_logs;
-        help_children.push(
-            element!(Text(
-                content: if directional_open && !use_short_text {
-                    "Enter/l/→"
-                } else if directional_close && !use_short_text {
-                    "Enter/h/←"
-                } else {
-                    "Enter"
-                },
-                color: COLOR_INTERACTIVE
-            ))
-            .into_any(),
-        );
-        match selected_disclosure {
-            Some(true) if use_symbols => {
-                help_children.push(element!(Text(content: " ▾ • ")).into_any());
-            }
-            Some(false) if use_symbols => {
-                help_children.push(element!(Text(content: " ▴ • ")).into_any());
-            }
-            Some(true) => {
-                help_children.push(element!(Text(content: " expand ")).into_any());
-            }
-            Some(false) => {
-                help_children.push(element!(Text(content: " collapse ")).into_any());
-            }
-            None if is_process && !showing_logs && process_previews_fit && use_symbols => {
-                help_children.push(element!(Text(content: " ◎ • ")).into_any());
-            }
-            None if is_process && showing_logs && use_symbols => {
-                help_children.push(element!(Text(content: " ▴ • ")).into_any());
-            }
-            None if use_symbols => {
-                help_children.push(element!(Text(content: " ▾ • ")).into_any());
-            }
-            None if is_process && !showing_logs && process_previews_fit => {
-                help_children.push(element!(Text(content: " focus ")).into_any());
-            }
-            None if is_process
-                && showing_logs
-                && process_previews_fit
-                && !selected_preview_focused =>
-            {
-                help_children.push(element!(Text(content: " hide previews ")).into_any());
-            }
-            None if is_process && showing_logs => {
-                help_children.push(element!(Text(content: " hide preview ")).into_any());
-            }
-            None if use_short_text => {
-                help_children.push(element!(Text(content: " preview ")).into_any());
-            }
-            None => {
-                help_children.push(element!(Text(content: " preview logs • ")).into_any());
-            }
-        }
-        if selected_has_logs || is_process {
-            help_children.push(element!(Text(content: if use_short_text { "^E" } else { "Ctrl-E" }, color: COLOR_INTERACTIVE)).into_any());
-            if use_symbols {
-                help_children.push(element!(Text(content: " ▼ • ")).into_any());
-            } else if use_short_text {
-                help_children.push(element!(Text(content: " logs ")).into_any());
-            } else {
-                help_children.push(element!(Text(content: " full logs • ")).into_any());
-            }
-        }
-        if is_process {
-            if is_stoppable {
-                help_children
-                    .push(element!(Text(content: if use_short_text { "^X" } else { "Ctrl-X" }, color: COLOR_INTERACTIVE)).into_any());
-                if use_symbols {
-                    help_children.push(element!(Text(content: " ")).into_any());
-                } else if use_short_text {
-                    help_children.push(element!(Text(content: " stop ")).into_any());
-                } else {
-                    help_children.push(element!(Text(content: " stop process • ")).into_any());
-                }
-            }
-            if is_restartable {
-                help_children.push(element!(Text(content: if use_short_text { "^R" } else { "Ctrl-R" }, color: COLOR_INTERACTIVE)).into_any());
-                if use_symbols {
-                    help_children.push(element!(Text(content: " ")).into_any());
-                } else if use_short_text {
-                    help_children.push(element!(Text(content: " restart ")).into_any());
-                } else {
-                    help_children.push(element!(Text(content: " (re)start process • ")).into_any());
-                }
-            }
-        }
-        if show_hide_toggle {
-            help_children.push(element!(Text(content: if use_short_text { "^H" } else { "Ctrl-H" }, color: COLOR_INTERACTIVE)).into_any());
-            if use_symbols {
-                help_children.push(element!(Text(content: " ")).into_any());
-            } else if use_short_text {
-                help_children.push(element!(Text(content: if hide_stopped_processes { " show " } else { " hide " })).into_any());
-            } else {
-                help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped • " } else { " hide stopped • " })).into_any());
-            }
-        }
-        if process_search_available {
-            help_children.push(element!(Text(content: "/", color: COLOR_INTERACTIVE)).into_any());
-            if use_symbols {
-                help_children.push(element!(Text(content: " ")).into_any());
-            } else if use_short_text {
-                help_children.push(element!(Text(content: " search ")).into_any());
-            } else {
-                help_children.push(element!(Text(content: " search processes • ")).into_any());
-            }
-        }
-        help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
-        if showing_logs {
-            if use_symbols {
-                help_children.push(element!(Text(content: " ✕")).into_any());
-            // close/hide symbol
-            } else if use_short_text {
-                help_children.push(element!(Text(content: " hide")).into_any());
-            } else {
-                help_children.push(element!(Text(content: " hide logs")).into_any());
-            }
-        } else {
-            help_children.push(element!(Text(content: " clear")).into_any());
-        }
-    } else {
-        // Show navigate hint only when no selection (Ctrl-E requires selection)
-        help_children.push(element!(Text(content: "↑", color: up_arrow_color)).into_any());
-        help_children.push(element!(Text(content: "↓", color: down_arrow_color)).into_any());
-        help_children.push(element!(Text(content: " j", color: down_arrow_color)).into_any());
-        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
-        help_children.push(element!(Text(content: "k", color: up_arrow_color)).into_any());
-        help_children.push(element!(Text(content: if use_short_text { " ^D" } else { " Ctrl-D" }, color: down_arrow_color)).into_any());
-        help_children.push(element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any());
-        help_children.push(element!(Text(content: if use_short_text { "^U" } else { "Ctrl-U" }, color: up_arrow_color)).into_any());
-        let trail = if show_hide_toggle || process_search_available {
-            " • "
-        } else {
-            ""
-        };
-        if !use_symbols {
-            if use_short_text {
-                help_children.push(element!(Text(content: format!(" nav{trail}"))).into_any());
-            } else {
-                help_children.push(element!(Text(content: format!(" navigate{trail}"))).into_any());
-            }
-        } else if show_hide_toggle || process_search_available {
-            help_children.push(element!(Text(content: " • ")).into_any());
-        }
-        if show_hide_toggle {
-            help_children.push(element!(Text(content: if use_short_text { "^H" } else { "Ctrl-H" }, color: COLOR_INTERACTIVE)).into_any());
-            if !use_symbols {
-                help_children.push(element!(Text(content: if hide_stopped_processes { " show stopped" } else { " hide stopped" })).into_any());
-            }
-        }
-        if process_search_available {
-            if show_hide_toggle {
-                help_children.push(element!(Text(content: " • ")).into_any());
-            }
-            help_children.push(element!(Text(content: "/", color: COLOR_INTERACTIVE)).into_any());
-            if !use_symbols {
-                help_children.push(element!(Text(content: " search")).into_any());
-            }
-        }
-    }
-
-    if has_selection && terminal_width < 60 {
-        let mut compact_help_children = vec![
-            element!(Text(content: "↑", color: up_arrow_color)).into_any(),
-            element!(Text(content: "↓", color: down_arrow_color)).into_any(),
-            element!(Text(content: " j", color: down_arrow_color)).into_any(),
-            element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any(),
-            element!(Text(content: "k", color: up_arrow_color)).into_any(),
-            element!(Text(content: " ^D", color: down_arrow_color)).into_any(),
-            element!(Text(content: "/", color: COLOR_HIERARCHY)).into_any(),
-            element!(Text(content: "^U", color: up_arrow_color)).into_any(),
-            element!(Text(content: " Enter", color: COLOR_INTERACTIVE)).into_any(),
-        ];
-        if selected_has_logs || is_process {
-            compact_help_children
-                .push(element!(Text(content: " ^E", color: COLOR_INTERACTIVE)).into_any());
-        }
-        if is_stoppable {
-            compact_help_children
-                .push(element!(Text(content: " ^X", color: COLOR_INTERACTIVE)).into_any());
-        }
-        if is_restartable {
-            compact_help_children
-                .push(element!(Text(content: " ^R", color: COLOR_INTERACTIVE)).into_any());
-        }
-        if show_hide_toggle {
-            compact_help_children
-                .push(element!(Text(content: " ^H", color: COLOR_INTERACTIVE)).into_any());
-        }
-        if process_search_available {
-            compact_help_children
-                .push(element!(Text(content: " /", color: COLOR_INTERACTIVE)).into_any());
-        }
-        compact_help_children
-            .push(element!(Text(content: " Esc", color: COLOR_INTERACTIVE)).into_any());
-        return element!(View(
-            flex_direction: FlexDirection::Row,
-            width: terminal_width.saturating_sub(2) as u32,
-            overflow: Overflow::Hidden
-        ) {
-            #(compact_help_children)
-        })
-        .into_any();
-    }
-
-    if has_selection && terminal_width < 72 {
-        return element!(View(
-            flex_direction: FlexDirection::Row,
-            width: terminal_width.saturating_sub(2) as u32,
-            overflow: Overflow::Hidden
-        ) {
-            #(help_children)
-        })
-        .into_any();
-    }
-
-    // Create layout with stats on left and help on right
-    let content_width = terminal_width.saturating_sub(2) as u32;
-    if terminal_width < 60 {
-        return element!(View(flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: content_width) {
-            View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                #(children)
-            }
-            View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 1) {
-                #(help_children)
-            }
-        }).into_any();
-    }
-    element!(View(flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
-        View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-            #(children)
-        }
-        View(
-            flex_direction: FlexDirection::Row,
-            flex_shrink: 1.0,
-            min_width: 0,
-            overflow: Overflow::Hidden,
-            margin_left: if use_symbols { 1 } else { 2 }
-        ) {
-            #(help_children)
-        }
-    }).into_any()
+    build_default_footer(summary, &footer_help, terminal_width)
 }
-
 pub(crate) fn build_configured_statusline(
     statusline: crate::statusline::RenderedStatusline,
     theme: &crate::config::ThemeConfig,
