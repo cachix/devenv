@@ -226,6 +226,11 @@
         {
           inherit (workspace.crates) devenv devenv-tasks;
           devenv-static = workspaceStatic.crates.devenv;
+          # The wrapped binary cannot run off-store: the makeBinaryWrapper stub
+          # is dynamically linked against the musl loader in /nix/store and
+          # execs the payload by absolute store path. Expose the raw binary too,
+          # for consumers that ship devenv as a relocatable tarball.
+          devenv-static-unwrapped = workspaceStatic.rawCrates.devenv.build;
           default = self.packages.${system}.devenv;
           crate2nix = pkgs.crate2nix;
           # Tools and shell helpers that `devenv-run-tests` runs `.test.sh` in.
