@@ -2133,10 +2133,7 @@ impl Devenv {
         let config = tasks::Config {
             roots,
             tasks: task_configs,
-            // Entry-point tasks need their prerequisites, never their downstream
-            // dependents. In particular, following edges out of enterShell pulls
-            // in enterTest and test-only hooks during ordinary shell entry.
-            run_mode: devenv_tasks::RunMode::Before,
+            run_mode: devenv_tasks::RunMode::All,
             runtime_dir: self.devenv_runtime.clone(),
             cache_dir: self.devenv_state_dir(),
             sudo_context: None,
