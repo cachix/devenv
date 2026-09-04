@@ -148,8 +148,28 @@ impl Pty {
 }
 
 /// Get the current terminal size.
+///
+/// `crossterm::terminal::size()` reads the size via `TIOCGWINSZ` on the
+/// controlling terminal. Under WSL2, that ioctl can succeed with a `0x0`
+/// winsize for a brief window right as a new process attaches to the pty
+/// (e.g. `devenv`'s zsh/bash hook auto-spawning `devenv shell` on `cd`) —
+/// the Windows-side pty host hasn't reported real dimensions yet, but
+/// crossterm has no way to tell that apart from a legitimately empty
+/// terminal, so it returns `Ok((0, 0))` rather than an `Err` we could
+/// already fall back on below.
+///
+/// A `0` in either dimension is never usable: it reaches
+/// `libghostty_vt::Terminal::new(cols, rows)` when the interactive shell
+/// session starts its VT emulator, and that rejects zero dimensions
+/// outright with `Error::InvalidValue` ("terminal error: invalid value"),
+/// aborting the whole session. Treat a zero-sized `Ok` result the same as
+/// a failed query and fall back to the default.
 pub fn get_terminal_size() -> PtySize {
-    let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    const DEFAULT_SIZE: (u16, u16) = (80, 24);
+    let (cols, rows) = match crossterm::terminal::size() {
+        Ok((cols, rows)) if cols != 0 && rows != 0 => (cols, rows),
+        _ => DEFAULT_SIZE,
+    };
     PtySize {
         rows,
         cols,
