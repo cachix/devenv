@@ -73,7 +73,7 @@ let
   # but not libstdc++, and on the dynamic (glibc) build these come in via the
   # Nix .so's NEEDED; for the static build we must link libstdc++ ourselves.
   # Put it in the same group so it resolves symbols the Nix archives reference.
-  staticBoostLinkOpts = [
+  gnuBoostLinkOpts = [
     "-C"
     "link-arg=-Wl,--start-group"
     "-C"
@@ -93,6 +93,22 @@ let
     "-C"
     "link-arg=-Wl,--end-group"
   ];
+
+  # ld64 resolves archives in any order, so it has no --start-group/--end-group,
+  # and the C++ runtime on darwin is libc++ rather than libstdc++.
+  darwinBoostLinkOpts = [
+    "-C"
+    "link-arg=-lboost_context"
+    "-C"
+    "link-arg=-lboost_iostreams"
+    "-C"
+    "link-arg=-lboost_url"
+    "-C"
+    "link-arg=-lc++"
+  ];
+
+  staticBoostLinkOpts =
+    if stdenv.hostPlatform.isDarwin then darwinBoostLinkOpts else gnuBoostLinkOpts;
 
   # Override for crates needing nix C libraries
   nixLibsOverride =
