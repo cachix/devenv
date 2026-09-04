@@ -4,12 +4,6 @@ let
   cfg = config.services.rustfs;
   types = lib.types;
 
-  rustfsInput = config.lib.getInput {
-    name = "rustfs";
-    url = "github:rustfs/rustfs/5d737eaeb7fcab5d40c655ba60a494e93dd98922";
-    attribute = "services.rustfs.enable";
-  };
-
   # Port allocation
   baseApiPort = cfg.port;
   baseConsolePort = cfg.consolePort;
@@ -26,8 +20,8 @@ in
     package = lib.mkOption {
       type = types.package;
       description = "Which package of RustFS to use";
-      default = rustfsInput.packages.${pkgs.stdenv.system}.default;
-      defaultText = lib.literalExpression "rustfsInput.packages.\${pkgs.stdenv.system}.default";
+      default = pkgs.rustfs;
+      defaultText = lib.literalExpression "pkgs.rustfs";
     };
 
     bind = lib.mkOption {
