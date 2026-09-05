@@ -83,6 +83,7 @@ in
   packages = [
     inputs.nix.packages.${system}.nix.dev # Required for integration tests
     pkgs.git
+    pkgs.lychee
     pkgs.openssl.dev
     pkgs.sqlite.dev
     pkgs.sqlx-cli

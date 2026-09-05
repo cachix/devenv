@@ -4,6 +4,13 @@ import CodeBlock from '../components/CodeBlock.astro';
 import DevenvMark from '../components/DevenvMark.astro';
 import TechnologyIcon from '../components/TechnologyIcon.astro';
 import AiCompositionLoader from '../components/AiCompositionLoader.astro';
+import Button from '@cachix/site-kit/ui/Button.astro';
+import ButtonGroup from '@cachix/site-kit/ui/ButtonGroup.astro';
+import LandingHero from '@cachix/site-kit/ui/LandingHero.astro';
+import LatestPostBanner from '@cachix/site-kit/ui/LatestPostBanner.astro';
+import LatestPostRegion from '@cachix/site-kit/ui/LatestPostRegion.astro';
+import TerminalFrame from '@cachix/site-kit/ui/TerminalFrame.astro';
+import { formatPostDate, latestBlogEntry } from '@cachix/site-kit/blog';
 import { getHighlighter } from '../lib/highlighter';
 import { codeThemeNames } from '../lib/code-themes';
 import { createLandingEnvironmentCore, documentationComment } from '../lib/landing-environment-core';
@@ -23,18 +30,8 @@ const utilityTechnologies = technologyRegistry.filter((technology) => technology
 const languageCount = languageTechnologies.length;
 const serviceCount = serviceTechnologies.length;
 const optionCatalog = landingOptionCatalog;
-const posts = docs
-  .filter((entry) => entry.id.startsWith('blog/') && !entry.data.draft)
-  .sort((a, b) => (b.data.date?.valueOf() ?? 0) - (a.data.date?.valueOf() ?? 0));
-const latestPost = posts[0];
-const latestPostDate = latestPost?.data.date
-  ? new Intl.DateTimeFormat('en', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      timeZone: 'UTC',
-    }).format(latestPost.data.date)
-  : null;
+const latestPost = latestBlogEntry(docs);
+const latestPostDate = latestPost?.data.date ? formatPostDate(latestPost.data.date) : null;
 const documentedTechnologyIds = docs
   .map((entry) => entry.id)
   .filter((id) => /^(languages|services)\//.test(id) && !/\/(index)$/.test(id));
@@ -78,24 +75,23 @@ const initialPreviewHtml = initialEnvironment.lines.map((line, index) => {
   }}
   hasSidebar={false}
 >
-<div id="_top"></div>
 <div class="not-content">
 
 <!-- ============ HERO ============ -->
-<section class="landing-hero" data-environment-hero>
+<LandingHero id="_top" class="landing-hero" data-environment-hero>
   <div class="landing-cosmos-glow is-blue" aria-hidden="true"></div>
   <div class="landing-cosmos-glow is-violet" aria-hidden="true"></div>
+  {latestPost && (
+    <LatestPostRegion>
+      <LatestPostBanner
+        href={`${base}blog/${latestPost.id.replace(/^blog\//, '')}/`}
+        title={latestPost.data.title}
+        date={latestPostDate ?? undefined}
+        class="landing-blog-banner"
+      />
+    </LatestPostRegion>
+  )}
   <div class="landing-hero-inner">
-    {latestPost && (
-      <a href={`${base}blog/${latestPost.id.replace(/^blog\//, '')}/`} class="csk-latest-post landing-blog-banner">
-        <span class="csk-latest-post__aside">
-          <span class="csk-latest-post__label">Latest from the blog</span>
-          {latestPostDate && <span class="csk-latest-post__date">{latestPostDate}</span>}
-        </span>
-        <span class="csk-latest-post__title">{latestPost.data.title}</span>
-        <span class="csk-latest-post__action" aria-hidden="true">Read post →</span>
-      </a>
-    )}
 
     <div class="landing-cosmos-head">
       <h1 class="landing-cosmos-title">
@@ -120,14 +116,14 @@ const initialPreviewHtml = initialEnvironment.lines.map((line, index) => {
           placeholder={initialPrompt}
           aria-label="Describe your environment"
         />
-        <button type="submit" class="landing-command-submit">Generate with AI <span aria-hidden="true">→</span></button>
+        <button type="submit" class="csk-button landing-command-submit">Generate with AI <span aria-hidden="true">→</span></button>
       </div>
       <div class="landing-prompt-chips" id="prompt-chips">
-        <button type="button" class="landing-chip is-rust" data-chip="Rust API with PostgreSQL">Rust + Postgres</button>
-        <button type="button" class="landing-chip is-python" data-chip="Python with uv and PyTorch">Python ML</button>
-        <button type="button" class="landing-chip is-node" data-chip="Node.js with Redis">Node + Redis</button>
-        <button type="button" class="landing-chip is-go" data-chip="Go microservice with MySQL">Go + MySQL</button>
-        <button type="button" class="landing-chip is-ruby" data-chip="Ruby on Rails with React">Rails + React</button>
+        <button type="button" class="csk-button landing-chip is-rust" data-chip="Rust API with PostgreSQL">Rust + Postgres</button>
+        <button type="button" class="csk-button landing-chip is-python" data-chip="Python with uv and PyTorch">Python ML</button>
+        <button type="button" class="csk-button landing-chip is-node" data-chip="Node.js with Redis">Node + Redis</button>
+        <button type="button" class="csk-button landing-chip is-go" data-chip="Go microservice with MySQL">Go + MySQL</button>
+        <button type="button" class="csk-button landing-chip is-ruby" data-chip="Ruby on Rails with React">Rails + React</button>
       </div>
       <span class="landing-compose-feedback" data-compose-feedback role="status" hidden></span>
       <span class="sr-only" data-compose-message aria-live="polite">Ready to compose</span>
@@ -146,28 +142,34 @@ const initialPreviewHtml = initialEnvironment.lines.map((line, index) => {
           </div>
           <div class="landing-cosmos-inspector" data-file-dropzone>
             <div class="landing-file-stage" data-file-stage>
-              <div class="landing-terminal landing-file-card is-nix" id="preview-terminal">
-                <div class="landing-terminal-header">
+              <TerminalFrame class="landing-terminal landing-file-card is-nix" id="preview-terminal" headerClass="landing-terminal-header" title="devenv.nix" titleClass="landing-terminal-title">
+                <Fragment slot="header-start">
                   <span class="landing-file-icon" aria-hidden="true"><DevenvMark /></span>
-                  <span class="landing-terminal-title">devenv.nix</span>
-                  <button type="button" class="landing-copy-btn" data-copy-target="preview-code">Copy</button>
-                </div>
-                <pre class="landing-terminal-body"><code
+                </Fragment>
+                <Fragment slot="header-end">
+                  <button type="button" class="csk-button landing-copy-btn" data-csk-copy-target="preview-code" data-csk-copy-lines=".landing-code-line, .landing-yaml-code-line" data-csk-copy-ignore=".landing-line-node, .landing-line-remove" data-csk-copy-success="Copied">Copy</button>
+                </Fragment>
+                <Fragment slot="body">
+                <pre class="csk-terminal__body landing-terminal-body"><code
                   id="preview-code"
                   class="language-nix"
                   aria-live="polite"
                   set:html={initialPreviewHtml}
                 /></pre>
                 <div class="landing-code-minimap" data-code-minimap aria-label="devenv.nix overview"></div>
-              </div>
-              <div class="landing-terminal landing-file-card is-yaml" id="preview-yaml-terminal" aria-hidden="true" hidden>
-                <div class="landing-terminal-header">
+                </Fragment>
+              </TerminalFrame>
+              <TerminalFrame class="landing-terminal landing-file-card is-yaml" id="preview-yaml-terminal" headerClass="landing-terminal-header" title="devenv.yaml" titleClass="landing-terminal-title" aria-hidden="true" hidden>
+                <Fragment slot="header-start">
                   <span class="landing-file-icon landing-yaml-file-icon" aria-hidden="true">Y</span>
-                  <span class="landing-terminal-title">devenv.yaml</span>
-                  <button type="button" class="landing-copy-btn" data-copy-target="preview-yaml">Copy</button>
-                </div>
-                <pre is:raw class="landing-terminal-body" id="preview-yaml-pre"><code id="preview-yaml" class="language-yaml" aria-live="polite"></code></pre>
-              </div>
+                </Fragment>
+                <Fragment slot="header-end">
+                  <button type="button" class="csk-button landing-copy-btn" data-csk-copy-target="preview-yaml" data-csk-copy-lines=".landing-code-line, .landing-yaml-code-line" data-csk-copy-ignore=".landing-line-node, .landing-line-remove" data-csk-copy-success="Copied">Copy</button>
+                </Fragment>
+                <Fragment slot="body">
+                <pre is:raw class="csk-terminal__body landing-terminal-body" id="preview-yaml-pre"><code id="preview-yaml" class="language-yaml" aria-live="polite"></code></pre>
+                </Fragment>
+              </TerminalFrame>
             </div>
             <AiCompositionLoader />
           </div>
@@ -175,12 +177,12 @@ const initialPreviewHtml = initialEnvironment.lines.map((line, index) => {
       </div>
     </div>
 
-    <nav class="landing-cosmos-actions" aria-label="Documentation shortcuts">
-      <a href={`${base}getting-started/`} class="landing-btn landing-btn-primary">Build your environment <span aria-hidden="true">→</span></a>
-      <a href={`${base}examples/`} class="landing-btn landing-btn-secondary">Explore examples</a>
-    </nav>
+    <ButtonGroup as="nav" class="landing-cosmos-actions" aria-label="Documentation shortcuts">
+      <Button href={`${base}getting-started/`} arrow>Build your environment</Button>
+      <Button href={`${base}examples/`} variant="secondary">Explore examples</Button>
+    </ButtonGroup>
   </div>
-</section>
+</LandingHero>
 
 <!-- ============ MARQUEE ============ -->
 <section class="landing-marquee-section">
@@ -268,25 +270,25 @@ $EDITOR devenv.nix`} />
     </div>
 
     <div class="landing-bento">
-      <a href={`${base}languages/`} class="landing-bento-card is-link landing-bento-2">
+      <a href={`${base}languages/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-2">
         <div class="landing-bento-big-num">{languageCount}</div>
         <p class="landing-bento-title">Languages</p>
         <p class="landing-bento-desc">Python, Rust, Go, Node, Ruby, PHP, Java, Elixir, and more, with version pinning and LSP servers.</p>
       </a>
 
-      <a href={`${base}services/`} class="landing-bento-card is-link landing-bento-2">
+      <a href={`${base}services/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-2">
         <p class="landing-bento-title">Services</p>
         <p class="landing-bento-desc">{serviceCount} preconfigured services, including PostgreSQL, Redis, MySQL, RabbitMQ, MinIO, Caddy, and Elasticsearch.</p>
         <CodeBlock class="landing-bento-mini-code" lang="nix" code={`services.postgres.enable = true;
 services.redis.enable = true;`} />
       </a>
 
-      <a href={`${base}processes/`} class="landing-bento-card is-link landing-bento-2">
+      <a href={`${base}processes/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-2">
         <p class="landing-bento-title">Processes</p>
         <p class="landing-bento-desc">Declarative process management with logs, restarts, and dependencies. Just <code class="inline-code">devenv up</code>.</p>
       </a>
 
-      <a href={`${base}tasks/`} class="landing-bento-card is-link landing-bento-3">
+      <a href={`${base}tasks/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-3">
         <p class="landing-bento-title">Tasks &amp; git hooks</p>
         <p class="landing-bento-desc">Define dependencies, run in parallel, hook into your shell or commits. Linters, formatters, codegen.</p>
         <CodeBlock class="landing-bento-mini-code" lang="nix" code={`tasks."app:build" = {
@@ -295,29 +297,29 @@ services.redis.enable = true;`} />
 };`} />
       </a>
 
-      <a href={`${base}integrations/secretspec/`} class="landing-bento-card is-link landing-bento-3">
+      <a href={`${base}integrations/secretspec/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-3">
         <p class="landing-bento-title">SecretSpec</p>
         <p class="landing-bento-desc">Declarative secrets from Keychain, 1Password, LastPass, or dotenv. Keep values out of config and committed <code class="inline-code">.env</code> files.</p>
         <CodeBlock class="landing-bento-mini-code" lang="nix" code={`processes.api.exec =
   "secretspec run -- npm start";`} />
       </a>
 
-      <a href={`${base}containers/`} class="landing-bento-card is-link landing-bento-2">
+      <a href={`${base}containers/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-2">
         <p class="landing-bento-title">Containers</p>
         <p class="landing-bento-desc">Build OCI containers from your dev environment. Same packages, same versions, same behavior.</p>
       </a>
 
-      <a href={`${base}tests/`} class="landing-bento-card is-link landing-bento-2">
+      <a href={`${base}tests/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-2">
         <p class="landing-bento-title">Tests</p>
         <p class="landing-bento-desc">Run integration tests with all processes active. <code class="inline-code">devenv test</code> and done.</p>
       </a>
 
-      <a href={`${base}basics/`} class="landing-bento-card is-link landing-bento-2">
+      <a href={`${base}basics/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-2">
         <p class="landing-bento-title">Basics</p>
         <p class="landing-bento-desc">Packages, variables, files, and scripts in native <strong>bash</strong>, <strong>zsh</strong>, <strong>fish</strong>, or <strong>nushell</strong>. Auto-activate on <code class="inline-code">cd</code> and apply updates at the next prompt.</p>
       </a>
 
-      <a href={`${base}ad-hoc-developer-environments/`} class="landing-bento-card is-link landing-bento-3">
+      <a href={`${base}ad-hoc-developer-environments/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-3">
         <p class="landing-bento-title">Ad-hoc shells, zero config</p>
         <p class="landing-bento-desc">Spin up a temporary environment without writing a <code class="inline-code">devenv.nix</code>. Great for experiments, scripts, and CI matrices.</p>
         <CodeBlock class="landing-bento-mini-code" lang="bash" code={`$ devenv -O languages.python.enable:bool true \\
@@ -325,7 +327,7 @@ services.redis.enable = true;`} />
        shell`} />
       </a>
 
-      <a href={`${base}packages/`} class="landing-bento-card is-link landing-bento-3">
+      <a href={`${base}packages/`} class="csk-interactive-surface landing-bento-card is-link landing-bento-3">
         <p class="landing-bento-title">Search packages &amp; options</p>
         <p class="landing-bento-desc">Search 100,000+ packages and every devenv option from the CLI, using the exact Nixpkgs version pinned by your project.</p>
         <CodeBlock class="landing-bento-mini-code" lang="bash" code={`$ devenv search postgres
@@ -343,7 +345,7 @@ services.postgres.enable`} />
       <span class="landing-showcase-eyebrow">Evaluation caching</span>
       <h2 class="landing-section-title">Warm shells in milliseconds.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        Auto-invalidated evaluation caching skips unchanged work. No daemons. No manual cache management. <a href={`${base}blog/2024/10/03/devenv-13-instant-developer-environments-with-nix-caching/`} class="landing-link">How it works.</a>
+        Auto-invalidated evaluation caching skips unchanged work. No daemons. No manual cache management. <a href={`${base}blog/2024/10/03/devenv-13-instant-developer-environments-with-nix-caching/`} class="landing-link csk-text-link">How it works.</a>
       </p>
     </div>
 
@@ -377,7 +379,7 @@ services.postgres.enable`} />
       <span class="landing-showcase-eyebrow">Composability</span>
       <h2 class="landing-section-title">Many environments. One shell.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        Import config across folders and repositories. <a href={`${base}composing-using-imports/`} class="landing-link">First-class monorepo support.</a>
+        Import config across folders and repositories. <a href={`${base}composing-using-imports/`} class="landing-link csk-text-link">First-class monorepo support.</a>
       </p>
     </div>
 
@@ -420,7 +422,7 @@ services.postgres.enable`} />
       <span class="landing-showcase-eyebrow">Profiles</span>
       <h2 class="landing-section-title">One project. Every workflow.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        Switch between frontend, backend, testing, and full-stack environments without duplicating configuration. <a href={`${base}profiles/`} class="landing-link">Layer profiles manually or activate them by hostname and user.</a>
+        Switch between frontend, backend, testing, and full-stack environments without duplicating configuration. <a href={`${base}profiles/`} class="landing-link csk-text-link">Layer profiles manually or activate them by hostname and user.</a>
       </p>
     </div>
 
@@ -453,12 +455,9 @@ services.postgres.enable`} />
         </div>
       </div>
 
-      <div class="landing-terminal">
-        <div class="landing-terminal-header">
-          <div class="landing-terminal-dots"><span></span><span></span><span></span></div>
-          <span class="landing-terminal-title">devenv.nix</span>
-        </div>
-        <CodeBlock class="landing-terminal-body" lang="nix" code={`profiles = {
+      <TerminalFrame class="landing-terminal" headerClass="landing-terminal-header" dotsClass="landing-terminal-dots" title="devenv.nix" titleClass="landing-terminal-title">
+        <Fragment slot="body">
+        <CodeBlock class="csk-terminal__body landing-terminal-body" lang="nix" code={`profiles = {
   backend.module = {
     services.postgres.enable = true;
     services.redis.enable = true;
@@ -471,7 +470,8 @@ services.postgres.enable`} />
 
   fullstack.extends = [ "backend" "frontend" ];
 };`} />
-      </div>
+        </Fragment>
+      </TerminalFrame>
     </div>
   </div>
 </section>
@@ -483,7 +483,7 @@ services.postgres.enable`} />
       <span class="landing-showcase-eyebrow">Native process manager</span>
       <h2 class="landing-section-title">One <code class="inline-code">devenv up</code>. Whole stack alive.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        Built-in process supervision: <a href={`${base}processes/`} class="landing-link">dependencies, ready probes, restart policies, socket activation, automatic port allocation</a>. <a href={`${base}supported-process-managers/`} class="landing-link">Or swap in process-compose, overmind, mprocs.</a>
+        Built-in process supervision: <a href={`${base}processes/`} class="landing-link csk-text-link">dependencies, ready probes, restart policies, socket activation, automatic port allocation</a>. <a href={`${base}supported-process-managers/`} class="landing-link csk-text-link">Or swap in process-compose, overmind, mprocs.</a>
       </p>
     </div>
 
@@ -539,32 +539,30 @@ services.postgres.enable`} />
       <span class="landing-showcase-eyebrow">SecretSpec</span>
       <h2 class="landing-section-title">Declare a secret. Swap the source.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        The same declaration reads from Keychain, 1Password, dotenv, or env. <a href={`${base}integrations/secretspec/`} class="landing-link">Load secrets at runtime without committing their values.</a>
+        The same declaration reads from Keychain, 1Password, dotenv, or env. <a href={`${base}integrations/secretspec/`} class="landing-link csk-text-link">Load secrets at runtime without committing their values.</a>
       </p>
     </div>
 
     <div class="landing-secret">
       <div>
         <div class="landing-provider-tabs" id="secret-tabs">
-          <button type="button" class="landing-provider-tab is-active" data-provider="keychain">Keychain</button>
-          <button type="button" class="landing-provider-tab" data-provider="onepassword">1Password</button>
-          <button type="button" class="landing-provider-tab" data-provider="lastpass">LastPass</button>
-          <button type="button" class="landing-provider-tab" data-provider="dotenv">.env</button>
-          <button type="button" class="landing-provider-tab" data-provider="env">env</button>
+          <button type="button" class="csk-button landing-provider-tab is-active" data-provider="keychain">Keychain</button>
+          <button type="button" class="csk-button landing-provider-tab" data-provider="onepassword">1Password</button>
+          <button type="button" class="csk-button landing-provider-tab" data-provider="lastpass">LastPass</button>
+          <button type="button" class="csk-button landing-provider-tab" data-provider="dotenv">.env</button>
+          <button type="button" class="csk-button landing-provider-tab" data-provider="env">env</button>
         </div>
 
-        <div class="landing-terminal">
-          <div class="landing-terminal-header">
-            <div class="landing-terminal-dots"><span></span><span></span><span></span></div>
-            <span class="landing-terminal-title">secretspec.toml</span>
-          </div>
-          <CodeBlock class="landing-terminal-body" lang="toml" code={`[project]
+        <TerminalFrame class="landing-terminal" headerClass="landing-terminal-header" dotsClass="landing-terminal-dots" title="secretspec.toml" titleClass="landing-terminal-title">
+          <Fragment slot="body">
+          <CodeBlock class="csk-terminal__body landing-terminal-body" lang="toml" code={`[project]
 name = "my-app"
 
 [profiles.default]
 DATABASE_URL = { required = true }
 STRIPE_SECRET_KEY = { required = true }`} />
-        </div>
+          </Fragment>
+        </TerminalFrame>
       </div>
 
       <div class="landing-secret-flow">
@@ -594,7 +592,7 @@ STRIPE_SECRET_KEY = { required = true }`} />
       <span class="landing-showcase-eyebrow">Packaging</span>
       <h2 class="landing-section-title">From dev shell to deployable artifact.</h2>
       <p class="landing-section-lead landing-section-lead-narrow">
-        Same languages, same versions, same packages. <a class="landing-link" href={`${base}outputs/`}>Define outputs</a> and ship a Nix derivation.
+        Same languages, same versions, same packages. <a class="landing-link csk-text-link" href={`${base}outputs/`}>Define outputs</a> and ship a Nix derivation.
       </p>
     </div>
 
@@ -640,22 +638,22 @@ in 12.4s`} />
     </div>
 
     <div class="landing-community">
-      <a href="https://github.com/cachix/devenv" class="landing-community-card">
+      <a href="https://github.com/cachix/devenv" class="csk-interactive-surface landing-community-card">
         <span class="landing-community-stat">GitHub</span>
         <span class="landing-community-label">Star &amp; contribute</span>
         <span class="landing-community-desc">Read the source, file an issue, send a PR. MIT licensed.</span>
       </a>
-      <a href="https://discord.gg/naMgvexb6q" class="landing-community-card">
+      <a href="https://discord.gg/naMgvexb6q" class="csk-interactive-surface landing-community-card">
         <span class="landing-community-stat">Discord</span>
         <span class="landing-community-label">Chat with the team</span>
         <span class="landing-community-desc">Get help, share setups, follow what's coming next.</span>
       </a>
-      <a href={`${base}blog/`} class="landing-community-card">
+      <a href={`${base}blog/`} class="csk-interactive-surface landing-community-card">
         <span class="landing-community-stat">Blog</span>
         <span class="landing-community-label">What's new</span>
         <span class="landing-community-desc">Release notes, design deep-dives, and case studies.</span>
       </a>
-      <a href="https://github.com/cachix/devenv/tree/main/examples" class="landing-community-card">
+      <a href="https://github.com/cachix/devenv/tree/main/examples" class="csk-interactive-surface landing-community-card">
         <span class="landing-community-stat">Examples</span>
         <span class="landing-community-label">Ready-made setups</span>
         <span class="landing-community-desc">Copy a working <code class="inline-code">devenv.nix</code> for your stack.</span>
@@ -672,10 +670,10 @@ in 12.4s`} />
       <p class="landing-section-lead landing-section-lead-narrow">
         Set up your first environment in minutes, or generate one from the hero above.
       </p>
-      <div class="landing-hero-actions">
-        <a href={`${base}getting-started/`} class="landing-btn landing-btn-primary">Get Started</a>
-        <a href="https://github.com/cachix/devenv" class="landing-btn landing-btn-secondary">View on GitHub</a>
-      </div>
+      <ButtonGroup class="landing-hero-actions">
+        <Button href={`${base}getting-started/`}>Get Started</Button>
+        <Button href="https://github.com/cachix/devenv" variant="secondary">View on GitHub</Button>
+      </ButtonGroup>
     </div>
   </div>
 </section>
@@ -683,8 +681,10 @@ in 12.4s`} />
 </div>
 
 <script>
+  import { initializeTerminalCopyButtons } from '@cachix/site-kit/terminal-copy';
+
   import { createAiCompositionLoader } from '../lib/ai-composition-loader';
-  import { codeThemeNames } from '../lib/code-themes';
+  import { codeThemeNames, codeThemes } from '../lib/code-themes';
   import { generateEnvironment, hasMeaningfulYaml } from '../lib/environment-generation';
   import {
     createLandingEnvironmentCore,
@@ -796,11 +796,10 @@ in 12.4s`} />
           import('@shikijs/engine-oniguruma'),
           import('@shikijs/langs/nix'),
           import('@shikijs/langs/yaml'),
-          import('../lib/code-themes'),
         ]).then(function (m) {
-          var core = m[0], onig = m[1], nix = m[2], yaml = m[3], themes = m[4];
+          var core = m[0], onig = m[1], nix = m[2], yaml = m[3];
           return core.createHighlighterCore({
-            themes: themes.codeThemes,
+            themes: codeThemes,
             langs: [nix.default, yaml.default],
             engine: onig.createOnigurumaEngine(fetch(`${import.meta.env.BASE_URL}shiki/onig.wasm`)),
           });
@@ -925,7 +924,7 @@ in 12.4s`} />
           marker = document.createElement('button');
           marker.type = 'button';
           marker.setAttribute('data-minimap-entry', entry.id);
-          marker.classList.add('is-entering');
+          marker.classList.add('csk-button', 'is-entering');
           bindMinimapMarker(marker);
         }
         marker.setAttribute('aria-label', 'Reveal ' + meta.label + ' in devenv.nix');
@@ -1031,7 +1030,7 @@ in 12.4s`} />
         if (!removeControl) {
           removeControl = document.createElement('button');
           removeControl.type = 'button';
-          removeControl.className = 'landing-line-remove';
+          removeControl.className = 'csk-button landing-line-remove';
           removeControl.textContent = '×';
           removeControl.setAttribute('data-entry-id', entry.id);
           bindRemoveControl(removeControl);
@@ -1359,7 +1358,7 @@ in 12.4s`} />
         var entry = { id: id, snippet: OPTION_TEMPLATES[id].join('\n') };
         var button = document.createElement('button');
         button.type = 'button';
-        button.className = 'landing-pantry-option';
+        button.className = 'csk-button landing-pantry-option';
         button.setAttribute('data-pantry-entry', id);
         if (clone) {
           button.setAttribute('aria-hidden', 'true');
@@ -1853,34 +1852,7 @@ in 12.4s`} />
     });
   })();
 
-  // ── Copy buttons ──
-  (function () {
-    var buttons = document.querySelectorAll<HTMLButtonElement>('.landing-copy-btn');
-    buttons.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var target = document.getElementById(btn.getAttribute('data-copy-target') || '');
-        if (!target) return;
-        var renderedLines = target.querySelectorAll('.landing-code-line, .landing-yaml-code-line');
-        var text = renderedLines.length
-          ? Array.from(renderedLines).map(function (line) {
-              var cleanLine = line.cloneNode(true) as HTMLElement;
-              cleanLine.querySelectorAll<HTMLElement>('.landing-line-node, .landing-line-remove').forEach(function (node) { node.remove(); });
-              return (cleanLine.textContent || '').replace(/\u00a0/g, '');
-            }).join('\n')
-          : target.textContent || '';
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(text).then(function () {
-            btn.textContent = 'Copied';
-            btn.classList.add('is-copied');
-            setTimeout(function () {
-              btn.textContent = 'Copy';
-              btn.classList.remove('is-copied');
-            }, 1500);
-          });
-        }
-      });
-    });
-  })();
+  initializeTerminalCopyButtons();
 </script>
 
 </StarlightPage>
