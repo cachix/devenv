@@ -1540,7 +1540,7 @@ mod tests {
                     name: "http".into(),
                     port: 8080,
                 }],
-                urls: vec!["http://web.demo.localhost".into()],
+                urls: Box::new(vec!["http://web.demo.localhost".into()]),
                 ready_probe: Some(ReadyProbe::Http(Box::new(HttpProbe {
                     host: "localhost".into(),
                     port: 8080,

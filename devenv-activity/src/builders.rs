@@ -852,7 +852,7 @@ impl ActivityStart for ProcessBuilder {
             parent: self.parent.unwrap_or_else(current_activity_id),
             command: self.command,
             ports: self.ports,
-            urls: self.urls,
+            urls: Box::new(self.urls),
             ready_probe: self.ready_probe,
             level,
             timestamp: Timestamp::now(),

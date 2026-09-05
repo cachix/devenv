@@ -416,8 +416,10 @@ pub enum Process {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ports: Vec<PortBinding>,
         /// URLs registered for this process by the localhost proxy.
+        /// Boxed to keep every activity event within its size bound.
+        #[allow(clippy::box_collection)]
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        urls: Vec<String>,
+        urls: Box<Vec<String>>,
         /// How the process signals readiness, if a probe is configured
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ready_probe: Option<ReadyProbe>,
@@ -1007,7 +1009,7 @@ mod tests {
                 name: "http".to_string(),
                 port: 8080,
             }],
-            urls: vec![],
+            urls: Box::default(),
             ready_probe: Some(ReadyProbe::Http(Box::new(HttpProbe {
                 host: "localhost".to_string(),
                 port: 8080,
