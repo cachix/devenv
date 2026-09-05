@@ -16,6 +16,14 @@ pub use backend::{NixCBackend, ProjectRoot};
 pub mod cnix_store;
 pub use cnix_store::CNixStore;
 
+pub mod gc_boehm;
+pub use gc_boehm::{
+    NIX_STACK_SIZE, init as nix_init, register_current_thread as gc_register_current_thread,
+    unregister_current_thread as gc_unregister_current_thread,
+};
+mod gc_root;
+mod gc_store;
+
 mod file_limit;
 
 pub mod lock;
@@ -24,12 +32,6 @@ pub mod primops;
 pub use primops::{
     AllocatePortPrimop, DotenvPlugin, LoadDotenvPrimop, NixEvalPlugin, NixEvalSetup,
     PortAllocationPlugin, PrimopRegistration, PrimopRegistry,
-};
-
-pub mod gc;
-pub use gc::{
-    NIX_STACK_SIZE, init as nix_init, register_current_thread as gc_register_current_thread,
-    unregister_current_thread as gc_unregister_current_thread,
 };
 
 /// Trigger the Nix interrupt flag to abort any in-progress Nix evaluation.

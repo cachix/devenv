@@ -264,6 +264,13 @@ impl ConsoleOutput {
                 id, line, is_error, ..
             }) => self.log(id, &line, is_error),
             ActivityEvent::Process(Process::Status { .. }) => {}
+            ActivityEvent::Process(Process::Exited { id, success, .. }) => {
+                let outcome = if success { "success" } else { "failure" };
+                self.log(id, &format!("Process exited ({outcome})"), !success)
+            }
+            ActivityEvent::Process(Process::Restarted { id, attempt, .. }) => {
+                self.log(id, &format!("Restarted (attempt {attempt})"), false)
+            }
 
             ActivityEvent::Operation(Operation::Start {
                 id, name, level, ..

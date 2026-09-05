@@ -454,17 +454,30 @@ impl TaskState {
             devenv_activity::start!(Activity::task(&self.task.name).id(activity_id));
 
         // Run the entire task within the activity's scope for proper parent-child nesting
-        self.run_inner(
-            now,
-            outputs,
-            cache,
-            cancellation,
-            &task_activity,
-            refresh_task_cache,
-            shell_env,
-        )
-        .in_activity(&task_activity)
-        .await
+        let result = self
+            .run_inner(
+                now,
+                outputs,
+                cache,
+                cancellation,
+                &task_activity,
+                refresh_task_cache,
+                shell_env,
+            )
+            .in_activity(&task_activity)
+            .await;
+
+        match &result {
+            Ok(TaskCompleted::Failed(_, failure)) => {
+                task_activity.fail_with_description(&failure.error);
+            }
+            Err(error) => {
+                task_activity.fail_with_description(format!("{error:#}"));
+            }
+            _ => {}
+        }
+
+        result
     }
 
     async fn run_inner(
@@ -550,7 +563,7 @@ impl TaskState {
                         }
                     }
                     Err(e) => {
-                        status_activity.fail();
+                        status_activity.fail_with_description(e.to_string());
                         return Ok(TaskCompleted::Failed(
                             now.elapsed(),
                             TaskFailure {
@@ -675,14 +688,14 @@ impl TaskState {
                 Self::get_outputs(&outputs_file, &exports_file, &result.stdout_lines).await,
             ))
         } else {
-            cmd_activity.fail();
-            task_activity.fail();
+            let error = result.error.unwrap_or_else(|| "Unknown error".to_string());
+            cmd_activity.fail_with_description(&error);
             Ok(TaskCompleted::Failed(
                 now.elapsed(),
                 TaskFailure {
                     stdout: result.stdout_lines,
                     stderr: result.stderr_lines,
-                    error: result.error.unwrap_or_else(|| "Unknown error".to_string()),
+                    error,
                 },
             ))
         }

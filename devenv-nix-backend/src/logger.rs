@@ -25,7 +25,6 @@ use devenv_eval_cache::internal_log::{Field, InternalLog, Verbosity};
 use miette::Result;
 use nix_bindings_expr::logger::ActivityLoggerBuilder;
 use nix_bindings_util::context::Context;
-use std::ffi::{c_char, c_void};
 use std::sync::Arc;
 
 /// Result of setting up the Nix logger.
@@ -37,35 +36,6 @@ pub struct NixLoggerSetup {
     pub logger: nix_bindings_expr::logger::ActivityLogger,
     /// The bridge for tracking eval activities and input collection
     pub bridge: Arc<NixLogBridge>,
-}
-
-unsafe fn callback_str<'a>(value: *const c_char, len: usize) -> Option<&'a str> {
-    if value.is_null() {
-        return None;
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(value.cast::<u8>(), len) };
-    std::str::from_utf8(bytes).ok()
-}
-
-unsafe extern "C" fn on_eval_effect_callback(
-    kind: *const c_char,
-    kind_len: usize,
-    subject: *const c_char,
-    subject_len: usize,
-    detail: *const c_char,
-    detail_len: usize,
-    user_data: *mut c_void,
-) {
-    let Some(bridge) = (unsafe { (user_data as *const NixLogBridge).as_ref() }) else {
-        return;
-    };
-    let (Some(kind), Some(subject)) = (unsafe { callback_str(kind, kind_len) }, unsafe {
-        callback_str(subject, subject_len)
-    }) else {
-        return;
-    };
-    let detail = unsafe { callback_str(detail, detail_len) };
-    bridge.process_eval_effect(kind, subject, detail);
 }
 
 /// Initialize the Nix activity logger with Activity system integration.
@@ -95,30 +65,18 @@ pub fn setup_nix_logger() -> Result<NixLoggerSetup> {
     let on_stop = create_stop_callback(Arc::clone(&bridge));
     let on_result = create_result_callback(Arc::clone(&bridge));
     let on_log = create_log_callback(Arc::clone(&bridge));
+    let eval_effect_bridge = Arc::clone(&bridge);
 
     let logger = ActivityLoggerBuilder::new()
         .on_start(on_start)
         .on_stop(on_stop)
         .on_result(on_result)
         .on_log(on_log)
+        .on_eval_effect(move |kind, subject, detail| {
+            eval_effect_bridge.process_eval_effect(kind, subject, detail);
+        })
         .register(&mut context)
         .map_err(|e| miette::miette!("Failed to register Nix logger: {}", e))?;
-
-    // The bridge Arc keeps this stable until after `logger` is dropped. The
-    // logger is deliberately the first field in NixLoggerSetup so it clears
-    // all C++ callbacks before the bridge is released.
-    let err = unsafe {
-        nix_bindings_bindgen_raw::set_eval_effect_callback(
-            context.ptr(),
-            Some(on_eval_effect_callback),
-            Arc::as_ptr(&bridge).cast_mut().cast::<c_void>(),
-        )
-    };
-    if err != nix_bindings_bindgen_raw::err_NIX_OK {
-        return Err(miette::miette!(
-            "Failed to register Nix eval effect callback: error code {err}"
-        ));
-    }
 
     Ok(NixLoggerSetup { logger, bridge })
 }

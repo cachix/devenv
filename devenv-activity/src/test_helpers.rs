@@ -193,6 +193,22 @@ pub fn process_status(id: u64, status: ProcessStatus) -> ActivityEvent {
     })
 }
 
+pub fn process_exited(id: u64, success: bool) -> ActivityEvent {
+    ActivityEvent::Process(Process::Exited {
+        id,
+        success,
+        timestamp: Timestamp::now(),
+    })
+}
+
+pub fn process_restarted(id: u64, attempt: u64) -> ActivityEvent {
+    ActivityEvent::Process(Process::Restarted {
+        id,
+        attempt,
+        timestamp: Timestamp::now(),
+    })
+}
+
 pub fn process_complete(id: u64, outcome: ActivityOutcome) -> ActivityEvent {
     ActivityEvent::Process(Process::Complete {
         id,

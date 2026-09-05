@@ -18,8 +18,8 @@ use tracing::Span;
 use crate::Timestamp;
 use crate::activity::{Activity, ActivityType};
 use crate::events::{
-    ActivityEvent, ActivityLevel, Build, Command, Evaluate, Fetch, FetchKind, Operation, Process,
-    Task,
+    ActivityEvent, ActivityLevel, Build, Command, Evaluate, Fetch, FetchKind, Operation,
+    PortBinding, Process, ReadyProbe, Task,
 };
 use crate::stack::{current_activity_id, current_activity_level, send_activity_event};
 
@@ -56,7 +56,7 @@ pub struct ActivitySpanFields<'a> {
     pub task_name: Option<&'a str>,
     pub process_name: Option<&'a str>,
     pub process_port_count: Option<u64>,
-    pub process_ready_probe: Option<&'a str>,
+    pub process_ready_probe: Option<&'a ReadyProbe>,
     pub operation_detail: Option<&'a str>,
 }
 
@@ -158,7 +158,7 @@ impl PreparedActivity {
                 command: command.as_deref(),
                 process_name: Some(name),
                 process_port_count: Some(ports.len() as u64),
-                process_ready_probe: ready_probe.as_deref(),
+                process_ready_probe: ready_probe.as_ref(),
                 ..ActivitySpanFields::default()
             },
             ActivityEvent::Operation(Operation::Start { detail, .. }) => ActivitySpanFields {
@@ -169,9 +169,17 @@ impl PreparedActivity {
         }
     }
 
+    /// Emit the start event and return the activity guard.
+    ///
+    /// The start event is mirrored into tracing under the new span, then sent
+    /// over the activity channel. The tracked caller is kept on the activity
+    /// so that its completion event points at the same source location.
+    #[track_caller]
     pub fn finish(self, span: Span) -> Activity {
+        let caller = std::panic::Location::caller();
+        crate::__trace_activity_event!(parent: &span, &self.event, caller);
         send_activity_event(self.event);
-        Activity::new(span, self.id, self.activity_type, self.level)
+        Activity::new(span, self.id, self.activity_type, self.level, caller)
     }
 }
 
@@ -192,6 +200,7 @@ pub trait ActivityStart: Sized {
     /// giving correct `code.file.path` / `code.module.name` metadata.
     /// This method exists for use inside other macros that already handle
     /// span creation (e.g. `activity!`, `#[instrument_activity]`).
+    #[track_caller]
     fn start(self) -> Activity {
         let id = self.existing_id().unwrap_or_else(crate::next_id);
         let prepared = self.prepare(id);
@@ -313,12 +322,14 @@ macro_rules! __create_activity_span {
         use tracing::field::FieldSet;
 
         // Common fields + caller-supplied extras. Each call site gets its own set.
+        // The span carries scalar attributes only. The typed start payload is
+        // emitted as a `devenv_activity::events` event under the span, so
+        // layers that do not want it never see it.
         const FIELD_NAMES: &[&str] = &[
             "activity_id",
             "otel.name",
             "devenv.ui.message",
             "devenv.activity.kind",
-            "devenv.activity.event",
             "devenv.activity.complete",
             "devenv.outcome",
             "devenv.derivation_path",
@@ -331,6 +342,7 @@ macro_rules! __create_activity_span {
             "devenv.process.ready_probe",
             "devenv.operation.detail",
             "otel.status_code",
+            "otel.status_description",
             $($( stringify!($($k).+) ),+ )?
         ];
 
@@ -373,43 +385,49 @@ macro_rules! __create_activity_span {
             if tracing::__macro_support::__is_enabled(meta, interest) {
                 let __name = $prepared.activity_name();
                 let __kind = $prepared.activity_kind();
+                let __otel_name_owned;
+                let __otel_name: &str = if __name.as_bytes().iter().any(|b| b.is_ascii_uppercase()) {
+                    __otel_name_owned = __name.to_ascii_lowercase();
+                    __otel_name_owned.as_str()
+                } else {
+                    __name
+                };
                 let fs = meta.fields();
-                // Serde conversion is deliberately inside the enabled branch:
-                // normal TUI/console operation never serializes activity data.
-                let __activity_event = tracing::enabled!(
-                    target: "devenv_activity::replay",
-                    tracing::Level::DEBUG
-                )
-                .then(|| $crate::SerdeValue::from_serialize($prepared.event()).ok())
-                .flatten();
-                let __activity_event = __activity_event
-                    .as_ref()
-                    .map($crate::SerdeValue::as_tracing_value);
                 let __fields = $prepared.span_fields();
-                // FIELD_NAMES and this value array have the same static order.
-                // Walking the field set once avoids a name lookup per field.
-                let mut __field_iter = fs.iter();
+                let __ready_probe = __fields
+                    .process_ready_probe
+                    .map(tracing::field::display);
+                fn __optional_value<T: tracing::field::Value>(
+                    value: &Option<T>,
+                ) -> Option<&dyn tracing::field::Value> {
+                    value
+                        .as_ref()
+                        .map(|value| value as &dyn tracing::field::Value)
+                }
+
+                // `value_set_all` associates values positionally with
+                // `FIELD_NAMES`, avoiding a field-name lookup per value.
                 tracing::Span::new(
                     meta,
-                    &fs.value_set(&[
-                        (&__field_iter.next().unwrap(), Some(&$id as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), Some(&__name as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), Some(&__name as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), Some(&__kind as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __activity_event.as_ref().map(|event| event as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), None),
-                        (&__field_iter.next().unwrap(), None),
-                        (&__field_iter.next().unwrap(), __fields.derivation_path.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __fields.fetch_kind.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __fields.url.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __fields.command.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __fields.task_name.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __fields.process_name.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __fields.process_port_count.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __fields.process_ready_probe.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), __fields.operation_detail.as_ref().map(|value| value as &dyn tracing::field::Value)),
-                        (&__field_iter.next().unwrap(), None),
-                        $($( (&__field_iter.next().unwrap(), Some(&$v as &dyn tracing::field::Value)) ),+ )?
+                    &fs.value_set_all(&[
+                        Some(&$id as &dyn tracing::field::Value),
+                        Some(&__otel_name as &dyn tracing::field::Value),
+                        Some(&__name as &dyn tracing::field::Value),
+                        Some(&__kind as &dyn tracing::field::Value),
+                        None,
+                        None,
+                        __optional_value(&__fields.derivation_path),
+                        __optional_value(&__fields.fetch_kind),
+                        __optional_value(&__fields.url),
+                        __optional_value(&__fields.command),
+                        __optional_value(&__fields.task_name),
+                        __optional_value(&__fields.process_name),
+                        __optional_value(&__fields.process_port_count),
+                        __optional_value(&__ready_probe),
+                        __optional_value(&__fields.operation_detail),
+                        None,
+                        None,
+                        $($( Some(&$v as &dyn tracing::field::Value) ),+ )?
                     ]),
                 )
             } else {
@@ -466,6 +484,7 @@ impl BuildBuilder {
     /// Queue a build activity.
     ///
     /// Prefer the [`queue!`] macro for correct call-site metadata.
+    #[track_caller]
     pub fn queue(self) -> Activity {
         let id = self.existing_id().unwrap_or_else(next_id);
         let prepared = self.prepare_queued(id);
@@ -756,9 +775,9 @@ impl ActivityStart for CommandBuilder {
 pub struct ProcessBuilder {
     name: String,
     command: Option<String>,
-    ports: Vec<String>,
+    ports: Vec<PortBinding>,
     urls: Vec<String>,
-    ready_probe: Option<String>,
+    ready_probe: Option<ReadyProbe>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
     level: Option<ActivityLevel>,
@@ -783,7 +802,7 @@ impl ProcessBuilder {
         self
     }
 
-    pub fn ports(mut self, ports: Vec<String>) -> Self {
+    pub fn ports(mut self, ports: Vec<PortBinding>) -> Self {
         self.ports = ports;
         self
     }
@@ -793,8 +812,8 @@ impl ProcessBuilder {
         self
     }
 
-    pub fn ready_probe(mut self, probe: impl Into<String>) -> Self {
-        self.ready_probe = Some(probe.into());
+    pub fn ready_probe(mut self, probe: ReadyProbe) -> Self {
+        self.ready_probe = Some(probe);
         self
     }
 

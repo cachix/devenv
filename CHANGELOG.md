@@ -9,9 +9,12 @@
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
 - Interrupting devenv a second time no longer leaves processes running. The second Ctrl+C exits straight away instead of waiting for shutdown to finish, which used to abandon any process still shutting down. This was easy to hit, since a process that is slow to stop is given five seconds before it is killed.
+- Existing GC root symlinks are now updated atomically when their store path changes.
+- Fixed JSON trace output (`--trace-to json:...`) writing invalid JSON lines for activity events that contain lists, such as the task hierarchy event.
 
 ### Improvements
 
+- Added opt-in `.localhost` URLs for processes with declared ports, with hostname overrides and URLs shown in the TUI ([#3141](https://github.com/cachix/devenv/pull/3141)).
 - `devenv hook <shell>` can now pass arguments to its auto-activated `devenv shell`. Arguments following `--` are forwarded safely in Bash, Zsh, Fish, and Nushell, for example `devenv hook fish -- --no-tui` ([#3128](https://github.com/cachix/devenv/issues/3128)).
 - OTLP trace destinations now also export Nix evaluator heap and garbage-collection metrics for diagnosing memory use.
 - When the Nix daemon is running version 2.35 or newer, `devenv gc` now cleans up old environments in a single batch, making it much faster. It also shows clear progress while it runs.
@@ -26,6 +29,8 @@
 - Added `processes.<name>.shutdown.signal` and `.grace` for the native manager and process-compose. The same settings apply to restarts, and PostgreSQL now uses SIGINT for fast shutdown.
 - Added process-manager capability checks. Detached mode is supported by process-compose, Honcho, Hivemind, and Overmind; unsupported operations now fail before launch, and mprocs remains foreground-only.
 - Process-manager metadata is compatible with older CLIs and Nix modules; no public Nix options changed.
+- Enabling `--trace-to` no longer serializes every activity event up front. Trace sinks now walk the typed event only when they write it, so tracing no longer allocates a JSON tree per Nix build log line on the Nix logger thread. Benchmarks of JSON activity export show 2.6× the throughput, 89% fewer allocation calls, and 78% fewer allocated bytes. With trace output disabled, lazy config logging eliminates serialization entirely—3,967 allocations and 287 KB for a representative 128-task config.
+- Process activities in `--trace-to json` output now carry structured `ports` and `ready_probe` fields, and process exits and supervisor restarts are exported as `exited` and `restarted` events instead of free-form log lines. The TUI and console show a `Process exited (success)` or `Process exited (failure)` line for every exit.
 
 ### Bug Fixes
 

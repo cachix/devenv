@@ -2477,6 +2477,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "valuable",
+ "valuable-serde",
 ]
 
 [[package]]
