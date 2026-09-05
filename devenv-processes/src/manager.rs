@@ -1044,7 +1044,8 @@ impl ProcessRunner {
     fn create_process_activity(&self, config: &ProcessConfig, parent_id: Option<u64>) -> Activity {
         let mut builder = Activity::process(&config.name)
             .command(&config.exec)
-            .ports(port_bindings(config));
+            .ports(port_bindings(config))
+            .urls(config.proxy.urls.clone());
         if let Some(probe) = ready_probe(config) {
             builder = builder.ready_probe(probe);
         }

@@ -26,6 +26,18 @@ static BROKER_ID: AtomicU64 = AtomicU64::new(0);
 pub struct CapabilityRequest {
     pub process: String,
     pub capabilities: Vec<String>,
+    #[serde(default)]
+    detached: bool,
+}
+
+impl CapabilityRequest {
+    pub fn new(process: impl Into<String>, capabilities: Vec<String>) -> Self {
+        Self {
+            process: process.into(),
+            capabilities,
+            detached: false,
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -285,6 +297,7 @@ fn display_capability_requests(requests: &[CapabilityRequest]) -> Result<()> {
 #[derive(Debug, Serialize, Deserialize)]
 enum Request {
     Launch(Box<LaunchRequest>),
+    LaunchDetached(Box<LaunchRequest>),
     Poll,
     Shutdown,
 }
@@ -454,6 +467,89 @@ impl CapabilityBrokerClient {
             )),
         }
     }
+
+    #[allow(clippy::too_many_arguments)]
+    fn launch_detached(
+        &self,
+        process: &str,
+        capabilities: &[String],
+        program: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+        cwd: &Path,
+        stdout: &Path,
+        stderr: &Path,
+    ) -> std::io::Result<u32> {
+        let request = Request::LaunchDetached(Box::new(LaunchRequest {
+            process: process.to_string(),
+            capabilities: capabilities.to_vec(),
+            program: program.to_string(),
+            args: args.to_vec(),
+            env: env.clone(),
+            cwd: cwd.to_path_buf(),
+            stdout: stdout.to_path_buf(),
+            stderr: stderr.to_path_buf(),
+        }));
+        let mut stream = self.stream.lock().unwrap_or_else(|e| e.into_inner());
+        write_message(&mut stream, &request)?;
+        match read_message::<Response>(&mut stream)? {
+            Response::Launched { pid } => Ok(pid),
+            Response::Error { message } => Err(std::io::Error::other(message)),
+            _ => Err(std::io::Error::other(
+                "unexpected capability broker response",
+            )),
+        }
+    }
+}
+
+/// Start a session-detached process with Linux capabilities through the
+/// privileged broker. Unlike supervised processes, the daemon is deliberately
+/// released before the broker shuts down and is responsible for its own
+/// lifetime. `frontend` hands the terminal over while sudo authenticates.
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+pub async fn start_capability_daemon(
+    mut request: CapabilityRequest,
+    runtime_dir: &Path,
+    frontend: Option<&tokio::sync::mpsc::Sender<devenv_mailbox::FrontendCommand>>,
+    program: &str,
+    args: &[String],
+    env: &HashMap<String, String>,
+    cwd: &Path,
+    log_path: &Path,
+) -> Result<u32> {
+    request.detached = true;
+    let broker_log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("failed to open {}", log_path.display()))?;
+    let broker = start_capability_broker(
+        std::slice::from_ref(&request),
+        true,
+        runtime_dir,
+        frontend,
+        Stdio::from(broker_log),
+    )
+    .await?
+    .ok_or_else(|| miette::miette!("Linux capability broker was not started"))?;
+    let client = CapabilityBrokerClient::connect(&broker)?;
+    let pid = client
+        .launch_detached(
+            &request.process,
+            &request.capabilities,
+            program,
+            args,
+            env,
+            cwd,
+            log_path,
+            log_path,
+        )
+        .into_diagnostic()
+        .wrap_err_with(|| format!("failed to launch '{}'", request.process))?;
+    drop(client);
+    Ok(pid)
 }
 
 impl Drop for CapabilityBrokerClient {
@@ -599,7 +695,11 @@ fn run_broker(args: Vec<OsString>) -> Result<()> {
     let allowed_requests: Vec<CapabilityRequest> =
         serde_json::from_str(&allowed_json.to_string_lossy()).into_diagnostic()?;
     let mut allowed = HashMap::<String, HashSet<caps::Capability>>::new();
+    let mut detached_allowed = HashSet::new();
     for request in allowed_requests {
+        if request.detached {
+            detached_allowed.insert(request.process.clone());
+        }
         let entry = allowed.entry(request.process).or_default();
         for name in request.capabilities {
             entry.insert(parse_capability(&name)?);
@@ -629,9 +729,18 @@ fn run_broker(args: Vec<OsString>) -> Result<()> {
         bail!("capability broker rejected client uid");
     }
     let mut known = HashSet::new();
-    let result = serve_manager(&mut stream, &allowed, uid, gid, &user, &mut known);
+    let result = serve_manager(
+        &mut stream,
+        &allowed,
+        &detached_allowed,
+        uid,
+        gid,
+        &user,
+        &mut known,
+    );
     // Every exit path, including a failed write to the manager, tears down the
-    // children the broker launched and removes the socket.
+    // supervised children the broker launched and removes the socket. Detached
+    // daemons have already taken responsibility for their own lifetime.
     kill_all(&known);
     let _ = std::fs::remove_file(&path);
     result
@@ -643,6 +752,7 @@ fn run_broker(args: Vec<OsString>) -> Result<()> {
 fn serve_manager(
     stream: &mut UnixStream,
     allowed: &HashMap<String, HashSet<caps::Capability>>,
+    detached_allowed: &HashSet<String>,
     uid: libc::uid_t,
     gid: libc::gid_t,
     user: &CString,
@@ -650,60 +760,9 @@ fn serve_manager(
 ) -> Result<()> {
     let mut exited = HashMap::new();
     while let Ok(request) = read_message::<Request>(stream) {
-        match request {
-            Request::Launch(request) => {
-                let LaunchRequest {
-                    process,
-                    capabilities,
-                    program,
-                    args,
-                    env,
-                    cwd,
-                    stdout,
-                    stderr,
-                } = *request;
-                let requested = capabilities
-                    .iter()
-                    .map(|name| parse_capability(name))
-                    .collect::<Result<HashSet<_>>>();
-                let authorized = requested.as_ref().is_ok_and(|requested| {
-                    allowed
-                        .get(&process)
-                        .is_some_and(|granted| requested.is_subset(granted))
-                });
-                // An unauthorized request is answered like any other launch
-                // failure. Ending the broker here would orphan the children it
-                // already launched.
-                let response = if !authorized {
-                    Response::Error {
-                        message: format!(
-                            "process '{process}' requested undeclared Linux capabilities"
-                        ),
-                    }
-                } else {
-                    match launch_child(
-                        uid,
-                        gid,
-                        user,
-                        &capabilities,
-                        &program,
-                        &args,
-                        &env,
-                        &cwd,
-                        &stdout,
-                        &stderr,
-                    ) {
-                        Ok(pid) => {
-                            known.insert(pid);
-                            Response::Launched { pid }
-                        }
-                        Err(error) => Response::Error {
-                            message: format!("failed to launch '{process}': {error:?}"),
-                        },
-                    }
-                };
-                write_message(stream, &response).into_diagnostic()?;
-            }
+        let (request, detached) = match request {
+            Request::Launch(request) => (request, false),
+            Request::LaunchDetached(request) => (request, true),
             Request::Poll => {
                 reap(known, &mut exited);
                 let processes = exited
@@ -711,6 +770,7 @@ fn serve_manager(
                     .map(|(pid, exit)| Exited { pid, exit })
                     .collect();
                 write_message(stream, &Response::Exited { processes }).into_diagnostic()?;
+                continue;
             }
             Request::Shutdown => {
                 kill_all(known);
@@ -718,7 +778,58 @@ fn serve_manager(
                 let _ = write_message(stream, &Response::Ok);
                 return Ok(());
             }
-        }
+        };
+        let LaunchRequest {
+            process,
+            capabilities,
+            program,
+            args,
+            env,
+            cwd,
+            stdout,
+            stderr,
+        } = *request;
+        let requested = capabilities
+            .iter()
+            .map(|name| parse_capability(name))
+            .collect::<Result<HashSet<_>>>();
+        let authorized = requested.as_ref().is_ok_and(|requested| {
+            (!detached || detached_allowed.contains(&process))
+                && allowed
+                    .get(&process)
+                    .is_some_and(|granted| requested.is_subset(granted))
+        });
+        // An unauthorized request is answered like any other launch failure.
+        // Ending the broker here would orphan the children it already launched.
+        let response = if !authorized {
+            Response::Error {
+                message: format!("process '{process}' requested undeclared Linux capabilities"),
+            }
+        } else {
+            match launch_child(
+                uid,
+                gid,
+                user,
+                &capabilities,
+                &program,
+                &args,
+                &env,
+                &cwd,
+                &stdout,
+                &stderr,
+            ) {
+                Ok(pid) => {
+                    if !detached {
+                        known.insert(pid);
+                    }
+                    Response::Launched { pid }
+                }
+                Err(error) => Response::Error {
+                    message: format!("failed to launch '{process}': {error:?}"),
+                },
+            }
+        };
+        write_message(stream, &response).into_diagnostic()?;
         reap(known, &mut exited);
     }
     Ok(())
