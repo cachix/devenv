@@ -39,7 +39,7 @@ devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-event-sources = { path = "devenv-event-sources" }
 devenv-processes = { path = "devenv-processes" }
-devenv-proxy = { path = "devenv-proxy" }
+devenv-proxy = { path = "devenv-proxy", default-features = false }
 devenv-mailbox = { path = "devenv-mailbox" }
 devenv-nix-backend = { path = "devenv-nix-backend" }
 devenv-nix-backend-macros = { path = "devenv-nix-backend-macros" }

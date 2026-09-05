@@ -1,15 +1,21 @@
-use crate::{Route, RouteTable};
+use crate::Route;
+#[cfg(feature = "server")]
+use crate::RouteTable;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "server")]
 use std::{
     fs,
-    io::{BufRead, BufReader, Read, Write},
     os::unix::{
         fs::{FileTypeExt, PermissionsExt},
-        net::{UnixListener, UnixStream},
+        net::UnixListener,
     },
-    path::Path,
     thread::{self, JoinHandle},
+};
+use std::{
+    io::{BufRead, BufReader, Read, Write},
+    os::unix::net::UnixStream,
+    path::Path,
     time::Duration,
 };
 
@@ -72,6 +78,7 @@ pub fn request(socket: &Path, request: &ControlRequest) -> Result<ControlRespons
     serde_json::from_str(&response).context("failed to decode proxy response")
 }
 
+#[cfg(feature = "server")]
 pub fn serve_control(socket: &Path, routes: RouteTable) -> Result<JoinHandle<()>> {
     prepare_socket(socket)?;
     let listener = UnixListener::bind(socket)
@@ -92,6 +99,7 @@ pub fn serve_control(socket: &Path, routes: RouteTable) -> Result<JoinHandle<()>
         .context("failed to start proxy control thread")
 }
 
+#[cfg(feature = "server")]
 fn prepare_socket(socket: &Path) -> Result<()> {
     if let Some(parent) = socket.parent() {
         fs::create_dir_all(parent)
@@ -112,6 +120,7 @@ fn prepare_socket(socket: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
 fn handle_connection(mut stream: UnixStream, routes: &RouteTable) {
     if let Err(error) = stream.set_read_timeout(Some(CONTROL_TIMEOUT)) {
         eprintln!("failed to set proxy control timeout: {error}");
@@ -136,6 +145,7 @@ fn handle_connection(mut stream: UnixStream, routes: &RouteTable) {
     }
 }
 
+#[cfg(feature = "server")]
 fn parse_request(stream: &UnixStream) -> Result<ControlRequest> {
     let mut line = String::new();
     BufReader::new(stream)
@@ -148,6 +158,7 @@ fn parse_request(stream: &UnixStream) -> Result<ControlRequest> {
     serde_json::from_str(&line).context("invalid proxy request")
 }
 
+#[cfg(feature = "server")]
 fn dispatch(request: ControlRequest, routes: &RouteTable) -> Result<ControlResponse> {
     match request {
         ControlRequest::Register { route } => {
@@ -181,7 +192,7 @@ fn dispatch(request: ControlRequest, routes: &RouteTable) -> Result<ControlRespo
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "server"))]
 mod tests {
     use super::*;
     use std::net::SocketAddr;

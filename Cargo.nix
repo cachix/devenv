@@ -8193,6 +8193,7 @@ rec {
           {
             name = "devenv-proxy";
             packageId = "devenv-proxy";
+            usesDefaultFeatures = false;
           }
           {
             name = "devenv-reload";
@@ -9148,7 +9149,7 @@ rec {
           {
             name = "devenv-proxy";
             path = "src/main.rs";
-            requiredFeatures = [ ];
+            requiredFeatures = [ "server" ];
           }
         ];
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./devenv-proxy; };
@@ -9161,38 +9162,46 @@ rec {
           {
             name = "arc-swap";
             packageId = "arc-swap";
+            optional = true;
           }
           {
             name = "async-trait";
             packageId = "async-trait";
+            optional = true;
           }
           {
             name = "bytes";
             packageId = "bytes";
+            optional = true;
           }
           {
             name = "clap";
             packageId = "clap";
+            optional = true;
             features = [ "derive" "cargo" "env" ];
           }
           {
             name = "libc";
             packageId = "libc";
+            optional = true;
           }
           {
             name = "pingora-core";
             packageId = "pingora-core";
+            optional = true;
             usesDefaultFeatures = false;
             features = [ "connection_filter" ];
           }
           {
             name = "pingora-http";
             packageId = "pingora-http";
+            optional = true;
             usesDefaultFeatures = false;
           }
           {
             name = "pingora-proxy";
             packageId = "pingora-proxy";
+            optional = true;
             usesDefaultFeatures = false;
           }
           {
@@ -9207,6 +9216,7 @@ rec {
           {
             name = "socket2";
             packageId = "socket2 0.6.4";
+            optional = true;
             features = [ "all" ];
           }
           {
@@ -9220,7 +9230,11 @@ rec {
             packageId = "tempfile";
           }
         ];
-
+        features = {
+          "default" = [ "server" ];
+          "server" = [ "dep:arc-swap" "dep:async-trait" "dep:bytes" "dep:clap" "dep:libc" "dep:pingora-core" "dep:pingora-http" "dep:pingora-proxy" "dep:socket2" ];
+        };
+        resolvedDefaultFeatures = [ "default" "server" ];
       };
       "devenv-reload" = rec {
         crateName = "devenv-reload";

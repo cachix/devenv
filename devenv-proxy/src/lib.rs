@@ -3,40 +3,57 @@
 mod control;
 mod routes;
 
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "server", target_os = "macos"))]
 use anyhow::Context;
+#[cfg(feature = "server")]
 use anyhow::Result;
+#[cfg(feature = "server")]
 use async_trait::async_trait;
+#[cfg(feature = "server")]
 use bytes::Bytes;
-pub use control::{ControlRequest, ControlResponse, request, serve_control};
+#[cfg(feature = "server")]
+pub use control::serve_control;
+pub use control::{ControlRequest, ControlResponse, request};
+#[cfg(feature = "server")]
 use pingora_core::{
     listeners::ConnectionFilter,
     server::{Server, configuration::ServerConf},
     upstreams::peer::HttpPeer,
 };
+#[cfg(feature = "server")]
 use pingora_proxy::{ProxyHttp, Session, http_proxy_service};
-pub use routes::{Route, RouteTable, normalize_hostname};
+#[cfg(feature = "server")]
+pub use routes::RouteTable;
+pub use routes::{Route, normalize_hostname};
+use std::{env, path::PathBuf};
+#[cfg(feature = "server")]
 use std::{
-    env,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
+    time::Duration,
 };
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "server", target_os = "macos"))]
 use std::{num::NonZeroU32, os::fd::IntoRawFd};
 
+#[cfg(feature = "server")]
 const NOT_FOUND: &[u8] = b"No devenv process is registered for this hostname.\n";
 pub const HEALTH_HOSTNAME: &str = "_devenv-proxy.localhost";
+#[cfg(feature = "server")]
+const UPSTREAM_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 
+#[cfg(feature = "server")]
 struct Router {
     routes: RouteTable,
 }
 
+#[cfg(feature = "server")]
 struct Upstream {
     address: SocketAddr,
     fallback: Option<SocketAddr>,
 }
 
+#[cfg(feature = "server")]
 impl Upstream {
     fn new(address: SocketAddr) -> Self {
         // Development servers binding to localhost may listen on either family.
@@ -54,8 +71,10 @@ impl Upstream {
 /// The macOS low-port listener uses a wildcard bind, so reject non-loopback
 /// peers immediately after accept and before any HTTP parsing.
 #[derive(Debug)]
+#[cfg(feature = "server")]
 struct LoopbackOnly;
 
+#[cfg(feature = "server")]
 #[async_trait]
 impl ConnectionFilter for LoopbackOnly {
     async fn should_accept(&self, address: Option<&SocketAddr>) -> bool {
@@ -63,10 +82,12 @@ impl ConnectionFilter for LoopbackOnly {
     }
 }
 
+#[cfg(feature = "server")]
 fn is_loopback_peer(address: Option<&SocketAddr>) -> bool {
     address.is_some_and(|address| address.ip().is_loopback())
 }
 
+#[cfg(feature = "server")]
 #[async_trait]
 impl ProxyHttp for Router {
     type CTX = Option<Upstream>;
@@ -109,11 +130,9 @@ impl ProxyHttp for Router {
         let upstream = ctx
             .as_ref()
             .expect("routed requests always have an upstream");
-        Ok(Box::new(HttpPeer::new(
-            upstream.address,
-            false,
-            String::new(),
-        )))
+        let mut peer = HttpPeer::new(upstream.address, false, String::new());
+        peer.options.connection_timeout = Some(UPSTREAM_CONNECT_TIMEOUT);
+        Ok(Box::new(peer))
     }
 
     fn fail_to_connect(
@@ -158,6 +177,7 @@ impl ProxyHttp for Router {
     }
 }
 
+#[cfg(feature = "server")]
 fn request_host(session: &Session) -> Option<String> {
     if let Some(authority) = session.req_header().uri.authority() {
         return Some(authority.host().to_owned());
@@ -167,6 +187,7 @@ fn request_host(session: &Session) -> Option<String> {
     Some(strip_port(host).to_owned())
 }
 
+#[cfg(feature = "server")]
 fn strip_port(host: &str) -> &str {
     // Bracketed IPv6 is not a valid devenv hostname, but avoid mangling it here.
     if host.starts_with('[') {
@@ -200,7 +221,7 @@ pub fn default_control_socket() -> PathBuf {
 ///
 /// The control listener is deliberately separate from Pingora's data plane. It
 /// is local-only and uses a mode-0600 Unix socket.
-#[cfg(unix)]
+#[cfg(all(feature = "server", unix))]
 pub fn run(listen: SocketAddr, control_socket: &Path) -> Result<()> {
     let routes = RouteTable::default();
     let _control = serve_control(control_socket, routes.clone())?;
@@ -240,7 +261,7 @@ pub fn run(listen: SocketAddr, control_socket: &Path) -> Result<()> {
     server.run_forever();
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "server", target_os = "macos"))]
 struct PreboundListener {
     bind: String,
     socket: socket2::Socket,
@@ -249,7 +270,7 @@ struct PreboundListener {
 /// Bind a low port without privilege by using Darwin's wildcard exception,
 /// while `IP_BOUND_IF`/`IPV6_BOUND_IF` restricts the socket to `lo0` in the
 /// kernel. Pingora adopts this descriptor through its inherited-FD table.
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "server", target_os = "macos"))]
 fn prebind_macos_low_port(listen: SocketAddr) -> Result<Option<PreboundListener>> {
     if listen.port() >= 1024 || !listen.ip().is_loopback() {
         return Ok(None);
@@ -299,13 +320,13 @@ fn prebind_macos_low_port(listen: SocketAddr) -> Result<Option<PreboundListener>
     }))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "server", target_os = "macos"))]
 struct PreboundService<A> {
     inner: pingora_core::services::listening::Service<A>,
     prebound: Option<PreboundListener>,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "server", target_os = "macos"))]
 #[async_trait]
 impl<A> pingora_core::services::ServiceWithDependents for PreboundService<A>
 where
@@ -343,12 +364,12 @@ where
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(all(feature = "server", not(unix)))]
 pub fn run(_listen: SocketAddr, _control_socket: &Path) -> Result<()> {
     anyhow::bail!("devenv proxy currently requires Unix domain sockets")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "server"))]
 mod tests {
     use super::{is_loopback_peer, strip_port};
     use std::net::SocketAddr;

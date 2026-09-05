@@ -1,9 +1,11 @@
 use anyhow::{Result, bail};
+#[cfg(feature = "server")]
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
+#[cfg(feature = "server")]
 use std::{
     collections::BTreeMap,
-    net::SocketAddr,
     sync::{Arc, Mutex},
 };
 
@@ -15,11 +17,13 @@ pub struct Route {
 }
 
 #[derive(Clone, Default)]
+#[cfg(feature = "server")]
 pub struct RouteTable {
     routes: Arc<ArcSwap<BTreeMap<String, Route>>>,
     updates: Arc<Mutex<()>>,
 }
 
+#[cfg(feature = "server")]
 impl RouteTable {
     pub fn register(&self, mut route: Route) -> Result<()> {
         route.hostname = normalize_hostname(&route.hostname)?;
@@ -147,7 +151,7 @@ pub fn normalize_hostname(hostname: &str) -> Result<String> {
     Ok(hostname)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "server"))]
 mod tests {
     use super::*;
 

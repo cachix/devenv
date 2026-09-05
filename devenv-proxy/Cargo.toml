@@ -4,19 +4,38 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["server"]
+server = [
+  "dep:arc-swap",
+  "dep:async-trait",
+  "dep:bytes",
+  "dep:clap",
+  "dep:libc",
+  "dep:pingora-core",
+  "dep:pingora-http",
+  "dep:pingora-proxy",
+  "dep:socket2",
+]
+
+[[bin]]
+name = "devenv-proxy"
+path = "src/main.rs"
+required-features = ["server"]
+
 [dependencies]
 anyhow.workspace = true
-arc-swap.workspace = true
-async-trait.workspace = true
-bytes.workspace = true
-clap.workspace = true
-libc.workspace = true
-pingora-core = { workspace = true, features = ["connection_filter"] }
-pingora-http.workspace = true
-pingora-proxy.workspace = true
+arc-swap = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+libc = { workspace = true, optional = true }
+pingora-core = { workspace = true, features = ["connection_filter"], optional = true }
+pingora-http = { workspace = true, optional = true }
+pingora-proxy = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
-socket2 = { workspace = true, features = ["all"] }
+socket2 = { workspace = true, features = ["all"], optional = true }
 whoami.workspace = true
 
 [dev-dependencies]
