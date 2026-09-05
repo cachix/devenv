@@ -1,6 +1,6 @@
 set -e
 
-wait_for_port 2345
+wait_for_port "$PGPORT"
 pg_isready -d template1
 
 # check whether the pg_uuidv7 extension is installed for the testdb database

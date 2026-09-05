@@ -43,13 +43,15 @@ command="exec \"$tui_replay\" --hold --attached --reactive --event-log \"$event_
 # The first restart is a pasted/key-repeat burst; it must remain one user intent.
 # Wait for the stopped fixture row before navigating: under load, selecting a
 # process while that row is still being inserted can clear or move the selection.
+# Process rows are delivered independently: macOS can render the disabled row
+# before the worker log, while Linux can render it afterward. The readiness gate
+# below checks the complete transcript instead of imposing an event order.
 "$pty_driver" pty --step-timeout 10 "$transcript" "$command" >/dev/null <<'EOF'
 expect:api
 expect:├
 expect:worker
 expect:processed deterministic job 1
-expect:disabled
-expect:stopped
+run:while ! grep -Fq 'disabled ' "$TUI_REPLAY_TRANSCRIPT" || ! grep -Fq 'stopped' "$TUI_REPLAY_TRANSCRIPT"; do sleep 0.02; done
 send:/worker
 expect:Search processes: /worker
 send:\r
