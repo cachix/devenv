@@ -1,0 +1,923 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UserConfig",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "tui": {
+      "$ref": "#/$defs/TuiPreferences",
+      "default": {
+        "viewport": "inline",
+        "theme": {
+          "preset": "devenv",
+          "palette": {},
+          "styles": {}
+        },
+        "statusline": {
+          "enabled": true,
+          "position": "inline",
+          "separator": " │ ",
+          "layouts": {
+            "main": {
+              "left": [
+                "summary"
+              ],
+              "center": [],
+              "right": [
+                "key_hints"
+              ]
+            },
+            "logs": {
+              "left": [
+                "log_mode",
+                "log_position"
+              ],
+              "center": [],
+              "right": [
+                "key_hints"
+              ]
+            },
+            "search": {
+              "left": [
+                "search"
+              ],
+              "center": [],
+              "right": [
+                "key_hints"
+              ]
+            },
+            "prompt": {
+              "left": [
+                "prompt"
+              ],
+              "center": [],
+              "right": [
+                "key_hints"
+              ]
+            }
+          },
+          "components": {}
+        },
+        "keybindings": {
+          "sequence_timeout_ms": 750,
+          "main": {},
+          "process_search": {},
+          "logs": {},
+          "log_search": {},
+          "prompt": {}
+        },
+        "behavior": {
+          "mouse": true,
+          "hide_stopped_processes": false,
+          "follow_logs": true,
+          "log_preview_lines": 10,
+          "log_history_lines": 1000
+        }
+      }
+    },
+    "shell": {
+      "$ref": "#/$defs/ShellPreferences",
+      "default": {
+        "keybindings": {}
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "$defs": {
+    "TuiPreferences": {
+      "type": "object",
+      "properties": {
+        "viewport": {
+          "$ref": "#/$defs/ViewportPlacement",
+          "default": "inline"
+        },
+        "theme": {
+          "$ref": "#/$defs/ThemeConfig",
+          "default": {
+            "preset": "devenv",
+            "palette": {},
+            "styles": {}
+          }
+        },
+        "statusline": {
+          "$ref": "#/$defs/StatuslineConfig",
+          "default": {
+            "enabled": true,
+            "position": "inline",
+            "separator": " │ ",
+            "layouts": {
+              "main": {
+                "left": [
+                  "summary"
+                ],
+                "center": [],
+                "right": [
+                  "key_hints"
+                ]
+              },
+              "logs": {
+                "left": [
+                  "log_mode",
+                  "log_position"
+                ],
+                "center": [],
+                "right": [
+                  "key_hints"
+                ]
+              },
+              "search": {
+                "left": [
+                  "search"
+                ],
+                "center": [],
+                "right": [
+                  "key_hints"
+                ]
+              },
+              "prompt": {
+                "left": [
+                  "prompt"
+                ],
+                "center": [],
+                "right": [
+                  "key_hints"
+                ]
+              }
+            },
+            "components": {}
+          }
+        },
+        "keybindings": {
+          "$ref": "#/$defs/KeybindingsConfig",
+          "default": {
+            "sequence_timeout_ms": 750,
+            "main": {},
+            "process_search": {},
+            "logs": {},
+            "log_search": {},
+            "prompt": {}
+          }
+        },
+        "behavior": {
+          "$ref": "#/$defs/BehaviorConfig",
+          "default": {
+            "mouse": true,
+            "hide_stopped_processes": false,
+            "follow_logs": true,
+            "log_preview_lines": 10,
+            "log_history_lines": 1000
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewportPlacement": {
+      "type": "string",
+      "enum": [
+        "inline",
+        "top"
+      ]
+    },
+    "ThemeConfig": {
+      "type": "object",
+      "properties": {
+        "preset": {
+          "$ref": "#/$defs/ThemePreset",
+          "default": "devenv"
+        },
+        "palette": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ColorSpec"
+          },
+          "default": {}
+        },
+        "styles": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/StyleConfig"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ThemePreset": {
+      "type": "string",
+      "enum": [
+        "devenv",
+        "terminal",
+        "none"
+      ]
+    },
+    "ColorSpec": {
+      "type": "string",
+      "pattern": "^(?:#[0-9A-Fa-f]{6}|ansi:0*(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])|[A-Za-z0-9_-]+)$"
+    },
+    "StyleConfig": {
+      "type": "object",
+      "properties": {
+        "foreground": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "background": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "modifiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TextModifier"
+          },
+          "default": [],
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "TextModifier": {
+      "type": "string",
+      "enum": [
+        "bold",
+        "dim",
+        "italic",
+        "underline",
+        "reverse"
+      ]
+    },
+    "StatuslineConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "position": {
+          "$ref": "#/$defs/StatuslinePosition",
+          "default": "inline"
+        },
+        "separator": {
+          "type": "string",
+          "maxLength": 8,
+          "default": " │ "
+        },
+        "layouts": {
+          "$ref": "#/$defs/StatuslineLayouts",
+          "default": {
+            "main": {
+              "left": [
+                "summary"
+              ],
+              "center": [],
+              "right": [
+                "key_hints"
+              ]
+            },
+            "logs": {
+              "left": [
+                "log_mode",
+                "log_position"
+              ],
+              "center": [],
+              "right": [
+                "key_hints"
+              ]
+            },
+            "search": {
+              "left": [
+                "search"
+              ],
+              "center": [],
+              "right": [
+                "key_hints"
+              ]
+            },
+            "prompt": {
+              "left": [
+                "prompt"
+              ],
+              "center": [],
+              "right": [
+                "key_hints"
+              ]
+            }
+          }
+        },
+        "components": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/StatusComponentConfig"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatuslinePosition": {
+      "type": "string",
+      "enum": [
+        "top",
+        "bottom",
+        "inline"
+      ]
+    },
+    "StatuslineLayouts": {
+      "type": "object",
+      "properties": {
+        "main": {
+          "$ref": "#/$defs/StatuslineLayout",
+          "default": {
+            "left": [
+              "summary"
+            ],
+            "center": [],
+            "right": [
+              "key_hints"
+            ]
+          }
+        },
+        "logs": {
+          "$ref": "#/$defs/StatuslineLayout",
+          "default": {
+            "left": [
+              "log_mode",
+              "log_position"
+            ],
+            "center": [],
+            "right": [
+              "key_hints"
+            ]
+          }
+        },
+        "search": {
+          "$ref": "#/$defs/StatuslineLayout",
+          "default": {
+            "left": [
+              "search"
+            ],
+            "center": [],
+            "right": [
+              "key_hints"
+            ]
+          }
+        },
+        "prompt": {
+          "$ref": "#/$defs/StatuslineLayout",
+          "default": {
+            "left": [
+              "prompt"
+            ],
+            "center": [],
+            "right": [
+              "key_hints"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatuslineLayout": {
+      "type": "object",
+      "properties": {
+        "left": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "uniqueItems": true
+        },
+        "center": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "uniqueItems": true
+        },
+        "right": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatusComponentConfig": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusComponentKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512,
+          "default": null
+        },
+        "compact_format": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512,
+          "default": null
+        },
+        "priority": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 50
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_width": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": null
+        },
+        "overflow": {
+          "$ref": "#/$defs/StatusOverflow",
+          "default": "truncate"
+        },
+        "show_empty": {
+          "type": "boolean",
+          "default": false
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256,
+          "default": null
+        },
+        "style": {
+          "$ref": "#/$defs/StyleConfig",
+          "default": {
+            "foreground": null,
+            "background": null,
+            "modifiers": []
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatusComponentKind": {
+      "type": "string",
+      "enum": [
+        "summary",
+        "builds",
+        "downloads",
+        "queries",
+        "tasks",
+        "processes",
+        "profiles",
+        "project",
+        "command",
+        "shell",
+        "elapsed",
+        "selected",
+        "log_mode",
+        "log_position",
+        "retained_logs",
+        "search",
+        "prompt",
+        "pending_key",
+        "key_hints",
+        "text"
+      ]
+    },
+    "StatusOverflow": {
+      "type": "string",
+      "enum": [
+        "truncate",
+        "hide"
+      ]
+    },
+    "KeybindingsConfig": {
+      "type": "object",
+      "properties": {
+        "sequence_timeout_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 100,
+          "maximum": 5000,
+          "default": 750
+        },
+        "main": {
+          "type": "object",
+          "properties": {
+            "move_down": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "move_up": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "half_page_down": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "half_page_up": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "activate": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "expand": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "collapse": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "open_logs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "search": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "restart_process": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "stop_process": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "toggle_stopped": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "cancel": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "process_search": {
+          "type": "object",
+          "properties": {
+            "next_match": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "previous_match": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "accept": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "cancel": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "logs": {
+          "type": "object",
+          "properties": {
+            "line_down": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "line_up": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "half_page_down": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "half_page_up": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "page_down": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "page_up": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "top": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "bottom": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "search": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "next_match": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "previous_match": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "copy": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "back": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "log_search": {
+          "type": "object",
+          "properties": {
+            "accept": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "cancel": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "prompt": {
+          "type": "object",
+          "properties": {
+            "cancel": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "quit": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "stop_manager": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "KeySequence": {
+      "type": "string",
+      "pattern": "^(?:(?:(?:ctrl|alt|shift)\\+)*(?:enter|esc|escape|backspace|delete|insert|up|down|left|right|home|end|page[_-]up|page[_-]down|tab|back[_-]tab|space|f(?:[1-9]|1[0-9]|2[0-4])|[^\\s+A-Z]))(?:[\\t\\n\\r ]+(?:(?:(?:ctrl|alt|shift)\\+)*(?:enter|esc|escape|backspace|delete|insert|up|down|left|right|home|end|page[_-]up|page[_-]down|tab|back[_-]tab|space|f(?:[1-9]|1[0-9]|2[0-4])|[^\\s+A-Z]))){0,3}$",
+      "not": {
+        "pattern": "(?:^|[\\t\\n\\r ])(?:(?:ctrl|shift)\\+)*ctrl\\+(?:(?:ctrl|shift)\\+)*c(?:$|[\\t\\n\\r ])"
+      }
+    },
+    "BehaviorConfig": {
+      "type": "object",
+      "properties": {
+        "mouse": {
+          "type": "boolean",
+          "default": true
+        },
+        "hide_stopped_processes": {
+          "type": "boolean",
+          "default": false
+        },
+        "follow_logs": {
+          "type": "boolean",
+          "default": true
+        },
+        "log_preview_lines": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 10
+        },
+        "log_history_lines": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1,
+          "maximum": 1000000,
+          "default": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "ShellPreferences": {
+      "type": "object",
+      "properties": {
+        "keybindings": {
+          "type": "object",
+          "properties": {
+            "toggle_pause": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ShellKeyChord"
+              },
+              "uniqueItems": true
+            },
+            "list_watched_files": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ShellKeyChord"
+              },
+              "uniqueItems": true
+            },
+            "toggle_error": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ShellKeyChord"
+              },
+              "uniqueItems": true
+            },
+            "reload": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ShellKeyChord"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ShellKeyChord": {
+      "type": "string",
+      "pattern": "^(?:(?:(?:ctrl|alt|shift)\\+)*(?:enter|esc|escape|backspace|delete|insert|up|down|left|right|home|end|page[_-]up|page[_-]down|tab|back[_-]tab|space|f(?:[1-9]|1[0-9]|2[0-4])|[^\\s+A-Z]))$",
+      "not": {
+        "pattern": "(?:^|[\\t\\n\\r ])(?:(?:ctrl|shift)\\+)*ctrl\\+(?:(?:ctrl|shift)\\+)*c(?:$|[\\t\\n\\r ])"
+      }
+    }
+  }
+}

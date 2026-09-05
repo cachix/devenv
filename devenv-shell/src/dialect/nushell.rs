@@ -102,7 +102,11 @@ exit 1
         super::BashDialect.env_diff_helpers()
     }
 
-    fn reload_hook(&self, reload_file: &Path) -> String {
+    fn reload_hook(
+        &self,
+        reload_file: &Path,
+        _keybindings: &crate::keybindings::ShellKeybindings,
+    ) -> String {
         // For nushell, the reload hook is generated directly in write_init_files
         // because it needs to reference the bash helper script path (init_dir).
         // We return the reload_file path as a marker so write_init_files knows
@@ -202,6 +206,29 @@ exit 1
             }
 
             let helper_path_str = helper_script.to_string_lossy();
+            let reload_keybindings = ctx
+                .shell_keybindings
+                .reload_bindings(self.name())
+                .iter()
+                .map(|binding| {
+                    let keycode = binding
+                        .nushell_keycode()
+                        .replace('\\', "\\\\")
+                        .replace('"', "\\\"");
+                    format!(
+                        r#"$env.config.keybindings = ($env.config.keybindings? | default [] | append {{
+    name: devenv_reload
+    modifier: "{modifier}"
+    keycode: "{keycode}"
+    mode: [emacs vi_normal vi_insert]
+    event: {{ send: executehostcommand cmd: "__devenv_reload_apply" }}
+}})
+"#,
+                        modifier = binding.nushell_modifier(),
+                        keycode = keycode,
+                    )
+                })
+                .collect::<String>();
 
             format!(
                 r#"
@@ -250,14 +277,7 @@ def --env __devenv_reload_apply [] {{
     }}
 }}
 
-# Keybinding for manual reload (Ctrl+Alt+R)
-$env.config.keybindings = ($env.config.keybindings? | default [] | append {{
-    name: devenv_reload
-    modifier: control_alt
-    keycode: char_r
-    mode: [emacs vi_normal vi_insert]
-    event: {{ send: executehostcommand cmd: "__devenv_reload_apply" }}
-}})
+{reload_keybindings}
 
 # Pre-prompt hook: apply pending reloads and restore devenv PATH.
 # This mirrors bash's PROMPT_COMMAND which auto-applies reloads on every prompt.
@@ -270,6 +290,7 @@ $env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt? | default [] | app
 "#,
                 reload_file = reload_file,
                 helper_path = helper_path_str,
+                reload_keybindings = reload_keybindings,
             )
         };
 

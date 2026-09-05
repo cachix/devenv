@@ -17,6 +17,8 @@ pub use zsh::ZshDialect;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::keybindings::ShellKeybindings;
+
 /// Shell-specific behavior for interactive sessions.
 pub trait ShellDialect: Send + Sync {
     /// Shell name for display/logging (e.g., "bash", "zsh", "fish").
@@ -34,7 +36,7 @@ pub trait ShellDialect: Send + Sync {
     fn env_diff_helpers(&self) -> &str;
 
     /// Generate the hot-reload hook script (prompt hook).
-    fn reload_hook(&self, reload_file: &Path) -> String;
+    fn reload_hook(&self, reload_file: &Path, keybindings: &ShellKeybindings) -> String;
 
     /// Path to the user's shell rc file (e.g., ~/.bashrc, ~/.zshrc).
     fn user_rcfile(&self) -> Option<PathBuf>;
@@ -152,11 +154,13 @@ pub struct RcfileContext<'a> {
     pub target_shell_path: Option<&'a str>,
     /// Directory for writing shell init files (e.g., .devenv/).
     pub init_dir: &'a Path,
+    pub shell_keybindings: &'a ShellKeybindings,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::keybindings::{ShellAction, ShellKeyChord, ShellKeyCode};
     use std::process::Command;
 
     /// Regression test for https://github.com/cachix/devenv/issues/2919
@@ -247,6 +251,97 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
     }
 
     #[test]
+    fn reload_hooks_preserve_defaults_and_apply_overrides() {
+        let reload_file = Path::new("/tmp/devenv-reload");
+        let defaults = ShellKeybindings::default();
+        assert!(
+            !BashDialect
+                .reload_hook(reload_file, &defaults)
+                .contains("bind -x")
+        );
+        assert!(
+            FishDialect
+                .reload_hook(reload_file, &defaults)
+                .contains("bind (string unescape '\\x1b\\x12')")
+        );
+        assert!(
+            ZshDialect
+                .reload_hook(reload_file, &defaults)
+                .contains("DEVENV_RELOAD_KEYBIND")
+        );
+
+        let mut custom = ShellKeybindings::default();
+        custom.replace(
+            ShellAction::Reload,
+            vec![ShellKeyChord::new(
+                ShellKeyCode::Function(12),
+                false,
+                false,
+                false,
+            )],
+        );
+        assert!(
+            BashDialect
+                .reload_hook(reload_file, &custom)
+                .contains("bind -x '\"\\x1b\\x5b\\x32\\x34\\x7e\"")
+        );
+        assert!(
+            FishDialect
+                .reload_hook(reload_file, &custom)
+                .contains("bind (string unescape '\\x1b\\x5b\\x32\\x34\\x7e')")
+        );
+        let zsh = ZshDialect.reload_hook(reload_file, &custom);
+        assert!(zsh.contains("bindkey $'\\x1b\\x5b\\x32\\x34\\x7e'"));
+        assert!(!zsh.contains("DEVENV_RELOAD_KEYBIND"));
+
+        custom.replace(ShellAction::Reload, Vec::new());
+        assert!(
+            !BashDialect
+                .reload_hook(reload_file, &custom)
+                .contains("bind -x")
+        );
+        assert!(
+            !FishDialect
+                .reload_hook(reload_file, &custom)
+                .contains("bind (")
+        );
+        assert!(
+            !ZshDialect
+                .reload_hook(reload_file, &custom)
+                .contains("bindkey ")
+        );
+    }
+
+    #[test]
+    fn nushell_reload_hook_uses_configured_binding() {
+        let tmp = unique_tmp_dir("nu-reload-keybinding");
+        let mut shell_keybindings = ShellKeybindings::default();
+        shell_keybindings.replace(
+            ShellAction::Reload,
+            vec![ShellKeyChord::new(
+                ShellKeyCode::Function(12),
+                false,
+                false,
+                false,
+            )],
+        );
+        let ctx = RcfileContext {
+            env_script_path: Path::new("/dev/null"),
+            env_diff_helpers: "",
+            reload_hook: "/tmp/devenv-reload",
+            target_shell_path: None,
+            init_dir: &tmp,
+            shell_keybindings: &shell_keybindings,
+        };
+        NushellDialect.write_init_files(&ctx).unwrap();
+        let config = std::fs::read_to_string(tmp.join("nu/config.nu")).unwrap();
+        assert!(config.contains("modifier: \"none\""));
+        assert!(config.contains("keycode: \"f12\""));
+        assert!(!config.contains("keycode: char_r"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn bash_rcfile_exits_on_cd_out_when_hook_spawned() {
         let tmp = unique_tmp_dir("bash-cdout");
         let root = tmp.join("project");
@@ -264,12 +359,14 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         let env_script = tmp.join("env.sh");
         std::fs::write(&env_script, format!("export DEVENV_ROOT={root:?}\n")).unwrap();
 
+        let shell_keybindings = ShellKeybindings::default();
         let ctx = RcfileContext {
             env_script_path: &env_script,
             env_diff_helpers: BashDialect.env_diff_helpers(),
             reload_hook: "",
             target_shell_path: None,
             init_dir: &tmp,
+            shell_keybindings: &shell_keybindings,
         };
         let rcfile_path = tmp.join("rcfile.sh");
         std::fs::write(&rcfile_path, BashDialect.rcfile_content(&ctx)).unwrap();
@@ -326,12 +423,14 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         )
         .unwrap();
 
+        let shell_keybindings = ShellKeybindings::default();
         let ctx = RcfileContext {
             env_script_path: Path::new("/dev/null"),
             env_diff_helpers: "",
             reload_hook: "",
             target_shell_path: None,
             init_dir: &init_dir,
+            shell_keybindings: &shell_keybindings,
         };
         ZshDialect.write_init_files(&ctx).unwrap();
         let zsh_dir = init_dir.join("zsh");
@@ -380,12 +479,14 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         let init_dir = tmp.join("init");
         std::fs::create_dir_all(&init_dir).unwrap();
 
+        let shell_keybindings = ShellKeybindings::default();
         let ctx = RcfileContext {
             env_script_path: Path::new("/dev/null"),
             env_diff_helpers: "",
             reload_hook: "",
             target_shell_path: None,
             init_dir: &init_dir,
+            shell_keybindings: &shell_keybindings,
         };
         FishDialect.write_init_files(&ctx).unwrap();
         let devenv_fish = init_dir.join("devenv.fish");
@@ -427,12 +528,14 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         let init_dir = tmp.join("init");
         std::fs::create_dir_all(&init_dir).unwrap();
 
+        let shell_keybindings = ShellKeybindings::default();
         let ctx = RcfileContext {
             env_script_path: Path::new("/dev/null"),
             env_diff_helpers: "",
             reload_hook: "",
             target_shell_path: None,
             init_dir: &init_dir,
+            shell_keybindings: &shell_keybindings,
         };
         NushellDialect.write_init_files(&ctx).unwrap();
         let config_nu = init_dir.join("nu").join("config.nu");
