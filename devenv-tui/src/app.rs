@@ -409,19 +409,13 @@ impl TuiApp {
             }
 
             if pause_flag.is_set() {
-                // The main view renders inline, so leaving its frame in the
-                // normal screen buffer would make it appear once above the
-                // interaction and again when rendering resumes. Fullscreen
-                // mode restores the earlier inline frame when it leaves the
-                // alternate screen; pre_expand_height identifies that frame.
-                let lines_to_clear = {
-                    let mut ui = ui_state.write().unwrap();
-                    let model = activity_model.read().unwrap();
-                    terminal_handoff_inline_height(&model, &mut ui, shutdown.is_cancelled())
-                };
-                let mut stderr = io::stderr();
-                let _ = clear_inline_lines(&mut stderr, lines_to_clear);
-                restore_terminal();
+                // The terminal owner knows the actual normal-buffer viewport,
+                // including the frame restored after leaving fullscreen.
+                let handoff_result = inline_terminal.clear().and(inline_terminal.suspend());
+                if let Err(error) = handoff_result {
+                    tracing::warn!(%error, "terminal handoff failed, stopping TUI");
+                    break;
+                }
                 let request = std::mem::replace(
                     &mut *pause_request.lock().unwrap_or_else(|e| e.into_inner()),
                     PauseSlot::Idle,
@@ -432,6 +426,13 @@ impl TuiApp {
                         let _ = resume.recv();
                     })
                     .await;
+                }
+                if let Err(error) = inline_terminal
+                    .reanchor()
+                    .and_then(|()| inline_terminal.resume())
+                {
+                    tracing::warn!(%error, "terminal resume failed, stopping TUI");
+                    break;
                 }
                 pause_flag.set(false);
                 model_version.fetch_add(1, Ordering::Release);
@@ -463,13 +464,9 @@ impl TuiApp {
         drop(process_command_tx);
 
         {
-            let mut ui = ui_state.write().unwrap();
+            let ui = ui_state.read().unwrap();
             if let Ok(model_guard) = activity_model.read() {
                 let (terminal_width, _) = crossterm::terminal::size().unwrap_or((80, 24));
-
-                let lines_to_clear = take_visible_inline_height(&model_guard, &mut ui, false);
-                let mut stderr = io::stderr();
-                let _ = clear_inline_lines(&mut stderr, lines_to_clear);
 
                 {
                     // Collect standalone error messages (no parent) from message_log
@@ -1404,59 +1401,6 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     rendered
 }
 
-/// Measure the normal inline view at the width where its last frame was
-/// painted. Using the current terminal width after a resize can clear the
-/// wrong number of lines.
-fn normal_inline_height(model: &ActivityModel, ui: &UiState, is_shutting_down: bool) -> u16 {
-    let painted_width = ui.terminal_size.width;
-    let mut measure = element! {
-        View(width: painted_width) {
-            #(vec![view(model, ui, RenderContext::Normal, None, is_shutting_down).into()])
-        }
-    };
-    measure.render(Some(painted_width as usize)).height() as u16
-}
-
-/// Return the inline frame currently visible in the normal screen buffer.
-/// Expanded mode restores the frame saved immediately before it entered the
-/// alternate screen; main mode has a directly measurable current frame.
-fn take_visible_inline_height(
-    model: &ActivityModel,
-    ui: &mut UiState,
-    is_shutting_down: bool,
-) -> u16 {
-    match ui.view_mode {
-        ViewMode::Main => normal_inline_height(model, ui, is_shutting_down),
-        ViewMode::ExpandedLogs { .. } => ui.pre_expand_height.take().unwrap_or(0),
-    }
-}
-
-fn terminal_handoff_inline_height(
-    model: &ActivityModel,
-    ui: &mut UiState,
-    is_shutting_down: bool,
-) -> u16 {
-    let was_expanded = matches!(ui.view_mode, ViewMode::ExpandedLogs { .. });
-    let height = take_visible_inline_height(model, ui, is_shutting_down);
-    if was_expanded {
-        // Resuming directly into fullscreen must not record a new
-        // normal-buffer frame that was never painted.
-        ui.pre_expand_height = Some(0);
-    }
-    height
-}
-
-fn clear_inline_lines(output: &mut impl Write, lines: u16) -> io::Result<()> {
-    if lines > 0 {
-        execute!(
-            output,
-            cursor::MoveToPreviousLine(lines),
-            terminal::Clear(terminal::ClearType::FromCursorDown)
-        )?;
-    }
-    Ok(())
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn run_view(
     activity_model: Arc<RwLock<ActivityModel>>,
@@ -1507,19 +1451,6 @@ async fn run_view(
             inline_terminal.render_loop(element).await
         }
         ViewMode::ExpandedLogs { activity_id } => {
-            // Calculate the normal-buffer frame height only when switching
-            // into expanded view. A terminal handoff resumes directly into
-            // fullscreen with Some(0), because the old inline frame was
-            // already cleared before the interaction.
-            if ui_state.read().unwrap().pre_expand_height.is_none() {
-                let height = {
-                    let ui = ui_state.read().unwrap();
-                    let model = activity_model.read().unwrap();
-                    normal_inline_height(&model, &ui, shutdown.is_cancelled())
-                };
-                ui_state.write().unwrap().pre_expand_height = Some(height);
-            }
-
             let mouse_enabled = ui_state
                 .read()
                 .map(|ui| ui.preferences.behavior.mouse)
@@ -1572,44 +1503,6 @@ mod tests {
     };
     use devenv_activity::{ActivityLevel, ActivityOutcome};
     use tokio::sync::mpsc;
-
-    #[test]
-    fn terminal_handoff_clears_main_inline_frame() {
-        let model = ActivityModel::new();
-        let mut ui = UiState::new();
-
-        assert!(terminal_handoff_inline_height(&model, &mut ui, false) > 0);
-    }
-
-    #[test]
-    fn terminal_handoff_consumes_expanded_views_saved_inline_frame_once() {
-        let model = ActivityModel::new();
-        let mut ui = UiState::new();
-        ui.view_mode = ViewMode::ExpandedLogs { activity_id: 1 };
-        ui.pre_expand_height = Some(7);
-
-        assert_eq!(terminal_handoff_inline_height(&model, &mut ui, false), 7);
-        assert_eq!(ui.pre_expand_height, Some(0));
-        assert_eq!(terminal_handoff_inline_height(&model, &mut ui, false), 0);
-    }
-
-    #[test]
-    fn inline_clear_emits_no_output_for_an_empty_frame() {
-        let mut output = Vec::new();
-
-        clear_inline_lines(&mut output, 0).unwrap();
-
-        assert!(output.is_empty());
-    }
-
-    #[test]
-    fn inline_clear_moves_over_the_frame_and_erases_it() {
-        let mut output = Vec::new();
-
-        clear_inline_lines(&mut output, 3).unwrap();
-
-        assert_eq!(output, b"\x1b[3F\x1b[J");
-    }
 
     #[test]
     fn activity_navigation_supports_arrow_vim_and_half_page_keys() {

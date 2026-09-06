@@ -115,6 +115,22 @@ impl Viewport {
             .saturating_add(self.height)
             .saturating_sub(self.screen_height)
     }
+
+    fn clear(&mut self, output: &mut impl Write) -> io::Result<()> {
+        if self.height == 0 {
+            return Ok(());
+        }
+        for row in self.top..self.top.saturating_add(self.height).min(self.screen_height) {
+            queue!(
+                output,
+                cursor::MoveTo(0, row),
+                terminal::Clear(terminal::ClearType::CurrentLine)
+            )?;
+        }
+        execute!(output, cursor::MoveTo(0, self.top))?;
+        self.height = 0;
+        Ok(())
+    }
 }
 
 pub struct InlineTerminal {
@@ -132,24 +148,11 @@ impl InlineTerminal {
     pub fn new(placement: ViewportPlacement) -> io::Result<Self> {
         let screen = terminal::size()?;
         let keyboard_enhancement = terminal::supports_keyboard_enhancement().unwrap_or(false);
-        let stdout_is_terminal = io::stdout().is_terminal();
-        let cursor_position = if stdout_is_terminal {
-            cursor::position().ok()
-        } else {
-            cursor_position_on_stderr().ok()
-        };
-        let (column, mut row) = cursor_position.unwrap_or((0, screen.1));
-        let mut stderr = io::stderr();
-
-        if column > 0 {
-            execute!(stderr, Print("\r\n"))?;
-            row = row.saturating_add(1).min(screen.1.saturating_sub(1));
-        }
         let mut terminal = Self {
-            stderr,
+            stderr: io::stderr(),
             viewport: Viewport {
                 placement,
-                top: row,
+                top: 0,
                 height: 0,
                 screen_width: screen.0,
                 screen_height: screen.1,
@@ -160,8 +163,9 @@ impl InlineTerminal {
             keyboard_enhancement_active: false,
             raw_mode_active: false,
             cursor_hidden: false,
-            track_resize_cursor: stdout_is_terminal && cursor_position.is_some(),
+            track_resize_cursor: false,
         };
+        terminal.reanchor()?;
         terminal.resume()?;
         Ok(terminal)
     }
@@ -313,6 +317,40 @@ impl InlineTerminal {
 
     pub fn invalidate(&mut self) {
         self.previous = None;
+    }
+
+    /// Release the painted rows and leave the cursor ready for interaction.
+    pub fn clear(&mut self) -> io::Result<()> {
+        self.viewport.clear(&mut self.stderr)?;
+        self.invalidate();
+        Ok(())
+    }
+
+    /// Start a fresh viewport after an interaction may have printed or scrolled.
+    pub fn reanchor(&mut self) -> io::Result<()> {
+        let (width, height) = terminal::size()?;
+        let stdout_is_terminal = io::stdout().is_terminal();
+        let position = if stdout_is_terminal {
+            cursor::position().ok()
+        } else {
+            cursor_position_on_stderr().ok()
+        };
+        let (column, mut row) = position.unwrap_or((0, height));
+        if column > 0 {
+            execute!(self.stderr, Print("\r\n"))?;
+            row = row.saturating_add(1).min(height.saturating_sub(1));
+        }
+        self.viewport = Viewport {
+            placement: self.viewport.placement,
+            top: row,
+            height: 0,
+            screen_width: width,
+            screen_height: height,
+            claimed: false,
+        };
+        self.track_resize_cursor = stdout_is_terminal && position.is_some();
+        self.invalidate();
+        Ok(())
     }
 
     pub fn suspend(&mut self) -> io::Result<()> {
@@ -788,6 +826,172 @@ fn reflowed_canvas_height(canvas: &Canvas, height: u16, width: u16) -> u16 {
 mod tests {
     use super::*;
     use iocraft::prelude::*;
+
+    #[test]
+    fn clearing_a_viewport_preserves_surrounding_rows() {
+        for placement in [ViewportPlacement::Inline, ViewportPlacement::Top] {
+            let mut viewport = Viewport {
+                placement,
+                top: if placement == ViewportPlacement::Inline {
+                    5
+                } else {
+                    0
+                },
+                height: 3,
+                screen_width: 80,
+                screen_height: 24,
+                claimed: true,
+            };
+            let mut output = Vec::new();
+            viewport.clear(&mut output).unwrap();
+            assert_eq!(
+                output,
+                if placement == ViewportPlacement::Inline {
+                    b"\x1b[6;1H\x1b[2K\x1b[7;1H\x1b[2K\x1b[8;1H\x1b[2K\x1b[6;1H"
+                } else {
+                    b"\x1b[1;1H\x1b[2K\x1b[2;1H\x1b[2K\x1b[3;1H\x1b[2K\x1b[1;1H"
+                }
+            );
+            assert_eq!(viewport.height, 0);
+            output.clear();
+            viewport.clear(&mut output).unwrap();
+            assert!(output.is_empty());
+        }
+    }
+
+    // Run terminal mutations in a child with its own PTY so the test runner's
+    // terminal and Crossterm's process-global state are never affected.
+    #[cfg(unix)]
+    #[test]
+    fn terminal_handoff_round_trip() {
+        use std::fs::File;
+        use std::io::Read;
+        use std::os::fd::{AsRawFd, FromRawFd};
+        use std::process::{Command, Stdio};
+
+        const CHILD: &str = "DEVENV_TEST_TERMINAL_HANDOFF";
+        if std::env::var_os(CHILD).is_some() {
+            let cooked_flags = || {
+                let mut settings = std::mem::MaybeUninit::uninit();
+                assert_eq!(unsafe { libc::tcgetattr(0, settings.as_mut_ptr()) }, 0);
+                unsafe { settings.assume_init() }.c_lflag & (libc::ICANON | libc::ECHO)
+            };
+            let mut terminal = InlineTerminal {
+                stderr: io::stderr(),
+                viewport: Viewport {
+                    placement: ViewportPlacement::Inline,
+                    top: 5,
+                    height: 0,
+                    screen_width: 80,
+                    screen_height: 24,
+                    claimed: false,
+                },
+                previous: None,
+                keyboard_enhancement: true,
+                keyboard_enhancement_active: false,
+                raw_mode_active: false,
+                cursor_hidden: false,
+                track_resize_cursor: true,
+            };
+            assert_eq!(cooked_flags(), libc::ICANON | libc::ECHO);
+            terminal.resume().unwrap();
+            let canvas =
+                element!(View(width: 80) { Text(content: "one\ntwo\nthree") }).render(Some(80));
+            terminal.draw_with_size(&canvas, (80, 24), None).unwrap();
+            assert_eq!(cooked_flags(), 0);
+            terminal.clear().unwrap();
+            terminal.suspend().unwrap();
+            assert_eq!(cooked_flags(), libc::ICANON | libc::ECHO);
+            assert!(!terminal.raw_mode_active);
+            assert!(!terminal.cursor_hidden);
+            assert!(!terminal.keyboard_enhancement_active);
+            terminal.reanchor().unwrap();
+            assert_eq!(terminal.viewport.top, 9);
+            terminal.resume().unwrap();
+            assert_eq!(cooked_flags(), 0);
+            assert!(terminal.cursor_hidden);
+            assert!(terminal.keyboard_enhancement_active);
+            terminal.draw_with_size(&canvas, (80, 24), None).unwrap();
+            let final_canvas = element!(View(width: 80) { Text(content: "done") }).render(Some(80));
+            terminal.commit(&final_canvas).unwrap();
+            terminal.suspend().unwrap();
+            assert_eq!(cooked_flags(), libc::ICANON | libc::ECHO);
+            return;
+        }
+
+        let mut master = -1;
+        let mut slave = -1;
+        let mut size = libc::winsize {
+            ws_row: 24,
+            ws_col: 80,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        assert_eq!(
+            unsafe {
+                libc::openpty(
+                    &mut master,
+                    &mut slave,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::addr_of_mut!(size),
+                )
+            },
+            0
+        );
+        let mut master = unsafe { File::from_raw_fd(master) };
+        let slave = unsafe { File::from_raw_fd(slave) };
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "inline_terminal::tests::terminal_handoff_round_trip",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .stdin(Stdio::from(slave.try_clone().unwrap()))
+            .stdout(Stdio::from(slave.try_clone().unwrap()))
+            .stderr(Stdio::from(slave))
+            .spawn()
+            .unwrap();
+        let mut output = Vec::new();
+        let mut answered = false;
+        loop {
+            let mut descriptor = libc::pollfd {
+                fd: master.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            if unsafe { libc::poll(&mut descriptor, 1, 10_000) } <= 0 {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("PTY timed out: {}", String::from_utf8_lossy(&output));
+            }
+            let mut buffer = [0; 4096];
+            match master.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(count) => output.extend_from_slice(&buffer[..count]),
+                Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
+                Err(error) => panic!("PTY read: {error}"),
+            }
+            if !answered && output.windows(4).any(|bytes| bytes == b"\x1b[6n") {
+                master.write_all(b"\x1b[10;1R").unwrap();
+                answered = true;
+            }
+        }
+        assert!(
+            child.wait().unwrap().success(),
+            "{}",
+            String::from_utf8_lossy(&output)
+        );
+        assert!(answered);
+        // The inline frame started on row 6. Neither clearing it nor committing
+        // the resumed frame may rewind to (or erase) the preceding row 5.
+        let output = String::from_utf8_lossy(&output);
+        assert!(!output.contains("\x1b[5;1H"));
+        assert!(!output.contains("\x1b[J"));
+        assert_eq!(output.matches("\x1b[?25l").count(), 2);
+        assert_eq!(output.matches("\x1b[?25h").count(), 2);
+    }
 
     #[cfg(unix)]
     #[test]

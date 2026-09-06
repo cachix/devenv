@@ -1424,7 +1424,7 @@ impl KeySequence {
 
     fn normalized_for_tui(mut self) -> Self {
         for chord in &mut self.chords {
-            chord.normalize_shifted_symbol();
+            chord.normalize_for_tui();
         }
         self
     }
@@ -1467,15 +1467,14 @@ impl KeyChord {
         let shifted_character =
             matches!(code, KeyCode::Char(character) if character.is_ascii_uppercase());
         let code = KeyCodeSpec::from_key_code(code)?;
-        let shift = !matches!(code, KeyCodeSpec::BackTab)
-            && (modifiers.contains(KeyModifiers::SHIFT) || shifted_character);
+        let shift = modifiers.contains(KeyModifiers::SHIFT) || shifted_character;
         let mut chord = Self {
             code,
             control: modifiers.contains(KeyModifiers::CONTROL),
             alt: modifiers.contains(KeyModifiers::ALT),
             shift,
         };
-        chord.normalize_shifted_symbol();
+        chord.normalize_for_tui();
         Some(chord)
     }
 
@@ -1514,7 +1513,11 @@ impl KeyChord {
         self.control && !self.alt && matches!(self.code, KeyCodeSpec::Char('c'))
     }
 
-    fn normalize_shifted_symbol(&mut self) {
+    fn normalize_for_tui(&mut self) {
+        if self.code == KeyCodeSpec::BackTab || (self.code == KeyCodeSpec::Tab && self.shift) {
+            self.code = KeyCodeSpec::BackTab;
+            self.shift = false;
+        }
         if !self.shift {
             return;
         }
@@ -2113,6 +2116,56 @@ tui:
             ),
             KeyMatch::Action(Action::Bottom)
         );
+    }
+
+    #[test]
+    fn dispatches_shifted_tab_across_terminal_encodings() {
+        for binding in ["shift+tab", "back_tab", "shift+back_tab", "back-tab"] {
+            for modifiers in [KeyModifiers::NONE, KeyModifiers::CONTROL, KeyModifiers::ALT] {
+                let prefix = if modifiers == KeyModifiers::CONTROL {
+                    "ctrl+"
+                } else if modifiers == KeyModifiers::ALT {
+                    "alt+"
+                } else {
+                    ""
+                };
+                let mut config = KeybindingsConfig::default();
+                config
+                    .main
+                    .insert("move_up".to_string(), vec![format!("{prefix}{binding}")]);
+                let keymap = config.resolve().unwrap();
+                let mut state = KeySequenceState::default();
+                for (code, shift) in [
+                    (KeyCode::Tab, KeyModifiers::SHIFT),
+                    (KeyCode::BackTab, KeyModifiers::SHIFT),
+                    (KeyCode::BackTab, KeyModifiers::NONE),
+                ] {
+                    assert_eq!(
+                        state.input_key(&keymap, KeyContext::Main, code, modifiers | shift),
+                        KeyMatch::Action(Action::MoveUp),
+                        "{prefix}{binding} with {code:?} and {shift:?}"
+                    );
+                }
+                assert_eq!(
+                    state.input_key(&keymap, KeyContext::Main, KeyCode::Tab, modifiers),
+                    KeyMatch::None
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_equivalent_tab_bindings_and_sequence_prefixes() {
+        for binding in ["back_tab", "shift+back-tab", "back_tab x"] {
+            let mut config = KeybindingsConfig::default();
+            config
+                .main
+                .insert("move_up".to_string(), vec!["shift+tab".to_string()]);
+            config
+                .main
+                .insert("move_down".to_string(), vec![binding.to_string()]);
+            assert!(config.resolve().is_err(), "{binding}");
+        }
     }
 
     #[test]
