@@ -1,0 +1,23 @@
+[package]
+name = "devenv-proxy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+arc-swap.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+clap.workspace = true
+libc.workspace = true
+pingora-core = { workspace = true, features = ["connection_filter"] }
+pingora-http.workspace = true
+pingora-proxy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+socket2 = { workspace = true, features = ["all"] }
+whoami.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

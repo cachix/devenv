@@ -971,7 +971,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         ActivityVariant::Process(process_data) => {
             let is_active = process_data.status.is_active();
 
-            // Build status text with optional ports
+            // Build status text with optional ports and proxy URLs.
             let status_str: std::borrow::Cow<str> = match &process_data.status {
                 _ if *shutting_down && is_active => "stopping".into(),
                 ProcessStatus::NotStarted => "auto start off".into(),
@@ -1006,7 +1006,12 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 format!(" {}", port_list.join(", "))
             };
 
-            let status_text = Some(format!("{}{}", status_str, ports_suffix));
+            let urls_suffix = if process_data.urls.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", process_data.urls.join(", "))
+            };
+            let status_text = Some(format!("{}{}{}", status_str, ports_suffix, urls_suffix));
 
             // Process prefix: a status dot whose shape encodes the lifecycle
             // state; transient states pulse instead of animating a spinner.
@@ -1950,6 +1955,50 @@ mod tests {
     }
 
     #[test]
+    fn process_rows_show_proxy_urls_alongside_ports() {
+        for (width, urls) in [
+            (80, vec!["http://docs.devenv8.localhost"]),
+            (
+                160,
+                vec!["http://app.localhost:8080", "http://admin.localhost:8080"],
+            ),
+        ] {
+            let mut model = ActivityModel::default();
+            let mut ui = UiState::new();
+            ui.terminal_size.width = width;
+            let mut event = process_start(1, "docs");
+            if let ActivityEvent::Process(Process::Start {
+                ports,
+                urls: event_urls,
+                ..
+            }) = &mut event
+            {
+                *ports = vec![devenv_activity::PortBinding {
+                    name: "http".to_owned(),
+                    port: 4321,
+                }];
+                **event_urls = urls.iter().map(|url| (*url).to_owned()).collect();
+            }
+            // The same event is serialized for replay when attaching.
+            let event = serde_json::from_str(&serde_json::to_string(&event).unwrap()).unwrap();
+            model.apply_activity_event(event);
+            model.apply_activity_event(ActivityEvent::Process(Process::Status {
+                id: 1,
+                status: ProcessStatus::Ready,
+                timestamp: Timestamp::now(),
+            }));
+
+            let mut element: AnyElement<'static> =
+                view(&model, &ui, RenderContext::Normal, None, false).into();
+            let rendered = element.render(Some(width as usize)).to_string();
+            assert!(rendered.contains("ready :4321"), "{rendered}");
+            for url in urls {
+                assert!(rendered.contains(url), "missing {url}: {rendered}");
+            }
+        }
+    }
+
+    #[test]
     fn process_preview_prefix_matches_tree_position() {
         assert_eq!(
             process_preview_prefix(
@@ -2113,6 +2162,7 @@ mod tests {
             parent: None,
             command: None,
             ports: vec![],
+            urls: Box::default(),
             ready_probe: None,
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
@@ -2138,6 +2188,7 @@ mod tests {
             parent: None,
             command: None,
             ports: vec![],
+            urls: Box::default(),
             ready_probe: None,
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
@@ -2203,6 +2254,7 @@ mod tests {
                 parent: None,
                 command: None,
                 ports: vec![],
+                urls: Box::default(),
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
@@ -2245,6 +2297,7 @@ mod tests {
             parent: Some(100),
             command: None,
             ports: vec![],
+            urls: Box::default(),
             ready_probe: None,
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
@@ -2305,6 +2358,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: Box::default(),
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
@@ -2374,6 +2428,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: Box::default(),
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
@@ -2430,6 +2485,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: Box::default(),
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
@@ -2515,6 +2571,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: Box::default(),
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),

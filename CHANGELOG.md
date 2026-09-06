@@ -14,6 +14,7 @@
 
 ### Improvements
 
+- Added opt-in `.localhost` URLs for processes with declared ports, with hostname overrides and URLs shown in the TUI ([#3141](https://github.com/cachix/devenv/pull/3141)).
 - `devenv hook <shell>` can now pass arguments to its auto-activated `devenv shell`. Arguments following `--` are forwarded safely in Bash, Zsh, Fish, and Nushell, for example `devenv hook fish -- --no-tui` ([#3128](https://github.com/cachix/devenv/issues/3128)).
 - OTLP trace destinations now also export Nix evaluator heap and garbage-collection metrics for diagnosing memory use.
 - When the Nix daemon is running version 2.35 or newer, `devenv gc` now cleans up old environments in a single batch, making it much faster. It also shows clear progress while it runs.

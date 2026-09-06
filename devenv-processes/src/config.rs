@@ -249,6 +249,20 @@ impl Default for StartConfig {
     }
 }
 
+/// Shared HTTP proxy configuration.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ProcessProxyConfig {
+    /// Full `.localhost` hostname used as the base hostname for this process.
+    #[serde(default)]
+    pub hostname: Option<String>,
+    /// Full `.localhost` hostname overrides keyed by port name.
+    #[serde(default)]
+    pub port_hostnames: HashMap<String, String>,
+    /// Resolved proxy URLs, populated by the CLI for process display.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub urls: Vec<String>,
+}
+
 /// Who owns automatic restart, readiness, watchdog, and file-watch policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -285,6 +299,9 @@ pub struct ProcessConfig {
     /// Allocated ports for display (e.g., {"http": 8080, "admin": 9000})
     #[serde(default)]
     pub ports: HashMap<String, u16>,
+    /// Shared HTTP proxy configuration.
+    #[serde(default)]
+    pub proxy: ProcessProxyConfig,
     /// Readiness probe configuration
     #[serde(default)]
     pub ready: Option<ReadyConfig>,
@@ -332,6 +349,7 @@ impl Default for ProcessConfig {
             env: HashMap::new(),
             listen: Vec::new(),
             ports: HashMap::new(),
+            proxy: ProcessProxyConfig::default(),
             ready: None,
             restart: RestartConfig::default(),
             watch: WatchConfig::default(),
