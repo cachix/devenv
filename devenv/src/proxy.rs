@@ -35,16 +35,17 @@ pub(crate) fn project_routes(
     let project = hostname_label(project_name)?;
     let mut routes = Vec::new();
     let mut hostnames = HashSet::new();
+    let mut task_urls = Vec::new();
 
-    for task in task_configs {
+    for (task_index, task) in task_configs.iter().enumerate() {
         let Some(process_name) = task.name.strip_prefix(devenv_tasks::PROCESS_TASK_PREFIX) else {
             continue;
         };
-        let Some(process) = task.process.as_mut() else {
+        let Some(process) = task.process.as_ref() else {
             continue;
         };
-        process.proxy.urls.clear();
         if process.ports.is_empty() {
+            task_urls.push((task_index, Vec::new()));
             continue;
         }
         let first_route = routes.len();
@@ -97,7 +98,16 @@ pub(crate) fn project_routes(
                 )?;
             }
         }
-        process.proxy.urls = routes[first_route..].iter().map(route_url).collect();
+        task_urls.push((
+            task_index,
+            routes[first_route..].iter().map(route_url).collect(),
+        ));
+    }
+
+    for (task_index, urls) in task_urls {
+        if let Some(process) = task_configs[task_index].process.as_mut() {
+            process.proxy.urls = urls;
+        }
     }
 
     Ok(routes)
@@ -763,5 +773,25 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("port http of process web"));
+    }
+
+    #[test]
+    fn invalid_hostname_does_not_mutate_existing_proxy_urls() {
+        let mut tasks = vec![process_task_with_hostnames(
+            "web",
+            &[("http", 8080), ("admin", 9000)],
+            Some("app.localhost"),
+            &[("admin", "example.com")],
+        )];
+        tasks[0].process.as_mut().unwrap().proxy.urls =
+            vec!["http://existing.localhost".to_owned()];
+
+        let error = project_routes("demo", "/work/demo", &mut tasks).unwrap_err();
+
+        assert!(error.to_string().contains("port admin of process web"));
+        assert_eq!(
+            tasks[0].process.as_ref().unwrap().proxy.urls,
+            ["http://existing.localhost"]
+        );
     }
 }

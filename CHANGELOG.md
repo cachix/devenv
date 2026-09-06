@@ -11,6 +11,7 @@
 - Interrupting devenv a second time no longer leaves processes running. The second Ctrl+C exits straight away instead of waiting for shutdown to finish, which used to abandon any process still shutting down. This was easy to hit, since a process that is slow to stop is given five seconds before it is killed.
 - Existing GC root symlinks are now updated atomically when their store path changes.
 - Fixed JSON trace output (`--trace-to json:...`) writing invalid JSON lines for activity events that contain lists, such as the task hierarchy event.
+- Fixed `devenv up` leaving stale proxy URLs behind in task metadata when proxy hostname validation failed. Route planning now updates process URLs only after validation succeeds, so error paths no longer partially mutate the task configuration.
 
 ### Improvements
 
