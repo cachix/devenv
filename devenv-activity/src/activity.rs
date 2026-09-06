@@ -155,6 +155,7 @@ pub struct Activity {
     activity_type: ActivityType,
     level: ActivityLevel,
     outcome: Arc<std::sync::Mutex<ActivityOutcome>>,
+    status_description: std::sync::Mutex<Option<String>>,
     complete_on_drop: bool,
     /// Where the activity was started. The completion event emitted on drop
     /// is attributed to this location.
@@ -176,6 +177,7 @@ impl Activity {
             activity_type,
             level,
             outcome: Arc::new(std::sync::Mutex::new(ActivityOutcome::Success)),
+            status_description: std::sync::Mutex::new(None),
             complete_on_drop: true,
             caller,
         }
@@ -308,6 +310,14 @@ impl Activity {
         }
     }
 
+    /// Mark as failed and attach the error description to exported traces.
+    pub fn fail_with_description(&self, description: impl AsRef<str>) {
+        self.fail();
+        if let Ok(mut status_description) = self.status_description.lock() {
+            *status_description = Some(description.as_ref().to_owned());
+        }
+    }
+
     /// Mark as cancelled
     pub fn cancel(&self) {
         if let Ok(mut outcome) = self.outcome.lock() {
@@ -340,6 +350,9 @@ impl Activity {
     pub fn reset(&self) {
         if let Ok(mut outcome) = self.outcome.lock() {
             *outcome = ActivityOutcome::Success;
+        }
+        if let Ok(mut status_description) = self.status_description.lock() {
+            *status_description = None;
         }
     }
 
@@ -647,6 +660,14 @@ impl Drop for Activity {
         self.span.record("devenv.outcome", outcome.as_str());
         if outcome.is_error() {
             self.span.record("otel.status_code", "ERROR");
+            if let Ok(status_description) = self.status_description.lock()
+                && let Some(status_description) = status_description.as_deref()
+            {
+                // tracing-opentelemetry models both status fields as one value,
+                // so the description must be recorded after the status code.
+                self.span
+                    .record("otel.status_description", status_description);
+            }
         }
         // This explicit transition, rather than the final tracing span close,
         // preserves ActivityRef semantics: borrowed span handles may outlive

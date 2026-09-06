@@ -737,30 +737,37 @@ impl Cli {
         let args = preprocess_profile_args(args);
         let cli = Self::try_parse_from(args.clone())?;
 
-        if let Commands::Hook { .. } = &cli.command {
+        if let Commands::Hook { shell, .. } = &cli.command {
             // Most devenv options are global, so clap would otherwise accept
             // `devenv hook fish --no-tui` as an option for this process even
             // though it belongs to the shell that the generated hook starts
             // later. Require one unambiguous ownership boundary instead.
-            let hook_index = args
+            //
+            // Global options are valid before the subcommand, so locate the
+            // parsed `hook <shell>` pair instead of assuming fixed argv
+            // positions. Only inspect arguments before `--`; forwarded shell
+            // arguments may themselves contain the same pair.
+            let shell_name = match shell {
+                HookShell::Bash => "bash",
+                HookShell::Zsh => "zsh",
+                HookShell::Fish => "fish",
+                HookShell::Nu => "nu",
+            };
+            let command_end = args
                 .iter()
-                .enumerate()
-                .skip(1)
-                .find_map(|(index, arg)| {
-                    if arg != OsStr::new("hook") {
-                        return None;
-                    }
-                    let candidate =
-                        std::iter::once(args[0].clone()).chain(args[index..].iter().cloned());
-                    Self::try_parse_from(candidate)
-                        .is_ok_and(|cli| matches!(cli.command, Commands::Hook { .. }))
-                        .then_some(index)
+                .position(|arg| arg == OsStr::new("--"))
+                .unwrap_or(args.len());
+            let shell_index = args[..command_end]
+                .windows(2)
+                .rposition(|pair| {
+                    pair[0] == OsStr::new("hook") && pair[1] == OsStr::new(shell_name)
                 })
-                .expect("parsed hook command must contain the hook subcommand");
+                .map(|hook_index| hook_index + 1)
+                .expect("clap parsed a hook command without hook argv");
             let separator_follows_shell = args
-                .get(hook_index + 2)
+                .get(shell_index + 1)
                 .is_some_and(|arg| arg == OsStr::new("--"));
-            if args.len() > hook_index + 2 && !separator_follows_shell {
+            if args.len() > shell_index + 1 && !separator_follows_shell {
                 return Err(Self::command().error(
                     clap::error::ErrorKind::ArgumentConflict,
                     "shell arguments must follow `--`\n\n  devenv hook <SHELL> -- <SHELL_ARGS>...",
@@ -1987,9 +1994,7 @@ mod tests {
 
     #[test]
     fn hook_accepts_global_options_before_subcommand() {
-        for (case, argv) in [
-            osargs(["devenv", "--no-tui", "hook", "fish"]),
-            osargs(["devenv", "--no-tui", "hook", "fish", "--", "--quiet"]),
+        for argv in [
             osargs([
                 "devenv",
                 "--override-input",
@@ -1998,12 +2003,19 @@ mod tests {
                 "hook",
                 "bash",
             ]),
-        ]
-        .into_iter()
-        .enumerate()
-        {
+            osargs(["devenv", "--no-tui", "hook", "fish"]),
+            osargs([
+                "devenv",
+                "--verbose",
+                "--trace-to",
+                "pretty:stderr",
+                "hook",
+                "fish",
+            ]),
+            osargs(["devenv", "--no-tui", "hook", "fish", "--", "--quiet"]),
+        ] {
             Cli::try_parse_preprocessed_from(argv)
-                .unwrap_or_else(|error| panic!("hook global option case {case}: {error}"));
+                .expect("global options before hook should parse");
         }
     }
 

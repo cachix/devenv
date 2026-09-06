@@ -6,6 +6,7 @@
   openssl,
   dbus,
   pkg-config,
+  cmake,
   llvmPackages,
   rustPlatform,
   libghostty-vt,
@@ -123,6 +124,7 @@ let
   opensslOverride = attrs: {
     buildInputs = (attrs.buildInputs or [ ]) ++ [ openssl ];
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+    OPENSSL_NO_VENDOR = "1";
   };
 
   # Override for crates needing dbus (Linux only)
@@ -217,6 +219,11 @@ in
 
   # openssl-sys needs openssl
   openssl-sys = opensslOverride;
+
+  # Pingora enables flate2's bundled zlib-ng backend.
+  libz-ng-sys = attrs: {
+    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ cmake ];
+  };
 
   # Crates that need tracing_unstable
   devenv-core = tracingUnstable;

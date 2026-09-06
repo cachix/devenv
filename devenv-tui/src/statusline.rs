@@ -1156,6 +1156,7 @@ mod tests {
             ActivityVariant::Process(crate::model::ProcessActivity {
                 status: ProcessStatus::GaveUp,
                 ports: Vec::new(),
+                urls: Vec::new(),
                 ready_probe: None,
             }),
             NixActivityState::Active,

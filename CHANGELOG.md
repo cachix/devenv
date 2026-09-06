@@ -4,6 +4,9 @@
 
 ### Bug Fixes
 
+- Fixed the interactive `devenv shell` session crashing with "terminal error: invalid value" when the terminal briefly reports a `0x0` size, most commonly seen on WSL2 right after `devenv`'s shell hook auto-activates on `cd`.
+- Certificate generation uses Nix-provided mkcert and its helper tools instead of relying on the development shell's `PATH`.
+- Fixed `devenv up` incorrectly reporting that the proxy exited while its capability broker child was still dropping root privileges.
 - Fixed environment capture accumulating unbounded `.devenv/shell-*.sh` files. Capture-specific activation scripts are now temporary, and non-interactive commands are passed as arguments instead of being embedded in persistent activation scripts ([#3149](https://github.com/cachix/devenv/issues/3149)).
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
@@ -14,6 +17,8 @@
 
 ### Improvements
 
+- Added opt-in HTTPS process URLs with `processes.<name>.proxy.https.enable`, using the project's existing mkcert certificate authority.
+- Processes with declared ports get `.localhost` HTTP URLs by default, with hostname overrides and URLs shown in the TUI ([#3141](https://github.com/cachix/devenv/pull/3141)).
 - `devenv hook <shell>` can now pass arguments to its auto-activated `devenv shell`. Arguments following `--` are forwarded safely in Bash, Zsh, Fish, and Nushell, for example `devenv hook fish -- --no-tui` ([#3128](https://github.com/cachix/devenv/issues/3128)).
 - OTLP trace destinations now also export Nix evaluator heap and garbage-collection metrics for diagnosing memory use.
 - When the Nix daemon is running version 2.35 or newer, `devenv gc` now cleans up old environments in a single batch, making it much faster. It also shows clear progress while it runs.

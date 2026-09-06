@@ -342,6 +342,7 @@ macro_rules! __create_activity_span {
             "devenv.process.ready_probe",
             "devenv.operation.detail",
             "otel.status_code",
+            "otel.status_description",
             $($( stringify!($($k).+) ),+ )?
         ];
 
@@ -424,6 +425,7 @@ macro_rules! __create_activity_span {
                         __optional_value(&__fields.process_port_count),
                         __optional_value(&__ready_probe),
                         __optional_value(&__fields.operation_detail),
+                        None,
                         None,
                         $($( Some(&$v as &dyn tracing::field::Value) ),+ )?
                     ]),
@@ -774,6 +776,7 @@ pub struct ProcessBuilder {
     name: String,
     command: Option<String>,
     ports: Vec<PortBinding>,
+    urls: Vec<String>,
     ready_probe: Option<ReadyProbe>,
     id: Option<u64>,
     parent: Option<Option<u64>>,
@@ -786,6 +789,7 @@ impl ProcessBuilder {
             name: name.into(),
             command: None,
             ports: Vec::new(),
+            urls: Vec::new(),
             ready_probe: None,
             id: None,
             parent: None,
@@ -800,6 +804,11 @@ impl ProcessBuilder {
 
     pub fn ports(mut self, ports: Vec<PortBinding>) -> Self {
         self.ports = ports;
+        self
+    }
+
+    pub fn urls(mut self, urls: Vec<String>) -> Self {
+        self.urls = urls;
         self
     }
 
@@ -843,6 +852,7 @@ impl ActivityStart for ProcessBuilder {
             parent: self.parent.unwrap_or_else(current_activity_id),
             command: self.command,
             ports: self.ports,
+            urls: Box::new(self.urls),
             ready_probe: self.ready_probe,
             level,
             timestamp: Timestamp::now(),
