@@ -847,7 +847,16 @@ mod tests {
         let control = UnixListener::bind(&socket).unwrap();
         control.set_nonblocking(true).unwrap();
         // Reserve the port without serving HTTP, as during daemon shutdown.
-        let http = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        // Sandboxes without network access (such as the Nix darwin sandbox)
+        // forbid binding a TCP socket; skip the test rather than fail there.
+        let http = match std::net::TcpListener::bind("127.0.0.1:0") {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                eprintln!("skipping: binding a TCP socket is not permitted: {error}");
+                return;
+            }
+            Err(error) => panic!("failed to bind a TCP listener: {error}"),
+        };
         let listen = http.local_addr().unwrap();
         let started = Instant::now();
         let shutdown_delay = Duration::from_millis(400);
