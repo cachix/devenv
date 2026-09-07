@@ -1,5 +1,5 @@
 ---
-title: "devenv 2.3: portless and TUI configuration"
+title: "devenv 2.3: Portless and TUI configuration"
 date: 2026-09-07
 authors:
   - name: "Domen Kožar"
