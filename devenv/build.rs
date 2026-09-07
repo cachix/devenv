@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rustc-check-cfg=cfg(use_mimalloc)");
+
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     println!("cargo:rustc-env=TARGET_ARCH={arch}");

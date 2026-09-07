@@ -8072,7 +8072,8 @@ dependencies = [
 [[package]]
 name = "secretspec"
 version = "0.20.0"
-source = "git+https://github.com/cachix/secretspec?tag=v0.20.0#2b63f45e0c17879c933b00f5a00600080415aa68"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b693a75854657fac1b34288f18503067836007c30f50606c8a1150e01782b081"
 dependencies = [
  "age",
  "aws-config",
