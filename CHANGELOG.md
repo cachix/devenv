@@ -19,6 +19,7 @@
 
 ### Improvements
 
+- Added `languages.rust.rustdocflags` for extending `RUSTDOCFLAGS` without conflicting with linker flags configured by the Rust module ([#3111](https://github.com/cachix/devenv/issues/3111)).
 - The `(devenv)` shell prompt prefix can now be disabled with `prompt_prefix: false` in `devenv.yaml`, or globally with `shell.prompt_prefix: false` in the user configuration.
 - Added opt-in HTTPS process URLs with `processes.<name>.proxy.https.enable`, using the project's existing mkcert certificate authority.
 - Added an opt-in localhost process proxy. Set `process.proxy.enable = true` to give processes with declared ports `.localhost` HTTP URLs, with hostname overrides and URLs shown in the TUI; the proxy is disabled by default ([#3141](https://github.com/cachix/devenv/pull/3141)).
