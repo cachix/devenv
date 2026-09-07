@@ -5,6 +5,7 @@
 ### Bug Fixes
 
 - Fixed `devenv tasks run` skipping a process that a task depends on via `@completed` when that process has `start.enable = false`. The process now runs to completion as the dependency requires; `devenv up` still does not auto-start it ([#3005](https://github.com/cachix/devenv/issues/3005)).
+- Fixed `devenv tasks run --no-tui` staying silent until the run finished when AI-agent auto-quiet was active (`CLAUDECODE`, and similar). Quiet mode now prints task running/succeeded/failed lines incrementally, without streaming full task output ([#3115](https://github.com/cachix/devenv/issues/3115)).
 - Fixed `devenv --from` also loading the current directory's `devenv.local.nix`. Options set there for the local project, such as tuning a process the external project doesn't define, no longer leak into the external environment and break evaluation.
 - Fixed `devenv up` failing after a CLI upgrade when the project's pinned modules predate the localhost proxy. The proxy remains disabled when those modules do not provide the option.
 - Fixed the interactive `devenv shell` session crashing with "terminal error: invalid value" when the terminal briefly reports a `0x0` size, most commonly seen on WSL2 right after `devenv`'s shell hook auto-activates on `cd`.
