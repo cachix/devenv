@@ -4,43 +4,60 @@ import starlightBlog from 'starlight-blog';
 import starlightLlmsTxt from 'starlight-llms-txt';
 import tailwindcss from '@tailwindcss/vite';
 import sitemap from '@astrojs/sitemap';
+import { siteKitAstro } from '@cachix/site-kit/astro';
+import { siteKitStarlight } from '@cachix/site-kit/starlight';
+import { siteBlogOptions } from '@cachix/site-kit/starlight/blog';
+import { siteLlmsOptions } from '@cachix/site-kit/starlight/llms';
 import { codeThemes } from './src/lib/code-themes.ts';
 
-const devGitHubApi = {
-  name: 'dev-github-api',
-  apply: 'serve',
-  enforce: 'pre',
-  configureServer(server) {
-    server.middlewares.use('/api/github', async (_request, response) => {
-      let stars = null;
-      let latestRelease = null;
-      try {
-        const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'devenv-docs' };
-        const [repository, release] = await Promise.all([
-          fetch('https://api.github.com/repos/cachix/devenv', { headers }),
-          fetch('https://api.github.com/repos/cachix/devenv/releases/latest', { headers }),
-        ]);
-        if (repository.ok) {
-          const data = await repository.json();
-          if (typeof data.stargazers_count === 'number') stars = data.stargazers_count;
-        }
-        if (release.ok) {
-          const data = await release.json();
-          if (typeof data.tag_name === 'string') latestRelease = data.tag_name;
-        }
-      } catch {
-        // The header hides metadata that cannot be loaded.
-      }
-      response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ stars, latestRelease }));
-    });
-  },
+const devenvFooter = {
+  title: 'devenv',
+  description: 'Fast, Declarative, Reproducible, and Composable Developer Environments using Nix.',
+  columns: [
+    {
+      heading: 'Docs',
+      links: [
+        { label: 'Getting Started', href: '/getting-started/' },
+        { label: 'Basics', href: '/basics/' },
+        { label: 'Packages', href: '/packages/' },
+        { label: 'Processes', href: '/processes/' },
+        { label: 'Tasks', href: '/tasks/' },
+      ],
+    },
+    {
+      heading: 'Reference',
+      links: [
+        { label: 'Options', href: '/reference/options/' },
+        { label: 'YAML Options', href: '/reference/yaml-options/' },
+        { label: 'Languages', href: '/languages/python/' },
+        { label: 'Services', href: '/services/postgres/' },
+        { label: 'Integrations', href: '/integrations/github-actions/' },
+      ],
+    },
+    {
+      heading: 'Resources',
+      links: [
+        { label: 'Examples', href: '/examples/' },
+        { label: 'Migration Guides', href: '/guides/migrating-to-20/' },
+        { label: 'Blog', href: '/blog/' },
+        { label: 'Cloud', href: '/cloud/' },
+      ],
+    },
+    {
+      heading: 'Community',
+      links: [
+        { label: 'GitHub', href: 'https://github.com/cachix/devenv', icon: 'github' },
+        { label: 'Discord', href: 'https://discord.gg/naMgvexb6q', icon: 'discord' },
+        { label: 'X', href: 'https://x.com/devenv_nix', icon: 'x.com' },
+      ],
+    },
+  ],
 };
 
 export default defineConfig({
   site: 'https://devenv.sh',
   vite: {
-    plugins: [tailwindcss(), devGitHubApi],
+    plugins: [tailwindcss()],
     server: {
       watch: {
         ignored: ['**/.devenv/**'],
@@ -55,11 +72,11 @@ export default defineConfig({
     },
   },
   integrations: [
+    siteKitAstro({ github: { repository: 'cachix/devenv' } }),
     starlight({
       plugins: [
-        starlightBlog({
-          title: 'Blog',
-          navigation: 'none',
+        siteKitStarlight({ footer: devenvFooter }),
+        starlightBlog(siteBlogOptions({
           authors: {
             domenkozar: {
               name: 'Domen Kožar',
@@ -72,21 +89,18 @@ export default defineConfig({
               url: 'https://github.com/sandydoo',
             },
           },
-        }),
-        starlightLlmsTxt({
-          description:
-            'devenv is a fast, declarative, reproducible, and composable developer environment tool using Nix. It supports 50+ programming languages, services, processes, tasks, containers, tests, and automated tooling.',
-        }),
+        })),
+        starlightLlmsTxt(siteLlmsOptions(
+          'devenv is a fast, declarative, reproducible, and composable developer environment tool using Nix. It supports 50+ programming languages, services, processes, tasks, containers, tests, and automated tooling.',
+        )),
       ],
       title: 'devenv',
+      description: 'Fast, Declarative, Reproducible, and Composable Developer Environments using Nix.',
       expressiveCode: {
         themes: codeThemes,
       },
       components: {
-        Footer: './src/overrides/Footer.astro',
-        Header: './src/overrides/Header.astro',
-        Hero: './src/overrides/Hero.astro',
-        Pagination: './src/overrides/Pagination.astro',
+        SocialIcons: './src/overrides/SocialIcons.astro',
       },
       logo: {
         light: './src/assets/logo.webp',

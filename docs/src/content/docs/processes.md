@@ -81,9 +81,10 @@ process with a full `.localhost` hostname:
 }
 ```
 
-For processes with multiple ports, named port routes are prefixed to the base
-hostname, such as `http://admin.app.localhost`. A port can override its own
-hostname independently:
+For processes with multiple ports, the default route stays available at the base
+hostname, and named port routes are also prefixed to that hostname, such as
+`http://http.app.localhost` and `http://admin.app.localhost`. A port can
+override its own hostname independently:
 
 ```nix title="devenv.nix"
 {

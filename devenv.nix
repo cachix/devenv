@@ -84,6 +84,7 @@ in
   packages = [
     inputs.nix.packages.${system}.nix.dev # Required for integration tests
     pkgs.git
+    pkgs.lychee
     pkgs.cmake # Required by Pingora's bundled zlib-ng dependency
     pkgs.openssl.dev
     pkgs.sqlite.dev
