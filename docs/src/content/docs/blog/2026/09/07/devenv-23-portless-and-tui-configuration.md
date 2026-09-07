@@ -126,26 +126,6 @@ devenv 2.2 introduced [nixpkgs-multiverse](https://github.com/fzakaria/nixpkgs-m
 
 You get exactly those versions, and Farid Zakaria's [write up](https://fzakaria.com/2026/08/17/nixpkgs-multiverse-the-fewest-nixpkgs) explains why the selection is minimal. See [pinning](/pinning/#pinning-an-individual-package-version) for details.
 
-## Skills for Claude Code
-
-The [Claude Code integration](/integrations/claude-code/) can now generate skills, the on demand knowledge folders Claude loads when a task matches their description:
-
-```nix title="devenv.nix"
-{
-  claude.code.skills.database-migrations = {
-    description = "How to write and run migrations in this project.";
-    allowedTools = [ "Read" "Grep" "Bash" ];
-    resources."references/schema.md" = ./docs/schema.md;
-    content = ''
-      Migrations live in `migrations/` and are applied with `diesel migration run`.
-      One logical change per migration; never edit an applied migration.
-    '';
-  };
-}
-```
-
-Skills support model and effort overrides, forked subagent contexts, and bundled resource files. Agents gained an `effort` setting, and `claude.code.agent` selects the primary agent for the main conversation. `devenv info` reports both.
-
 ## And more
 
 **SecretSpec 0.20.** Git and Docker credential helpers, inline secret specifications, and five new providers: Azure App Configuration, Kubernetes, EJSON, Fly.io, and Cloudflare Secrets Store. See the [release announcement](https://secretspec.dev/blog/secretspec-0-20-git-docker-inline-specs-and-five-new-providers/) for details.
