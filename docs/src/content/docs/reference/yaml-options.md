@@ -194,6 +194,14 @@ See [Profiles](/profiles/).
 
 *Type:* `string`
 
+## prompt_prefix
+
+Show the `(devenv)` prefix in the interactive shell prompt.
+Set to `false` when using a custom prompt such as Starship.
+Overrides the global user configuration.
+
+*Type:* `boolean` · *Default:* `true`
+
 ## reload
 
 <small class="added-in">Added in <code>2.0</code></small>

@@ -98,12 +98,20 @@ fi
 # Hot-reload hook (PROMPT_COMMAND integration)
 {reload_hook}
 
+# Set devenv prompt prefix after the user's prompt configuration.
+{prompt_prefix}
+
 # Re-enable history after init
 set -o history
 "#,
             env_diff_helpers = ctx.env_diff_helpers,
             env_script_path = ctx.env_script_path.to_string_lossy(),
             reload_hook = ctx.reload_hook,
+            prompt_prefix = if ctx.prompt_prefix {
+                self.prompt_prefix()
+            } else {
+                ""
+            },
         )
     }
 
@@ -232,7 +240,21 @@ __devenv_apply_reverse_diff() {
 "#
     }
 
-    fn reload_hook(&self, reload_file: &Path) -> String {
+    fn reload_hook(
+        &self,
+        reload_file: &Path,
+        keybindings: &crate::keybindings::ShellKeybindings,
+    ) -> String {
+        let reload_keybindings = keybindings
+            .reload_bindings(self.name())
+            .iter()
+            .map(|binding| {
+                format!(
+                    "bind -x '\"{}\":__devenv_reload_apply'\n",
+                    binding.escaped_bytes()
+                )
+            })
+            .collect::<String>();
         format!(
             r#"
 __devenv_reload_apply() {{
@@ -273,8 +295,10 @@ __devenv_reload_hook() {{
 if [[ "$PROMPT_COMMAND" != *"__devenv_reload_hook"* ]]; then
     PROMPT_COMMAND="${{PROMPT_COMMAND:+$PROMPT_COMMAND;}}__devenv_reload_hook"
 fi
+{reload_keybindings}
 "#,
-            reload_file.to_string_lossy()
+            reload_file.to_string_lossy(),
+            reload_keybindings = reload_keybindings,
         )
     }
 
@@ -283,7 +307,7 @@ fi
     }
 
     fn prompt_prefix(&self) -> &str {
-        r#"PS1="(devenv) ${PS1:-}"#
+        r#"PS1="(devenv) ${PS1:-}""#
     }
 
     fn format_task_exports(&self, exports: &BTreeMap<String, String>) -> String {

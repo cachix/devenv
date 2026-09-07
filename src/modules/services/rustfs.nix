@@ -8,6 +8,7 @@ let
     name = "rustfs";
     url = "github:rustfs/rustfs/5d737eaeb7fcab5d40c655ba60a494e93dd98922";
     attribute = "services.rustfs.enable";
+    follows = [ "nixpkgs" ];
   };
 
   # Port allocation

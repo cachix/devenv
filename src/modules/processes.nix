@@ -30,6 +30,25 @@ let
         # Pass process name and port name for stable caching across evaluations
         default = allocatePort processName name config.allocate;
       };
+
+      proxy = lib.mkOption {
+        type = types.submodule {
+          options.hostname = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Full `.localhost` hostname to use for this port when
+              `process.proxy.enable` is enabled.
+
+              This takes precedence over `processes.<name>.proxy.hostname`
+              and the generated hostname.
+            '';
+            example = "admin.localhost";
+          };
+        };
+        default = { };
+        description = "Shared HTTP proxy configuration for this port.";
+      };
     };
   });
 
@@ -80,6 +99,30 @@ let
             admin.allocate = 9000;
           }
         '';
+      };
+
+      proxy = lib.mkOption {
+        type = types.submodule {
+          options.hostname = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Full `.localhost` hostname to use for this process when
+              `process.proxy.enable` is enabled.
+
+              By default, devenv derives the hostname from the process and
+              project names. Named ports without their own hostname override
+              are prefixed to this hostname.
+            '';
+            example = "app.localhost";
+          };
+          options.https.enable = lib.mkEnableOption ''
+            HTTPS proxy URLs for this process using the project's mkcert certificate authority.
+            HTTP URLs remain available. Requires `process.proxy.enable`
+          '';
+        };
+        default = { };
+        description = "Shared HTTP proxy configuration for this process.";
       };
 
       env = lib.mkOption {
@@ -251,11 +294,16 @@ let
               default = [ ];
               description = ''
                 Linux capabilities to add as ambient capabilities for this process
-                (e.g., "cap_net_admin", "cap_sys_admin").
+                (e.g., "net_bind_service", "net_admin").
+
+                Supported capabilities are net_bind_service, net_raw, net_admin,
+                ipc_lock, sys_nice, sys_resource, sys_admin, chown, dac_override,
+                and fowner. Starting a process with capabilities requires sudo
+                authentication.
 
                 Requires devenv 2.0+.
               '';
-              example = [ "cap_net_admin" "cap_sys_admin" ];
+              example = [ "net_bind_service" "net_admin" ];
             };
           };
         };
@@ -590,6 +638,11 @@ in
                 restart = process.restart;
                 listen = process.listen;
                 ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
+                proxy = process.proxy // {
+                  port_hostnames = lib.mapAttrs
+                    (_: portCfg: portCfg.proxy.hostname)
+                    (lib.filterAttrs (_: portCfg: portCfg.proxy.hostname != null) process.ports);
+                };
                 watch = process.watch // {
                   paths = map toString process.watch.paths;
                 };

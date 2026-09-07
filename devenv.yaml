@@ -32,7 +32,7 @@ inputs:
   ghostty:
     # Provides libghostty-vt.
     # Kept in sync with flake.nix's ghostty input.
-    url: github:ghostty-org/ghostty
+    url: github:ghostty-org/ghostty/22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018
     flake: false
 
   devenv-ai-agents:

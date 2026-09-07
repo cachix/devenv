@@ -423,6 +423,66 @@ fn selected_navbar_preserves_status_and_fits_usable_widths() {
     }
 }
 
+#[test]
+fn selected_navbar_fits_mixed_summary_without_fragmenting_controls() {
+    let mut model = ActivityModel::new();
+    model.apply_activity_event(build_start_with(1, "build", None));
+    model.apply_activity_event(build_complete(1, ActivityOutcome::Success));
+    model.apply_activity_event(fetch_start(2, FetchKind::Download, "download"));
+    model.apply_activity_event(fetch_complete(2, ActivityOutcome::Success));
+    model.apply_activity_event(fetch_start(3, FetchKind::Query, "query"));
+    model.apply_activity_event(fetch_complete(3, ActivityOutcome::Success));
+    model.apply_activity_event(task_hierarchy_single(4, "task", None, true, false));
+    model.apply_activity_event(task_start(4));
+    model.apply_activity_event(task_complete(4, ActivityOutcome::Success));
+    model.apply_activity_event(process_start(5, "process"));
+    model.apply_activity_event(process_status(5, ProcessStatus::Ready));
+
+    for width in 40u16..=240 {
+        let mut ui = UiState::new();
+        ui.set_terminal_size(width, 24);
+        ui.selected_activity = Some(5);
+        let output = render(&model, &ui);
+        let footer = output.lines().find(|line| line.contains('↑')).unwrap();
+        let summary = footer[..footer.find('↑').unwrap()].trim();
+
+        assert!(max_line_width(&output) <= usize::from(width), "{output}");
+        assert!(
+            summary.is_empty()
+                || summary == "1/1 builds │ 1/1 downloads │ 1/1 queries │ 1/1 tasks │ 1 process"
+                || summary
+                    == "1 of 1 builds  │  1 of 1 downloads  │  1 of 1 queries  │  1 of 1 tasks  │  1 process",
+            "width {width}: {footer:?}"
+        );
+        assert!(footer.contains("↑↓ j/k"), "width {width}: {footer:?}");
+        assert!(
+            footer.contains("^D/^U") || footer.contains("Ctrl-D/Ctrl-U"),
+            "width {width}: {footer:?}"
+        );
+        assert!(footer.contains("Enter"), "width {width}: {footer:?}");
+        assert!(
+            footer.contains("^E") || footer.contains("Ctrl-E"),
+            "width {width}: {footer:?}"
+        );
+        assert!(
+            footer.contains("^X") || footer.contains("Ctrl-X"),
+            "width {width}: {footer:?}"
+        );
+        assert!(
+            footer.contains("^R") || footer.contains("Ctrl-R"),
+            "width {width}: {footer:?}"
+        );
+        assert!(footer.contains("Esc"), "width {width}: {footer:?}");
+
+        if width == 140 {
+            assert!(
+                footer.contains("↑↓ j/k ^D/^U • Enter ▾ • ^E ▼ • ^X ^R / Esc clear"),
+                "{footer:?}"
+            );
+        }
+    }
+}
+
 /// A mixed summary plus the show-stopped hint must stay within the flex row at
 /// every usable width. The framework clips lower-priority summary details while
 /// preserving the controls on the right.

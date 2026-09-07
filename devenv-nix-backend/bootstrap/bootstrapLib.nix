@@ -555,6 +555,8 @@ rec {
         ;
       bash = pkgs.bash;
       shell = config.shell;
+      # Older pinned modules predate the optional localhost proxy.
+      processProxyEnabled = config.process.proxy.enable or false;
       optionsJSON = options.optionsJSON;
       info = config.info;
       ci = config.ciDerivation;

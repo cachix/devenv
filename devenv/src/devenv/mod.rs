@@ -47,7 +47,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, debug_span, info, info_span, instrument, trace, warn};
+use tracing::{Instrument, debug, debug_span, info, instrument, trace, warn};
 
 /// Trailing guidance shown when the running manager doesn't recognise a process
 /// name because it was started under a different configuration.
@@ -77,6 +77,37 @@ fn same_process_command(
             processes::ProcessCommand::Stop(right)
         ) if left == right
     )
+}
+
+fn capability_requests(
+    task_configs: &[tasks::TaskConfig],
+) -> Vec<processes::capabilities::CapabilityRequest> {
+    task_configs
+        .iter()
+        .filter_map(|task| {
+            let process = task.process.as_ref()?;
+            if process.linux.capabilities.is_empty() {
+                return None;
+            }
+            Some(processes::capabilities::CapabilityRequest::new(
+                // The broker keys its allow list on this name and the manager
+                // launches by the same helper's output; they must not drift.
+                tasks::process_name(&task.name),
+                process.linux.capabilities.clone(),
+            ))
+        })
+        .collect()
+}
+
+/// Whether this invocation starts a process that needs Linux capabilities.
+/// Disabled processes are declared to the broker for later starts but do not
+/// make authentication mandatory when sudo cannot prompt.
+fn capabilities_required_now(task_configs: &[tasks::TaskConfig]) -> bool {
+    task_configs.iter().any(|task| {
+        task.process
+            .as_ref()
+            .is_some_and(|process| process.start.enable && !process.linux.capabilities.is_empty())
+    })
 }
 
 /// Detect whether we are running inside an AI coding agent.
@@ -247,6 +278,14 @@ fn should_attach_to_running_manager(
     interactivity: ClientInteractivity,
 ) -> bool {
     mode == ClientRunMode::Follow && interactivity == ClientInteractivity::Interactive
+}
+
+fn should_clear_proxy_routes(
+    manager_was_running: bool,
+    owns_foreground_manager: bool,
+    start_failed: bool,
+) -> bool {
+    owns_foreground_manager || (!manager_was_running && start_failed)
 }
 
 /// A shell command ready to be executed.
@@ -851,6 +890,46 @@ impl Devenv {
             .get_or_try_init(|| processes::get_process_runtime_dir(&self.devenv_runtime))
     }
 
+    fn proxy_owner(&self) -> String {
+        self.devenv_dotfile.to_string_lossy().into_owned()
+    }
+
+    async fn reconcile_proxy_routes(
+        &self,
+        task_configs: &mut [tasks::TaskConfig],
+        envs: &HashMap<String, String>,
+        frontend: Option<&tokio::sync::mpsc::Sender<FrontendCommand>>,
+    ) -> Result<()> {
+        let enabled = self
+            .backend
+            .eval_devenv(&["processProxyEnabled"])
+            .await
+            .wrap_err("failed to evaluate whether the localhost proxy is enabled")?;
+        let enabled: bool = serde_json::from_str(&enabled)
+            .into_diagnostic()
+            .wrap_err("process.proxy.enable is not a boolean")?;
+        if !enabled {
+            // Reconcile a previous enabled configuration without starting the
+            // shared proxy when it is not already running.
+            crate::proxy::clear(&self.proxy_owner());
+            return Ok(());
+        }
+
+        let configured_name = self
+            .backend
+            .eval_devenv(&["devenv.config.name"])
+            .await
+            .wrap_err("failed to evaluate the project name for localhost proxy routes")?;
+        let project_name: Option<String> = serde_json::from_str(&configured_name)
+            .into_diagnostic()
+            .wrap_err("project name is not a string")?;
+        let project_name = crate::proxy::project_name(project_name, &self.devenv_root)?;
+        let owner = self.proxy_owner();
+        let mut routes = crate::proxy::project_routes(&project_name, &owner, task_configs)?;
+        crate::proxy::prepare_https(&mut routes, task_configs, envs, frontend).await?;
+        crate::proxy::reconcile(&owner, routes, frontend).await
+    }
+
     /// Build a `tasks::Config` with common fields filled in.
     ///
     /// The bash path is resolved here rather than passed in: process tasks with
@@ -877,6 +956,7 @@ impl Devenv {
             ignore_process_deps: false,
             exit_on_idle: Some(false),
             supervisor: devenv_processes::SupervisionMode::Native,
+            capability_broker: None,
         })
     }
 
@@ -1234,7 +1314,11 @@ impl Devenv {
                 devenv_activity::start!(
                     Activity::process(&info.name)
                         .parent(Some(parent_id))
-                        .ports(info.ports.clone())
+                        .ports(info.ports.clone()),
+                    devenv.process.status = tracing::field::Empty,
+                    devenv.process.restart_count = info.restart_count as u64,
+                    devenv.process.supervisor_phase = tracing::field::Empty,
+                    devenv.process.exit_status = tracing::field::Empty
                 )
                 .into_ref()
             });
@@ -1624,11 +1708,21 @@ impl Devenv {
         Ok(config.watch_paths(&self.devenv_root))
     }
 
-    #[instrument(skip(self))]
     pub async fn prepare_shell(
         &self,
         cmd: &Option<String>,
         args: &[String],
+    ) -> Result<process::Command> {
+        self.prepare_shell_with_script_dir(cmd, args, &self.devenv_dotfile)
+            .await
+    }
+
+    #[instrument(name = "prepare_shell", skip(self, script_dir))]
+    async fn prepare_shell_with_script_dir(
+        &self,
+        cmd: &Option<String>,
+        args: &[String],
+        script_dir: &Path,
     ) -> Result<process::Command> {
         // Reuse a DevEnv evaluated by `up()` phase 1 or an earlier
         // `prepare_shell` so we don't re-run "Configuring shell".
@@ -1693,24 +1787,20 @@ impl Devenv {
         let dotenv_messages = dotenv.message_script();
 
         // For non-interactive commands, always use bash directly
-        if cmd.is_some() {
+        if let Some(cmd) = cmd {
             let mut script = bash_init_script(&shell_env);
             script.push_str(&dotenv_activation);
             script.push_str(&task_exports);
             script.push_str(&dotenv_messages);
+            // Keep the content-addressed activation script independent of the
+            // command. In particular, environment capture uses a randomly named
+            // temporary helper whose path must not affect the script hash.
+            script.push_str("\nexec \"$@\"\n");
 
-            let command = format!(
-                "\nexec {} {}",
-                cmd.as_ref().unwrap(),
-                args.iter()
-                    .map(|arg| shell_escape::escape(std::borrow::Cow::Borrowed(arg)))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-            script.push_str(&command);
-
-            let script_path = write_executable_script(&self.devenv_dotfile, &script);
+            let script_path = write_executable_script(script_dir, &script);
             shell_cmd.arg(&script_path);
+            shell_cmd.arg(cmd);
+            shell_cmd.args(args);
         } else {
             // Interactive shell
             let script_path = if target_shell_path.is_some() {
@@ -1727,6 +1817,7 @@ impl Devenv {
 
                 let env_diff_helpers = dialect.env_diff_helpers();
                 let target_path_str = target_shell_path.as_deref().unwrap();
+                let shell_keybindings = devenv_shell::keybindings::ShellKeybindings::default();
 
                 let rcfile_ctx = RcfileContext {
                     env_script_path: &env_script_path,
@@ -1734,6 +1825,8 @@ impl Devenv {
                     reload_hook: "",
                     target_shell_path: Some(target_path_str),
                     init_dir: &self.devenv_dotfile,
+                    shell_keybindings: &shell_keybindings,
+                    prompt_prefix: self.options.shell_settings.prompt_prefix,
                 };
 
                 let rcfile_content = dialect.rcfile_content(&rcfile_ctx);
@@ -1750,6 +1843,10 @@ impl Devenv {
                 script.push_str(&task_exports);
                 script.push_str(&task_messages);
                 script.push_str(&dotenv_messages);
+                if self.options.shell_settings.prompt_prefix {
+                    script.push_str(BashDialect.prompt_prefix());
+                    script.push('\n');
+                }
                 write_executable_script(&self.devenv_dotfile, &script)
             };
 
@@ -1768,7 +1865,9 @@ impl Devenv {
         );
 
         // Inject OTEL trace context so instrumented subprocesses join the trace.
-        shell_cmd.envs(devenv_activity::trace_propagation_env());
+        devenv_activity::inject_trace_propagation_env(|key, value| {
+            shell_cmd.env(key, value);
+        });
 
         Ok(shell_cmd)
     }
@@ -2010,10 +2109,10 @@ impl Devenv {
 
         let config = self.make_task_config(roots, tasks, run_mode, envs).await?;
 
-        if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
-            use valuable::Valuable;
-            debug!(event = config_value.as_value(), "Loaded task config");
-        }
+        debug!(
+            event = devenv_activity::SerdeValuable(&config).as_tracing_value(),
+            "Loaded task config"
+        );
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
             .with_refresh_task_cache(self.options.cache_settings.refresh_task_cache)
@@ -2098,6 +2197,7 @@ impl Devenv {
             ignore_process_deps: false,
             exit_on_idle: Some(false),
             supervisor: devenv_processes::SupervisionMode::Native,
+            capability_broker: None,
         };
 
         let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
@@ -2174,7 +2274,9 @@ impl Devenv {
         let script_path = temp_dir.path().join("script");
         let env_path = temp_dir.path().join("env");
 
-        let script = format!("env -0 > {}", env_path.to_string_lossy());
+        // Pass the output path as an argument so a TMPDIR containing spaces or
+        // shell metacharacters is never interpolated into shell source.
+        let script = r#"env -0 > "$1""#;
         fs::write(&script_path, script)
             .await
             .into_diagnostic()
@@ -2195,18 +2297,57 @@ impl Devenv {
         // run_enter_shell_tasks(). Running them inside this subprocess would
         // be redundant and, worse, a @completed task failure there would cause the
         // subprocess to exit non-zero, aborting the environment capture.
+        let env_path_arg = env_path.to_string_lossy().into_owned();
         let mut cmd = self
-            .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
+            .prepare_shell_with_script_dir(
+                &Some(script_path.to_string_lossy().into()),
+                &[env_path_arg],
+                temp_dir.path(),
+            )
             .await?;
         cmd.env("DEVENV_SKIP_TASKS", "1");
-        let output = async {
+        let subprocess_span = debug_span!(
+            target: "devenv_activity::spans",
+            "shell_capture_subprocess",
+            otel.name = "capturing shell environment subprocess",
+            devenv.activity.kind = "command",
+            devenv.shell.stage = "capture_environment",
+            devenv.command = %cmd.as_std().get_program().to_string_lossy(),
+            devenv.command.exit_code = tracing::field::Empty,
+            devenv.command.stdout_bytes = tracing::field::Empty,
+            devenv.command.stderr_bytes = tracing::field::Empty,
+            devenv.outcome = tracing::field::Empty,
+            otel.status_code = tracing::field::Empty
+        );
+        let output_result = async {
             cmd.output()
                 .await
                 .into_diagnostic()
                 .wrap_err("Failed to execute environment capture script")
         }
-        .instrument(info_span!("capture_env_subprocess"))
-        .await?;
+        .instrument(subprocess_span.clone())
+        .await;
+
+        match &output_result {
+            Ok(output) => {
+                if let Some(exit_code) = output.status.code() {
+                    subprocess_span.record("devenv.command.exit_code", exit_code as i64);
+                }
+                subprocess_span.record("devenv.command.stdout_bytes", output.stdout.len());
+                subprocess_span.record("devenv.command.stderr_bytes", output.stderr.len());
+                if output.status.success() {
+                    subprocess_span.record("devenv.outcome", "success");
+                } else {
+                    subprocess_span.record("devenv.outcome", "failed");
+                    subprocess_span.record("otel.status_code", "ERROR");
+                }
+            }
+            Err(_) => {
+                subprocess_span.record("devenv.outcome", "failed");
+                subprocess_span.record("otel.status_code", "ERROR");
+            }
+        }
+        let output = output_result?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -2479,7 +2620,7 @@ impl Devenv {
         }
 
         // ── Phase 2: Loading and running enterShell tasks ─────────────
-        let task_configs = self.load_tasks().await?;
+        let mut task_configs = self.load_tasks().await?;
         let (_status, exports, _messages) = self
             .run_tasks_with_roots(
                 vec!["devenv:enterShell".to_string()],
@@ -2490,9 +2631,32 @@ impl Devenv {
             .await?;
         envs.extend(exports);
 
+        // When enabled, named process ports become friendly localhost URLs.
+        // The proxy is shared across projects and starts lazily on the first
+        // `devenv up` that has at least one route.
+        self.reconcile_proxy_routes(
+            &mut task_configs,
+            &envs,
+            options.frontend_command_tx.as_ref(),
+        )
+        .await?;
+
         // ── Phase 3: Running processes ──────────────────────────────
-        self.start_processes(processes, task_mode, envs, options, Some(task_configs))
-            .await
+        let manager_was_running =
+            self.native_manager_running().await || self.external_process_manager_state_exists();
+        let owns_foreground_manager =
+            options.mode == ClientRunMode::Follow && !options.daemon && !manager_was_running;
+        let result = self
+            .start_processes(processes, task_mode, envs, options, Some(task_configs))
+            .await;
+        if should_clear_proxy_routes(
+            manager_was_running,
+            owns_foreground_manager,
+            result.is_err(),
+        ) {
+            crate::proxy::clear(&self.proxy_owner());
+        }
+        result
     }
 
     /// Start processes after shell environment and tasks are already configured.
@@ -2632,14 +2796,28 @@ impl Devenv {
                 roots
             );
 
-            let config = self
+            // Authenticate for every declared capability-bearing process while
+            // the caller still has a terminal. The manager may start disabled
+            // processes later, after it has detached.
+            let capability_requests = capability_requests(&task_configs);
+            let capabilities_required_now = capabilities_required_now(&task_configs);
+
+            let mut config = self
                 .make_task_config(roots, task_configs, task_mode, envs)
                 .await?;
 
             if options.daemon {
                 // Spawn a separate daemon process via re-exec to avoid
                 // fork-safety issues in this multithreaded process.
-                return self.spawn_daemon_processes(config, &launch_names).await;
+                return self
+                    .spawn_daemon_processes(
+                        config,
+                        &launch_names,
+                        &capability_requests,
+                        capabilities_required_now,
+                        options.frontend_command_tx.as_ref(),
+                    )
+                    .await;
             }
 
             // If a manager is already running (e.g. started by `devenv up -d`),
@@ -2678,6 +2856,15 @@ impl Devenv {
                 .await?;
                 return Ok(ProcessStartOutcome::Completed);
             }
+
+            config.capability_broker = processes::start_capability_broker(
+                &capability_requests,
+                capabilities_required_now,
+                self.process_runtime_dir()?,
+                options.frontend_command_tx.as_ref(),
+                std::process::Stdio::inherit(),
+            )
+            .await?;
 
             let tasks_runner = Arc::new(
                 tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
@@ -2841,8 +3028,11 @@ impl Devenv {
     /// own process group. This does not create a new Unix session.
     async fn spawn_daemon_processes(
         &self,
-        config: tasks::Config,
+        mut config: tasks::Config,
         launch_names: &[String],
+        capability_requests: &[processes::CapabilityRequest],
+        capabilities_required_now: bool,
+        frontend_command_tx: Option<&tokio::sync::mpsc::Sender<FrontendCommand>>,
     ) -> Result<ProcessStartOutcome> {
         let pid_file = self.native_manager_pid_file();
 
@@ -2910,8 +3100,26 @@ impl Devenv {
             return Ok(ProcessStartOutcome::Completed);
         }
 
-        // Serialize the task config for the daemon
         let runtime_dir = self.process_runtime_dir()?;
+        let log_file_path = runtime_dir.join("daemon.log");
+
+        // The broker outlives this invocation, so its diagnostics go to the
+        // daemon log rather than to a terminal that may already be gone.
+        let broker_log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file_path)
+            .map_err(|e| miette!("Failed to create daemon log: {}", e))?;
+        config.capability_broker = processes::start_capability_broker(
+            capability_requests,
+            capabilities_required_now,
+            runtime_dir,
+            frontend_command_tx,
+            std::process::Stdio::from(broker_log),
+        )
+        .await?;
+
+        // Serialize the task config for the daemon
         let config_file = runtime_dir.join("daemon-config.json");
         let config_json = serde_json::to_string(&config)
             .map_err(|e| miette!("Failed to serialize task config: {}", e))?;
@@ -2923,7 +3131,6 @@ impl Devenv {
         let devenv_exe = std::env::current_exe()
             .map_err(|e| miette!("Failed to get current executable: {}", e))?;
 
-        let log_file_path = runtime_dir.join("daemon.log");
         let log_file = std::fs::File::create(&log_file_path)
             .map_err(|e| miette!("Failed to create daemon log: {}", e))?;
 
@@ -2993,6 +3200,7 @@ impl Devenv {
     pub async fn down(&self) -> Result<()> {
         if let Some(server) = self.native_api_server.get() {
             server.manager().stop_all().await?;
+            crate::proxy::clear(&self.proxy_owner());
             return Ok(());
         }
 
@@ -3008,10 +3216,13 @@ impl Devenv {
                 // Stopping does not invoke the launcher, so a dummy path is sufficient.
                 Box::new(self.external_process_manager_control())
             } else {
+                crate::proxy::clear(&self.proxy_owner());
                 bail!("No process manager is running. Start processes first with `devenv up -d`")
             };
 
-        manager.stop().await
+        manager.stop().await?;
+        crate::proxy::clear(&self.proxy_owner());
+        Ok(())
     }
 
     pub async fn wait_for_ready(&self, timeout: std::time::Duration) -> Result<()> {
@@ -3457,7 +3668,8 @@ fn format_process_list(processes: &[processes::ProcessInfo]) -> String {
             process.name, process.phase, process.restart_count
         ));
         if !process.ports.is_empty() {
-            output.push_str(&format!(" ports: {}", process.ports.join(", ")));
+            let ports: Vec<String> = process.ports.iter().map(ToString::to_string).collect();
+            output.push_str(&format!(" ports: {}", ports.join(", ")));
         }
         output.push('\n');
     }
@@ -4040,7 +4252,16 @@ mod tests {
             name: "web".to_string(),
             phase: processes::ProcessPhase::Ready,
             restart_count: 1,
-            ports: vec!["http:8080".to_string(), "metrics:9090".to_string()],
+            ports: vec![
+                devenv_activity::PortBinding {
+                    name: "http".to_string(),
+                    port: 8080,
+                },
+                devenv_activity::PortBinding {
+                    name: "metrics".to_string(),
+                    port: 9090,
+                },
+            ],
         }]);
 
         assert!(output.contains("restarts: 1 ports: http:8080, metrics:9090\n"));
@@ -4068,6 +4289,64 @@ mod tests {
             }),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn capability_requests_include_disabled_processes_for_later_starts() {
+        let mut database = process_task("database", true);
+        database
+            .process
+            .as_mut()
+            .unwrap()
+            .linux
+            .capabilities
+            .push("ipc_lock".to_string());
+        let mut api = process_task("api", true);
+        api.after
+            .push("devenv:processes:database@ready".to_string());
+        let mut unrelated = process_task("unrelated", false);
+        unrelated
+            .process
+            .as_mut()
+            .unwrap()
+            .linux
+            .capabilities
+            .push("net_admin".to_string());
+
+        let requests = capability_requests(&[database, api, unrelated]);
+
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].process, "database");
+        assert_eq!(requests[0].capabilities, ["ipc_lock"]);
+        assert_eq!(requests[1].process, "unrelated");
+        assert_eq!(requests[1].capabilities, ["net_admin"]);
+    }
+
+    #[test]
+    fn capabilities_required_now_ignores_disabled_processes() {
+        let mut disabled = process_task("disabled", false);
+        disabled
+            .process
+            .as_mut()
+            .unwrap()
+            .linux
+            .capabilities
+            .push("net_bind_service".to_string());
+        let plain = process_task("plain", true);
+        assert!(!capabilities_required_now(&[
+            disabled.clone(),
+            plain.clone()
+        ]));
+
+        let mut enabled = process_task("enabled", true);
+        enabled
+            .process
+            .as_mut()
+            .unwrap()
+            .linux
+            .capabilities
+            .push("net_bind_service".to_string());
+        assert!(capabilities_required_now(&[disabled, plain, enabled]));
     }
 
     #[test]
@@ -4235,6 +4514,13 @@ mod tests {
                 "{mode:?}, {interactivity:?}"
             );
         }
+    }
+
+    #[test]
+    fn attached_manager_routes_survive_failed_invocations() {
+        assert!(!should_clear_proxy_routes(true, false, true));
+        assert!(should_clear_proxy_routes(false, false, true));
+        assert!(should_clear_proxy_routes(false, true, false));
     }
 
     #[test]

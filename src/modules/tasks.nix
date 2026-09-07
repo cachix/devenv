@@ -261,6 +261,25 @@ let
                   '';
                 };
 
+                proxy = lib.mkOption {
+                  type = types.submodule {
+                    options.hostname = lib.mkOption {
+                      type = types.nullOr types.str;
+                      default = null;
+                      description = "Full `.localhost` proxy hostname for this process.";
+                    };
+                    options.port_hostnames = lib.mkOption {
+                      type = types.attrsOf types.str;
+                      default = { };
+                      description = "Full `.localhost` proxy hostnames keyed by port name.";
+                    };
+                    options.https.enable = lib.mkEnableOption "HTTPS proxy URLs for this process";
+                  };
+                  default = { };
+                  internal = true;
+                  description = "Shared HTTP proxy configuration for this process.";
+                };
+
                 listen = lib.mkOption {
                   type = types.listOf listenType;
                   default = [ ];
@@ -313,11 +332,16 @@ let
                         default = [ ];
                         description = ''
                           Linux capabilities to add as ambient capabilities for this process
-                          (e.g., "cap_net_admin", "cap_sys_admin").
+                          (e.g., "net_bind_service", "net_admin").
+
+                          Supported capabilities are net_bind_service, net_raw, net_admin,
+                          ipc_lock, sys_nice, sys_resource, sys_admin, chown, dac_override,
+                          and fowner. Starting a process with capabilities requires sudo
+                          authentication.
 
                           Requires devenv 2.0+.
                         '';
-                        example = [ "cap_net_admin" "cap_sys_admin" ];
+                        example = [ "net_bind_service" "net_admin" ];
                       };
                     };
                   };

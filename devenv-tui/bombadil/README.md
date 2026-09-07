@@ -62,8 +62,9 @@ Notes:
   observable crash/Unicode invariants and bounded process lifecycle recovery.
 - Bombadil randomizes columns at a fixed 40 rows. Its emulator does not model
   row-count changes reliably for this scrollback-preserving, non-alternate-
-  screen TUI. The scripted PTY regression covers `48x12 -> 120x40`; generated
-  renderer tests cover degenerate sizes. Likewise, the spec sends PageUp and
+  screen TUI. The scripted PTY regression covers narrow-to-wide row and
+  column resizes; generated renderer tests cover degenerate sizes. Likewise,
+  the spec sends PageUp and
   PageDown bytes instead of Bombadil's `ScrollUp`/`ScrollDown`, which move only
   the observer's scrollback viewport and do not exercise devenv input.
 - Once a Bombadil failure is minimized, promote its meaningful key/resize

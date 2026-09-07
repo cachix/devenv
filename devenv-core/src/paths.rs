@@ -47,6 +47,10 @@ pub fn resolve_home() -> Result<PathBuf> {
         })
 }
 
+pub fn resolve_user_config_file() -> Option<PathBuf> {
+    xdg::BaseDirectories::with_prefix("devenv").get_config_file("config.yaml")
+}
+
 /// Resolve the per-project runtime directory that holds sockets and other
 /// short-lived runtime files.
 ///

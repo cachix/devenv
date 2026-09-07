@@ -426,7 +426,7 @@ impl ActivityTextComponent {
                     }
                     // Flexible middle column - can overflow
                     // Each item uses leading margin (margin_left) to separate from predecessor
-                    View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
+                    View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
                         #(if !shortened_name.is_empty() {
                             let has_predecessor = !action.is_empty();
                             let margin = if has_predecessor { 1 } else { 0 };
@@ -461,7 +461,7 @@ impl ActivityTextComponent {
                     }
                     // Flexible middle column - can overflow
                     // Each item uses leading margin (margin_left) to separate from predecessor
-                    View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
+                    View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
                         #(if !shortened_name.is_empty() {
                             let has_predecessor = !action.is_empty();
                             let margin = if has_predecessor { 1 } else { 0 };
@@ -1150,6 +1150,7 @@ mod tests {
             ActivityVariant::Process(crate::model::ProcessActivity {
                 status: ProcessStatus::Ready,
                 ports: vec![],
+                urls: vec![],
                 ready_probe: None,
             }),
         )

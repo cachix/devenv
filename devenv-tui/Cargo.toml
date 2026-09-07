@@ -20,6 +20,7 @@ tokio-shutdown.workspace = true
 # TUI library
 iocraft.workspace = true
 crossterm.workspace = true
+futures.workspace = true
 
 # Tracing integration
 tracing.workspace = true
@@ -31,6 +32,7 @@ libc.workspace = true
 # Error handling
 thiserror.workspace = true
 anyhow.workspace = true
+miette.workspace = true
 
 # CLI argument parsing
 clap.workspace = true
@@ -38,6 +40,8 @@ clap.workspace = true
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
+schemars.workspace = true
+serde_yaml.workspace = true
 
 # Activity system
 devenv-activity.workspace = true
@@ -54,6 +58,7 @@ chrono.workspace = true
 # Human-readable formatting
 human-repr.workspace = true
 unicode-width = "0.1"
+unicode-segmentation = "1.13"
 
 # URL parsing
 url.workspace = true
