@@ -56,6 +56,10 @@ const devenvFooter = {
 
 export default defineConfig({
   site: 'https://devenv.sh',
+  redirects: {
+    '/blog/2026/09/07/devenv-23-localhost-urls-for-processes-a-new-dotenv-engine-and-a-customizable-tui/':
+      '/blog/2026/09/07/devenv-23-portless-and-tui-configuration/',
+  },
   vite: {
     plugins: [tailwindcss()],
     server: {
