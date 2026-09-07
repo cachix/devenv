@@ -2402,7 +2402,7 @@ checksum = "d0e5e1a8a73b51f024c547eda5583456612c1387e1df3d8e1af029d571078aaf"
 
 [[package]]
 name = "devenv"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "axum",
  "clap",
@@ -2464,7 +2464,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-activity"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "arc-swap",
  "devenv-activity-macros",
@@ -2482,7 +2482,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-activity-macros"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2491,7 +2491,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-cache-core"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "blake3",
  "fd-lock",
@@ -2508,7 +2508,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-core"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -2544,7 +2544,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "devenv-activity",
  "devenv-cache-core",
@@ -2565,7 +2565,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-event-sources"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "async-priority-channel",
  "devenv-activity",
@@ -2581,14 +2581,14 @@ dependencies = [
 
 [[package]]
 name = "devenv-mailbox"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "portable-pty",
 ]
 
 [[package]]
 name = "devenv-nix-backend"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2622,7 +2622,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-nix-backend-macros"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "quote",
  "syn 2.0.118",
@@ -2630,7 +2630,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-processes"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "async-trait",
  "caps",
@@ -2660,7 +2660,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-proxy"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2681,7 +2681,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-reload"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "devenv-activity",
  "devenv-cache-core",
@@ -2698,7 +2698,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "clap",
  "devenv",
@@ -2720,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-shell"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "crossterm",
  "devenv-mailbox",
@@ -2739,7 +2739,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "async-trait",
  "base64",
@@ -2771,7 +2771,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tui"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -5924,7 +5924,7 @@ dependencies = [
 
 [[package]]
 name = "nix-conf-parser"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "indexmap 2.14.0",
  "miette",
@@ -9316,7 +9316,7 @@ dependencies = [
 
 [[package]]
 name = "tokio-shutdown"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "futures",
  "nix 0.31.3",
@@ -10658,7 +10658,7 @@ checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
 
 [[package]]
 name = "xtask"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "clap",
  "clap_complete",

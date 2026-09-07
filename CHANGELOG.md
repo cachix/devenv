@@ -1,6 +1,8 @@
 # Changelog
 
-## 2.3.0 (unreleased)
+## 2.3.1 (unreleased)
+
+## 2.3.0 (2026-09-07)
 
 ### Bug Fixes
 
@@ -22,6 +24,16 @@
 - Existing GC root symlinks are now updated atomically when their store path changes.
 - Fixed JSON trace output (`--trace-to json:...`) writing invalid JSON lines for activity events that contain lists, such as the task hierarchy event.
 - Fixed `devenv up` leaving stale proxy URLs behind in task metadata when proxy hostname validation failed. Route planning now updates process URLs only after validation succeeds, so error paths no longer partially mutate the task configuration.
+- Fixed short-lived processes staying active under process-compose. External managers now own restart and readiness, while `devenv-tasks` runs the process once and exits when it settles ([#2879](https://github.com/cachix/devenv/issues/2879)).
+- Fixed services surviving a crash of `devenv-tasks` or the native process manager. A guardian now cleans abandoned service sessions, and the next manager reconciles them before starting the same process.
+- Fixed `devenv-tasks` leaving processes running after errors or parent death. It now stops processes before returning and when it loses its parent.
+- Fixed the native manager missing descendants in separate process groups. Stop and restart now clean the whole service session.
+- Fixed `devenv down` leaving external-manager descendants running. Shutdown now tracks the complete process scope and gracefully stops Overmind before cleanup.
+- Fixed external-manager start/stop races, false-positive detached starts, and process names containing shell metacharacters.
+- Fixed `devenv processes down` returning before Overmind had finished stopping. Overmind left its control socket behind, and the next `devenv up` refused to start. devenv now waits for the manager to exit before it cleans up.
+- Fixed a foreground `devenv up` with an external process manager being invisible to other devenv commands. `devenv processes down` in another terminal now stops it, and a second `devenv up` attaches instead of starting a rival manager.
+- Fixed `devenv processes down` doing nothing after you log out and back in. systemd removes `/run/user/$UID` when your last session ends, which used to lose a detached process manager: it kept running, nothing could stop it, and the next `devenv up` started a second one beside it. devenv now keeps a copy of the manager state in `.devenv`.
+- Fixed devenv suppressing the TUI and forcing quiet output for every shell started from Warp. AI-agent auto-detection now matches only autonomous agents, not "hybrid" environments.
 
 ### Improvements
 
@@ -45,19 +57,6 @@
 - Process-manager metadata is compatible with older CLIs and Nix modules; no public Nix options changed.
 - Enabling `--trace-to` no longer serializes every activity event up front. Trace sinks now walk the typed event only when they write it, so tracing no longer allocates a JSON tree per Nix build log line on the Nix logger thread. Benchmarks of JSON activity export show 2.6× the throughput, 89% fewer allocation calls, and 78% fewer allocated bytes. With trace output disabled, lazy config logging eliminates serialization entirely—3,967 allocations and 287 KB for a representative 128-task config.
 - Process activities in `--trace-to json` output now carry structured `ports` and `ready_probe` fields, and process exits and supervisor restarts are exported as `exited` and `restarted` events instead of free-form log lines. The TUI and console show a `Process exited (success)` or `Process exited (failure)` line for every exit.
-
-### Bug Fixes
-
-- Fixed short-lived processes staying active under process-compose. External managers now own restart and readiness, while `devenv-tasks` runs the process once and exits when it settles ([#2879](https://github.com/cachix/devenv/issues/2879)).
-- Fixed services surviving a crash of `devenv-tasks` or the native process manager. A guardian now cleans abandoned service sessions, and the next manager reconciles them before starting the same process.
-- Fixed `devenv-tasks` leaving processes running after errors or parent death. It now stops processes before returning and when it loses its parent.
-- Fixed the native manager missing descendants in separate process groups. Stop and restart now clean the whole service session.
-- Fixed `devenv down` leaving external-manager descendants running. Shutdown now tracks the complete process scope and gracefully stops Overmind before cleanup.
-- Fixed external-manager start/stop races, false-positive detached starts, and process names containing shell metacharacters.
-- Fixed `devenv processes down` returning before Overmind had finished stopping. Overmind left its control socket behind, and the next `devenv up` refused to start. devenv now waits for the manager to exit before it cleans up.
-- Fixed a foreground `devenv up` with an external process manager being invisible to other devenv commands. `devenv processes down` in another terminal now stops it, and a second `devenv up` attaches instead of starting a rival manager.
-- Fixed `devenv processes down` doing nothing after you log out and back in. systemd removes `/run/user/$UID` when your last session ends, which used to lose a detached process manager: it kept running, nothing could stop it, and the next `devenv up` started a second one beside it. devenv now keeps a copy of the manager state in `.devenv`.
-- Fixed devenv suppressing the TUI and forcing quiet output for every shell started from Warp. AI-agent auto-detection now matches only autonomous agents, not "hybrid" environments.
 
 ## 2.2.2 (2026-08-13)
 
