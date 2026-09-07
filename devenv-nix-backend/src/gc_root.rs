@@ -66,8 +66,11 @@ pub(crate) fn ensure_gc_root(
 
     // Nix atomically replaces symlinks into the store; remove only entries it refuses.
     if outcome == GcRootOutcome::Invalid {
-        std::fs::remove_file(gc_root)
-            .map_err(|e| miette!("Failed to remove existing GC root: {}", e))?;
+        match std::fs::remove_file(gc_root) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(miette!("Failed to remove existing GC root: {}", error)),
+        }
     }
     store
         .add_perm_root(&parsed_path, gc_root)
