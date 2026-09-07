@@ -72,7 +72,7 @@ const initialPreviewHtml = initialEnvironment.lines.map((line, index) => {
   frontmatter={{
     title: 'Your whole development environment, declared.',
     description:
-      'Define packages, languages, services, tasks, secrets, and tooling once. Give every developer—and CI—the same fast, reproducible environment.',
+      'Define packages, languages, services, tasks, secrets, and tooling once. Give every developer and CI the same fast, reproducible environment.',
     template: 'splash',
     hero: { tagline: '' },
   }}
@@ -102,8 +102,14 @@ const initialPreviewHtml = initialEnvironment.lines.map((line, index) => {
         <span class="is-primary">Your whole development</span><br />{' '}<span>environment, declared.</span>
       </h1>
       <p class="landing-cosmos-subtitle">
-        Define packages, languages, services, tasks, secrets, and tooling once. Give every
-        developer—and CI—the same fast, reproducible environment.
+        Define <a href={`${base}packages/`} class="landing-link">packages</a>,{' '}
+        <a href={`${base}languages/`} class="landing-link">languages</a>,{' '}
+        <a href={`${base}services/`} class="landing-link">services</a>,{' '}
+        <a href={`${base}tasks/`} class="landing-link">tasks</a>,{' '}
+        <a href={`${base}integrations/secretspec/`} class="landing-link">secrets</a>, and{' '}
+        <a href={`${base}git-hooks/`} class="landing-link">tooling</a> once. Give every
+        developer and <a href={`${base}integrations/github-actions/`} class="landing-link">CI</a>{' '}
+        the same fast, reproducible environment.
       </p>
     </div>
 
