@@ -659,7 +659,7 @@ mod tests {
                 .await
                 .unwrap()
                 .expect("concurrent cold cache open should succeed");
-            sqlx::query("SELECT 1")
+            sqlx::query("SELECT COUNT(*) FROM task_run")
                 .fetch_one(cache.db.pool())
                 .await
                 .unwrap();

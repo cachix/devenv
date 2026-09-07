@@ -27,10 +27,10 @@ impl Database {
         }
 
         // Serialize create + migrate across processes. Concurrent cold
-        // `devenv shell` entries race on this window: sqlite3_open(CREATE) and
-        // PRAGMA journal_mode=WAL can return SQLITE_BUSY before busy_timeout is
-        // installed, and a migration error used to delete the database out from
-        // under the process that created it (#3133).
+        // `devenv shell` entries race on this window: SQLite's busy timeout does
+        // not serialize the whole migration sequence, and SQLx's SQLite
+        // migration lock is a no-op. A migration error used to delete the
+        // database out from under the process that created it (#3133).
         let _init_lock = acquire_init_lock(&path).await?;
 
         trace!("Running migrations");
@@ -182,10 +182,11 @@ fn sqlite_error_code(error: &sqlx::Error) -> Option<i32> {
 fn is_busy_error(error: &sqlx::Error) -> bool {
     match error {
         sqlx::Error::PoolTimedOut => true,
-        _ => matches!(
-            sqlite_error_code(error),
-            Some(SQLITE_BUSY) | Some(SQLITE_LOCKED) | Some(SQLITE_IOERR_DELETE_NOENT)
-        ),
+        // SQLx reports extended codes; the low byte identifies the primary
+        // error. All BUSY/LOCKED variants must avoid database recreation.
+        _ => sqlite_error_code(error).is_some_and(|code| {
+            matches!(code & 0xff, SQLITE_BUSY | SQLITE_LOCKED) || code == SQLITE_IOERR_DELETE_NOENT
+        }),
     }
 }
 
@@ -337,7 +338,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
     async fn concurrent_cold_open_succeeds() {
-        // Several processes creating the same missing database must all
+        // Several tasks creating the same missing database must all
         // succeed. This is the eval-cache / task-cache race on a cold
         // `.devenv/` (#3133).
         let temp_dir = TempDir::new().unwrap();
@@ -366,7 +367,10 @@ mod tests {
                 .await
                 .unwrap()
                 .expect("concurrent cold Database::new should succeed");
-            sqlx::query("SELECT 1").fetch_one(db.pool()).await.unwrap();
+            sqlx::query("SELECT id, name FROM test")
+                .fetch_all(db.pool())
+                .await
+                .unwrap();
             dbs.push(db);
         }
 
@@ -387,6 +391,10 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let migrator = create_migrator(&temp_dir).await;
         let warm = Database::new(db_path.clone(), &migrator).await.unwrap();
+        sqlx::query("INSERT INTO test (name) VALUES ('preserved')")
+            .execute(warm.pool())
+            .await
+            .unwrap();
         warm.close().await;
 
         let migrations_dir = temp_dir.path().join("migrations");
@@ -404,8 +412,44 @@ mod tests {
                 .await
                 .unwrap()
                 .expect("concurrent warm Database::new should succeed");
+            let (name,): (String,) = sqlx::query_as("SELECT name FROM test")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+            assert_eq!(name, "preserved");
             db.close().await;
         }
+    }
+
+    #[tokio::test]
+    async fn busy_snapshot_is_not_a_reason_to_recreate_database() {
+        let temp_dir = TempDir::new().unwrap();
+        let migrator = create_migrator(&temp_dir).await;
+        let db = Database::new(temp_dir.path().join("test.db"), &migrator)
+            .await
+            .unwrap();
+        let mut reader = db.pool().begin().await.unwrap();
+        sqlx::query("SELECT * FROM test")
+            .fetch_all(&mut *reader)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO test (name) VALUES ('other writer')")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let error = sqlx::query("INSERT INTO test (name) VALUES ('stale reader')")
+            .execute(&mut *reader)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            sqlite_error_code(&error),
+            Some(libsqlite3_sys::SQLITE_BUSY_SNAPSHOT)
+        );
+        assert!(migrate_error_is_busy(&MigrateError::ExecuteMigration(
+            error, 1
+        )));
+        reader.rollback().await.unwrap();
+        db.close().await;
     }
 
     async fn create_migrator(temp_dir: &TempDir) -> Migrator {
