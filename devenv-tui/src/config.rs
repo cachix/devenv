@@ -126,11 +126,23 @@ impl UserConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ShellPreferences {
+    /// Show the `(devenv)` prefix in interactive shell prompts.
+    /// A project's `prompt_prefix` setting in `devenv.yaml` takes precedence.
+    pub prompt_prefix: bool,
     #[schemars(schema_with = "shell_keybindings_schema")]
     pub keybindings: BTreeMap<String, Vec<String>>,
+}
+
+impl Default for ShellPreferences {
+    fn default() -> Self {
+        Self {
+            prompt_prefix: true,
+            keybindings: BTreeMap::new(),
+        }
+    }
 }
 
 impl ShellPreferences {
@@ -1770,6 +1782,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn shell_prompt_prefix_defaults_to_true_and_can_be_disabled() {
+        for yaml in ["version: 1\n", "version: 1\nshell: {}\n"] {
+            let default = UserConfig::from_yaml("config.yaml", yaml.into()).unwrap();
+            assert!(default.shell.prompt_prefix);
+        }
+        let disabled = UserConfig::from_yaml(
+            "config.yaml",
+            "version: 1\nshell:\n  prompt_prefix: false\n".into(),
+        )
+        .unwrap();
+        assert!(!disabled.shell.prompt_prefix);
+    }
+
+    #[test]
     fn default_config_round_trips() {
         let config = UserConfig::default();
         let serialized = config.to_yaml().unwrap();
@@ -1777,7 +1803,7 @@ mod tests {
             "# yaml-language-server: $schema=https://devenv.sh/devenv.user.schema.json\n\n"
         ));
         assert!(!serialized.contains("\"$schema\""));
-        assert!(serialized.contains("\nshell:\n  keybindings: {}\n"));
+        assert!(serialized.contains("\nshell:\n  prompt_prefix: true\n  keybindings: {}\n"));
         let parsed = UserConfig::from_yaml("config.yaml", serialized).unwrap();
         assert_eq!(parsed.version, USER_CONFIG_VERSION);
         assert_eq!(parsed.tui.viewport, ViewportPlacement::Inline);

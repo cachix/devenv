@@ -155,6 +155,8 @@ pub struct RcfileContext<'a> {
     /// Directory for writing shell init files (e.g., .devenv/).
     pub init_dir: &'a Path,
     pub shell_keybindings: &'a ShellKeybindings,
+    /// Whether to add the devenv prompt prefix.
+    pub prompt_prefix: bool,
 }
 
 #[cfg(test)]
@@ -251,6 +253,137 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
     }
 
     #[test]
+    fn prompt_setting_preserves_user_prompts() {
+        for shell in ["bash", "zsh", "fish", "nu"] {
+            if Command::new(shell).arg("--version").output().is_err() {
+                eprintln!("skipping prompt test: {shell} is unavailable");
+                continue;
+            }
+            let tmp = unique_tmp_dir(&format!("{shell}-prompt"));
+            let dialect = create_dialect(shell);
+            let shell_keybindings = ShellKeybindings::default();
+            std::fs::write(tmp.join(".bashrc"), "PS1='custom> '\n").unwrap();
+            std::fs::write(tmp.join(".zshrc"), "PROMPT='custom> '\n").unwrap();
+
+            for prompt_prefix in [true, false] {
+                let ctx = RcfileContext {
+                    env_script_path: Path::new("/dev/null"),
+                    env_diff_helpers: dialect.env_diff_helpers(),
+                    reload_hook: "",
+                    target_shell_path: None,
+                    init_dir: &tmp,
+                    shell_keybindings: &shell_keybindings,
+                    prompt_prefix,
+                };
+                dialect.write_init_files(&ctx).unwrap();
+                let script = match shell {
+                    "bash" => format!("{}\nprintf '%s' \"$PS1\"", dialect.rcfile_content(&ctx)),
+                    "zsh" => format!(
+                        "source {:?}\nprintf '%s' \"$PROMPT\"",
+                        tmp.join("zsh/.zshrc")
+                    ),
+                    "fish" => format!(
+                        "set fish_function_path; functions -e fish_prompt; source {:?}; fish_prompt",
+                        tmp.join("devenv.fish")
+                    ),
+                    "nu" => {
+                        let path = tmp.join("nu/config.nu");
+                        // Do not load the real user's config discovered during generation.
+                        let config = std::fs::read_to_string(&path).unwrap();
+                        let config = config
+                            .lines()
+                            .filter(|line| !line.starts_with("source "))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        std::fs::write(&path, config).unwrap();
+                        format!(
+                            "$env.PROMPT_COMMAND = {{|| 'custom> '}}; source {path:?}; print -n (do $env.PROMPT_COMMAND)"
+                        )
+                    }
+                    _ => unreachable!(),
+                };
+                let mut command = Command::new(shell);
+                match shell {
+                    "bash" => {
+                        command.args(["--noprofile", "--norc"]);
+                    }
+                    "zsh" => {
+                        command.arg("-f");
+                    }
+                    "fish" => {
+                        command.arg("--no-config");
+                    }
+                    "nu" => {
+                        command.arg("--no-config-file");
+                    }
+                    _ => unreachable!(),
+                }
+                let output = command
+                    .env("HOME", &tmp)
+                    .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+                    .env_remove("_DEVENV_REAL_ZDOTDIR")
+                    .env_remove("_DEVENV_HOOK_DIR")
+                    .env_remove("GHOSTTY_RESOURCES_DIR")
+                    .args(["-c", &script])
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success(),
+                    "{shell}: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                let prefix = if prompt_prefix { "(devenv) " } else { "" };
+                let user_prompt = if shell == "fish" { "> " } else { "custom> " };
+                assert_eq!(
+                    String::from_utf8_lossy(&output.stdout),
+                    format!("{prefix}{user_prompt}"),
+                    "{shell}, prompt_prefix={prompt_prefix}"
+                );
+            }
+            let _ = std::fs::remove_dir_all(tmp);
+        }
+    }
+
+    #[test]
+    fn disabled_fish_prompt_preserves_user_prompt_and_reload_hooks() {
+        if Command::new("fish").arg("--version").output().is_err() {
+            return;
+        }
+        let tmp = unique_tmp_dir("fish-prompt-reload");
+        let shell_keybindings = ShellKeybindings::default();
+        let ctx = RcfileContext {
+            env_script_path: Path::new("/dev/null"),
+            env_diff_helpers: "",
+            reload_hook: "function __devenv_reload_apply; echo -n RELOAD; end\nfunction __devenv_restore_path; echo -n PATH; end",
+            target_shell_path: None,
+            init_dir: &tmp,
+            shell_keybindings: &shell_keybindings,
+            prompt_prefix: false,
+        };
+        FishDialect.write_init_files(&ctx).unwrap();
+        let script = format!(
+            "function fish_prompt; echo -n 'custom> '; end; source {:?}; fish_prompt",
+            tmp.join("devenv.fish")
+        );
+        let output = Command::new("fish")
+            .env_remove("_DEVENV_HOOK_DIR")
+            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+            .args(["--no-config", "-c", &script])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "custom> RELOADPATH"
+        );
+        let _ = std::fs::remove_dir_all(tmp);
+    }
+
+    #[test]
     fn reload_hooks_preserve_defaults_and_apply_overrides() {
         let reload_file = Path::new("/tmp/devenv-reload");
         let defaults = ShellKeybindings::default();
@@ -332,6 +465,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             target_shell_path: None,
             init_dir: &tmp,
             shell_keybindings: &shell_keybindings,
+            prompt_prefix: true,
         };
         NushellDialect.write_init_files(&ctx).unwrap();
         let config = std::fs::read_to_string(tmp.join("nu/config.nu")).unwrap();
@@ -367,6 +501,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             target_shell_path: None,
             init_dir: &tmp,
             shell_keybindings: &shell_keybindings,
+            prompt_prefix: true,
         };
         let rcfile_path = tmp.join("rcfile.sh");
         std::fs::write(&rcfile_path, BashDialect.rcfile_content(&ctx)).unwrap();
@@ -431,6 +566,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             target_shell_path: None,
             init_dir: &init_dir,
             shell_keybindings: &shell_keybindings,
+            prompt_prefix: true,
         };
         ZshDialect.write_init_files(&ctx).unwrap();
         let zsh_dir = init_dir.join("zsh");
@@ -487,6 +623,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             target_shell_path: None,
             init_dir: &init_dir,
             shell_keybindings: &shell_keybindings,
+            prompt_prefix: true,
         };
         FishDialect.write_init_files(&ctx).unwrap();
         let devenv_fish = init_dir.join("devenv.fish");
@@ -536,6 +673,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             target_shell_path: None,
             init_dir: &init_dir,
             shell_keybindings: &shell_keybindings,
+            prompt_prefix: true,
         };
         NushellDialect.write_init_files(&ctx).unwrap();
         let config_nu = init_dir.join("nu").join("config.nu");

@@ -280,7 +280,21 @@ tui:
       stop_manager: [s]
 ```
 
-## Shell keybindings
+## Shell settings
+
+`shell.prompt_prefix` controls the `(devenv)` prefix in interactive shell prompts and defaults to `true`.
+Disable it to keep your own prompt, for example when using Starship:
+
+```yaml
+version: 1
+shell:
+  prompt_prefix: false
+```
+
+A project's `prompt_prefix` setting in `devenv.yaml` or `devenv.local.yaml` takes precedence.
+Changes take effect when you start a new shell.
+
+### Shell keybindings
 
 `shell.keybindings` controls shortcuts claimed inside an interactive `devenv shell`. Each action accepts a list of single key chords. Omit an action to keep its default. Set it to `[]` to release every shortcut for that action.
 

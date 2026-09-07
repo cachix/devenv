@@ -335,13 +335,16 @@ $env.PATH = ($env._DEVENV_PATH | split row ":")
 
 # Prepend (devenv) to the prompt.
 # Save the original prompt command before overriding, then wrap it.
-let _devenv_original_prompt = (if "PROMPT_COMMAND" in $env {{ $env.PROMPT_COMMAND }} else {{ {{|| ""}} }})
-$env.PROMPT_COMMAND = {{|| "(devenv) " + (do $_devenv_original_prompt) }}
+if {prompt_prefix} {{
+    let _devenv_original_prompt = (if "PROMPT_COMMAND" in $env {{ $env.PROMPT_COMMAND }} else {{ {{|| ""}} }})
+    $env.PROMPT_COMMAND = {{|| "(devenv) " + (do $_devenv_original_prompt) }}
+}}
 
 # Hot-reload hook
 {reload_code}
 "#,
             user_config_source = user_config_source,
+            prompt_prefix = ctx.prompt_prefix,
             reload_code = reload_code,
         );
 

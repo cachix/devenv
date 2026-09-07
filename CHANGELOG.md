@@ -17,6 +17,7 @@
 
 ### Improvements
 
+- The `(devenv)` shell prompt prefix can now be disabled with `prompt_prefix: false` in `devenv.yaml`, or globally with `shell.prompt_prefix: false` in the user configuration.
 - Added opt-in HTTPS process URLs with `processes.<name>.proxy.https.enable`, using the project's existing mkcert certificate authority.
 - Processes with declared ports get `.localhost` HTTP URLs by default, with hostname overrides and URLs shown in the TUI ([#3141](https://github.com/cachix/devenv/pull/3141)).
 - `devenv hook <shell>` can now pass arguments to its auto-activated `devenv shell`. Arguments following `--` are forwarded safely in Bash, Zsh, Fish, and Nushell, for example `devenv hook fish -- --no-tui` ([#3128](https://github.com/cachix/devenv/issues/3128)).

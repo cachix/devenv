@@ -37,6 +37,7 @@ pub struct DevenvShellBuilder {
     pub task_exports: BTreeMap<String, String>,
     pub task_messages: Vec<String>,
     pub shell: String,
+    pub prompt_prefix: bool,
     /// Absolute path to the shell binary from the login-shell database
     /// (`getpwuid`). When present and the path exists, used directly instead
     /// of `resolve_shell_path` so stripped environments still find the shell.
@@ -118,6 +119,7 @@ impl DevenvShellBuilder {
             target_shell_path: target_shell_path.as_deref(),
             init_dir: &self.dotfile,
             shell_keybindings: &self.shell_keybindings,
+            prompt_prefix: self.prompt_prefix,
         };
 
         dialect

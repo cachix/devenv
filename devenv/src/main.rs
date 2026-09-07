@@ -500,7 +500,7 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
 
     let terminal_interactive = terminal::can_use_stdin_interactively();
     let shell_interactive = matches!(&command, Commands::Shell { cmd: None, .. });
-    let (tui_preferences, shell_keybindings) = load_user_preferences(
+    let (tui_preferences, shell_keybindings, user_prompt_prefix) = load_user_preferences(
         tui_allowed,
         shell_interactive,
         terminal_interactive,
@@ -574,11 +574,12 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     if matches!(command, Commands::Update { .. }) {
         nix_settings.refresh_fetchers = true;
     }
-    let shell_settings = ShellSettings::resolve_with_shell_hint(
+    let mut shell_settings = ShellSettings::resolve_with_shell_hint(
         devenv_core::ShellOptions::from(cli.shell_args),
         &config,
         shell_hint,
     );
+    shell_settings.prompt_prefix = config.prompt_prefix.unwrap_or(user_prompt_prefix);
     frontend.tui_context = Arc::new(devenv_tui::TuiRunContext {
         profiles: shell_settings.profiles.clone(),
         project_root: project_root.or_else(|| env::current_dir().ok()),
@@ -659,15 +660,17 @@ fn load_user_preferences(
 ) -> Result<(
     devenv_tui::TuiPreferences,
     devenv_shell::keybindings::ShellKeybindings,
+    bool,
 )> {
     if terminal_interactive && (tui_allowed || shell_interactive) {
         let config = devenv::user_config::load(path)?;
         let shell_keybindings = config.shell.resolve()?;
-        Ok((config.tui, shell_keybindings))
+        Ok((config.tui, shell_keybindings, config.shell.prompt_prefix))
     } else {
         Ok((
             devenv_tui::TuiPreferences::default(),
             devenv_shell::keybindings::ShellKeybindings::default(),
+            true,
         ))
     }
 }
@@ -1111,6 +1114,7 @@ async fn run_backend(
         let clean = devenv.options().shell_settings.clean.clone();
         let shell = devenv.options().shell_settings.shell.clone();
         let shell_path = devenv.options().shell_settings.shell_path.clone();
+        let prompt_prefix = devenv.options().shell_settings.prompt_prefix;
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
         // Load dotenv after enterShell tasks so a task that creates or updates the
@@ -1127,6 +1131,7 @@ async fn run_backend(
             clean,
             shell,
             shell_path,
+            prompt_prefix,
             dotfile,
             task_exports,
             task_messages,
@@ -1606,6 +1611,7 @@ struct ReloadShellArgs {
     clean: devenv_core::config::Clean,
     shell: String,
     shell_path: Option<std::path::PathBuf>,
+    prompt_prefix: bool,
     dotfile: std::path::PathBuf,
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
@@ -1635,6 +1641,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         clean,
         shell,
         shell_path,
+        prompt_prefix,
         dotfile,
         task_exports,
         task_messages,
@@ -1659,6 +1666,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         task_messages,
         shell,
         shell_path,
+        prompt_prefix,
         shell_cwd,
         shell_keybindings,
     };

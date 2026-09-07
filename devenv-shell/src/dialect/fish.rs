@@ -245,7 +245,7 @@ if functions -q fish_prompt
 else
     function fish_prompt
         {prompt_calls}
-        echo -n "(devenv) > "
+        echo -n "{prompt_prefix}> "
     end
 end
 
@@ -254,6 +254,7 @@ end
 "#,
             reload_hook = reload_hook,
             prompt_calls = prompt_calls,
+            prompt_prefix = if ctx.prompt_prefix { "(devenv) " } else { "" },
         );
 
         std::fs::write(ctx.init_dir.join("devenv.fish"), config_fish_content)?;

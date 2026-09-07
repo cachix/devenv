@@ -98,12 +98,20 @@ fi
 # Hot-reload hook (PROMPT_COMMAND integration)
 {reload_hook}
 
+# Set devenv prompt prefix after the user's prompt configuration.
+{prompt_prefix}
+
 # Re-enable history after init
 set -o history
 "#,
             env_diff_helpers = ctx.env_diff_helpers,
             env_script_path = ctx.env_script_path.to_string_lossy(),
             reload_hook = ctx.reload_hook,
+            prompt_prefix = if ctx.prompt_prefix {
+                self.prompt_prefix()
+            } else {
+                ""
+            },
         )
     }
 
@@ -299,7 +307,7 @@ fi
     }
 
     fn prompt_prefix(&self) -> &str {
-        r#"PS1="(devenv) ${PS1:-}"#
+        r#"PS1="(devenv) ${PS1:-}""#
     }
 
     fn format_task_exports(&self, exports: &BTreeMap<String, String>) -> String {

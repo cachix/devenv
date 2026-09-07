@@ -1826,6 +1826,7 @@ impl Devenv {
                     target_shell_path: Some(target_path_str),
                     init_dir: &self.devenv_dotfile,
                     shell_keybindings: &shell_keybindings,
+                    prompt_prefix: self.options.shell_settings.prompt_prefix,
                 };
 
                 let rcfile_content = dialect.rcfile_content(&rcfile_ctx);
@@ -1842,6 +1843,10 @@ impl Devenv {
                 script.push_str(&task_exports);
                 script.push_str(&task_messages);
                 script.push_str(&dotenv_messages);
+                if self.options.shell_settings.prompt_prefix {
+                    script.push_str(BashDialect.prompt_prefix());
+                    script.push('\n');
+                }
                 write_executable_script(&self.devenv_dotfile, &script)
             };
 

@@ -83,6 +83,7 @@
     "shell": {
       "$ref": "#/$defs/ShellPreferences",
       "default": {
+        "prompt_prefix": true,
         "keybindings": {}
       }
     }
@@ -874,6 +875,11 @@
     "ShellPreferences": {
       "type": "object",
       "properties": {
+        "prompt_prefix": {
+          "description": "Show the `(devenv)` prefix in interactive shell prompts.\nA project's `prompt_prefix` setting in `devenv.yaml` takes precedence.",
+          "type": "boolean",
+          "default": true
+        },
         "keybindings": {
           "type": "object",
           "properties": {

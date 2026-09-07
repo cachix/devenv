@@ -189,7 +189,11 @@ zle -N __devenv_reload_widget
         std::fs::create_dir_all(&zsh_dir)?;
 
         let reload_hook = ctx.reload_hook;
-        let prompt_prefix = self.prompt_prefix();
+        let prompt_prefix = if ctx.prompt_prefix {
+            self.prompt_prefix()
+        } else {
+            ""
+        };
 
         let zshenv_content = r#"# devenv zsh .zshenv - runs before /etc/zshrc.
 # Prepend devenv profile site-functions so the system compinit (often
