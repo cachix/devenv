@@ -1325,6 +1325,26 @@ impl Tasks {
             match ts.build_process_config(&self.env, &self.bash, self.supervisor) {
                 Ok(mut config) => {
                     if scheduled.contains(&index) {
+                        // Transient `devenv tasks run` pulls a process into the
+                        // schedule when a requested task depends on it.
+                        // `start.enable` only gates `devenv up` autostart — and
+                        // flake-compat's equivalent, which names every process as
+                        // a root so disabled ones register as NotStarted.
+                        // Honouring `start.enable` for dependency-included
+                        // processes skips exec while treating `@completed` as
+                        // already satisfied (#3005). Explicit `devenv processes
+                        // start` / attach already override in `start_with_deps`.
+                        // After/All also schedule downstream processes. Only
+                        // override those required by a scheduled dependent.
+                        if !register_unscheduled_processes
+                            && !self.roots.contains(&index)
+                            && self
+                                .graph
+                                .edges(index)
+                                .any(|edge| scheduled.contains(&edge.target()))
+                        {
+                            config.start.enable = true;
+                        }
                         self.process_runner
                             .register_waiting(config.clone(), Some(orchestration_activity.id()))
                             .await;
@@ -4203,6 +4223,226 @@ mod schedule_tests {
             !tasks.dependency_parked("d").await,
             "a process that started then exited still satisfies @started after \
              an explicit stop; d must not be judged dependency-parked"
+        );
+
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn task_run_only_starts_disabled_processes_required_as_dependencies() {
+        for mode in [
+            RunMode::Before,
+            RunMode::After,
+            RunMode::All,
+            RunMode::Single,
+        ] {
+            for required in [false, true] {
+                for process_mode in [false, true] {
+                    let case =
+                        format!("{mode:?}, required={required}, process_mode={process_mode}");
+                    let files = tempfile::tempdir().unwrap();
+                    let process_ran = files.path().join("process-ran");
+                    let consumer_ran = files.path().join("consumer-ran");
+                    let setup_script = executable_script(files.path(), "setup", "true");
+                    let mut setup = oneshot_task("test:setup", vec![]);
+                    setup.command = Some(setup_script.to_string_lossy().into_owned());
+                    let process_script = executable_script(
+                        files.path(),
+                        "process",
+                        &format!("touch '{}'", process_ran.display()),
+                    );
+                    let process_name = format!("{PROCESS_TASK_PREFIX}disabled");
+                    let mut process = process_task(&process_name, vec!["test:setup"]);
+                    process.command = Some(process_script.to_string_lossy().into_owned());
+                    let mut config = no_restart_process_config(None);
+                    config.start.enable = false;
+                    process.process = Some(config);
+                    let mut configs = vec![setup, process];
+                    if required {
+                        let consumer_script = executable_script(
+                            files.path(),
+                            "consumer",
+                            &format!("touch '{}'", consumer_ran.display()),
+                        );
+                        let mut consumer = oneshot_task(
+                            "test:consumer",
+                            vec![&format!("{process_name}@completed")],
+                        );
+                        consumer.command = Some(consumer_script.to_string_lossy().into_owned());
+                        configs.push(consumer);
+                    }
+                    // Keep an outgoing edge to a task outside the Before/Single
+                    // schedule: only selected dependents may force a start.
+                    if mode == RunMode::Before && !required || mode == RunMode::Single {
+                        configs.push(oneshot_task(
+                            "test:unselected",
+                            vec![&format!("{process_name}@started")],
+                        ));
+                    }
+                    let root = if mode == RunMode::Before && required {
+                        "test:consumer"
+                    } else {
+                        "test:setup"
+                    };
+                    let (tasks, _tmp) = build_test_tasks_with_run_mode(
+                        configs,
+                        vec![root.to_string()],
+                        mode,
+                        false,
+                    )
+                    .await;
+                    let result = tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        tasks.run(process_mode),
+                    )
+                    .await;
+                    let phase = tasks.process_runner().get_phase("disabled").await;
+                    tasks.process_runner().stop_all().await.unwrap();
+                    assert!(result.is_ok(), "{case}: run did not settle");
+                    let consumer_selected = required && mode != RunMode::Single;
+                    let should_start = consumer_selected && !process_mode;
+                    assert_eq!(
+                        process_ran.exists(),
+                        should_start,
+                        "{case}: process execution"
+                    );
+                    assert_eq!(
+                        consumer_ran.exists(),
+                        consumer_selected,
+                        "{case}: consumer execution"
+                    );
+                    let expected_phase = if should_start {
+                        Some(ProcessPhase::Exited)
+                    } else if process_mode || matches!(mode, RunMode::After | RunMode::All) {
+                        Some(ProcessPhase::NotStarted)
+                    } else {
+                        None
+                    };
+                    assert_eq!(phase, expected_phase, "{case}");
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn task_run_starts_auto_start_off_process_for_completed_dep() {
+        // Regression for https://github.com/cachix/devenv/issues/3005
+        let files = tempfile::tempdir().unwrap();
+        let process_ran = files.path().join("process-ran");
+        let task_ran = files.path().join("task-ran");
+
+        let process_script = executable_script(
+            files.path(),
+            "marker",
+            &format!("touch '{}'", process_ran.to_string_lossy()),
+        );
+        let mut marker =
+            process_task_with_command("marker", vec![], &process_script.to_string_lossy());
+        let mut process_cfg = no_restart_process_config(None);
+        process_cfg.start.enable = false;
+        marker.process = Some(process_cfg);
+
+        let task_script = executable_script(
+            files.path(),
+            "build",
+            &format!(
+                "test -f '{}' || exit 91\ntouch '{}'",
+                process_ran.to_string_lossy(),
+                task_ran.to_string_lossy(),
+            ),
+        );
+        let mut build = oneshot_task("repro:build", vec![]);
+        build.after = vec![format!("{PROCESS_TASK_PREFIX}marker@completed")];
+        build.command = Some(task_script.to_string_lossy().into_owned());
+
+        let (tasks, _tmp) =
+            build_test_tasks(vec![marker, build], vec!["repro:build".to_string()], false).await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(false))
+            .await
+            .expect("task run did not settle");
+
+        assert!(
+            process_ran.exists(),
+            "start.enable=false process did not run as a @completed dependency"
+        );
+        assert!(task_ran.exists(), "dependent task did not run");
+
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn task_run_does_not_start_auto_start_off_process_when_it_is_the_root() {
+        // `devenv-tasks run devenv:processes:*` (flake-compat / containers /
+        // `config.ci`) names every process as a root, including
+        // `start.enable = false`, so they register as NotStarted.
+        let files = tempfile::tempdir().unwrap();
+        let process_ran = files.path().join("process-ran");
+        let process_script = executable_script(
+            files.path(),
+            "idle",
+            &format!("touch '{}'", process_ran.to_string_lossy()),
+        );
+        let mut idle = process_task_with_command("idle", vec![], &process_script.to_string_lossy());
+        let mut process_cfg = no_restart_process_config(None);
+        process_cfg.start.enable = false;
+        idle.process = Some(process_cfg);
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![idle],
+            vec![format!("{PROCESS_TASK_PREFIX}idle")],
+            false,
+        )
+        .await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(false))
+            .await
+            .expect("task run did not settle");
+
+        assert!(
+            !process_ran.exists(),
+            "start.enable=false process must not start when it is itself a tasks-run root"
+        );
+        assert_eq!(
+            tasks.process_runner().get_phase("idle").await,
+            Some(ProcessPhase::NotStarted),
+        );
+
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn process_mode_does_not_start_auto_start_off_process() {
+        let files = tempfile::tempdir().unwrap();
+        let process_ran = files.path().join("process-ran");
+        let process_script = executable_script(
+            files.path(),
+            "idle",
+            &format!("touch '{}'", process_ran.to_string_lossy()),
+        );
+        let mut idle = process_task_with_command("idle", vec![], &process_script.to_string_lossy());
+        let mut process_cfg = no_restart_process_config(None);
+        process_cfg.start.enable = false;
+        idle.process = Some(process_cfg);
+
+        let (tasks, _tmp) = build_test_tasks(
+            vec![idle],
+            vec![format!("{PROCESS_TASK_PREFIX}idle")],
+            false,
+        )
+        .await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), tasks.run(true))
+            .await
+            .expect("process mode run did not settle");
+
+        assert!(
+            !process_ran.exists(),
+            "start.enable=false process must not auto-start under devenv up"
+        );
+        assert_eq!(
+            tasks.process_runner().get_phase("idle").await,
+            Some(ProcessPhase::NotStarted),
         );
 
         tasks.process_runner().stop_all().await.unwrap();
