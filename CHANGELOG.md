@@ -20,7 +20,7 @@
 
 - The `(devenv)` shell prompt prefix can now be disabled with `prompt_prefix: false` in `devenv.yaml`, or globally with `shell.prompt_prefix: false` in the user configuration.
 - Added opt-in HTTPS process URLs with `processes.<name>.proxy.https.enable`, using the project's existing mkcert certificate authority.
-- Processes with declared ports get `.localhost` HTTP URLs by default, with hostname overrides and URLs shown in the TUI ([#3141](https://github.com/cachix/devenv/pull/3141)).
+- Added an opt-in localhost process proxy. Set `process.proxy.enable = true` to give processes with declared ports `.localhost` HTTP URLs, with hostname overrides and URLs shown in the TUI; the proxy is disabled by default ([#3141](https://github.com/cachix/devenv/pull/3141)).
 - `devenv hook <shell>` can now pass arguments to its auto-activated `devenv shell`. Arguments following `--` are forwarded safely in Bash, Zsh, Fish, and Nushell, for example `devenv hook fish -- --no-tui` ([#3128](https://github.com/cachix/devenv/issues/3128)).
 - OTLP trace destinations now also export Nix evaluator heap and garbage-collection metrics for diagnosing memory use.
 - When the Nix daemon is running version 2.35 or newer, `devenv gc` now cleans up old environments in a single batch, making it much faster. It also shows clear progress while it runs.

@@ -252,6 +252,21 @@ async fn test_backend_eval_expression() {
 }
 
 #[nix_test]
+async fn test_process_proxy_defaults_and_opt_in() {
+    for (nix, expected) in [
+        ("{}", "false"),
+        ("{ process.proxy.enable = false; }", "false"),
+        ("{ process.proxy.enable = true; }", "true"),
+    ] {
+        let env = TestEnv::builder().nix(nix).build().await;
+        assert_eq!(
+            env.backend.eval(&["processProxyEnabled"]).await.unwrap(),
+            expected
+        );
+    }
+}
+
+#[nix_test]
 async fn test_process_proxy_with_legacy_modules() {
     let env = TestEnv::builder()
         .nix(

@@ -53,12 +53,14 @@ The default timeout is 120 seconds.
 
 ## Friendly localhost URLs
 
-Processes with named ports get HTTP URLs under `.localhost` by default:
+Enable the shared proxy to give processes with named ports HTTP URLs under `.localhost`:
 
 ```nix title="devenv.nix"
 { config, ... }:
 
 {
+  process.proxy.enable = true;
+
   processes.web = {
     exec = "python -m http.server $PORT";
     ports.http.allocate = 8000;
@@ -67,9 +69,10 @@ Processes with named ports get HTTP URLs under `.localhost` by default:
 }
 ```
 
-By default, the process is available at
-`http://web.<project-name>.localhost`. Set `process.proxy.enable = false` to
-disable proxying for the project. Override that hostname for an individual
+With this configuration, the process is available at
+`http://web.<project-name>.localhost`. The proxy is disabled by default. On Linux,
+starting its port-80 listener requires sudo authentication; in noninteractive
+environments, authenticate with `sudo -v` first. Override the hostname for an individual
 process with a full `.localhost` hostname:
 
 ```nix title="devenv.nix"
@@ -104,6 +107,7 @@ Enable HTTPS for an individual process's generated URLs:
 
 ```nix title="devenv.nix"
 {
+  process.proxy.enable = true;
   processes.web.proxy.https.enable = true;
 }
 ```
