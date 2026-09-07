@@ -902,7 +902,7 @@ impl Devenv {
     ) -> Result<()> {
         let enabled = self
             .backend
-            .eval_devenv(&["devenv.config.process.proxy.enable"])
+            .eval_devenv(&["processProxyEnabled"])
             .await
             .wrap_err("failed to evaluate whether the localhost proxy is enabled")?;
         let enabled: bool = serde_json::from_str(&enabled)

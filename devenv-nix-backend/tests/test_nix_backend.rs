@@ -252,6 +252,44 @@ async fn test_backend_eval_expression() {
 }
 
 #[nix_test]
+async fn test_process_proxy_with_legacy_modules() {
+    let env = TestEnv::builder()
+        .nix(
+            r#"{ inputs, ... }: {
+              disabledModules = [
+                (inputs.devenv + "/integrations/process-proxy.nix")
+                (inputs.devenv + "/integrations/mkcert.nix")
+              ];
+            }"#,
+        )
+        .build()
+        .await;
+    // Simulate modules from before the proxy integration existed.
+    env.backend
+        .eval(&["config.process.proxy.enable"])
+        .await
+        .expect_err("the legacy option must be absent");
+    assert_eq!(
+        env.backend.eval(&["processProxyEnabled"]).await.unwrap(),
+        "false"
+    );
+}
+
+#[nix_test]
+async fn test_process_proxy_preserves_evaluation_errors() {
+    let env = TestEnv::builder()
+        .nix(r#"{ process.proxy.enable = throw "proxy configuration error"; }"#)
+        .build()
+        .await;
+    let error = env
+        .backend
+        .eval(&["processProxyEnabled"])
+        .await
+        .expect_err("a broken configuration must not silently disable the proxy");
+    assert!(error.to_string().contains("proxy configuration error"));
+}
+
+#[nix_test]
 async fn test_backend_eval_multiple_attributes() {
     let env = TestEnv::new().await;
 
