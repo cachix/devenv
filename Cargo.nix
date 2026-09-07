@@ -8506,6 +8506,10 @@ rec {
             packageId = "blake3";
           }
           {
+            name = "fd-lock";
+            packageId = "fd-lock";
+          }
+          {
             name = "libsqlite3-sys";
             packageId = "libsqlite3-sys";
             usesDefaultFeatures = false;
@@ -8531,7 +8535,7 @@ rec {
           {
             name = "tokio";
             packageId = "tokio";
-            features = [ "process" "fs" "io-util" "macros" "rt-multi-thread" "sync" "time" "fs" "macros" "time" ];
+            features = [ "process" "fs" "io-util" "macros" "rt-multi-thread" "sync" "time" "fs" "macros" "time" "sync" "rt" ];
           }
           {
             name = "tracing";
