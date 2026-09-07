@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv --from` also loading the current directory's `devenv.local.nix`. Options set there for the local project, such as tuning a process the external project doesn't define, no longer leak into the external environment and break evaluation.
 - Fixed `devenv up` failing after a CLI upgrade when the project's pinned modules predate the localhost proxy. The proxy remains disabled when those modules do not provide the option.
 - Fixed the interactive `devenv shell` session crashing with "terminal error: invalid value" when the terminal briefly reports a `0x0` size, most commonly seen on WSL2 right after `devenv`'s shell hook auto-activates on `cd`.
 - Certificate generation uses Nix-provided mkcert and its helper tools instead of relying on the development shell's `PATH`.
