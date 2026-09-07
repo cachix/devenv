@@ -83,6 +83,10 @@ impl TasksBuilder {
         // endpoint. Persistent callers compose those around this runner.
         let mut pm = ProcessRunner::new(self.config.runtime_dir.clone())
             .map_err(|e| Error::io(format!("Failed to initialize process manager: {e}")))?;
+        if let Some(path) = &self.config.capability_broker {
+            pm.set_capability_broker(path)
+                .map_err(|e| Error::io(format!("Failed to initialize capability broker: {e}")))?;
+        }
 
         let notify_finished = Arc::new(Notify::new());
         pm.set_task_notify(Arc::clone(&notify_finished));
@@ -1907,6 +1911,7 @@ mod schedule_tests {
             ignore_process_deps,
             exit_on_idle: Some(false),
             supervisor: devenv_processes::SupervisionMode::Native,
+            capability_broker: None,
         };
 
         let shutdown = tokio_shutdown::Shutdown::new();
@@ -2010,6 +2015,7 @@ mod schedule_tests {
             ignore_process_deps: false,
             exit_on_idle: None,
             supervisor: SupervisionMode::External,
+            capability_broker: None,
         };
 
         let tasks = Tasks::builder(
@@ -2048,6 +2054,7 @@ mod schedule_tests {
             ignore_process_deps: false,
             exit_on_idle: Some(false),
             supervisor: SupervisionMode::External,
+            capability_broker: None,
         };
 
         let tasks = Tasks::builder(
@@ -2235,6 +2242,7 @@ mod schedule_tests {
             ignore_process_deps: false,
             exit_on_idle: None,
             supervisor: SupervisionMode::External,
+            capability_broker: None,
         };
         let tasks = Tasks::builder(
             config,

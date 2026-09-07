@@ -51,6 +51,119 @@ $ devenv processes wait --timeout 120
 
 The default timeout is 120 seconds.
 
+## Friendly localhost URLs
+
+Enable the shared proxy to give processes with named ports HTTP URLs under `.localhost`:
+
+```nix title="devenv.nix"
+{ config, ... }:
+
+{
+  process.proxy.enable = true;
+
+  processes.web = {
+    exec = "python -m http.server $PORT";
+    ports.http.allocate = 8000;
+    env.PORT = builtins.toString config.processes.web.ports.http.value;
+  };
+}
+```
+
+With this configuration, the process is available at
+`http://web.<project-name>.localhost`. The proxy is disabled by default. On Linux,
+starting its port-80 listener requires sudo authentication; in noninteractive
+environments, authenticate with `sudo -v` first. Override the hostname for an individual
+process with a full `.localhost` hostname:
+
+```nix title="devenv.nix"
+{
+  processes.web.proxy.hostname = "app.localhost";
+}
+```
+
+For processes with multiple ports, the default route stays available at the base
+hostname, and named port routes are also prefixed to that hostname, such as
+`http://http.app.localhost` and `http://admin.app.localhost`. A port can
+override its own hostname independently:
+
+```nix title="devenv.nix"
+{
+  processes.web = {
+    proxy.hostname = "app.localhost";
+    ports.http.proxy.hostname = "public.localhost";
+    ports.admin.proxy.hostname = "control.localhost";
+  };
+}
+```
+
+Port-level hostnames take precedence over the process hostname. Ports without
+an override continue to use the process hostname as their base.
+
+### HTTPS
+
+:::tip[New in devenv 2.3]
+:::
+
+Enable HTTPS for an individual process's generated URLs:
+
+```nix title="devenv.nix"
+{
+  process.proxy.enable = true;
+  processes.web.proxy.https.enable = true;
+}
+```
+
+HTTPS is disabled by default. `devenv up` uses the project's existing mkcert
+certificate authority, generates certificates for the opted-in process hostnames,
+and shows their `https://` URLs in the TUI. Other processes keep their HTTP URLs.
+The first setup may request permission to trust
+the local certificate authority. If trust installation fails, run `mkcert -install`
+inside the development shell.
+
+The shared proxy serves HTTPS on port 443 and continues to serve HTTP on port 80.
+Processes continue to receive HTTP, with `X-Forwarded-Proto: https` for HTTPS
+requests. Each project keeps its own certificates; the shared proxy selects the
+certificate for the requested hostname. Restart an existing HTTP-only proxy when
+first enabling HTTPS.
+
+## Linux capabilities
+
+:::tip[New in devenv 2.3]
+:::
+
+On Linux, the native process manager can grant a process a limited set of
+kernel capabilities without running the service as root. For example, this
+allows a web server to bind to port 443:
+
+```nix title="devenv.nix"
+{
+  processes.web = {
+    exec = "caddy run";
+    linux.capabilities = [ "net_bind_service" ];
+  };
+}
+```
+
+Devenv displays the requested capabilities and authenticates with `sudo` before
+starting the manager. The service then runs with your user and group IDs, with
+only the requested capabilities retained. In a non-interactive environment,
+run `sudo -v` first; without it, `devenv up` fails only if a process that needs
+capabilities is part of that start. Processes declared with `start.enable =
+false` are reported with a warning and cannot be started later until the
+manager is restarted from a terminal. A privileged broker remains available
+for the lifetime of the manager, so detached processes and supervised restarts
+do not prompt again. The broker can launch only the capability-bearing
+processes declared in the evaluated configuration.
+
+On other platforms the option is ignored with a warning and the process starts
+without extra privileges, so a shared `devenv.nix` keeps working on macOS.
+
+The currently allowed capabilities are `net_bind_service`, `net_raw`,
+`net_admin`, `ipc_lock`, `sys_nice`, `sys_resource`, `sys_admin`, `chown`,
+`dac_override`, and `fowner`. The `cap_` prefix and uppercase spellings are
+also accepted. Linux capabilities cannot currently be combined with devenv
+socket activation on the same process.
+
 ## Attaching to running processes
 
 :::tip[New in devenv 2.2]

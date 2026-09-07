@@ -77,12 +77,22 @@ jobs:
       - name: Generate JSON schema
         run: devenv shell -- cargo xtask generate-json-schema
 
+      - name: Generate user configuration JSON schema
+        run: devenv shell -- cargo xtask generate-user-config-schema
+
       - uses: EndBug/add-and-commit@v11
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
           add: docs/public/devenv.schema.json
           message: "Auto generate docs/public/devenv.schema.json"
+
+      - uses: EndBug/add-and-commit@v11
+        if: ${{ github.event_name == 'push' }}
+        with:
+          default_author: github_actions
+          add: docs/public/devenv.user.schema.json
+          message: "Auto generate docs/public/devenv.user.schema.json"
 
       - name: Generate devenv.yaml options reference
         run: devenv shell -- cargo xtask generate-yaml-options-doc

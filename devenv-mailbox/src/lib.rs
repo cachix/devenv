@@ -27,6 +27,13 @@ pub enum FrontendCommand {
     ExitRenderer,
     /// Record whether the frontend is attached to an existing session.
     SetAttached(bool),
+    /// Temporarily release terminal ownership for an interactive backend action.
+    PauseForInteraction {
+        /// Sent after the renderer has restored cooked terminal mode.
+        ready: std::sync::mpsc::SyncSender<()>,
+        /// The renderer resumes after this receiver observes completion.
+        resume: std::sync::mpsc::Receiver<()>,
+    },
     /// Command for the shell session after the frontend takes terminal ownership.
     Shell(ShellCommand),
 }

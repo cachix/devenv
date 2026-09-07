@@ -11,6 +11,7 @@ members = [
   "devenv-nix-backend",
   "devenv-nix-backend-macros",
   "devenv-processes",
+  "devenv-proxy",
   "devenv-mailbox",
   "devenv-reload",
   "devenv-run-tests",
@@ -38,6 +39,7 @@ devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-event-sources = { path = "devenv-event-sources" }
 devenv-processes = { path = "devenv-processes" }
+devenv-proxy = { path = "devenv-proxy", default-features = false }
 devenv-mailbox = { path = "devenv-mailbox" }
 devenv-nix-backend = { path = "devenv-nix-backend" }
 devenv-nix-backend-macros = { path = "devenv-nix-backend-macros" }
@@ -65,6 +67,7 @@ base64 = "0.22"
 anyhow = "1.0.102"
 async-priority-channel = "0.2.0"
 async-trait = "0.1"
+bytes = "1"
 blake3 = "1.8.3"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.6.1", features = ["derive", "cargo", "env"] }
@@ -120,6 +123,7 @@ serde_json = "1.0.149"
 serde_repr = "0.1.20"
 serde_with = "3"
 serde_yaml = "0.9.34"
+toml = "0.9.12"
 ser_nix = "0.2.4"
 similar = "3.1.0"
 sha2 = "0.11.0"
@@ -160,13 +164,16 @@ url = "2"
 human-repr = "1.1"
 insta = { version = "1.47", features = ["filters", "json"] }
 notify = { version = "8", default-features = false }
-watchexec = "8.2"
+watchexec = "8.4.1"
 watchexec-filterer-globset = "8.0"
-watchexec-supervisor = "5.2"
+watchexec-supervisor = "5.4.0"
 signal-hook = "0.4"
 signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }
 socket2 = "0.6"
 process-wrap = { version = "9.1", features = ["tokio1"] }
+pingora-core = { version = "=0.8.1", default-features = false }
+pingora-http = { version = "=0.8.1", default-features = false }
+pingora-proxy = { version = "=0.8.1", default-features = false }
 portable-pty = "0.9.0"
 ignore = "0.4.25"
 proptest = "1.11"
