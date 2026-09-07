@@ -77,6 +77,9 @@ pub struct Config {
     /// Who owns process lifecycle policy.
     #[serde(default)]
     pub supervisor: devenv_processes::SupervisionMode,
+    /// Socket for the privileged capability broker started before detaching.
+    #[serde(default)]
+    pub capability_broker: Option<std::path::PathBuf>,
 }
 
 impl TryFrom<serde_json::Value> for Config {

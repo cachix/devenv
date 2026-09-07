@@ -1,0 +1,18 @@
+---
+import Navbar from '@cachix/site-kit/starlight/Navbar.astro';
+import NavbarLink from '@cachix/site-kit/ui/NavbarLink.astro';
+---
+
+<Navbar>
+  <NavbarLink slot="before" href="/reference/options/">Reference</NavbarLink>
+  <NavbarLink slot="before" href="/cloud/">Cloud</NavbarLink>
+  <NavbarLink slot="before" href="/community/get-involved/">Community</NavbarLink>
+</Navbar>
+
+<style>
+  @media (min-width: 50rem) and (max-width: 75.999rem) {
+    :global(.header .social-icons) :global(.csk-navbar-extra) {
+      display: none;
+    }
+  }
+</style>

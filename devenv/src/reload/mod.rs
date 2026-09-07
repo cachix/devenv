@@ -13,6 +13,7 @@ use crate::devenv::{format_shell_exports, resolve_shell_path};
 use devenv_core::config::Clean;
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect, create_dialect};
+use devenv_shell::keybindings::ShellKeybindings;
 use std::collections::BTreeMap;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -36,6 +37,7 @@ pub struct DevenvShellBuilder {
     pub task_exports: BTreeMap<String, String>,
     pub task_messages: Vec<String>,
     pub shell: String,
+    pub prompt_prefix: bool,
     /// Absolute path to the shell binary from the login-shell database
     /// (`getpwuid`). When present and the path exists, used directly instead
     /// of `resolve_shell_path` so stripped environments still find the shell.
@@ -43,6 +45,7 @@ pub struct DevenvShellBuilder {
     /// Directory to start the interactive shell in. Set when the project root
     /// was discovered in a parent directory; `None` uses the build context cwd.
     pub shell_cwd: Option<PathBuf>,
+    pub shell_keybindings: ShellKeybindings,
 }
 
 impl ShellBuilder for DevenvShellBuilder {
@@ -106,7 +109,7 @@ impl DevenvShellBuilder {
         let reload_hook = ctx
             .reload_file
             .as_deref()
-            .map(|f| dialect.reload_hook(f))
+            .map(|f| dialect.reload_hook(f, &self.shell_keybindings))
             .unwrap_or_default();
 
         let rcfile_ctx = RcfileContext {
@@ -115,6 +118,8 @@ impl DevenvShellBuilder {
             reload_hook: &reload_hook,
             target_shell_path: target_shell_path.as_deref(),
             init_dir: &self.dotfile,
+            shell_keybindings: &self.shell_keybindings,
+            prompt_prefix: self.prompt_prefix,
         };
 
         dialect

@@ -4,7 +4,10 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use devenv_activity::{Activity, ActivityEvent, Build, FetchKind, ProcessStatus, start};
+use devenv_activity::{
+    Activity, ActivityEvent, Build, FetchKind, HttpProbe, PortBinding, ProcessStatus, ReadyProbe,
+    start,
+};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber, span};
 use tracing_subscriber::layer::{Context, SubscriberExt};
@@ -14,12 +17,14 @@ use tracing_subscriber::{Layer, Registry};
 #[derive(Debug, Default)]
 struct RecordedFields {
     values: BTreeMap<&'static str, String>,
-    valuable: Vec<&'static str>,
+    /// Structured values, re-serialized to JSON the way an export layer would.
+    valuable: BTreeMap<&'static str, serde_json::Value>,
 }
 
 impl Visit for RecordedFields {
-    fn record_value(&mut self, field: &Field, _value: valuable::Value<'_>) {
-        self.valuable.push(field.name());
+    fn record_value(&mut self, field: &Field, value: valuable::Value<'_>) {
+        let json = serde_json::to_value(valuable_serde::Serializable::new(value)).unwrap();
+        self.valuable.insert(field.name(), json);
     }
 
     fn record_str(&mut self, field: &Field, value: &str) {
@@ -128,7 +133,10 @@ fn native_span_and_updates_preserve_activity_data_and_callers() {
     assert_eq!(spans.len(), 1);
     assert!(spans[0].file.unwrap().ends_with("tests/tracing.rs"));
     assert_eq!(spans[0].line, Some(start_line));
-    assert!(spans[0].fields.valuable.contains(&"devenv.activity.event"));
+    assert_eq!(
+        spans[0].fields.values.get("devenv.ui.message"),
+        Some(&"example".to_owned())
+    );
     assert_eq!(
         spans[0].fields.values.get("devenv.derivation_path"),
         Some(&"/nix/store/example.drv".to_string())
@@ -137,13 +145,18 @@ fn native_span_and_updates_preserve_activity_data_and_callers() {
         spans[0].fields.values.get("test.callsite"),
         Some(&"preserved".to_string())
     );
+    assert!(
+        spans[0].fields.valuable.is_empty(),
+        "activity spans carry scalar attributes only"
+    );
 
+    // Start, progress, log and complete are all events under the span.
     let events = capture.events.lock().unwrap();
-    assert_eq!(events.len(), 2);
+    assert_eq!(events.len(), 4);
     for event in events.iter() {
         assert_eq!(event.parent, Some(spans[0].id));
         assert_eq!(event.target, "devenv_activity::events");
-        assert!(event.fields.valuable.contains(&"event"));
+        assert!(event.fields.valuable.contains_key("event"));
         assert!(
             event
                 .fields
@@ -153,23 +166,37 @@ fn native_span_and_updates_preserve_activity_data_and_callers() {
                 .ends_with("tests/tracing.rs")
         );
     }
+    let source_lines: Vec<_> = events
+        .iter()
+        .map(|event| event.fields.values.get("source.line").unwrap().clone())
+        .collect();
     assert_eq!(
-        events[0].fields.values.get("source.line"),
-        Some(&progress_line.to_string())
+        source_lines,
+        [
+            start_line.to_string(),
+            progress_line.to_string(),
+            log_line.to_string(),
+            // Completion is attributed to where the activity was started.
+            start_line.to_string(),
+        ]
     );
-    assert_eq!(
-        events[1].fields.values.get("source.line"),
-        Some(&log_line.to_string())
-    );
-    drop(events);
-    drop(spans);
 
+    // The traced payload is the channel event, byte for byte.
+    let channel_events: Vec<ActivityEvent> =
+        std::iter::from_fn(|| receiver.try_recv().ok()).collect();
+    assert_eq!(channel_events.len(), 4);
+    for (traced, sent) in events.iter().zip(&channel_events) {
+        assert_eq!(
+            traced.fields.valuable["event"],
+            serde_json::to_value(sent).unwrap()
+        );
+    }
     assert!(matches!(
-        receiver.try_recv().unwrap(),
+        channel_events[0],
         ActivityEvent::Build(Build::Start { id: 42, .. })
     ));
     assert!(matches!(
-        receiver.try_recv().unwrap(),
+        channel_events[1],
         ActivityEvent::Build(Build::Progress {
             id: 42,
             done: 1,
@@ -178,11 +205,11 @@ fn native_span_and_updates_preserve_activity_data_and_callers() {
         })
     ));
     assert!(matches!(
-        receiver.try_recv().unwrap(),
+        &channel_events[2],
         ActivityEvent::Build(Build::Log { id: 42, line, .. }) if line == "hello"
     ));
     assert!(matches!(
-        receiver.try_recv().unwrap(),
+        channel_events[3],
         ActivityEvent::Build(Build::Complete { id: 42, .. })
     ));
 }
@@ -204,8 +231,21 @@ fn activity_spans_export_borrowed_semantic_fields() {
         let process = start!(
             Activity::process("web")
                 .command("run-web")
-                .ports(vec!["http:8080".to_string(), "admin:9000".to_string()])
-                .ready_probe("http: localhost:8080/health"),
+                .ports(vec![
+                    PortBinding {
+                        name: "http".to_string(),
+                        port: 8080,
+                    },
+                    PortBinding {
+                        name: "admin".to_string(),
+                        port: 9000,
+                    },
+                ])
+                .ready_probe(ReadyProbe::Http(Box::new(HttpProbe {
+                    host: "localhost".to_string(),
+                    port: 8080,
+                    path: "/health".to_string(),
+                }))),
             devenv.process.status = tracing::field::Empty
         );
         process.set_status(ProcessStatus::Ready);
@@ -258,7 +298,6 @@ fn activity_spans_export_borrowed_semantic_fields() {
 #[derive(Clone, Default)]
 struct NoExportLayer {
     saw_activity_span: Arc<AtomicBool>,
-    saw_serialized_start: Arc<AtomicBool>,
     activity_events: Arc<AtomicUsize>,
 }
 
@@ -286,16 +325,9 @@ where
     }
 
     fn on_new_span(&self, attrs: &span::Attributes<'_>, _id: &span::Id, _ctx: Context<'_, S>) {
-        if attrs.metadata().name() != "activity" {
-            return;
+        if attrs.metadata().name() == "activity" {
+            self.saw_activity_span.store(true, Ordering::Relaxed);
         }
-        self.saw_activity_span.store(true, Ordering::Relaxed);
-        let mut fields = RecordedFields::default();
-        attrs.record(&mut fields);
-        self.saw_serialized_start.store(
-            fields.valuable.contains(&"devenv.activity.event"),
-            Ordering::Relaxed,
-        );
     }
 
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
@@ -306,7 +338,7 @@ where
 }
 
 #[test]
-fn disabled_payload_target_skips_structured_values() {
+fn disabled_events_target_emits_no_payloads() {
     let capture = NoExportLayer::default();
     let subscriber = Registry::default().with(capture.clone());
 
@@ -317,7 +349,6 @@ fn disabled_payload_target_skips_structured_values() {
     });
 
     assert!(capture.saw_activity_span.load(Ordering::Relaxed));
-    assert!(!capture.saw_serialized_start.load(Ordering::Relaxed));
     assert_eq!(capture.activity_events.load(Ordering::Relaxed), 0);
 }
 

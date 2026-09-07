@@ -1,0 +1,4 @@
+version: 1
+tui:
+  behavior:
+    mouse: false

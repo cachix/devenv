@@ -16,6 +16,7 @@ in
 
     # Use sqlite from nixpkgs to match the version used by Nix
     LIBSQLITE3_SYS_USE_PKG_CONFIG = "1";
+    OPENSSL_NO_VENDOR = "1";
 
     RUST_LOG = "devenv=debug";
     RUST_LOG_SPAN_EVENTS = "full";
@@ -83,6 +84,8 @@ in
   packages = [
     inputs.nix.packages.${system}.nix.dev # Required for integration tests
     pkgs.git
+    pkgs.lychee
+    pkgs.cmake # Required by Pingora's bundled zlib-ng dependency
     pkgs.openssl.dev
     pkgs.sqlite.dev
     pkgs.sqlx-cli

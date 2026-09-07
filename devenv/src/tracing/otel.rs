@@ -289,9 +289,26 @@ fn create_exporter(
 
 #[cfg(test)]
 mod tests {
-    use tracing_subscriber::Registry;
+    use std::sync::{Arc, Mutex};
+
+    use opentelemetry::trace::{Status, TracerProvider as _};
+    use opentelemetry_sdk::{
+        error::OTelSdkResult,
+        trace::{SdkTracerProvider, SpanData, SpanExporter},
+    };
+    use tracing_subscriber::{Registry, layer::SubscriberExt};
 
     use super::{clear_exporter_thread_isolation, isolate_exporter_thread};
+
+    #[derive(Clone, Debug, Default)]
+    struct RecordingExporter(Arc<Mutex<Vec<SpanData>>>);
+
+    impl SpanExporter for RecordingExporter {
+        async fn export(&self, mut batch: Vec<SpanData>) -> OTelSdkResult {
+            self.0.lock().unwrap().append(&mut batch);
+            Ok(())
+        }
+    }
 
     #[test]
     fn exporter_thread_isolation_overrides_and_restores_dispatch() {
@@ -306,5 +323,31 @@ mod tests {
         })
         .join()
         .unwrap();
+    }
+
+    #[test]
+    fn failed_activity_exports_otel_status_description() {
+        let exporter = RecordingExporter::default();
+        let provider = SdkTracerProvider::builder()
+            .with_simple_exporter(exporter.clone())
+            .build();
+        let tracer = provider.tracer("devenv-test");
+        let subscriber =
+            Registry::default().with(tracing_opentelemetry::layer().with_tracer(tracer));
+
+        tracing::subscriber::with_default(subscriber, || {
+            let activity = devenv_activity::start!(devenv_activity::Activity::task("failing"));
+            activity.fail_with_description("native task builtin failed: invalid input");
+        });
+
+        let spans = exporter.0.lock().unwrap();
+        let span = spans
+            .iter()
+            .find(|span| span.name == "failing")
+            .expect("failed activity span must be exported");
+        assert_eq!(
+            span.status,
+            Status::error("native task builtin failed: invalid input")
+        );
     }
 }

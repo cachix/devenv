@@ -36,4 +36,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run validate:urls
-      - run: npm run validate:links
+      - name: Check links
+        uses: cachix/site-kit/check-links@59a4fbfbe8e105aeb7f6e32c90055342f10d2b8a
+        with:
+          working-directory: docs
+          site: https://devenv.sh

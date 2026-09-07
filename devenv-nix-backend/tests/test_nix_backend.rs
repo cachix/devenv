@@ -252,6 +252,59 @@ async fn test_backend_eval_expression() {
 }
 
 #[nix_test]
+async fn test_process_proxy_defaults_and_opt_in() {
+    for (nix, expected) in [
+        ("{}", "false"),
+        ("{ process.proxy.enable = false; }", "false"),
+        ("{ process.proxy.enable = true; }", "true"),
+    ] {
+        let env = TestEnv::builder().nix(nix).build().await;
+        assert_eq!(
+            env.backend.eval(&["processProxyEnabled"]).await.unwrap(),
+            expected
+        );
+    }
+}
+
+#[nix_test]
+async fn test_process_proxy_with_legacy_modules() {
+    let env = TestEnv::builder()
+        .nix(
+            r#"{ inputs, ... }: {
+              disabledModules = [
+                (inputs.devenv + "/integrations/process-proxy.nix")
+                (inputs.devenv + "/integrations/mkcert.nix")
+              ];
+            }"#,
+        )
+        .build()
+        .await;
+    // Simulate modules from before the proxy integration existed.
+    env.backend
+        .eval(&["config.process.proxy.enable"])
+        .await
+        .expect_err("the legacy option must be absent");
+    assert_eq!(
+        env.backend.eval(&["processProxyEnabled"]).await.unwrap(),
+        "false"
+    );
+}
+
+#[nix_test]
+async fn test_process_proxy_preserves_evaluation_errors() {
+    let env = TestEnv::builder()
+        .nix(r#"{ process.proxy.enable = throw "proxy configuration error"; }"#)
+        .build()
+        .await;
+    let error = env
+        .backend
+        .eval(&["processProxyEnabled"])
+        .await
+        .expect_err("a broken configuration must not silently disable the proxy");
+    assert!(error.to_string().contains("proxy configuration error"));
+}
+
+#[nix_test]
 async fn test_backend_eval_multiple_attributes() {
     let env = TestEnv::new().await;
 
@@ -407,15 +460,86 @@ async fn test_build_nonexistent_attribute() {
 async fn test_build_gc_root_already_exists() {
     let env = TestEnv::new().await;
     let gc_root_base = env.path().join("result");
+    let gc_root = env.path().join("result-shell");
 
     let opts = || BuildOptions {
         gc_root: Some(gc_root_base.clone()),
     };
 
     env.backend.build(&["shell"], opts()).await.expect("first");
+    let target = std::fs::read_link(&gc_root).expect("first GC root");
     env.backend.build(&["shell"], opts()).await.expect("second");
 
-    assert!(env.path().join("result-shell").exists());
+    assert_eq!(
+        std::fs::read_link(&gc_root).expect("second GC root"),
+        target,
+        "the GC root must keep pointing to the shell output"
+    );
+}
+
+#[nix_test]
+async fn test_build_refuses_gc_root_directory() {
+    let env = TestEnv::new().await;
+    let gc_root_base = env.path().join("result");
+    let gc_root = env.path().join("result-shell");
+    std::fs::create_dir(&gc_root).expect("create GC root directory");
+
+    env.backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base),
+            },
+        )
+        .await
+        .expect_err("a directory cannot be replaced with a GC root");
+
+    assert!(gc_root.is_dir());
+}
+
+#[nix_test]
+async fn test_build_replaces_invalid_gc_root() {
+    let env = TestEnv::new().await;
+    let gc_root_base = env.path().join("result");
+    let gc_root = env.path().join("result-shell");
+    std::fs::write(&gc_root, "not a GC root").expect("write invalid root");
+
+    env.backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base),
+            },
+        )
+        .await
+        .expect("replace invalid root");
+
+    assert!(gc_root.symlink_metadata().unwrap().file_type().is_symlink());
+}
+
+#[nix_test]
+async fn test_build_replaces_stale_gc_root() {
+    let env = TestEnv::new().await;
+    let gc_root_base = env.path().join("result");
+    let gc_root = env.path().join("result-shell");
+    let stale = "/nix/store/00000000000000000000000000000000-stale";
+    std::os::unix::fs::symlink(stale, &gc_root).expect("write stale root");
+
+    env.backend
+        .build(
+            &["shell"],
+            BuildOptions {
+                gc_root: Some(gc_root_base),
+            },
+        )
+        .await
+        .expect("replace stale root");
+
+    assert!(gc_root.exists());
+    assert_ne!(
+        std::fs::read_link(&gc_root).expect("read replacement"),
+        PathBuf::from(stale)
+    );
 }
 
 #[nix_test]

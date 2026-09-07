@@ -10,11 +10,15 @@ pub mod tracing_interface;
 // UI modules
 pub mod app;
 pub mod components;
+pub mod config;
 pub mod expanded_view;
+mod inline_terminal;
 pub mod model;
+pub mod statusline;
 pub mod view;
 
 pub use app::{TuiApp, TuiConfig};
+pub use config::{TuiPreferences, TuiRunContext, UserConfig, UserConfigError};
 pub use model::{
     Activity, ActivityModel, ActivityVariant, BuildActivity, ChildActivityLimit, DownloadActivity,
     ProgressActivity, QueryActivity, RenderContext, TaskActivity, TaskDisplayStatus, TerminalSize,
