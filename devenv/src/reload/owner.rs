@@ -7,7 +7,7 @@
 //! still reach it during shutdown.
 
 use crate::Devenv;
-use crate::devenv::{ShellCommand, format_shell_exports};
+use crate::devenv::{ShellCommand, format_shell_exports, push_shell_fragment};
 use devenv_core::VerbosityLevel;
 use devenv_nix_backend::{NIX_STACK_SIZE, gc_register_current_thread};
 use devenv_reload::{BuildError, WatcherHandle};
@@ -162,7 +162,7 @@ async fn run_build_reload_env(
         .print_dev_env(false)
         .await
         .map_err(|e| BuildError::new(format!("Failed to build environment: {}", e)))?;
-    env_script.push_str(&format_shell_exports(&exports));
+    push_shell_fragment(&mut env_script, &format_shell_exports(&exports));
 
     let temp_path = reload_file.with_extension("sh.tmp");
     std::fs::write(&temp_path, &env_script)
