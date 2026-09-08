@@ -71,18 +71,6 @@ $ devenv -O packages:pkgs! "ncdu git" shell
 
 This replaces all packages rather than appending to whatever `devenv.nix` already defines.
 
-## Out-of-tree Sources
-
-Use `allow` to bind the current directory to a local or fetched source:
-
-```console
-devenv --from path:../shared-devenv allow
-devenv --from github:myorg/devenv-configs?dir=rust-web allow
-```
-
-Local and fetched sources load the complete `devenv.yaml` import graph and all Nix modules.
-The target directory configuration has higher precedence than the source configuration.
-
 ## Combining with `devenv.nix`
 
 When used with an existing `devenv.nix` file, `--option` values will override the configuration in the file.

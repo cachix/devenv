@@ -43,7 +43,7 @@ Closes [devenv#971](https://github.com/cachix/devenv/issues/971), open since Feb
 
 ## Configure an environment once, use it anywhere
 
-[`--from`](/ad-hoc-developer-environments/) lets you use a devenv without checking `devenv.nix` into the project. In 2.1 you had to repeat the flag for every command. In 2.2, `devenv allow` can bind the current directory to that source:
+[`--from`](/guides/out-of-tree-devenvs/) lets you use a devenv without checking `devenv.nix` into the project. In 2.1 you had to repeat the flag for every command. In 2.2, `devenv allow` can bind the current directory to that source:
 
 ```sh
 $ cd my-project
