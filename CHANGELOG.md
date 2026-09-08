@@ -2,6 +2,10 @@
 
 ## 2.3.1 (unreleased)
 
+### Bug Fixes
+
+- Fixed fetched `--from` sources loading only `devenv.nix`. They now also load the source's complete YAML configuration and imports.
+
 ## 2.3.0 (2026-09-07)
 
 ### Bug Fixes

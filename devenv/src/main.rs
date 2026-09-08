@@ -519,10 +519,12 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
 
     // --- Project configuration ---
 
-    // A `path:` source resolves to a live directory whose devenv.yaml graph is
-    // merged into the config by Config::load_with_source, which also appends
-    // the source's module as an absolute `path:` import. Relative refs resolve
-    // against the invocation cwd (persisted bindings are always absolute).
+    let nix_debugger = cli.nix_args.nix_debugger;
+    let nix_options = devenv_core::NixOptions::from(cli.nix_args);
+    let refresh_fetchers = matches!(&command, Commands::Update { .. });
+
+    // Keep `path:` sources live. Relative refs resolve against the invocation
+    // directory, and Config::load_with_source reads their complete YAML graph.
     let from_path = from_source
         .as_deref()
         .and_then(|from| from.strip_prefix("path:"))
@@ -534,8 +536,42 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             fs::canonicalize(&full_path).unwrap_or(full_path)
         });
 
-    let mut config = Config::load_with_source(from_path.as_deref())?;
-    config.check_version(crate_version!())?;
+    let remote_source_input = if from_path.is_none() {
+        from_source.as_ref().map(|from| devenv_core::config::Input {
+            url: Some(from.clone()),
+            flake: false,
+            follows: None,
+            inputs: BTreeMap::new(),
+            overlays: Vec::new(),
+        })
+    } else {
+        None
+    };
+
+    let mut config = if let Some(source_input) = remote_source_input.as_ref() {
+        let target_config = Config::load()?;
+        let mut preliminary_nix_settings =
+            NixSettings::resolve(nix_options.clone(), &target_config);
+        preliminary_nix_settings.refresh_fetchers = refresh_fetchers;
+        let target_root = env::current_dir()
+            .into_diagnostic()
+            .wrap_err("Failed to resolve the target directory")?;
+        let source_path = devenv_nix_backend::source::materialize_source(
+            &preliminary_nix_settings,
+            &target_root,
+            &target_root.join("devenv.lock"),
+            source_input,
+        )?;
+        Config::load_with_source(Some(&source_path))?
+    } else {
+        Config::load_with_source(from_path.as_deref())?
+    };
+
+    // Retain the original reference in the final lock. The materialized store
+    // path is only a configuration loading detail.
+    if let Some(source_input) = remote_source_input {
+        config.inputs.insert("from".to_string(), source_input);
+    }
 
     let input_overrides = InputOverrides::from(cli.input_overrides);
     for chunk in input_overrides.override_inputs.chunks_exact(2) {
@@ -546,34 +582,12 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             .override_input_url(name, url)
             .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
     }
-
-    // A non-path source (flake ref, via --from or a persisted binding) is
-    // fetched as the `from` input and its devenv.nix imported from the store.
-    // Its devenv.yaml is not merged (that needs a fetch before config load);
-    // `path:` sources get the full merge via Config::load_with_source above.
-    if from_path.is_none()
-        && let Some(from) = &from_source
-    {
-        let from_input = devenv_core::config::Input {
-            url: Some(from.clone()),
-            flake: false,
-            follows: None,
-            inputs: BTreeMap::new(),
-            overlays: Vec::new(),
-        };
-        config.inputs.insert("from".to_string(), from_input);
-        config.imports.push("from".to_string());
-    }
+    config.check_version(crate_version!())?;
 
     // --- Resolved settings ---
 
-    // Read before the conversion consumes `cli.nix_args`.
-    let nix_debugger = cli.nix_args.nix_debugger;
-    let mut nix_settings =
-        NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
-    if matches!(command, Commands::Update { .. }) {
-        nix_settings.refresh_fetchers = true;
-    }
+    let mut nix_settings = NixSettings::resolve(nix_options, &config);
+    nix_settings.refresh_fetchers = refresh_fetchers;
     let mut shell_settings = ShellSettings::resolve_with_shell_hint(
         devenv_core::ShellOptions::from(cli.shell_args),
         &config,

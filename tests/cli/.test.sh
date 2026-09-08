@@ -55,6 +55,52 @@ for path in "path:$from_test_dir" "path:./from-test"; do
   ! echo "$out" | grep -q "python3" || fail "--from=$path leaked local python3"
 done
 
+step "--from loads YAML imports from a fetched source"
+fetched_source_repo="$(mktemp -d "${TMPDIR:-/tmp}/devenv-from-source.XXXXXX")"
+mkdir -p "$fetched_source_repo/configs/source/modules/marker"
+cat > "$fetched_source_repo/configs/source/devenv.nix" <<'EOF'
+{ ... }: { }
+EOF
+cat > "$fetched_source_repo/configs/source/devenv.yaml" <<'EOF'
+imports:
+  - ./modules/marker
+EOF
+cat > "$fetched_source_repo/configs/source/modules/marker/devenv.nix" <<'EOF'
+{ ... }:
+{
+  env.FETCHED_FROM_YAML_IMPORT = "loaded-from-yaml-import";
+}
+EOF
+git -C "$fetched_source_repo" init -q
+git -C "$fetched_source_repo" config user.email "tests@devenv.sh"
+git -C "$fetched_source_repo" config user.name "devenv tests"
+git -C "$fetched_source_repo" config commit.gpgsign false
+git -C "$fetched_source_repo" add .
+git -C "$fetched_source_repo" commit -q -m "Add fetched source fixture"
+fetched_source="git+file://$fetched_source_repo?dir=configs/source"
+
+fetched_source_failures=0
+if ! out=$(devenv --from "$fetched_source" shell -- sh -c 'printf %s "$FETCHED_FROM_YAML_IMPORT"') \
+  || [[ "$out" != *"loaded-from-yaml-import"* ]]; then
+  echo "direct fetched source did not load its YAML import" >&2
+  fetched_source_failures=$((fetched_source_failures + 1))
+fi
+
+fetched_target="$(mktemp -d "${TMPDIR:-/tmp}/devenv-from-target.XXXXXX")"
+pushd "$fetched_target" >/dev/null
+devenv --from "$fetched_source" allow
+if ! out=$(devenv shell -- sh -c 'printf %s "$FETCHED_FROM_YAML_IMPORT"') \
+  || [[ "$out" != *"loaded-from-yaml-import"* ]]; then
+  echo "persisted fetched source did not load its YAML import" >&2
+  fetched_source_failures=$((fetched_source_failures + 1))
+fi
+devenv revoke
+popd >/dev/null
+rm -rf "$fetched_target" "$fetched_source_repo"
+
+(( fetched_source_failures == 0 )) \
+  || fail "$fetched_source_failures fetched --from checks failed"
+
 step "--from ignores the local devenv.local.nix"
 mkdir -p test-local-override && pushd test-local-override >/dev/null
 cat > devenv.nix <<'EOF'
