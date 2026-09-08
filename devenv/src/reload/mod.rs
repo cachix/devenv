@@ -9,7 +9,7 @@ pub mod owner;
 // Re-export the generic reload engine so callers use a single `reload` namespace.
 pub use devenv_reload::{Config, ShellCoordinator};
 
-use crate::devenv::{format_shell_exports, resolve_shell_path};
+use crate::devenv::{format_shell_exports, push_shell_fragment, resolve_shell_path};
 use devenv_core::config::Clean;
 use devenv_reload::{BuildContext, BuildError, CommandBuilder, ShellBuilder};
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect, create_dialect};
@@ -86,8 +86,11 @@ impl DevenvShellBuilder {
         // (e.g. VIRTUAL_ENV, PATH from venv override the Nix-provided ones).
         let env_script_path = self.dotfile.join("shell-env.sh");
         let mut env_script = self.initial_env_script.clone();
-        env_script.push_str(&format_shell_exports(&self.task_exports));
-        env_script.push_str(&BashDialect.format_task_messages(&self.task_messages));
+        push_shell_fragment(&mut env_script, &format_shell_exports(&self.task_exports));
+        push_shell_fragment(
+            &mut env_script,
+            &BashDialect.format_task_messages(&self.task_messages),
+        );
         write_file(&env_script_path, &env_script, "env script")?;
 
         tracing::trace!("Shell setting: {:?}", self.shell);
