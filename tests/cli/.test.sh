@@ -86,6 +86,15 @@ if ! out=$(devenv --from "$fetched_source" shell -- sh -c 'printf %s "$FETCHED_F
   fetched_source_failures=$((fetched_source_failures + 1))
 fi
 
+if out=$(devenv --from "$fetched_source" \
+  --override-input from "$fetched_source" info 2>&1); then
+  echo "fetched source accepted a from input override" >&2
+  fetched_source_failures=$((fetched_source_failures + 1))
+elif [[ "$out" != *"Input from does not exist so it can't be overridden."* ]]; then
+  echo "fetched source returned an unexpected from input override error: $out" >&2
+  fetched_source_failures=$((fetched_source_failures + 1))
+fi
+
 fetched_target="$(mktemp -d "${TMPDIR:-/tmp}/devenv-from-target.XXXXXX")"
 pushd "$fetched_target" >/dev/null
 devenv --from "$fetched_source" allow

@@ -567,12 +567,6 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         Config::load_with_source(from_path.as_deref())?
     };
 
-    // Retain the original reference in the final lock. The materialized store
-    // path is only a configuration loading detail.
-    if let Some(source_input) = remote_source_input {
-        config.inputs.insert("from".to_string(), source_input);
-    }
-
     let input_overrides = InputOverrides::from(cli.input_overrides);
     for chunk in input_overrides.override_inputs.chunks_exact(2) {
         let [name, url] = chunk else {
@@ -581,6 +575,11 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         config
             .override_input_url(name, url)
             .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
+    }
+    // Retain the original reference in the final lock. The materialized store
+    // path is only a configuration loading detail.
+    if let Some(source_input) = remote_source_input {
+        config.inputs.insert("from".to_string(), source_input);
     }
     config.check_version(crate_version!())?;
 

@@ -145,6 +145,12 @@ fn select_source_directory(fetched_root: &Path, dir: Option<&str>) -> Result<Pat
     if selected != fetched_root && !selected.starts_with(&fetched_root) {
         bail!("The requested dir '{dir}' escapes the source root");
     }
+    if !selected.is_dir() {
+        bail!(
+            "The selected source path is not a directory: {}",
+            selected.display()
+        );
+    }
     Ok(selected)
 }
 
@@ -170,6 +176,23 @@ mod tests {
         let selected = select_source_directory(source.path(), Some("profiles/rails")).unwrap();
 
         assert_eq!(selected, fs::canonicalize(child).unwrap());
+    }
+
+    #[test]
+    fn rejects_file_from_dir() {
+        let source = tempfile::tempdir().unwrap();
+        let file = source.path().join("devenv.yaml");
+        fs::write(&file, "inputs: {}").unwrap();
+
+        let error = select_source_directory(source.path(), Some("devenv.yaml")).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "The selected source path is not a directory: {}",
+                fs::canonicalize(file).unwrap().display()
+            )
+        );
     }
 
     #[test]
