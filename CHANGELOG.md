@@ -2,6 +2,10 @@
 
 ## 2.3.1 (unreleased)
 
+### Bug Fixes
+
+- Fixed `devenv shell` printing `bash: export: … not a valid identifier` and truncating `PATH` at the first space when a task re-exports `PATH` (for example Python venv activation) and the parent `PATH` contains a directory with a space ([#3165](https://github.com/cachix/devenv/issues/3165)).
+
 ## 2.3.0 (2026-09-07)
 
 ### Bug Fixes
