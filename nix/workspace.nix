@@ -44,15 +44,27 @@ let
     stripReleaseBinaries = cargoProfile == "release";
   };
 
+  # musl-specific: darwin keeps a dynamic libSystem and ld64 rejects these
+  # flags outright.
+  isMusl = !stdenv.hostPlatform.isDarwin;
+
   # rust+musl defaults to static-PIE, which segfaults on exec (the musl-gcc
   # wrappers don't support static-PIE — rust-lang/rust#95926). Fix: non-PIE
   # codegen via -Crelocation-model=static plus -Clink-arg=-no-pie to force a
   # non-PIE link, so the final musl host binary actually runs. These apply to
   # the host (musl) crate compiles only.
-  staticRustcOpts = [
+
+  # nix's libblake3 and the Rust `blake3` crate both define
+  # blake3_compress_in_place_portable; collides on aarch64 only.
+  staticRustcOpts = lib.optionals isMusl [
     "-Crelocation-model=static"
     "-Clink-arg=-no-pie"
+    "-Clink-arg=-Wl,--allow-multiple-definition"
   ];
+
+  # buildRustCrate hashes rustcTarget, not the stdenv, into an rlib's filename.
+  # darwin shares one across host and build, so the two sets collide in deps.
+  hostAbiTag = lib.optionals stdenv.hostPlatform.isDarwin [ "devenv-static-host" ];
 
   # Build scripts (build.rs) are the real Tier 2 blocker. crate2nix compiles a
   # crate's build.rs *inside the musl host derivation*, but with NO `--target`
@@ -75,7 +87,7 @@ let
   #      exec. Passing `-Wl,-dynamic-linker,<glibc ld.so>` ourselves bypasses
   #      that guard and restores the interpreter, so build.rs runs.
   buildCc = "${buildPackages.stdenv.cc}/bin/${buildPackages.stdenv.cc.targetPrefix}cc";
-  buildRsRustcOpts = [
+  buildRsRustcOpts = lib.optionals isMusl [
     "-C"
     "linker=${buildCc}"
     "-C"
@@ -86,6 +98,7 @@ let
     crate:
     crate
     // {
+      features = (crate.features or [ ]) ++ hostAbiTag;
       extraRustcOpts = (crate.extraRustcOpts or [ ]) ++ staticRustcOpts;
       extraRustcOptsForBuildRs = (crate.extraRustcOptsForBuildRs or [ ]) ++ buildRsRustcOpts;
     };
