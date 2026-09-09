@@ -71,6 +71,12 @@ in
     treefmt.config.projectRootFile = lib.mkDefault "";
 
     tasks."devenv:treefmt:run" = {
+      # Files materialized by `devenv:files` have to exist before the tree-wide sweep walks
+      # them: without an edge between the two the scheduler runs them concurrently and
+      # treefmt fails to stat a managed file that is being replaced. `devenv:files` is
+      # always declared (files.nix only makes its *contents* conditional on `files`), so the
+      # name always resolves - an unresolved name in `after` aborts the run.
+      after = [ "devenv:files" ];
       before = [ "devenv:enterShell" ];
       exec = "${treefmtWrapper}/bin/treefmt";
     };

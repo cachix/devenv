@@ -2,6 +2,10 @@
 
 ## 2.3.1 (unreleased)
 
+### Bug Fixes
+
+- Fixed `devenv shell` intermittently failing with a treefmt error such as `failed to stat <file>: no such file or directory` when `treefmt.enable = true` and the project has files managed by devenv. The tree-wide formatter now runs after devenv has written those files, and a file with `copyMode = "copy"` is replaced atomically, so tools that walk the project never see it missing.
+
 ## 2.3.0 (2026-09-07)
 
 ### Bug Fixes
