@@ -116,7 +116,16 @@
                   let
                     staticComponents = prev.nixComponents2.overrideScope (
                       _finalScope: prevScope: {
-                        nix-store = prevScope.nix-store.override { withAWS = false; };
+                        nix-store = prevScope.nix-store.override (
+                          {
+                            withAWS = false;
+                          }
+                          # nixpkgs gates this on isStatic alone, but the
+                          # sandbox shell is Linux-only and needs busybox.
+                          // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isDarwin {
+                            embeddedSandboxShell = false;
+                          }
+                        );
                       }
                     );
                   in
@@ -210,11 +219,17 @@
           # config, so libc++ (and thus SIMD) builds cleanly. The simd C++ is
           # compiled SIMDUTF_NO_LIBCXX/-fno-exceptions/-fno-rtti, so the static
           # archive we link references no libc++ symbols at runtime.
-          libghosttyVtStatic = pkgsStatic.libghostty-vt.overrideAttrs (old: {
-            zigBuildFlags = old.zigBuildFlags ++ [
-              "-Dtarget=${pkgsStatic.stdenv.hostPlatform.parsed.cpu.name}-linux-musl"
-            ];
-          });
+          # darwin has no musl-style static libc, so the native build is
+          # already ABI-identical; only musl needs an explicit zig target.
+          libghosttyVtStatic =
+            if pkgsStatic.stdenv.hostPlatform.isDarwin then
+              pkgs.libghostty-vt
+            else
+              pkgsStatic.libghostty-vt.overrideAttrs (old: {
+                zigBuildFlags = old.zigBuildFlags ++ [
+                  "-Dtarget=${pkgsStatic.stdenv.hostPlatform.parsed.cpu.name}-linux-musl"
+                ];
+              });
           workspaceStatic = pkgsStatic.callPackage ./nix/workspace.nix {
             inherit gitRev;
             rustc = rustToolchainStatic;
