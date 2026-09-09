@@ -15,6 +15,7 @@
   libunistring,
   llhttp,
   mimalloc,
+  libiconvReal,
   gitRev ? "",
   isRelease ? false,
   stripReleaseBinaries ? false,
@@ -121,11 +122,20 @@ let
     // staticPkgConfig;
 
   # Common overrides for crates needing openssl
-  opensslOverride = attrs: {
-    buildInputs = (attrs.buildInputs or [ ]) ++ [ openssl ];
-    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-    OPENSSL_NO_VENDOR = "1";
-  };
+  opensslOverride =
+    attrs:
+    {
+      buildInputs = (attrs.buildInputs or [ ]) ++ [ openssl ];
+      nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+      OPENSSL_NO_VENDOR = "1";
+    }
+    # Unset, openssl-sys falls back to probing Homebrew on darwin (the nix
+    # sandbox is off there) and links its dylibs into the static binary.
+    // lib.optionalAttrs (stdenv.hostPlatform.isStatic && stdenv.hostPlatform.isDarwin) {
+      OPENSSL_LIB_DIR = "${lib.getLib openssl}/lib";
+      OPENSSL_INCLUDE_DIR = "${lib.getDev openssl}/include";
+      OPENSSL_STATIC = "1";
+    };
 
   # Override for crates needing dbus (Linux only)
   dbusOverride = attrs: {
@@ -153,6 +163,13 @@ let
     "link-arg=-lmimalloc"
   ];
 
+  # [tier2] The Nix libs need GNU libiconv's renamed _libiconv* symbols, absent
+  # from Apple's. Absolute path: buildRustCrate's -L would win over -liconv.
+  staticIconvLinkOpts = lib.optionals (stdenv.hostPlatform.isStatic && stdenv.hostPlatform.isDarwin) [
+    "-C"
+    "link-arg=${lib.getLib libiconvReal}/lib/libiconv.a"
+  ];
+
   # Shared override for crates linking against nix, openssl, dbus, and bindgen.
   devenvBase =
     attrs:
@@ -178,6 +195,7 @@ let
         ]
         ++ lib.optional stripReleaseBinaries "-C strip=symbols"
         ++ staticAllocLinkOpts
+        ++ staticIconvLinkOpts
         ++ staticBoostLinkOpts;
     }
     // staticPkgConfig;

@@ -53,6 +53,15 @@ jobs:
           devenv_path=$(nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv)
           echo "path=$devenv_path" >> $GITHUB_OUTPUT
 
+      # Build and cache the relocatable static binaries
+      - name: Build devenv-static-${{ inputs.system }}
+        run: |
+          nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-static
+
+      - name: Build devenv-static-unwrapped-${{ inputs.system }}
+        run: |
+          nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-static-unwrapped
+
   extended-tests:
     needs: [build]
     runs-on: ${{ fromJSON(inputs.runs-on) }}
