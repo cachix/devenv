@@ -1653,8 +1653,8 @@ impl Devenv {
             // Keep Nix activation first so it snapshots the caller's
             // PATH/XDG_DATA_DIRS before the runtime dotenv layer changes either.
             let mut activation = output;
-            activation.push_str(&dotenv.activation_script());
-            activation.push_str(&dotenv.message_script());
+            push_shell_fragment(&mut activation, &dotenv.activation_script());
+            push_shell_fragment(&mut activation, &dotenv.message_script());
             Ok(activation)
         }
     }
@@ -1789,9 +1789,9 @@ impl Devenv {
         // For non-interactive commands, always use bash directly
         if let Some(cmd) = cmd {
             let mut script = bash_init_script(&shell_env);
-            script.push_str(&dotenv_activation);
-            script.push_str(&task_exports);
-            script.push_str(&dotenv_messages);
+            push_shell_fragment(&mut script, &dotenv_activation);
+            push_shell_fragment(&mut script, &task_exports);
+            push_shell_fragment(&mut script, &dotenv_messages);
             // Keep the content-addressed activation script independent of the
             // command. In particular, environment capture uses a randomly named
             // temporary helper whose path must not affect the script hash.
@@ -1807,10 +1807,14 @@ impl Devenv {
                 // Non-bash: write env script, generate bash wrapper that execs into target shell
                 let env_script_path = self.devenv_dotfile.join("shell-env.sh");
                 let mut env_content = shell_env;
-                env_content.push_str(&dotenv_activation);
-                env_content.push_str(&task_exports);
-                env_content.push_str(&task_messages);
-                env_content.push_str(&dotenv_messages);
+                // `trim_end()` above strips the trailing newline after
+                // `eval "${shellHook:-}"`. Without a separator, the first
+                // `export PATH='…'` lands on that same physical line, bash
+                // consumes the quotes, and PATH values with spaces word-split.
+                push_shell_fragment(&mut env_content, &dotenv_activation);
+                push_shell_fragment(&mut env_content, &task_exports);
+                push_shell_fragment(&mut env_content, &task_messages);
+                push_shell_fragment(&mut env_content, &dotenv_messages);
                 std::fs::write(&env_script_path, &env_content)
                     .into_diagnostic()
                     .wrap_err("Failed to write env script")?;
@@ -1839,10 +1843,10 @@ impl Devenv {
             } else {
                 // Bash (default)
                 let mut script = bash_init_script(&shell_env);
-                script.push_str(&dotenv_activation);
-                script.push_str(&task_exports);
-                script.push_str(&task_messages);
-                script.push_str(&dotenv_messages);
+                push_shell_fragment(&mut script, &dotenv_activation);
+                push_shell_fragment(&mut script, &task_exports);
+                push_shell_fragment(&mut script, &task_messages);
+                push_shell_fragment(&mut script, &dotenv_messages);
                 if self.options.shell_settings.prompt_prefix {
                     script.push_str(BashDialect.prompt_prefix());
                     script.push('\n');
@@ -3703,6 +3707,23 @@ pub fn format_shell_exports(exports: &BTreeMap<String, String>) -> String {
     buf
 }
 
+/// Append a shell-script fragment, inserting a newline first if `dest` does
+/// not already end with one.
+///
+/// Empty fragments are a no-op so callers with no task exports or messages
+/// leave the env script unchanged. Used when concatenating the Nix env script
+/// (which `trim_end()` may leave without a trailing newline) with
+/// `format_shell_exports` / task messages.
+pub fn push_shell_fragment(dest: &mut String, fragment: &str) {
+    if fragment.is_empty() {
+        return;
+    }
+    if !dest.is_empty() && !dest.ends_with('\n') {
+        dest.push('\n');
+    }
+    dest.push_str(fragment);
+}
+
 /// Generate a bash init script that sources .bashrc and applies the devenv shell environment.
 fn bash_init_script(shell_env: &str) -> String {
     indoc::formatdoc! {
@@ -5017,6 +5038,97 @@ mod tests {
         assert_eq!(
             result,
             vec![("CONFIG".to_string(), "key=value=extra".to_string())]
+        );
+    }
+
+    #[test]
+    fn push_shell_fragment_skips_empty_additions() {
+        let mut script = r#"eval "${shellHook:-}""#.to_string();
+        push_shell_fragment(&mut script, "");
+        assert_eq!(script, r#"eval "${shellHook:-}""#);
+    }
+
+    #[test]
+    fn push_shell_fragment_is_noop_when_body_already_has_newline() {
+        let mut script = "eval true\n".to_string();
+        push_shell_fragment(&mut script, "export FOO=bar\n");
+        assert_eq!(script, "eval true\nexport FOO=bar\n");
+    }
+
+    /// Reproduces the `.devenv/shell-env.sh` assembly in `prepare_shell`:
+    /// `trim_end()` strips the newline after `eval "${shellHook:-}"`, and
+    /// without a separator the first PATH export is glued onto that line.
+    #[test]
+    fn trimmed_shell_env_keeps_path_exports_on_their_own_line() {
+        let output_str = concat!("export FOO=1\n", r#"eval "${shellHook:-}""#, "\n");
+        let shell_env = output_str
+            .trim_end()
+            .trim_end_matches("exec bash")
+            .trim_end_matches("exec $SHELL")
+            .to_string();
+        assert!(
+            !shell_env.ends_with('\n'),
+            "trim_end() must strip the trailing newline for this regression to apply"
+        );
+
+        let mut exports = BTreeMap::new();
+        exports.insert(
+            "PATH".into(),
+            "/tmp/venv/bin:/tmp/Some App/bin:/usr/bin".into(),
+        );
+        exports.insert("VIRTUAL_ENV".into(), "/tmp/venv".into());
+
+        let mut env_content = shell_env;
+        push_shell_fragment(&mut env_content, &format_shell_exports(&exports));
+
+        assert!(
+            !env_content.contains(r#"eval "${shellHook:-}"export"#),
+            "first export must not be glued onto the eval line:\n{env_content}"
+        );
+        let eval_line = env_content
+            .lines()
+            .find(|line| line.contains("shellHook"))
+            .expect("eval line");
+        assert_eq!(eval_line, r#"eval "${shellHook:-}""#);
+
+        let path_line = env_content
+            .lines()
+            .find(|line| line.starts_with("export PATH="))
+            .expect("PATH export");
+        assert!(
+            path_line.contains("Some App"),
+            "PATH export should keep the space-containing directory: {path_line}"
+        );
+
+        // Source the assembled script and print PATH (the original glue caused
+        // bash to word-split the PATH value and reject the remainder).
+        env_content.push_str("printf '%s\\n' \"$PATH\"\n");
+        let script_path = std::env::temp_dir().join(format!(
+            "devenv-shell-env-path-spaces-{}.sh",
+            std::process::id()
+        ));
+        std::fs::write(&script_path, &env_content).expect("write assembled env script");
+
+        let output = std::process::Command::new("bash")
+            .args(["--noprofile", "--norc"])
+            .arg(&script_path)
+            .output()
+            .expect("run bash");
+        let _ = std::fs::remove_file(&script_path);
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("not a valid identifier"),
+            "bash must not word-split PATH at spaces:\n{stderr}"
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("Some App"),
+            "PATH must not be truncated at the first space, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("/tmp/venv/bin"),
+            "venv bin dir should remain on PATH, got: {stdout}"
         );
     }
 }
