@@ -6,6 +6,8 @@
 //!
 //! - the post-init evaluation of `config.cachix.{enable,pull,push}`
 //!   that produces a [`CachixCacheInfo`]
+//! - fetching the public signing keys of pull caches from the Cachix API
+//!   and caching them in `cachix_trusted_keys.json`
 //! - the application of substituters/keys to the open store
 //! - the optional push daemon ([`OwnedDaemon`]) — the daemon owns its own
 //!   per-batch [`Activity`] internally, lazily started when work appears
@@ -25,15 +27,18 @@ use std::time::Duration;
 
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel, activity, message, start};
 use devenv_core::BuildOptions;
-use devenv_core::cachix::{CachixCacheInfo, CachixManager};
+use devenv_core::cachix::{CacheMetadata, CachixCacheInfo, CachixManager};
 use devenv_core::evaluator::Evaluator;
 use devenv_core::realized::RealizedPathsObserver;
 use devenv_core::settings::NixSettings;
 use devenv_nix_backend::NixCBackend;
 use devenv_nix_backend::cachix_daemon::{ConnectionParams, DaemonSpawnConfig, OwnedDaemon};
-use miette::{IntoDiagnostic, Result, WrapErr};
+use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, info, warn};
+
+const CACHIX_API_URL: &str = "https://cachix.org/api/v1";
+const CACHIX_API_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Runtime cachix integration.
 ///
@@ -89,7 +94,12 @@ impl CachixIntegration {
             let pull: Vec<String> = eval_field(cnix, "config.cachix.pull").await?;
             let push: Option<String> = eval_field(cnix, "config.cachix.push").await?;
 
-            let known_keys = load_known_keys(&cachix_manager.paths.trusted_keys).await;
+            let known_keys = ensure_known_keys(
+                &cachix_manager.paths.trusted_keys,
+                &pull,
+                cachix_manager.resolve_auth_token().as_deref(),
+            )
+            .await;
             let info = CachixCacheInfo {
                 caches: devenv_core::cachix::Cachix {
                     pull,
@@ -252,11 +262,126 @@ async fn eval_field<T: serde::de::DeserializeOwned>(cnix: &NixCBackend, attr: &s
         .wrap_err_with(|| format!("Failed to deserialize {attr}"))
 }
 
+/// The public signing keys of `pull_caches`, keyed by cache name.
+///
+/// Keys already cached in `path` are reused; the rest are fetched from the
+/// Cachix API and the merged map is written back. A cache whose key cannot
+/// be fetched is reported and left out: its substituter still gets
+/// registered, Nix just cannot verify the paths it serves.
+async fn ensure_known_keys(
+    path: &Path,
+    pull_caches: &[String],
+    auth_token: Option<&str>,
+) -> BTreeMap<String, String> {
+    let mut known_keys = load_known_keys(path).await;
+    let missing: Vec<&str> = pull_caches
+        .iter()
+        .filter(|cache| !known_keys.contains_key(*cache))
+        .map(String::as_str)
+        .collect();
+    if missing.is_empty() {
+        return known_keys;
+    }
+
+    let fetched = fetch_public_keys(&missing, auth_token).await;
+    if fetched.is_empty() {
+        return known_keys;
+    }
+    known_keys.extend(fetched);
+    if let Err(e) = persist_known_keys(path, &known_keys).await {
+        warn!(
+            "cachix: failed to save public keys to {}: {e}",
+            path.display()
+        );
+    }
+    known_keys
+}
+
 async fn load_known_keys(path: &Path) -> BTreeMap<String, String> {
     match tokio::fs::read_to_string(path).await {
         Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
         Err(_) => BTreeMap::new(),
     }
+}
+
+async fn persist_known_keys(path: &Path, known_keys: &BTreeMap<String, String>) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await.into_diagnostic()?;
+    }
+    let json = serde_json::to_string_pretty(known_keys).into_diagnostic()?;
+    tokio::fs::write(path, json).await.into_diagnostic()?;
+    Ok(())
+}
+
+/// Fetch the public signing keys of `caches` concurrently. Failures are
+/// reported per cache and skipped, so one unreachable cache does not cost
+/// the others their keys.
+async fn fetch_public_keys(caches: &[&str], auth_token: Option<&str>) -> BTreeMap<String, String> {
+    let client = match reqwest::Client::builder()
+        .timeout(CACHIX_API_TIMEOUT)
+        .build()
+    {
+        Ok(client) => client,
+        Err(e) => {
+            warn!("cachix: failed to create an HTTP client for the Cachix API: {e}");
+            return BTreeMap::new();
+        }
+    };
+
+    let fetches = caches.iter().map(|cache| {
+        let client = &client;
+        async move { (*cache, fetch_public_key(client, cache, auth_token).await) }
+    });
+
+    let mut keys = BTreeMap::new();
+    for (cache, result) in futures::future::join_all(fetches).await {
+        match result {
+            Ok(key) => {
+                debug!("cachix: fetched public signing key for cache '{cache}'");
+                keys.insert(cache.to_string(), key);
+            }
+            Err(e) => {
+                warn!("cachix: {e}");
+                message(ActivityLevel::Warn, format!("Cachix cache '{cache}': {e}"));
+            }
+        }
+    }
+    keys
+}
+
+/// The cache's public signing keys as one space-separated string, the form
+/// `extra-trusted-public-keys` takes.
+async fn fetch_public_key(
+    client: &reqwest::Client,
+    cache: &str,
+    auth_token: Option<&str>,
+) -> Result<String> {
+    let mut request = client.get(format!("{CACHIX_API_URL}/cache/{cache}"));
+    if let Some(token) = auth_token {
+        request = request.bearer_auth(token);
+    }
+    let response = request
+        .send()
+        .await
+        .into_diagnostic()
+        .wrap_err("failed to query the Cachix API")?;
+    if response.status().is_client_error() {
+        bail!(
+            "the cache does not exist or requires an auth token; \
+             paths it serves cannot be verified until one is configured"
+        );
+    }
+    let metadata: CacheMetadata = response
+        .error_for_status()
+        .into_diagnostic()?
+        .json()
+        .await
+        .into_diagnostic()
+        .wrap_err("failed to parse the Cachix API response")?;
+    if metadata.public_signing_keys.is_empty() {
+        bail!("the cache has no public signing keys");
+    }
+    Ok(metadata.public_signing_keys.join(" "))
 }
 
 async fn resolve_cachix_binary(cnix: &NixCBackend) -> Result<PathBuf> {

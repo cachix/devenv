@@ -2,6 +2,10 @@
 
 ## 2.3.1 (unreleased)
 
+### Bug Fixes
+
+- Fixed devenv no longer fetching the public signing keys of the caches in `cachix.pull`, a regression from the 2.0 rewrite. Only keys already present in `cachix_trusted_keys.json` were passed to Nix, so on a machine that had only ever run 2.x `extra-trusted-public-keys` was empty and Nix could not verify paths from those caches. The keys are fetched from the Cachix API again (using the resolved auth token for private caches) and cached ([#3176](https://github.com/cachix/devenv/issues/3176)).
+
 ## 2.3.0 (2026-09-07)
 
 ### Bug Fixes

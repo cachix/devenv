@@ -2437,6 +2437,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "reqwest 0.13.4",
  "rmcp",
  "schemars 1.2.1",
  "secrecy",
