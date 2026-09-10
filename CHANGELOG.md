@@ -2,6 +2,10 @@
 
 ## 2.3.1 (unreleased)
 
+### Bug Fixes
+
+- Fixed `cachix.pull` containing duplicate caches. The module adds `devenv` (and `cachix.push`) to the list, so a cache also listed in `devenv.nix` was registered twice and Nix warned `Substituter '...' is already present in the substituters list` on every command. The option now deduplicates its value.
+
 ## 2.3.0 (2026-09-07)
 
 ### Bug Fixes
