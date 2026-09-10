@@ -81,6 +81,59 @@ It mirrors the official NixOS cache and is designed to provide caching for the [
 Some languages and integrations may automatically add caches when enabled.
 :::
 
+## Multi-user Nix and trusted users
+
+devenv registers the caches in `cachix.pull` with Nix as substituters, together with their public signing keys.
+On a multi-user install (the default on macOS, and `--daemon` installs on Linux) the Nix daemon performs
+the builds, and it only accepts substituters and keys requested by users listed in
+[`trusted-users`](https://nix.dev/manual/nix/latest/command-ref/conf-file#conf-trusted-users), or
+substituters already present in `trusted-substituters`. For anyone else the daemon drops the request and
+builds every path that is missing from `cache.nixos.org` locally, without an error in the shell.
+
+Check whether the daemon trusts you:
+
+```sh
+$ nix store info
+...
+Trusted: 1
+```
+
+If it reports `Trusted: 0`, either make yourself a trusted user or configure the caches in the daemon's own
+configuration.
+
+### Adding yourself to `trusted-users`
+
+Pass it when installing Nix:
+
+```sh
+# nix-installer
+$ curl -sSfL https://artifacts.nixos.org/nix-installer | sh -s -- install --extra-conf "trusted-users = root $USER"
+```
+
+Or on an existing install, append it to the daemon's configuration and restart the daemon.
+On macOS with nix-installer that file is `/etc/nix/nix.custom.conf`; on Linux it is `/etc/nix/nix.conf`:
+
+```sh
+$ echo "trusted-users = root $USER" | sudo tee -a /etc/nix/nix.conf
+$ sudo systemctl restart nix-daemon      # Linux
+$ sudo launchctl kickstart -k system/org.nixos.nix-daemon   # macOS
+```
+
+On NixOS or nix-darwin, set `nix.settings.trusted-users = [ "root" "yourname" ];` instead.
+
+A trusted user can add arbitrary paths to the Nix store, so grant it only to the person who uses the machine.
+
+### Configuring the caches in the daemon
+
+Alternatively, add the caches and their public keys to the daemon's configuration so they apply to every
+user without trusting anyone. The key is shown on the cache's page at `https://app.cachix.org/cache/<name>`:
+
+```
+extra-substituters = https://devenv.cachix.org
+extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=
+```
+
+Single-user installs (`--no-daemon`) have no daemon and are not affected.
 
 ## Pushing
 
