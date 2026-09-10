@@ -335,7 +335,10 @@ This is particularly useful for:
 
     `devenv tasks run` stops every process it started once the task graph finishes,
     whether the process is a root or was pulled in as a dependency of another task.
-    Use [`devenv up`](processes.md) when you want a process to keep running.
+    If a process manager is already running (`devenv up -d`), process dependencies
+    reuse that manager instead of starting a second copy: already-healthy processes
+    are not restarted, and they keep running after the task exits.
+    Use [`devenv up`](processes.md) when you want to start a process and leave it running.
 
 You can also run tasks after a process finishes by depending on its `@completed` state (see [Dependency states](#dependency-states)). The default suffix for a process dependency is `@ready`, which fires as soon as the process is healthy, so use `@completed` to wait for it to exit instead:
 
