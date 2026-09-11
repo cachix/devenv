@@ -156,7 +156,7 @@ The `copyMode` attribute accepts:
 
 - `symlink` (default): symlink to the read-only file in the Nix store. Edits are not possible; devenv keeps the link pointed at the current contents.
 - `seed`: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. This is useful for seeding configuration files from templates that the user can then edit to fit their project.
-- `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. This is useful when a tool must write to the file in place but devenv should remain the source of truth.
+- `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. The file is replaced atomically, by renaming a temporary file in the same directory over it, so tools that walk the project never see it missing. This is useful when a tool must write to the file in place but devenv should remain the source of truth.
 
 :::tip[New in version 2.2]
 :::
