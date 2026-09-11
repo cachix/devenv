@@ -130,25 +130,48 @@ let
   # Copy the file into place as a writable file the user can edit.
   # "seed" only creates the file when missing; "copy" overwrites it every time.
   createCopyScript = filename: fileOption: ''
-    # Drop a previous devenv-managed symlink into the store so we can seed a writable copy
-    if [ -L "${filename}" ] && [[ "$(readlink "${filename}")" == /nix/store/* ]]; then
-      rm "${filename}"
-    fi
-    ${optionalString (fileOption.copyMode == "copy") ''
-      if [ -e "${filename}" ] || [ -L "${filename}" ]; then
-        echo "Overwriting ${filename}"
-        rm -rf "${filename}"
+    (
+      export PATH="${pkgs.coreutils}/bin:$PATH"
+      destination=${lib.escapeShellArg filename}
+      source=${lib.escapeShellArg (toString fileOption.file)}
+      ${optionalString (fileOption.copyMode == "seed") ''
+        # Convert an old store symlink to an editable seed.
+        if [ -L "$destination" ] && [[ "$(readlink "$destination")" == /nix/store/* ]]; then
+          rm -- "$destination"
+        fi
+        if [ -e "$destination" ] || [ -L "$destination" ]; then
+          echo "Keeping existing $destination"
+          exit 0
+        fi
+      ''}
+      echo "Writing $destination"
+      mkdir -p -- ${lib.escapeShellArg (dirOf filename)}
+      if [ -d "$source" ]; then
+        # Directory copies retain the existing recursive replacement behavior.
+        ${optionalString (fileOption.copyMode == "copy") ''rm -rf -- "$destination"''}
+        cp -RL -- "$source" "$destination"
+        chmod -R u+w -- "$destination"
+      else
+        # Stage beside the destination so publishing stays on one filesystem.
+        staging=$(mktemp -d -- ${lib.escapeShellArg "${dirOf filename}/.devenv-file.XXXXXX"})
+        trap 'rm -rf -- "$staging"' EXIT
+        cp -L -- "$source" "$staging/file"
+        chmod u+w -- "$staging/file"
+        ${if fileOption.copyMode == "copy" then ''
+          # A real directory must be removed; mv -T replaces symlinks themselves.
+          if [ -d "$destination" ] && [ ! -L "$destination" ]; then
+            rm -rf -- "$destination"
+          fi
+          mv -fT -- "$staging/file" "$destination"
+        '' else ''
+          # Hard-link publication leaves a concurrent creator's file untouched.
+          if ! ln -T -- "$staging/file" "$destination"; then
+            [ -e "$destination" ] || [ -L "$destination" ] || exit 1
+          fi
+        ''}
       fi
-    ''}
-    if [ -e "${filename}" ]; then
-      echo "Keeping existing ${filename}"
-    else
-      echo "Creating ${filename}"
-      mkdir -p "${dirOf filename}"
-      cp -RL ${fileOption.file} "${filename}"
-      chmod -R u+w "${filename}"
-    fi
-    echo "${filename}" >> "$DEVENV_FILES_CREATED"
+    )
+    echo ${lib.escapeShellArg filename} >> "$DEVENV_FILES_CREATED"
   '';
 
   createFileScript = filename: fileOption:
