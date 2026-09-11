@@ -2,6 +2,10 @@
 
 ## 2.3.2 (unreleased)
 
+### Bug Fixes
+
+- Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
+
 ## 2.3.1 (2026-09-11)
 
 ### Bug Fixes
