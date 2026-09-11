@@ -495,16 +495,22 @@ impl Config {
     }
 
     /// Like [`Config::load`], but additionally merges the configuration of an
-    /// out-of-tree source directory (a `path:` `--from` source).
+    /// out-of-tree source directory.
     ///
     /// The source's `devenv.yaml` import graph merges at the lowest precedence
     /// (the project's own configuration wins), and the source's inputs and
     /// imports are rewritten to absolute `path:` form so they resolve from the
-    /// live source directory regardless of the project root. The source's
-    /// module (`devenv.nix`) is appended to `imports` as an absolute `path:`
-    /// import, so it must exist even when the source has no `devenv.yaml`.
+    /// source directory regardless of the project root. The source's module
+    /// (`devenv.nix`) is appended to `imports` as an absolute `path:` import,
+    /// so it must exist even when the source has no `devenv.yaml`.
     pub fn load_with_source(source_dir: Option<&Path>) -> Result<Self> {
-        Self::load_from_with_source("./", source_dir)
+        Self::load_from_with_source_root("./", source_dir, None)
+    }
+
+    /// Like [`Config::load_with_source`], with an explicit repository root for
+    /// imports from a fetched source whose store tree has no `.git` metadata.
+    pub fn load_with_source_root(source_dir: &Path, source_repository_root: &Path) -> Result<Self> {
+        Self::load_from_with_source_root("./", Some(source_dir), Some(source_repository_root))
     }
 
     /// Like [`Config::load_with_source`], with locked filesystem locations for
@@ -565,6 +571,30 @@ impl Config {
     where
         P: AsRef<Path>,
     {
+        Self::load_from_with_source_root_and_input_sources(path, source_dir, None, input_sources)
+    }
+
+    fn load_from_with_source_root<P>(
+        path: P,
+        source_dir: Option<&Path>,
+        source_repository_root: Option<&Path>,
+    ) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        Self::load_from_with_source_root_and_input_sources(path, source_dir, source_repository_root, &BTreeMap::new())
+    }
+
+    /// Load a source's YAML graph with its repository root and locked input locations.
+    pub fn load_from_with_source_root_and_input_sources<P>(
+        path: P,
+        source_dir: Option<&Path>,
+        source_repository_root: Option<&Path>,
+        input_sources: &BTreeMap<String, PathBuf>,
+    ) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
         let base_path = path.as_ref();
         let base_yaml = base_path.join(YAML_CONFIG);
 
@@ -611,12 +641,16 @@ impl Config {
         let mut source_yamls = Vec::new();
         let mut source_dir_only_imports = Vec::new();
         let mut source_module_imports = Vec::new();
-        // Canonical root of the out-of-tree source (`None` if it doesn't
-        // resolve). Reused to import the source module and to classify which
-        // inputs were defined by source-side configs.
-        let source_root_canon = source_dir.and_then(|d| d.canonicalize().ok());
+        let source_dir_canon = source_dir.and_then(|dir| dir.canonicalize().ok());
+        let detected_source_repository_root = source_dir
+            .filter(|_| source_repository_root.is_none())
+            .and_then(Self::detect_git_root);
+        let source_repository_root =
+            source_repository_root.or(detected_source_repository_root.as_deref());
+        let source_containment_root = source_repository_root
+            .or(source_dir)
+            .and_then(|root| root.canonicalize().ok());
         if let Some(source_dir) = source_dir {
-            let source_git_root = Self::detect_git_root(source_dir);
             let source_yaml = source_dir.join(YAML_CONFIG);
             if source_yaml.exists() {
                 let canonical =
@@ -653,7 +687,7 @@ impl Config {
                     &source_result.config.imports,
                     source_dir,
                     ImportRoots {
-                        git_root: source_git_root.as_deref(),
+                        git_root: source_repository_root,
                         input_sources,
                     },
                     &mut source_yamls,
@@ -680,7 +714,7 @@ impl Config {
                         let resolved = Self::resolve_import_path(
                             import,
                             source_dir,
-                            source_git_root.as_deref(),
+                            source_repository_root,
                             input_sources,
                         )?
                         .expect("file imports always resolve");
@@ -692,7 +726,7 @@ impl Config {
 
             // The source module itself (devenv.nix plus devenv.local.nix at
             // eval time), imported live even when the source has no yaml.
-            let canonical = source_root_canon
+            let canonical = source_dir_canon
                 .clone()
                 .unwrap_or_else(|| source_dir.to_path_buf());
             source_module_imports.push(format!("path:{}", canonical.display()));
@@ -850,7 +884,7 @@ impl Config {
                 // from the project root (relative escapes also break under
                 // lazy-trees).
                 let from_source_side =
-                    source_root_canon.as_ref().is_some_and(|root| {
+                    source_containment_root.as_ref().is_some_and(|root| {
                         input_dir
                             .canonicalize()
                             .is_ok_and(|dir| dir.starts_with(root))
@@ -2594,6 +2628,50 @@ inputs:
             "missing common import: {:?}",
             config.imports
         );
+    }
+
+    #[test]
+    fn explicit_source_root_allows_imports_without_git_metadata() {
+        let repository = tempfile::tempdir().expect("Failed to create repository");
+        let common = repository.path().join("profiles").join("common");
+        let dependency = common.join("dependency");
+        let rooted = repository.path().join("rooted");
+        let profile = repository.path().join("profiles").join("rails");
+        fs::create_dir_all(&dependency).expect("Failed to create common dependency");
+        fs::create_dir(&rooted).expect("Failed to create rooted module");
+        fs::create_dir_all(&profile).expect("Failed to create profile");
+        fs::write(
+            common.join("devenv.yaml"),
+            "inputs:\n  shared-input:\n    url: path:./dependency\n",
+        )
+        .expect("Failed to write common config");
+        fs::write(rooted.join("devenv.nix"), "{ }\n").expect("Failed to write rooted module");
+        fs::write(
+            profile.join("devenv.yaml"),
+            "imports:\n  - ../common\n  - /rooted\n",
+        )
+        .expect("Failed to write profile config");
+
+        let project = tempfile::tempdir().expect("Failed to create project");
+        let config = Config::load_from_with_source_root(
+            project.path(),
+            Some(&profile),
+            Some(repository.path()),
+        )
+        .expect("Failed to load config");
+
+        let expected_url = format!("path:{}", dependency.canonicalize().unwrap().display());
+        assert_eq!(
+            config
+                .inputs
+                .get("shared-input")
+                .and_then(|input| input.url.as_deref()),
+            Some(expected_url.as_str())
+        );
+        for imported in [&common, &rooted] {
+            let import = format!("path:{}", imported.canonicalize().unwrap().display());
+            assert!(config.imports.contains(&import), "missing import {import}");
+        }
     }
 
     #[test]
