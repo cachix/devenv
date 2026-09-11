@@ -16,7 +16,7 @@
 //! let (flake_settings, fetchers_settings) = build_settings()?;
 //! let logger_setup = logger::setup_nix_logger()?;
 //! let fingerprint = lock::with_lock_scope(&logger_setup.bridge, || {
-//!     let eval_state = lock::build_eval_state(&store, &root, &flake_settings)?;
+//!     let eval_state = lock::build_eval_state(&store, &root, &flake_settings, false)?;
 //!     lock::validate_and_load(&eval_state, &store, &fetchers_settings,
 //!         &flake_settings, &root, &lock_file, &inputs)
 //! })?;
@@ -1478,7 +1478,7 @@ fn build_eval_state(
         .to_str()
         .ok_or_else(|| miette!("Nixpkgs config path contains invalid UTF-8"))?;
 
-    let mut builder = EvalStateBuilder::new(store.clone())
+    let builder = EvalStateBuilder::new(store.clone())
         .to_miette()
         .wrap_err("Failed to create eval state builder")?
         .base_directory(root_str)
@@ -1491,16 +1491,7 @@ fn build_eval_state(
         .to_miette()
         .wrap_err("Failed to configure flakes")?;
 
-    // `devenv update` sets this so branch and tag inputs are re-resolved
-    // instead of served from cache within tarball-ttl. The eval state's own
-    // fetchers::Settings is what governs locking, so the override must land
-    // here rather than on the global config or the locker's settings argument.
-    if refresh_fetchers {
-        builder = builder
-            .fetch_setting("tarball-ttl", "0")
-            .to_miette()
-            .wrap_err("Failed to set tarball-ttl")?;
-    }
+    let builder = crate::lock::apply_fetcher_refresh(builder, refresh_fetchers)?;
 
     let mut eval_state = builder
         .build()

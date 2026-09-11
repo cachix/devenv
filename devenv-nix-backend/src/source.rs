@@ -9,12 +9,28 @@ use serde_json::Value;
 use crate::anyhow_ext::AnyhowToMiette;
 use crate::{backend, lock};
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct MaterializedSource {
+    repository_root: PathBuf,
+    directory: Option<PathBuf>,
+}
+
+impl MaterializedSource {
+    pub fn repository_root(&self) -> &Path {
+        &self.repository_root
+    }
+
+    pub fn directory(&self) -> &Path {
+        self.directory.as_deref().unwrap_or(&self.repository_root)
+    }
+}
+
 pub fn materialize_source(
     nix_settings: &NixSettings,
     root: &Path,
     lock_file_path: &Path,
     source_input: &Input,
-) -> Result<PathBuf> {
+) -> Result<MaterializedSource> {
     let store_settings = StoreSettings::default();
     let _gc_registration = backend::init_nix(nix_settings, &store_settings)
         .wrap_err("Failed to initialize Nix for source resolution")?;
@@ -22,8 +38,9 @@ pub fn materialize_source(
         .wrap_err("Failed to open the Nix store for source resolution")?;
     let (flake_settings, fetchers_settings) =
         backend::build_settings().wrap_err("Failed to build Nix source settings")?;
-    let mut eval_state = lock::build_eval_state(&store, root, &flake_settings)
-        .wrap_err("Failed to build the Nix source evaluator")?;
+    let mut eval_state =
+        lock::build_eval_state(&store, root, &flake_settings, nix_settings.refresh_fetchers)
+            .wrap_err("Failed to build the Nix source evaluator")?;
 
     let source_lock = crate::lock_source_input(
         &eval_state,
@@ -109,7 +126,7 @@ fn locked_source_attributes(lock_json: &str) -> Result<(Value, Option<String>)> 
     Ok((Value::Object(locked), dir))
 }
 
-fn select_source_directory(fetched_root: &Path, dir: Option<&str>) -> Result<PathBuf> {
+fn select_source_directory(fetched_root: &Path, dir: Option<&str>) -> Result<MaterializedSource> {
     let fetched_root = fs::canonicalize(fetched_root)
         .into_diagnostic()
         .wrap_err_with(|| {
@@ -119,7 +136,10 @@ fn select_source_directory(fetched_root: &Path, dir: Option<&str>) -> Result<Pat
             )
         })?;
     let Some(dir) = dir else {
-        return Ok(fetched_root);
+        return Ok(MaterializedSource {
+            repository_root: fetched_root,
+            directory: None,
+        });
     };
 
     let mut relative_dir = PathBuf::new();
@@ -151,7 +171,11 @@ fn select_source_directory(fetched_root: &Path, dir: Option<&str>) -> Result<Pat
             selected.display()
         );
     }
-    Ok(selected)
+    let directory = (selected != fetched_root).then_some(selected);
+    Ok(MaterializedSource {
+        repository_root: fetched_root,
+        directory,
+    })
 }
 
 #[cfg(test)]
@@ -163,8 +187,10 @@ mod tests {
         let source = tempfile::tempdir().unwrap();
 
         let selected = select_source_directory(source.path(), None).unwrap();
+        let root = fs::canonicalize(source.path()).unwrap();
 
-        assert_eq!(selected, fs::canonicalize(source.path()).unwrap());
+        assert_eq!(selected.repository_root(), root);
+        assert_eq!(selected.directory(), root);
     }
 
     #[test]
@@ -175,7 +201,11 @@ mod tests {
 
         let selected = select_source_directory(source.path(), Some("profiles/rails")).unwrap();
 
-        assert_eq!(selected, fs::canonicalize(child).unwrap());
+        assert_eq!(
+            selected.repository_root(),
+            fs::canonicalize(source.path()).unwrap()
+        );
+        assert_eq!(selected.directory(), fs::canonicalize(child).unwrap());
     }
 
     #[test]
