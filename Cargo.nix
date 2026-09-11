@@ -8276,6 +8276,11 @@ rec {
             features = [ "rt-tokio" ];
           }
           {
+            name = "reqwest";
+            packageId = "reqwest 0.13.4";
+            features = [ "json" "query" "stream" ];
+          }
+          {
             name = "rmcp";
             packageId = "rmcp";
             features = [ "server" "transport-io" "transport-streamable-http-server" ];

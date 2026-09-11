@@ -61,6 +61,7 @@ once_cell.workspace = true
 shell-escape.workspace = true
 rmcp.workspace = true
 axum.workspace = true
+reqwest.workspace = true
 secretspec.workspace = true
 secrecy.workspace = true
 url.workspace = true
