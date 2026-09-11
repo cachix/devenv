@@ -287,13 +287,13 @@ async fn ensure_known_keys(
     if fetched.is_empty() {
         return known_keys;
     }
-    known_keys.extend(fetched);
-    if let Err(e) = persist_known_keys(path, &known_keys).await {
+    if let Err(e) = persist_known_keys(path, &fetched).await {
         warn!(
             "cachix: failed to save public keys to {}: {e}",
             path.display()
         );
     }
+    known_keys.extend(fetched);
     known_keys
 }
 
@@ -304,13 +304,45 @@ async fn load_known_keys(path: &Path) -> BTreeMap<String, String> {
     }
 }
 
-async fn persist_known_keys(path: &Path, known_keys: &BTreeMap<String, String>) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await.into_diagnostic()?;
-    }
-    let json = serde_json::to_string_pretty(known_keys).into_diagnostic()?;
-    tokio::fs::write(path, json).await.into_diagnostic()?;
-    Ok(())
+async fn persist_known_keys(path: &Path, fetched: &BTreeMap<String, String>) -> Result<()> {
+    let path = path.to_path_buf();
+    let fetched = fetched.clone();
+    // Waiting for another process's lock must not block a Tokio worker.
+    tokio::task::spawn_blocking(move || {
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        std::fs::create_dir_all(parent).into_diagnostic()?;
+
+        // Lock a separate, persistent file: replacing the JSON file changes
+        // its inode, so locking the JSON itself would not serialize writers.
+        let lock_file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path.with_extension("json.lock"))
+            .into_diagnostic()?;
+        let mut lock = fd_lock::RwLock::new(lock_file);
+        let _guard = lock.write().into_diagnostic()?;
+
+        // Re-read under the lock and merge only freshly fetched keys. An
+        // earlier snapshot could overwrite keys another invocation updated.
+        let mut known_keys: BTreeMap<String, String> = match std::fs::read_to_string(&path) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
+            Err(e) => return Err(e).into_diagnostic(),
+        };
+        known_keys.extend(fetched);
+        let mut temp = tempfile::NamedTempFile::new_in(parent).into_diagnostic()?;
+        serde_json::to_writer_pretty(&mut temp, &known_keys).into_diagnostic()?;
+        // Readers do not need the lock: they see either complete version.
+        temp.persist(&path).into_diagnostic()?;
+        Ok(())
+    })
+    .await
+    .into_diagnostic()?
 }
 
 /// Fetch the public signing keys of `caches` concurrently. Failures are
@@ -397,4 +429,58 @@ async fn resolve_cachix_binary(cnix: &NixCBackend) -> Result<PathBuf> {
         .await
         .wrap_err("Failed to build config.cachix.package")?;
     Ok(binary_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Read;
+
+    #[tokio::test]
+    async fn persist_known_keys_merges_concurrent_writers() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/cachix_trusted_keys.json");
+        let original = BTreeMap::from([("existing".to_string(), "existing-key".to_string())]);
+        persist_known_keys(&path, &original).await.unwrap();
+
+        // Every invocation fetched a different key from the same snapshot.
+        let updates: Vec<_> = (0..32)
+            .map(|i| BTreeMap::from([(format!("cache-{i}"), "key".repeat(i + 1))]))
+            .collect();
+        let results =
+            futures::future::join_all(updates.iter().map(|keys| persist_known_keys(&path, keys)))
+                .await;
+        for result in results {
+            result.unwrap();
+        }
+
+        let mut expected = original;
+        for update in updates {
+            expected.extend(update);
+        }
+        let actual: BTreeMap<String, String> =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[tokio::test]
+    async fn persist_known_keys_atomically_replaces_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cachix_trusted_keys.json");
+        let original = BTreeMap::from([("cache".to_string(), "long-key".repeat(1024))]);
+        persist_known_keys(&path, &original).await.unwrap();
+        let mut reader = std::fs::File::open(&path).unwrap();
+
+        let updated = BTreeMap::from([("cache".to_string(), "short-key".to_string())]);
+        persist_known_keys(&path, &updated).await.unwrap();
+
+        // A reader that opened the old file must still see its whole contents.
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents).unwrap();
+        assert_eq!(
+            serde_json::from_str::<BTreeMap<String, String>>(&contents).unwrap(),
+            original
+        );
+        assert_eq!(load_known_keys(&path).await, updated);
+    }
 }
