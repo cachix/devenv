@@ -5,6 +5,7 @@
 ### Bug Fixes
 
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
+- Regular files with `copyMode = "copy"` are now replaced atomically, so concurrent readers do not see missing or partial contents. Regular seed files are published without overwriting a concurrent creator's file.
 
 ## 2.3.1 (2026-09-11)
 
