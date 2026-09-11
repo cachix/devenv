@@ -420,6 +420,13 @@ fn enter_discovered_project_root() -> Result<()> {
     enter_root(&root)
 }
 
+fn should_refresh_source(command: &Commands) -> bool {
+    match command {
+        Commands::Update { name } => name.as_deref().is_none_or(|name| name == "from"),
+        _ => false,
+    }
+}
+
 /// Prepare a config-backed CLI command for execution.
 fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCommand> {
     // --- Project discovery and working directory ---
@@ -522,6 +529,7 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     let nix_debugger = cli.nix_args.nix_debugger;
     let nix_options = devenv_core::NixOptions::from(cli.nix_args);
     let refresh_fetchers = matches!(&command, Commands::Update { .. });
+    let refresh_source = should_refresh_source(&command);
 
     // Keep `path:` sources live. Relative refs resolve against the invocation
     // directory, and Config::load_with_source reads their complete YAML graph.
@@ -552,17 +560,20 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         let target_config = Config::load()?;
         let mut preliminary_nix_settings =
             NixSettings::resolve(nix_options.clone(), &target_config);
-        preliminary_nix_settings.refresh_fetchers = refresh_fetchers;
+        preliminary_nix_settings.refresh_fetchers = refresh_source;
         let target_root = env::current_dir()
             .into_diagnostic()
             .wrap_err("Failed to resolve the target directory")?;
-        let source_path = devenv_nix_backend::source::materialize_source(
+        let materialized_source = devenv_nix_backend::source::materialize_source(
             &preliminary_nix_settings,
             &target_root,
             &target_root.join("devenv.lock"),
             source_input,
         )?;
-        Config::load_with_source(Some(&source_path))?
+        Config::load_with_source_root(
+            materialized_source.directory(),
+            materialized_source.repository_root(),
+        )?
     } else {
         Config::load_with_source(from_path.as_deref())?
     };
@@ -1810,6 +1821,18 @@ mod tests {
     use std::sync::Mutex;
 
     static PROCESS_STATE_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn source_refresh_matches_update_scope() {
+        assert!(should_refresh_source(&Commands::Update { name: None }));
+        assert!(should_refresh_source(&Commands::Update {
+            name: Some("from".to_string()),
+        }));
+        assert!(!should_refresh_source(&Commands::Update {
+            name: Some("nixpkgs".to_string()),
+        }));
+        assert!(!should_refresh_source(&Commands::Info {}));
+    }
 
     #[test]
     fn only_interactive_tui_and_shell_commands_load_user_configuration() {

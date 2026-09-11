@@ -706,6 +706,7 @@ impl Devenv {
                             &store,
                             &paths.root,
                             &flake_settings,
+                            nix_settings.refresh_fetchers,
                         )?;
                         devenv_nix_backend::lock::validate_and_load(
                             &eval_state,

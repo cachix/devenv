@@ -57,6 +57,7 @@ done
 
 step "--from loads YAML imports from a fetched source"
 fetched_source_repo="$(mktemp -d "${TMPDIR:-/tmp}/devenv-from-source.XXXXXX")"
+fetched_source_remote="$(mktemp -d "${TMPDIR:-/tmp}/devenv-from-remote.XXXXXX")"
 mkdir -p "$fetched_source_repo/configs/source/modules/marker"
 cat > "$fetched_source_repo/configs/source/devenv.nix" <<'EOF'
 { ... }: { }
@@ -77,7 +78,10 @@ git -C "$fetched_source_repo" config user.name "devenv tests"
 git -C "$fetched_source_repo" config commit.gpgsign false
 git -C "$fetched_source_repo" add .
 git -C "$fetched_source_repo" commit -q -m "Add fetched source fixture"
-fetched_source="git+file://$fetched_source_repo?dir=configs/source"
+git -C "$fetched_source_remote" init -q --bare
+git -C "$fetched_source_repo" remote add origin "$fetched_source_remote"
+git -C "$fetched_source_repo" push -q -u origin HEAD
+fetched_source="git+file://$fetched_source_remote?dir=configs/source"
 
 fetched_source_failures=0
 if ! out=$(devenv --from "$fetched_source" shell -- sh -c 'printf %s "$FETCHED_FROM_YAML_IMPORT"') \
@@ -97,15 +101,32 @@ fi
 
 fetched_target="$(mktemp -d "${TMPDIR:-/tmp}/devenv-from-target.XXXXXX")"
 pushd "$fetched_target" >/dev/null
+mkdir fixture
+cat > devenv.yaml <<'EOF'
+inputs:
+  fixture:
+    url: path:./fixture
+    flake: false
+EOF
 devenv --from "$fetched_source" allow
 if ! out=$(devenv shell -- sh -c 'printf %s "$FETCHED_FROM_YAML_IMPORT"') \
   || [[ "$out" != *"loaded-from-yaml-import"* ]]; then
   echo "persisted fetched source did not load its YAML import" >&2
   fetched_source_failures=$((fetched_source_failures + 1))
 fi
+cat >> "$fetched_source_repo/configs/source/devenv.yaml" <<'EOF'
+require_version: ">=999.0"
+EOF
+git -C "$fetched_source_repo" add configs/source/devenv.yaml
+git -C "$fetched_source_repo" commit -q -m "Change fetched source fixture"
+git -C "$fetched_source_repo" push -q
+if ! devenv update fixture; then
+  echo "updating another input refreshed the fetched source" >&2
+  fetched_source_failures=$((fetched_source_failures + 1))
+fi
 devenv revoke
 popd >/dev/null
-rm -rf "$fetched_target" "$fetched_source_repo"
+rm -rf "$fetched_target" "$fetched_source_repo" "$fetched_source_remote"
 
 (( fetched_source_failures == 0 )) \
   || fail "$fetched_source_failures fetched --from checks failed"
