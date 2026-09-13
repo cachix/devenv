@@ -2,14 +2,14 @@
 @import '@astrojs/starlight-tailwind';
 
 @theme {
-  /* devenv slate-blue scale, anchored to logo #425c81 (H217 S32 L38) */
+  /* devenv slate-blue scale, anchored to logo #425c82 */
   --color-accent-50:  #f1f4f9;
   --color-accent-100: #dde4ee;
   --color-accent-200: #bccbde;
   --color-accent-300: #92a7c4;
   --color-accent-400: #6b85aa;
   --color-accent-500: #52708f;
-  --color-accent-600: #425c81;
+  --color-accent-600: #425c82;
   --color-accent-700: #384c6a;
   --color-accent-800: #2e3d54;
   --color-accent-900: #1f2a3b;
@@ -23,6 +23,31 @@
   --color-gray-700: #353841;
   --color-gray-800: #24272f;
   --color-gray-900: #17191e;
+}
+
+/* Keep these outside Tailwind's layers so Starlight's defaults cannot replace
+   the brand palette. Dark mode uses a lighter shade of the logo blue. */
+:root {
+  --sl-color-accent-low: var(--color-accent-950);
+  --sl-color-accent: var(--color-accent-600);
+  --sl-color-accent-high: var(--color-accent-200);
+  --sl-color-text-accent: var(--color-accent-300);
+  --sl-color-text-invert: var(--color-accent-950);
+  --sl-color-bg-accent: var(--sl-color-text-accent);
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: var(--color-accent-200);
+  --sl-color-accent: var(--color-accent-600);
+  --sl-color-accent-high: var(--color-accent-900);
+  --sl-color-text-accent: var(--color-accent-600);
+  --sl-color-text-invert: var(--color-white);
+}
+
+/* Article links share the sidebar and table-of-contents accent in both themes. */
+:root[data-has-sidebar] .sl-markdown-content a:not([class]),
+:root[data-has-sidebar] .sl-markdown-content a:not([class]):hover {
+  color: var(--sl-color-text-accent);
 }
 
 /* ── Reference options page: skip rendering offscreen option blocks. ── */
