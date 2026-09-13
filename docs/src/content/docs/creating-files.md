@@ -158,6 +158,8 @@ The `copyMode` attribute accepts:
 - `seed`: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. This is useful for seeding configuration files from templates that the user can then edit to fit their project.
 - `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. This is useful when a tool must write to the file in place but devenv should remain the source of truth.
 
+Regular files are copied to a temporary sibling and made writable before publication. In `copy` mode, replacing a file or symlink is atomic, so concurrent readers see complete contents without a gap where the path is missing. In `seed` mode, publication leaves a file created concurrently untouched. Directory copies and conversion of an existing directory to a file are not atomic.
+
 :::tip[New in version 2.2]
 :::
 
