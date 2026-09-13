@@ -1,0 +1,6 @@
+inputs:
+  zig-overlay:
+    url: github:mitchellh/zig-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
