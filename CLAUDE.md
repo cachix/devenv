@@ -141,7 +141,16 @@ warn!(path = %p.display(), "failed to read file, falling back to default");
 
 When adding documentation in `docs/`, make sure to note the version the change was added in by checking `Cargo.toml`.
 
-    !!! tip "New in version X.Y.Y"
+Use MDX and the shared site-kit component for version notices:
+
+```mdx
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
+<VersionCompatibility version="X.Y.Z" />
+```
+
+New-feature notices are self-closing; put explanatory text after the component.
+For changes to existing behavior, use `kind="changed"` with explanatory body content.
 
 ## Changelog
 

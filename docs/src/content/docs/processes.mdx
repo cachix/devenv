@@ -3,6 +3,8 @@ title: "Processes"
 description: Run and supervise your development stack with devenv's built-in native process manager.
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 Devenv's built-in native process manager is the default and recommended way to
 run your development stack. It provides supervision, socket activation, file
 watching, readiness checks, and dependency management without additional
@@ -37,10 +39,9 @@ To stop processes started in the background:
 $ devenv down
 ```
 
-:::tip[New in devenv 2.2]
+<VersionCompatibility version="2.2" />
 
 `devenv down` is a shorthand for `devenv processes down`.
-:::
 
 
 With the native process manager, wait for all processes to become ready (useful in CI):
@@ -101,8 +102,7 @@ an override continue to use the process hostname as their base.
 
 ### HTTPS
 
-:::tip[New in devenv 2.3]
-:::
+<VersionCompatibility version="2.3" />
 
 Enable HTTPS for an individual process's generated URLs:
 
@@ -128,8 +128,7 @@ first enabling HTTPS.
 
 ## Linux capabilities
 
-:::tip[New in devenv 2.3]
-:::
+<VersionCompatibility version="2.3" />
 
 On Linux, the native process manager can grant a process a limited set of
 kernel capabilities without running the service as root. For example, this
@@ -166,8 +165,7 @@ socket activation on the same process.
 
 ## Attaching to running processes
 
-:::tip[New in devenv 2.2]
-:::
+<VersionCompatibility version="2.2" />
 
 
 This section describes the native process manager. External managers can run in the background when they advertise that
@@ -261,8 +259,7 @@ These services come with sensible defaults, health checks, and proper initializa
 
 ## Restart Policies
 
-:::tip[New in devenv 2.0]
-:::
+<VersionCompatibility version="2.0" />
 
 
 Control how processes restart when they exit:
@@ -285,7 +282,7 @@ Control how processes restart when they exit:
 
 ## Shutdown
 
-:::tip[New in devenv 2.3]
+<VersionCompatibility version="2.3" />
 
 Control how a process is stopped.
 `signal` is the Unix signal number sent for a graceful stop.
@@ -306,12 +303,10 @@ The defaults are SIGTERM (15) and 5 seconds.
 
 The same settings apply to restarts from file watching or the watchdog.
 If `devenv` or `devenv-tasks` is killed, a guardian performs the shutdown.
-:::
 
 ## Ready Probes
 
-:::tip[New in devenv 2.0]
-:::
+<VersionCompatibility version="2.0" />
 
 
 Ready probes let the process manager detect when a process is ready to serve. This is used by `after` dependencies to know when a dependency is available.
@@ -394,8 +389,7 @@ When `listen` sockets or allocated `ports` are configured and no explicit probe 
 
 ## File Watching
 
-:::tip[New in devenv 2.0]
-:::
+<VersionCompatibility version="2.0" />
 
 
 Automatically restart processes when files change:
@@ -442,8 +436,7 @@ directory for `exec`.
 
 ## Socket Activation
 
-:::tip[New in devenv 2.0]
-:::
+<VersionCompatibility version="2.0" />
 
 
 Socket activation allows the process manager to bind sockets before starting your process. This enables zero-downtime restarts and lazy process startup.
@@ -478,8 +471,7 @@ File descriptors start at 3 (after stdin, stdout, stderr). This is compatible wi
 
 ## Watchdog
 
-:::tip[New in devenv 2.0]
-:::
+<VersionCompatibility version="2.0" />
 
 
 Enable systemd-compatible watchdog monitoring. Your process must periodically send `WATCHDOG=1` to the notify socket, or it will be killed and restarted:
@@ -522,8 +514,7 @@ Processes are automatically available as tasks, allowing you to define pre and p
 
 ## Automatic port allocation
 
-:::tip[New in devenv 2.0]
-:::
+<VersionCompatibility version="2.0" />
 
 
 Devenv can automatically allocate free ports for your processes, preventing conflicts when a port is already in use or when running multiple devenv projects simultaneously.

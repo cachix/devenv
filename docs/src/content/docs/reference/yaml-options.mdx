@@ -2,7 +2,9 @@
 title: devenv.yaml
 ---
 
-<!-- This file is auto-generated from devenv-core/src/config.rs doc comments. Do not edit. -->
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
+{/* This file is auto-generated from devenv-core/src/config.rs doc comments. Do not edit. */}
 
 ## backend
 
@@ -12,7 +14,7 @@ Select the Nix backend used to evaluate `devenv.nix`.
 
 ## clean.enabled
 
-<small class="added-in">Added in <code>1.0</code></small>
+<VersionCompatibility version="1.0" />
 
 Clean the environment when entering the shell.
 
@@ -20,7 +22,7 @@ Clean the environment when entering the shell.
 
 ## clean.keep
 
-<small class="added-in">Added in <code>1.0</code></small>
+<VersionCompatibility version="1.0" />
 
 A list of environment variables to keep when cleaning the environment.
 
@@ -35,7 +37,7 @@ See [Composing using imports](/composing-using-imports/).
 
 ## impure
 
-<small class="added-in">Added in <code>1.0</code></small>
+<VersionCompatibility version="1.0" />
 
 Relax the hermeticity of the environment.
 
@@ -84,7 +86,7 @@ See [Supported URI formats](/inputs/#supported-uri-formats).
 
 ## nixpkgs.allow_broken
 
-<small class="added-in">Added in <code>1.7</code></small>
+<VersionCompatibility version="1.7" />
 
 Allow packages marked as broken.
 
@@ -98,7 +100,7 @@ Allow packages not built from source.
 
 ## nixpkgs.allow_unfree
 
-<small class="added-in">Added in <code>1.7</code></small>
+<VersionCompatibility version="1.7" />
 
 Allow unfree packages.
 
@@ -106,7 +108,7 @@ Allow unfree packages.
 
 ## nixpkgs.allow_unsupported_system
 
-<small class="added-in">Added in <code>2.0.5</code></small>
+<VersionCompatibility version="2.0.5" />
 
 Allow packages that are not supported on the current system.
 
@@ -137,7 +139,7 @@ See [nixpkgs license list](https://github.com/NixOS/nixpkgs/blob/master/lib/lice
 
 ## nixpkgs.cuda_capabilities
 
-<small class="added-in">Added in <code>1.7</code></small>
+<VersionCompatibility version="1.7" />
 
 Select CUDA capabilities for nixpkgs.
 
@@ -145,7 +147,7 @@ Select CUDA capabilities for nixpkgs.
 
 ## nixpkgs.cuda_support
 
-<small class="added-in">Added in <code>1.7</code></small>
+<VersionCompatibility version="1.7" />
 
 Enable CUDA support for nixpkgs.
 
@@ -153,7 +155,7 @@ Enable CUDA support for nixpkgs.
 
 ## nixpkgs.per_platform
 
-<small class="added-in">Added in <code>1.7</code></small>
+<VersionCompatibility version="1.7" />
 
 Per-platform nixpkgs configuration.
 Accepts the same options as `nixpkgs`.
@@ -162,7 +164,7 @@ Accepts the same options as `nixpkgs`.
 
 ## nixpkgs.permitted_insecure_packages
 
-<small class="added-in">Added in <code>1.7</code></small>
+<VersionCompatibility version="1.7" />
 
 A list of insecure permitted packages.
 
@@ -170,7 +172,7 @@ A list of insecure permitted packages.
 
 ## nixpkgs.permitted_unfree_packages
 
-<small class="added-in">Added in <code>1.9</code></small>
+<VersionCompatibility version="1.9" />
 
 A list of unfree packages to allow by name.
 
@@ -178,7 +180,7 @@ A list of unfree packages to allow by name.
 
 ## nixpkgs.rocm_support
 
-<small class="added-in">Added in <code>2.0.7</code></small>
+<VersionCompatibility version="2.0.7" />
 
 Enable ROCm support for nixpkgs.
 
@@ -186,7 +188,7 @@ Enable ROCm support for nixpkgs.
 
 ## profile
 
-<small class="added-in">Added in <code>1.11</code></small>
+<VersionCompatibility version="1.11" />
 
 Default profile to activate.
 Can be overridden by `--profile` CLI flag.
@@ -204,7 +206,7 @@ Overrides the global user configuration.
 
 ## reload
 
-<small class="added-in">Added in <code>2.0</code></small>
+<VersionCompatibility version="2.0" />
 
 Enable auto-reload of the shell when files change.
 Can be overridden by `--reload` or `--no-reload` CLI flags.
@@ -213,7 +215,7 @@ Can be overridden by `--reload` or `--no-reload` CLI flags.
 
 ## require_version
 
-<small class="added-in">Added in <code>2.1</code></small>
+<VersionCompatibility version="2.1" />
 
 Version requirement for the devenv CLI.
 Set to `true` to enforce that the CLI version matches the modules version
@@ -224,7 +226,7 @@ Set to `true` to enforce that the CLI version matches the modules version
 
 ## secretspec.cachix_auth_token
 
-<small class="added-in">Added in <code>2.2</code></small>
+<VersionCompatibility version="2.2" />
 
 Require the Cachix auth token through SecretSpec when
 `CACHIX_AUTH_TOKEN` is not set in the environment.
@@ -237,7 +239,7 @@ secret name. No declaration in `secretspec.toml` is required.
 
 ## secretspec.enable
 
-<small class="added-in">Added in <code>1.8</code></small>
+<VersionCompatibility version="1.8" />
 
 Enable [secretspec integration](/integrations/secretspec/).
 
@@ -245,7 +247,7 @@ Enable [secretspec integration](/integrations/secretspec/).
 
 ## secretspec.profile
 
-<small class="added-in">Added in <code>1.8</code></small>
+<VersionCompatibility version="1.8" />
 
 Secretspec profile name to use.
 
@@ -253,7 +255,7 @@ Secretspec profile name to use.
 
 ## secretspec.provider
 
-<small class="added-in">Added in <code>1.8</code></small>
+<VersionCompatibility version="1.8" />
 
 Secretspec provider to use.
 
@@ -261,7 +263,7 @@ Secretspec provider to use.
 
 ## shell
 
-<small class="added-in">Added in <code>2.1</code></small>
+<VersionCompatibility version="2.1" />
 
 Default interactive shell to use when entering the devenv environment.
 Can be overridden by the `--shell` CLI flag.

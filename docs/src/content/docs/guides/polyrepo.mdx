@@ -2,6 +2,8 @@
 title: "Polyrepos"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 When working with multiple projects across separate repositories, you may want
 to compose environments or reference options --- such as outputs, packages, or
 other configuration --- defined in one devenv project from another.
@@ -65,8 +67,7 @@ For local cross-project imports (monorepos), see the
 
 ## Referencing config across inputs
 
-:::note[New in version 2.0]
-:::
+<VersionCompatibility version="2.0" />
 
 
 When you don't want to merge an entire environment but need access to specific

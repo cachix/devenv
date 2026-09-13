@@ -3,6 +3,8 @@ status: deprecated
 title: "Direnv"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 
@@ -62,9 +64,9 @@ This file configures direnv to use devenv for shell activation.
 :::
 
 
-:::tip[New in version 2.2]
+<VersionCompatibility version="2.2" />
+
 Use `devenv init --include-envrc` to include an `.envrc` file. On earlier versions, create it manually using the snippet above.
-:::
 
 
 ## Approving and loading the shell

@@ -2,7 +2,9 @@
 title: "Outputs"
 ---
 
-<small class="added-in">Added in <code>1.1</code></small>
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
+<VersionCompatibility version="1.1" />
 
 Outputs allow you to define Nix derivations using the module system,
 exposing Nix packages or sets of packages to be consumed by other tools for installation/distribution.
