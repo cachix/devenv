@@ -22,6 +22,14 @@ members = [
   "tokio-shutdown",
   "xtask",
 ]
+# Keep the user-facing crates in the default test/build set. Nixpkgs and other
+# downstream packagers invoke Cargo from the workspace root and use this list.
+default-members = [
+  "devenv",
+  "devenv-proxy",
+  "devenv-run-tests",
+  "devenv-shell",
+]
 
 [workspace.package]
 version = "2.3.2"

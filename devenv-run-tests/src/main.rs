@@ -92,6 +92,13 @@ struct PtyArgs {
         help = "Seconds allowed per expect: directive and for the final drain (exit 124)"
     )]
     step_timeout: u64,
+
+    #[clap(
+        long,
+        default_value = "120x40",
+        help = "Initial PTY size as COLSxROWS (including zero dimensions)"
+    )]
+    size: String,
 }
 
 #[derive(Parser, Debug)]
@@ -714,6 +721,7 @@ fn main() -> Result<ExitCode> {
             &pty_args.transcript,
             &pty_args.command,
             std::time::Duration::from_secs(pty_args.step_timeout),
+            &pty_args.size,
         )?;
         return Ok(ExitCode::from((code & 0xff) as u8));
     }

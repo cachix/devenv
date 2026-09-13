@@ -166,15 +166,19 @@ impl Pty {
 /// a failed query and fall back to the default.
 pub fn get_terminal_size() -> PtySize {
     const DEFAULT_SIZE: (u16, u16) = (80, 24);
-    let (cols, rows) = match crossterm::terminal::size() {
-        Ok((cols, rows)) if cols != 0 && rows != 0 => (cols, rows),
-        _ => DEFAULT_SIZE,
-    };
+    let (cols, rows) = usable_terminal_size(crossterm::terminal::size(), DEFAULT_SIZE);
     PtySize {
         rows,
         cols,
         pixel_width: 0,
         pixel_height: 0,
+    }
+}
+
+fn usable_terminal_size(size: std::io::Result<(u16, u16)>, default: (u16, u16)) -> (u16, u16) {
+    match size {
+        Ok((cols, rows)) if cols != 0 && rows != 0 => (cols, rows),
+        _ => default,
     }
 }
 
@@ -203,5 +207,16 @@ mod tests {
         // Should return either actual size or default 80x24
         assert!(size.cols >= 1);
         assert!(size.rows >= 1);
+    }
+
+    #[test]
+    fn zero_terminal_dimensions_use_default() {
+        assert_eq!(usable_terminal_size(Ok((0, 0)), (80, 24)), (80, 24));
+        assert_eq!(usable_terminal_size(Ok((0, 24)), (80, 24)), (80, 24));
+        assert_eq!(usable_terminal_size(Ok((80, 0)), (80, 24)), (80, 24));
+        assert_eq!(
+            usable_terminal_size(Err(std::io::Error::other("probe failed")), (80, 24)),
+            (80, 24)
+        );
     }
 }
