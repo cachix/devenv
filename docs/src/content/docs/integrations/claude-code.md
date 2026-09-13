@@ -71,6 +71,9 @@ You can define custom hooks that run at different stages of Claude's workflow:
 - **Notification**: Triggers on Claude notifications
 - **Stop**: Executes when Claude finishes responding
 - **SubagentStop**: Runs when subagent tasks complete
+- **FileChanged**: Runs when a watched file changes on disk
+
+Each hook can also set a `timeout` (in seconds) to bound how long its command is allowed to run before Claude Code cancels it.
 
 ### Examples
 
@@ -151,6 +154,18 @@ You can define custom hooks that run at different stages of Claude's workflow:
       name = "Log subagent completion";
       hookType = "SubagentStop";
       command = ''echo "Subagent task completed" >> subagent.log'';
+    };
+
+    # Reload direnv when .envrc changes (FileChanged hook)
+    reload-direnv = {
+      enable = true;
+      name = "Reload direnv on .envrc changes";
+      hookType = "FileChanged";
+      # For FileChanged, matcher is a glob (or `|`-separated globs) matched
+      # against paths relative to the project root, not a tool-name regex.
+      matcher = ".envrc";
+      command = "direnv reload";
+      timeout = 10;
     };
   };
 }
