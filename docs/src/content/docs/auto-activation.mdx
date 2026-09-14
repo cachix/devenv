@@ -2,13 +2,14 @@
 title: "Auto Activation"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 
-:::tip[New in version 2.1]
+<VersionCompatibility version="2.1" />
 
 [Read more about auto activation in the v2.1 release post](/blog/2026/05/07/devenv-21-nix-with-zsh-fish-and-nushell-via-libghostty/)
-:::
 
 
 devenv includes a built in shell hook that automatically activates your developer environment when you `cd` into a project directory. No external tools required.
@@ -53,7 +54,7 @@ devenv includes a built in shell hook that automatically activates your develope
 
 ### Passing arguments to `devenv shell`
 
-:::tip[New in version 2.3]
+<VersionCompatibility version="2.3" />
 
 Place arguments for the auto-activated `devenv shell` after `--`. For example,
 to disable the TUI in shells started by the Fish hook without changing other
@@ -68,8 +69,6 @@ The same separator works in every supported shell:
 ```bash title="~/.bashrc"
 eval "$(devenv hook bash -- --no-tui)"
 ```
-
-:::
 
 
 ## Trusting a project

@@ -2,6 +2,8 @@
 title: "Tests"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 Tests are a way to ensure that your development environment is working as expected.
 
 Running `devenv test` will build your environment and run the tests defined in `enterTest`.
@@ -85,7 +87,7 @@ ncdu 2.2
 
 ## Changing environment if testing
 
-<small class="added-in">Added in <code>1.0.6</code></small>
+<VersionCompatibility version="1.0.6" />
 
 ```nix title="devenv.nix"
 { pkgs, lib, config, ... }: {

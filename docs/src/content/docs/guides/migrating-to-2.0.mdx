@@ -2,6 +2,8 @@
 title: "Migrating to devenv 2.0"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 This guide covers the breaking changes in devenv 2.0 and how to update your project.
 
 ## Native process manager is the default
@@ -196,10 +198,10 @@ The setting applies to both the native manager and process-compose:
 }
 ```
 
-!!! tip "New in version 2.2.3"
+<VersionCompatibility version="2.2.3" />
 
-    `processes.<name>.shutdown` was added in devenv 2.2.3.
-    Older 2.x versions send SIGTERM; wrap the process in a script that translates the signal if you need a different one.
+`processes.<name>.shutdown` was added in devenv 2.2.3.
+Older 2.x versions send SIGTERM; wrap the process in a script that translates the signal if you need a different one.
 
 #### Elevated processes
 

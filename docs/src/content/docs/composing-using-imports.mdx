@@ -2,6 +2,8 @@
 title: "Composing using imports"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 You can compose environments either locally or by referencing [inputs](/inputs/).
 
 Imagine you're building a typical web application, with separate frontend and backend components
@@ -26,11 +28,10 @@ If you enter the ``frontend`` directory, the environment will activate based on 
 If you enter the top-level project, the environment is combined with what's defined in ``backend/devenv.nix`` and ``frontend/devenv.nix``.
 For example, ``devenv up`` will start both the frontend and backend processes.
 
-:::note[Added in 1.10]
+<VersionCompatibility version="1.10" />
 
 Composing ``devenv.yaml`` files is now supported for local files (relative and absolute paths).
 Remote inputs are not yet supported for ``devenv.yaml`` imports.
-:::
 
 
 ## Sharing configuration from another repository
@@ -49,11 +50,12 @@ imports:
 The sibling `shared-config` repository only needs a `devenv.nix` file.
 Combine this with [profiles](/profiles/) to define one shared configuration that adapts to each project.
 
-:::tip[New in version 2.2]
+<VersionCompatibility version="2.2" kind="changed">
 
 Changes to files in local `path:` inputs are picked up automatically.
 Previously the evaluation cache held on to the old configuration until `.devenv` was deleted.
-:::
+
+</VersionCompatibility>
 
 
 See [devenv.yaml reference](/reference/yaml-options/#imports) for all supported import options.

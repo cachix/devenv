@@ -16,19 +16,24 @@ let
   # When enabled, use getInput (throws helpful error if missing)
   # Otherwise, use tryGetInput to populate the docs when the input is available.
   treefmt-nix =
-    if cfg.enable then config.lib.getInput inputArgs else config.lib.tryGetInput inputArgs;
+    if cfg.enable
+    then config.lib.getInput inputArgs
+    else config.lib.tryGetInput inputArgs;
 
   treefmtSubmodule =
-    if treefmt-nix != null then
+    if treefmt-nix != null
+    then
       treefmt-nix.lib.submoduleWith lib
         {
           specialArgs = { inherit pkgs; };
         }
-    else
-      lib.types.attrs;
+    else lib.types.attrs;
 
   # Determine tree root: prefer git.root, fallback to devenv.root
-  treeRoot = if config.git.root != null then config.git.root else config.devenv.root;
+  treeRoot =
+    if config.git.root != null
+    then config.git.root
+    else config.devenv.root;
 
   # Custom wrapper to point treefmt to the project root.
   #
@@ -38,10 +43,9 @@ let
   treefmtWrapper =
     let
       treeRootOption =
-        if cfg.config.projectRootFile != "" then
-          "--tree-root-file " + lib.escapeShellArg cfg.config.projectRootFile
-        else
-          "--tree-root " + lib.escapeShellArg treeRoot;
+        if cfg.config.projectRootFile != ""
+        then "--tree-root-file " + lib.escapeShellArg cfg.config.projectRootFile
+        else "--tree-root " + lib.escapeShellArg treeRoot;
     in
     pkgs.writeShellScriptBin "treefmt" ''
       exec ${cfg.config.package}/bin/treefmt --config-file ${cfg.config.build.configFile} "$@" ${treeRootOption}
@@ -71,11 +75,7 @@ in
     treefmt.config.projectRootFile = lib.mkDefault "";
 
     tasks."devenv:treefmt:run" = {
-      # Files materialized by `devenv:files` have to exist before the tree-wide sweep walks
-      # them: without an edge between the two the scheduler runs them concurrently and
-      # treefmt fails to stat a managed file that is being replaced. `devenv:files` is
-      # always declared (files.nix only makes its *contents* conditional on `files`), so the
-      # name always resolves - an unresolved name in `after` aborts the run.
+      # Wait for managed files before walking the project tree.
       after = [ "devenv:files" ];
       before = [ "devenv:enterShell" ];
       exec = "${treefmtWrapper}/bin/treefmt";

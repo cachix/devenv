@@ -1,4 +1,8 @@
-{ pkgs, ... }:
+{
+  lib,
+  pkgs,
+  ...
+}:
 {
   packages = [ pkgs.jq ];
 
@@ -9,6 +13,20 @@
       nixfmt.enable = true;
     };
   };
+
+  files."managed.txt" = {
+    text = "managed content\n";
+    copyMode = "copy";
+  };
+
+  # Use a slow producer and a reader to exercise the integration's ordering edge.
+  tasks."devenv:files".exec = lib.mkForce ''
+    sleep 1
+    printf 'managed content\n' > managed.txt
+  '';
+  tasks."devenv:treefmt:run".exec = lib.mkForce ''
+    grep -qx "managed content" managed.txt
+  '';
 
   # Copy-mode files are rewritten by `devenv:files` on every shell entry, so the tree-wide
   # treefmt sweep has to wait for them: without an ordering edge the two run concurrently

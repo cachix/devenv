@@ -101,7 +101,7 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         with:
           default_author: github_actions
-          add: docs/src/content/docs/reference/yaml-options.md
+          add: docs/src/content/docs/reference/yaml-options.mdx
           message: "Auto generate docs YAML options"
 
       - name: Check for uncommitted changes

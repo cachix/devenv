@@ -1424,6 +1424,14 @@ pub enum SessionError {
     Io(#[from] io::Error),
     #[error("terminal error: {0}")]
     Terminal(#[from] libghostty_vt::Error),
+    #[error("terminal error during {operation} ({cols}x{rows}): {source}")]
+    TerminalOperation {
+        operation: &'static str,
+        cols: u16,
+        rows: u16,
+        #[source]
+        source: libghostty_vt::Error,
+    },
     #[error("channel closed")]
     ChannelClosed,
     #[error("unexpected command: expected Spawn, got {0}")]
@@ -1904,11 +1912,30 @@ impl ShellSession {
             // it is drained into the child PTY immediately after each feed.
             let virtual_pty_replies = RefCell::new(VirtualPtyReplies::default());
             // Create the VT on this thread (Terminal is !Send)
-            let mut vt = Terminal::new(pty_size.cols, pty_size.rows)?;
-            vt.set_scrollback_max_bytes(Some(DEFAULT_MAX_SCROLLBACK))?;
+            let mut vt = Terminal::new(pty_size.cols, pty_size.rows).map_err(|source| {
+                SessionError::TerminalOperation {
+                    operation: "VT creation",
+                    cols: pty_size.cols,
+                    rows: pty_size.rows,
+                    source,
+                }
+            })?;
+            vt.set_scrollback_max_bytes(Some(DEFAULT_MAX_SCROLLBACK))
+                .map_err(|source| SessionError::TerminalOperation {
+                    operation: "scrollback setup",
+                    cols: pty_size.cols,
+                    rows: pty_size.rows,
+                    source,
+                })?;
             vt.on_pty_write({
                 let virtual_pty_replies = &virtual_pty_replies;
                 move |_term, data| virtual_pty_replies.borrow_mut().capture(data)
+            })
+            .map_err(|source| SessionError::TerminalOperation {
+                operation: "PTY callback setup",
+                cols: pty_size.cols,
+                rows: pty_size.rows,
+                source,
             })?;
 
             // Reset the VT after resize so any stale PTY output (the shell's
@@ -1921,7 +1948,14 @@ impl ShellSession {
             vt.vt_write(b"\x1b[2J\x1b[H");
 
             // Initialize the renderer; content above the takeover row stays.
-            let mut renderer = Renderer::new(pty_size.rows, &vt)?;
+            let mut renderer = Renderer::new(pty_size.rows, &vt).map_err(|source| {
+                SessionError::TerminalOperation {
+                    operation: "renderer creation",
+                    cols: pty_size.cols,
+                    rows: pty_size.rows,
+                    source,
+                }
+            })?;
             renderer.init_takeover(takeover_offset, &mut stdout, &vt)?;
             if self.config.show_status_line {
                 self.status_line

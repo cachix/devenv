@@ -9,7 +9,7 @@ use std::{
 
 const JSON_SCHEMA_PATH: &str = "docs/public/devenv.schema.json";
 const USER_CONFIG_SCHEMA_PATH: &str = "docs/public/devenv.user.schema.json";
-const YAML_OPTIONS_PATH: &str = "docs/src/content/docs/reference/yaml-options.md";
+const YAML_OPTIONS_PATH: &str = "docs/src/content/docs/reference/yaml-options.mdx";
 
 pub fn default_json_schema_path() -> PathBuf {
     PathBuf::from(JSON_SCHEMA_PATH)
@@ -92,7 +92,10 @@ fn render_yaml_options(schema: &serde_json::Value) -> String {
     sections.sort_by(|a, b| a.path.cmp(&b.path));
 
     let mut out = String::from("---\ntitle: devenv.yaml\n---\n\n");
-    out.push_str("<!-- This file is auto-generated from devenv-core/src/config.rs doc comments. Do not edit. -->\n\n");
+    out.push_str(
+        "import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';\n\n",
+    );
+    out.push_str("{/* This file is auto-generated from devenv-core/src/config.rs doc comments. Do not edit. */}\n\n");
     for section in sections {
         out.push_str(&render_section(&section));
     }
@@ -271,7 +274,7 @@ fn render_section(s: &OptionSection) -> String {
     let mut out = format!("## {}\n\n", s.path);
     if let Some(version) = &s.added_in {
         out.push_str(&format!(
-            "<small class=\"added-in\">Added in <code>{}</code></small>\n\n",
+            "<VersionCompatibility version=\"{}\" />\n\n",
             version
         ));
     }
@@ -444,7 +447,10 @@ mod tests {
         assert!(rendered.contains("## inputs.\\<name\\>.url\n"));
         assert!(rendered.contains("## require_version\n"));
         assert!(rendered.contains("*Type:* `boolean | string`"));
-        assert!(rendered.contains("Added in <code>1.7</code>"));
+        assert!(rendered.contains(
+            "import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';"
+        ));
+        assert!(rendered.contains("<VersionCompatibility version=\"1.7\" />"));
         assert!(!rendered.contains("## allow_unfree\n"));
     }
 }

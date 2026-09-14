@@ -2,6 +2,8 @@
 title: "Packages"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 Packages allow you to add executables and libraries/headers to your environment.
 
 To declare packages, refer to the `pkgs` input and specify `packages` as a list:
@@ -84,11 +86,10 @@ for the reproducibility and update workflow.
 
 ### Pinning several packages
 
-:::tip[New in version 2.2.3]
+<VersionCompatibility version="2.2.3" />
 
 `multiverse.pins` needs a recent `nixpkgs-multiverse`.
 Run `devenv update nixpkgs-multiverse` if you added the input earlier.
-:::
 
 A multiverse costs one fetch and one evaluation per Nixpkgs revision it touches, not per package. Each version above
 resolves to the newest revision that shipped it, so two pins from different years mean two Nixpkgs trees.
