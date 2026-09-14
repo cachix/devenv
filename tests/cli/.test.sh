@@ -21,6 +21,18 @@ step "shell forwards arguments verbatim and to subdirs"
 devenv shell ls -- -la | grep -q "\.test\.sh"
 devenv shell ls ../ | grep -q "cli"
 
+step "shell accepts command strings and literal arguments with or without --"
+for separator in '' --; do
+  shell_args=(shell)
+  if [[ -n "$separator" ]]; then shell_args+=("$separator"); fi
+  [[ "$(devenv "${shell_args[@]}" "printf '<%s>\\n' 'two words'")" == '<two words>' ]] \
+    || fail "quoted shell command failed with separator '$separator'"
+  [[ "$(devenv "${shell_args[@]}" "printf '<%s>\\n'" 'two words' '$HOME')" == $'<two words>\n<$HOME>' ]] \
+    || fail "quoted shell command changed literal arguments with separator '$separator'"
+  [[ "$(devenv "${shell_args[@]}" printf '<%s>\n' 'two words' '$HOME')" == $'<two words>\n<$HOME>' ]] \
+    || fail "shell changed literal arguments with separator '$separator'"
+done
+
 step "info/show surface enabled languages"
 devenv info | grep -q "python3-"
 devenv show | grep -q "python3-"

@@ -1792,10 +1792,8 @@ impl Devenv {
             script.push_str(&dotenv_activation);
             script.push_str(&task_exports);
             script.push_str(&dotenv_messages);
-            // Keep the content-addressed activation script independent of the
-            // command. In particular, environment capture uses a randomly named
-            // temporary helper whose path must not affect the script hash.
-            script.push_str("\nexec \"$@\"\n");
+            // Pass the command via args to avoid changing the script hash.
+            script.push_str("\neval \"exec $1\" '\"${@:2}\"'\n");
 
             let script_path = write_executable_script(script_dir, &script);
             shell_cmd.arg(&script_path);
@@ -2300,7 +2298,7 @@ impl Devenv {
         let env_path_arg = env_path.to_string_lossy().into_owned();
         let mut cmd = self
             .prepare_shell_with_script_dir(
-                &Some(script_path.to_string_lossy().into()),
+                &Some(shell_escape::escape(script_path.to_string_lossy()).into_owned()),
                 &[env_path_arg],
                 temp_dir.path(),
             )
@@ -2436,7 +2434,7 @@ impl Devenv {
                     )
                     .await?;
                 Ok::<String, miette::Report>(
-                    test_script[0].as_path().to_string_lossy().into_owned(),
+                    shell_escape::escape(test_script[0].as_path().to_string_lossy()).into_owned(),
                 )
             }
             .in_activity(&phase3)
