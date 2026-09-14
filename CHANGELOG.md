@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- Fixed `devenv shell` failing with `not found` when the command was passed as a single quoted string. The first argument is parsed as a shell command again, and extra arguments are passed literally ([#3187](https://github.com/cachix/devenv/issues/3187)).
+- Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 
 ## 2.3.1 (2026-09-11)

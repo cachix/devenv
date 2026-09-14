@@ -1793,12 +1793,20 @@ impl Devenv {
             script.push_str(&task_exports);
             script.push_str(&dotenv_messages);
             // Pass the command via args to avoid changing the script hash.
-            script.push_str("\neval \"exec $1\" '\"${@:2}\"'\n");
+            // $1 expands before eval; `set --` hides the wrapper's positional parameters.
+            // TODO(sander): Add a mode for raw shell source, like `bash -c`.
+            // The exec prefix prevents command sequences such as `echo hello && echo bye`.
+            script.push_str("\neval \"set --; exec $1\"\n");
+
+            let escaped_args = args
+                .iter()
+                .map(|arg| shell_escape::escape(arg.into()))
+                .collect::<Vec<_>>()
+                .join(" ");
 
             let script_path = write_executable_script(script_dir, &script);
             shell_cmd.arg(&script_path);
-            shell_cmd.arg(cmd);
-            shell_cmd.args(args);
+            shell_cmd.arg(format!("{cmd} {escaped_args}"));
         } else {
             // Interactive shell
             let script_path = if target_shell_path.is_some() {

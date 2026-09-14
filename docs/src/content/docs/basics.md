@@ -47,6 +47,19 @@ hello
 See [Nix language tutorial](https://nix.dev/tutorials/first-steps/nix-language) for a 1-2 hour deep dive
 that will allow you to read any Nix file.
 
+## Running commands
+
+Pass a command to `devenv shell` to run it inside the environment and exit:
+
+```sh
+$ devenv shell -- git log --oneline
+```
+
+For multiple commands, pipes, or `&&`, use `bash -c`:
+
+```sh
+$ devenv shell -- bash -c 'cd src && make'
+```
 
 ## Shell prompt
 

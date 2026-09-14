@@ -25,13 +25,44 @@ step "shell accepts command strings and literal arguments with or without --"
 for separator in '' --; do
   shell_args=(shell)
   if [[ -n "$separator" ]]; then shell_args+=("$separator"); fi
-  [[ "$(devenv "${shell_args[@]}" "printf '<%s>\\n' 'two words'")" == '<two words>' ]] \
+  output=$(devenv "${shell_args[@]}" "printf '<%s>\\n' 'two words'")
+  [[ "$output" == '<two words>' ]] \
     || fail "quoted shell command failed with separator '$separator'"
-  [[ "$(devenv "${shell_args[@]}" "printf '<%s>\\n'" 'two words' '$HOME')" == $'<two words>\n<$HOME>' ]] \
+  output=$(devenv "${shell_args[@]}" "printf '<%s>\\n'" 'two words' '$HOME')
+  [[ "$output" == $'<two words>\n<$HOME>' ]] \
     || fail "quoted shell command changed literal arguments with separator '$separator'"
-  [[ "$(devenv "${shell_args[@]}" printf '<%s>\n' 'two words' '$HOME')" == $'<two words>\n<$HOME>' ]] \
+  output=$(devenv "${shell_args[@]}" printf '<%s>\n' 'two words' '$HOME')
+  [[ "$output" == $'<two words>\n<$HOME>' ]] \
     || fail "shell changed literal arguments with separator '$separator'"
+  output=$(devenv "${shell_args[@]}" 'printf "<%s>\n" $# $1 "$1"' foo)
+  [[ "$output" == $'<0>\n<>\n<foo>' ]] \
+    || fail "quoted shell command saw positional parameters with separator '$separator'"
 done
+
+step "shell keeps commands and arguments out of the activation script"
+devenv shell -- 'printf "%s" "devenv-cli-command-marker"' 'devenv-cli-argument-marker' >/dev/null
+rc=0
+grep -F -e 'devenv-cli-command-marker' -e 'devenv-cli-argument-marker' .devenv/shell-*.sh >/dev/null || rc=$?
+[[ "$rc" == 1 ]] || fail "activation scripts contain command text or could not be read (grep exited $rc)"
+
+step "shell passes unusual arguments literally"
+output=$(devenv shell -- printf '<%s>\n' '' '$(echo no)' '`echo no`' '*' "it's" 'a\b' 'a"b' $'a\nb')
+[[ "$output" == $'<>\n<$(echo no)>\n<`echo no`>\n<*>\n<it\'s>\n<a\\b>\n<a"b>\n<a\nb>' ]] \
+  || fail "shell changed unusual arguments"
+
+step "shell command strings see the activated environment"
+output=$(devenv shell -- 'printf "<%s>\n" "$DEVENV_CLI_TEST_VAR" "$command"')
+[[ "$output" == $'<hello-from-task>\n<env-command>' ]] \
+  || fail "quoted shell command did not see the activated environment: $output"
+
+step "shell forwards flags after -- and preserves the exit status"
+output=$(devenv shell -- printf '%s\n' --help)
+[[ "$output" == '--help' ]] || fail "shell consumed --help after --: $output"
+output=$(devenv shell bash -- -c 'echo ok')
+[[ "$output" == 'ok' ]] || fail "shell broke -- after the command: $output"
+rc=0
+devenv shell -- sh -c 'exit 3' || rc=$?
+[[ "$rc" == 3 ]] || fail "shell did not preserve exit status 3, got $rc"
 
 step "info/show surface enabled languages"
 devenv info | grep -q "python3-"

@@ -89,7 +89,7 @@ to override the default shell for the current step and replace it with the deven
 
 ```yaml
 - name: Run a multi-line command in the devenv shell
-  shell: devenv shell bash -- -e {0}
+  shell: devenv shell -- bash -e {0}
   run: |
     hello
     say-bye
@@ -108,7 +108,7 @@ option to set devenv as the default shell for all `run` steps in a job.
 ```yaml
 defaults:
   run:
-    shell: devenv shell bash -- -e {0}
+    shell: devenv shell -- bash -e {0}
 ```
 
 When setting the default shell, the "Install devenv.sh" step must be amended as follows, so that it does not attempt to use a devenv shell:
@@ -153,7 +153,7 @@ jobs:
       run: devenv shell hello
 
     - name: Run a multi-line command in the devenv shell
-      shell: devenv shell bash -- -e {0}
+      shell: devenv shell -- bash -e {0}
       run: |
         hello
         say-bye
