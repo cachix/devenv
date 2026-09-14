@@ -13,6 +13,10 @@
 - Fixed `cachix.pull` containing duplicate caches. The module adds `devenv` (and `cachix.push`) to the list, so a cache also listed in `devenv.nix` was registered twice and Nix warned `Substituter '...' is already present in the substituters list` on every command. The option now deduplicates its value.
 - Fixed devenv no longer fetching the public signing keys of the caches in `cachix.pull`, a regression from the 2.0 rewrite. Only keys already present in `cachix_trusted_keys.json` were passed to Nix, so on a machine that had only ever run 2.x `extra-trusted-public-keys` was empty and Nix could not verify paths from those caches. The keys are fetched from the Cachix API again (using the resolved auth token for private caches) and cached ([#3176](https://github.com/cachix/devenv/issues/3176)).
 
+### Bug Fixes
+
+- Fixed fetched `--from` sources loading only `devenv.nix`. They now also load the source's complete YAML configuration and imports.
+
 ## 2.3.0 (2026-09-07)
 
 ### Bug Fixes
