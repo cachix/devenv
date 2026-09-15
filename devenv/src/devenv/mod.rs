@@ -2768,8 +2768,10 @@ impl Devenv {
             manager_descriptor.adapter.client,
         ) {
             (true, processes::ManagerClient::NativeApi)
-            | (false, processes::ManagerClient::None) => {}
-            (true, processes::ManagerClient::None) => {
+            | (false, processes::ManagerClient::None)
+            | (false, processes::ManagerClient::ProcessCompose) => {}
+            (true, processes::ManagerClient::None)
+            | (true, processes::ManagerClient::ProcessCompose) => {
                 bail!("the native process manager requires the native API client adapter")
             }
             (false, processes::ManagerClient::NativeApi) => bail!(
@@ -3257,14 +3259,26 @@ impl Devenv {
                 }
             }
         } else if self.external_process_manager_state_exists() {
-            let adapter = self
-                .external_process_manager_control()
+            let manager = self.external_process_manager_control();
+            let adapter = manager
                 .require_operation(processes::ManagerOperation::WaitReady)
                 .await?;
-            Self::unsupported_external_client_operation(
-                adapter,
-                processes::ManagerOperation::WaitReady,
-            )
+            if adapter.client == processes::ManagerClient::ProcessCompose {
+                let process_compose = self.process_compose_binary().await?;
+                let process_configs = self.process_configs().await?;
+                processes::process_compose::wait_for_ready(
+                    &process_compose,
+                    &self.process_compose_socket(),
+                    &process_configs,
+                    timeout,
+                )
+                .await
+            } else {
+                Self::unsupported_external_client_operation(
+                    adapter,
+                    processes::ManagerOperation::WaitReady,
+                )
+            }
         } else {
             bail!("No process manager is running. Start processes first with `devenv up -d`")
         }
@@ -3377,20 +3391,76 @@ impl Devenv {
                 "the running external manager cannot use the native API client adapter for {}",
                 operation.description()
             ),
+            processes::ManagerClient::ProcessCompose => bail!(
+                "the running process-compose manager does not implement {} through its client adapter",
+                operation.description()
+            ),
         }
     }
 
+    fn process_compose_socket(&self) -> PathBuf {
+        std::env::var_os("PC_SOCKET_PATH")
+            .map(PathBuf::from)
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or_else(|| self.devenv_runtime.join("pc.sock"))
+    }
+
+    async fn process_compose_binary(&self) -> Result<PathBuf> {
+        let gc_root = self.devenv_dot_gc.join("process-compose-package");
+        let paths = self
+            .backend()
+            .build_devenv(
+                &["devenv.config.process.managers.process-compose.package"],
+                BuildOptions {
+                    gc_root: Some(gc_root),
+                },
+            )
+            .await?;
+        Ok(paths[0].as_path().join("bin/process-compose"))
+    }
+
+    async fn process_configs(&self) -> Result<HashMap<String, processes::ProcessConfig>> {
+        let processes_json = self
+            .backend
+            .eval_devenv(&["devenv.config.processes"])
+            .await?;
+        serde_json::from_str(&processes_json)
+            .map_err(|e| miette!("Failed to parse process config: {}", e))
+    }
+
     pub async fn processes_list(&self) -> Result<String> {
-        match self
-            .native_api_request(&processes::ApiRequest::List)
-            .await?
-        {
-            processes::ApiResponse::ProcessList { processes } => {
-                Ok(format_process_list(&processes))
-            }
-            processes::ApiResponse::Error { message } => bail!("{}", message),
-            other => bail!("Unexpected response: {:?}", other),
+        if self.native_manager_pid_file().exists() {
+            return match self
+                .native_api_request(&processes::ApiRequest::List)
+                .await?
+            {
+                processes::ApiResponse::ProcessList { processes } => {
+                    Ok(format_process_list(&processes))
+                }
+                processes::ApiResponse::Error { message } => bail!("{}", message),
+                other => bail!("Unexpected response: {:?}", other),
+            };
         }
+
+        if self.external_process_manager_state_exists() {
+            let (manager_id, adapter) = self
+                .external_process_manager_control()
+                .running_identity()
+                .await?;
+            if adapter.client == processes::ManagerClient::ProcessCompose
+                || manager_id == "process-compose"
+            {
+                let listed = processes::process_compose::list(
+                    &self.process_compose_binary().await?,
+                    &self.process_compose_socket(),
+                )
+                .await?;
+                return Ok(processes::process_compose::format_list(&listed));
+            }
+            bail!("This subcommand is only supported with the native process manager")
+        }
+
+        bail!("No process manager is running. Start processes first with `devenv up -d`")
     }
 
     pub async fn processes_status(&self, name: &str) -> Result<String> {

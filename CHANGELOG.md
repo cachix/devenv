@@ -9,6 +9,10 @@
 - Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 
+### Improvements
+
+- `devenv processes list` and `devenv processes wait` now work with process-compose, so those projects no longer need to call `process-compose` directly for status and readiness ([#2950](https://github.com/cachix/devenv/issues/2950)).
+
 ## 2.3.1 (2026-09-11)
 
 ### Bug Fixes
