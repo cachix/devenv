@@ -2,6 +2,10 @@
 
 ## 2.4.1 (unreleased)
 
+### Improvements
+
+- `devenv processes list` and `devenv processes wait` now work with process-compose, so those projects no longer need to call `process-compose` directly for status and readiness ([#2950](https://github.com/cachix/devenv/issues/2950)).
+
 ### Bug Fixes
 
 - Nushell hot reload no longer breaks commands that use structured environment variables and now removes variables that disappeared after a reload ([#3230](https://github.com/cachix/devenv/issues/3230)).

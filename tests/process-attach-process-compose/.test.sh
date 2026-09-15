@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Unsupported operations must fail without disturbing process-compose.
+# Attach, status, logs, and individual control must fail without disturbing
+# process-compose. list and wait talk to the running process-compose server.
 
 set -eux
 
@@ -44,14 +45,14 @@ jq -e '
   and .capabilities == {
     "background_start": true,
     "devenv_attach": false,
-    "wait_ready": false,
+    "wait_ready": true,
     "individual_control": false,
     "cold_start_subset": true
   }
   and .adapter == {
     "terminal": "none",
     "stop": "process-scope",
-    "client": "none"
+    "client": "process-compose"
   }
 ' "$STATE_FILE" >/dev/null
 MANAGER_PID=$(manager_pid)
@@ -65,7 +66,6 @@ fi
 grep -Fq "process manager 'process-compose' does not support devenv attach" attach.txt
 
 for command in \
-  "list" \
   "status alpha" \
   "logs alpha"
 do
@@ -95,12 +95,13 @@ do
   http_is_ready "$PORT"
 done
 
-if devenv processes wait >wait.txt 2>&1; then
-  echo "process-compose wait unexpectedly succeeded" >&2
-  exit 1
-fi
-grep -Fq "process manager 'process-compose' does not support readiness waiting" wait.txt
+devenv processes wait --timeout 60
+list_output=$(devenv processes list)
+echo "$list_output"
+grep -q '^alpha[[:space:]]' <<<"$list_output"
+
 test "$(manager_pid)" = "$MANAGER_PID"
+kill -0 "$MANAGER_PID"
 http_is_ready "$PORT"
 
 devenv processes down
