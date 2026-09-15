@@ -6,6 +6,7 @@
 pub mod dialect;
 pub mod escape;
 pub mod escape_state;
+pub mod keybindings;
 mod protocol;
 mod pty;
 mod session;

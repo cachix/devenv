@@ -20,6 +20,16 @@ enum Command {
         )]
         output: std::path::PathBuf,
     },
+    #[command(name = "generate-user-config-schema")]
+    UserConfigSchema {
+        #[clap(
+            long,
+            value_parser,
+            value_hint = clap::ValueHint::FilePath,
+            default_value_os_t = config_docs::default_user_config_schema_path()
+        )]
+        output: std::path::PathBuf,
+    },
     #[command(name = "generate-yaml-options-doc")]
     YamlOptionsDoc {
         #[clap(
@@ -60,6 +70,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Command::JsonSchema { output } => config_docs::generate_json_schema(output),
+        Command::UserConfigSchema { output } => config_docs::generate_user_config_schema(output),
         Command::YamlOptionsDoc { output } => config_docs::generate_yaml_options_doc(output),
         Command::Manpages { out_dir } => manpage::generate(out_dir),
         Command::ShellCompletion { shell, out_dir } => shell_completion::generate(shell, out_dir),

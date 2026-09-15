@@ -135,6 +135,9 @@ fn main() -> Result<()> {
     if let Some(code) = devenv_processes::maybe_run_process_guardian() {
         std::process::exit(code);
     }
+    if let Some(code) = devenv_processes::maybe_run_capability_helper() {
+        std::process::exit(code);
+    }
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
@@ -252,6 +255,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 ignore_process_deps,
                 exit_on_idle,
                 supervisor,
+                capability_broker: None,
             };
 
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))

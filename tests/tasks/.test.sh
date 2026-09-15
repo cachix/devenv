@@ -116,6 +116,48 @@ if ! echo "$OUTPUT" | grep -q "HIDDEN_OUTPUT_MARKER"; then
 fi
 echo "✓ --show-output flag displays output"
 
+# Test: showOutput still streams under --quiet (AI-agent auto-quiet uses Quiet)
+OUTPUT=$(devenv --quiet --no-tui tasks run test:with-output 2>&1)
+if ! echo "$OUTPUT" | grep -q "VISIBLE_OUTPUT_MARKER"; then
+  echo "FAIL: test:with-output should show output under --quiet but didn't"
+  echo "Got output: $OUTPUT"
+  exit 1
+fi
+echo "✓ showOutput=true displays output under --quiet"
+
+# Test: without showOutput, --quiet still hides successful task stdout
+OUTPUT=$(devenv --quiet --no-tui tasks run test:without-output 2>&1)
+if echo "$OUTPUT" | grep -q "HIDDEN_OUTPUT_MARKER"; then
+  echo "FAIL: test:without-output should hide output under --quiet but didn't"
+  echo "Got output: $OUTPUT"
+  exit 1
+fi
+echo "✓ showOutput=false hides output under --quiet"
+
+# Test: --show-output still wins under --quiet
+OUTPUT=$(devenv --quiet --no-tui tasks run test:without-output --show-output 2>&1)
+if ! echo "$OUTPUT" | grep -q "HIDDEN_OUTPUT_MARKER"; then
+  echo "FAIL: --show-output should show output under --quiet but didn't"
+  echo "Got output: $OUTPUT"
+  exit 1
+fi
+echo "✓ --show-output flag displays output under --quiet"
+
+# Test: CLAUDECODE auto-quiet still honors showOutput (#3038)
+OUTPUT=$(env -u DEVENV_NO_AI_AGENT CLAUDECODE=1 devenv --no-tui tasks run test:with-output 2>&1)
+if ! echo "$OUTPUT" | grep -q "VISIBLE_OUTPUT_MARKER"; then
+  echo "FAIL: test:with-output should show output under CLAUDECODE=1 but didn't"
+  echo "Got output: $OUTPUT"
+  exit 1
+fi
+OUTPUT=$(env -u DEVENV_NO_AI_AGENT CLAUDECODE=1 devenv --no-tui tasks run test:without-output 2>&1)
+if echo "$OUTPUT" | grep -q "HIDDEN_OUTPUT_MARKER"; then
+  echo "FAIL: test:without-output should hide output under CLAUDECODE=1 but didn't"
+  echo "Got output: $OUTPUT"
+  exit 1
+fi
+echo "✓ showOutput honors CLAUDECODE auto-quiet"
+
 # Test: Nix-defined task input is passed via DEVENV_TASK_INPUT
 devenv tasks run test:input
 INPUT=$(cat input-result.json)

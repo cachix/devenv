@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use devenv_activity::{Activity, ProcessStatus};
+use devenv_activity::{Activity, HttpProbe, PortBinding, ProcessStatus, ReadyProbe};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix::sys::signal::{self, Signal as NixSignal};
 use nix::unistd::Pid;
@@ -88,9 +88,9 @@ pub struct ProcessInfo {
     pub name: String,
     pub phase: ProcessPhase,
     pub restart_count: usize,
-    /// Configured ports, formatted as "name:port" (e.g. ["http:8080"]).
+    /// Configured ports.
     #[serde(default)]
-    pub ports: Vec<String>,
+    pub ports: Vec<PortBinding>,
 }
 
 /// Response sent by the native manager API socket.
@@ -522,6 +522,7 @@ pub struct ProcessRunner {
     live: Arc<AtomicUsize>,
     /// Wakes a foreground run when a process reaches a terminal phase.
     completion: Arc<Notify>,
+    capability_broker: Option<crate::capabilities::CapabilityBrokerClient>,
 }
 
 /// Path-only control client for an already-running native manager.
@@ -542,15 +543,18 @@ impl NativeManagerClient {
 /// Display ports for a process: socket-activation `listen` specs plus declared
 /// `ports` not shadowed by a same-named listen spec; "name:port", deduped by
 /// name, sorted.
-pub fn display_ports(config: &ProcessConfig) -> Vec<String> {
-    let mut ports: Vec<String> = config
+/// The named ports a process listens on: declared TCP listen sockets first,
+/// then allocated ports that no listen socket already covers.
+pub fn port_bindings(config: &ProcessConfig) -> Vec<PortBinding> {
+    let mut ports: Vec<PortBinding> = config
         .listen
         .iter()
         .filter_map(|spec| {
-            spec.address.as_ref().and_then(|addr| {
-                addr.rsplit(':')
-                    .next()
-                    .map(|port| format!("{}:{}", spec.name, port))
+            let address = spec.address.as_ref()?;
+            let port = address.rsplit(':').next()?.parse().ok()?;
+            Some(PortBinding {
+                name: spec.name.clone(),
+                port,
             })
         })
         .collect();
@@ -558,26 +562,33 @@ pub fn display_ports(config: &ProcessConfig) -> Vec<String> {
         config.listen.iter().map(|s| s.name.as_str()).collect();
     for (name, port) in &config.ports {
         if !listen_names.contains(name.as_str()) {
-            ports.push(format!("{}:{}", name, port));
+            ports.push(PortBinding {
+                name: name.clone(),
+                port: *port,
+            });
         }
     }
     ports.sort();
     ports
 }
 
-/// Build a human-readable description of the readiness probe for TUI display.
-fn probe_description(config: &ProcessConfig) -> Option<String> {
+/// The configured readiness probe, if any.
+fn ready_probe(config: &ProcessConfig) -> Option<ReadyProbe> {
     let ready = config.ready.as_ref()?;
     if ready.exec.is_some() {
-        return Some("exec".to_string());
+        return Some(ReadyProbe::Exec);
     }
     if let Some(http) = &ready.http
         && let Some(get) = &http.get
     {
-        return Some(format!("http: {}:{}{}", get.host, get.port, get.path));
+        return Some(ReadyProbe::Http(Box::new(HttpProbe {
+            host: get.host.clone(),
+            port: get.port,
+            path: get.path.clone(),
+        })));
     }
     if ready.notify {
-        return Some("notify".to_string());
+        return Some(ReadyProbe::Notify);
     }
     None
 }
@@ -831,7 +842,13 @@ impl ProcessRunner {
             entries_changed: Arc::new(Notify::new()),
             live: Arc::new(AtomicUsize::new(0)),
             completion: Arc::new(Notify::new()),
+            capability_broker: None,
         })
+    }
+
+    pub fn set_capability_broker(&mut self, path: &Path) -> Result<()> {
+        self.capability_broker = Some(crate::capabilities::CapabilityBrokerClient::connect(path)?);
+        Ok(())
     }
 
     /// Set the notify handle used to wake the task dependency loop
@@ -1019,24 +1036,29 @@ impl ProcessRunner {
             name: name.to_string(),
             phase,
             restart_count,
-            ports: display_ports(entry.config()),
+            ports: port_bindings(entry.config()),
         }
     }
 
     /// Create a TUI activity for a process without launching it.
     fn create_process_activity(&self, config: &ProcessConfig, parent_id: Option<u64>) -> Activity {
-        let ports = display_ports(config);
-
         let mut builder = Activity::process(&config.name)
             .command(&config.exec)
-            .ports(ports);
-        if let Some(probe_desc) = probe_description(config) {
-            builder = builder.ready_probe(probe_desc);
+            .ports(port_bindings(config))
+            .urls(config.proxy.urls.clone());
+        if let Some(probe) = ready_probe(config) {
+            builder = builder.ready_probe(probe);
         }
         if let Some(pid) = parent_id {
             builder = builder.parent(Some(pid));
         }
-        devenv_activity::start!(builder)
+        devenv_activity::start!(
+            builder,
+            devenv.process.status = tracing::field::Empty,
+            devenv.process.restart_count = tracing::field::Empty,
+            devenv.process.supervisor_phase = tracing::field::Empty,
+            devenv.process.exit_status = tracing::field::Empty
+        )
     }
 
     /// Register a process as waiting for dependencies.
@@ -1272,6 +1294,7 @@ impl ProcessRunner {
         let state_dir = self.state_dir.clone();
         let live = Arc::clone(&self.live);
         let completion = Arc::clone(&self.completion);
+        let capability_broker = self.capability_broker.clone();
         tokio::spawn(async move {
             let (config, activity_ref) = {
                 let procs = processes.read().await;
@@ -1283,7 +1306,8 @@ impl ProcessRunner {
                 }
             };
 
-            let setup = Self::launch_setup(&state_dir, &config, &activity_ref).await;
+            let setup =
+                Self::launch_setup(&state_dir, &config, &activity_ref, capability_broker).await;
 
             let mut procs = processes.write().await;
             match procs.remove(&name) {
@@ -1404,6 +1428,7 @@ impl ProcessRunner {
         state_dir: &Path,
         config: &ProcessConfig,
         activity: &devenv_activity::ActivityRef,
+        capability_broker: Option<crate::capabilities::CapabilityBrokerClient>,
     ) -> Result<LaunchSetup> {
         // A previous manager may have left this process's scope behind.
         let claim =
@@ -1426,6 +1451,21 @@ impl ProcessRunner {
         let watchdog_usec = supervise_locally
             .then(|| config.watchdog.as_ref().map(|w| w.usec))
             .flatten();
+
+        // Capabilities are a Linux feature. Elsewhere the process starts
+        // unprivileged, as it did before the broker existed.
+        let capabilities: &[String] = if cfg!(target_os = "linux") {
+            &config.linux.capabilities
+        } else {
+            &[]
+        };
+
+        if !config.listen.is_empty() && !capabilities.is_empty() {
+            bail!(
+                "process '{}' cannot combine socket activation with Linux capabilities yet",
+                config.name
+            );
+        }
 
         // Build the command (creates log directory and wrapper script)
         let proc_cmd = crate::command::build_command(
@@ -1458,34 +1498,20 @@ impl ProcessRunner {
         })
         .await;
 
-        // Setup socket activation and/or capabilities if configured
+        // Capability-bearing commands are delegated to the privileged broker.
+        // Socket activation remains a normal pre-exec wrapper.
         let has_sockets = !config.listen.is_empty();
-        let has_caps = !config.linux.capabilities.is_empty();
 
-        let process_setup = if has_sockets || has_caps {
-            let fds = if has_sockets {
-                info!("Setting up socket activation for {}", config.name);
-                let spec = activation_from_listen(&config.listen)?;
-                let activated = spec.create_fds()?;
-                debug!(
-                    "Created {} activation sockets for {}",
-                    activated.fds().len(),
-                    config.name
-                );
-                activated.into_fds()
-            } else {
-                Vec::new()
-            };
-
-            if has_caps {
-                info!(
-                    "Setting up capabilities for {}: {:?}",
-                    config.name, config.linux.capabilities
-                );
-            }
-
-            let capabilities = config.linux.capabilities.clone();
-            Some((fds, capabilities))
+        let process_setup = if has_sockets {
+            info!("Setting up socket activation for {}", config.name);
+            let spec = activation_from_listen(&config.listen)?;
+            let activated = spec.create_fds()?;
+            debug!(
+                "Created {} activation sockets for {}",
+                activated.fds().len(),
+                config.name
+            );
+            Some(activated.into_fds())
         } else {
             None
         };
@@ -1507,36 +1533,67 @@ impl ProcessRunner {
             spawned_scope: None,
         };
 
-        job.set_spawn_hook(move |command_wrap, _ctx| {
-            let cmd = command_wrap.command_mut();
-            cmd.envs(&spawn_env);
-            if let Some(ref cwd) = spawn_cwd {
-                cmd.current_dir(cwd);
-            }
-            cmd.stdin(std::process::Stdio::null());
-            cmd.stdout(
-                crate::command::open_log_file(&spawn_stdout)
-                    .map(std::process::Stdio::from)
-                    .unwrap_or_else(std::process::Stdio::null),
-            );
-            cmd.stderr(
-                crate::command::open_log_file(&spawn_stderr)
-                    .map(std::process::Stdio::from)
-                    .unwrap_or_else(std::process::Stdio::null),
-            );
+        if capabilities.is_empty() {
+            job.set_spawn_hook(move |command_wrap, _ctx| {
+                let cmd = command_wrap.command_mut();
+                cmd.envs(&spawn_env);
+                if let Some(ref cwd) = spawn_cwd {
+                    cmd.current_dir(cwd);
+                }
+                cmd.stdin(std::process::Stdio::null());
+                cmd.stdout(
+                    crate::command::open_log_file(&spawn_stdout)
+                        .map(std::process::Stdio::from)
+                        .unwrap_or_else(std::process::Stdio::null),
+                );
+                cmd.stderr(
+                    crate::command::open_log_file(&spawn_stderr)
+                        .map(std::process::Stdio::from)
+                        .unwrap_or_else(std::process::Stdio::null),
+                );
 
-            // Inject OTEL trace context so instrumented subprocesses join the trace.
-            cmd.envs(devenv_activity::trace_propagation_env());
+                // Inject OTEL trace context so instrumented subprocesses join the trace.
+                devenv_activity::inject_trace_propagation_env(|key, value| {
+                    cmd.env(key, value);
+                });
 
-            // Record the scope so a force exit, which skips both teardown and
-            // destructors, can still reach processes that would otherwise be
-            // orphaned to init.
-            command_wrap.wrap(registration.clone());
-
-            if let Some((ref fds, ref capabilities)) = process_setup {
-                command_wrap.wrap(ProcessSetupWrapper::new(fds.clone(), capabilities.clone()));
-            }
-        });
+                command_wrap.wrap(registration.clone());
+                if let Some(ref fds) = process_setup {
+                    command_wrap.wrap(ProcessSetupWrapper::socket_activation(fds.clone()));
+                }
+            });
+        } else {
+            let broker = capability_broker.ok_or_else(|| {
+                miette::miette!(
+                    "process '{}' requires Linux capabilities but no privileged broker is available; start the process manager from a terminal, or after `sudo -v`, to authenticate",
+                    config.name
+                )
+            })?;
+            let process_name = config.name.clone();
+            let capabilities = capabilities.to_vec();
+            let program = config.bash.clone();
+            let mut args = vec!["-c".to_string(), config.exec.clone()];
+            args.extend(config.args.clone());
+            let mut env = spawn_env;
+            devenv_activity::inject_trace_propagation_env(|key, value| {
+                env.insert(key.to_owned(), value.to_owned());
+            });
+            let cwd = spawn_cwd
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+            job.set_spawn_child_fn(move |_command_wrap| {
+                let child = broker.launch(
+                    &process_name,
+                    &capabilities,
+                    &program,
+                    &args,
+                    &env,
+                    &cwd,
+                    &spawn_stdout,
+                    &spawn_stderr,
+                )?;
+                registration.register_external_session_child(child)
+            });
+        }
 
         job.start().await;
         if let Ok(error) = start_error_rx.try_recv() {
@@ -3100,7 +3157,11 @@ mod tests {
             ..test_config("ports-proc")
         };
 
-        assert_eq!(display_ports(&config), vec!["db:5432", "web:8080"]);
+        let ports: Vec<String> = port_bindings(&config)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(ports, ["db:5432", "web:8080"]);
     }
 
     #[test]

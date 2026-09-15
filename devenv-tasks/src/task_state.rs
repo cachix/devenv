@@ -454,17 +454,30 @@ impl TaskState {
             devenv_activity::start!(Activity::task(&self.task.name).id(activity_id));
 
         // Run the entire task within the activity's scope for proper parent-child nesting
-        self.run_inner(
-            now,
-            outputs,
-            cache,
-            cancellation,
-            &task_activity,
-            refresh_task_cache,
-            shell_env,
-        )
-        .in_activity(&task_activity)
-        .await
+        let result = self
+            .run_inner(
+                now,
+                outputs,
+                cache,
+                cancellation,
+                &task_activity,
+                refresh_task_cache,
+                shell_env,
+            )
+            .in_activity(&task_activity)
+            .await;
+
+        match &result {
+            Ok(TaskCompleted::Failed(_, failure)) => {
+                task_activity.fail_with_description(&failure.error);
+            }
+            Err(error) => {
+                task_activity.fail_with_description(format!("{error:#}"));
+            }
+            _ => {}
+        }
+
+        result
     }
 
     async fn run_inner(
@@ -509,11 +522,19 @@ impl TaskState {
                 let status_activity = devenv_activity::start!(
                     Activity::command("check status")
                         .command(cmd)
-                        .level(ActivityLevel::Debug)
+                        .level(ActivityLevel::Debug),
+                    devenv.command.exit_code = tracing::field::Empty,
+                    devenv.command.stdout_bytes = tracing::field::Empty,
+                    devenv.command.stderr_bytes = tracing::field::Empty
                 );
 
                 match command.output().await {
                     Ok(output) => {
+                        if let Some(exit_code) = output.status.code() {
+                            status_activity.record("devenv.command.exit_code", exit_code as i64);
+                        }
+                        status_activity.record("devenv.command.stdout_bytes", output.stdout.len());
+                        status_activity.record("devenv.command.stderr_bytes", output.stderr.len());
                         // A nonzero exit is a normal status/cache miss: fall through
                         // to run the command. Only a spawn/execution error of the
                         // status probe itself (the `Err` arm below) is a real failure.
@@ -542,7 +563,7 @@ impl TaskState {
                         }
                     }
                     Err(e) => {
-                        status_activity.fail();
+                        status_activity.fail_with_description(e.to_string());
                         return Ok(TaskCompleted::Failed(
                             now.elapsed(),
                             TaskFailure {
@@ -594,7 +615,11 @@ impl TaskState {
         let cmd_activity = devenv_activity::start!(
             Activity::command("execute command")
                 .command(cmd)
-                .level(ActivityLevel::Debug)
+                .level(ActivityLevel::Debug),
+            devenv.command.pid = tracing::field::Empty,
+            devenv.command.exit_code = tracing::field::Empty,
+            devenv.command.stdout_line_count = tracing::field::Empty,
+            devenv.command.stderr_line_count = tracing::field::Empty
         );
 
         self.validate_cwd()?;
@@ -621,6 +646,20 @@ impl TaskState {
         // Execute using the provided executor
         let callback = ActivityCallback::new(task_activity);
         let result = crate::executor::execute(ctx, &callback, cancellation).await;
+        if let Some(pid) = result.pid {
+            cmd_activity.record("devenv.command.pid", pid as u64);
+        }
+        if let Some(exit_code) = result.exit_code {
+            cmd_activity.record("devenv.command.exit_code", exit_code as i64);
+        }
+        cmd_activity.record(
+            "devenv.command.stdout_line_count",
+            result.stdout_lines.len(),
+        );
+        cmd_activity.record(
+            "devenv.command.stderr_line_count",
+            result.stderr_lines.len(),
+        );
 
         // Only update file states on success - failed tasks should not be cached
         if result.success {
@@ -649,14 +688,14 @@ impl TaskState {
                 Self::get_outputs(&outputs_file, &exports_file, &result.stdout_lines).await,
             ))
         } else {
-            cmd_activity.fail();
-            task_activity.fail();
+            let error = result.error.unwrap_or_else(|| "Unknown error".to_string());
+            cmd_activity.fail_with_description(&error);
             Ok(TaskCompleted::Failed(
                 now.elapsed(),
                 TaskFailure {
                     stdout: result.stdout_lines,
                     stderr: result.stderr_lines,
-                    error: result.error.unwrap_or_else(|| "Unknown error".to_string()),
+                    error,
                 },
             ))
         }

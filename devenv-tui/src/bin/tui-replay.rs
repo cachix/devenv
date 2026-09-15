@@ -37,6 +37,9 @@ struct Args {
     #[arg(long)]
     attached: bool,
 
+    #[arg(long, value_name = "PATH")]
+    user_config: Option<PathBuf>,
+
     /// Respond deterministically to process restart/stop commands from the TUI.
     ///
     /// Process names and IDs are discovered from Process::Start events in the
@@ -350,10 +353,14 @@ async fn run_reactive_backend(
                         ProcessStatus::Stopped,
                     )?;
                 }
+                // `FrontendCommand` carries a channel receiver, so its send
+                // error is not `Sync` and cannot be wrapped with `context`.
                 renderer_tx
                     .send(FrontendCommand::ExitRenderer)
                     .await
-                    .context("TUI closed before process-manager shutdown completed")?;
+                    .map_err(|_| {
+                        anyhow::anyhow!("TUI closed before process-manager shutdown completed")
+                    })?;
                 return Ok(());
             }
         };
@@ -390,6 +397,12 @@ async fn main() -> Result<()> {
 
     // Validation deliberately happens before the TUI enters raw mode.
     let events = load_trace_file(&args.trace_file)?;
+    let preferences = args
+        .user_config
+        .as_ref()
+        .map(devenv_tui::UserConfig::load)
+        .transpose()?
+        .map(|config| config.tui);
     let processes = reactive_processes(&events);
     if args.reactive && processes.is_empty() {
         bail!("--reactive requires at least one process start event in the trace");
@@ -417,10 +430,13 @@ async fn main() -> Result<()> {
         renderer_tx
             .send(FrontendCommand::SetAttached(true))
             .await
-            .context("failed to initialize attached replay mode")?;
+            .map_err(|_| anyhow::anyhow!("failed to initialize attached replay mode"))?;
     }
 
     let mut app = devenv_tui::TuiApp::new(activity_rx, renderer_rx, shutdown.clone());
+    if let Some(preferences) = preferences {
+        app = app.with_preferences(preferences);
+    }
     if args.reactive {
         app = app.with_event_sender(event_tx);
     } else {
@@ -476,7 +492,7 @@ async fn main() -> Result<()> {
                 renderer_tx
                     .send(FrontendCommand::ExitRenderer)
                     .await
-                    .context("TUI closed before replay completion")?;
+                    .map_err(|_| anyhow::anyhow!("TUI closed before replay completion"))?;
                 tui_task.await.context("TUI task panicked")??;
             }
         }
@@ -507,7 +523,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    const PROCESS: &str = r#"{"target":"devenv_activity::events","timestamp":"2025-01-14T10:00:00Z","fields":{"event":{"activity_kind":"process","event":"start","id":7,"name":"web","parent":null,"command":"serve","ports":["http:8080"],"ready_probe":"http: localhost:8080","level":"info","timestamp":"2025-01-14T10:00:00Z"}}}"#;
+    const PROCESS: &str = r#"{"target":"devenv_activity::events","timestamp":"2025-01-14T10:00:00Z","fields":{"event":{"activity_kind":"process","event":"start","id":7,"name":"web","parent":null,"command":"serve","ports":[{"name":"http","port":8080}],"ready_probe":{"kind":"http","host":"localhost","port":8080,"path":"/"},"level":"info","timestamp":"2025-01-14T10:00:00Z"}}}"#;
 
     #[test]
     fn rejects_non_json_trace() {

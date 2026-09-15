@@ -223,37 +223,19 @@ pub fn activation_from_listen(listens: &[ListenSpec]) -> Result<ActivationSpec> 
     Ok(builder.build())
 }
 
-/// Wrapper for process-wrap that sets up socket activation and Linux capabilities
+/// Wrapper for process-wrap that sets up socket activation.
 ///
 /// This implements CommandWrapper to integrate with watchexec-supervisor.
-/// It uses pre_exec to configure systemd-style socket activation and Linux
-/// capabilities in the child process.
+/// It uses pre_exec to configure systemd-style socket activation in the child.
 #[derive(Debug, Clone)]
 pub struct ProcessSetupWrapper {
     fds: Vec<RawFd>,
-    capabilities: Vec<String>,
 }
 
 impl ProcessSetupWrapper {
-    /// Create a new process setup wrapper
-    pub fn new(fds: Vec<RawFd>, capabilities: Vec<String>) -> Self {
-        Self { fds, capabilities }
-    }
-
-    /// Create wrapper for socket activation only
+    /// Create a wrapper for socket activation.
     pub fn socket_activation(fds: Vec<RawFd>) -> Self {
-        Self {
-            fds,
-            capabilities: Vec::new(),
-        }
-    }
-
-    /// Create wrapper for capabilities only
-    pub fn capabilities(capabilities: Vec<String>) -> Self {
-        Self {
-            fds: Vec::new(),
-            capabilities,
-        }
+        Self { fds }
     }
 }
 
@@ -276,29 +258,7 @@ impl CommandWrapper for ProcessSetupWrapper {
         // Clone data for the pre_exec closure
         let fds = self.fds.clone();
 
-        // Parse capabilities upfront (before fork) so errors are reported early
-        #[cfg(target_os = "linux")]
-        let parsed_caps: Vec<caps::Capability> = {
-            self.capabilities
-                .iter()
-                .map(|name| {
-                    // Normalize: add CAP_ prefix if not present
-                    let normalized = if name.to_uppercase().starts_with("CAP_") {
-                        name.to_uppercase()
-                    } else {
-                        format!("CAP_{}", name.to_uppercase())
-                    };
-                    normalized.parse::<caps::Capability>()
-                })
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?
-        };
-
-        // Capabilities are silently ignored on non-Linux platforms
-        #[cfg(not(target_os = "linux"))]
-        let _ = &self.capabilities;
-
-        // Use pre_exec to set up FDs, capabilities, and LISTEN_PID
+        // Use pre_exec to set up FDs and LISTEN_PID.
         unsafe {
             command.pre_exec(move || {
                 use nix::libc;
@@ -364,18 +324,6 @@ impl CommandWrapper for ProcessSetupWrapper {
                     if source_fd != target_fd && is_valid_fd(source_fd) {
                         libc::close(source_fd);
                     }
-                }
-
-                // === Capabilities Setup (Linux only) ===
-                // Capabilities are applied as ambient (inheritable first, then ambient)
-                // so they are inherited by child processes.
-                #[cfg(target_os = "linux")]
-                for cap in &parsed_caps {
-                    caps::raise(None, caps::CapSet::Inheritable, *cap)
-                        .and_then(|_| caps::raise(None, caps::CapSet::Ambient, *cap))
-                        .map_err(|e| {
-                            std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
-                        })?;
                 }
 
                 Ok(())

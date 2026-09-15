@@ -53,6 +53,15 @@ jobs:
           devenv_path=$(nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv)
           echo "path=$devenv_path" >> $GITHUB_OUTPUT
 
+      # Build and cache the relocatable static binaries
+      - name: Build devenv-static-${{ inputs.system }}
+        run: |
+          nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-static
+
+      - name: Build devenv-static-unwrapped-${{ inputs.system }}
+        run: |
+          nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-static-unwrapped
+
   extended-tests:
     needs: [build]
     runs-on: ${{ fromJSON(inputs.runs-on) }}
@@ -123,3 +132,26 @@ jobs:
             cargo build -p devenv-run-tests -p devenv-tui --features devenv-tui/deterministic-tui
           bash devenv-tui/tests/replay-pty.sh \
             target/debug/devenv-run-tests target/debug/tui-replay
+
+      # This job is a prerequisite of release pinning, as well as PR tests.
+      # Use the packaged executable so native-library and wrapper regressions
+      # cannot hide behind the Rust session fixtures.
+      - name: Smoke test interactive shell
+        run: |
+          bash devenv-shell/tests/smoke.sh \
+            '${{ steps.build-devenv.outputs.path }}/bin/devenv' \
+            "$PWD/target/debug/devenv-run-tests" \
+            "$PWD/src/modules" "$RUNNER_TEMP/shell-smoke/default"
+          static_path=$(nix build -L --no-link --print-out-paths .#devenv-static)
+          bash devenv-shell/tests/smoke.sh \
+            "$static_path/bin/devenv" \
+            "$PWD/target/debug/devenv-run-tests" \
+            "$PWD/src/modules" "$RUNNER_TEMP/shell-smoke/static"
+
+      - name: Upload shell smoke transcripts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shell-smoke-${{ inputs.system }}
+          path: ${{ runner.temp }}/shell-smoke
+          if-no-files-found: ignore

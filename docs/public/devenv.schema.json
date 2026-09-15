@@ -99,6 +99,13 @@
         "null"
       ]
     },
+    "prompt_prefix": {
+      "description": "Show the `(devenv)` prefix in the interactive shell prompt.\nSet to `false` when using a custom prompt such as Starship.\nOverrides the global user configuration.\n\nDefault: `true`.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "strict_ports": {
       "description": "Error if a port is already in use instead of auto-allocating the next available port.\nCan be overridden by `--strict-ports` or `--no-strict-ports` CLI flags.\n\nDefault: `false`.",
       "type": [

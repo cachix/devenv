@@ -1,8 +1,8 @@
 use crate::app::TuiConfig;
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
-    ExpectedCategory, Fetch, FetchKind, Message, Operation, Process, ProcessStatus, SetExpected,
-    Task,
+    ExpectedCategory, Fetch, FetchKind, Message, Operation, PortBinding, Process, ProcessStatus,
+    ReadyProbe, SetExpected, Task,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
@@ -103,9 +103,10 @@ pub struct MessageActivity {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProcessActivity {
     pub status: ProcessStatus,
-    pub ports: Vec<String>,
-    /// Human-readable description of the readiness probe (e.g., "exec: pg_isready")
-    pub ready_probe: Option<String>,
+    pub ports: Vec<PortBinding>,
+    pub urls: Vec<String>,
+    /// The configured readiness probe, if any
+    pub ready_probe: Option<ReadyProbe>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -157,6 +158,10 @@ pub struct Activity {
 /// UI state - lives outside the RwLock, managed by the UI thread.
 #[derive(Debug)]
 pub struct UiState {
+    pub preferences: Arc<crate::config::TuiPreferences>,
+    keymap: Arc<crate::config::Keymap>,
+    pub run_context: Arc<crate::config::TuiRunContext>,
+    pub pending_key: Option<String>,
     pub viewport: ViewportConfig,
     pub selected_activity: Option<u64>,
     pub inline_logs_activity: Option<u64>,
@@ -175,17 +180,19 @@ pub struct UiState {
     /// rather than the in-process "keep running vs quit".
     pub interrupt_prompt_attached: bool,
     pub view_mode: ViewMode,
-    /// Height of the inline frame painted before entering the expanded view,
-    /// so returning to [`ViewMode::Main`] clears exactly what is still on
-    /// screen. Consumed by that clear.
-    pub pre_expand_height: Option<u16>,
 }
 
 impl UiState {
     /// Create a new UiState, querying the terminal for its size.
     pub fn new() -> Self {
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+        let preferences = crate::config::TuiPreferences::default();
+        let keymap = preferences.keybindings.resolve().unwrap();
         Self {
+            preferences: Arc::new(preferences),
+            keymap: Arc::new(keymap),
+            run_context: Arc::new(crate::config::TuiRunContext::default()),
+            pending_key: None,
             viewport: ViewportConfig {
                 current: 10,
                 min: 10,
@@ -209,13 +216,26 @@ impl UiState {
             interrupt_prompt_active: false,
             interrupt_prompt_attached: false,
             view_mode: ViewMode::Main,
-            pre_expand_height: None,
         }
     }
 
     /// Record the size the current frame is rendered at.
     pub fn set_terminal_size(&mut self, width: u16, height: u16) {
         self.terminal_size = TerminalSize { width, height };
+    }
+
+    pub fn set_preferences(
+        &mut self,
+        preferences: crate::config::TuiPreferences,
+    ) -> Result<(), crate::config::UserConfigError> {
+        let keymap = preferences.keybindings.resolve()?;
+        self.preferences = Arc::new(preferences);
+        self.keymap = Arc::new(keymap);
+        Ok(())
+    }
+
+    pub fn keymap(&self) -> &Arc<crate::config::Keymap> {
+        &self.keymap
     }
 
     pub fn show_interrupt_prompt(&mut self, attached: bool) {
@@ -751,6 +771,7 @@ impl ActivityModel {
                 parent,
                 command,
                 ports,
+                urls,
                 ready_probe,
                 level,
                 ..
@@ -758,6 +779,7 @@ impl ActivityModel {
                 let variant = ActivityVariant::Process(ProcessActivity {
                     status: ProcessStatus::Starting,
                     ports,
+                    urls: *urls,
                     ready_probe,
                 });
                 self.create_activity(id, name, parent, command, variant, level);
@@ -785,6 +807,13 @@ impl ActivityModel {
                         proc.status = status;
                     }
                 }
+            }
+            Process::Exited { id, success, .. } => {
+                let outcome = if success { "success" } else { "failure" };
+                self.handle_activity_log(id, format!("Process exited ({outcome})"), !success);
+            }
+            Process::Restarted { id, attempt, .. } => {
+                self.handle_activity_log(id, format!("Restarted (attempt {attempt})"), false);
             }
         }
     }
@@ -1985,6 +2014,7 @@ mod tests {
             parent: Some(100),
             command: None,
             ports: vec![],
+            urls: Box::default(),
             ready_probe: None,
             level: ActivityLevel::Info,
             timestamp: Timestamp::now(),
@@ -2037,6 +2067,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: Box::default(),
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
@@ -2078,6 +2109,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: Box::default(),
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),
@@ -2139,6 +2171,7 @@ mod tests {
                 parent: Some(100),
                 command: None,
                 ports: vec![],
+                urls: Box::default(),
                 ready_probe: None,
                 level: ActivityLevel::Info,
                 timestamp: Timestamp::now(),

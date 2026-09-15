@@ -229,14 +229,19 @@ rec {
           )
         ]
         ++ (lib.flatten (map importModule devenv_imports))
-        ++ (if !skip_local_src then (importModule (devenv_root + "/devenv.nix")) else [ ])
+        ++ (
+          if !skip_local_src then
+            (importModule (devenv_root + "/devenv.nix"))
+            ++ (
+              let
+                localPath = devenv_root + "/devenv.local.nix";
+              in
+              lib.optional (builtins.pathExists localPath) localPath
+            )
+          else
+            [ ]
+        )
         ++ [
-          (
-            let
-              localPath = devenv_root + "/devenv.local.nix";
-            in
-            if builtins.pathExists localPath then localPath else { }
-          )
           cli_options
         ];
 
@@ -550,6 +555,8 @@ rec {
         ;
       bash = pkgs.bash;
       shell = config.shell;
+      # Older pinned modules predate the optional localhost proxy.
+      processProxyEnabled = config.process.proxy.enable or false;
       optionsJSON = options.optionsJSON;
       info = config.info;
       ci = config.ciDerivation;

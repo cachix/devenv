@@ -2,4 +2,4 @@
 source: devenv-shell/tests/session_tests.rs
 expression: "rows[23]"
 ---
- ✗ devenv failed | watching 1 files                       Ctrl-Alt-E show error
+ ✗ devenv failed | watching 1 files                       Ctrl+Alt+E show error

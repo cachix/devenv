@@ -15,6 +15,7 @@ ser_nix.workspace = true
 include_dir.workspace = true
 tracing.workspace = true
 once_cell.workspace = true
+opentelemetry.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 

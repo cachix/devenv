@@ -10,10 +10,12 @@ pub mod lsp;
 pub mod mcp;
 pub mod metadata;
 pub mod nix_log_bridge;
+mod proxy;
 pub mod reload;
 pub(crate) mod shell_env;
 pub mod terminal;
 pub mod tracing;
+pub mod user_config;
 pub use devenv_processes as processes;
 mod util;
 

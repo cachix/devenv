@@ -1,7 +1,11 @@
 //! Console output for activity events when the TUI is disabled.
 //!
-//! Every line goes through `ConsoleOutput::write`, which applies the
-//! verbosity filter before writing to stderr.
+//! Most lines go through `ConsoleOutput::write`, which applies the verbosity
+//! filter before writing to stderr. Quiet has two exceptions: task
+//! start/complete lines still print so `--no-tui` and redirected runs have
+//! mid-run liveness without streaming task logs (see #3115); task logs with
+//! `show_output` bypass the gate so `--quiet` / AI-agent auto-quiet still
+//! stream explicit task output without reclassifying stdout as Error (see #3038).
 //!
 //! All output goes to stderr. stdout is owned by the caller's command
 //! result (e.g. `devenv eval` JSON), so writing diagnostics there breaks
@@ -66,11 +70,19 @@ struct Entry {
     /// Lines hidden by the verbosity gate. Replayed to stderr on failure
     /// so CI doesn't lose diagnostic output.
     suppressed_logs: BoundedLog,
+    /// Print start/end even when Quiet would hide `level`. Used for task
+    /// lifecycle so AI-agent auto-quiet `--no-tui` logs aren't empty until
+    /// exit. Child logs stay gated by `log_level` unless `force_output`.
+    show_lifecycle: bool,
+    /// Explicit `show_output` / `--show-output`: stream this task's logs even
+    /// when Quiet would hide `log_level`. Does not reclassify stdout as Error.
+    force_output: bool,
 }
 
 struct PendingTask {
     name: String,
     log_level: ActivityLevel,
+    force_output: bool,
 }
 
 pub struct ConsoleOutput {
@@ -141,6 +153,10 @@ impl ConsoleOutput {
                 command = self.frontend_rx.recv() => match command {
                     Some(FrontendCommand::ExitRenderer) => exit_requested = true,
                     Some(FrontendCommand::SetAttached(_)) => {}
+                    Some(FrontendCommand::PauseForInteraction { ready, resume }) => {
+                        let _ = ready.send(());
+                        let _ = tokio::task::spawn_blocking(move || resume.recv()).await;
+                    }
                     // Shell commands follow ExitRenderer and remain queued for
                     // the session that takes terminal ownership next.
                     Some(FrontendCommand::Shell(_)) => {
@@ -225,13 +241,18 @@ impl ConsoleOutput {
                         PendingTask {
                             name: format!("Running {}", t.name),
                             log_level: if t.show_output { Info } else { Debug },
+                            force_output: t.show_output,
                         },
                     );
                 }
             }
             ActivityEvent::Task(Task::Start { id, .. }) => {
                 if let Some(p) = self.pending_tasks.remove(&id) {
-                    self.begin(id, p.name, Info, p.log_level);
+                    // Quiet hides Info, but task running/succeeded/failed is
+                    // the liveness signal for `--no-tui` and redirected logs
+                    // (including AI-agent auto-quiet). Logs stay at log_level
+                    // unless `show_output` sets force_output.
+                    self.begin_with(id, p.name, Info, p.log_level, true, p.force_output);
                 }
             }
             ActivityEvent::Task(Task::Complete { id, outcome, .. }) => self.end(id, outcome),
@@ -260,6 +281,13 @@ impl ConsoleOutput {
                 id, line, is_error, ..
             }) => self.log(id, &line, is_error),
             ActivityEvent::Process(Process::Status { .. }) => {}
+            ActivityEvent::Process(Process::Exited { id, success, .. }) => {
+                let outcome = if success { "success" } else { "failure" };
+                self.log(id, &format!("Process exited ({outcome})"), !success)
+            }
+            ActivityEvent::Process(Process::Restarted { id, attempt, .. }) => {
+                self.log(id, &format!("Restarted (attempt {attempt})"), false)
+            }
 
             ActivityEvent::Operation(Operation::Start {
                 id, name, level, ..
@@ -280,14 +308,31 @@ impl ConsoleOutput {
     }
 
     fn begin(&mut self, id: u64, name: String, level: ActivityLevel, log_level: ActivityLevel) {
+        self.begin_with(id, name, level, log_level, false, false);
+    }
+
+    fn begin_with(
+        &mut self,
+        id: u64,
+        name: String,
+        level: ActivityLevel,
+        log_level: ActivityLevel,
+        show_lifecycle: bool,
+        force_output: bool,
+    ) {
         let entry = Entry {
             name,
             start: Instant::now(),
             level,
             log_level,
             suppressed_logs: BoundedLog::new(MAX_SUPPRESSED_LINES),
+            show_lifecycle,
+            force_output,
         };
-        self.write(level, format_args!("{} {}", style("•").blue(), entry.name));
+        self.write_visible(
+            show_lifecycle || self.show_at(level),
+            format_args!("{} {}", style("•").blue(), entry.name),
+        );
         self.entries.insert(id, entry);
     }
 
@@ -316,8 +361,8 @@ impl ConsoleOutput {
             ActivityOutcome::Failed | ActivityOutcome::DependencyFailed => style("✖").red(),
         };
         let duration = HumanReadableDuration(entry.start.elapsed());
-        self.write(
-            level,
+        self.write_visible(
+            entry.show_lifecycle || self.show_at(level),
             format_args!(
                 "{mark} {} in {duration}{}",
                 entry.name,
@@ -327,19 +372,23 @@ impl ConsoleOutput {
     }
 
     fn log(&mut self, id: u64, line: &str, is_error: bool) {
+        let (log_level, force_output) = self
+            .entries
+            .get(&id)
+            .map(|e| (e.log_level, e.force_output))
+            .unwrap_or((ActivityLevel::Info, false));
         let level = if is_error {
             ActivityLevel::Error
         } else {
-            self.entries
-                .get(&id)
-                .map(|e| e.log_level)
-                .unwrap_or(ActivityLevel::Info)
+            log_level
         };
-        let visible = self.show_at(level);
+        // `show_output` is an explicit per-task opt-in: bypass Quiet without
+        // promoting stdout to Error (which would paint it as a failure).
+        let visible = force_output || self.show_at(level);
         // Indent so chunks nest visually under their activity's start line.
         for chunk in line.split('\n') {
             if visible {
-                self.write(level, format_args!("  {chunk}"));
+                self.write_visible(true, format_args!("  {chunk}"));
             } else if let Some(entry) = self.entries.get_mut(&id) {
                 entry.suppressed_logs.push(chunk.to_string());
             }
@@ -362,7 +411,11 @@ impl ConsoleOutput {
 
     /// Apply the verbosity filter and write one line.
     fn write(&mut self, level: ActivityLevel, args: fmt::Arguments) {
-        if !self.show_at(level) {
+        self.write_visible(self.show_at(level), args);
+    }
+
+    fn write_visible(&mut self, visible: bool, args: fmt::Arguments) {
+        if !visible {
             return;
         }
         let _ = writeln!(self.stderr, "{args}");
@@ -644,6 +697,158 @@ mod tests {
         assert!(
             out.contains("SC2148"),
             "suppressed line must replay on fail even at Quiet, got:\n{out}"
+        );
+        assert!(
+            out.contains("• Running devenv:git-hooks:run"),
+            "Quiet must still print the task start line, got:\n{out}"
+        );
+    }
+
+    /// Quiet `--no-tui` (and AI-agent auto-quiet) must emit running/succeeded
+    /// incrementally without dumping task stdout. See #3115.
+    #[test]
+    fn quiet_streams_task_lifecycle_without_logs() {
+        let mut h = Harness::new(VerbosityLevel::Quiet);
+        h.dispatch(hierarchy(1, "demo:slow", false));
+        h.dispatch(task_start(1));
+
+        let mid = h.stderr.contents();
+        assert!(
+            mid.contains("• Running demo:slow"),
+            "start must appear before the task finishes, got:\n{mid}"
+        );
+        assert!(
+            !mid.contains("progress tick"),
+            "no task stdout before logs are dispatched, got:\n{mid}"
+        );
+
+        h.dispatch(task_log(1, "progress tick 1", false));
+        let after_log = h.stderr.contents();
+        assert!(
+            !after_log.contains("progress tick 1"),
+            "task stdout must stay suppressed at Quiet, got:\n{after_log}"
+        );
+
+        h.dispatch(task_complete(1, ActivityOutcome::Success));
+        let out = h.stderr.contents();
+        assert!(
+            out.contains("✓ Running demo:slow"),
+            "success must appear at Quiet, got:\n{out}"
+        );
+        assert!(
+            !out.contains("progress tick 1"),
+            "successful Quiet runs must not replay stdout, got:\n{out}"
+        );
+    }
+
+    /// Quiet still hides eval/build/operation Info so we don't dump verbose
+    /// output — only task lifecycle is exempt.
+    #[test]
+    fn quiet_hides_non_task_info_activities() {
+        let mut h = Harness::new(VerbosityLevel::Quiet);
+        h.dispatch(build_start(1, "hello-1.0"));
+        h.dispatch(build_log(1, "compiling foo.c", false));
+        h.dispatch(build_complete(1, ActivityOutcome::Success));
+        h.dispatch(operation_start(2, "Configuring shell"));
+        h.dispatch(operation_complete(2, ActivityOutcome::Success));
+
+        let out = h.stderr.contents();
+        assert!(
+            out.is_empty(),
+            "Quiet must not dump build/operation Info, got:\n{out}"
+        );
+    }
+
+    /// Failed Quiet tasks print start immediately; suppressed stdout only
+    /// appears with the failure marker, not mid-run.
+    #[test]
+    fn quiet_task_failure_replays_after_live_start() {
+        let mut h = Harness::new(VerbosityLevel::Quiet);
+        h.dispatch(hierarchy(1, "demo:slow-fail", false));
+        h.dispatch(task_start(1));
+        h.dispatch(task_log(1, "boom", false));
+
+        let mid = h.stderr.contents();
+        assert!(
+            mid.contains("• Running demo:slow-fail"),
+            "start must be live at Quiet, got:\n{mid}"
+        );
+        assert!(
+            !mid.contains("boom"),
+            "stdout must not stream live at Quiet, got:\n{mid}"
+        );
+
+        h.dispatch(task_complete(1, ActivityOutcome::Failed));
+        let out = h.stderr.contents();
+        let start = out
+            .find("• Running demo:slow-fail")
+            .expect("start line missing");
+        let replay = out.find("boom").expect("replay missing");
+        let fail = out
+            .find("✖ Running demo:slow-fail")
+            .expect("failure marker missing");
+        assert!(
+            start < replay && replay < fail,
+            "expected start, then replayed stdout, then failure, got:\n{out}"
+        );
+    }
+
+    /// `show_output: true` is an explicit per-task opt-in: Quiet (including
+    /// AI-agent auto-quiet) must still stream those logs. See #3038.
+    #[test]
+    fn quiet_show_output_streams_task_stdout() {
+        let mut h = Harness::new(VerbosityLevel::Quiet);
+        h.dispatch(hierarchy(1, "demo:visible", true));
+        h.dispatch(task_start(1));
+        h.dispatch(task_log(1, "VISIBLE_OUTPUT_MARKER", false));
+        h.dispatch(task_complete(1, ActivityOutcome::Success));
+
+        let out = h.stderr.contents();
+        assert!(
+            out.contains("  VISIBLE_OUTPUT_MARKER"),
+            "show_output must stream stdout at Quiet, got:\n{out}"
+        );
+        assert_eq!(
+            out.matches("VISIBLE_OUTPUT_MARKER").count(),
+            1,
+            "must not double-print on success, got:\n{out}"
+        );
+        assert!(
+            !out.contains("✖ VISIBLE_OUTPUT_MARKER"),
+            "stdout must not be reclassified as Error, got:\n{out}"
+        );
+    }
+
+    /// Without show_output, Quiet still suppresses successful task stdout.
+    #[test]
+    fn quiet_without_show_output_suppresses_task_stdout() {
+        let mut h = Harness::new(VerbosityLevel::Quiet);
+        h.dispatch(hierarchy(1, "demo:hidden", false));
+        h.dispatch(task_start(1));
+        h.dispatch(task_log(1, "HIDDEN_OUTPUT_MARKER", false));
+        h.dispatch(task_complete(1, ActivityOutcome::Success));
+
+        let out = h.stderr.contents();
+        assert!(
+            !out.contains("HIDDEN_OUTPUT_MARKER"),
+            "Quiet without show_output must suppress stdout, got:\n{out}"
+        );
+    }
+
+    /// Quiet + show_output streams live; failure must not replay a second copy.
+    #[test]
+    fn quiet_show_output_no_duplicate_on_fail() {
+        let mut h = Harness::new(VerbosityLevel::Quiet);
+        h.dispatch(hierarchy(1, "demo:visible", true));
+        h.dispatch(task_start(1));
+        h.dispatch(task_log(1, "step 1", false));
+        h.dispatch(task_complete(1, ActivityOutcome::Failed));
+
+        let stderr = h.stderr.contents();
+        assert_eq!(
+            stderr.matches("step 1").count(),
+            1,
+            "show_output line should appear exactly once at Quiet, got:\n{stderr}"
         );
     }
 
@@ -927,6 +1132,47 @@ mod tests {
 
         assert!(writer.contents().contains("queued event"));
         assert!(writer.flush_count() > flushes_before_shutdown);
+    }
+
+    /// Regression for #3115: Quiet task start must leave the log before the
+    /// task finishes. ConsoleOutput batches through a BufWriter, so we have
+    /// to flush after each event or redirected `--no-tui` stays at 0 bytes.
+    #[tokio::test]
+    async fn quiet_task_start_flushes_before_complete() {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (frontend_tx, frontend_rx) = mpsc::channel(1);
+        let writer = FlushSpy::new();
+        let output = ConsoleOutput::with_writer(
+            rx,
+            frontend_rx,
+            VerbosityLevel::Quiet,
+            writer.clone().into_box(),
+        );
+        let task = tokio::spawn(output.run());
+
+        let hierarchy_flushed = writer.flushed.notified();
+        tx.send(hierarchy(1, "demo:slow", false)).unwrap();
+        hierarchy_flushed.await;
+
+        let start_flushed = writer.flushed.notified();
+        tx.send(task_start(1)).unwrap();
+        start_flushed.await;
+
+        let mid = writer.contents();
+        assert!(
+            mid.contains("Running demo:slow"),
+            "Quiet start must be visible mid-run, got:\n{mid}"
+        );
+        assert!(
+            !mid.contains("✓ Running demo:slow"),
+            "complete must not have been emitted yet, got:\n{mid}"
+        );
+
+        frontend_tx
+            .send(FrontendCommand::ExitRenderer)
+            .await
+            .unwrap();
+        let _frontend_rx = task.await.unwrap();
     }
 
     #[tokio::test]

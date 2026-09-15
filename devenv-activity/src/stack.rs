@@ -73,6 +73,10 @@ pub(crate) fn send_activity_event(event: ActivityEvent) {
 /// dedicated activity target. The macro expands where the operation is
 /// implemented, while `source.file` and `source.line` carry the tracked public
 /// API caller.
+///
+/// The event is passed to tracing as a borrowed [`SerdeValuable`](crate::SerdeValuable).
+/// Nothing is serialized here: a layer that wants the payload walks the typed
+/// event itself when it visits the `event` field.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __trace_activity_event {
@@ -80,8 +84,8 @@ macro_rules! __trace_activity_event {
         if tracing::enabled!(
             target: "devenv_activity::events",
             tracing::Level::DEBUG
-        ) && let Ok(__event) = $crate::SerdeValue::from_serialize($event)
-        {
+        ) {
+            let __event = $crate::SerdeValuable($event);
             tracing::debug!(
                 target: "devenv_activity::events",
                 parent: $parent,
@@ -96,8 +100,8 @@ macro_rules! __trace_activity_event {
         if tracing::enabled!(
             target: "devenv_activity::events",
             tracing::Level::DEBUG
-        ) && let Ok(__event) = $crate::SerdeValue::from_serialize($event)
-        {
+        ) {
+            let __event = $crate::SerdeValuable($event);
             tracing::debug!(
                 target: "devenv_activity::events",
                 event = __event.as_tracing_value(),

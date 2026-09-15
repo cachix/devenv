@@ -31,6 +31,7 @@ portable-pty.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 caps.workspace = true
+libc.workspace = true
 
 # Linux discovers session members through /proc and nix. macOS needs the raw
 # proc_listallpids/proc_pidinfo APIs, which nix does not expose.
@@ -40,7 +41,7 @@ libc.workspace = true
 [features]
 default = []
 test-all = ["test-file-watcher"]
-test-file-watcher = ["devenv-event-sources/macos-kqueue"]
+test-file-watcher = []
 
 [dev-dependencies]
 sd-notify.workspace = true

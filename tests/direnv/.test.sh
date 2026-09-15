@@ -61,7 +61,38 @@ echo "PASS: DEVENV_CMDLINE is correctly set to: $DEVENV_CMDLINE" >&2
 
 # Execute some operations that should not cause direnv to reload
 echo "Running commands that should not trigger direnv reload..." >&2
-devenv shell -- echo 'Hello from devenv shell'
+
+# Environment capture is one-shot, so repeated captures must not persist their
+# activation scripts in the project directory (#3149).
+SHELL_SCRIPTS_BEFORE=$(find .devenv -maxdepth 1 -type f -name 'shell-*.sh' | wc -l | tr -d ' ')
+
+for _ in 1 2 3; do
+	devenv direnv-export >/dev/null
+done
+
+# Capture paths are arguments, not shell source, so unusual temporary-directory
+# names must be handled literally.
+TMPDIR_WITH_SPACES="$PWD/tmp dir"
+mkdir -p "$TMPDIR_WITH_SPACES"
+TMPDIR="$TMPDIR_WITH_SPACES" devenv direnv-export >/dev/null
+
+SHELL_SCRIPTS_AFTER=$(find .devenv -maxdepth 1 -type f -name 'shell-*.sh' | wc -l | tr -d ' ')
+if [[ "$SHELL_SCRIPTS_BEFORE" != "$SHELL_SCRIPTS_AFTER" ]]; then
+	echo "FAIL: direnv-export leaked shell scripts: $SHELL_SCRIPTS_BEFORE -> $SHELL_SCRIPTS_AFTER" >&2
+	exit 1
+fi
+echo "PASS: direnv-export did not persist activation scripts" >&2
+
+SHELL_COMMAND_OUTPUT=$(devenv shell -- printf '<%s>\n' 'Hello from devenv shell')
+if [[ "$SHELL_COMMAND_OUTPUT" != '<Hello from devenv shell>' ]]; then
+	echo "FAIL: shell command arguments were not preserved: $SHELL_COMMAND_OUTPUT" >&2
+	exit 1
+fi
+if grep -Fq 'Hello from devenv shell' .devenv/shell-*.sh; then
+	echo "FAIL: shell command arguments were embedded in the activation script" >&2
+	exit 1
+fi
+echo "PASS: shell command arguments were passed separately" >&2
 
 direnv_eval
 

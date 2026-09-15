@@ -256,6 +256,7 @@ pub struct ShellSettings {
     pub clean: Clean,
     pub profiles: Vec<String>,
     pub reload: bool,
+    pub prompt_prefix: bool,
     /// The shell dialect name (e.g. "zsh", "bash").
     pub shell: String,
     /// The absolute path to the shell binary when known from the login-shell
@@ -271,6 +272,7 @@ impl Default for ShellSettings {
             clean: Clean::default(),
             profiles: Vec::new(),
             reload: true,
+            prompt_prefix: true,
             shell: "bash".to_string(),
             shell_path: None,
         }
@@ -392,6 +394,7 @@ impl ShellSettings {
             clean,
             profiles,
             reload,
+            prompt_prefix: config.prompt_prefix.unwrap_or(true),
             shell,
             shell_path,
         }
@@ -744,6 +747,18 @@ mod tests {
         let config = Config::default();
         let settings = ShellSettings::resolve(options, &config);
         assert!(settings.profiles.is_empty());
+    }
+
+    #[test]
+    fn shell_settings_prompt_defaults_to_true_and_respects_config() {
+        for prompt_prefix in [None, Some(false), Some(true)] {
+            let config = Config {
+                prompt_prefix,
+                ..Default::default()
+            };
+            let settings = ShellSettings::resolve(ShellOptions::default(), &config);
+            assert_eq!(settings.prompt_prefix, prompt_prefix.unwrap_or(true));
+        }
     }
 
     #[test]

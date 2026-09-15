@@ -24,9 +24,10 @@ blake3.workspace = true
 
 # File operations
 walkdir.workspace = true
+fd-lock.workspace = true
 
 # Async runtime
-tokio = { workspace = true, features = ["fs", "macros", "time"] }
+tokio = { workspace = true, features = ["fs", "macros", "time", "sync", "rt"] }
 
 # Logging
 tracing.workspace = true

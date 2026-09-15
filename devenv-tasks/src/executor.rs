@@ -6,6 +6,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug)]
 pub struct ExecutionResult {
     pub success: bool,
+    pub pid: Option<u32>,
+    pub exit_code: Option<i32>,
     pub stdout_lines: Vec<(std::time::Instant, String)>,
     pub stderr_lines: Vec<(std::time::Instant, String)>,
     pub error: Option<String>,
@@ -15,6 +17,8 @@ impl ExecutionResult {
     fn failed(error: impl Into<String>) -> Self {
         Self {
             success: false,
+            pid: None,
+            exit_code: None,
             stdout_lines: Vec::new(),
             stderr_lines: Vec::new(),
             error: Some(error.into()),
@@ -65,7 +69,9 @@ impl<'a> ExecutionContext<'a> {
         command.env("DEVENV_TASK_EXPORTS_FILE", self.exports_file_path);
 
         // Inject OTEL trace context so instrumented subprocesses join the trace.
-        command.envs(devenv_activity::trace_propagation_env());
+        devenv_activity::inject_trace_propagation_env(|key, value| {
+            command.env(key, value);
+        });
 
         command
     }
@@ -212,6 +218,8 @@ pub async fn execute(
                         error!("Error waiting for command: {}", e);
                         return ExecutionResult {
                             success: false,
+                            pid: Some(child_pid),
+                            exit_code: None,
                             stdout_lines,
                             stderr_lines,
                             error: Some(format!("Error waiting for command: {e}")),
@@ -234,9 +242,13 @@ pub async fn execute(
                     )
                 });
                 let (wait_result, cleanup_result) = tokio::join!(child.wait(), cleanup);
-                if let Err(error) = wait_result {
-                    error!(%error, "Error waiting for cancelled task");
-                }
+                let exit_code = match wait_result {
+                    Ok(status) => status.code(),
+                    Err(error) => {
+                        error!(%error, "Error waiting for cancelled task");
+                        None
+                    }
+                };
                 match cleanup_result {
                     Ok(Ok(())) => {}
                     Ok(Err(error)) => error!(%error, "Failed to clean up task process scope"),
@@ -245,6 +257,8 @@ pub async fn execute(
 
                 return ExecutionResult {
                     success: false,
+                    pid: Some(child_pid),
+                    exit_code,
                     stdout_lines,
                     stderr_lines,
                     error: Some("Task cancelled".to_string()),
@@ -256,6 +270,8 @@ pub async fn execute(
     let success = exit_status.map(|s| s.success()).unwrap_or(false);
     ExecutionResult {
         success,
+        pid: Some(child_pid),
+        exit_code: exit_status.and_then(|status| status.code()),
         stdout_lines,
         stderr_lines,
         error: if success {

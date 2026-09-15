@@ -38,15 +38,9 @@ use std::time::{Duration, Instant};
 /// exits 124. A failed `run` directive exits 125. Input is always sent exactly
 /// once: retrying an interactive command can hide dropped-input bugs or repeat
 /// a non-idempotent action.
-pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i32> {
+pub fn run(transcript: &Path, command: &str, step_timeout: Duration, size: &str) -> Result<i32> {
     let pty = native_pty_system()
-        .openpty(PtySize {
-            // The TUI assertions assume a 40x120 terminal.
-            rows: 40,
-            cols: 120,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
+        .openpty(parse_size(size)?)
         .map_err(|e| miette!("failed to open pty: {e}"))?;
 
     let mut cmd = CommandBuilder::new("/bin/sh");
@@ -107,6 +101,8 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
         // enhancement support.
         const KEYBOARD_PROBE: &[u8] = b"\x1b[?u\x1b[c";
         const PRIMARY_DEVICE_ATTRIBUTES: &[u8] = b"\x1b[?1;2c";
+        const CURSOR_POSITION_QUERY: &[u8] = b"\x1b[6n";
+        const CURSOR_POSITION: &[u8] = b"\x1b[6;1R";
         let mut probe_output = Vec::new();
         let mut buf = [0u8; 4096];
         'read: loop {
@@ -129,7 +125,19 @@ pub fn run(transcript: &Path, command: &str, step_timeout: Duration) -> Result<i
                         }
                         probe_output.drain(..pos + KEYBOARD_PROBE.len());
                     }
-                    let keep = KEYBOARD_PROBE.len().saturating_sub(1);
+                    while let Some(pos) = find(&probe_output, CURSOR_POSITION_QUERY) {
+                        let Ok(mut writer) = terminal_writer.lock() else {
+                            break 'read;
+                        };
+                        if writer.write_all(CURSOR_POSITION).is_err() || writer.flush().is_err() {
+                            break 'read;
+                        }
+                        probe_output.drain(..pos + CURSOR_POSITION_QUERY.len());
+                    }
+                    let keep = KEYBOARD_PROBE
+                        .len()
+                        .max(CURSOR_POSITION_QUERY.len())
+                        .saturating_sub(1);
                     if probe_output.len() > keep {
                         probe_output.drain(..probe_output.len() - keep);
                     }
@@ -245,9 +253,8 @@ fn parse_size(value: &str) -> Result<PtySize> {
         .parse::<u16>()
         .into_diagnostic()
         .wrap_err_with(|| format!("invalid PTY row count in {value:?}"))?;
-    if cols == 0 || rows == 0 {
-        return Err(miette!("PTY dimensions must be greater than zero"));
-    }
+    // Zero dimensions are legal at the OS boundary and reproduce terminals
+    // whose window size has not yet been initialized.
     Ok(PtySize {
         rows,
         cols,
@@ -440,7 +447,10 @@ mod tests {
         assert_eq!(size.cols, 120);
         assert_eq!(size.rows, 40);
         assert!(parse_size("120").is_err());
-        assert!(parse_size("0x40").is_err());
+        assert_eq!(parse_size("0x40").unwrap().cols, 0);
+        assert_eq!(parse_size("120x0").unwrap().rows, 0);
+        assert_eq!(parse_size("0x0").unwrap().rows, 0);
+        assert!(parse_size("65536x40").is_err());
         assert!(parse_size("120xnope").is_err());
     }
 

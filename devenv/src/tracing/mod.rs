@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::{self, IsTerminal, LineWriter, Write};
 use std::sync::{Arc, Mutex, MutexGuard};
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::filter::filter_fn;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry, util::SubscriberInitExt};
 
@@ -132,7 +132,7 @@ where
     layer
 }
 
-fn create_filter(level: Level, has_trace_export: bool) -> EnvFilter {
+fn create_filter(level: Level, has_trace_export: bool, has_activity_replay: bool) -> EnvFilter {
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::from(level).into())
         .from_env_lossy()
@@ -142,15 +142,21 @@ fn create_filter(level: Level, has_trace_export: bool) -> EnvFilter {
     // stable target so their lifecycle is independent of ordinary log level.
     // Both activity targets are only useful to an explicit trace export.
     if has_trace_export {
-        filter
+        let filter = filter
             .add_directive("devenv_activity::spans=trace".parse().unwrap())
-            .add_directive("devenv_activity::events=debug".parse().unwrap())
+            .add_directive("devenv_activity::events=debug".parse().unwrap());
+        if has_activity_replay {
+            filter.add_directive("devenv_activity::replay=trace".parse().unwrap())
+        } else {
+            filter.add_directive("devenv_activity::replay=off".parse().unwrap())
+        }
     } else {
         // The activity channel, not tracing, drives the TUI and console.
         // Disable tracing mirrors so their values are never serialized.
         filter
             .add_directive("devenv_activity::spans=off".parse().unwrap())
             .add_directive("devenv_activity::events=off".parse().unwrap())
+            .add_directive("devenv_activity::replay=off".parse().unwrap())
     }
 }
 
@@ -184,6 +190,13 @@ pub fn init_tracing_default() -> TracingGuard {
 /// Returns a [`TracingGuard`] that must be held until program exit to ensure
 /// proper flushing of trace data.
 pub fn init_tracing(level: Level, specs: &[TraceOutputSpec]) -> TracingGuard {
+    // The activity channel independently drives the TUI and console. Without
+    // an explicit trace sink there is no tracing consumer, so avoid installing
+    // a registry/lifecycle layer and let every tracing callsite stay disabled.
+    if specs.is_empty() {
+        return TracingGuard::empty();
+    }
+
     let has_trace_export = !specs.is_empty();
     let has_otlp = specs
         .iter()
@@ -228,23 +241,15 @@ where
                 .pretty(),
         )],
         TraceFormat::Json => vec![
-            Box::new(
-                create_json_layer(writer.clone()).with_filter(filter_fn(|metadata| {
-                    metadata.target() != "devenv_activity::events"
-                })),
-            ),
-            // Both JSON layers live inside a `Vec<Layer>`. Give this adapter
-            // its own per-layer filter so tracing-subscriber's registry can
-            // see that activity events rejected by the generic JSON layer are
-            // still enabled for this layer.
-            Box::new(
-                ActivityJsonLayer::new(writer).with_filter(filter_fn(|metadata| {
-                    matches!(
-                        metadata.target(),
-                        "devenv_activity::spans" | "devenv_activity::events"
-                    )
-                })),
-            ),
+            // Filter at the writer boundary rather than with a per-layer
+            // filter. These layers are collected in a runtime `Vec<Layer>`,
+            // where per-layer filter state can hide activity spans from the
+            // adapter's context and prevent lifecycle records from being
+            // generated.
+            Box::new(create_json_layer(writer.clone().with_filter(|metadata| {
+                metadata.target() != "devenv_activity::events"
+            }))),
+            Box::new(ActivityJsonLayer::new(writer)),
         ],
     }
 }
@@ -255,6 +260,9 @@ fn init_tracing_local(
     specs: &[TraceOutputSpec],
     has_trace_export: bool,
 ) -> TracingGuard {
+    let has_activity_replay = specs
+        .iter()
+        .any(|spec| matches!(spec, TraceOutputSpec::Render(TraceFormat::Json, _)));
     let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
 
     for spec in specs {
@@ -265,7 +273,7 @@ fn init_tracing_local(
     // events via ctx.event(), which only dispatch to layers *below* it. Placing
     // it last ensures all export layers receive those events.
     let _ = Registry::default()
-        .with(create_filter(level, has_trace_export))
+        .with(create_filter(level, has_trace_export, has_activity_replay))
         .with(SpanIdLayer)
         .with(layers)
         .with(DevenvLayer::new())
@@ -351,20 +359,27 @@ mod tests {
     fn trace_export_captures_activities_even_at_silent_log_level() {
         let capture = ActivityCapture::default();
         let subscriber = tracing_subscriber::Registry::default()
-            .with(create_filter(Level::Silent, true))
+            .with(create_filter(Level::Silent, true, false))
             .with(capture.clone());
 
-        tracing::subscriber::with_default(subscriber, emit_activity);
+        tracing::subscriber::with_default(subscriber, || {
+            assert!(!tracing::enabled!(
+                target: "devenv_activity::replay",
+                tracing::Level::DEBUG
+            ));
+            emit_activity();
+        });
 
         assert_eq!(capture.spans.load(Ordering::Relaxed), 1);
-        assert_eq!(capture.events.load(Ordering::Relaxed), 1);
+        // Start, progress, and complete.
+        assert_eq!(capture.events.load(Ordering::Relaxed), 3);
     }
 
     #[test]
     fn no_trace_export_disables_activity_tracing_mirror() {
         let capture = ActivityCapture::default();
         let subscriber = tracing_subscriber::Registry::default()
-            .with(create_filter(Level::Info, false))
+            .with(create_filter(Level::Info, false, false))
             .with(capture.clone());
 
         tracing::subscriber::with_default(subscriber, emit_activity);
@@ -380,7 +395,7 @@ mod tests {
         let spec = TraceOutputSpec::Render(TraceFormat::Json, TraceSink::File(output.clone()));
         let layers = create_local_boxed_layers(&spec);
         let subscriber = tracing_subscriber::Registry::default()
-            .with(create_filter(Level::Silent, true))
+            .with(create_filter(Level::Silent, true, true))
             .with(SpanIdLayer)
             .with(layers)
             .with(DevenvLayer::new());

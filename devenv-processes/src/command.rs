@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use miette::{IntoDiagnostic, Result, WrapErr};
 use tracing::warn;
-use watchexec_supervisor::command::{Command, Program, Shell, SpawnOptions};
+use watchexec_supervisor::command::{Command, Program, SpawnOptions};
 
 use crate::config::ProcessConfig;
 
@@ -75,10 +75,17 @@ pub fn build_command(
         env.insert("WATCHDOG_USEC".to_string(), usec.to_string());
     }
 
-    let program = Program::Shell {
-        shell: Shell::new("bash"),
-        command: config.exec.clone(),
-        args: config.args.clone(),
+    // Devenv owns the shell invocation semantics here. In particular, process
+    // commands may use shell builtins such as `exit` or start with an explicit
+    // `exec`. Representing this as `Program::Exec` prevents the supervisor from
+    // applying its optional shell-command rewriting while still invoking the
+    // configured shell exactly as `<bash> -c <command> [args...]`.
+    let program = Program::Exec {
+        prog: config.bash.clone().into(),
+        args: std::iter::once("-c".to_string())
+            .chain(std::iter::once(config.exec.clone()))
+            .chain(config.args.iter().cloned())
+            .collect(),
     };
 
     let command = Arc::new(Command {

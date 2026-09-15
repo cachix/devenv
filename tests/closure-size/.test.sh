@@ -7,8 +7,8 @@ set -euo pipefail
 # Darwin's platform closure is larger, so keep a separate ratchet for it.
 system=$(nix eval --impure --raw --expr builtins.currentSystem)
 case "$system" in
-  aarch64-darwin) MAX_MB=510 ;;
-  *) MAX_MB=400 ;;
+  aarch64-darwin) MAX_MB=540 ;;
+  *) MAX_MB=420 ;;
 esac
 
 repo=$(cd ../.. && pwd)

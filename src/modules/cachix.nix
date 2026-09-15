@@ -19,6 +19,7 @@ in
       description = "Which Cachix caches to pull from.";
       default = [ ];
       defaultText = lib.literalExpression ''[ "devenv" ]'';
+      apply = lib.unique;
     };
 
     push = lib.mkOption {

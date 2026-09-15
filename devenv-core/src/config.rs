@@ -404,6 +404,14 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(merge = schematic::merge::replace)]
     pub reload: Option<bool>,
+    /// Show the `(devenv)` prefix in the interactive shell prompt.
+    /// Set to `false` when using a custom prompt such as Starship.
+    /// Overrides the global user configuration.
+    ///
+    /// Default: `true`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[setting(merge = schematic::merge::replace)]
+    pub prompt_prefix: Option<bool>,
     /// Error if a port is already in use instead of auto-allocating the next available port.
     /// Can be overridden by `--strict-ports` or `--no-strict-ports` CLI flags.
     ///
@@ -1585,6 +1593,29 @@ mod tests {
             err.to_string()
                 .contains("Input other does not exist so it can't be followed."),
             "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn project_prompt_prefix_can_be_overridden_locally() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(
+            directory.path().join("devenv.yaml"),
+            "prompt_prefix: false\n",
+        )
+        .unwrap();
+        assert_eq!(
+            Config::load_from(directory.path()).unwrap().prompt_prefix,
+            Some(false)
+        );
+        std::fs::write(
+            directory.path().join("devenv.local.yaml"),
+            "prompt_prefix: true\n",
+        )
+        .unwrap();
+        assert_eq!(
+            Config::load_from(directory.path()).unwrap().prompt_prefix,
+            Some(true)
         );
     }
 

@@ -1,17 +1,59 @@
 # Changelog
 
-## 2.3.0 (unreleased)
+## 2.3.2 (unreleased)
 
 ### Bug Fixes
 
+- Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
+
+## 2.3.1 (2026-09-11)
+
+### Bug Fixes
+
+- Fixed `cachix.pull` containing duplicate caches. The module adds `devenv` (and `cachix.push`) to the list, so a cache also listed in `devenv.nix` was registered twice and Nix warned `Substituter '...' is already present in the substituters list` on every command. The option now deduplicates its value.
+- Fixed devenv no longer fetching the public signing keys of the caches in `cachix.pull`, a regression from the 2.0 rewrite. Only keys already present in `cachix_trusted_keys.json` were passed to Nix, so on a machine that had only ever run 2.x `extra-trusted-public-keys` was empty and Nix could not verify paths from those caches. The keys are fetched from the Cachix API again (using the resolved auth token for private caches) and cached ([#3176](https://github.com/cachix/devenv/issues/3176)).
+
+## 2.3.0 (2026-09-07)
+
+### Bug Fixes
+
+- Fixed reload-shell shortcuts intercepting Ctrl-Alt input from full-screen terminal applications such as Neovim ([#3107](https://github.com/cachix/devenv/issues/3107)).
+- Fixed `showOutput = true` / `--show-output` being ignored when AI-agent auto-quiet (or `--quiet`) is active. Explicit task output now streams even at Quiet, without treating stdout as an error ([#3038](https://github.com/cachix/devenv/issues/3038)).
+- Fixed `devenv tasks run` skipping a process that a task depends on via `@completed` when that process has `start.enable = false`. The process now runs to completion as the dependency requires; `devenv up` still does not auto-start it ([#3005](https://github.com/cachix/devenv/issues/3005)).
+- Fixed `devenv tasks run --no-tui` staying silent until the run finished when AI-agent auto-quiet was active (`CLAUDECODE`, and similar). Quiet mode now prints task running/succeeded/failed lines incrementally, without streaming full task output ([#3115](https://github.com/cachix/devenv/issues/3115)).
+- Fixed `devenv --from` also loading the current directory's `devenv.local.nix`. Options set there for the local project, such as tuning a process the external project doesn't define, no longer leak into the external environment and break evaluation.
+- Fixed `devenv up` failing after a CLI upgrade when the project's pinned modules predate the localhost proxy. The proxy remains disabled when those modules do not provide the option.
+- Fixed the interactive `devenv shell` session crashing with "terminal error: invalid value" when the terminal briefly reports a `0x0` size, most commonly seen on WSL2 right after `devenv`'s shell hook auto-activates on `cd`.
+- Certificate generation uses Nix-provided mkcert and its helper tools instead of relying on the development shell's `PATH`.
+- Fixed `devenv up` incorrectly reporting that the proxy exited while its capability broker child was still dropping root privileges.
+- Fixed concurrent `devenv shell` entries into a project without `.devenv/` failing with `database is locked` (and related task-cache init / GC-root races). First-time eval and task cache initialization now takes a process lock so a concurrent creator can wait instead of deleting the database, and removing an existing GC root ignores a concurrent delete ([#3133](https://github.com/cachix/devenv/issues/3133)).
+- Fixed environment capture accumulating unbounded `.devenv/shell-*.sh` files. Capture-specific activation scripts are now temporary, and non-interactive commands are passed as arguments instead of being embedded in persistent activation scripts ([#3149](https://github.com/cachix/devenv/issues/3149)).
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
 - Interrupting devenv a second time no longer leaves processes running. The second Ctrl+C exits straight away instead of waiting for shutdown to finish, which used to abandon any process still shutting down. This was easy to hit, since a process that is slow to stop is given five seconds before it is killed.
+- Existing GC root symlinks are now updated atomically when their store path changes.
+- Fixed JSON trace output (`--trace-to json:...`) writing invalid JSON lines for activity events that contain lists, such as the task hierarchy event.
+- Fixed `devenv up` leaving stale proxy URLs behind in task metadata when proxy hostname validation failed. Route planning now updates process URLs only after validation succeeds, so error paths no longer partially mutate the task configuration.
+- Fixed short-lived processes staying active under process-compose. External managers now own restart and readiness, while `devenv-tasks` runs the process once and exits when it settles ([#2879](https://github.com/cachix/devenv/issues/2879)).
+- Fixed services surviving a crash of `devenv-tasks` or the native process manager. A guardian now cleans abandoned service sessions, and the next manager reconciles them before starting the same process.
+- Fixed `devenv-tasks` leaving processes running after errors or parent death. It now stops processes before returning and when it loses its parent.
+- Fixed the native manager missing descendants in separate process groups. Stop and restart now clean the whole service session.
+- Fixed `devenv down` leaving external-manager descendants running. Shutdown now tracks the complete process scope and gracefully stops Overmind before cleanup.
+- Fixed external-manager start/stop races, false-positive detached starts, and process names containing shell metacharacters.
+- Fixed `devenv processes down` returning before Overmind had finished stopping. Overmind left its control socket behind, and the next `devenv up` refused to start. devenv now waits for the manager to exit before it cleans up.
+- Fixed a foreground `devenv up` with an external process manager being invisible to other devenv commands. `devenv processes down` in another terminal now stops it, and a second `devenv up` attaches instead of starting a rival manager.
+- Fixed `devenv processes down` doing nothing after you log out and back in. systemd removes `/run/user/$UID` when your last session ends, which used to lose a detached process manager: it kept running, nothing could stop it, and the next `devenv up` started a second one beside it. devenv now keeps a copy of the manager state in `.devenv`.
+- Fixed devenv suppressing the TUI and forcing quiet output for every shell started from Warp. AI-agent auto-detection now matches only autonomous agents, not "hybrid" environments.
 
 ### Improvements
 
+- Added `languages.rust.rustdocflags` for extending `RUSTDOCFLAGS` without conflicting with linker flags configured by the Rust module ([#3111](https://github.com/cachix/devenv/issues/3111)).
+- The `(devenv)` shell prompt prefix can now be disabled with `prompt_prefix: false` in `devenv.yaml`, or globally with `shell.prompt_prefix: false` in the user configuration.
+- Added opt-in HTTPS process URLs with `processes.<name>.proxy.https.enable`, using the project's existing mkcert certificate authority.
+- Added an opt-in localhost process proxy. Set `process.proxy.enable = true` to give processes with declared ports `.localhost` HTTP URLs, with hostname overrides and URLs shown in the TUI; the proxy is disabled by default ([#3141](https://github.com/cachix/devenv/pull/3141)).
 - `devenv hook <shell>` can now pass arguments to its auto-activated `devenv shell`. Arguments following `--` are forwarded safely in Bash, Zsh, Fish, and Nushell, for example `devenv hook fish -- --no-tui` ([#3128](https://github.com/cachix/devenv/issues/3128)).
+- OTLP trace destinations now also export Nix evaluator heap and garbage-collection metrics for diagnosing memory use.
 - When the Nix daemon is running version 2.35 or newer, `devenv gc` now cleans up old environments in a single batch, making it much faster. It also shows clear progress while it runs.
 - File watching now uses substantially fewer allocations and less peak memory for large dependency sets, batches registrations and change bursts more efficiently, and keeps tracking files that are created later or replaced atomically.
 - Pinning several package versions no longer costs a separate nixpkgs fetch and evaluation for each one. `multiverse.pins { cmake = "3.26.4"; bun = "0.7.0"; }` resolves a whole set of versions, at exactly those versions, through the fewest nixpkgs revisions that can serve them and returns the packages.
@@ -24,19 +66,8 @@
 - Added `processes.<name>.shutdown.signal` and `.grace` for the native manager and process-compose. The same settings apply to restarts, and PostgreSQL now uses SIGINT for fast shutdown.
 - Added process-manager capability checks. Detached mode is supported by process-compose, Honcho, Hivemind, and Overmind; unsupported operations now fail before launch, and mprocs remains foreground-only.
 - Process-manager metadata is compatible with older CLIs and Nix modules; no public Nix options changed.
-
-### Bug Fixes
-
-- Fixed short-lived processes staying active under process-compose. External managers now own restart and readiness, while `devenv-tasks` runs the process once and exits when it settles ([#2879](https://github.com/cachix/devenv/issues/2879)).
-- Fixed services surviving a crash of `devenv-tasks` or the native process manager. A guardian now cleans abandoned service sessions, and the next manager reconciles them before starting the same process.
-- Fixed `devenv-tasks` leaving processes running after errors or parent death. It now stops processes before returning and when it loses its parent.
-- Fixed the native manager missing descendants in separate process groups. Stop and restart now clean the whole service session.
-- Fixed `devenv down` leaving external-manager descendants running. Shutdown now tracks the complete process scope and gracefully stops Overmind before cleanup.
-- Fixed external-manager start/stop races, false-positive detached starts, and process names containing shell metacharacters.
-- Fixed `devenv processes down` returning before Overmind had finished stopping. Overmind left its control socket behind, and the next `devenv up` refused to start. devenv now waits for the manager to exit before it cleans up.
-- Fixed a foreground `devenv up` with an external process manager being invisible to other devenv commands. `devenv processes down` in another terminal now stops it, and a second `devenv up` attaches instead of starting a rival manager.
-- Fixed `devenv processes down` doing nothing after you log out and back in. systemd removes `/run/user/$UID` when your last session ends, which used to lose a detached process manager: it kept running, nothing could stop it, and the next `devenv up` started a second one beside it. devenv now keeps a copy of the manager state in `.devenv`.
-- Fixed devenv suppressing the TUI and forcing quiet output for every shell started from Warp. AI-agent auto-detection now matches only autonomous agents, not "hybrid" environments.
+- Enabling `--trace-to` no longer serializes every activity event up front. Trace sinks now walk the typed event only when they write it, so tracing no longer allocates a JSON tree per Nix build log line on the Nix logger thread. Benchmarks of JSON activity export show 2.6× the throughput, 89% fewer allocation calls, and 78% fewer allocated bytes. With trace output disabled, lazy config logging eliminates serialization entirely—3,967 allocations and 287 KB for a representative 128-task config.
+- Process activities in `--trace-to json` output now carry structured `ports` and `ready_probe` fields, and process exits and supervisor restarts are exported as `exited` and `restarted` events instead of free-form log lines. The TUI and console show a `Process exited (success)` or `Process exited (failure)` line for every exit.
 
 ## 2.2.2 (2026-08-13)
 
@@ -126,7 +157,7 @@
 - Fixed detaching from a running native process manager completing the attached process activities in the client TUI even though the daemon-owned processes were still alive. Attached rows are now non-owning proxies, and self-exited and crash-loop-exhausted processes retain distinct `exited` and `gave up` states.
 - Fixed two concurrent cold `devenv up -d` invocations racing to spawn separate native managers for the same project, which could orphan the losing daemon and its children. Daemon startup is now serialized until one manager publishes its PID, after which the other invocation attaches normally.
 - Fixed dynamically discovered process dependency closures remaining pending forever when an unseen one-shot failed or a shutdown cancelled it. Terminal failure and cancellation now propagate through the retained graph, and task cancellation reliably terminates the task's whole subprocess group.
-- Fixed `processes.<name>.linux.capabilities` being silently dropped when process definitions were translated into internal tasks, so the native process manager now receives and applies the configured capabilities.
+- Fixed `processes.<name>.linux.capabilities` failing to grant the requested capabilities. A sudo-authenticated broker now grants only the declared capabilities, keeps services running as the invoking user, and supports detached processes and supervised restarts without repeated prompts. On macOS the option is ignored with a warning instead of silently, and a non-interactive `devenv up` without `sudo -v` only fails when a process that needs capabilities is actually being started.
 - Fixed a shutdown racing with a task dependency failure reporting unstarted tasks as dependency failures instead of cancellations. Shutdown now consistently takes precedence across the remaining dependency closure.
 - Fixed `devenv processes logs --lines` returning the wrong number of lines when the last log line had no trailing newline, and normalized CRLF output so stray carriage returns are not printed. Native manager port-allocation snapshots are now returned in a stable order as well.
 - Fixed a process that exited on its own and was then explicitly stopped still showing as exited (and counting as succeeded in run summaries) instead of stopped.

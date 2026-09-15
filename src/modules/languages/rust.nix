@@ -94,6 +94,12 @@ in
       description = "Extra flags to pass to the Rust compiler.";
     };
 
+    rustdocflags = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "Extra flags to pass to Rustdoc.";
+    };
+
     mold.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -443,7 +449,7 @@ in
             CARGO_PROFILE_DEV_CODEGEN_BACKEND = optionalEnv cfg.cranelift.enable "cranelift";
             CARGO_PROFILE_DEV_BUILD_OVERRIDE_CODEGEN_BACKEND = optionalEnv cfg.cranelift.forceBuildScriptsLlvm "llvm";
             RUSTFLAGS = optionalEnv (linkerFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ linkerFlags cfg.rustflags ]));
-            RUSTDOCFLAGS = optionalEnv (linkerFlags != "") linkerFlags;
+            RUSTDOCFLAGS = optionalEnv (linkerFlags != "" || cfg.rustdocflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ linkerFlags cfg.rustdocflags ]));
           }
           # Configure the Clang linker driver through CARGO_TARGET_<triple>_LINKER
           # rather than RUSTFLAGS. Setting RUSTFLAGS in the environment makes cargo

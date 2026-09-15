@@ -71,6 +71,8 @@ in
     treefmt.config.projectRootFile = lib.mkDefault "";
 
     tasks."devenv:treefmt:run" = {
+      # Wait for managed files before walking the project tree.
+      after = [ "devenv:files" ];
       before = [ "devenv:enterShell" ];
       exec = "${treefmtWrapper}/bin/treefmt";
     };
