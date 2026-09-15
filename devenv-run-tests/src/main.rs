@@ -951,7 +951,24 @@ async fn async_main() -> Result<ExitCode> {
     let executable_dir = executable_path.parent().unwrap();
     let cwd = env::current_dir().into_diagnostic()?;
 
-    // Create a wrapper for devenv that adds --override-input
+    let args = Args::parse();
+    let default_overrides = match &args.command {
+        Commands::Run(args) => args
+            .override_inputs
+            .chunks_exact(2)
+            .map(|input| {
+                format!(
+                    "--override-input {} {}",
+                    shell_escape::escape(input[0].as_str().into()),
+                    shell_escape::escape(input[1].as_str().into()),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => String::new(),
+    };
+
+    // Apply the runner's input overrides to nested devenv commands too.
     let wrapper_dir = TempDir::new().into_diagnostic()?;
     let devenv_wrapper_path = wrapper_dir.path().join("devenv");
 
@@ -982,8 +999,9 @@ while [ $i -lt $# ]; do
     esac
 done
 
-# Execute devenv with our devenv override first, then user overrides, then other arguments
+# Match the outer test: runner overrides, local modules, then command-specific overrides
 exec '{bin_dir}/devenv' \
+  {default_overrides} \
   --override-input devenv 'git+file:{cwd}?dir=src/modules' \
   "${{override_inputs[@]}}" \
   "${{other_args[@]}}"
@@ -1005,7 +1023,7 @@ exec '{bin_dir}/devenv' \
     // The environment `.test.sh` runs in: shared shell helpers plus the tools
     // they use. Building it here means every test in the run sees the same one.
     // `generate-json` only reads test metadata, so it goes without.
-    let test_env = match Args::parse().command {
+    let test_env = match args.command {
         Commands::Run(_) => Some(resolve_test_env(&cwd)?),
         _ => None,
     };

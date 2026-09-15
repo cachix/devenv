@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
+
 - Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 

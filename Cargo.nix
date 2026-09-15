@@ -9381,6 +9381,10 @@ rec {
             packageId = "serde_yaml";
           }
           {
+            name = "shell-escape";
+            packageId = "shell-escape";
+          }
+          {
             name = "signal-hook";
             packageId = "signal-hook 0.4.4";
           }

@@ -32,7 +32,8 @@ devenv-run-tests run tests --exclude 'slow-*'
 
 #### Overriding inputs
 
-Pass `--override-input` (`-o`) to override `devenv.yaml` inputs:
+Pass `--override-input` (`-o`) to override `devenv.yaml` inputs, including in nested `devenv` commands.
+An override passed directly to a nested command takes precedence:
 
 ```bash
 devenv-run-tests run tests -o nixpkgs github:NixOS/nixpkgs/nixos-unstable
