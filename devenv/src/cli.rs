@@ -979,7 +979,12 @@ impl Commands {
     pub fn supports_tui(&self) -> bool {
         !matches!(
             self,
-            Self::Mcp { http: None } | Self::Lsp { .. } | Self::PrintPaths
+            Self::Mcp { http: None }
+                | Self::Lsp { .. }
+                | Self::PrintPaths
+                | Self::Machines {
+                    command: MachinesCommand::Deploy { .. } | MachinesCommand::Plan { .. }
+                }
         )
     }
 }
@@ -1202,6 +1207,39 @@ pub enum ContainerCommand {
 )]
 pub enum MachinesCommand {
     #[command(
+        about = "Apply the exact NixOS systems in a reviewed deployment plan transactionally."
+    )]
+    Apply {
+        #[arg(help = "Saved plan ID, or an exported JSON file.")]
+        plan: PathBuf,
+    },
+    #[command(about = "Build and save a NixOS deployment plan for review.")]
+    Plan {
+        #[arg(
+            long,
+            help = "Export the plan as JSON instead of showing a summary and saved plan ID."
+        )]
+        json: bool,
+        #[arg(help = "Machine names. Defaults to all remote NixOS machines.")]
+        names: Vec<String>,
+    },
+    #[command(
+        about = "Read target-side NixOS deployment state as JSON without building or activating."
+    )]
+    Status {
+        #[arg(help = "Machine names. Defaults to all remote NixOS machines.")]
+        names: Vec<String>,
+    },
+    #[command(
+        about = "Roll back a transactional NixOS deployment to its recorded previous system."
+    )]
+    Rollback {
+        #[arg(
+            help = "The NixOS machine to roll back. Requires a recorded transactional deployment."
+        )]
+        name: String,
+    },
+    #[command(
         about = "List every machine declared in devenv.nix and the metadata devenv uses to build, deploy, and install them."
     )]
     Info {
@@ -1266,9 +1304,19 @@ pub enum MachinesCommand {
     },
 
     #[command(
-        about = "Build each named machine's toplevel locally, copy it to the target over SSH, and activate. https://devenv.sh/machines/#updating-an-existing-host"
+        about = "Build, review, and confirm NixOS deployment, or deploy nix-darwin/home-manager directly. https://devenv.sh/machines/#updating-an-existing-host"
     )]
     Deploy {
+        #[arg(
+            long,
+            help = "Apply the displayed NixOS plan without an interactive confirmation."
+        )]
+        yes: bool,
+        #[arg(
+            long,
+            help = "Use direct activation without a reviewed plan or transactional rollback."
+        )]
+        legacy: bool,
         // Note: `-j` is already taken by the global `max_jobs` Nix option
         // (see `NixCliArgs`), so `--max-concurrent` intentionally has no
         // short alias. Users who want sequential behaviour pass
@@ -1276,7 +1324,7 @@ pub enum MachinesCommand {
         #[arg(
             long = "max-concurrent",
             value_name = "N",
-            help = "Maximum number of machines to deploy in parallel. Defaults to unbounded (every machine in the working set runs concurrently). Pass 1 for sequential deploys."
+            help = "Concurrency for direct activation (--legacy, nix-darwin, home-manager). Reviewed NixOS deployment is sequential and accepts only 1."
         )]
         max_concurrent: Option<usize>,
 

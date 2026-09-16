@@ -1375,6 +1375,20 @@ async fn dispatch_command(
             }
         },
         Commands::Machines { command } => match command {
+            MachinesCommand::Apply { plan } => {
+                devenv.machines_apply(&plan).await?;
+                Ok(CommandResult::Done)
+            }
+            MachinesCommand::Plan { names, json } => Ok(CommandResult::Print(
+                devenv.machines_saved_plan(&names, json).await?,
+            )),
+            MachinesCommand::Status { names } => {
+                Ok(CommandResult::Print(devenv.machines_status(&names).await?))
+            }
+            MachinesCommand::Rollback { name } => {
+                devenv.machines_rollback(&name).await?;
+                Ok(CommandResult::Done)
+            }
             MachinesCommand::Info { names } => {
                 let output = devenv.machines_info(&names).await?;
                 Ok(CommandResult::Print(output))
@@ -1431,12 +1445,20 @@ async fn dispatch_command(
                 Ok(CommandResult::Done)
             }
             MachinesCommand::Deploy {
+                yes,
+                legacy,
                 max_concurrent,
                 use_machines_as_builders,
                 names,
             } => {
                 devenv
-                    .machines_deploy(&names, max_concurrent, use_machines_as_builders)
+                    .machines_deploy_reviewed(
+                        &names,
+                        max_concurrent,
+                        use_machines_as_builders,
+                        legacy,
+                        yes,
+                    )
                     .await?;
                 Ok(CommandResult::Done)
             }
