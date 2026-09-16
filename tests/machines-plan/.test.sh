@@ -18,6 +18,11 @@ cat >mock-bin/ssh <<'EOF'
 set -euo pipefail
 printf '%s\n' "$@" >> "$PLAN_LOG"
 remote="${!#}"
+if [[ "$remote" == *devenv-machine-facts-v1* ]]; then
+  if [[ "${PLAN_UNCHANGED:-}" == 1 ]]; then printf '%s\n' "$PLAN_NEW"; else printf '%s\n' "$PLAN_OLD"; fi
+  printf '%s\n' "${PLAN_FACTS:-null}"
+  exit 0
+fi
 if [[ "${APPLY_TEST:-}" == 1 && "$remote" != *'devenv-machine-plan-v1'* ]]; then
   if [[ "$remote" == *' start '* ]]; then
     [[ "$remote" == *"'$PLAN_NEW'"* ]]
@@ -42,7 +47,7 @@ fi
 [[ "$remote" != *'nix-env'* && "$remote" != *'systemd-run'* && "$remote" != *'switch-to-configuration'* ]]
 if [[ "${PLAN_FAIL:-}" == 1 ]]; then exit 97; fi
 if [[ "${PLAN_MALFORMED:-}" == 1 ]]; then printf 'unexpected login banner\n'; exit 0; fi
-if [[ "${PLAN_UNCHANGED:-}" == 1 || ( "${APPLY_SECOND_STALE:-}" == 1 && "$*" == *second.invalid* ) ]]; then
+if [[ ( "${APPLY_DRIFT_AFTER_COPY:-}" == 1 && -e "$PLAN_LOG.copied" ) || "${PLAN_UNCHANGED:-}" == 1 || ( "${APPLY_SECOND_STALE:-}" == 1 && "$*" == *second.invalid* ) ]]; then
   printf 'devenv-machine-plan-v1\n%s\n%s\n' "$PLAN_NEW" "$PLAN_NEW"
   exec "$REAL_NIX_STORE" --query --requisites "$PLAN_NEW"
 fi
@@ -53,6 +58,8 @@ cat >mock-bin/nix <<'EOF'
 #!/usr/bin/env bash
 if [[ "${APPLY_TEST:-}" == 1 && "$1" == copy ]]; then
   printf 'copy %s\n' "${!#}" >> "$PLAN_LOG"
+  touch "$PLAN_LOG.copied"
+  if [[ "${APPLY_COPY_FAIL_SECOND:-}" == 1 && "$*" == *second.invalid* ]]; then exit 93; fi
   exit 0
 fi
 echo "unexpected external nix operation: $*" >&2
@@ -71,7 +78,7 @@ export PATH="$PWD/mock-bin:$PATH"
 
 devenv machines plan --json server > plan.json
 jq -e --arg old "$PLAN_OLD" --arg new "$PLAN_NEW" --arg removed "$PLAN_REMOVED" '
-  .version == 2 and .scope == "nixos" and
+  .version == 3 and .scope == "nixos" and
   (.machines.server | .target == "reader@preview.invalid" and
     .currentSystem == $old and .currentProfile == $new and .requestedSystem == $new and
     .systemChanged and (.profileChanged | not) and
@@ -169,5 +176,34 @@ if grep -q '^copy ' "$PLAN_LOG"; then exit 1; fi
 
 : > "$PLAN_LOG"
 if APPLY_TEST=1 APPLY_REJECT=1 devenv machines apply fleet.json > fleet-failed.log 2>&1; then exit 1; fi
-test "$(grep -c '^copy ' "$PLAN_LOG")" -eq 2
+test "$(grep -c '^copy ' "$PLAN_LOG")" -eq 4
 test "$(grep -c ' start ' "$PLAN_LOG")" -eq 1
+
+for fault in APPLY_COPY_FAIL_SECOND APPLY_DRIFT_AFTER_COPY; do
+  : > "$PLAN_LOG"
+  rm -f "$PLAN_LOG.copied"
+  if env APPLY_TEST=1 "$fault=1" devenv machines apply fleet.json > "$fault.log" 2>&1; then exit 1; fi
+  if grep -q ' start ' "$PLAN_LOG"; then exit 1; fi
+done
+
+# A disabled management path blocks both --yes and saved-plan application.
+cat > devenv.local.nix <<'NIX'
+{ lib, ... }: {
+  machines.server.nixos.services.openssh.enable = lib.mkForce false;
+  machines.server.nixos.services.openssh.settings.PermitRootLogin = lib.mkForce "no";
+}
+NIX
+devenv machines plan --json server > blocked-plan.json
+jq -e '.machines.server.findings | any(.code == "ssh-disabled" and .severity == "error") and any(.code == "root-login-disabled" and .severity == "error")' blocked-plan.json
+: > "$PLAN_LOG"
+if APPLY_TEST=1 devenv machines deploy server --yes > blocked-deploy.log 2>&1; then exit 1; fi
+grep -q 'Access checks block deployment' blocked-deploy.log
+if grep -q '^copy ' "$PLAN_LOG"; then exit 1; fi
+: > "$PLAN_LOG"
+if APPLY_TEST=1 devenv machines apply blocked-plan.json > blocked-apply.log 2>&1; then exit 1; fi
+grep -q 'Access checks block deployment' blocked-apply.log
+test ! -s "$PLAN_LOG"
+# Forging findings cannot bypass recomputation from the saved facts.
+jq '.machines.server.findings = []' blocked-plan.json > forged-plan.json
+if APPLY_TEST=1 devenv machines apply forged-plan.json > forged.log 2>&1; then exit 1; fi
+grep -q 'Inconsistent access findings' forged.log

@@ -1,4 +1,9 @@
-{ pkgs, lib, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 {
   outputs.test-python = pkgs.python3;
   machines.server = {
@@ -9,6 +14,7 @@
     ];
     hardware.facter = null;
     nixos = {
+      services.openssh.enable = true;
       boot.loader.grub.devices = [ "nodev" ];
       fileSystems."/" = {
         device = "/dev/disk/by-label/root";
@@ -18,7 +24,8 @@
     };
     build.nixos = lib.mkForce (
       pkgs.runCommand "preview-system" { } ''
-        mkdir -p $out/bin
+        mkdir -p $out/bin $out/etc/devenv
+        cp ${pkgs.writeText "preview-facts" (builtins.toJSON config.machines.server.deploy.facts)} $out/etc/devenv/machine-facts.json
         touch $out/bin/switch-to-configuration
         echo ${pkgs.writeText "preview-reference" "retained dependency"} > $out/reference
       ''

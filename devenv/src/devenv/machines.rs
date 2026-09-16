@@ -16,6 +16,23 @@ use serde::Deserialize;
 use tokio::process;
 
 use super::Devenv;
+mod impact;
+use impact::{Facts, Finding};
+
+const MACHINE_FACTS_PATH: &str = "etc/devenv/machine-facts.json";
+// Bind facts to a fixed generation. A missing file on an older system is
+// represented by null; unreadable files and transport failures remain errors.
+const MACHINE_FACTS_OBSERVATION: &str = r#"set -eu
+# devenv-machine-facts-v1
+running=$(readlink -e /run/current-system)
+printf '%s\n' "$running"
+if test -e "$running/etc/devenv/machine-facts.json"; then
+  cat "$running/etc/devenv/machine-facts.json"
+else
+  printf 'null\n'
+fi
+test "$(readlink -e /run/current-system)" = "$running"
+"#;
 
 /// Default SSH options applied to every connection opened by `devenv
 /// machines`. OpenSSH keeps the first value it obtains for most options, so
@@ -136,6 +153,9 @@ struct MachinePlanEntry {
     added_store_paths: Vec<String>,
     removed_store_paths: Vec<String>,
     unplanned_roles: Vec<String>,
+    current_facts: Option<Facts>,
+    requested_facts: Facts,
+    findings: Vec<Finding>,
 }
 
 impl MachinePlan {
@@ -145,6 +165,7 @@ impl MachinePlan {
             output.push_str(&format!("\n{name} ({})\n  Running:   {}\n  Profile:   {}\n  Requested: {}\n  Executor:  {}\n  Closure: +{} / -{} store paths\n",
                 entry.target, entry.current_system, entry.current_profile, entry.requested_system,
                 entry.executor, entry.added_store_paths.len(), entry.removed_store_paths.len()));
+            output.push_str(&impact::summary(&entry.findings));
             if !entry.unplanned_roles.is_empty() {
                 output.push_str(&format!(
                     "  Not included: {}\n",
@@ -156,13 +177,30 @@ impl MachinePlan {
     }
 
     fn parse(input: &str) -> Result<Self> {
-        let plan: Self = serde_json::from_str(input)
+        let value: serde_json::Value = serde_json::from_str(input)
             .into_diagnostic()
             .wrap_err("Invalid deployment plan")?;
-        if plan.version != 2 || plan.scope != "nixos" || plan.machines.is_empty() {
-            bail!("Apply requires a nonempty version 2 NixOS deployment plan");
+        if value["version"].as_u64() != Some(3) {
+            bail!("Apply requires a version 3 NixOS deployment plan; regenerate older plans");
+        }
+        let plan: Self = serde_json::from_value(value)
+            .into_diagnostic()
+            .wrap_err("Invalid deployment plan")?;
+        if plan.version != 3 || plan.scope != "nixos" || plan.machines.is_empty() {
+            bail!(
+                "Apply requires a nonempty version 3 NixOS deployment plan; regenerate older plans"
+            );
         }
         for (name, entry) in &plan.machines {
+            entry.requested_facts.validate()?;
+            if let Some(facts) = &entry.current_facts {
+                facts.validate()?;
+            }
+            if entry.findings
+                != impact::analyze(entry.current_facts.as_ref(), &entry.requested_facts)
+            {
+                bail!("Inconsistent access findings for {name}; create a new plan");
+            }
             validate_machine_name(name)?;
             SshTarget::parse(&entry.target)?;
             for path in [
@@ -2371,6 +2409,7 @@ impl Devenv {
         }
         let json = self.machines_plan(&selected).await?;
         let plan = MachinePlan::parse(&json)?;
+        Self::validate_plan_impact(&plan)?;
         let id = self.save_machine_plan(&json, &plan).await?;
         eprintln!("{}\nSaved plan: {id}", plan.summary());
         if !yes {
@@ -2706,9 +2745,21 @@ impl Devenv {
             let output = self.executor_ssh_capture(&target, &machine.target.ssh_opts, MACHINE_PLAN_OBSERVATION)
                 .await.wrap_err_with(|| format!("Could not observe {name} for deployment preview; the target may have changed during observation"))?;
             let (running, profile, current_closure) = parse_plan_observation(&output)?;
+            let requested_facts = Facts::parse(&std::fs::read_to_string(requested.join(MACHINE_FACTS_PATH))
+                .into_diagnostic().wrap_err("Requested system has no readable access facts; rebuild with current devenv")?)?;
+            let (observed, current_facts) = self
+                .observe_machine_facts(&target, &machine.target.ssh_opts)
+                .await?;
+            if observed != running {
+                bail!("Target generation changed while planning {name}");
+            }
+            let findings = impact::analyze(current_facts.as_ref(), &requested_facts);
             let added: Vec<_> = requested_closure.difference(&current_closure).collect();
             let removed: Vec<_> = current_closure.difference(&requested_closure).collect();
             plans.insert(name, serde_json::json!({
+                "currentFacts": current_facts,
+                "requestedFacts": requested_facts,
+                "findings": findings,
                 "target": host,
                 "sshOpts": machine.target.ssh_opts,
                 "executor": executor,
@@ -2726,10 +2777,130 @@ impl Devenv {
         Ok(format!(
             "{}\n",
             serde_json::to_string_pretty(&serde_json::json!({
-                "version": 2, "scope": "nixos", "machines": plans,
+                "version": 3, "scope": "nixos", "machines": plans,
             }))
             .into_diagnostic()?
         ))
+    }
+
+    async fn observe_machine_facts(
+        &self,
+        target: &SshTarget,
+        ssh_opts: &[String],
+    ) -> Result<(String, Option<Facts>)> {
+        let output = self
+            .executor_ssh_capture(target, ssh_opts, MACHINE_FACTS_OBSERVATION)
+            .await?;
+        let (running, contents) = output
+            .split_once('\n')
+            .ok_or_else(|| miette!("Invalid target facts response"))?;
+        validate_plan_store_path(running)?;
+        let facts = if contents.trim() == "null" {
+            None
+        } else {
+            Some(Facts::parse(contents)?)
+        };
+        Ok((running.to_owned(), facts))
+    }
+
+    fn validate_plan_impact(plan: &MachinePlan) -> Result<()> {
+        let errors: Vec<_> = plan
+            .machines
+            .iter()
+            .filter(|(_, e)| impact::has_errors(&e.findings))
+            .map(|(name, entry)| format!("{name}:\n{}", impact::summary(&entry.findings)))
+            .collect();
+        if !errors.is_empty() {
+            bail!("Access checks block deployment:\n{}", errors.join("\n"));
+        }
+        Ok(())
+    }
+
+    async fn preflight_machine_plan(&self, plan: &MachinePlan) -> Result<()> {
+        for (name, entry) in &plan.machines {
+            let target = SshTarget::parse(&entry.target)?;
+            let output = self
+                .executor_ssh_capture(&target, &entry.ssh_opts, MACHINE_PLAN_OBSERVATION)
+                .await?;
+            let (running, profile, _) = parse_plan_observation(&output)?;
+            if running != entry.current_system || profile != entry.current_profile {
+                bail!(
+                    "Stale deployment plan for {name}: target generations changed; create a new plan"
+                );
+            }
+            let (observed, facts) = self.observe_machine_facts(&target, &entry.ssh_opts).await?;
+            if observed != running || facts != entry.current_facts {
+                bail!(
+                    "Stale deployment plan for {name}: target access facts changed; create a new plan"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Evaluation and read-only SSH only. Returns output plus whether policy failed.
+    pub async fn machines_check(&self, names: &[String], json: bool) -> Result<(String, bool)> {
+        validate_unique_machine_names(names, "check")?;
+        let meta = self.load_machines_meta().await?;
+        let selected: Vec<_> = if names.is_empty() {
+            meta.iter()
+                .filter(|(_, m)| m.has_nixos && m.target.host.is_some())
+                .map(|(n, _)| n.clone())
+                .collect()
+        } else {
+            names.to_vec()
+        };
+        // Validate all names before any remote observations.
+        for name in &selected {
+            let machine = meta
+                .get(name)
+                .ok_or_else(|| miette!("Unknown machine: {name}"))?;
+            if !machine.has_nixos {
+                bail!("Access checks require a NixOS role on machines.{name}");
+            }
+            SshTarget::parse(
+                machine
+                    .target
+                    .host
+                    .as_deref()
+                    .ok_or_else(|| miette!("machines.{name} requires target.host"))?,
+            )?;
+        }
+        let mut reports = BTreeMap::new();
+        let mut text = String::from(
+            "Configuration access check only. No builds, closure comparison, or activation health checks.\n",
+        );
+        let mut failed = false;
+        for name in selected {
+            let machine = &meta[&name];
+            let attr = format!("devenv.config.machines.{name}.deploy.facts");
+            let requested = Facts::parse(&self.backend.eval_devenv(&[&attr]).await?)?;
+            let target = SshTarget::parse(machine.target.host.as_deref().unwrap())?;
+            let (running, current) = self
+                .observe_machine_facts(&target, &machine.target.ssh_opts)
+                .await?;
+            let findings = impact::analyze(current.as_ref(), &requested);
+            failed |= impact::has_errors(&findings);
+            text.push_str(&format!("\n{name}:\n{}", impact::summary(&findings)));
+            if findings.is_empty() {
+                text.push_str("  No declared access risks found. Reachability is not proven.\n");
+            }
+            reports.insert(
+                name,
+                serde_json::json!({"currentSystem": running, "currentFacts": current,
+                "requestedFacts": requested, "findings": findings}),
+            );
+        }
+        let output =
+            if json {
+                format!("{}\n", serde_json::to_string_pretty(&serde_json::json!({
+            "version": 1, "scope": "configuration-access", "buildsPerformed": false,
+            "closureCompared": false, "activationHealthChecked": false, "machines": reports
+        })).into_diagnostic()?)
+            } else {
+                text
+            };
+        Ok((output, failed))
     }
 
     /// Apply pinned outputs without evaluating or rebuilding machine roles.
@@ -2796,6 +2967,7 @@ impl Devenv {
     }
 
     async fn apply_machine_plan(&self, plan: MachinePlan) -> Result<()> {
+        Self::validate_plan_impact(&plan)?;
         let meta = self.load_machines_meta().await?;
         // Validate the entire artifact and local availability before any copies.
         for (name, entry) in &plan.machines {
@@ -2811,6 +2983,15 @@ impl Devenv {
                     "Machine {name} no longer matches the planned target, SSH options, or system; create a new plan"
                 );
             }
+            let pinned_facts = Facts::parse(
+                &std::fs::read_to_string(
+                    Path::new(&entry.requested_system).join(MACHINE_FACTS_PATH),
+                )
+                .into_diagnostic()?,
+            )?;
+            if pinned_facts != entry.requested_facts {
+                bail!("Planned access facts do not match the pinned system for {name}");
+            }
             for (package, binary) in [
                 (&entry.requested_system, "bin/switch-to-configuration"),
                 (&entry.executor, "bin/devenv-machine-deploy"),
@@ -2822,26 +3003,19 @@ impl Devenv {
                 }
             }
         }
-        // Preflight every target before starting this fleet. Each executor also
-        // checks the preconditions under its lock after copying and at activation.
-        for (name, entry) in &plan.machines {
-            let target = SshTarget::parse(&entry.target)?;
-            let output = self
-                .executor_ssh_capture(&target, &entry.ssh_opts, MACHINE_PLAN_OBSERVATION)
-                .await?;
-            let (running, profile, _) = parse_plan_observation(&output)?;
-            if running != entry.current_system || profile != entry.current_profile {
-                bail!(
-                    "Stale deployment plan for {name}: target generations changed; create a new plan"
-                );
-            }
-        }
-        for (name, entry) in &plan.machines {
+        self.preflight_machine_plan(&plan).await?;
+        for entry in plan.machines.values() {
             let target = SshTarget::parse(&entry.target)?;
             self.nix_copy(&target, Path::new(&entry.requested_system), &entry.ssh_opts)
                 .await?;
             self.nix_copy(&target, Path::new(&entry.executor), &entry.ssh_opts)
                 .await?;
+        }
+        // No host activates until every closure has arrived and every target
+        // still matches. The executor checks again under its own lock.
+        self.preflight_machine_plan(&plan).await?;
+        for (name, entry) in &plan.machines {
+            let target = SshTarget::parse(&entry.target)?;
             self.run_machine_transaction(
                 name,
                 &target,

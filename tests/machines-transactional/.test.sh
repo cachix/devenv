@@ -10,6 +10,10 @@ cat >mock-bin/ssh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 remote="${!#}"
+if [[ "$remote" == *devenv-machine-facts-v1* ]]; then
+  printf '%s\nnull\n' "$TRANSACTION_SYSTEM"
+  exit 0
+fi
 if [[ "$remote" == *devenv-machine-plan-v1* ]]; then
   printf 'devenv-machine-plan-v1\n%s\n%s\n%s\n' "$TRANSACTION_SYSTEM" "$TRANSACTION_SYSTEM" "$TRANSACTION_SYSTEM"
   exit 0
