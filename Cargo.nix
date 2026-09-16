@@ -8645,6 +8645,10 @@ rec {
             packageId = "dialoguer";
           }
           {
+            name = "etcetera";
+            packageId = "etcetera";
+          }
+          {
             name = "fd-lock";
             packageId = "fd-lock";
           }

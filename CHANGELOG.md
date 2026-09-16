@@ -6,10 +6,18 @@
 
 - Fixed `devenv lsp` aborting on startup with `Already registered store with name 'Dummy Store'` ([#3196](https://github.com/cachix/devenv/issues/3196)).
 - Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
+- `devenv machines install` builds the replacement NixOS system before partitioning disks, so a failed system build does not erase the existing installation. Explicit disk-only operations still run without building a system.
 
 - Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 - Fixed `devenv shell` crashing with SIGABRT and leaving a coredump when its terminal window is closed while output is being written ([#3203](https://github.com/cachix/devenv/issues/3203)).
+
+### Improvements
+
+- Added an experimental target-side deployment executor for NixOS, with activation independent of SSH, deployment locking, health checks, persistent status, and explicit rollback. Unconfirmed deployments roll back after a deadline or reboot once NixOS reaches userspace; inspect and recover deployments with `machines status` and `machines rollback`.
+- Added configuration access checks to NixOS machine plans and `devenv machines check` to inspect them without building. Reviewed deployments reject disabled SSH or root login, report uncertain access changes, and require regenerated fleet plans.
+- Mixed NixOS, nix-darwin, and home-manager fleets share one review and confirmation. Every role is built and copied before activation; system roles run before home-manager. `--max-concurrent` supports bounded activation batches that stop after a failure.
+- `devenv machines deploy` builds a fleet plan, shows changes, asks for confirmation, and applies those exact outputs. NixOS uses generation checks and transactional rollback; nix-darwin and home-manager use direct activation. Use `--yes` for automation. `machines plan` saves a reusable plan ID; JSON export is optional with `--json`.
 
 ## 2.3.1 (2026-09-11)
 
@@ -34,7 +42,6 @@
 - Fixed concurrent `devenv shell` entries into a project without `.devenv/` failing with `database is locked` (and related task-cache init / GC-root races). First-time eval and task cache initialization now takes a process lock so a concurrent creator can wait instead of deleting the database, and removing an existing GC root ignores a concurrent delete ([#3133](https://github.com/cachix/devenv/issues/3133)).
 - Fixed environment capture accumulating unbounded `.devenv/shell-*.sh` files. Capture-specific activation scripts are now temporary, and non-interactive commands are passed as arguments instead of being embedded in persistent activation scripts ([#3149](https://github.com/cachix/devenv/issues/3149)).
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
-- `devenv machines install` builds the replacement NixOS system before partitioning disks, so a failed system build does not erase the existing installation. Explicit disk-only operations still run without building a system.
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
 - Interrupting devenv a second time no longer leaves processes running. The second Ctrl+C exits straight away instead of waiting for shutdown to finish, which used to abandon any process still shutting down. This was easy to hit, since a process that is slow to stop is given five seconds before it is killed.
@@ -60,10 +67,6 @@
 - Added an opt-in localhost process proxy. Set `process.proxy.enable = true` to give processes with declared ports `.localhost` HTTP URLs, with hostname overrides and URLs shown in the TUI; the proxy is disabled by default ([#3141](https://github.com/cachix/devenv/pull/3141)).
 - `devenv hook <shell>` can now pass arguments to its auto-activated `devenv shell`. Arguments following `--` are forwarded safely in Bash, Zsh, Fish, and Nushell, for example `devenv hook fish -- --no-tui` ([#3128](https://github.com/cachix/devenv/issues/3128)).
 - OTLP trace destinations now also export Nix evaluator heap and garbage-collection metrics for diagnosing memory use.
-- Added configuration access checks to NixOS machine plans and `devenv machines check` to inspect them without building. Reviewed deployments reject disabled SSH or root login, report uncertain access changes, and require regenerated version 3 plans.
-- Machine deployment now copies every system and executor and rechecks every target before activating any machine, preventing partial rollouts when preparation fails.
-- NixOS `devenv machines deploy` now builds a plan, shows changes, asks for confirmation, and applies those exact outputs with generation checks and transactional rollback. Use `--yes` for automation or `--legacy` for direct activation. `machines plan` saves a reusable plan ID; JSON export is optional with `--json`.
-- Added an experimental target-side deployment executor for NixOS, with activation independent of SSH, deployment locking, health checks, persistent status, and explicit rollback. Unconfirmed deployments roll back after a deadline or reboot once NixOS reaches userspace; inspect and recover deployments with `machines status` and `machines rollback`.
 - When the Nix daemon is running version 2.35 or newer, `devenv gc` now cleans up old environments in a single batch, making it much faster. It also shows clear progress while it runs.
 - File watching now uses substantially fewer allocations and less peak memory for large dependency sets, batches registrations and change bursts more efficiently, and keeps tracking files that are created later or replaced atomically.
 - Pinning several package versions no longer costs a separate nixpkgs fetch and evaluation for each one. `multiverse.pins { cmake = "3.26.4"; bun = "0.7.0"; }` resolves a whole set of versions, at exactly those versions, through the fewest nixpkgs revisions that can serve them and returns the packages.

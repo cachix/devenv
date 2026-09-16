@@ -12,7 +12,7 @@ use devenv_core::{cachix::CACHIX_AUTH_TOKEN_ENV, settings::SecretSettings};
 use futures::stream::StreamExt;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use secrecy::{ExposeSecret, SecretSlice};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::process;
 
 use super::Devenv;
@@ -130,7 +130,7 @@ fn parse_plan_observation(output: &str) -> Result<(String, String, BTreeSet<Stri
     Ok((running.to_owned(), profile.to_owned(), closure))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct MachinePlan {
     version: u64,
@@ -138,12 +138,20 @@ struct MachinePlan {
     machines: BTreeMap<String, MachinePlanEntry>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct MachinePlanEntry {
-    target: String,
+    target: Option<String>,
     ssh_opts: Vec<String>,
     system: String,
+    nixos: Option<NixosPlan>,
+    nix_darwin: Option<String>,
+    home_manager: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NixosPlan {
     current_system: String,
     current_profile: String,
     requested_system: String,
@@ -152,24 +160,59 @@ struct MachinePlanEntry {
     profile_changed: bool,
     added_store_paths: Vec<String>,
     removed_store_paths: Vec<String>,
-    unplanned_roles: Vec<String>,
     current_facts: Option<Facts>,
     requested_facts: Facts,
     findings: Vec<Finding>,
 }
 
+impl MachinePlanEntry {
+    /// Every pinned output, its GC root label, and required entry point.
+    fn outputs(&self) -> Vec<(&str, &str, &str)> {
+        let mut outputs = Vec::new();
+        if let Some(nixos) = &self.nixos {
+            outputs.push((
+                "system",
+                nixos.requested_system.as_str(),
+                "bin/switch-to-configuration",
+            ));
+            outputs.push((
+                "executor",
+                nixos.executor.as_str(),
+                "bin/devenv-machine-deploy",
+            ));
+        }
+        if let Some(path) = &self.nix_darwin {
+            outputs.push(("nix-darwin", path.as_str(), "activate"));
+        }
+        if let Some(path) = &self.home_manager {
+            outputs.push(("home-manager", path.as_str(), "activate"));
+        }
+        outputs
+    }
+}
+
 impl MachinePlan {
     fn summary(&self) -> String {
-        let mut output = String::from("NixOS deployment plan (transactional, sequential):\n");
+        let mut output = String::from("Fleet deployment plan:\n");
         for (name, entry) in &self.machines {
-            output.push_str(&format!("\n{name} ({})\n  Running:   {}\n  Profile:   {}\n  Requested: {}\n  Executor:  {}\n  Closure: +{} / -{} store paths\n",
-                entry.target, entry.current_system, entry.current_profile, entry.requested_system,
-                entry.executor, entry.added_store_paths.len(), entry.removed_store_paths.len()));
-            output.push_str(&impact::summary(&entry.findings));
-            if !entry.unplanned_roles.is_empty() {
+            output.push_str(&format!(
+                "\n{name} ({})\n",
+                entry.target.as_deref().unwrap_or("local")
+            ));
+            if let Some(nixos) = &entry.nixos {
+                output.push_str(&format!("  NixOS: transactional rollback\n  Running:   {}\n  Profile:   {}\n  Requested: {}\n  Executor:  {}\n  Closure: +{} / -{} store paths\n",
+                    nixos.current_system, nixos.current_profile, nixos.requested_system,
+                    nixos.executor, nixos.added_store_paths.len(), nixos.removed_store_paths.len()));
+                output.push_str(&impact::summary(&nixos.findings));
+            }
+            if let Some(path) = &entry.nix_darwin {
                 output.push_str(&format!(
-                    "  Not included: {}\n",
-                    entry.unplanned_roles.join(", ")
+                    "  nix-darwin: {path} (direct activation, no automatic rollback)\n"
+                ));
+            }
+            if let Some(path) = &entry.home_manager {
+                output.push_str(&format!(
+                    "  home-manager: {path} (direct activation, no automatic rollback)\n"
                 ));
             }
         }
@@ -180,49 +223,51 @@ impl MachinePlan {
         let value: serde_json::Value = serde_json::from_str(input)
             .into_diagnostic()
             .wrap_err("Invalid deployment plan")?;
-        if value["version"].as_u64() != Some(3) {
-            bail!("Apply requires a version 3 NixOS deployment plan; regenerate older plans");
+        if value["version"].as_u64() != Some(4) {
+            bail!("Apply requires a version 4 fleet deployment plan; regenerate older plans");
         }
         let plan: Self = serde_json::from_value(value)
             .into_diagnostic()
             .wrap_err("Invalid deployment plan")?;
-        if plan.version != 3 || plan.scope != "nixos" || plan.machines.is_empty() {
-            bail!(
-                "Apply requires a nonempty version 3 NixOS deployment plan; regenerate older plans"
-            );
+        if plan.scope != "fleet" || plan.machines.is_empty() {
+            bail!("Apply requires a nonempty fleet deployment plan");
         }
         for (name, entry) in &plan.machines {
-            entry.requested_facts.validate()?;
-            if let Some(facts) = &entry.current_facts {
-                facts.validate()?;
-            }
-            if entry.findings
-                != impact::analyze(entry.current_facts.as_ref(), &entry.requested_facts)
-            {
-                bail!("Inconsistent access findings for {name}; create a new plan");
-            }
             validate_machine_name(name)?;
-            SshTarget::parse(&entry.target)?;
-            for path in [
-                &entry.current_system,
-                &entry.current_profile,
-                &entry.requested_system,
-                &entry.executor,
-            ]
-            .into_iter()
-            .chain(&entry.added_store_paths)
-            .chain(&entry.removed_store_paths)
+            if let Some(target) = &entry.target {
+                SshTarget::parse(target)?;
+            }
+            if (entry.nixos.is_some() && entry.nix_darwin.is_some())
+                || ((entry.nixos.is_some() || entry.nix_darwin.is_some()) && entry.target.is_none())
+                || entry.outputs().is_empty()
             {
+                bail!("Invalid deployment roles or target for {name}");
+            }
+            for (_, path, _) in entry.outputs() {
                 validate_plan_store_path(path)?;
             }
-            if entry.system_changed != (entry.current_system != entry.requested_system)
-                || entry.profile_changed != (entry.current_profile != entry.requested_system)
-                || entry
-                    .unplanned_roles
-                    .iter()
-                    .any(|role| role != "home-manager")
-            {
-                bail!("Inconsistent deployment plan for {name}");
+            if let Some(nixos) = &entry.nixos {
+                nixos.requested_facts.validate()?;
+                if let Some(facts) = &nixos.current_facts {
+                    facts.validate()?;
+                }
+                if nixos.findings
+                    != impact::analyze(nixos.current_facts.as_ref(), &nixos.requested_facts)
+                {
+                    bail!("Inconsistent access findings for {name}; create a new plan");
+                }
+                for path in [&nixos.current_system, &nixos.current_profile]
+                    .into_iter()
+                    .chain(&nixos.added_store_paths)
+                    .chain(&nixos.removed_store_paths)
+                {
+                    validate_plan_store_path(path)?;
+                }
+                if nixos.system_changed != (nixos.current_system != nixos.requested_system)
+                    || nixos.profile_changed != (nixos.current_profile != nixos.requested_system)
+                {
+                    bail!("Inconsistent deployment plan for {name}");
+                }
             }
         }
         Ok(plan)
@@ -914,7 +959,10 @@ fn target_secretspec_manifest(
     profile_name: Option<&str>,
     secret_names: impl IntoIterator<Item = String>,
 ) -> Result<Vec<u8>> {
-    let mut config = secretspec::Config::try_from(secretspec_path)
+    // SecretSpec 0.21 keeps its TOML document type behind __private. We need
+    // the document here to flatten inheritance and preserve native provider
+    // policy while forcing only bootstrap references to file output.
+    let mut config = secretspec::__private::Config::try_from(secretspec_path)
         .map_err(|e| miette!("Failed to load SecretSpec configuration: {e}"))?;
     if let Some(profile_name) = profile_name
         && !config.profiles.contains_key(profile_name)
@@ -2359,12 +2407,11 @@ impl Devenv {
         }
     }
 
-    pub async fn machines_deploy_reviewed(
+    pub async fn machines_deploy(
         &self,
         names: &[String],
         max_concurrent: Option<usize>,
         use_machines_as_builders: bool,
-        legacy: bool,
         yes: bool,
     ) -> Result<()> {
         validate_unique_machine_names(names, "deploy")?;
@@ -2388,21 +2435,8 @@ impl Devenv {
         if selected.is_empty() {
             return Ok(());
         }
-        let any_nixos = selected.iter().any(|name| meta[name].has_nixos);
-        if legacy || !any_nixos {
-            return self
-                .machines_deploy_direct(names, max_concurrent, use_machines_as_builders)
-                .await;
-        }
-        if selected.iter().any(|name| !meta[name].has_nixos) {
-            bail!(
-                "Select NixOS machines separately for reviewed deployment, or use --legacy for mixed roles"
-            );
-        }
-        if max_concurrent.is_some_and(|n| n != 1) {
-            bail!(
-                "Reviewed deployment applies sequentially; --max-concurrent requires --legacy unless set to 1"
-            );
+        if max_concurrent == Some(0) {
+            bail!("--max-concurrent must be greater than zero");
         }
         if use_machines_as_builders {
             configure_remote_builders(self, &meta, &HashSet::new())?;
@@ -2419,7 +2453,7 @@ impl Devenv {
                 );
             }
             if !dialoguer::Confirm::new()
-                .with_prompt("Apply this NixOS plan?")
+                .with_prompt("Apply this fleet plan?")
                 .default(false)
                 .interact()
                 .into_diagnostic()?
@@ -2430,173 +2464,7 @@ impl Devenv {
         }
         // Apply the in-memory artifact that was displayed, not a reread of a
         // file that could have changed while the user was reviewing it.
-        self.apply_machine_plan(plan).await
-    }
-
-    async fn machines_deploy_direct(
-        &self,
-        names: &[String],
-        max_concurrent: Option<usize>,
-        use_machines_as_builders: bool,
-    ) -> Result<()> {
-        validate_unique_machine_names(names, "deploy")?;
-
-        // Configure the live C-Nix builder settings before parallel jobs.
-        if use_machines_as_builders {
-            let meta = self.load_machines_meta().await?;
-            // Preserve the normal deploy validation order: a typo in the
-            // requested working set should be reported before unrelated
-            // builder metadata is inspected.
-            let missing: Vec<&str> = names
-                .iter()
-                .filter(|name| !meta.contains_key(*name))
-                .map(String::as_str)
-                .collect();
-            if !missing.is_empty() {
-                let available: Vec<String> = meta.keys().cloned().collect();
-                let available_str = if available.is_empty() {
-                    "(none defined in devenv.nix)".to_string()
-                } else {
-                    available.join(", ")
-                };
-                bail!(
-                    "Unknown machine(s): {}. Available: {available_str}",
-                    missing.join(", ")
-                );
-            }
-            configure_remote_builders(self, &meta, &HashSet::new())?;
-            return self
-                .machines_deploy_inner(names, max_concurrent, &meta)
-                .await;
-        }
-
-        let meta = self.load_machines_meta().await?;
-        self.machines_deploy_inner(names, max_concurrent, &meta)
-            .await
-    }
-
-    async fn machines_deploy_inner(
-        &self,
-        names: &[String],
-        max_concurrent: Option<usize>,
-        meta: &BTreeMap<String, MachineMeta>,
-    ) -> Result<()> {
-        // Resolve the working set. Explicit names are used as-is; bulk runs
-        // (no names) pick every machine in the attrset, per doc:
-        //
-        //     `devenv machines deploy` without arguments deploys every
-        //     machine in the attrset that has `target.host` set. Machines
-        //     without a host are skipped with an informational line, which
-        //     is how you opt a local-only home-manager entry out of bulk
-        //     deploys.
-        //
-        // "Skipping" here means we still create the per-machine activity so
-        // the TUI shows the entry as Skipped, rather than silently dropping
-        // it from the report.
-        let bulk = names.is_empty();
-        let working_set: Vec<String> = if bulk {
-            meta.keys().cloned().collect()
-        } else {
-            // Validate every requested name up front so a typo never
-            // partially-deploys a bulk run.
-            let mut missing: Vec<&str> = Vec::new();
-            for name in names {
-                if !meta.contains_key(name) {
-                    missing.push(name.as_str());
-                }
-            }
-            if !missing.is_empty() {
-                let available: Vec<String> = meta.keys().cloned().collect();
-                let available_str = if available.is_empty() {
-                    "(none defined in devenv.nix)".to_string()
-                } else {
-                    available.join(", ")
-                };
-                bail!(
-                    "Unknown machine(s): {}. Available: {}",
-                    missing.join(", "),
-                    available_str
-                );
-            }
-            names.to_vec()
-        };
-
-        if working_set.is_empty() {
-            return Ok(());
-        }
-
-        // Parallel execution. Doc: "Machines are deployed in parallel by
-        // default. Each machine runs its own build, copy, and activation
-        // pipeline independently, and the summary printed at the end shows
-        // the outcome for each one. Pass `--max-concurrent N` to cap how many
-        // machines run at once; `--max-concurrent 1` runs them one at a time."
-        //
-        // Default cap = working_set.len() (every machine runs concurrently);
-        // an explicit `--max-concurrent N` clamps it. A limit of 1 gives
-        // deterministic sequential ordering, which matches the doc's
-        // "watching a single host closely" use case.
-        let concurrency = max_concurrent
-            .unwrap_or(working_set.len())
-            .max(1)
-            .min(working_set.len());
-
-        // Build a stream of per-machine deploy futures. Each future creates
-        // its own activity, so the TUI shows a tree of concurrent machines
-        // under the top-level `devenv machines deploy` operation, and marks
-        // each one `skipped` / `fail` independently.
-        //
-        // Doc: "A failure on one machine does not stop the others. Machines
-        // that already activated stay applied, machines still running
-        // finish their own pipelines, and every outcome lands in the final
-        // summary."
-        let jobs = working_set.iter().map(|name| {
-            let machine = &meta[name];
-            let target_label = machine.target.host.as_deref().unwrap_or("(no target)");
-            let activity = activity!(
-                INFO,
-                operation,
-                format!("Deploying {name} ({target_label})")
-            );
-            let should_skip = bulk && machine.target.host.is_none();
-            async move {
-                if should_skip {
-                    activity.skipped();
-                    return (name.clone(), Ok(()));
-                }
-                let outcome = async { self.deploy_one_machine(name, machine).await }
-                    .in_activity(&activity)
-                    .await;
-                if outcome.is_err() {
-                    activity.fail();
-                }
-                (name.clone(), outcome)
-            }
-        });
-
-        let results: Vec<(String, Result<()>)> = futures::stream::iter(jobs)
-            .buffer_unordered(concurrency)
-            .collect()
-            .await;
-
-        let failures: Vec<(String, miette::Report)> = results
-            .into_iter()
-            .filter_map(|(n, r)| r.err().map(|e| (n, e)))
-            .collect();
-
-        if !failures.is_empty() {
-            let details = failures
-                .iter()
-                .map(|(n, e)| format!("- {n}: {e}"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            bail!(
-                "{} machine(s) failed to deploy:\n{}",
-                failures.len(),
-                details
-            );
-        }
-
-        Ok(())
+        self.apply_machine_plan(plan, max_concurrent).await
     }
 
     /// Load the metadata attrset for every machine defined in `devenv.nix`.
@@ -2628,159 +2496,152 @@ impl Devenv {
         Ok(meta)
     }
 
-    async fn deploy_one_machine(&self, name: &str, machine: &MachineMeta) -> Result<()> {
-        if !machine.has_nixos && !machine.has_nix_darwin && !machine.has_home_manager {
-            bail!(
-                "machines.{name} has no deployable role set (nixos, nix-darwin, or home-manager)"
-            );
-        }
-
-        // Doc: "Roles activate in a fixed order: NixOS (or nix-darwin) first,
-        // then home-manager. home-manager depends on the user existing on the
-        // target, so running it after the system switch is the only order
-        // that works for a fresh entry."
-        if machine.has_nixos {
-            self.deploy_nixos(name, machine).await?;
-        }
-        if machine.has_nix_darwin {
-            self.deploy_nix_darwin(name, machine).await?;
-        }
-        if machine.has_home_manager {
-            self.deploy_home_manager(name, machine).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn deploy_nixos(&self, name: &str, machine: &MachineMeta) -> Result<()> {
-        let host = machine.target.host.as_deref().ok_or_else(|| {
-            miette!(
-                "machines.{name}.nixos requires target.host to be set — NixOS deploys always go over SSH."
-            )
-        })?;
-        let target = SshTarget::parse(host)
-            .wrap_err_with(|| format!("Failed to parse machines.{name}.target.host"))?;
-
-        // Intentionally no wrap_err on the build call: if the inner error is
-        // a missing-input hint (`devenv inputs add disko …`) or a disko
-        // evaluation failure, we want the user to see it directly in the
-        // final per-machine failure report rather than a generic
-        // "Failed to build" wrapper that hides the hint.
-        let toplevel = self.build_machine_role(name, "nixos").await?;
-
-        self.nix_copy(&target, &toplevel, &machine.target.ssh_opts)
-            .await
-            .wrap_err_with(|| format!("Failed to copy NixOS closure to {host}"))?;
-
-        let toplevel_str = toplevel.display().to_string();
-        // NixOS activation: swap the system profile to the new toplevel, then
-        // run the toplevel's switch-to-configuration. Doing both in a single
-        // remote shell reduces round trips and matches what nixos-rebuild
-        // switch --target-host does.
-        let script = format!(
-            "nix-env --profile /nix/var/nix/profiles/system --set {p} && \
-             {p}/bin/switch-to-configuration switch",
-            p = toplevel_str
-        );
-        self.ssh_run(&target, &machine.target.ssh_opts, &script)
-            .await
-            .wrap_err_with(|| format!("NixOS activation failed on {host}"))?;
-        Ok(())
-    }
-
-    /// Build locally and compare with read-only observations of remote NixOS.
+    /// Build every selected role and review the exact outputs applied later.
     pub async fn machines_plan(&self, names: &[String]) -> Result<String> {
         validate_unique_machine_names(names, "plan")?;
         let meta = self.load_machines_meta().await?;
         let selected: Vec<&str> = if names.is_empty() {
             meta.iter()
-                .filter(|(_, machine)| machine.has_nixos && machine.target.host.is_some())
-                .map(|(name, _)| name.as_str())
+                .filter(|(_, m)| m.target.host.is_some())
+                .map(|(n, _)| n.as_str())
                 .collect()
         } else {
             names.iter().map(String::as_str).collect()
         };
-        // Validate the full selection before building or contacting any host.
-        let targets = selected
-            .iter()
-            .map(|&name| {
-                let machine = meta
-                    .get(name)
-                    .ok_or_else(|| miette!("Unknown machine: {name}"))?;
-                if !machine.has_nixos {
-                    bail!("Deployment previews require a NixOS role on machines.{name}");
-                }
-                let host = machine.target.host.as_deref().ok_or_else(|| {
-                    miette!("machines.{name} requires target.host for deployment previews")
-                })?;
-                Ok((name, machine, host, SshTarget::parse(host)?))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let mut plans = BTreeMap::new();
-        for (name, machine, host, target) in targets {
-            let requested = self.build_machine_role(name, "nixos").await?;
-            let executor = self.build_machine_role(name, "deployer").await?;
-            let closure = process::Command::new("nix-store")
-                .args(["--query", "--requisites"])
-                .arg(&requested)
-                .stdin(Stdio::null())
-                .stderr(Stdio::inherit())
-                .kill_on_drop(true)
-                .output()
-                .await
-                .into_diagnostic()
-                .wrap_err("Failed to query the requested system closure")?;
-            if !closure.status.success() {
-                bail!("Requested system closure query failed: {}", closure.status);
+        // Validate the entire selection before any builds or remote queries.
+        for name in &selected {
+            let machine = meta
+                .get(*name)
+                .ok_or_else(|| miette!("Unknown machine: {name}"))?;
+            if !machine.has_nixos && !machine.has_nix_darwin && !machine.has_home_manager {
+                bail!(
+                    "machines.{name} has no deployable role set (nixos, nix-darwin, or home-manager)"
+                );
             }
-            let closure = String::from_utf8(closure.stdout).into_diagnostic()?;
-            let mut requested_closure = BTreeSet::new();
-            for path in closure.lines() {
-                validate_plan_store_path(path)?;
-                requested_closure.insert(path.to_owned());
+            if machine.has_nixos && machine.has_nix_darwin {
+                bail!("machines.{name} cannot deploy both NixOS and nix-darwin");
             }
-            if !requested_closure.contains(requested.to_string_lossy().as_ref()) {
-                bail!("Requested system closure is incomplete");
+            if (machine.has_nixos || machine.has_nix_darwin) && machine.target.host.is_none() {
+                let role = if machine.has_nixos {
+                    "nixos"
+                } else {
+                    "nix-darwin"
+                };
+                bail!("machines.{name}.{role} requires target.host for system deployment");
             }
-            let output = self.executor_ssh_capture(&target, &machine.target.ssh_opts, MACHINE_PLAN_OBSERVATION)
-                .await.wrap_err_with(|| format!("Could not observe {name} for deployment preview; the target may have changed during observation"))?;
-            let (running, profile, current_closure) = parse_plan_observation(&output)?;
-            let requested_facts = Facts::parse(&std::fs::read_to_string(requested.join(MACHINE_FACTS_PATH))
-                .into_diagnostic().wrap_err("Requested system has no readable access facts; rebuild with current devenv")?)?;
-            let (observed, current_facts) = self
-                .observe_machine_facts(&target, &machine.target.ssh_opts)
-                .await?;
-            if observed != running {
-                bail!("Target generation changed while planning {name}");
+            if let Some(host) = &machine.target.host {
+                SshTarget::parse(host)?;
             }
-            let findings = impact::analyze(current_facts.as_ref(), &requested_facts);
-            let added: Vec<_> = requested_closure.difference(&current_closure).collect();
-            let removed: Vec<_> = current_closure.difference(&requested_closure).collect();
-            plans.insert(name, serde_json::json!({
-                "currentFacts": current_facts,
-                "requestedFacts": requested_facts,
-                "findings": findings,
-                "target": host,
-                "sshOpts": machine.target.ssh_opts,
-                "executor": executor,
-                "system": machine.system,
-                "currentSystem": running,
-                "currentProfile": profile,
-                "requestedSystem": requested,
-                "systemChanged": Path::new(&running) != requested,
-                "profileChanged": Path::new(&profile) != requested,
-                "addedStorePaths": added,
-                "removedStorePaths": removed,
-                "unplannedRoles": if machine.has_home_manager { vec!["home-manager"] } else { vec![] },
-            }));
+        }
+        let mut machines = BTreeMap::new();
+        for name in selected {
+            let machine = &meta[name];
+            let nixos = if machine.has_nixos {
+                Some(self.plan_nixos(name, machine).await?)
+            } else {
+                None
+            };
+            let nix_darwin = if machine.has_nix_darwin {
+                Some(
+                    self.build_machine_role(name, "nix-darwin")
+                        .await?
+                        .display()
+                        .to_string(),
+                )
+            } else {
+                None
+            };
+            let home_manager = if machine.has_home_manager {
+                Some(
+                    self.build_machine_role(name, "home-manager")
+                        .await?
+                        .display()
+                        .to_string(),
+                )
+            } else {
+                None
+            };
+            machines.insert(
+                name.to_owned(),
+                MachinePlanEntry {
+                    target: machine.target.host.clone(),
+                    ssh_opts: machine.target.ssh_opts.clone(),
+                    system: machine.system.clone(),
+                    nixos,
+                    nix_darwin,
+                    home_manager,
+                },
+            );
         }
         Ok(format!(
             "{}\n",
-            serde_json::to_string_pretty(&serde_json::json!({
-                "version": 3, "scope": "nixos", "machines": plans,
-            }))
+            serde_json::to_string_pretty(&MachinePlan {
+                version: 4,
+                scope: "fleet".into(),
+                machines,
+            })
             .into_diagnostic()?
         ))
+    }
+
+    async fn plan_nixos(&self, name: &str, machine: &MachineMeta) -> Result<NixosPlan> {
+        let target = SshTarget::parse(machine.target.host.as_deref().unwrap())?;
+        let requested = self.build_machine_role(name, "nixos").await?;
+        let executor = self.build_machine_role(name, "deployer").await?;
+        let closure = process::Command::new("nix-store")
+            .args(["--query", "--requisites"])
+            .arg(&requested)
+            .stdin(Stdio::null())
+            .stderr(Stdio::inherit())
+            .kill_on_drop(true)
+            .output()
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to query the requested system closure")?;
+        if !closure.status.success() {
+            bail!("Requested system closure query failed: {}", closure.status);
+        }
+        let closure = String::from_utf8(closure.stdout).into_diagnostic()?;
+        let mut requested_closure = BTreeSet::new();
+        for path in closure.lines() {
+            validate_plan_store_path(path)?;
+            requested_closure.insert(path.to_owned());
+        }
+        if !requested_closure.contains(requested.to_string_lossy().as_ref()) {
+            bail!("Requested system closure is incomplete");
+        }
+        let output = self.executor_ssh_capture(&target, &machine.target.ssh_opts, MACHINE_PLAN_OBSERVATION)
+                .await.wrap_err_with(|| format!("Could not observe {name} for deployment preview; the target may have changed during observation"))?;
+        let (running, profile, current_closure) = parse_plan_observation(&output)?;
+        let requested_facts = Facts::parse(
+            &std::fs::read_to_string(requested.join(MACHINE_FACTS_PATH))
+                .into_diagnostic()
+                .wrap_err(
+                    "Requested system has no readable access facts; rebuild with current devenv",
+                )?,
+        )?;
+        let (observed, current_facts) = self
+            .observe_machine_facts(&target, &machine.target.ssh_opts)
+            .await?;
+        if observed != running {
+            bail!("Target generation changed while planning {name}");
+        }
+        let findings = impact::analyze(current_facts.as_ref(), &requested_facts);
+        let added: Vec<_> = requested_closure.difference(&current_closure).collect();
+        let removed: Vec<_> = current_closure.difference(&requested_closure).collect();
+        Ok(NixosPlan {
+            current_facts,
+            requested_facts,
+            findings,
+            executor: executor.display().to_string(),
+            system_changed: Path::new(&running) != requested,
+            profile_changed: Path::new(&profile) != requested,
+            current_system: running,
+            current_profile: profile,
+            requested_system: requested.display().to_string(),
+            added_store_paths: added.into_iter().cloned().collect(),
+            removed_store_paths: removed.into_iter().cloned().collect(),
+        })
     }
 
     async fn observe_machine_facts(
@@ -2807,8 +2668,11 @@ impl Devenv {
         let errors: Vec<_> = plan
             .machines
             .iter()
-            .filter(|(_, e)| impact::has_errors(&e.findings))
-            .map(|(name, entry)| format!("{name}:\n{}", impact::summary(&entry.findings)))
+            .filter_map(|(name, e)| {
+                let nixos = e.nixos.as_ref()?;
+                impact::has_errors(&nixos.findings)
+                    .then(|| format!("{name}:\n{}", impact::summary(&nixos.findings)))
+            })
             .collect();
         if !errors.is_empty() {
             bail!("Access checks block deployment:\n{}", errors.join("\n"));
@@ -2818,21 +2682,35 @@ impl Devenv {
 
     async fn preflight_machine_plan(&self, plan: &MachinePlan) -> Result<()> {
         for (name, entry) in &plan.machines {
-            let target = SshTarget::parse(&entry.target)?;
-            let output = self
-                .executor_ssh_capture(&target, &entry.ssh_opts, MACHINE_PLAN_OBSERVATION)
-                .await?;
-            let (running, profile, _) = parse_plan_observation(&output)?;
-            if running != entry.current_system || profile != entry.current_profile {
-                bail!(
-                    "Stale deployment plan for {name}: target generations changed; create a new plan"
-                );
-            }
-            let (observed, facts) = self.observe_machine_facts(&target, &entry.ssh_opts).await?;
-            if observed != running || facts != entry.current_facts {
-                bail!(
-                    "Stale deployment plan for {name}: target access facts changed; create a new plan"
-                );
+            let Some(host) = &entry.target else { continue };
+            let target = SshTarget::parse(host)?;
+            if let Some(nixos) = &entry.nixos {
+                let output = self
+                    .executor_ssh_capture(&target, &entry.ssh_opts, MACHINE_PLAN_OBSERVATION)
+                    .await?;
+                let (running, profile, _) = parse_plan_observation(&output)?;
+                if running != nixos.current_system || profile != nixos.current_profile {
+                    bail!(
+                        "Stale deployment plan for {name}: target generations changed; create a new plan"
+                    );
+                }
+                let (observed, facts) =
+                    self.observe_machine_facts(&target, &entry.ssh_opts).await?;
+                if observed != running || facts != nixos.current_facts {
+                    bail!(
+                        "Stale deployment plan for {name}: target access facts changed; create a new plan"
+                    );
+                }
+            } else {
+                // Direct roles have no transactional generation checkpoint.
+                // Still require every target to be reachable before activation.
+                self.executor_ssh_capture(
+                    &target,
+                    &entry.ssh_opts,
+                    "true # devenv-machine-preflight",
+                )
+                .await
+                .wrap_err_with(|| format!("Could not reach {name} during fleet preparation"))?;
             }
         }
         Ok(())
@@ -2904,7 +2782,7 @@ impl Devenv {
     }
 
     /// Apply pinned outputs without evaluating or rebuilding machine roles.
-    pub async fn machines_apply(&self, path: &Path) -> Result<()> {
+    pub async fn machines_apply(&self, path: &Path, max_concurrent: Option<usize>) -> Result<()> {
         let path = if let Some(id) = path.to_str().filter(|id| {
             id.starts_with("plan-") && id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
         }) {
@@ -2920,7 +2798,7 @@ impl Devenv {
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Could not read deployment plan {}", path.display()))?,
         )?;
-        self.apply_machine_plan(plan).await
+        self.apply_machine_plan(plan, max_concurrent).await
     }
 
     pub async fn machines_saved_plan(&self, names: &[String], json: bool) -> Result<String> {
@@ -2949,10 +2827,7 @@ impl Devenv {
         file.write_all(contents.as_bytes()).into_diagnostic()?;
         file.sync_all().into_diagnostic()?;
         for (name, entry) in &plan.machines {
-            for (role, package) in [
-                ("system", &entry.requested_system),
-                ("executor", &entry.executor),
-            ] {
+            for (role, package, _) in entry.outputs() {
                 self.backend()
                     .store()
                     .add_gc_root(
@@ -2966,36 +2841,43 @@ impl Devenv {
         Ok(path.file_name().unwrap().to_string_lossy().into_owned())
     }
 
-    async fn apply_machine_plan(&self, plan: MachinePlan) -> Result<()> {
+    async fn apply_machine_plan(
+        &self,
+        plan: MachinePlan,
+        max_concurrent: Option<usize>,
+    ) -> Result<()> {
+        if max_concurrent == Some(0) {
+            bail!("--max-concurrent must be greater than zero");
+        }
         Self::validate_plan_impact(&plan)?;
         let meta = self.load_machines_meta().await?;
-        // Validate the entire artifact and local availability before any copies.
         for (name, entry) in &plan.machines {
             let machine = meta
                 .get(name)
                 .ok_or_else(|| miette!("Unknown machine in plan: {name}"))?;
-            if !machine.has_nixos
+            if machine.has_nixos != entry.nixos.is_some()
+                || machine.has_nix_darwin != entry.nix_darwin.is_some()
+                || machine.has_home_manager != entry.home_manager.is_some()
                 || machine.system != entry.system
-                || machine.target.host.as_deref() != Some(entry.target.as_str())
+                || machine.target.host != entry.target
                 || machine.target.ssh_opts != entry.ssh_opts
             {
                 bail!(
-                    "Machine {name} no longer matches the planned target, SSH options, or system; create a new plan"
+                    "Machine {name} no longer matches the planned roles, target, SSH options, or system; create a new plan"
                 );
             }
-            let pinned_facts = Facts::parse(
-                &std::fs::read_to_string(
-                    Path::new(&entry.requested_system).join(MACHINE_FACTS_PATH),
-                )
-                .into_diagnostic()?,
-            )?;
-            if pinned_facts != entry.requested_facts {
-                bail!("Planned access facts do not match the pinned system for {name}");
+            if let Some(nixos) = &entry.nixos {
+                let pinned_facts = Facts::parse(
+                    &std::fs::read_to_string(
+                        Path::new(&nixos.requested_system).join(MACHINE_FACTS_PATH),
+                    )
+                    .into_diagnostic()?,
+                )?;
+                if pinned_facts != nixos.requested_facts {
+                    bail!("Planned access facts do not match the pinned system for {name}");
+                }
             }
-            for (package, binary) in [
-                (&entry.requested_system, "bin/switch-to-configuration"),
-                (&entry.executor, "bin/devenv-machine-deploy"),
-            ] {
+            for (_, package, binary) in entry.outputs() {
                 if !Path::new(package).join(binary).is_file() {
                     bail!(
                         "Planned output {package} is unavailable or incomplete; create a new plan"
@@ -3005,26 +2887,99 @@ impl Devenv {
         }
         self.preflight_machine_plan(&plan).await?;
         for entry in plan.machines.values() {
-            let target = SshTarget::parse(&entry.target)?;
-            self.nix_copy(&target, Path::new(&entry.requested_system), &entry.ssh_opts)
-                .await?;
-            self.nix_copy(&target, Path::new(&entry.executor), &entry.ssh_opts)
-                .await?;
+            if let Some(host) = &entry.target {
+                let target = SshTarget::parse(host)?;
+                for (_, path, _) in entry.outputs() {
+                    self.nix_copy(&target, Path::new(path), &entry.ssh_opts)
+                        .await?;
+                }
+            }
         }
-        // No host activates until every closure has arrived and every target
-        // still matches. The executor checks again under its own lock.
         self.preflight_machine_plan(&plan).await?;
-        for (name, entry) in &plan.machines {
-            let target = SshTarget::parse(&entry.target)?;
+        // Bound concurrency in batches. On failure, finish every in-flight
+        // machine and stop before starting the next batch, never canceling a
+        // running activation merely because a different machine failed.
+        let entries: Vec<_> = plan.machines.iter().collect();
+        let mut completed = Vec::new();
+        for batch in entries.chunks(max_concurrent.unwrap_or(1)) {
+            let results = futures::future::join_all(batch.iter().map(|(name, entry)| async move {
+                let activity = activity!(INFO, operation, format!("Deploying {name}"));
+                let result = self
+                    .activate_machine_plan(name, entry)
+                    .in_activity(&activity)
+                    .await;
+                if result.is_err() {
+                    activity.fail();
+                }
+                (*name, result)
+            }))
+            .await;
+            let mut failures = Vec::new();
+            for (name, result) in results {
+                match result {
+                    Ok(()) => {
+                        eprintln!("{name}: deployed");
+                        completed.push(name.as_str());
+                    }
+                    Err(error) => failures.push(format!("{name}: {error}")),
+                }
+            }
+            if !failures.is_empty() {
+                bail!(
+                    "Fleet deployment stopped. Completed: {}. No further machines were started.\n{}",
+                    if completed.is_empty() {
+                        "none".into()
+                    } else {
+                        completed.join(", ")
+                    },
+                    failures.join("\n")
+                );
+            }
+        }
+        Ok(())
+    }
+
+    async fn activate_machine_plan(&self, name: &str, entry: &MachinePlanEntry) -> Result<()> {
+        let target = entry.target.as_deref().map(SshTarget::parse).transpose()?;
+        if let Some(nixos) = &entry.nixos {
             self.run_machine_transaction(
                 name,
-                &target,
+                target.as_ref().unwrap(),
                 &entry.ssh_opts,
-                &Path::new(&entry.executor).join("bin/devenv-machine-deploy"),
-                Some(Path::new(&entry.requested_system)),
-                Some((&entry.current_system, &entry.current_profile)),
+                &Path::new(&nixos.executor).join("bin/devenv-machine-deploy"),
+                Some(Path::new(&nixos.requested_system)),
+                Some((&nixos.current_system, &nixos.current_profile)),
             )
             .await?;
+        }
+        if let Some(path) = &entry.nix_darwin {
+            self.ssh_run(target.as_ref().unwrap(), &entry.ssh_opts, &nix_darwin_activation_script(Path::new(path))).await
+                .wrap_err_with(|| format!("nix-darwin activation failed on {name}; direct activation may have partially applied"))?;
+        }
+        if let Some(path) = &entry.home_manager {
+            let activate = Path::new(path).join("activate");
+            let result = if let Some(target) = &target {
+                self.ssh_run(
+                    target,
+                    &entry.ssh_opts,
+                    &shell_quote(&activate.display().to_string()),
+                )
+                .await
+            } else {
+                let status = process::Command::new(&activate)
+                    .stdin(Stdio::inherit())
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .status()
+                    .await
+                    .into_diagnostic()?;
+                if status.success() {
+                    Ok(())
+                } else {
+                    Err(miette!("home-manager activation exited with {status}"))
+                }
+            };
+            result.wrap_err_with(|| format!("home-manager activation failed on {name}; any completed system activation remains applied"))?;
         }
         Ok(())
     }
@@ -3211,68 +3166,6 @@ impl Devenv {
         .map_err(|_| {
             miette!("Timed out observing the remote executor; activation may still be running")
         })?
-    }
-
-    async fn deploy_nix_darwin(&self, name: &str, machine: &MachineMeta) -> Result<()> {
-        let host = machine.target.host.as_deref().ok_or_else(|| {
-            miette!(
-                "machines.{name}.nix-darwin requires target.host to be set — nix-darwin deploys always go over SSH."
-            )
-        })?;
-        let target = SshTarget::parse(host)
-            .wrap_err_with(|| format!("Failed to parse machines.{name}.target.host"))?;
-
-        // See `deploy_nixos` for why the build error isn't wrapped.
-        let toplevel = self.build_machine_role(name, "nix-darwin").await?;
-
-        self.nix_copy(&target, &toplevel, &machine.target.ssh_opts)
-            .await
-            .wrap_err_with(|| format!("Failed to copy nix-darwin closure to {host}"))?;
-
-        // nix-darwin activation swaps the system profile and runs the
-        // toplevel's `activate` script with the root HOME it expects. Normal
-        // administrator targets use passwordless sudo; explicit root targets
-        // run the same operations directly.
-        let script = nix_darwin_activation_script(&toplevel);
-        self.ssh_run(&target, &machine.target.ssh_opts, &script)
-            .await
-            .wrap_err_with(|| format!("nix-darwin activation failed on {host}"))?;
-        Ok(())
-    }
-
-    async fn deploy_home_manager(&self, name: &str, machine: &MachineMeta) -> Result<()> {
-        // See `deploy_nixos` for why the build error isn't wrapped.
-        let activation_package = self.build_machine_role(name, "home-manager").await?;
-        let activate = activation_package.join("activate");
-        let activate_str = activate.display().to_string();
-
-        match machine.target.host.as_deref() {
-            Some(host) => {
-                let target = SshTarget::parse(host)
-                    .wrap_err_with(|| format!("Failed to parse machines.{name}.target.host"))?;
-                self.nix_copy(&target, &activation_package, &machine.target.ssh_opts)
-                    .await
-                    .wrap_err_with(|| format!("Failed to copy home-manager closure to {host}"))?;
-                self.ssh_run(&target, &machine.target.ssh_opts, &activate_str)
-                    .await
-                    .wrap_err_with(|| format!("home-manager activation failed on {host}"))?;
-            }
-            None => {
-                // Local activation: run $activationPackage/activate in-process.
-                let status = process::Command::new(&activate)
-                    .stdin(Stdio::inherit())
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .status()
-                    .await
-                    .into_diagnostic()
-                    .wrap_err_with(|| format!("Failed to spawn {activate_str}"))?;
-                if !status.success() {
-                    bail!("home-manager activation {activate_str} exited with {status}");
-                }
-            }
-        }
-        Ok(())
     }
 
     /// Build a single machine role using the existing `devenv build` path.
@@ -3801,7 +3694,7 @@ secrets = ["BOOTSTRAP_KEY"]
             target_secretspec_manifest(&path, Some("production"), ["BOOTSTRAP_KEY".to_string()])
                 .unwrap();
         let manifest = String::from_utf8(manifest).unwrap();
-        let parsed: secretspec::Config = manifest.parse().unwrap();
+        let parsed: secretspec::__private::Config = manifest.parse().unwrap();
 
         assert!(parsed.project.extends.is_none());
         assert_eq!(
@@ -3875,7 +3768,8 @@ remote = "awssm"
 
         let manifest =
             target_secretspec_manifest(&path, None, ["BOOTSTRAP_KEY".to_string()]).unwrap();
-        let parsed: secretspec::Config = String::from_utf8(manifest).unwrap().parse().unwrap();
+        let parsed: secretspec::__private::Config =
+            String::from_utf8(manifest).unwrap().parse().unwrap();
         assert_eq!(
             parsed.profiles["default"].secrets["BOOTSTRAP_KEY"].as_path,
             Some(true)

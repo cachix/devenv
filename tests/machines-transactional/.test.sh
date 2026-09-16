@@ -93,9 +93,8 @@ if TRANSACTION_CONFIRM=1 TRANSACTION_LOST_CONFIRM=1 devenv machines deploy serve
 fi
 grep -q 'Could not acknowledge confirmation' lost-confirm.log
 
-# Explicit legacy deployment attempts the direct activation command.
-if devenv machines deploy server --legacy >legacy.log 2>&1; then
-  echo "mock unexpectedly accepted direct activation"
-  exit 1
-fi
-grep -q 'nix-env --profile' "$TRANSACTION_LOG"
+# The unreleased direct NixOS bypass has been removed.
+: > "$TRANSACTION_LOG"
+if devenv machines deploy server --legacy > removed-flag.log 2>&1; then exit 1; fi
+grep -q "unexpected argument '--legacy'" removed-flag.log
+test ! -s "$TRANSACTION_LOG"

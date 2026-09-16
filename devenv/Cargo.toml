@@ -34,6 +34,7 @@ cli-table.workspace = true
 console.workspace = true
 detect-coding-agent.workspace = true
 dialoguer.workspace = true
+etcetera.workspace = true
 fd-lock.workspace = true
 futures.workspace = true
 hostname.workspace = true

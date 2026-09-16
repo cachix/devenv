@@ -71,25 +71,28 @@ closure = lambda path: set(
 )
 old_closure, new_closure = closure(original), closure(updated)
 plan = {
-    "version": 3,
-    "scope": "nixos",
+    "version": 4,
+    "scope": "fleet",
     "machines": {
         "server": {
             "target": f"root@127.0.0.1:{port}",
             "sshOpts": opts,
             "system": "x86_64-linux",
-            "currentSystem": original,
-            "currentProfile": original,
-            "requestedSystem": updated,
-            "executor": executor_package,
-            "systemChanged": True,
-            "profileChanged": True,
-            "addedStorePaths": sorted(new_closure - old_closure),
-            "removedStorePaths": sorted(old_closure - new_closure),
-            "unplannedRoles": [],
-            "currentFacts": facts,
-            "requestedFacts": requested,
-            "findings": findings,
+            "nixos": {
+                "currentSystem": original,
+                "currentProfile": original,
+                "requestedSystem": updated,
+                "executor": executor_package,
+                "systemChanged": True,
+                "profileChanged": True,
+                "addedStorePaths": sorted(new_closure - old_closure),
+                "removedStorePaths": sorted(old_closure - new_closure),
+                "currentFacts": facts,
+                "requestedFacts": requested,
+                "findings": findings,
+            },
+            "nixDarwin": None,
+            "homeManager": None,
         }
     },
 }

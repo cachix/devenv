@@ -15,9 +15,9 @@ The current machines implementation includes:
 
 - **Build targets** work: `devenv build machines.<name>` realises every role a machine declares; `devenv build machines.<name>.build.<role>` builds a single role.
 - **`devenv machines info [name...]`** lists every machine with its system, target, and configured roles. Read-only; does not force `build.*`.
-- **`devenv machines deploy`** builds and reviews a NixOS plan, asks for confirmation, and applies its exact outputs transactionally. Standalone nix-darwin and home-manager use direct activation. `--legacy` enables direct activation for all roles, in the order NixOS, nix-darwin, then home-manager.
+- **`devenv machines deploy`** builds and reviews every selected role in one fleet plan, asks for confirmation, prepares all targets, and applies the exact outputs. NixOS uses transactional rollback. nix-darwin and home-manager use direct activation, with home-manager following the system role on each machine.
 - **Reviewed NixOS deploys** apply sequentially and stop on failure. Direct activation runs are parallel by default; `--max-concurrent N` limits their concurrency.
-- **Bulk `devenv machines deploy`** selects entries with `target.host`. Reviewed runs require all selected machines to have a NixOS role; use explicit names to separate platforms, or `--legacy` for mixed runs. Local-only entries are excluded.
+- **Bulk `devenv machines deploy`** selects every entry with `target.host`, including mixed NixOS, nix-darwin, and home-manager fleets. Local-only entries are excluded unless explicitly named.
 - **`devenv machines install <name1> [<name2> ...]`** runs the full install pipeline: preflight probe → kexec into NixOS installer → nixos-facter hardware probe (writes `.machines/<name>/facter.json`) → disko partitioning → nix copy + nixos-install → reboot. Supports `--phases`, `--stop-after-disko`, `--no-reboot`, `--disko-mode disko|format|mount`, and `--max-concurrent N`. Install-time encryption keys (`install.encryptionKeys`) are piped to the target before disko; extra files (`install.extraFiles`), SecretSpec bootstrap files (`install.secrets`), and SSH host key preservation (`install.copyHostKeys`) happen after nixos-install, before reboot. Custom kexec images are supported via `install.kexec.image` and `install.kexec.postSshPort`.
 - **`--use-machines-as-builders`** configures the live C-Nix remote builder settings from machines metadata (every machine with `target.host` becomes a candidate builder for its `system`) and enables builder substitutes. It is available on both `deploy` and `install` and currently requires the C-Nix backend.
 :::
@@ -208,13 +208,13 @@ $ devenv machines deploy server
 
 For NixOS, this builds the system and executor, shows the requested generations and closure changes, then asks for confirmation (default: no). On approval it applies the exact displayed outputs with generation checks, health checks, SSH confirmation, and timed rollback. No JSON file is needed. Use `--yes` for automation; without a terminal, deployment stops after saving the plan unless `--yes` is given.
 
-NixOS deployment requires root SSH and systemd. It applies only the NixOS role; a colocated home-manager role is shown as not included. Use `--legacy` for the previous direct activation flow, including all declared roles. Standalone nix-darwin and home-manager deployments retain their existing behavior. Select NixOS separately from other platforms for reviewed deployment, or use `--legacy` for a mixed run.
+One deployment can include NixOS, nix-darwin, and standalone home-manager machines. All declared roles are included in the review. NixOS deployment requires root SSH and systemd and uses transactional rollback. nix-darwin and home-manager use direct activation without automatic rollback; the review identifies this per role. A colocated home-manager role activates after its system role succeeds.
 
-### Previewing NixOS deployment
+### Previewing a fleet deployment
 
 :::tip[New in version 2.2.3]
 
-`devenv machines plan server` builds the requested NixOS system and deployment executor, shows a summary, and saves a plan ID.
+`devenv machines plan server mac` builds every selected role, shows a summary, and saves a plan ID. NixOS entries also pin a deployment executor.
 :::
 
 ```sh
@@ -223,11 +223,11 @@ devenv machines plan server
 devenv machines apply plan-...
 ```
 
-With no names, `plan` selects all remote NixOS machines. It uses the normal Nix build settings and reads each target's running system, selected system profile, and store closure over SSH. It does not copy the requested system or install an executor on the deployment target, and does not change its profile or activate anything. Root SSH is not required for these reads.
+With no names, `plan` selects every machine with `target.host`. Explicit names can also select local home-manager entries. It uses the normal Nix build settings and reads each NixOS target's running system, selected system profile, and store closure over SSH. It does not copy outputs or activate anything. Root SSH is not required for these reads. nix-darwin and home-manager entries show pinned activation outputs without claiming a current-generation or access comparison.
 
-For automation, `devenv machines plan --json server > plan.json` exports the plan. The version 3 JSON contains `currentSystem`, `currentProfile`, `requestedSystem`, `executor`, `sshOpts`, `systemChanged`, `profileChanged`, `addedStorePaths`, and `removedStorePaths` per machine, plus `currentFacts`, `requestedFacts`, and access-impact `findings`. The executor path pins the health check and rollback timeout. Store paths are sorted and compared against the running system's closure; the executor's closure is separate from this comparison. Added paths may already exist elsewhere in the target store; removed paths are not scheduled for deletion. These lists describe closure membership, not download sizes or which services will restart. A matching system path does not prove application health or make activation scripts free of side effects.
+For automation, `devenv machines plan --json server > plan.json` exports the plan. The version 4 JSON has scope `fleet`. Each machine records its target, SSH options, platform, and its `nixos`, `nixDarwin`, and `homeManager` roles. The latter two contain pinned activation package paths, or null when absent. The `nixos` object contains `currentSystem`, `currentProfile`, `requestedSystem`, `executor`, `systemChanged`, `profileChanged`, `addedStorePaths`, and `removedStorePaths` plus `currentFacts`, `requestedFacts`, and access-impact `findings`. The executor path pins the health check and rollback timeout. Store paths are sorted and compared against the running system's closure; the executor's closure is separate from this comparison. Added paths may already exist elsewhere in the target store; removed paths are not scheduled for deletion. These lists describe closure membership, not download sizes or which services will restart. A matching system path does not prove application health or make activation scripts free of side effects.
 
-The plan covers the NixOS role. Any home-manager role on the same machine is listed under `unplannedRoles`. An observed generation change during the SSH query causes the command to fail. A later `deploy` builds again. To use the exact reviewed outputs, use `apply` instead.
+The plan covers every selected role, including home-manager alongside a system role. An observed NixOS generation change during the SSH query causes the command to fail. A later `deploy` builds again. To use the exact reviewed outputs, use `apply` instead.
 
 ### Applying a reviewed plan
 
@@ -237,11 +237,11 @@ devenv machines plan server
 devenv machines apply plan-...
 ```
 
-`apply` uses the experimental transactional executor and requires root SSH and systemd on each target. It reads current machine metadata to verify the target address, SSH options, NixOS role, and platform still match the plan. It does not rebuild the system or executor, so changes to their configuration after planning do not change what is applied. Saved plans live in `.devenv/machine-plans/<id>/` and keep their system and executor outputs rooted against garbage collection. Remove a saved plan directory when you no longer need its retained outputs. Plan IDs are local to the project. Exported JSON files can also be passed to `apply`; their outputs must exist in the local store. Regenerate version 1 or 2 plans so access checks are included.
+`apply` uses the transactional executor for NixOS and direct activation for nix-darwin and home-manager. NixOS targets require root SSH and systemd. It reads current machine metadata to verify the target address, SSH options, declared roles, and platform still match the plan. It does not rebuild any role, so configuration changes after planning do not change what is applied. Saved plans live in `.devenv/machine-plans/<id>/` and keep every pinned role and executor rooted against garbage collection. Remove a saved plan directory when you no longer need its retained outputs. Plan IDs are local to the project. Exported JSON files can also be passed to `apply`; their outputs must exist in the local store. Regenerate older plans to include every role in the fleet format.
 
-Before copying, `apply` checks every target's running system, selected profile, and access facts against the plan. It checks the planned facts against the pinned system and recomputes findings. Then it copies every requested system and executor before activating any machine, and checks every target again after copying. A transfer failure or stale state detected at this boundary prevents all activations. Successful copies may remain in target stores. Each target executor checks generation preconditions again under its deployment lock at submission and immediately before activation. These checks coordinate devenv transactions; external activation tools do not share this lock and must not run concurrently.
+Before copying, `apply` checks that every remote target is reachable. On NixOS, it also compares the running system, selected profile, and access facts against the plan, verifies facts from the pinned system, and recomputes findings. Then it copies every requested role and executor before activating any machine, and rechecks all targets after copying. A transfer failure or stale state detected at this boundary prevents all activations. Successful copies may remain in target stores. Each target executor checks generation preconditions again under its deployment lock at submission and immediately before activation. These checks coordinate devenv transactions; external activation tools do not share this lock and must not run concurrently.
 
-Machines apply sequentially in name order, stopping at the first failure. Earlier confirmed machines stay applied, so this is not an atomic fleet transaction. Home-manager roles are not applied. Health checks, fresh SSH confirmation, and timed rollback follow the transactional behavior below. On a lost response, inspect `machines status` before retrying. Applying an unchanged system can still run activation scripts.
+By default, machines apply sequentially in name order, stopping at the first failure. `deploy` and `apply` accept `--max-concurrent N` to activate in batches of up to N machines. A failed batch finishes its active machines and prevents the next batch from starting. Earlier successful roles stay applied, so this is not an atomic fleet transaction. Each machine applies its system role before home-manager. NixOS health checks, fresh SSH confirmation, and timed rollback follow the transactional behavior below. On a lost response, inspect `machines status` before retrying. Applying an unchanged system can still run activation scripts.
 
 Treat the plan as a trusted deployment input: it selects executable store paths and is not signed or an approval record. Review the exact file passed to `apply`; keep it protected from edits between review and use. SSH host identity continues to use your SSH configuration and known-hosts policy.
 
@@ -269,7 +269,7 @@ These are configuration checks, not proof of connectivity. Dynamic key sources, 
 
 :::tip[New in version 2.2.3]
 
-The target-side deployment executor is experimental and is the default for reviewed NixOS deployment. Use `--legacy` for direct activation.
+The target-side deployment executor is experimental and handles the NixOS role in every deployment, including mixed fleets.
 :::
 
 ```sh
@@ -278,7 +278,7 @@ devenv machines status server
 devenv machines rollback server
 ```
 
-Reviewed NixOS deployment requires root SSH access and a running NixOS system with systemd. It copies a small executor to the target, records the currently running and requested systems, and starts activation in a systemd service. A target lock prevents overlapping transactional activations, including requests from different controllers or machine aliases. `deploy --legacy`, `nixos-rebuild`, and other deployment tools do not participate in this lock; do not run them concurrently.
+Reviewed NixOS deployment requires root SSH access and a running NixOS system with systemd. It copies a small executor to the target, records the currently running and requested systems, and starts activation in a systemd service. A target lock prevents overlapping transactional activations, including requests from different controllers or machine aliases. `nixos-rebuild` and other deployment tools do not participate in this lock; do not run them concurrently.
 
 A target-side watchdog is armed before activation. After activation and target health checks pass, the CLI confirms the deployment through a fresh SSH request. If activation fails, a check fails or hangs, or confirmation never arrives, the watchdog stops the activation process group and restores the previous system when the deadline expires. The watchdog continues if the controller exits or SSH disconnects. The CLI normally waits for the result, for up to 15 minutes of polling. A lost connection or observation timeout does not cancel activation and does not mean activation failed. Use `status` after reconnecting to reconcile the outcome. Service logs are available with `journalctl -u <unit>`, using the unit reported by status.
 
@@ -396,13 +396,13 @@ A single entry can carry more than one role. Both modules apply to the same host
 }
 ```
 
-`devenv machines install server` provisions only the NixOS role. After the target reboots, `devenv machines deploy server --legacy` activates all declared roles in order, including the home-manager configuration for `jdoe`. The reviewed NixOS flow does not apply home-manager.
+`devenv machines install server` provisions only the NixOS role. After the target reboots, `devenv machines deploy server` reviews and activates all declared roles in order, including the home-manager configuration for `jdoe`.
 
-During direct activation (`deploy --legacy` for NixOS), roles activate in a fixed order: NixOS (or nix-darwin) first, then home-manager. home-manager depends on the user existing on the target, so running it after the system switch is the only order that works for a fresh entry.
+Roles activate in a fixed order: NixOS (or nix-darwin) first, then home-manager. home-manager depends on the user existing on the target, so running it after the system switch is the only order that works for a fresh entry.
 
 When the shared SSH target logs in as `root` or as a different administrator, devenv runs the home-manager activation as `home.username` with `HOME` set to `home.homeDirectory`. It uses `runuser` for root sessions and falls back to passwordless `sudo` for administrator sessions.
 
-The two roles are not transactional: a partial success is possible and is reported as a failure. If NixOS activation fails, home-manager is not attempted and the entry is reported as failed. If NixOS succeeds but home-manager fails, the NixOS switch stays applied, the entry is still reported as failed, and bulk deploys exit nonzero. Inspect both roles before retrying with `deploy --legacy`; activation scripts can run again and can have side effects.
+The two roles are not one transaction. NixOS must complete its transaction and confirmation before home-manager starts. If NixOS fails, home-manager is not attempted. If home-manager fails after NixOS succeeds, the confirmed NixOS system stays applied and the machine is reported as failed. The same ordering applies to nix-darwin and home-manager, but neither role has automatic rollback. Inspect completed roles before retrying; activation scripts can run again and can have side effects.
 
 A couple of footguns to know about when combining roles on one entry:
 
@@ -517,13 +517,12 @@ LUKS root unlock keys are a separate case: they are consumed by disko at install
 
 ## Deploying multiple machines
 
-`devenv machines deploy` without arguments selects every machine with `target.host`. Reviewed runs require a NixOS role on each selected machine. For mixed NixOS, nix-darwin, and home-manager fleets, select platforms separately or use direct activation with `--legacy`. Local-only entries are excluded; direct activation reports them as skipped:
+`devenv machines deploy` without arguments selects every machine with `target.host`. A mixed fleet gets one review and confirmation, with all system and home-manager outputs prepared before activation. Local-only entries are excluded unless named explicitly:
 
 ```sh
-$ devenv machines deploy --legacy
-server       (root@192.0.2.10)    deploying... ok
-mac          (admin@mac.local)    deploying... ok
-me           (no target)          skipped
+devenv machines deploy              # All remote machines, across platforms
+devenv machines deploy --yes        # The same fleet without an interactive prompt
+devenv machines deploy me           # Explicitly include a local home-manager entry
 ```
 
 You can also pass several names explicitly:
@@ -562,21 +561,17 @@ Keep this at the Nix layer rather than wrapping `devenv machines deploy` in a sh
 
 ### Parallelism and failure handling
 
-Reviewed NixOS deployments build and review all requested outputs before copying, recheck every target, and apply sequentially, stopping on the first failure. Earlier confirmed machines remain applied. `--max-concurrent 1` is accepted; larger limits require `--legacy`.
+All deployments build and review every selected role, copy every remote output, and recheck all targets before activation. Preparation failure prevents every activation, including local home-manager activation.
 
-For `--legacy` and standalone nix-darwin/home-manager runs, machines are deployed in parallel by default. Each machine runs its own build, copy, and activation pipeline independently, and the summary printed at the end shows the outcome for each one. Pass `--max-concurrent N` to cap how many machines run at once; `--max-concurrent 1` runs them strictly one at a time, which helps when you want predictable ordering or when debugging a specific host. (`-j` is not used because it's already the global Nix `max-jobs` flag.) The same flag also caps concurrent `install` jobs.
+By default, machines activate sequentially in name order. `--max-concurrent N` on `deploy` or `apply` activates batches of up to N machines. Roles within each machine remain sequential: system first, home-manager second. If any machine fails, the remaining active machines in its batch finish, and no later batch starts. Successful activations remain applied; the command reports completed machines and failures and exits nonzero. This is not a fleet-wide transaction.
 
-In those direct activation runs, build and activation are interleaved: each machine builds its own closure immediately before copying and activating, not all closures up front. A failure on one machine does not stop the others. Machines that already activated stay applied, machines still running finish their own pipelines, and every outcome lands in the final summary. `devenv machines deploy` exits nonzero if any machine in the run failed. If you want every closure built before any deploy runs, build each machine explicitly with `devenv build machines.<name>` first and only then invoke `devenv machines deploy`.
-
-If a host in a direct activation bulk run is unreachable, devenv still builds its closure locally and only discovers the problem at the copy step; that machine is marked failed in the summary and the other machines continue. There is no precheck that probes every target before building.
-
-Interrupting a direct activation parallel run with Ctrl-C leaves in flight machines in whatever state they happened to reach: a machine mid copy stops mid copy, a machine mid activation may be half switched. devenv does not roll those back. Inspect the target before retrying direct activation; already completed activation scripts can run again.
+NixOS retains its health checks, SSH confirmation, and rollback deadline at every concurrency level. Direct roles do not gain automatic rollback by sharing a fleet with NixOS. The same `--max-concurrent` flag also caps concurrent `install` jobs. (`-j` is the global Nix build-job setting.)
 
 ## Progress and logs
 
-`install` and `deploy` report progress through devenv's activity tracing system. The reviewed `deploy` and `plan` commands use line-based progress so their summaries and confirmation prompts remain visible. For other commands, in TUI mode each machine shows up as its own tracked operation, with distinct phases for build, copy, and activation so you can see which step a stuck run is waiting on. When the TUI is disabled (for example, when tracing is routed to stderr), the same events are emitted as log lines, keeping CI output readable.
+`install` and `deploy` report progress through devenv's activity tracing system. The `deploy` and `plan` commands use line-based progress so their summaries and confirmation prompts remain visible. For other commands, in TUI mode each machine shows up as its own tracked operation, with distinct phases for build, copy, and activation so you can see which step a stuck run is waiting on. When the TUI is disabled (for example, when tracing is routed to stderr), the same events are emitted as log lines, keeping CI output readable.
 
-For bulk deploys, a summary with one line per machine is printed at the end, matching the format shown above.
+Deployment reports each completed machine. Failures identify the affected role and previously completed machines.
 
 ## Cross-platform deploys
 
@@ -661,7 +656,7 @@ The supporting inputs (`disko`, `nixos-facter-modules`, `nix-darwin`, `home-mana
 
 A few behaviors are explicit non features, called out so you do not infer them from the tools devenv machines is compared to:
 
-- **Direct activation has no rollback.** `--legacy`, nix-darwin, and home-manager can leave partial activation effects. Reviewed NixOS deployments use the rollback behavior described above.
+- **nix-darwin and home-manager have no automatic rollback.** These roles can leave partial activation effects. NixOS roles use the rollback behavior described above, including in mixed fleets.
 - **Only `switch` activation.** There is no `boot`, `test`, or `dry-activate` mode, and no `--reboot` flag. If you need a reboot after a kernel update, follow `deploy` with a manual `ssh <host> systemctl reboot`.
 - **Health checks cover transactional NixOS only.** Configure `deploy.healthCheck`; direct activation reports the activation script result.
 - **State is local to each controller and target.** Saved plans live under `.devenv/machine-plans`; deployment checkpoints and recovery roots live on the target. There is no shared fleet coordinator.

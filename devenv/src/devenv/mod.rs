@@ -657,14 +657,13 @@ impl Devenv {
             .secretspec
             .as_ref()
             .and_then(|config| config.provider.as_deref());
-        let secretspec_global_config = if secretspec_cell.get().is_none()
+        let secretspec_global_profile = if secretspec_cell.get().is_none()
             && secret_settings
                 .secretspec
                 .as_ref()
                 .is_some_and(|config| config.enable && config.profile.is_none())
         {
-            secretspec::GlobalConfig::load()
-                .map_err(|error| miette!("Failed to load SecretSpec global config: {error}"))?
+            load_secretspec_global_profile()?
         } else {
             None
         };
@@ -688,7 +687,7 @@ impl Devenv {
                     // later local resolution will use.
                     profile: Some(effective_secretspec_profile(
                         config,
-                        secretspec_global_config.as_ref(),
+                        secretspec_global_profile.as_deref(),
                     )),
                     provider: config.provider.clone(),
                     secrets: Default::default(),
@@ -4168,13 +4167,52 @@ fn project_cachix_auth_token(
 
 fn effective_secretspec_profile(
     config: &devenv_core::config::SecretspecConfig,
-    global_config: Option<&secretspec::GlobalConfig>,
+    global_profile: Option<&str>,
 ) -> String {
     config
         .profile
         .clone()
-        .or_else(|| global_config.and_then(|global| global.defaults.profile.clone()))
+        .or_else(|| global_profile.map(str::to_string))
         .unwrap_or_else(|| "default".to_string())
+}
+
+/// Read only profile selection, without resolving any bootstrap values on the
+/// workstation. SecretSpec 0.21 keeps its global config type private, so this
+/// follows the same etcetera config path and parses the selector we need.
+fn load_secretspec_global_profile() -> Result<Option<String>> {
+    use etcetera::app_strategy::{AppStrategy, AppStrategyArgs, choose_app_strategy};
+
+    #[derive(serde::Deserialize, Default)]
+    struct GlobalDefaults {
+        profile: Option<String>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct GlobalProfileConfig {
+        #[serde(default)]
+        defaults: GlobalDefaults,
+    }
+
+    let strategy = choose_app_strategy(AppStrategyArgs {
+        top_level_domain: String::new(),
+        author: String::new(),
+        app_name: "secretspec".into(),
+    })
+    .map_err(|error| miette!("Failed to locate SecretSpec global config: {error}"))?;
+    let path = strategy.config_dir().join("config.toml");
+    let contents = match std::fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(miette!(
+                "Failed to read SecretSpec global config {}: {error}",
+                path.display()
+            ));
+        }
+    };
+    let config: GlobalProfileConfig = toml::from_str(&contents)
+        .map_err(|error| miette!("Failed to parse SecretSpec global config: {error}"))?;
+    Ok(config.defaults.profile)
 }
 
 fn resolve_secretspec_into(
@@ -4595,16 +4633,14 @@ mod tests {
         };
         assert_eq!(effective_secretspec_profile(&config, None), "default");
 
-        let mut global = secretspec::GlobalConfig::default();
-        global.defaults.profile = Some("team".to_string());
-        assert_eq!(effective_secretspec_profile(&config, Some(&global)), "team");
+        assert_eq!(effective_secretspec_profile(&config, Some("team")), "team");
 
         let explicit = devenv_core::config::SecretspecConfig {
             profile: Some("production".to_string()),
             ..config
         };
         assert_eq!(
-            effective_secretspec_profile(&explicit, Some(&global)),
+            effective_secretspec_profile(&explicit, Some("team")),
             "production"
         );
     }

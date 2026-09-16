@@ -87,6 +87,7 @@ console = "0.16.3"
 detect-coding-agent = "0.1.0"
 dialoguer = "0.12.0"
 dotenv = { package = "dotenv-ng", version = "1.0.0" }
+etcetera = "0.11"
 fd-lock = "4"
 futures = "0.3.32"
 hex = "0.4.3"
@@ -140,7 +141,6 @@ sqlx = { version = "0.9.0", features = ["time", "sqlite", "runtime-tokio"] }
 strum = { version = "0.28", features = ["derive"] }
 tempfile = "3.27.0"
 termimad = "0.34"
-toml = "0.9"
 tokio-test = "0.4"
 thiserror = "2.0.18"
 tracing = { version = "0.1.44", features = ["valuable"] }

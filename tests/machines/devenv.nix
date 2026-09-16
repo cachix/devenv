@@ -30,13 +30,17 @@
   # nix-darwin-only machine: used to exercise the targeted missing-host error
   # path in `devenv machines deploy` (nix-darwin deployment requires SSH).
   machines.mac = {
-    nix-darwin = { environment.systemPackages = [ ]; };
+    nix-darwin = {
+      environment.systemPackages = [ ];
+    };
   };
 
   # NixOS machine without a target.host: used to exercise the
   # "NixOS deploys always go over SSH" error path.
   machines.nohost = {
-    nixos = { services.openssh.enable = true; };
+    nixos = {
+      services.openssh.enable = true;
+    };
   };
 
   # NixOS machine with custom kexec override: used to test that the
@@ -48,7 +52,9 @@
     install.kexec.image = "https://example.com/custom-kexec.tar.gz";
     install.kexec.postSshPort = 2222;
     install.copyHostKeys = true;
-    nixos = { services.openssh.enable = true; };
+    nixos = {
+      services.openssh.enable = true;
+    };
   };
 
   # Local payload validation must happen before builds, SSH, or destructive
@@ -71,15 +77,20 @@
     target.host = "root@secretful.example.com";
     # The secret-bearing install must force `yes` ahead of this deliberately
     # insecure value. A shell integration check captures the actual SSH argv.
-    target.sshOpts = [ "-o" "StrictHostKeyChecking=no" ];
+    target.sshOpts = [
+      "-o"
+      "StrictHostKeyChecking=no"
+    ];
     install.secrets."/var/lib/sops-nix/key.txt" = {
       secret = "SECRET_MACHINE_AGE_KEY";
       owner = "0:0";
       mode =
-        if config.secretspec.profile == "default"
-          && !(config.secretspec.secrets ? SECRET_MACHINE_AGE_KEY)
-        then "0600"
-        else "0644";
+        if
+          config.secretspec.profile == "default" && !(config.secretspec.secrets ? SECRET_MACHINE_AGE_KEY)
+        then
+          "0600"
+        else
+          "0644";
     };
     nixos = {
       services.openssh.enable = true;
