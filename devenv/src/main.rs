@@ -1561,7 +1561,10 @@ async fn dispatch_command(
             // Re-read dotenv after tasks so generated files are exported on the
             // same direnv activation.
             let mut output = devenv.print_dev_env(false).await?;
-            output.push_str(&devenv::format_shell_exports(&task_exports));
+            devenv::push_shell_fragment(
+                &mut output,
+                &devenv::format_shell_exports(&task_exports),
+            );
             Ok(CommandResult::Print(output))
         }
         Commands::PrintPaths => {
