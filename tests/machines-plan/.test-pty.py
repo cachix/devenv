@@ -23,7 +23,7 @@ for response, should_copy in [(b"\n", False), (b"y\n", True)]:
                     output += os.read(terminal, 65536)
                 except OSError:
                     pass
-            if not answered and b"Apply this NixOS plan?" in output:
+            if not answered and b"Apply this fleet plan?" in output:
                 # The displayed plan must precede the confirmation.
                 assert os.environ["PLAN_NEW"].encode() in output
                 assert "copy " not in log.read_text()

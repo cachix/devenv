@@ -1215,21 +1215,25 @@ pub enum MachinesCommand {
         #[arg(help = "Machine names. Defaults to all remote NixOS machines.")]
         names: Vec<String>,
     },
-    #[command(
-        about = "Apply the exact NixOS systems in a reviewed deployment plan transactionally."
-    )]
+    #[command(about = "Apply every pinned role in a reviewed fleet deployment plan.")]
     Apply {
         #[arg(help = "Saved plan ID, or an exported JSON file.")]
         plan: PathBuf,
+        #[arg(
+            long,
+            value_name = "N",
+            help = "Activate at most N machines per batch (default: 1). Stop after a failed batch."
+        )]
+        max_concurrent: Option<usize>,
     },
-    #[command(about = "Build and save a NixOS deployment plan for review.")]
+    #[command(about = "Build and save a fleet deployment plan for review.")]
     Plan {
         #[arg(
             long,
             help = "Export the plan as JSON instead of showing a summary and saved plan ID."
         )]
         json: bool,
-        #[arg(help = "Machine names. Defaults to all remote NixOS machines.")]
+        #[arg(help = "Machine names. Defaults to every machine with target.host.")]
         names: Vec<String>,
     },
     #[command(
@@ -1313,19 +1317,14 @@ pub enum MachinesCommand {
     },
 
     #[command(
-        about = "Build, review, and confirm NixOS deployment, or deploy nix-darwin/home-manager directly. https://devenv.sh/machines/#updating-an-existing-host"
+        about = "Build, review, and deploy NixOS, nix-darwin, and home-manager together. https://devenv.sh/machines/#updating-an-existing-host"
     )]
     Deploy {
         #[arg(
             long,
-            help = "Apply the displayed NixOS plan without an interactive confirmation."
+            help = "Apply the displayed fleet plan without an interactive confirmation."
         )]
         yes: bool,
-        #[arg(
-            long,
-            help = "Use direct activation without a reviewed plan or transactional rollback."
-        )]
-        legacy: bool,
         // Note: `-j` is already taken by the global `max_jobs` Nix option
         // (see `NixCliArgs`), so `--max-concurrent` intentionally has no
         // short alias. Users who want sequential behaviour pass
@@ -1333,7 +1332,7 @@ pub enum MachinesCommand {
         #[arg(
             long = "max-concurrent",
             value_name = "N",
-            help = "Concurrency for direct activation (--legacy, nix-darwin, home-manager). Reviewed NixOS deployment is sequential and accepts only 1."
+            help = "Activate at most N machines per batch (default: 1). Stop after a failed batch."
         )]
         max_concurrent: Option<usize>,
 

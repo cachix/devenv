@@ -720,8 +720,8 @@ let
       diskoScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.diskoScript;
       diskoFormatScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.formatScript;
       diskoMountScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.mountScript;
-      nix-darwin = lib.mkIf (config.nix-darwin != null) (buildNixDarwinToplevel config);
-      home-manager = lib.mkIf (config.home-manager != null) (buildHomeManagerToplevel config);
+      nix-darwin = lib.mkIf (config.nix-darwin != null) (lib.mkDefault (buildNixDarwinToplevel config));
+      home-manager = lib.mkIf (config.home-manager != null) (lib.mkDefault (buildHomeManagerToplevel config));
     };
 
     # Lazy: only forced when the CLI reads `installCheck.hasRootAuth`

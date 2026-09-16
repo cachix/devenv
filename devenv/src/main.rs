@@ -1409,8 +1409,11 @@ async fn dispatch_command(
                 let (output, failed) = devenv.machines_check(&names, json).await?;
                 Ok(CommandResult::CheckReport(output, failed))
             }
-            MachinesCommand::Apply { plan } => {
-                devenv.machines_apply(&plan).await?;
+            MachinesCommand::Apply {
+                plan,
+                max_concurrent,
+            } => {
+                devenv.machines_apply(&plan, max_concurrent).await?;
                 Ok(CommandResult::Done)
             }
             MachinesCommand::Plan { names, json } => Ok(CommandResult::Print(
@@ -1480,19 +1483,12 @@ async fn dispatch_command(
             }
             MachinesCommand::Deploy {
                 yes,
-                legacy,
                 max_concurrent,
                 use_machines_as_builders,
                 names,
             } => {
                 devenv
-                    .machines_deploy_reviewed(
-                        &names,
-                        max_concurrent,
-                        use_machines_as_builders,
-                        legacy,
-                        yes,
-                    )
+                    .machines_deploy(&names, max_concurrent, use_machines_as_builders, yes)
                     .await?;
                 Ok(CommandResult::Done)
             }

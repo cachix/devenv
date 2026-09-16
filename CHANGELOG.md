@@ -11,9 +11,9 @@
 
 ### Improvements
 
-- Added configuration access checks to NixOS machine plans and `devenv machines check` to inspect them without building. Reviewed deployments reject disabled SSH or root login, report uncertain access changes, and require regenerated version 3 plans.
-- Machine deployment now copies every system and executor and rechecks every target before activating any machine, preventing partial rollouts when preparation fails.
-- NixOS `devenv machines deploy` now builds a plan, shows changes, asks for confirmation, and applies those exact outputs with generation checks and transactional rollback. Use `--yes` for automation or `--legacy` for direct activation. `machines plan` saves a reusable plan ID; JSON export is optional with `--json`.
+- Added configuration access checks to NixOS machine plans and `devenv machines check` to inspect them without building. Reviewed deployments reject disabled SSH or root login, report uncertain access changes, and require regenerated fleet plans.
+- Mixed NixOS, nix-darwin, and home-manager fleets share one review and confirmation. Every role is built and copied before activation; system roles run before home-manager. `--max-concurrent` supports bounded activation batches that stop after a failure.
+- `devenv machines deploy` builds a fleet plan, shows changes, asks for confirmation, and applies those exact outputs. NixOS uses generation checks and transactional rollback; nix-darwin and home-manager use direct activation. Use `--yes` for automation. `machines plan` saves a reusable plan ID; JSON export is optional with `--json`.
 - Added an experimental target-side deployment executor for NixOS, with activation independent of SSH, deployment locking, health checks, persistent status, and explicit rollback. Unconfirmed deployments roll back after a deadline or reboot once NixOS reaches userspace; inspect and recover deployments with `machines status` and `machines rollback`.
 - When the Nix daemon is running version 2.35 or newer, `devenv gc` now cleans up old environments in a single batch, making it much faster. It also shows clear progress while it runs.
 - File watching now uses substantially fewer allocations and less peak memory for large dependency sets, batches registrations and change bursts more efficiently, and keeps tracking files that are created later or replaced atomically.

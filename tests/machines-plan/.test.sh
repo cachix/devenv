@@ -78,20 +78,19 @@ export PATH="$PWD/mock-bin:$PATH"
 
 devenv machines plan --json server > plan.json
 jq -e --arg old "$PLAN_OLD" --arg new "$PLAN_NEW" --arg removed "$PLAN_REMOVED" '
-  .version == 3 and .scope == "nixos" and
+  .version == 4 and .scope == "fleet" and
   (.machines.server | .target == "reader@preview.invalid" and
-    .currentSystem == $old and .currentProfile == $new and .requestedSystem == $new and
+    (.nixos | .currentSystem == $old and .currentProfile == $new and .requestedSystem == $new and
     .systemChanged and (.profileChanged | not) and
-    .addedStorePaths == [$new] and .removedStorePaths == ([$old, $removed] | sort) and
-    .unplannedRoles == [])' plan.json
+    .addedStorePaths == [$new] and .removedStorePaths == ([$old, $removed] | sort)))' plan.json
 grep -qx 2222 "$PLAN_LOG"
 
 PLAN_UNCHANGED=1 devenv machines plan --json > unchanged.json
 jq -e '.machines | keys == ["server"]' unchanged.json
-jq -e '.machines.server | (.systemChanged | not) and (.profileChanged | not) and .addedStorePaths == [] and .removedStorePaths == []' unchanged.json
+jq -e '.machines.server.nixos | (.systemChanged | not) and (.profileChanged | not) and .addedStorePaths == [] and .removedStorePaths == []' unchanged.json
 
 export PLAN_EXECUTOR
-PLAN_EXECUTOR=$(jq -er '.machines.server.executor' plan.json)
+PLAN_EXECUTOR=$(jq -er '.machines.server.nixos.executor' plan.json)
 devenv machines plan server > saved-plan.log
 saved_plan=$(sed -n 's/^Saved plan: //p' saved-plan.log)
 test -n "$saved_plan"
@@ -108,7 +107,7 @@ APPLY_TEST=1 devenv machines deploy server --yes
 grep -qx "copy $PLAN_NEW" "$PLAN_LOG"
 
 # Selection is validated in full before contacting any target.
-for args in 'server missing' 'server server' 'local'; do
+for args in 'server missing' 'server server'; do
   : > "$PLAN_LOG"
   # Deliberate splitting supplies separate CLI names.
   if devenv machines plan --json $args > rejected.json 2> rejected.log; then exit 1; fi
@@ -132,7 +131,7 @@ done
 
 # Applying uses only the reviewed paths, even when current roles cannot build.
 export PLAN_EXECUTOR
-PLAN_EXECUTOR=$(jq -er '.machines.server.executor' plan.json)
+PLAN_EXECUTOR=$(jq -er '.machines.server.nixos.executor' plan.json)
 cat > devenv.local.nix <<'EOF'
 { lib, ... }: {
   machines.server.build.nixos = lib.mkForce (throw "apply rebuilt the system");
@@ -160,8 +159,8 @@ if APPLY_TEST=1 APPLY_REJECT=1 devenv machines apply plan.json > rejected-apply.
 grep -q 'may have started' rejected-apply.log
 
 for edit in '.version = 1' '.machines.server.target = "other.invalid"' \
-  '.machines.server.requestedSystem += "/bin"' '.machines = {}' \
-  '.machines.server.executor = "/nix/store/00000000000000000000000000000000-missing"'; do
+  '.machines.server.nixos.requestedSystem += "/bin"' '.machines = {}' \
+  '.machines.server.nixos.executor = "/nix/store/00000000000000000000000000000000-missing"'; do
   jq "$edit" plan.json > invalid-plan.json
   : > "$PLAN_LOG"
   if APPLY_TEST=1 devenv machines apply invalid-plan.json > invalid-apply.log 2>&1; then exit 1; fi
@@ -194,7 +193,7 @@ cat > devenv.local.nix <<'NIX'
 }
 NIX
 devenv machines plan --json server > blocked-plan.json
-jq -e '.machines.server.findings | any(.code == "ssh-disabled" and .severity == "error") and any(.code == "root-login-disabled" and .severity == "error")' blocked-plan.json
+jq -e '.machines.server.nixos.findings | any(.code == "ssh-disabled" and .severity == "error") and any(.code == "root-login-disabled" and .severity == "error")' blocked-plan.json
 : > "$PLAN_LOG"
 if APPLY_TEST=1 devenv machines deploy server --yes > blocked-deploy.log 2>&1; then exit 1; fi
 grep -q 'Access checks block deployment' blocked-deploy.log
@@ -204,6 +203,6 @@ if APPLY_TEST=1 devenv machines apply blocked-plan.json > blocked-apply.log 2>&1
 grep -q 'Access checks block deployment' blocked-apply.log
 test ! -s "$PLAN_LOG"
 # Forging findings cannot bypass recomputation from the saved facts.
-jq '.machines.server.findings = []' blocked-plan.json > forged-plan.json
+jq '.machines.server.nixos.findings = []' blocked-plan.json > forged-plan.json
 if APPLY_TEST=1 devenv machines apply forged-plan.json > forged.log 2>&1; then exit 1; fi
 grep -q 'Inconsistent access findings' forged.log
