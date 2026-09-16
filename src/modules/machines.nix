@@ -143,6 +143,7 @@ let
         modules = [
           { nixpkgs.hostPlatform = machine.system; }
           disko.nixosModules.disko
+          ./machines/recovery.nix
           machine.nixos
           ({ pkgs, ... }:
             let
@@ -606,6 +607,34 @@ let
         description = "Built NixOS system toplevel for this machine, or null if no `nixos` module is set.";
       };
 
+      build.deployer = lib.mkOption {
+        type = outputType;
+        default = null;
+        internal = true;
+        description = "Target-platform NixOS deployment executor.";
+      };
+
+      deploy.healthCheck = lib.mkOption {
+        type = lib.types.lines;
+        default = "true";
+        description = ''
+          Root shell commands run on the target after transactional NixOS activation.
+          A nonzero exit or failure to finish before `deploy.rollbackTimeout`
+          prevents confirmation and triggers rollback at the deadline.
+          Use absolute store paths for required tools.
+        '';
+      };
+
+      deploy.rollbackTimeout = lib.mkOption {
+        type = lib.types.ints.between 30 600;
+        default = 300;
+        description = ''
+          Seconds allowed for transactional activation, health checks and SSH
+          confirmation together. A target-side watchdog restores the previous
+          system if this deadline expires without confirmation.
+        '';
+      };
+
       build.nix-darwin = lib.mkOption {
         type = outputType;
         default = null;
@@ -674,6 +703,10 @@ let
     config._nixosEval = lib.mkIf (config.nixos != null) (nixosEval config);
 
     config.build = {
+      deployer = lib.mkIf (config.nixos != null) (import ./machines/deploy.nix {
+        pkgs = config._nixosEval.pkgs;
+        inherit (config.deploy) healthCheck rollbackTimeout;
+      });
       nixos = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.toplevel;
       diskoScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.diskoScript;
       diskoFormatScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.formatScript;
