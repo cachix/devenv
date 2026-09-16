@@ -225,7 +225,7 @@ devenv machines apply plan-...
 
 With no names, `plan` selects all remote NixOS machines. It uses the normal Nix build settings and reads each target's running system, selected system profile, and store closure over SSH. It does not copy the requested system or install an executor on the deployment target, and does not change its profile or activate anything. Root SSH is not required for these reads.
 
-For automation, `devenv machines plan --json server > plan.json` exports the plan. The version 2 JSON contains `currentSystem`, `currentProfile`, `requestedSystem`, `executor`, `sshOpts`, `systemChanged`, `profileChanged`, `addedStorePaths`, and `removedStorePaths` per machine. The executor path pins the health check and rollback timeout. Store paths are sorted and compared against the running system's closure; the executor's closure is separate from this comparison. Added paths may already exist elsewhere in the target store; removed paths are not scheduled for deletion. These lists describe closure membership, not download sizes or which services will restart. A matching system path does not prove application health or make activation scripts free of side effects.
+For automation, `devenv machines plan --json server > plan.json` exports the plan. The version 3 JSON contains `currentSystem`, `currentProfile`, `requestedSystem`, `executor`, `sshOpts`, `systemChanged`, `profileChanged`, `addedStorePaths`, and `removedStorePaths` per machine, plus `currentFacts`, `requestedFacts`, and access-impact `findings`. The executor path pins the health check and rollback timeout. Store paths are sorted and compared against the running system's closure; the executor's closure is separate from this comparison. Added paths may already exist elsewhere in the target store; removed paths are not scheduled for deletion. These lists describe closure membership, not download sizes or which services will restart. A matching system path does not prove application health or make activation scripts free of side effects.
 
 The plan covers the NixOS role. Any home-manager role on the same machine is listed under `unplannedRoles`. An observed generation change during the SSH query causes the command to fail. A later `deploy` builds again. To use the exact reviewed outputs, use `apply` instead.
 
@@ -237,13 +237,33 @@ devenv machines plan server
 devenv machines apply plan-...
 ```
 
-`apply` uses the experimental transactional executor and requires root SSH and systemd on each target. It reads current machine metadata to verify the target address, SSH options, NixOS role, and platform still match the plan. It does not rebuild the system or executor, so changes to their configuration after planning do not change what is applied. Saved plans live in `.devenv/machine-plans/<id>/` and keep their system and executor outputs rooted against garbage collection. Remove a saved plan directory when you no longer need its retained outputs. Plan IDs are local to the project. Exported JSON files can also be passed to `apply`; their outputs must exist in the local store. Version 1 previews cannot be applied.
+`apply` uses the experimental transactional executor and requires root SSH and systemd on each target. It reads current machine metadata to verify the target address, SSH options, NixOS role, and platform still match the plan. It does not rebuild the system or executor, so changes to their configuration after planning do not change what is applied. Saved plans live in `.devenv/machine-plans/<id>/` and keep their system and executor outputs rooted against garbage collection. Remove a saved plan directory when you no longer need its retained outputs. Plan IDs are local to the project. Exported JSON files can also be passed to `apply`; their outputs must exist in the local store. Regenerate version 1 or 2 plans so access checks are included.
 
-Before copying, `apply` checks every target's running system and selected profile against the plan. Each target executor checks those generation preconditions again under its deployment lock at submission and immediately before activation. A stale plan fails. These checks coordinate devenv transactions; external activation tools do not share this lock and must not run concurrently.
+Before copying, `apply` checks every target's running system, selected profile, and access facts against the plan. It checks the planned facts against the pinned system and recomputes findings. Then it copies every requested system and executor before activating any machine, and checks every target again after copying. A transfer failure or stale state detected at this boundary prevents all activations. Successful copies may remain in target stores. Each target executor checks generation preconditions again under its deployment lock at submission and immediately before activation. These checks coordinate devenv transactions; external activation tools do not share this lock and must not run concurrently.
 
 Machines apply sequentially in name order, stopping at the first failure. Earlier confirmed machines stay applied, so this is not an atomic fleet transaction. Home-manager roles are not applied. Health checks, fresh SSH confirmation, and timed rollback follow the transactional behavior below. On a lost response, inspect `machines status` before retrying. Applying an unchanged system can still run activation scripts.
 
 Treat the plan as a trusted deployment input: it selects executable store paths and is not signed or an approval record. Review the exact file passed to `apply`; keep it protected from edits between review and use. SSH host identity continues to use your SSH configuration and known-hosts policy.
+
+### Checking access changes without building
+
+:::tip[New in version 2.2.3]
+
+`devenv machines check server` evaluates access configuration and reads the target's current facts over SSH. It does not build derivations, compare closures, copy outputs, create an applicable plan, or test activation health. Evaluation can still fetch inputs. Evaluation can reuse existing derivation outputs, but local and remote builds and substitution are disabled. If evaluation needs an unavailable derivation output, the check fails.
+:::
+
+```sh
+devenv machines check server
+devenv machines check --json server
+```
+
+With no names, `check` selects all remote NixOS machines. The JSON report uses scope `configuration-access` and includes structured findings with stable `code`, `severity`, `message`, `before`, and `after` fields. Errors produce a nonzero exit status while preserving the JSON report on stdout. Warnings alone do not fail the check.
+
+The same access analysis appears in deployment plans. Disabling SSH or setting `PermitRootLogin = "no"` blocks reviewed deployment before copying; `--yes` cannot bypass these errors. Warnings describe changed SSH ports, removed declared administrator keys, hostname changes, missing reboot recovery, and SSH ports absent from declared global firewall allowances. A hostname change alone is not treated as proof of a wrong target.
+
+NixOS machine configurations install versioned public configuration facts at `/run/current-system/etc/devenv/machine-facts.json`. Evaluation uses the same facts definition. Facts contain SHA-256 hashes of declared administrator key entries, not their text, private keys, or secret values. Changing an entry's options or comment also changes its hash. Older targets without this file remain deployable, but the missing before/after comparison is reported explicitly. Unreadable or malformed facts and SSH failures fail the observation.
+
+These are configuration checks, not proof of connectivity. Dynamic key sources, home-directory authorized keys, SSH overrides, interface firewall rules, nftables, and other custom rules require manual review. External firewalls, actual key possession, and runtime changes are not established by declared facts. Post-activation SSH confirmation and timed rollback remain necessary.
 
 ### Transactional NixOS deployment
 

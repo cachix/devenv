@@ -144,6 +144,7 @@ let
           { nixpkgs.hostPlatform = machine.system; }
           disko.nixosModules.disko
           ./machines/recovery.nix
+          ./machines/facts.nix
           machine.nixos
           ({ pkgs, ... }:
             let
@@ -614,6 +615,13 @@ let
         description = "Target-platform NixOS deployment executor.";
       };
 
+      deploy.facts = lib.mkOption {
+        type = lib.types.attrs;
+        internal = true;
+        readOnly = true;
+        description = "Evaluated NixOS access facts; reading these does not build the system.";
+      };
+
       deploy.healthCheck = lib.mkOption {
         type = lib.types.lines;
         default = "true";
@@ -701,6 +709,7 @@ let
     # `config.nixos == null` because every `build.*` and `installCheck`
     # consumer guards access behind `lib.mkIf (config.nixos != null) …`.
     config._nixosEval = lib.mkIf (config.nixos != null) (nixosEval config);
+    config.deploy.facts = if config.nixos != null then config._nixosEval.config.devenvMachineFacts else { };
 
     config.build = {
       deployer = lib.mkIf (config.nixos != null) (import ./machines/deploy.nix {

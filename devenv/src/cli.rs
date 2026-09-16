@@ -1065,7 +1065,9 @@ impl Commands {
                 | Self::Lsp { .. }
                 | Self::PrintPaths
                 | Self::Machines {
-                    command: MachinesCommand::Deploy { .. } | MachinesCommand::Plan { .. }
+                    command: MachinesCommand::Deploy { .. }
+                        | MachinesCommand::Plan { .. }
+                        | MachinesCommand::Check { .. }
                 }
         )
     }
@@ -1300,6 +1302,13 @@ pub enum ContainerCommand {
     arg_required_else_help(true)
 )]
 pub enum MachinesCommand {
+    #[command(about = "Check declared NixOS access changes without building or deploying.")]
+    Check {
+        #[arg(long, help = "Print structured findings as JSON.")]
+        json: bool,
+        #[arg(help = "Machine names. Defaults to all remote NixOS machines.")]
+        names: Vec<String>,
+    },
     #[command(
         about = "Apply the exact NixOS systems in a reviewed deployment plan transactionally."
     )]

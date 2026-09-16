@@ -576,6 +576,25 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     if matches!(command, Commands::Update { .. }) {
         nix_settings.refresh_fetchers = true;
     }
+    if matches!(
+        command,
+        Commands::Machines {
+            command: MachinesCommand::Check { .. }
+        }
+    ) {
+        // Evaluation may reuse already-realized IFD outputs (including the
+        // nixpkgs bootstrap), but may not build locally or on remote builders.
+        nix_settings.nix_options.extend([
+            "max-jobs".into(),
+            "0".into(),
+            "builders".into(),
+            "".into(),
+            "substitute".into(),
+            "false".into(),
+            "always-allow-substitutes".into(),
+            "false".into(),
+        ]);
+    }
     let mut shell_settings = ShellSettings::resolve_with_shell_hint(
         devenv_core::ShellOptions::from(cli.shell_args),
         &config,
@@ -1225,6 +1244,8 @@ enum CommandResult {
     Done,
     /// Print this string after UI cleanup
     Print(String),
+    /// Print a structured check report, then exit with its policy result.
+    CheckReport(String, bool),
     /// Exec into this command after cleanup (TUI shutdown, terminal restore)
     Exec(Command),
     /// Exit with a specific code (e.g., from shell exit)
@@ -1249,6 +1270,15 @@ impl CommandResult {
             CommandResult::Done => Ok(()),
             CommandResult::Print(output) => {
                 print!("{output}");
+                Ok(())
+            }
+            CommandResult::CheckReport(output, failed) => {
+                use std::io::Write;
+                print!("{output}");
+                io::stdout().flush().into_diagnostic()?;
+                if failed {
+                    process::exit(1);
+                }
                 Ok(())
             }
             CommandResult::Exec(mut cmd) => {
@@ -1545,6 +1575,10 @@ async fn dispatch_command(
             }
         },
         Commands::Machines { command } => match command {
+            MachinesCommand::Check { names, json } => {
+                let (output, failed) = devenv.machines_check(&names, json).await?;
+                Ok(CommandResult::CheckReport(output, failed))
+            }
             MachinesCommand::Apply { plan } => {
                 devenv.machines_apply(&plan).await?;
                 Ok(CommandResult::Done)
