@@ -1254,7 +1254,7 @@ pub enum MachinesCommand {
             long,
             value_enum,
             default_value_t = DiskoMode::Disko,
-            help = "Disko partitioning mode: disko (default, destructive), format (non-destructive), mount (recovery)."
+            help = "Disko partitioning mode: disko (default, destroy/create/mount), format (create missing storage structures without the destroy phase), mount (mount existing filesystems)."
         )]
         disko_mode: DiskoMode,
 

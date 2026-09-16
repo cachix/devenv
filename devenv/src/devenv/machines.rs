@@ -1453,6 +1453,21 @@ impl Devenv {
             }
         }
 
+        // Realise the complete replacement before any disk mutation. Keep the
+        // exact output: install must not evaluate or build a different system
+        // after disko has already erased the old one. Hardware discovery above
+        // may be needed to evaluate this closure on a first installation.
+        let installed_toplevel = if phases.contains(&InstallPhase::Install) {
+            let act = activity!(INFO, operation, "Building replacement NixOS system");
+            Some(
+                async { self.build_machine_role(name, "nixos").await }
+                    .in_activity(&act)
+                    .await?,
+            )
+        } else {
+            None
+        };
+
         // Encryption keys are dropped onto the installer BEFORE disko runs
         // so LUKS layouts with `passwordFile` can reference them.
         if phases.contains(&InstallPhase::Disko) && !machine.encryption_keys.is_empty() {
@@ -1482,16 +1497,12 @@ impl Devenv {
         }
 
         // Phase 4: install
-        let installed_toplevel = if phases.contains(&InstallPhase::Install) {
+        if let Some(toplevel) = &installed_toplevel {
             let act = activity!(INFO, operation, "Installing NixOS");
-            Some(
-                async { self.install_nixos(name, &target, &ssh_opts).await }
-                    .in_activity(&act)
-                    .await?,
-            )
-        } else {
-            None
-        };
+            async { self.install_nixos(name, &target, &ssh_opts, toplevel).await }
+                .in_activity(&act)
+                .await?;
+        }
 
         // `nixos-install` invokes `switch-to-configuration boot`, whose boot
         // action deliberately returns before activation scripts run. Stage
@@ -1777,9 +1788,9 @@ impl Devenv {
         name: &str,
         target: &SshTarget,
         ssh_opts: &[String],
-    ) -> Result<PathBuf> {
-        let toplevel = self.build_machine_role(name, "nixos").await?;
-        self.nix_copy(target, &toplevel, ssh_opts)
+        toplevel: &Path,
+    ) -> Result<()> {
+        self.nix_copy(target, toplevel, ssh_opts)
             .await
             .wrap_err("Failed to copy NixOS closure to target")?;
         let toplevel_str = toplevel.display().to_string();
@@ -1788,7 +1799,7 @@ impl Devenv {
         self.ssh_run(target, ssh_opts, &script)
             .await
             .wrap_err_with(|| format!("nixos-install failed on machines.{name}"))?;
-        Ok(toplevel)
+        Ok(())
     }
 
     /// Copy encryption keyfiles to the installer BEFORE disko runs, so LUKS

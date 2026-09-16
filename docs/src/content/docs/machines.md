@@ -168,7 +168,7 @@ Install over SSH. The target is read from `machines.<name>.target.host`:
 $ devenv machines install server
 ```
 
-devenv builds the NixOS toplevel, connects to the target over SSH, kexecs into a minimal installer, runs disko to partition and format, copies the closure, installs the bootloader, and reboots. The remote only needs SSH access and a running Linux kernel. No pre-existing NixOS is required.
+devenv connects over SSH, kexecs into a minimal installer, and collects hardware information. It then builds the complete NixOS system before running disko to partition and format, copies that exact built system, installs the bootloader, and requests a reboot. A failed system build stops installation before disk mutation. Hardware discovery on a first install still requires entering the installer, so build failure can leave the target running the installer. The remote only needs SSH access and a running Linux kernel. No pre-existing NixOS is required.
 
 Install requires an explicit name. Because it wipes disks, running `devenv machines install` with no arguments is an error rather than "install everything". You can still install more than one host in a single invocation by naming them, and the named hosts are installed in parallel:
 
@@ -183,7 +183,7 @@ Pass `--max-concurrent N` to cap how many hosts install at once. `--max-concurre
 Before running `install` against a real target, confirm:
 
 - **Root SSH is enabled on the remote installer.** Install logs in as `root` and does not escalate with `sudo`. Many cloud minimal images disable root login by default; either pick an image that allows it or run `passwd root` on the console before invoking install.
-- **The target kernel can kexec.** kexec is how devenv pivots into the NixOS installer without requiring pre installed NixOS. Some older ARM boards (early Raspberry Pi revisions) and a few locked down cloud kernels refuse mid kexec. If you hit this, boot the NixOS minimal ISO manually and use `devenv machines deploy` instead.
+- **The target kernel can kexec.** kexec is how devenv pivots into the NixOS installer without requiring pre installed NixOS. If kexec is unavailable, boot an installer with SSH and nixos-facter manually, then use `devenv machines install server --phases facter,disko,install,reboot` to omit kexec. This still partitions the configured disks; `deploy` does not install a fresh system to disk.
 - **The target has roughly 1 GB of free RAM.** The kexec'd installer holds the next system closure in memory before writing it to disk, and smaller VPS instances (512 MB, 1 GB) have OOMed mid run.
 - **TCP 22 is reachable from the host running devenv.** Ordinary installs add the target to `known_hosts` on first contact because `StrictHostKeyChecking=accept-new` is the default. Installs that transmit local files require a pre-pinned identity as described under [SSH defaults](#ssh-defaults).
 
@@ -193,7 +193,7 @@ The disko layout describes the filesystems and you own `boot.loader.*` directly.
 
 `devenv machines install` partitions and formats the target according to your disko layout. Any data on the listed devices will be destroyed. There is no confirmation prompt, so only name hosts you actually mean to wipe. `devenv machines deploy` does not touch disks.
 
-There is no dry run and no resume. A failed install is recovered by re running `install`, which re wipes the disks. Test disko layouts with `devenv build machines.<name>` or a disko VM test before pointing `install` at real hardware.
+There is no dry run or automatic resume. Re-running the default installation repeats disk partitioning and formatting. Experienced operators can select phases with `--phases` and use `--disko-mode mount` after verifying the target's actual disk and mount state. Phase selection does not verify that omitted phases completed successfully. An explicitly disk-only operation, including `--stop-after-disko`, does not build the final NixOS system. Test disko layouts with a disko VM test before pointing `install` at real hardware; building the output alone does not test the layout.
 :::
 
 If an install appears to hang right after the kexec phase, the most common cause is that DHCP handed the kexec'd installer a different IP than the one you started the run against. Check the console or DHCP lease table for the installer's new address; use a static address or a MAC reservation to avoid the problem on subsequent runs. See [Troubleshooting](#troubleshooting) for more symptoms.
