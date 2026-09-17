@@ -1,13 +1,13 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightBlog from 'starlight-blog';
-import starlightLlmsTxt from 'starlight-llms-txt';
+import starlightLlmActions from 'starlight-llm-actions';
 import tailwindcss from '@tailwindcss/vite';
 import sitemap from '@astrojs/sitemap';
 import { siteKitAstro } from '@cachix/site-kit/astro';
 import { siteKitStarlight } from '@cachix/site-kit/starlight';
 import { siteBlogOptions } from '@cachix/site-kit/starlight/blog';
-import { siteLlmsOptions } from '@cachix/site-kit/starlight/llms';
+import { siteLlmActionsOptions } from '@cachix/site-kit/starlight/llms';
 import { codeThemes } from './src/lib/code-themes.ts';
 
 const devenvFooter = {
@@ -94,7 +94,7 @@ export default defineConfig({
             },
           },
         })),
-        starlightLlmsTxt(siteLlmsOptions(
+        starlightLlmActions(siteLlmActionsOptions(
           'devenv is a fast, declarative, reproducible, and composable developer environment tool using Nix. It supports 50+ programming languages, services, processes, tasks, containers, tests, and automated tooling.',
         )),
       ],
