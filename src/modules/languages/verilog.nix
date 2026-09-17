@@ -8,7 +8,7 @@ let
 in
 {
   options.languages.verilog = {
-    enable = lib.mkEnableOption "tools for Verilog/SystemVerilog Development";
+    enable = lib.mkEnableOption "tools for Verilog/SystemVerilog Development.";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -16,13 +16,14 @@ in
       defaultText = lib.literalExpression "pkgs.verilator";
       description = ''
         Verilog/SystemVerilog package to use.
+
         By default, `pkgs.verilator` supports both Verilog and SystemVerilog.
         You can use `pkgs.sv-lang` instead if you only need SystemVerilog support.
       '';
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Verilog/SystemVerilog Language Server" // { default = true; };
+      enable = lib.mkEnableOption "Verilog/SystemVerilog Language Server." // { default = true; };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.verible;

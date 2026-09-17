@@ -18,7 +18,7 @@ let
 in
 {
   options.languages.vhdl = {
-    enable = lib.mkEnableOption "tools for VHDL Development";
+    enable = lib.mkEnableOption "tools for VHDL Development.";
     compiler = lib.mkOption {
       type = lib.types.enum (builtins.attrNames compilerPackages);
       default =
@@ -27,10 +27,6 @@ in
         else "ghdl-gcc";
       description = ''
         The VHDL compiler to use.
-        - ghdl-gcc: GHDL with GCC backend
-        - ghdl-llvm: GHDL with LLVM backend
-        - ghdl-mcode: GHDL with built-in mcode backend
-        - nvc: VHDL compiler and simulator
       '';
     };
     package = lib.mkOption {
@@ -41,7 +37,7 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "VHDL Language Server" // { default = true; };
+      enable = lib.mkEnableOption "VHDL Language Server." // { default = true; };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.vhdl-ls;

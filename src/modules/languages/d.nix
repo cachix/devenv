@@ -8,7 +8,7 @@ let
 in
 {
   options.languages.d = {
-    enable = lib.mkEnableOption "tools for D language development";
+    enable = lib.mkEnableOption "tools for D language development.";
 
     package = lib.mkOption {
       type = lib.types.package;

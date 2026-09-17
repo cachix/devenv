@@ -149,14 +149,14 @@ let
 in
 {
   options.languages.assembly = {
-    enable = lib.mkEnableOption "tools for Assembly Development";
+    enable = lib.mkEnableOption "tools for Assembly Development.";
 
     type = lib.mkOption {
       type = lib.types.enum [ "nasm" "fasm" "yasm" "arm" "riscv" ];
       default = "nasm";
       defaultText = lib.literalExpression "nasm";
       description = ''
-        Assembler selection, only one of nasm / fasm / yasm / arm / riscv.
+        Assembler selection, only one of `nasm / fasm / yasm / arm / riscv`.
 
         This setting changes the default value of `targetArch` if you use `arm` or `riscv`.
       '';
@@ -172,17 +172,7 @@ in
         else "x86_64";
       defaultText = lib.literalExpression "x86_64";
       description = ''
-        Target architecture.
-
-        Default (developer host assumed): x86_64
-
-        Applies only when type is "arm" or "riscv".
-
-        ARM family (type = "arm"):
-        - aarch64: ARM 64-bit (RPi 4, Pi 5, Apple Silicon and more).
-        - armv7l: ARM 32-bit (RPi 2, 3 in 32-bit, embedded systems).
-        RISC-V family (type = "riscv"):
-        - riscv32 / riscv64
+        Target architecture. Default (developer host assumed): x86_64.
       '';
     };
 
@@ -193,7 +183,7 @@ in
       description = ''
         Assembly toolchain/package to use.
 
-        For ARM/RISC-V this defaults to the cross compiler
+        For `ARM/RISC-V` this defaults to the cross compiler
         selected from targetArch, but can be overridden explicitly.
       '';
     };
@@ -209,7 +199,7 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Assembly Language Server" // { default = cfg.enable; };
+      enable = lib.mkEnableOption "Assembly Language Server." // { default = cfg.enable; };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.asm-lsp;
@@ -225,8 +215,6 @@ in
           description = ''
             Auto-generates `.asm-lsp.toml`, always located at the root of your project.
             It's only rewritten if the content changes.
-
-            Reference: https://github.com/bergercookie/asm-lsp#optional-configure-via-asm-lsptoml
           '';
         };
 
@@ -285,7 +273,7 @@ in
 
     emulator = {
       enable =
-        lib.mkEnableOption "System Emulator (qemu / rvvm)."
+        lib.mkEnableOption "System Emulator."
         // {
           default = isCrossCompile;
           defaultText = lib.literalExpression "isCrossCompile";
@@ -299,8 +287,6 @@ in
         defaultText = lib.literalExpression "qemu";
         description = ''
           Select your system emulator backend.
-          - qemu: general purpose.
-          - rvvm: only RISC-V.
         '';
       };
       package = lib.mkOption {
@@ -308,7 +294,7 @@ in
         default = emulatorPkgs.${cfg.emulator.type};
         defaultText = lib.literalExpression "pkgs.qemu";
         description = ''
-          System emulator, solved by `emulator.type`, but you can overwrite
+          System emulator, solved by `cfg.emulator.type`, but you can overwrite
           for an emulator of your choice.
         '';
       };

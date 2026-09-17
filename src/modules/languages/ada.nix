@@ -8,7 +8,7 @@ let
 in
 {
   options.languages.ada = {
-    enable = lib.mkEnableOption "Tools for Ada Development";
+    enable = lib.mkEnableOption "Tools for Ada Development.";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -18,9 +18,11 @@ in
     };
 
     gprbuild = {
-      enable = lib.mkEnableOption "Ada Multi-language extensible build tool.Alire Package Manager" // {
-        default = cfg.enable;
-      };
+      enable =
+        lib.mkEnableOption "Ada Multi-language extensible build tool."
+        // {
+          default = cfg.enable;
+        };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.gnatPackages.gprbuild;
@@ -30,7 +32,7 @@ in
     };
 
     alire = {
-      enable = lib.mkEnableOption "Alire Package Manager";
+      enable = lib.mkEnableOption "Alire Package Manager.";
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.alire;
@@ -44,8 +46,7 @@ in
     packages =
       [ cfg.package ]
       ++ lib.optional cfg.gprbuild.enable cfg.gprbuild.package
-      ++ lib.optional cfg.alire.enable cfg.alire.package
-    ;
+      ++ lib.optional cfg.alire.enable cfg.alire.package;
 
     # Without this, alire produces errors when linking:
     #  cannot find Scrt1.o: No such file or directory
