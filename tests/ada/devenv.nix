@@ -1,4 +1,4 @@
-{pkgs, ... }:
+{ pkgs, ... }:
 {
   languages.ada = {
     enable = true;
