@@ -39,7 +39,7 @@ import DefaultSearch from '@astrojs/starlight/components/Search.astro';
   #devenv-search-results .pagefind-ui__result-inner { display: flex; flex: 1; flex-direction: column; min-width: 0; }
   #devenv-search-results .pagefind-ui__result-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; margin: 0; font-size: calc(21px * var(--pagefind-ui-scale, .8)); font-weight: 700; }
   #devenv-search-results .pagefind-ui__result-link { color: var(--sl-color-white); text-decoration: none; min-width: 0; }
-  #devenv-search-results .pagefind-ui__result-excerpt { color: var(--sl-color-gray-2); margin: 0; line-height: 1.5; padding: .375rem var(--sl-search-result-pad-inline-end, 1rem) .75rem var(--sl-search-result-pad-inline-start, 3rem); }
+  #devenv-search-results .search-result-description { flex: 1 1 10rem; min-width: 0; color: var(--sl-color-gray-2); font-size: .8125rem; font-weight: 400; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   #devenv-search-results [data-suggestion]:not(:empty) { margin-bottom: .25rem; }
   #devenv-search-results small { color: var(--sl-color-gray-3); font-size: .75rem; white-space: nowrap; }
   #devenv-search-results .search-suggestion-label { color: var(--sl-color-text-accent); font-size: .6875rem; font-weight: 500; }
@@ -63,6 +63,5 @@ import DefaultSearch from '@astrojs/starlight/components/Search.astro';
   site-search .search-container:has(.pagefind-ui__drawer:not(.search-docs-expanded):not(.pagefind-ui__hidden) :is(.pagefind-ui__result:nth-child(4), .pagefind-ui__result-nested)) .search-more-docs { display: block; }
   @media (max-width: 30rem) {
     #devenv-search-results .pagefind-ui__result-title { gap: .25rem .5rem; }
-    #devenv-search-results .pagefind-ui__result-link { flex-basis: 100%; }
   }
 </style>

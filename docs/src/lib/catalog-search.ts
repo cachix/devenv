@@ -80,14 +80,14 @@ export function enhanceSearch() {
       link.href = `https://search.nixos.org/packages?${new URLSearchParams({ channel: 'unstable', show: attr, query: attr })}`;
     }
     header.append(link);
+    if (entry.description) {
+      const description = entry.description.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[`*_]/g, '').replace(/\s+/g, ' ').trim();
+      addText(header, 'span', description).className = 'search-result-description';
+    }
     if (suggested) addText(header, 'span', 'Suggested').className = 'search-suggestion-label';
     if (entry.version) addText(header, 'small', entry.version);
     inner.append(header);
     parent.append(inner);
-    if (entry.description) {
-      const description = entry.description.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[`*_]/g, '').replace(/\s+/g, ' ').trim();
-      addText(inner, 'p', description).className = 'pagefind-ui__result-excerpt';
-    }
     if (kind === 'packages') {
       const copy = document.createElement('button');
       copy.type = 'button';

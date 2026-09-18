@@ -77,7 +77,8 @@ try {
     return ['options', 'packages'].every(kind => {
       const link = document.querySelector('[data-group="' + kind + '"] [data-results] .pagefind-ui__result-link');
       const title = link.closest('.pagefind-ui__result-title');
-      return ['fontSize', 'fontWeight', 'fontFamily', 'color'].every(key => getComputedStyle(link)[key] === getComputedStyle(docs)[key])
+      return link.nextElementSibling?.classList.contains('search-result-description')
+        && ['fontSize', 'fontWeight', 'fontFamily', 'color'].every(key => getComputedStyle(link)[key] === getComputedStyle(docs)[key])
         && getComputedStyle(title, '::before').maskImage === getComputedStyle(docs.closest('.pagefind-ui__result-title'), '::before').maskImage;
     });
   })()`), true, 'Options and packages share docs title typography and result icons');
