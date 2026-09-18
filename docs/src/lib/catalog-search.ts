@@ -43,7 +43,8 @@ export function enhanceSearch() {
       moreDocs.addEventListener('click', () => drawer.classList.add('search-docs-expanded'));
       // Pagefind inserts its results after initialization. Keep the footer
       // outside its managed drawer so it always follows every docs result.
-      site.querySelector('.search-container')!.append(moreDocs);
+      const searchRoot = site.querySelector('#starlight__search')!;
+      searchRoot.append(moreDocs, panel);
     }
     return Boolean(input && drawer);
   };
@@ -63,22 +64,29 @@ export function enhanceSearch() {
     parent.append(element);
     return element;
   }
-  function entryCard(parent: HTMLElement, entry: Entry, kind: Kind) {
-    const header = document.createElement('div');
-    header.className = 'search-result-header';
+  function entryCard(parent: HTMLElement, entry: Entry, kind: Kind, suggested = false, href?: string) {
+    parent.classList.add('pagefind-ui__result');
+    const inner = document.createElement('div');
+    inner.className = 'pagefind-ui__result-inner';
+    const header = document.createElement('p');
+    header.className = 'pagefind-ui__result-title';
     const link = document.createElement('a');
+    link.className = 'pagefind-ui__result-link';
     link.textContent = entry.name;
-    if (kind === 'options') link.href = optionUrl(entry.name);
+    if (href) link.href = href;
+    else if (kind === 'options') link.href = optionUrl(entry.name);
     else {
       const attr = entry.name.replace(/^pkgs\./, '');
       link.href = `https://search.nixos.org/packages?${new URLSearchParams({ channel: 'unstable', show: attr, query: attr })}`;
     }
     header.append(link);
+    if (suggested) addText(header, 'span', 'Suggested').className = 'search-suggestion-label';
     if (entry.version) addText(header, 'small', entry.version);
-    parent.append(header);
+    inner.append(header);
+    parent.append(inner);
     if (entry.description) {
       const description = entry.description.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[`*_]/g, '').replace(/\s+/g, ' ').trim();
-      addText(parent, 'p', description);
+      addText(inner, 'p', description).className = 'pagefind-ui__result-excerpt';
     }
     if (kind === 'packages') {
       const copy = document.createElement('button');
@@ -108,18 +116,13 @@ export function enhanceSearch() {
       const match = resolution?.match;
       let suggestedName: string | undefined;
       if (match) {
-        addText(suggestion, 'span', 'Suggested').className = 'search-suggestion-label';
         if (typeof match === 'string') {
           const members = resolution?.options ?? [];
           const target = members.find(entry => entry.name === `${match}.enable`) ?? members[0];
           if (target) {
-            const link = document.createElement('a');
-            link.href = optionUrl(target.name);
-            link.textContent = match;
-            suggestion.append(link);
-            addText(suggestion, 'p', `${members.length} options in this group`);
+            entryCard(suggestion, { name: match, description: `${members.length} options in this group` }, kind, true, optionUrl(target.name));
           }
-        } else { entryCard(suggestion, match, kind); suggestedName = match.name; }
+        } else { entryCard(suggestion, match, kind, true); suggestedName = match.name; }
       }
       const seen = new Set(suggestedName ? [suggestedName] : []);
       const alternatives = (resolution?.alternatives ?? []).filter((entry): entry is Entry => 'name' in entry);

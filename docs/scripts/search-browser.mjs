@@ -56,7 +56,7 @@ try {
     };
     setSearchQuery('postgres');
   `);
-  await until(`document.querySelector('.pagefind-ui__result') && document.querySelector('[data-group="options"] [data-results] li') && document.querySelector('[data-group="packages"] [data-results] li')`);
+  await until(`document.querySelector('.pagefind-ui__drawer .pagefind-ui__result-link') && document.querySelector('[data-group="options"] [data-results] li') && document.querySelector('[data-group="packages"] [data-results] li')`);
   assert.deepEqual((await evaluate('window.catalogCalls')).sort(), ['resolve_option', 'resolve_package', 'search_options', 'search_packages']);
   assert.equal(await evaluate(`document.querySelector('site-search [role="tab"]')`), null);
   assert.notEqual(await evaluate(`getComputedStyle(document.querySelector('.pagefind-ui__drawer')).display`), 'none');
@@ -72,6 +72,15 @@ try {
     return Math.abs(results.width - drawer.width) < 2 && more.top >= results.bottom;
   })()`), true, 'Docs fill the pane and Show more follows all docs results');
   assert.equal(await evaluate(`document.querySelector('[data-group="packages"] button[aria-label^="Copy configuration for"]') !== null`), true);
+  assert.equal(await evaluate(`(() => {
+    const docs = document.querySelector('.pagefind-ui__drawer .pagefind-ui__result-link');
+    return ['options', 'packages'].every(kind => {
+      const link = document.querySelector('[data-group="' + kind + '"] [data-results] .pagefind-ui__result-link');
+      const title = link.closest('.pagefind-ui__result-title');
+      return ['fontSize', 'fontWeight', 'fontFamily', 'color'].every(key => getComputedStyle(link)[key] === getComputedStyle(docs)[key])
+        && getComputedStyle(title, '::before').maskImage === getComputedStyle(docs.closest('.pagefind-ui__result-title'), '::before').maskImage;
+    });
+  })()`), true, 'Options and packages share docs title typography and result icons');
   await evaluate(`document.querySelector('.search-more-docs').click()`);
   assert.equal(await evaluate(`document.querySelector('.pagefind-ui__drawer').classList.contains('search-docs-expanded')`), true);
   console.log('One query returns docs, options, packages, and both resolved suggestions without selecting a source.');
