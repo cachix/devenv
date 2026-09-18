@@ -28,15 +28,18 @@ import DefaultSearch from '@astrojs/starlight/components/Search.astro';
   #devenv-search-results { display: grid; gap: 1.5rem; margin-top: 1.5rem; font-size: .875rem; }
   #devenv-search-results[hidden] { display: none; }
   #devenv-search-results [data-group] { border-top: 1px solid var(--sl-color-gray-5); padding-top: 1rem; }
-  .search-group-header { display: flex; align-items: baseline; gap: .75rem; min-width: 0; }
-  .search-group-header { flex-wrap: wrap; margin-bottom: .5rem; }
-  #devenv-search-results h2, site-search [data-docs-heading] { font-size: .875rem; font-weight: 600; margin: 0; flex-basis: auto; }
+  .search-group-header { display: block; min-width: 0; }
+  #devenv-search-results h2, site-search [data-docs-heading] { color: var(--sl-color-white); font-size: .875rem; font-weight: 600; margin: 0; flex-basis: auto; }
   site-search [data-docs-heading] { flex-basis: 100%; margin-top: 1rem; }
-  #devenv-search-results [data-status] { color: var(--sl-color-gray-3); font-size: .75rem; margin: 0; }
+  #devenv-search-results [data-status], site-search .pagefind-ui__message { color: var(--sl-color-gray-3); font-size: .75rem; font-weight: 400; line-height: 1.5; height: auto; margin: .5rem 0 .75rem; padding: 0; }
   #devenv-search-results ul { list-style: none; padding: 0; margin: 0; }
   /* Use Starlight's result classes for the same icons, hover states and spacing. */
   #devenv-search-results .pagefind-ui__result { display: flex; overflow-wrap: anywhere; }
   #devenv-search-results .pagefind-ui__result-inner { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+  site-search #starlight__search .pagefind-ui__result-inner { background: var(--sl-color-black); border-radius: var(--sl-search-corners); overflow: hidden; }
+  site-search #starlight__search .pagefind-ui__result-inner:hover,
+  site-search #starlight__search .pagefind-ui__result-inner:focus-within { background: var(--sl-color-accent-low); }
+  site-search #starlight__search .pagefind-ui__result-inner > .pagefind-ui__result-title { box-sizing: border-box; width: 100%; min-width: 0; background: transparent; }
   #devenv-search-results .pagefind-ui__result-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; margin: 0; font-size: calc(21px * var(--pagefind-ui-scale, .8)); font-weight: 700; }
   #devenv-search-results .pagefind-ui__result-link { color: var(--sl-color-white); text-decoration: none; min-width: 0; }
   #devenv-search-results .search-result-description { flex: 1 1 10rem; min-width: 0; color: var(--sl-color-gray-2); font-size: .8125rem; font-weight: 400; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
@@ -51,8 +54,7 @@ import DefaultSearch from '@astrojs/starlight/components/Search.astro';
   .devenv-catalog-dev-input { font: inherit; padding: .75rem; color: var(--sl-color-text); background: var(--sl-color-black); border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; }
   /* Keep Pagefind's behavior, with the same compact rows as catalog results. */
   site-search .pagefind-ui__drawer { display: block; overflow: visible; max-height: none; }
-  site-search .pagefind-ui__results-area { width: 100%; min-width: 0; margin-top: .5rem; }
-  site-search .pagefind-ui__message { font-size: .75rem; color: var(--sl-color-gray-3); padding-block: .5rem; }
+  site-search .pagefind-ui__results-area { width: 100%; min-width: 0; margin-top: 0; }
   site-search #starlight__search { --sl-search-result-spacing: .25rem; }
   site-search .pagefind-ui__result { border: 0; }
   site-search .pagefind-ui__result-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }

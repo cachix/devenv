@@ -82,6 +82,26 @@ try {
         && getComputedStyle(title, '::before').maskImage === getComputedStyle(docs.closest('.pagefind-ui__result-title'), '::before').maskImage;
     });
   })()`), true, 'Options and packages share docs title typography and result icons');
+  assert.equal(await evaluate(`(() => {
+    const groups = [
+      [document.querySelector('[data-docs-heading]'), document.querySelector('.pagefind-ui__message')],
+      ...['options', 'packages'].map(kind => [document.querySelector('[data-group="' + kind + '"] h2'), document.querySelector('[data-group="' + kind + '"] [data-status]')]),
+    ];
+    const gaps = groups.map(([heading, count]) => count.getBoundingClientRect().top - heading.getBoundingClientRect().bottom);
+    return gaps.every(gap => gap >= 0 && Math.abs(gap - gaps[0]) < 2)
+      && groups.every(([, count]) => ['fontSize', 'fontWeight', 'lineHeight', 'color'].every(key => getComputedStyle(count)[key] === getComputedStyle(groups[0][1])[key]));
+  })()`), true, 'All result counts sit below their headings with identical spacing and typography');
+  const descriptionsInsideBoxes = `(() => {
+    const docsBox = document.querySelector('.pagefind-ui__drawer .pagefind-ui__result-inner');
+    return [...document.querySelectorAll('.search-result-description')].every(description => {
+      const box = description.closest('.pagefind-ui__result-inner');
+      const bounds = box.getBoundingClientRect();
+      const text = description.getBoundingClientRect();
+      return text.left >= bounds.left && text.right <= bounds.right + 1 && text.top >= bounds.top && text.bottom <= bounds.bottom + 1
+        && (!docsBox || getComputedStyle(box).backgroundColor === getComputedStyle(docsBox).backgroundColor);
+    });
+  })()`;
+  assert.equal(await evaluate(descriptionsInsideBoxes), true, 'Descriptions are enclosed by the same result background as docs');
   await evaluate(`document.querySelector('.search-more-docs').click()`);
   assert.equal(await evaluate(`document.querySelector('.pagefind-ui__drawer').classList.contains('search-docs-expanded')`), true);
   console.log('One query returns docs, options, packages, and both resolved suggestions without selecting a source.');
@@ -115,6 +135,7 @@ try {
   console.log('Stale replies cannot replace either group; resolve failures retain results; remote text stays escaped.');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   assert.equal(await evaluate(`document.querySelector('dialog').getBoundingClientRect().width <= 390`), true);
+  assert.equal(await evaluate(descriptionsInsideBoxes), true, 'Descriptions remain inside their result boxes on mobile');
   console.log('Mobile modal fits the viewport.');
 } finally {
   socket.close();
