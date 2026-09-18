@@ -420,6 +420,13 @@ fn enter_discovered_project_root() -> Result<()> {
     enter_root(&root)
 }
 
+fn should_refresh_source(command: &Commands) -> bool {
+    match command {
+        Commands::Update { name } => name.as_deref().is_none_or(|name| name == "from"),
+        _ => false,
+    }
+}
+
 /// Prepare a config-backed CLI command for execution.
 fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCommand> {
     // --- Project discovery and working directory ---
@@ -519,10 +526,13 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
 
     // --- Project configuration ---
 
-    // A `path:` source resolves to a live directory whose devenv.yaml graph is
-    // merged into the config by Config::load_with_source, which also appends
-    // the source's module as an absolute `path:` import. Relative refs resolve
-    // against the invocation cwd (persisted bindings are always absolute).
+    let nix_debugger = cli.nix_args.nix_debugger;
+    let nix_options = devenv_core::NixOptions::from(cli.nix_args);
+    let refresh_fetchers = matches!(&command, Commands::Update { .. });
+    let refresh_source = should_refresh_source(&command);
+
+    // Keep `path:` sources live. Relative refs resolve against the invocation
+    // directory, and Config::load_with_source reads their complete YAML graph.
     let from_path = from_source
         .as_deref()
         .and_then(|from| from.strip_prefix("path:"))
@@ -534,8 +544,39 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             fs::canonicalize(&full_path).unwrap_or(full_path)
         });
 
-    let mut config = Config::load_with_source(from_path.as_deref())?;
-    config.check_version(crate_version!())?;
+    let remote_source_input = if from_path.is_none() {
+        from_source.as_ref().map(|from| devenv_core::config::Input {
+            url: Some(from.clone()),
+            flake: false,
+            follows: None,
+            inputs: BTreeMap::new(),
+            overlays: Vec::new(),
+        })
+    } else {
+        None
+    };
+
+    let mut config = if let Some(source_input) = remote_source_input.as_ref() {
+        let target_config = Config::load()?;
+        let mut preliminary_nix_settings =
+            NixSettings::resolve(nix_options.clone(), &target_config);
+        preliminary_nix_settings.refresh_fetchers = refresh_source;
+        let target_root = env::current_dir()
+            .into_diagnostic()
+            .wrap_err("Failed to resolve the target directory")?;
+        let materialized_source = devenv_nix_backend::source::materialize_source(
+            &preliminary_nix_settings,
+            &target_root,
+            &target_root.join("devenv.lock"),
+            source_input,
+        )?;
+        Config::load_with_source_root(
+            materialized_source.directory(),
+            materialized_source.repository_root(),
+        )?
+    } else {
+        Config::load_with_source(from_path.as_deref())?
+    };
 
     let input_overrides = InputOverrides::from(cli.input_overrides);
     for chunk in input_overrides.override_inputs.chunks_exact(2) {
@@ -546,34 +587,17 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             .override_input_url(name, url)
             .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
     }
-
-    // A non-path source (flake ref, via --from or a persisted binding) is
-    // fetched as the `from` input and its devenv.nix imported from the store.
-    // Its devenv.yaml is not merged (that needs a fetch before config load);
-    // `path:` sources get the full merge via Config::load_with_source above.
-    if from_path.is_none()
-        && let Some(from) = &from_source
-    {
-        let from_input = devenv_core::config::Input {
-            url: Some(from.clone()),
-            flake: false,
-            follows: None,
-            inputs: BTreeMap::new(),
-            overlays: Vec::new(),
-        };
-        config.inputs.insert("from".to_string(), from_input);
-        config.imports.push("from".to_string());
+    // Retain the original reference in the final lock. The materialized store
+    // path is only a configuration loading detail.
+    if let Some(source_input) = remote_source_input {
+        config.inputs.insert("from".to_string(), source_input);
     }
+    config.check_version(crate_version!())?;
 
     // --- Resolved settings ---
 
-    // Read before the conversion consumes `cli.nix_args`.
-    let nix_debugger = cli.nix_args.nix_debugger;
-    let mut nix_settings =
-        NixSettings::resolve(devenv_core::NixOptions::from(cli.nix_args), &config);
-    if matches!(command, Commands::Update { .. }) {
-        nix_settings.refresh_fetchers = true;
-    }
+    let mut nix_settings = NixSettings::resolve(nix_options, &config);
+    nix_settings.refresh_fetchers = refresh_fetchers;
     let mut shell_settings = ShellSettings::resolve_with_shell_hint(
         devenv_core::ShellOptions::from(cli.shell_args),
         &config,
@@ -1797,6 +1821,18 @@ mod tests {
     use std::sync::Mutex;
 
     static PROCESS_STATE_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn source_refresh_matches_update_scope() {
+        assert!(should_refresh_source(&Commands::Update { name: None }));
+        assert!(should_refresh_source(&Commands::Update {
+            name: Some("from".to_string()),
+        }));
+        assert!(!should_refresh_source(&Commands::Update {
+            name: Some("nixpkgs".to_string()),
+        }));
+        assert!(!should_refresh_source(&Commands::Info {}));
+    }
 
     #[test]
     fn only_interactive_tui_and_shell_commands_load_user_configuration() {

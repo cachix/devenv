@@ -133,7 +133,7 @@ This builds on the existing [monorepo](/guides/monorepo/) support and extends it
 
 ### Out of tree devenvs
 
-Not every project has a `devenv.nix` checked in, and sometimes you want one configuration to serve multiple repositories. This was the [fourth most upvoted issue](https://github.com/cachix/devenv/issues/67). devenv 2.0 adds [`--from`](/ad-hoc-developer-environments/):
+Not every project has a `devenv.nix` checked in, and sometimes you want one configuration to serve multiple repositories. This was the [fourth most upvoted issue](https://github.com/cachix/devenv/issues/67). devenv 2.0 adds [`--from`](/guides/out-of-tree-devenvs/):
 
 ```sh
 $ devenv shell --from github:myorg/devenv-configs?dir=rust-web
