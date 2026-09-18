@@ -4,14 +4,14 @@ on:
   pull_request:
     paths:
       - "docs/**"
-      - "functions/api/*.js"
+      - "functions/**/*.js"
       - "build_cloudflare.sh"
       - ".github/workflows/docs.yml"
   push:
     branches: [main]
     paths:
       - "docs/**"
-      - "functions/api/*.js"
+      - "functions/**/*.js"
       - "build_cloudflare.sh"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
       - run: npm run build
       - run: npm run validate:urls
       - name: Check links
-        uses: cachix/site-kit/check-links@59a4fbfbe8e105aeb7f6e32c90055342f10d2b8a
+        uses: cachix/site-kit/check-links@1e9bb1e181430d4a8d632bc8c1487e16de946091
         with:
           working-directory: docs
           site: https://devenv.sh

@@ -21,17 +21,24 @@
     "prebuild": "npm run generate:skills-index && npm run generate:technology-icons && npm run generate:syntax-assets"
   },
   "dependencies": {
-    "@astrojs/mdx": "^7.0.5",
+    "@astrojs/mdx": "^7.0.8",
     "@astrojs/sitemap": "^3.7.3",
     "@astrojs/starlight": "^0.41.5",
     "@astrojs/starlight-tailwind": "^5.0.0",
-    "@cachix/site-kit": "https://codeload.github.com/cachix/site-kit/tar.gz/59a4fbfbe8e105aeb7f6e32c90055342f10d2b8a",
+    "@cachix/site-kit": "https://codeload.github.com/cachix/site-kit/tar.gz/1e9bb1e181430d4a8d632bc8c1487e16de946091",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.1.6",
+    "hast-util-select": "^6.0.4",
     "marked": "^18.0.7",
+    "rehype-parse": "^9.0.1",
+    "rehype-remark": "^10.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-stringify": "^11.0.0",
     "starlight-blog": "^0.28.0",
-    "starlight-llms-txt": "^0.11.0",
-    "tailwindcss": "^4.3.3"
+    "starlight-llm-actions": "^0.13.0",
+    "tailwindcss": "^4.3.3",
+    "unified": "^11.0.5",
+    "unist-util-remove": "^4.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",

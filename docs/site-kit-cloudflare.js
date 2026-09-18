@@ -1,1 +1,1 @@
-export { createGitHubMetadataHandler } from '@cachix/site-kit/cloudflare';
+export { createGitHubMetadataHandler, createMarkdownMiddleware } from '@cachix/site-kit/cloudflare';
