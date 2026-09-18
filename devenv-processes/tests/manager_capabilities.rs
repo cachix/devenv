@@ -20,6 +20,7 @@ fn compatibility_contracts_match_known_managers() {
             "process-compose",
             ManagerCapabilities {
                 background_start: true,
+                wait_ready: true,
                 cold_start_subset: true,
                 ..ManagerCapabilities::default()
             },
@@ -63,7 +64,13 @@ fn compatibility_contracts_match_known_managers() {
                 client: ManagerClient::NativeApi,
             },
         ),
-        ("process-compose", ManagerAdapter::default()),
+        (
+            "process-compose",
+            ManagerAdapter {
+                client: ManagerClient::ProcessCompose,
+                ..ManagerAdapter::default()
+            },
+        ),
         (
             "overmind",
             ManagerAdapter {

@@ -162,6 +162,17 @@ impl ExternalManager {
         }
     }
 
+    /// Identity and adapter persisted by the running external manager.
+    pub async fn running_identity(&self) -> Result<(String, ManagerAdapter)> {
+        if !matches!(self.check_status().await?, PidStatus::Running(_)) {
+            bail!("No process manager is running. Start processes first with `devenv up -d`");
+        }
+        let Some(state) = self.load_state().await? else {
+            bail!("No process manager is running. Start processes first with `devenv up -d`");
+        };
+        Ok((state.manager_id, state.adapter))
+    }
+
     fn state_file(&self) -> PathBuf {
         self.runtime_dir.join(STATE_FILE_NAME)
     }

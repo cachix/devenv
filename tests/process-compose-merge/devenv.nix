@@ -22,6 +22,7 @@ in
 
     ready = {
       exec = "true";
+      probe_timeout = 4;
       failure_threshold = 5;
     };
 
@@ -70,6 +71,12 @@ in
       assertion = foo.readiness_probe.failure_threshold == 99;
       message = "process-compose merge: user override of readiness_probe.failure_threshold not applied. Got: ${
         toString (foo.readiness_probe.failure_threshold or null)
+      }";
+    }
+    {
+      assertion = foo.readiness_probe.timeout_seconds == 4;
+      message = "process-compose merge: ready.probe_timeout did not render to readiness_probe.timeout_seconds. Got: ${
+        toString (foo.readiness_probe.timeout_seconds or null)
       }";
     }
     {
