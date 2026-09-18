@@ -9,6 +9,7 @@ import { siteKitStarlight } from '@cachix/site-kit/starlight';
 import { siteBlogOptions } from '@cachix/site-kit/starlight/blog';
 import { siteLlmActionsOptions } from '@cachix/site-kit/starlight/llms';
 import { codeThemes } from './src/lib/code-themes.ts';
+import { catalogSearchApi } from './scripts/search-dev.mjs';
 
 const devenvFooter = {
   title: 'devenv',
@@ -61,7 +62,7 @@ export default defineConfig({
       '/blog/2026/09/07/devenv-23-portless-and-tui-configuration/',
   },
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss(), catalogSearchApi()],
     server: {
       watch: {
         ignored: ['**/.devenv/**'],
@@ -104,6 +105,7 @@ export default defineConfig({
         themes: codeThemes,
       },
       components: {
+        Search: './src/overrides/Search.astro',
         SocialIcons: './src/overrides/SocialIcons.astro',
       },
       logo: {

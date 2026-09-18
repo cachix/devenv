@@ -1,0 +1,44 @@
+---
+import DefaultSearch from '@astrojs/starlight/components/Search.astro';
+---
+
+<DefaultSearch {...Astro.props} />
+<template id="devenv-search-template">
+  <div id="devenv-search-results" hidden>
+    {['options', 'packages'].map(kind => (
+      <section data-group={kind} aria-labelledby={`search-${kind}-heading`}>
+        <h2 id={`search-${kind}-heading`}>{kind === 'options' ? 'Options' : 'Packages'}</h2>
+        <p data-status role="status"></p>
+        <div data-suggestion></div>
+        <ul data-results></ul>
+        <button type="button" data-more hidden>Show more {kind}</button>
+      </section>
+    ))}
+    <p class="search-source">Public catalog from mcp.devenv.sh. Versions may differ from your project’s lockfile.</p>
+  </div>
+</template>
+<script>
+  import { enhanceSearch } from '../lib/catalog-search';
+  enhanceSearch();
+</script>
+<style is:global>
+  #devenv-search-results button {
+    font: inherit; color: var(--sl-color-text); background: var(--sl-color-black);
+    border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; padding: .4rem .8rem; cursor: pointer;
+  }
+  .devenv-catalog-dev-input { font: inherit; padding: .75rem; color: var(--sl-color-text); background: var(--sl-color-black); border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; }
+  #devenv-search-results[hidden] { display: none; }
+  #devenv-search-results { font-size: .875rem; display: grid; gap: 1.5rem; }
+  #devenv-search-results h2, site-search [data-docs-heading] { font-size: 1rem; margin-block: 0 .5rem; flex-basis: 100%; }
+  site-search .pagefind-ui__drawer { max-height: 20rem; overflow-y: auto; }
+  #devenv-search-results .search-source { color: var(--sl-color-gray-2); font-size: .8rem; margin-top: 0; }
+  #devenv-search-results ul { list-style: none; padding: 0; display: grid; gap: .75rem; }
+  #devenv-search-results li, #devenv-search-results [data-suggestion]:not(:empty) {
+    border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; padding: .8rem; overflow-wrap: anywhere;
+  }
+  #devenv-search-results [data-suggestion]:not(:empty) { border-color: var(--sl-color-text-accent); margin-block: 1rem; }
+  #devenv-search-results a { color: var(--sl-color-text-accent); }
+  #devenv-search-results p { margin-block: .4rem; white-space: pre-line; }
+  #devenv-search-results small { color: var(--sl-color-gray-2); }
+  #devenv-search-results button:focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: 2px; }
+</style>
