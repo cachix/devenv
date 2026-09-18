@@ -65,6 +65,12 @@ try {
   assert.equal(await evaluate(`document.querySelector('[data-group="options"] [data-results] a').getAttribute('href').startsWith('/reference/options/#')`), true);
   assert.equal(await evaluate(`document.querySelector('[data-group="packages"] [data-results] a').href.startsWith('https://search.nixos.org/')`), true);
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('.pagefind-ui__drawer')).overflowY`), 'visible');
+  assert.equal(await evaluate(`(() => {
+    const results = document.querySelector('.pagefind-ui__results-area').getBoundingClientRect();
+    const drawer = document.querySelector('.pagefind-ui__drawer').getBoundingClientRect();
+    const more = document.querySelector('.search-more-docs').getBoundingClientRect();
+    return Math.abs(results.width - drawer.width) < 2 && more.top >= results.bottom;
+  })()`), true, 'Docs fill the pane and Show more follows all docs results');
   assert.equal(await evaluate(`document.querySelector('[data-group="packages"] button[aria-label^="Copy configuration for"]') !== null`), true);
   await evaluate(`document.querySelector('.search-more-docs').click()`);
   assert.equal(await evaluate(`document.querySelector('.pagefind-ui__drawer').classList.contains('search-docs-expanded')`), true);

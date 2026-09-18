@@ -41,7 +41,9 @@ export function enhanceSearch() {
       moreDocs.className = 'search-more-docs';
       moreDocs.textContent = 'Show more docs';
       moreDocs.addEventListener('click', () => drawer.classList.add('search-docs-expanded'));
-      drawer.append(moreDocs);
+      // Pagefind inserts its results after initialization. Keep the footer
+      // outside its managed drawer so it always follows every docs result.
+      site.querySelector('.search-container')!.append(moreDocs);
     }
     return Boolean(input && drawer);
   };
