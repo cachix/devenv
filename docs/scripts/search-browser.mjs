@@ -64,6 +64,10 @@ try {
   await until(`document.querySelector('[data-group="options"] [data-suggestion] a') && document.querySelector('[data-group="packages"] [data-suggestion] a')`);
   assert.equal(await evaluate(`document.querySelector('[data-group="options"] [data-results] a').getAttribute('href').startsWith('/reference/options/#')`), true);
   assert.equal(await evaluate(`document.querySelector('[data-group="packages"] [data-results] a').href.startsWith('https://search.nixos.org/')`), true);
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('.pagefind-ui__drawer')).overflowY`), 'visible');
+  assert.equal(await evaluate(`document.querySelector('[data-group="packages"] button[aria-label^="Copy configuration for"]') !== null`), true);
+  await evaluate(`document.querySelector('.search-more-docs').click()`);
+  assert.equal(await evaluate(`document.querySelector('.pagefind-ui__drawer').classList.contains('search-docs-expanded')`), true);
   console.log('One query returns docs, options, packages, and both resolved suggestions without selecting a source.');
 
   await evaluate(`document.querySelector('.pagefind-ui__search-clear').click()`);

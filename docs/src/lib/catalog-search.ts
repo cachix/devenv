@@ -36,6 +36,12 @@ export function enhanceSearch() {
       heading.dataset.docsHeading = '';
       heading.textContent = 'Docs';
       drawer.prepend(heading);
+      const moreDocs = document.createElement('button');
+      moreDocs.type = 'button';
+      moreDocs.className = 'search-more-docs';
+      moreDocs.textContent = 'Show more docs';
+      moreDocs.addEventListener('click', () => drawer.classList.add('search-docs-expanded'));
+      drawer.append(moreDocs);
     }
     return Boolean(input && drawer);
   };
@@ -56,6 +62,8 @@ export function enhanceSearch() {
     return element;
   }
   function entryCard(parent: HTMLElement, entry: Entry, kind: Kind) {
+    const header = document.createElement('div');
+    header.className = 'search-result-header';
     const link = document.createElement('a');
     link.textContent = entry.name;
     if (kind === 'options') link.href = optionUrl(entry.name);
@@ -63,20 +71,25 @@ export function enhanceSearch() {
       const attr = entry.name.replace(/^pkgs\./, '');
       link.href = `https://search.nixos.org/packages?${new URLSearchParams({ channel: 'unstable', show: attr, query: attr })}`;
     }
-    parent.append(link);
-    if (entry.version) addText(parent, 'small', ` ${entry.version}`);
-    if (entry.description) addText(parent, 'p', entry.description.slice(0, 350));
-    if (kind === 'options' && entry.default != null) addText(parent, 'small', `Default: ${typeof entry.default === 'string' ? entry.default : JSON.stringify(entry.default)}`);
+    header.append(link);
+    if (entry.version) addText(header, 'small', entry.version);
+    parent.append(header);
+    if (entry.description) {
+      const description = entry.description.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[`*_]/g, '').replace(/\s+/g, ' ').trim();
+      addText(parent, 'p', description);
+    }
     if (kind === 'packages') {
       const copy = document.createElement('button');
       copy.type = 'button';
-      copy.textContent = 'Copy configuration';
+      copy.textContent = 'Copy';
+      copy.setAttribute('aria-label', `Copy configuration for ${entry.name}`);
+      copy.title = 'Copy configuration';
       copy.addEventListener('click', async () => {
         const name = entry.name.startsWith('pkgs.') ? entry.name : `pkgs.${entry.name}`;
         try { await navigator.clipboard.writeText(`packages = [ ${name} ];`); copy.textContent = 'Copied'; }
         catch { copy.textContent = 'Could not copy'; }
       });
-      parent.append(copy);
+      header.append(copy);
     }
   }
   function createGroup(kind: Kind) {
@@ -93,7 +106,7 @@ export function enhanceSearch() {
       const match = resolution?.match;
       let suggestedName: string | undefined;
       if (match) {
-        addText(suggestion, 'strong', 'Suggested match');
+        addText(suggestion, 'span', 'Suggested').className = 'search-suggestion-label';
         if (typeof match === 'string') {
           const members = resolution?.options ?? [];
           const target = members.find(entry => entry.name === `${match}.enable`) ?? members[0];
@@ -101,7 +114,7 @@ export function enhanceSearch() {
             const link = document.createElement('a');
             link.href = optionUrl(target.name);
             link.textContent = match;
-            suggestion.append(document.createElement('br'), link);
+            suggestion.append(link);
             addText(suggestion, 'p', `${members.length} options in this group`);
           }
         } else { entryCard(suggestion, match, kind); suggestedName = match.name; }
@@ -134,7 +147,7 @@ export function enhanceSearch() {
         void fetchTool(searchTool, text, signal).then(data => {
           if (current !== generation) return;
           entries = data as Entry[];
-          status.textContent = entries.length ? `${entries.length} results for “${text}”` : `No search results for “${text}”.`;
+          status.textContent = entries.length ? `${entries.length} results` : 'No matches';
           render();
         }).catch(() => {
           if (current === generation && !signal.aborted) status.textContent = 'Search is temporarily unavailable. Press Enter to retry.';
@@ -164,6 +177,7 @@ export function enhanceSearch() {
     controller?.abort();
     const current = ++generation;
     const text = query.trim();
+    site!.querySelector('.pagefind-ui__drawer')?.classList.remove('search-docs-expanded');
     panel.hidden = !text;
     groups.forEach(group => group.reset(text));
     if (!text || text.length > 200) return;

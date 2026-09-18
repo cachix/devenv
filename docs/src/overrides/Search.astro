@@ -7,14 +7,16 @@ import DefaultSearch from '@astrojs/starlight/components/Search.astro';
   <div id="devenv-search-results" hidden>
     {['options', 'packages'].map(kind => (
       <section data-group={kind} aria-labelledby={`search-${kind}-heading`}>
-        <h2 id={`search-${kind}-heading`}>{kind === 'options' ? 'Options' : 'Packages'}</h2>
-        <p data-status role="status"></p>
+        <div class="search-group-header">
+          <h2 id={`search-${kind}-heading`}>{kind === 'options' ? 'Options' : 'Packages'}</h2>
+          <p data-status role="status"></p>
+        </div>
         <div data-suggestion></div>
         <ul data-results></ul>
         <button type="button" data-more hidden>Show more {kind}</button>
       </section>
     ))}
-    <p class="search-source">Public catalog from mcp.devenv.sh. Versions may differ from your project’s lockfile.</p>
+    <p class="search-source">Catalog versions may differ from your project’s lockfile.</p>
   </div>
 </template>
 <script>
@@ -22,23 +24,44 @@ import DefaultSearch from '@astrojs/starlight/components/Search.astro';
   enhanceSearch();
 </script>
 <style is:global>
-  #devenv-search-results button {
-    font: inherit; color: var(--sl-color-text); background: var(--sl-color-black);
-    border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; padding: .4rem .8rem; cursor: pointer;
-  }
-  .devenv-catalog-dev-input { font: inherit; padding: .75rem; color: var(--sl-color-text); background: var(--sl-color-black); border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; }
+  site-search dialog { max-width: 46rem; }
+  #devenv-search-results { display: grid; gap: 1.5rem; font-size: .875rem; }
   #devenv-search-results[hidden] { display: none; }
-  #devenv-search-results { font-size: .875rem; display: grid; gap: 1.5rem; }
-  #devenv-search-results h2, site-search [data-docs-heading] { font-size: 1rem; margin-block: 0 .5rem; flex-basis: 100%; }
-  site-search .pagefind-ui__drawer { max-height: 20rem; overflow-y: auto; }
-  #devenv-search-results .search-source { color: var(--sl-color-gray-2); font-size: .8rem; margin-top: 0; }
-  #devenv-search-results ul { list-style: none; padding: 0; display: grid; gap: .75rem; }
-  #devenv-search-results li, #devenv-search-results [data-suggestion]:not(:empty) {
-    border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; padding: .8rem; overflow-wrap: anywhere;
+  #devenv-search-results [data-group] { border-top: 1px solid var(--sl-color-gray-5); padding-top: 1rem; }
+  .search-group-header, .search-result-header { display: flex; align-items: baseline; gap: .75rem; min-width: 0; }
+  .search-group-header { flex-wrap: wrap; margin-bottom: .5rem; }
+  #devenv-search-results h2, site-search [data-docs-heading] { font-size: .875rem; font-weight: 600; margin: 0; flex-basis: auto; }
+  site-search [data-docs-heading] { flex-basis: 100%; margin-top: 1rem; }
+  #devenv-search-results [data-status] { color: var(--sl-color-gray-3); font-size: .75rem; margin: 0; }
+  #devenv-search-results ul { list-style: none; padding: 0; margin: 0; }
+  #devenv-search-results li, #devenv-search-results [data-suggestion]:not(:empty) { padding: .75rem .5rem; overflow-wrap: anywhere; border-radius: .375rem; }
+  #devenv-search-results li:hover, #devenv-search-results li:focus-within { background: var(--sl-color-gray-6); }
+  #devenv-search-results [data-suggestion]:not(:empty) { background: var(--sl-color-gray-6); margin-bottom: .25rem; }
+  #devenv-search-results a { color: var(--sl-color-text); text-decoration: none; font-weight: 500; }
+  #devenv-search-results a:hover { color: var(--sl-color-text-accent); text-decoration: underline; }
+  #devenv-search-results .search-result-header > a { font-family: var(--sl-font-mono); font-size: .8125rem; min-width: 0; }
+  #devenv-search-results p { color: var(--sl-color-gray-2); margin: .25rem 0 0; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  #devenv-search-results small { color: var(--sl-color-gray-3); font-size: .75rem; white-space: nowrap; }
+  #devenv-search-results .search-suggestion-label { display: block; color: var(--sl-color-text-accent); font-size: .6875rem; font-weight: 500; margin-bottom: .25rem; }
+  #devenv-search-results button, site-search .search-more-docs { font: inherit; font-size: .75rem; border: 0; border-radius: .25rem; background: transparent; color: var(--sl-color-text-accent); cursor: pointer; padding: .375rem .5rem; }
+  #devenv-search-results .search-result-header button { margin-left: auto; color: var(--sl-color-gray-2); flex-shrink: 0; }
+  #devenv-search-results button:hover, site-search .search-more-docs:hover { background: var(--sl-color-gray-6); color: var(--sl-color-text-accent); }
+  #devenv-search-results button:focus-visible, site-search .search-more-docs:focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: 2px; }
+  #devenv-search-results .search-source { font-size: .75rem; color: var(--sl-color-gray-3); }
+  .devenv-catalog-dev-input { font: inherit; padding: .75rem; color: var(--sl-color-text); background: var(--sl-color-black); border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; }
+  /* Keep Pagefind's behavior, with the same compact rows as catalog results. */
+  site-search .pagefind-ui__drawer { overflow: visible; max-height: none; }
+  site-search .pagefind-ui__message { font-size: .75rem; color: var(--sl-color-gray-3); padding-block: .5rem; }
+  site-search #starlight__search { --sl-search-result-spacing: .25rem; }
+  site-search .pagefind-ui__result { border: 0; }
+  site-search .pagefind-ui__result-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  site-search .pagefind-ui__drawer:not(.search-docs-expanded) .pagefind-ui__result:nth-child(n+4),
+  site-search .pagefind-ui__drawer:not(.search-docs-expanded) .pagefind-ui__result-nested,
+  site-search .pagefind-ui__drawer:not(.search-docs-expanded) .pagefind-ui__button { display: none; }
+  site-search .search-more-docs { display: none; }
+  site-search .pagefind-ui__drawer:not(.search-docs-expanded):has(.pagefind-ui__result:nth-child(4), .pagefind-ui__result-nested) .search-more-docs { display: block; }
+  @media (max-width: 30rem) {
+    .search-result-header { flex-wrap: wrap; gap: .25rem .5rem; }
+    #devenv-search-results .search-result-header > a { flex-basis: 100%; }
   }
-  #devenv-search-results [data-suggestion]:not(:empty) { border-color: var(--sl-color-text-accent); margin-block: 1rem; }
-  #devenv-search-results a { color: var(--sl-color-text-accent); }
-  #devenv-search-results p { margin-block: .4rem; white-space: pre-line; }
-  #devenv-search-results small { color: var(--sl-color-gray-2); }
-  #devenv-search-results button:focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: 2px; }
 </style>
