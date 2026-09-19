@@ -61,6 +61,14 @@ let
     fi
   '';
 
+  pnpmArgs = lib.functionArgs pkgs.pnpm.override;
+
+  pnpmPackage =
+    if builtins.hasAttr "nodejs-slim" pnpmArgs then
+      pkgs.pnpm.override { nodejs-slim = cfg.package; }
+    else
+      pkgs.pnpm.override { nodejs = cfg.package; };
+
   initPnpmScript = pkgs.writeShellScript "init-pnpm.sh" ''
     function _devenv-pnpm-install()
     {
@@ -274,9 +282,7 @@ in
       enable = lib.mkEnableOption "install pnpm";
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.pnpm.override {
-          nodejs = cfg.package;
-        };
+        default = pnpmPackage;
         defaultText = lib.literalExpression "pkgs.pnpm";
         description = "The pnpm package to use.";
       };
