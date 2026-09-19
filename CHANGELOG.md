@@ -7,6 +7,7 @@
 - Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
 
 - Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).
+- Fixed `devenv tasks run` restarting processes that are already running via `devenv up`. Process dependencies now attach to the existing manager, wait until those processes are healthy, and run the task without a crash loop ([#3137](https://github.com/cachix/devenv/issues/3137)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 
 ## 2.3.1 (2026-09-11)
