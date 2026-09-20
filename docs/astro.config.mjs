@@ -120,7 +120,7 @@ export default defineConfig({
         { icon: 'discord', label: 'Discord', href: 'https://discord.gg/naMgvexb6q' },
       ],
       editLink: {
-        baseUrl: 'https://github.com/cachix/devenv/edit/main/docs/src/content/docs/',
+        baseUrl: 'https://github.com/cachix/devenv/edit/main/docs/',
       },
       head: [
         {
