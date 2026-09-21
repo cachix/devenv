@@ -4,6 +4,8 @@
 
 ### Bug Fixes
 
+- Trigger Nix garbage collection after `devenv mcp` initializes its package and option caches.
+
 - Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
 
 - Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).

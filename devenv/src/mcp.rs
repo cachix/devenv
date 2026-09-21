@@ -589,7 +589,17 @@ pub async fn run_mcp_server(
         })
         .map_err(|e| miette!("Failed to spawn MCP cache init thread: {}", e))?;
 
-    // Errors are held until the init thread is joined, so no path detaches it.
+    // Join immediately when evaluation finishes so its stack no longer roots
+    // Nix values. Cached searches do not allocate in Nix and cannot trigger GC.
+    let init_task = tokio::task::spawn_blocking(move || {
+        let result = init_handle.join();
+        if let Err(error) = devenv_nix_backend::gc_boehm::collect_full("mcp_cache_initialized") {
+            warn!(%error, "failed to collect MCP evaluation memory");
+        }
+        result
+    });
+
+    // Retain the join task until serving ends, including on serving errors.
     let serve_result: Result<()> = async {
         match http_port {
             Some(port) => {
@@ -661,7 +671,7 @@ pub async fn run_mcp_server(
 
     devenv_nix_backend::trigger_interrupt();
 
-    let init_result = tokio::task::spawn_blocking(move || init_handle.join())
+    let init_result = init_task
         .await
         .map_err(|e| miette!("Failed to join MCP cache init thread: {}", e))?;
 
