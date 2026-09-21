@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- Release evaluation memory after `devenv mcp` initializes its package and option caches, reducing idle memory usage.
+- Release evaluation memory after `devenv mcp` initializes its package and option caches, reducing idle memory usage ([#3065](https://github.com/cachix/devenv/issues/3065)).
 
 - Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
 
