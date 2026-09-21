@@ -7,14 +7,11 @@ let
   cfg = config.languages.assembly;
 
   asmTargetPkgs = {
-    nasm = pkgs.nasm;
-    fasm = pkgs.fasm;
-    yasm = pkgs.yasm;
+    inherit (pkgs) nasm fasm yasm;
   };
 
   emulatorPkgs = {
-    qemu = pkgs.qemu;
-    rvvm = pkgs.rvvm;
+    inherit (pkgs) qemu rvvm;
   };
 
   isCrossCompile = builtins.elem cfg.type [ "arm" "riscv" ];
@@ -36,12 +33,12 @@ let
 
   isValidArchMapping =
     builtins.hasAttr cfg.type archMapping
-    && builtins.elem cfg.targetArch archMapping.${cfg.type};
+    && builtins.elem cfg.arch archMapping.${cfg.type};
 
   invalidArchMappingMsg = ''
-    languages.assembly: inconsistency between `type` and `targetArch`.
+    languages.assembly: inconsistency between `type` and `arch`.
       type       = ${cfg.type}
-      targetArch = ${cfg.targetArch}
+      arch       = ${cfg.arch}
 
     Valid mapping:
       nasm/fasm/yasm -> x86_64
@@ -51,7 +48,7 @@ let
 
   crossPkgs =
     if isCrossCompile && isValidArchMapping
-    then crossArchMap.${cfg.targetArch} or { }
+    then crossArchMap.${cfg.arch} or { }
     else { };
 
   defaultPackage =
@@ -102,25 +99,25 @@ let
   asmLspDiagnosticsDefault = cfg.type == "arm" || cfg.type == "riscv";
 
   asmLspAssembler =
-    if cfg.lsp.projectConfig.assembler != null
-    then cfg.lsp.projectConfig.assembler
+    if cfg.lsp.config.assembler != null
+    then cfg.lsp.config.assembler
     else asmLspAssemblerMap.${cfg.type};
 
   asmLspInstructionSet =
-    if cfg.lsp.projectConfig.instructionSet != null
-    then cfg.lsp.projectConfig.instructionSet
+    if cfg.lsp.config.instructionSet != null
+    then cfg.lsp.config.instructionSet
     else
       asmLspInstructionSetMap.${
-      cfg.targetArch
+      cfg.arch
       } or (throw ''
         languages.assembly: no known `.asm-lsp.toml` instruction_set
-        mapping for targetArch = "${cfg.targetArch}". Set
-        `languages.assembly.lsp.projectConfig.instructionSet` explicitly.
+        mapping for arch = "${cfg.arch}". Set
+        `languages.assembly.lsp.config.instructionSet` explicitly.
       '');
 
   asmLspDiagnostics =
-    if cfg.lsp.projectConfig.diagnostics != null
-    then cfg.lsp.projectConfig.diagnostics
+    if cfg.lsp.config.diagnostics != null
+    then cfg.lsp.config.diagnostics
     else asmLspDiagnosticsDefault;
 
   asmLspCompiler =
@@ -145,7 +142,7 @@ let
       };
   };
 
-  asmLspSettings = lib.recursiveUpdate asmLspBaseSettings cfg.lsp.projectConfig.extraSettings;
+  asmLspSettings = lib.recursiveUpdate asmLspBaseSettings cfg.lsp.config.extraSettings;
 in
 {
   options.languages.assembly = {
@@ -158,11 +155,11 @@ in
       description = ''
         Assembler selection, only one of `nasm / fasm / yasm / arm / riscv`.
 
-        This setting changes the default value of `targetArch` if you use `arm` or `riscv`.
+        This setting changes the default value of `arch` if you use `arm` or `riscv`.
       '';
     };
 
-    targetArch = lib.mkOption {
+    arch = lib.mkOption {
       type = lib.types.enum [ "x86_64" "aarch64" "armv7l" "riscv32" "riscv64" ];
       default =
         if cfg.type == "riscv"
@@ -184,7 +181,7 @@ in
         Assembly toolchain/package to use.
 
         For `ARM/RISC-V` this defaults to the cross compiler
-        selected from targetArch, but can be overridden explicitly.
+        selected from arch, but can be overridden explicitly.
       '';
     };
 
@@ -207,7 +204,7 @@ in
         description = "The Assembly Language Server package to use.";
       };
 
-      projectConfig = {
+      config = {
         enable = lib.mkOption {
           type = lib.types.bool;
           default = cfg.lsp.enable;
@@ -231,10 +228,10 @@ in
         instructionSet = lib.mkOption {
           type = lib.types.nullOr (lib.types.enum [ "x86" "x86-64" "x86/x86-64" "arm" "arm64" "riscv" "z80" "6502" "avr" "mips" ]);
           default = null;
-          defaultText = lib.literalExpression "derived from `languages.assembly.targetArch`";
+          defaultText = lib.literalExpression "derived from `languages.assembly.arch`";
           description = ''
             Override the asm-lsp `instruction_set`. Leave `null` to derive
-            it automatically from `targetArch`.
+            it automatically from `arch`.
           '';
         };
 
@@ -342,7 +339,7 @@ in
       }
     ];
 
-    files = lib.mkIf (cfg.lsp.enable && cfg.lsp.projectConfig.enable) {
+    files = lib.mkIf (cfg.lsp.enable && cfg.lsp.config.enable) {
       ".asm-lsp.toml".toml = asmLspSettings;
     };
 

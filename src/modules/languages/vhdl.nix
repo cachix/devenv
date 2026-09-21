@@ -6,10 +6,13 @@
 let
   cfg = config.languages.vhdl;
   compilerPackages = {
-    ghdl-gcc = pkgs.ghdl-gcc;
-    ghdl-llvm = pkgs.ghdl-llvm;
-    ghdl-mcode = pkgs.ghdl-mcode;
-    nvc = pkgs.nvc;
+    inherit
+      (pkgs)
+      ghdl-gcc
+      ghdl-llvm
+      ghdl-mcode
+      nvc
+      ;
   };
   defaultPackageText =
     if pkgs.stdenv.isDarwin
