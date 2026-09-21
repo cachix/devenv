@@ -57,7 +57,7 @@ package
 *Default:*
 
 ```nix
-rustfsInput.packages.${pkgs.stdenv.system}.default
+pkgs.rustfs
 ```
 
 *Declared by:*
