@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- Trigger Nix garbage collection after `devenv mcp` initializes its package and option caches.
+- Release evaluation memory after `devenv mcp` initializes its package and option caches, reducing idle memory usage.
 
 - Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
 
