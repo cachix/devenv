@@ -22,7 +22,7 @@
 - Added configuration access checks to NixOS machine plans and `devenv machines check` to inspect them without building. Reviewed deployments reject disabled SSH or root login, report uncertain access changes, and require regenerated fleet plans.
 - Mixed NixOS, nix-darwin, and home-manager fleets share one review and confirmation. Every role is built and copied before activation; system roles run before home-manager. `--max-concurrent` supports bounded activation batches that stop after a failure.
 - `devenv machines deploy` builds a fleet plan, shows changes, asks for confirmation, and applies those exact outputs. NixOS uses generation checks and transactional rollback; nix-darwin and home-manager use direct activation. Use `--yes` for automation. `machines plan` saves a reusable plan ID; JSON export is optional with `--json`.
-- Added `tasks.<name>.wantedBy` to choose which tasks select a task, separately from `after`/`before` ordering. A setup task with `wantedBy = [ "devenv:processes:db" ]` runs whenever `db` starts, including under `devenv up` ([#2852](https://github.com/cachix/devenv/issues/2852)).
+- Added `tasks.<name>.wantedBy` to choose which tasks select a task, separately from `after`/`before` ordering. Garage now configures its layout and buckets when started with `devenv up garage` as well as bare `devenv up` ([#2852](https://github.com/cachix/devenv/issues/2852)).
 
 ## 2.3.1 (2026-09-11)
 
