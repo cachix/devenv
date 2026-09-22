@@ -40,6 +40,5 @@ in
         then cfg.package.unwrapped
         else cfg.package
     }/share/dotnet";
-    env.LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${lib.makeLibraryPath [ pkgs.icu ]}";
   };
 }
