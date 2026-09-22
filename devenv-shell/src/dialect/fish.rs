@@ -211,15 +211,13 @@ end
         let config_fish_content = format!(
             r#"# devenv fish init
 
-# If this shell was spawned by the devenv hook (marked by `_DEVENV_HOOK_DIR`),
-# `exit` when the user `cd`s outside the project so the parent shell can
-# follow. Handled here (devenv's own init file, not the user's hook.fish) so
-# it works regardless of whether the user's config.fish re-sources the hook
-# for this non-login shell. Erase the marker as soon as it is read so it
-# cannot leak into further descendants (a new tmux/zellij pane, a
-# manually started nested shell, ...) which would otherwise wrongly conclude
-# they too are hook-spawned.
-if set -q _DEVENV_HOOK_DIR
+# If this shell was spawned by the devenv hook, `exit` when the user `cd`s
+# outside the project so the parent shell can follow. The user's config.fish
+# may already have moved `_DEVENV_HOOK_DIR` to the non-exported
+# `_devenv_hook_dir` before this init file runs. Accept either marker so the
+# exit happens on PWD change, before prompt handlers can query the terminal.
+# Erase the exported marker so it cannot leak into further descendants.
+if set -q _DEVENV_HOOK_DIR; or set -q _devenv_hook_dir
     set -e _DEVENV_HOOK_DIR
     function _devenv_shell_exit_on_cd_out --on-variable PWD
         switch $PWD
