@@ -61,7 +61,7 @@ use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{
     collections::BTreeMap,
     env, fs,
-    io::{self, IsTerminal},
+    io::{self, IsTerminal, Write},
     os, panic,
     path::{Path, PathBuf},
     process::{self, Command},
@@ -92,7 +92,9 @@ fn main() {
     install_miette_hook();
 
     if let Err(err) = main_inner() {
-        eprintln!("{err:?}");
+        // The terminal may already be gone (window closed, SIGHUP), so a
+        // failed write must not panic like `eprintln!` would.
+        let _ = writeln!(io::stderr(), "{err:?}");
         process::exit(1);
     }
 }
