@@ -37,9 +37,27 @@
   tasks."test:enter-test-only" = {
     exec = ''
       export DEVENV_TEST_ENTER_TEST_RAN="yes"
+      touch "$DEVENV_STATE/enter-test-ran"
     '';
     exports = [ "DEVENV_TEST_ENTER_TEST_RAN" ];
     before = [ "devenv:enterTest" ];
+  };
+
+  # Runs after shell setup and before test setup. Selecting it from
+  # enterShell must not pull enterTest into `devenv shell`.
+  tasks."test:after-shell-before-test" = {
+    exec = "true";
+    after = [ "devenv:enterShell" ];
+    before = [ "devenv:enterTest" ];
+  };
+
+  # Hooks into shell entry through wantedBy instead of an ordering edge.
+  tasks."test:wanted-by-shell" = {
+    exec = ''
+      touch "$DEVENV_STATE/wanted-by-shell-ran"
+    '';
+    after = [ "devenv:enterShell" ];
+    wantedBy = [ "devenv:enterShell" ];
   };
 
   # Process with exec readiness probe. Tests that the bash path is resolved

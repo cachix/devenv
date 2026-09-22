@@ -61,6 +61,28 @@ Processes are tasks too (see [Processes as tasks](#processes-as-tasks)), so the 
 }
 ```
 
+### Selecting tasks with `wantedBy`
+
+<VersionCompatibility version="2.3.2" />
+
+`before` and `after` both order tasks and choose which tasks run. Running a task pulls in the tasks it runs after, and in `after` and `all` [modes](#execution-modes) also the tasks that run after it.
+
+Set `wantedBy` to choose explicitly which tasks select yours, like systemd's `wantedBy`. The listed tasks then select it in every mode except `single`, and `before`/`after` only order it:
+
+```nix title="devenv.nix"
+{
+  tasks."myapp:migrate" = {
+    exec = "myapp migrate";
+    after = [ "devenv:processes:db" ];     # order: wait until db is ready
+    wantedBy = [ "devenv:processes:db" ];  # select: run whenever db starts
+  };
+}
+```
+
+`wantedBy` does not order tasks, so pair it with `after` or `before`.
+A task with `wantedBy = [ ]` runs only when named directly or when a selected task runs after it.
+`devenv:enterTest` uses this, so entering a shell does not run test setup.
+
 ### Dependency states
 
 <VersionCompatibility version="2.0" />
@@ -100,7 +122,9 @@ When you run a task, devenv schedules a subgraph around it rather than only that
 | `single` | only the named task |
 | `before` (default) | the task and everything *upstream* of it (its dependencies) |
 | `after` | the task and everything *downstream* of it (tasks that depend on it) |
-| `all` | the entire connected graph, both upstream and downstream |
+| `all` | the task, everything upstream and downstream of it, and the upstream of those downstream tasks |
+
+In every mode except `single`, tasks that list a selected task in [`wantedBy`](#selecting-tasks-with-wantedby) also run, and downstream tasks that set `wantedBy` run only when one of their listed tasks is selected.
 
 ```sh
 $ devenv tasks run myapp:build               # before mode (default): build + its dependencies
@@ -368,7 +392,7 @@ This ensures that cleanup tasks like removing PID files or clearing caches are e
 
 A task that runs *after* a process — a setup or configure step wired with `processes.<name>.before = [ "devenv:<name>:configure" ]`, or equivalently `tasks."devenv:<name>:configure".after = [ "devenv:processes:<name>" ]` — is *downstream* of that process. `devenv up` schedules processes in `before` mode, which runs each process's upstream dependencies but **not** its downstream tasks, so the setup step is skipped and never runs.
 
-Until this is resolved ([#2852](https://github.com/cachix/devenv/issues/2852)), run `devenv up --mode all` to include downstream setup tasks. `devenv test` already runs in `all` mode, so these tasks run there. See [Execution modes](#execution-modes).
+Since 2.3.2, add `wantedBy = [ "devenv:processes:<name>" ];` to the setup task so it runs whenever the process starts, including under `devenv up` (see [Selecting tasks with `wantedBy`](#selecting-tasks-with-wantedby)). On older versions, run `devenv up --mode all` to include downstream setup tasks. `devenv test` already runs in `all` mode, so these tasks run there. See [Execution modes](#execution-modes).
 :::
 
 
