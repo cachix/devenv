@@ -628,28 +628,37 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         FishDialect.write_init_files(&ctx).unwrap();
         let devenv_fish = init_dir.join("devenv.fish");
 
-        let script = format!("source {devenv_fish:?}\ncd /\necho SHOULD_NOT_REACH\n");
-        let output = Command::new("fish")
-            // Keep the test independent of user, system, and vendor Fish
-            // configuration. A separately loaded devenv hook consumes
-            // `_DEVENV_HOOK_DIR` before this generated rcfile is sourced, and
-            // its prompt handler does not run under `fish -c`.
-            .arg("--no-config")
-            .env("DEVENV_ROOT", &root)
-            .env("_DEVENV_HOOK_DIR", &root)
-            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
-            .arg("-c")
-            .arg(&script)
-            .output()
-            .expect("failed to run fish rcfile");
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(
-            !stdout.contains("SHOULD_NOT_REACH"),
-            "[fish] hook-spawned rcfile did not exit on cd-out.\nstdout: {stdout}\nstderr: {}",
-            String::from_utf8_lossy(&output.stderr),
-        );
-        let exit_dir = std::fs::read_to_string(root.join(".devenv/exit-dir")).unwrap();
-        assert_eq!(exit_dir, "/", "exit-dir should record cd target");
+        for hook_loaded_first in [false, true] {
+            // Fish runs config.fish before the -C init script. If config.fish
+            // loads the hook, it consumes the exported marker first. Simulate
+            // that ordering without loading user or vendor Fish configuration.
+            let hook_setup = if hook_loaded_first {
+                "set -g _devenv_hook_dir $_DEVENV_HOOK_DIR\nset -e _DEVENV_HOOK_DIR\n"
+            } else {
+                ""
+            };
+            let script =
+                format!("{hook_setup}source {devenv_fish:?}\ncd /\necho SHOULD_NOT_REACH\n");
+            let output = Command::new("fish")
+                .arg("--no-config")
+                .env("DEVENV_ROOT", &root)
+                .env("_DEVENV_HOOK_DIR", &root)
+                .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+                .arg("-c")
+                .arg(&script)
+                .output()
+                .expect("failed to run fish rcfile");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                !stdout.contains("SHOULD_NOT_REACH"),
+                "[fish] hook-spawned rcfile did not exit on cd-out (hook_loaded_first={hook_loaded_first}).\nstdout: {stdout}\nstderr: {}",
+                String::from_utf8_lossy(&output.stderr),
+            );
+            let exit_dir_file = root.join(".devenv/exit-dir");
+            let exit_dir = std::fs::read_to_string(&exit_dir_file).unwrap();
+            assert_eq!(exit_dir, "/", "exit-dir should record cd target");
+            std::fs::remove_file(exit_dir_file).unwrap();
+        }
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
