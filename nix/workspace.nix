@@ -168,6 +168,9 @@ let
         ''
           mkdir -p $out/bin
 
+          # Catch duplicate Nix store registrations in the bundled language server.
+          ${lib.getBin nixd}/bin/nixd --version > /dev/null
+
           cp $src/bin/devenv $out/bin/
           cp $devenvRunTests/bin/devenv-run-tests $out/bin/
           cp $devenvProxy/bin/devenv-proxy $out/bin/
