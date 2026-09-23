@@ -26,7 +26,7 @@
 - **[Instant environments](https://devenv.sh/blog/2024/10/03/devenv-13-instant-developer-environments-with-nix-caching/)** with incremental Nix evaluation caching (sub 100ms when nothing changed)
 - **[LSP for devenv.nix](https://devenv.sh/lsp/)** with autocomplete, hover docs, and go to definition via bundled nixd
 - **[Ad hoc environments](https://devenv.sh/ad-hoc-developer-environments/)** from the CLI without any config files (`--option languages.rust.enable:bool true`)
-- **[Out of tree devenvs](https://devenv.sh/ad-hoc-developer-environments/)** to use configs from other repos (`--from github:myorg/configs`)
+- **[Out of tree devenvs](https://devenv.sh/guides/out-of-tree-devenvs/)** to use configs from other repos (`--from github:myorg/configs`)
 
 ### Languages, packages, and services
 
