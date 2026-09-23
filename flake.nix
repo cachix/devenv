@@ -183,7 +183,14 @@
                     llvmStatic = true;
                     inherit nixComponents;
                     nixf = nixdPkgs.nixf.override { inherit (nixComponents) nix-expr; };
-                    nixt = nixdPkgs.nixt.override { inherit nixComponents; };
+                    # Shared libnixt would embed a second copy of the static Nix
+                    # libraries, causing duplicate store registration at startup.
+                    nixt = (nixdPkgs.nixt.override { inherit nixComponents; }).overrideAttrs (old: {
+                      mesonFlags = (old.mesonFlags or [ ]) ++ [
+                        (prev.lib.mesonOption "default_library" "static")
+                      ];
+                      propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ (old.buildInputs or [ ]);
+                    });
                   };
               crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
               libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" {
