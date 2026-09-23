@@ -58,19 +58,21 @@ EOF
 done
 
 # Activate through the real bash prompt hook after changing directories.
+# Use a marker from the parent Bash's PROMPT_COMMAND so the exit check cannot
+# match the nested devenv shell's prompt, which contains the same PS1 text.
 "$DEVENV_SMOKE_BIN" allow
 cd "$work"
 "$driver" pty --step-timeout 180 "$output/hook.typescript" \
   'export PS1="SMOKE_OUTER> "; exec bash --noprofile --norc -i' <<'EOF'
 expect:SMOKE_OUTER>
-send:eval "$("$DEVENV_SMOKE_BIN" hook bash)"\n
+send:PROMPT_COMMAND='echo SMOKE_PARENT_READY'; eval "$("$DEVENV_SMOKE_BIN" hook bash)"\n
 expect:SMOKE_OUTER>
 send:cd project\n
 expect:SMOKE_READY
 send:printf 'HOOK_RESULT=%s\\n' "$((SMOKE_VALUE + 1))"\n
 expect:HOOK_RESULT=7320
 send:exit\n
-expect:SMOKE_OUTER>
+expect:SMOKE_PARENT_READY
 send:exit\n
 EOF
 echo "Passed bash hook activation"

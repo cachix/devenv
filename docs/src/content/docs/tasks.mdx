@@ -118,6 +118,10 @@ $ devenv tasks run myapp:build --mode all    # build, its dependencies, and its 
 - **`devenv:enterTest`** runs before tests execute (`devenv test`).
   It depends on `devenv:enterShell`, so all shell setup tasks run first automatically.
 
+`devenv tasks run` starts from the requested task and its dependencies, so it does not run `devenv:enterShell` automatically.
+If a task needs shell setup, add an `after` dependency on the setup task so its environment exports reach your task.
+For an example, see [using a Python virtual environment in tasks](/languages/python/#using-the-virtual-environment-in-tasks).
+
 To hook into these events, use `before` to declare that your task should run before the event completes:
 
 ```nix title="devenv.nix"

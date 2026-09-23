@@ -61,6 +61,28 @@ devenv can create and manage one for you:
 The virtual environment is stored in `$DEVENV_STATE/venv` and is activated automatically every time you enter the shell.
 If the Python interpreter changes (for example, after updating `version`), the virtual environment is recreated.
 
+### Using the virtual environment in tasks
+
+`devenv tasks run` does not automatically run the shell entry tasks that initialize the virtual environment.
+If a task needs the virtual environment, make it depend on `devenv:python:virtualenv`:
+
+```nix
+{
+  languages.python = {
+    enable = true;
+    venv.enable = true;
+  };
+
+  tasks."myapp:check" = {
+    after = [ "devenv:python:virtualenv" ];
+    exec = ''python -c "import sys; print(sys.executable)"'';
+  };
+}
+```
+
+This runs the setup task first and passes its `PATH` and `VIRTUAL_ENV` exports to `myapp:check`.
+If you use `uv.sync.enable`, depend on `devenv:python:uv` instead.
+
 ### Installing packages from requirements
 
 If your project uses a [requirements file](https://pip.pypa.io/en/stable/reference/requirements-file-format/), you can point devenv to it.

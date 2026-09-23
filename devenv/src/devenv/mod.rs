@@ -29,7 +29,6 @@ use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
 use processes::ProcessManagerControl as _;
-use secrecy::ExposeSecret;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -4137,8 +4136,8 @@ fn resolve_secretspec_into(
         .resolved
         .secrets
         .iter()
-        .map(|(key, value)| (key.clone(), value.expose_secret().to_string()))
-        .collect();
+        .map(|(key, value)| Ok((key.clone(), secretspec_text(key, value.expose_secret())?)))
+        .collect::<Result<_>>()?;
     let resolved = validated_secrets.into_resolved(resolved_secrets);
 
     cell.set(resolved)
@@ -4180,7 +4179,15 @@ fn resolve_builtin_cachix_auth_token(
         .resolved
         .secrets
         .get(secret_name)
-        .map(|secret| secret.expose_secret().to_string()))
+        .map(|secret| secretspec_text(secret_name, secret.expose_secret()))
+        .transpose()?)
+}
+
+fn secretspec_text(name: &str, value: &[u8]) -> Result<String> {
+    std::str::from_utf8(value)
+        .map(str::to_owned)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("SecretSpec secret '{name}' is not valid UTF-8"))
 }
 
 /// Whether a native process manager with the given PID-file status is healthy
@@ -4396,6 +4403,12 @@ mod tests {
             !native_manager_seedable(None),
             "an errored PID check must not seed"
         );
+    }
+
+    #[test]
+    fn secretspec_text_rejects_binary_values() {
+        let error = secretspec_text("BINARY_SECRET", &[0xff]).expect_err("invalid UTF-8 must fail");
+        assert!(error.to_string().contains("BINARY_SECRET"));
     }
 
     #[test]
