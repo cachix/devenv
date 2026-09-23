@@ -121,7 +121,7 @@ schematic = { version = "0.19", features = [
 ] }
 secrecy = "0.10"
 # https://github.com/mikaelmello/inquire/pull/330
-secretspec = "0.20"
+secretspec = "0.21"
 semver = "1"
 serde = { version = "1.0.228", features = ["derive"] }
 # default-features = false drops the `reqwest` feature (remote https
