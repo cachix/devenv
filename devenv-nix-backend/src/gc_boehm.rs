@@ -214,6 +214,29 @@ pub fn collect(stage: &'static str) {
         return;
     }
 
+    collect_inner(stage, nix_bindings_expr::eval_state::gc_now);
+}
+
+/// Collect after a one-shot evaluator and its thread have been dropped.
+/// Idle servers may never allocate in Nix again, so cleanup cannot depend on
+/// allocation pressure or the opt-in diagnostics setting.
+pub fn collect_full(stage: &'static str) -> Result<()> {
+    register_current_thread()?;
+    collect_inner(stage, || {
+        // Two passes release finalized graphs. Up to seven more age the freed
+        // blocks past Boehm's default unmap threshold of six collections.
+        // Keep this idle-only work here rather than changing Nix's GC policy.
+        for pass in 0..9 {
+            nix_bindings_expr::eval_state::gc_now();
+            if pass >= 1 && heap_stats().free_bytes == 0 {
+                break;
+            }
+        }
+    });
+    Ok(())
+}
+
+fn collect_inner(stage: &'static str, collect: impl FnOnce()) {
     let before = heap_stats();
     let span = tracing::info_span!(
         target: "devenv_nix_backend::gc_boehm",
@@ -238,7 +261,7 @@ pub fn collect(stage: &'static str) {
     let _entered = span.enter();
 
     let started = Instant::now();
-    nix_bindings_expr::eval_state::gc_now();
+    collect();
     let elapsed = started.elapsed().as_secs_f64();
     let after = heap_stats();
     let reclaimed = before.live_bytes().saturating_sub(after.live_bytes());
@@ -256,4 +279,43 @@ pub fn collect(stage: &'static str) {
     span.record("gc_unmapped_after_bytes", after.unmapped_bytes);
     span.record("gc_bytes_since_after", after.bytes_since_gc);
     span.record("gc_collections_after", after.collections);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nix_bindings_expr::eval_state::EvalState;
+    use nix_bindings_store::store::Store;
+
+    #[test]
+    fn releases_heap_after_evaluator_thread_exits() {
+        register_current_thread().unwrap();
+        let store = Store::open(Some("dummy://"), []).unwrap();
+        let mut state = EvalState::new(store, []).unwrap();
+        let live_value = state.new_value_str("still alive").unwrap();
+
+        const ALLOCATION: usize = 64 * 1024 * 1024;
+        std::thread::spawn(|| {
+            register_current_thread().unwrap();
+            let store = Store::open(Some("dummy://"), []).unwrap();
+            let mut state = EvalState::new(store, []).unwrap();
+            let value = state.new_value_str(&"x".repeat(ALLOCATION)).unwrap();
+            std::hint::black_box(&value);
+        })
+        .join()
+        .unwrap();
+
+        let before = heap_stats();
+        collect_full("test_evaluator_exited").unwrap();
+        let after = heap_stats();
+        assert!(
+            before.live_bytes().saturating_sub(after.live_bytes()) >= ALLOCATION as u64,
+            "evaluation garbage was retained: before={before:?}, after={after:?}"
+        );
+        assert!(
+            after.unmapped_bytes.saturating_sub(before.unmapped_bytes) >= ALLOCATION as u64,
+            "unused heap was not returned to the OS: before={before:?}, after={after:?}"
+        );
+        assert_eq!(state.require_string(&live_value).unwrap(), "still alive");
+    }
 }
