@@ -4,97 +4,93 @@ title: "Machines"
 
 :::caution[Experimental]
 
-The machines interface is new and may still change before it is declared stable.
+Machines are new in devenv 2.4. The interface may change before it is declared stable.
 :::
 
-The `machines` option lets a single `devenv.nix` declare one or more full system configurations (NixOS hosts, nix-darwin machines, or home-manager users) alongside the dev shell that builds them. Each entry is keyed by name and carries an optional `system`, an optional `target` submodule, and one or more of `nixos`, `nix-darwin`, or `home-manager` modules.
+A machine is a NixOS, nix-darwin, or home-manager configuration defined in `devenv.nix`. You can build it from your development environment, then install or deploy it with `devenv machines`.
 
-:::note[Current implementation]
+| What you want to do | Command |
+| --- | --- |
+| See configured machines | `devenv machines info` |
+| Build one without contacting its target | `devenv build machines.server` |
+| Check NixOS SSH access changes without building | `devenv machines check server` |
+| Install NixOS on a fresh host | `devenv machines install server` |
+| Update an existing machine | `devenv machines deploy server` |
+| Review now and deploy the same outputs later | `devenv machines plan server`, then `devenv machines apply plan-...` |
+| Check or reverse the last NixOS deployment | `devenv machines status server`, `devenv machines rollback server` |
 
-The current machines implementation includes:
+`install` partitions disks and requires a machine name. `deploy` updates an existing system and, with no names, selects all remote machines. [The options reference](/reference/options/#machines) lists every setting.
 
-- **Build targets** work: `devenv build machines.<name>` realises every role a machine declares; `devenv build machines.<name>.build.<role>` builds a single role.
-- **`devenv machines info [name...]`** lists every machine with its system, target, and configured roles. Read-only; does not force `build.*`.
-- **`devenv machines deploy`** builds and reviews every selected role in one fleet plan, asks for confirmation, prepares all targets, and applies the exact outputs. NixOS uses transactional rollback. nix-darwin and home-manager use direct activation, with home-manager following the system role on each machine.
-- **Reviewed NixOS deploys** apply sequentially and stop on failure. Direct activation runs are parallel by default; `--max-concurrent N` limits their concurrency.
-- **Bulk `devenv machines deploy`** selects every entry with `target.host`, including mixed NixOS, nix-darwin, and home-manager fleets. Local-only entries are excluded unless explicitly named.
-- **`devenv machines install <name1> [<name2> ...]`** runs the full install pipeline: preflight probe → kexec into NixOS installer → nixos-facter hardware probe (writes `.machines/<name>/facter.json`) → disko partitioning → nix copy + nixos-install → reboot. Supports `--phases`, `--stop-after-disko`, `--no-reboot`, `--disko-mode disko|format|mount`, and `--max-concurrent N`. Install-time encryption keys (`install.encryptionKeys`) are piped to the target before disko; extra files (`install.extraFiles`), SecretSpec bootstrap files (`install.secrets`), and SSH host key preservation (`install.copyHostKeys`) happen after nixos-install, before reboot. Custom kexec images are supported via `install.kexec.image` and `install.kexec.postSshPort`.
-- **`--use-machines-as-builders`** configures the live C-Nix remote builder settings from machines metadata (every machine with `target.host` becomes a candidate builder for its `system`) and enables builder substitutes. It is available on both `deploy` and `install` and currently requires the C-Nix backend.
-:::
+## Define a machine
 
-:::note[Renamed from `configurations`]
+A machine needs a name and at least one role. NixOS machines require the disko input, even when you only deploy to an existing host:
 
-Earlier versions exposed this option as `configurations`. It was renamed to `machines`, and the old name still works via `lib.mkRenamedOptionModule`, so existing configs keep evaluating.
-:::
-
-## Defining a machine
-
-A minimal NixOS machine:
-
-```nix title="devenv.nix"
-{ ... }: {
-  machines.laptop = {
-    system = "x86_64-linux";
-    target.host = "root@laptop.local";
-    nixos = {
-      networking.hostName = "laptop";
-      services.openssh.enable = true;
-      users.users.root.openssh.authorizedKeys.keys = [ "ssh-ed25519 ..." ];
-    };
-  };
-}
+```sh
+devenv inputs add disko github:nix-community/disko --follows nixpkgs
 ```
 
-`target` is a submodule describing the SSH destination used by install and deploy. It exposes two fields:
-
-- `target.host` is an optional string. Set it to an SSH URI in one of these forms: `user@host`, `user@host:port`, or the full `ssh://user@host:port`. Omitting `target.host` means "activate in process on the current host" and is only valid for `home-manager`. Note that setting it to `"localhost"` is not the same as omitting it; `"localhost"` still routes through SSH.
-- `target.sshOpts` is an optional list of SSH option tokens. They are applied before devenv's defaults for direct SSH and `nix copy` connections because OpenSSH keeps the first value it obtains for most settings; use them to override the default set below. Nix remote-builder connections are the exception described under [SSH config and the nix-daemon](#ssh-config-and-the-nix-daemon).
-
-One `target` is shared across `nixos`, `nix-darwin`, and `home-manager` on the same machine, so if you declare more than one role on a single entry they all land on the same host.
-
-### SSH defaults
-
-Every direct SSH or `nix copy` connection devenv opens for install and deploy uses these defaults:
-
-- `StrictHostKeyChecking=accept-new`, so parallel runs do not deadlock on interactive host key prompts on first contact. Pre-populate `~/.ssh/known_hosts` if you want stricter checking.
-- A bounded `ConnectTimeout`, so an unreachable host in a bulk run fails fast instead of hanging the whole batch.
-
-Override these by adding your own `-o` pair to `target.sshOpts`; the configured value is passed first and therefore wins.
-
-An install that transmits local file payloads through `install.secrets`, `install.encryptionKeys`, or `install.extraFiles` is deliberately stricter from its first SSH connection: it forces `StrictHostKeyChecking=yes` and disables forwarding, agent forwarding, X11 forwarding, local commands, and TTY allocation. These settings cannot be weakened through `target.sshOpts`. Add every host identity used during the run to `known_hosts` before starting—including both the original system and kexec installer identities if they differ. A per-machine file can be selected with `[ "-o" "UserKnownHostsFile=/absolute/path" ]`. Unknown identities fail before preflight or destructive work.
-
-### Machine names
-
-Machine names must start with a letter or underscore and contain only letters, digits, underscores, and hyphens. Dotted names such as `machines."host.example.com"` are not accepted because the CLI uses names in Nix attribute paths.
-
-## NixOS
-
-NixOS deployment is inspired by [nixos-anywhere](https://github.com/nix-community/nixos-anywhere). It uses the same SSH + kexec approach for fresh installs and relies on [disko](https://github.com/nix-community/disko) for declarative partitioning.
-
-### Disk layout with disko
-
-Add the `disko` input to `devenv.yaml`, then declare the disk layout inside `machines.<name>.nixos`. devenv imports `disko.nixosModules.disko` automatically:
-
-```yaml title="devenv.yaml"
-inputs:
-  disko:
-    url: github:nix-community/disko
-    inputs:
-      nixpkgs:
-        follows: nixpkgs
-```
+This example updates a host whose NixOS module already includes its hardware configuration:
 
 ```nix title="devenv.nix"
 { ... }: {
   machines.server = {
     system = "x86_64-linux";
-    target.host = "root@192.0.2.10";
+    target.host = "root@server.example.com";
+    hardware.facter = null;
+    nixos = import ./nixos/server.nix;
+  };
+}
+```
+
+The imported file is a normal NixOS module. Give it the services, users, bootloader, and hardware configuration that the host needs. You can also define the module inline.
+
+`target.host` is the SSH destination: `user@host`, `user@host:port`, or `ssh://user@host:port`. NixOS deployment and installation require root SSH. A nix-darwin deployment can use an administrator with passwordless `sudo`. A home-manager-only machine can omit `target.host` to activate locally. Setting it to `localhost` still uses SSH.
+
+Names must start with a letter or underscore and contain only letters, digits, underscores, and hyphens. The roles are `nixos`, `nix-darwin`, and `home-manager`. A machine can have a system role and a home-manager role; both use the same target.
+
+### Inspect and build
+
+```sh
+devenv machines info
+devenv build machines.server
+# Or build only one role:
+devenv build machines.server.build.nixos
+```
+
+`info` reads machine metadata without building or contacting targets. `build` produces the configured role outputs locally without deploying them. If a role needs an input you have not added, devenv gives a `devenv inputs add` hint. The build may still need a matching local architecture or a configured Nix builder. If you use the default hardware report path instead of setting `hardware.facter = null`, add the nixos-facter input and provide that report before building.
+
+### SSH settings
+
+For direct SSH and `nix copy`, devenv accepts new host keys and sets a connection timeout. Preload `known_hosts` if you need stricter verification. To override SSH options, set `target.sshOpts`:
+
+```nix
+machines.server.target.sshOpts = [ "-o" "IdentitiesOnly=yes" ];
+```
+
+When an install sends local secrets, encryption keys, or extra files, devenv requires a known host key from its first connection and disables forwarding. Add the host keys for both the original host and the kexec installer if they differ. You can select a dedicated file with `[ "-o" "UserKnownHostsFile=/absolute/path" ]`. The stricter settings cannot be overridden with `sshOpts`.
+
+## Install NixOS on a fresh host
+
+`install` connects to a Linux host over root SSH, boots a temporary NixOS installer with kexec, detects hardware, builds the new system, partitions disks with disko, installs NixOS, and reboots. The host does not need to be running NixOS beforehand.
+
+Add the inputs used by the disk layout and hardware detection if they are not already in your project:
+
+```sh
+devenv inputs add disko github:nix-community/disko --follows nixpkgs
+devenv inputs add nixos-facter-modules github:nix-community/nixos-facter-modules
+```
+
+Then define the host, including its disk layout and bootloader. The example below is for a UEFI host with one disk. Replace the disk ID and provide suitable networking and SSH configuration before using it.
+
+### Disk layout with disko
+
+```nix title="devenv.nix"
+{ ... }: {
+  machines.server = {
+    system = "x86_64-linux";
+    target.host = "root@server.example.com";
     nixos = {
       disko.devices.disk.main = {
-        # Use a stable path under /dev/disk/by-id; kernel names like /dev/sda
-        # reorder across reboots and live USB sessions and have wiped the
-        # wrong disk for real users. Look up the id on the target with
-        # `ls -l /dev/disk/by-id`.
         device = "/dev/disk/by-id/ata-REPLACE-ME";
         type = "disk";
         content = {
@@ -122,192 +118,95 @@ inputs:
       };
       boot.loader.systemd-boot.enable = true;
       services.openssh.enable = true;
+      users.users.root.openssh.authorizedKeys.keys = [ "ssh-ed25519 ..." ];
     };
   };
 }
 ```
 
-A few things the example bakes in that are worth knowing before you copy it:
-
-- **Use `/dev/disk/by-id/...`, not `/dev/sda`.** Kernel device names reorder across reboots and live USB sessions. This is the footgun that has wiped the wrong disk for real users. Stable paths under `/dev/disk/by-id` or `/dev/disk/by-path` are the only safe choice for `install`.
-- **UEFI only.** The example pairs `systemd-boot` with an `EF00` ESP, which silently requires UEFI firmware. BIOS and legacy boot hosts (common on older dedicated servers and some VPS providers) need a GRUB setup with a BIOS boot partition instead.
-- **The 512M ESP is intentional.** It is sized to fit several systemd-boot generations without running out of space as kernels accumulate. disko does not support resizing partitions in place, so pick a sensible size at install time.
-- **The layout is effectively immutable.** Changing partition shape, filesystem type, or encryption setup after install is not an in place operation; plan to back up, reinstall, and restore.
-- **ZFS has an extra step.** If you create a non root ZFS pool in your layout, add it to `boot.zfs.extraPools` in the same `nixos` module. Otherwise the pool is not imported at boot and the target hangs at stage 1 on first reboot.
-
-### Hardware detection with nixos-facter
-
-devenv uses [nixos-facter](https://github.com/nix-community/nixos-facter) to capture each machine's hardware profile. facter produces a `facter.json` report that replaces the traditional `hardware-configuration.nix`: initrd kernel modules, CPU microcode, GPU drivers, and network controller modules are all derived from the report by the facter NixOS module, which devenv imports automatically for every `nixos` entry.
-
-On first `install` devenv probes the target over SSH after kexec and before disko, writes the report to `.machines/<name>/facter.json` in your project root, and stages it with `git add --intent-to-add`. The directory is dotted so it stays out of the way, but the files inside **must be committed to git**. Without a committed report, teammates and CI cannot build the machine closure without first reaching the live target, and every fresh checkout would have to re probe hardware.
-
-Each machine gets its own subdirectory keyed by the machine name. facter reports contain machine specific identifiers (disk UUIDs, MAC addresses, serial numbers), so sharing a report across hosts is almost always wrong; the per machine layout is intentional.
-
-Override the default path per machine with `machines.<name>.hardware.facter`:
-
-```nix title="devenv.nix"
-{ ... }: {
-  machines.web1 = {
-    system = "x86_64-linux";
-    target.host = "root@web1.example.com";
-    hardware.facter = ./hardware/web1.json;
-    nixos = {
-      # ...
-    };
-  };
-}
-```
-
-Set `hardware.facter = null;` to opt a machine out entirely, for example when you maintain a hand written `hardware-configuration.nix` instead. `nix-darwin` and `home-manager` entries ignore the option; only `nixos` entries carry hardware reports.
+Find the disk ID on the target with `ls -l /dev/disk/by-id`. Use a stable `/dev/disk/by-id/` or `/dev/disk/by-path/` path. Names such as `/dev/sda` can change between boots and point at the wrong disk. The example requires UEFI; BIOS hosts need a different bootloader and partition layout. Changing partitions or filesystems later generally requires a backup and reinstall. Test the disko layout in a VM before using real disks. For a non-root ZFS pool, add it to `boot.zfs.extraPools` so it is imported at boot.
 
 ### Installing on a fresh host
 
-Install over SSH. The target is read from `machines.<name>.target.host`:
+Before running `install`, verify the SSH destination and disk IDs. The target must allow root SSH, support kexec, and have `tar` and `curl`. Allow roughly 1 GB of free RAM for the temporary installer. If kexec is unavailable, boot a suitable installer yourself and use `--phases facter,disko,install,reboot`.
 
-```sh
-$ devenv machines install server
-```
+:::caution[Install wipes disks without a confirmation prompt]
 
-devenv connects over SSH, kexecs into a minimal installer, and collects hardware information. It then builds the complete NixOS system before running disko to partition and format, copies that exact built system, installs the bootloader, and requests a reboot. A failed system build stops installation before disk mutation. Hardware discovery on a first install still requires entering the installer, so build failure can leave the target running the installer. The remote only needs SSH access and a running Linux kernel. No pre-existing NixOS is required.
-
-Install requires an explicit name. Because it wipes disks, running `devenv machines install` with no arguments is an error rather than "install everything". You can still install more than one host in a single invocation by naming them, and the named hosts are installed in parallel:
-
-```sh
-$ devenv machines install server1 server2
-```
-
-Pass `--max-concurrent N` to cap how many hosts install at once. `--max-concurrent 1` runs them one at a time, which is useful for a controlled rollout or for watching a single host closely. (`-j` remains the global Nix `max-jobs` flag.)
-
-#### Preflight for install
-
-Before running `install` against a real target, confirm:
-
-- **Root SSH is enabled on the remote installer.** Install logs in as `root` and does not escalate with `sudo`. Many cloud minimal images disable root login by default; either pick an image that allows it or run `passwd root` on the console before invoking install.
-- **The target kernel can kexec.** kexec is how devenv pivots into the NixOS installer without requiring pre installed NixOS. If kexec is unavailable, boot an installer with SSH and nixos-facter manually, then use `devenv machines install server --phases facter,disko,install,reboot` to omit kexec. This still partitions the configured disks; `deploy` does not install a fresh system to disk.
-- **The target has roughly 1 GB of free RAM.** The kexec'd installer holds the next system closure in memory before writing it to disk, and smaller VPS instances (512 MB, 1 GB) have OOMed mid run.
-- **TCP 22 is reachable from the host running devenv.** Ordinary installs add the target to `known_hosts` on first contact because `StrictHostKeyChecking=accept-new` is the default. Installs that transmit local files require a pre-pinned identity as described under [SSH defaults](#ssh-defaults).
-
-The disko layout describes the filesystems and you own `boot.loader.*` directly. Everything else the target needs (initrd kernel modules, CPU microcode, GPU drivers, network controller modules) comes from the nixos-facter report that devenv generates on first install; see [Hardware detection with nixos-facter](#hardware-detection-with-nixos-facter).
-
-:::caution[Install wipes disks]
-
-`devenv machines install` partitions and formats the target according to your disko layout. Any data on the listed devices will be destroyed. There is no confirmation prompt, so only name hosts you actually mean to wipe. `devenv machines deploy` does not touch disks.
-
-There is no dry run or automatic resume. Re-running the default installation repeats disk partitioning and formatting. Experienced operators can select phases with `--phases` and use `--disko-mode mount` after verifying the target's actual disk and mount state. Phase selection does not verify that omitted phases completed successfully. An explicitly disk-only operation, including `--stop-after-disko`, does not build the final NixOS system. Test disko layouts with a disko VM test before pointing `install` at real hardware; building the output alone does not test the layout.
-:::
-
-If an install appears to hang right after the kexec phase, the most common cause is that DHCP handed the kexec'd installer a different IP than the one you started the run against. Check the console or DHCP lease table for the installer's new address; use a static address or a MAC reservation to avoid the problem on subsequent runs. See [Troubleshooting](#troubleshooting) for more symptoms.
-
-### Updating an existing host
-
-For machines that are already running NixOS, use `deploy`:
-
-```sh
-$ devenv machines deploy server
-```
-
-For NixOS, this builds the system and executor, shows the requested generations and closure changes, then asks for confirmation (default: no). On approval it applies the exact displayed outputs with generation checks, health checks, SSH confirmation, and timed rollback. No JSON file is needed. Use `--yes` for automation; without a terminal, deployment stops after saving the plan unless `--yes` is given.
-
-One deployment can include NixOS, nix-darwin, and standalone home-manager machines. All declared roles are included in the review. NixOS deployment requires root SSH and systemd and uses transactional rollback. nix-darwin and home-manager use direct activation without automatic rollback; the review identifies this per role. A colocated home-manager role activates after its system role succeeds.
-
-### Previewing a fleet deployment
-
-:::tip[New in version 2.2.3]
-
-`devenv machines plan server mac` builds every selected role, shows a summary, and saves a plan ID. NixOS entries also pin a deployment executor.
+`devenv machines install` partitions and formats the devices in your disko layout. A normal retry repeats those steps. Inspect the target before running it again; there is no dry run or automatic resume.
 :::
 
 ```sh
-devenv machines plan server
-# Saved plan: plan-...
-devenv machines apply plan-...
+devenv machines install server
 ```
 
-With no names, `plan` selects every machine with `target.host`. Explicit names can also select local home-manager entries. It uses the normal Nix build settings and reads each NixOS target's running system, selected system profile, and store closure over SSH. It does not copy outputs or activate anything. Root SSH is not required for these reads. nix-darwin and home-manager entries show pinned activation outputs without claiming a current-generation or access comparison.
-
-For automation, `devenv machines plan --json server > plan.json` exports the plan. The version 4 JSON has scope `fleet`. Each machine records its target, SSH options, platform, and its `nixos`, `nixDarwin`, and `homeManager` roles. The latter two contain pinned activation package paths, or null when absent. The `nixos` object contains `currentSystem`, `currentProfile`, `requestedSystem`, `executor`, `systemChanged`, `profileChanged`, `addedStorePaths`, and `removedStorePaths` plus `currentFacts`, `requestedFacts`, and access-impact `findings`. The executor path pins the health check and rollback timeout. Store paths are sorted and compared against the running system's closure; the executor's closure is separate from this comparison. Added paths may already exist elsewhere in the target store; removed paths are not scheduled for deletion. These lists describe closure membership, not download sizes or which services will restart. A matching system path does not prove application health or make activation scripts free of side effects.
-
-The plan covers every selected role, including home-manager alongside a system role. An observed NixOS generation change during the SSH query causes the command to fail. A later `deploy` builds again. To use the exact reviewed outputs, use `apply` instead.
-
-### Applying a reviewed plan
+The system builds **before** disko changes disks. A build failure stops before partitioning, but the target may already be running the temporary installer. `install` requires explicit names, including for a fleet:
 
 ```sh
-devenv machines plan server
-# Review the summary, then use the printed ID:
-devenv machines apply plan-...
+devenv machines install server1 server2 --max-concurrent 1
 ```
 
-`apply` uses the transactional executor for NixOS and direct activation for nix-darwin and home-manager. NixOS targets require root SSH and systemd. It reads current machine metadata to verify the target address, SSH options, declared roles, and platform still match the plan. It does not rebuild any role, so configuration changes after planning do not change what is applied. Saved plans live in `.devenv/machine-plans/<id>/` and keep every pinned role and executor rooted against garbage collection. Remove a saved plan directory when you no longer need its retained outputs. Plan IDs are local to the project. Exported JSON files can also be passed to `apply`; their outputs must exist in the local store. Regenerate older plans to include every role in the fleet format.
+Use `--max-concurrent N` to limit simultaneous installs. For an interrupted install, inspect the target before selecting phases with `--phases`. The phases run in this order: `kexec`, `facter`, `disko`, `install`, `reboot`. `--disko-mode mount` can mount an existing layout without repartitioning; `format` creates missing storage structures without the destroy phase; the default `disko` mode is destructive. `--stop-after-disko` and `--no-reboot` are available for controlled installs. Phase selection does not check whether omitted steps succeeded.
 
-Before copying, `apply` checks that every remote target is reachable. On NixOS, it also compares the running system, selected profile, and access facts against the plan, verifies facts from the pinned system, and recomputes findings. Then it copies every requested role and executor before activating any machine, and rechecks all targets after copying. A transfer failure or stale state detected at this boundary prevents all activations. Successful copies may remain in target stores. Each target executor checks generation preconditions again under its deployment lock at submission and immediately before activation. These checks coordinate devenv transactions; external activation tools do not share this lock and must not run concurrently.
+### Hardware detection with nixos-facter
 
-By default, machines apply sequentially in name order, stopping at the first failure. `deploy` and `apply` accept `--max-concurrent N` to activate in batches of up to N machines. A failed batch finishes its active machines and prevents the next batch from starting. Earlier successful roles stay applied, so this is not an atomic fleet transaction. Each machine applies its system role before home-manager. NixOS health checks, fresh SSH confirmation, and timed rollback follow the transactional behavior below. On a lost response, inspect `machines status` before retrying. Applying an unchanged system can still run activation scripts.
+During the first install, devenv runs nixos-facter in the temporary installer and saves `.machines/server/facter.json`. Commit that report so teammates and CI can build the same machine without contacting it. Reports contain host-specific details such as disk IDs and MAC addresses, so keep one per host.
 
-Treat the plan as a trusted deployment input: it selects executable store paths and is not signed or an approval record. Review the exact file passed to `apply`; keep it protected from edits between review and use. SSH host identity continues to use your SSH configuration and known-hosts policy.
+To use a different report path, set `machines.server.hardware.facter = ./hardware/server.json;`. Set it to `null` if you supply hardware configuration yourself. devenv imports the nixos-facter module automatically when a NixOS machine has a report.
 
-### Checking access changes without building
+## Updating an existing host
 
-:::tip[New in version 2.2.3]
-
-`devenv machines check server` evaluates access configuration and reads the target's current facts over SSH. It does not build derivations, compare closures, copy outputs, create an applicable plan, or test activation health. Evaluation can still fetch inputs. Evaluation can reuse existing derivation outputs, but local and remote builds and substitution are disabled. If evaluation needs an unavailable derivation output, the check fails.
-:::
+For a configured host that is already running NixOS:
 
 ```sh
 devenv machines check server
-devenv machines check --json server
+devenv machines deploy server
 ```
 
-With no names, `check` selects all remote NixOS machines. The JSON report uses scope `configuration-access` and includes structured findings with stable `code`, `severity`, `message`, `before`, and `after` fields. Errors produce a nonzero exit status while preserving the JSON report on stdout. Warnings alone do not fail the check.
+`check` compares declared SSH access with facts read from the target, without building or changing it. It blocks reviewed deployments that would disable SSH or root login, and warns about changes such as SSH ports and administrator keys. It cannot verify external firewalls, dynamic keys, or that you possess a working key. `check --json server` gives structured results for automation.
 
-The same access analysis appears in deployment plans. Disabling SSH or setting `PermitRootLogin = "no"` blocks reviewed deployment before copying; `--yes` cannot bypass these errors. Warnings describe changed SSH ports, removed declared administrator keys, hostname changes, missing reboot recovery, and SSH ports absent from declared global firewall allowances. A hostname change alone is not treated as proof of a wrong target.
+`deploy` builds every role on the machine, shows a plan, and asks for confirmation. After confirmation, it copies the reviewed outputs and activates them. Pass `--yes` for automation. NixOS requires root SSH and systemd. It does not repartition disks or reboot after a kernel change; reboot separately when needed.
 
-NixOS machine configurations install versioned public configuration facts at `/run/current-system/etc/devenv/machine-facts.json`. Evaluation uses the same facts definition. Facts contain SHA-256 hashes of declared administrator key entries, not their text, private keys, or secret values. Changing an entry's options or comment also changes its hash. Older targets without this file remain deployable, but the missing before/after comparison is reported explicitly. Unreadable or malformed facts and SSH failures fail the observation.
-
-These are configuration checks, not proof of connectivity. Dynamic key sources, home-directory authorized keys, SSH overrides, interface firewall rules, nftables, and other custom rules require manual review. External firewalls, actual key possession, and runtime changes are not established by declared facts. Post-activation SSH confirmation and timed rollback remain necessary.
-
-### Transactional NixOS deployment
-
-:::tip[New in version 2.2.3]
-
-The target-side deployment executor is experimental and handles the NixOS role in every deployment, including mixed fleets.
-:::
+### Review now, apply later
 
 ```sh
-devenv machines deploy server
+devenv machines plan server
+# Review the summary and note the printed plan ID.
+devenv machines apply plan-...
+```
+
+`plan` builds outputs and records the NixOS system, access facts, and store closure changes. It does not copy or activate anything. `apply` uses those exact outputs without rebuilding, checks that the machine still matches the plan, copies all outputs, then activates them. A changed NixOS generation or target definition makes the plan stale. For automation, `devenv machines plan --json server` exports a plan that `apply` can also read.
+
+Saved plans live under `.devenv/machine-plans/<id>/` and retain their outputs. Remove an old plan directory when you no longer need it. Treat a plan as a trusted deployment input because it selects executable store paths. Closure changes describe which paths are present, not download size or which services restart.
+
+### NixOS rollback and health checks
+
+NixOS deployment runs in a systemd service on the target. A watchdog restores the previous system if activation or a health check fails, or if the controller cannot confirm success before the deadline. The default deadline is 300 seconds; the default health check only verifies system paths. Add an application check when that is insufficient:
+
+```nix title="devenv.nix"
+{ ... }: {
+  machines.server.deploy = {
+    rollbackTimeout = 300; # 30 to 600 seconds
+    healthCheck = ''
+      /run/current-system/sw/bin/systemctl is-active --quiet my-app.service
+    '';
+  };
+}
+```
+
+The check runs as root. Use absolute paths for commands and allow enough time for service startup and SSH reconnection. If your connection drops, **check the result before retrying**:
+
+```sh
 devenv machines status server
 devenv machines rollback server
 ```
 
-Reviewed NixOS deployment requires root SSH access and a running NixOS system with systemd. It copies a small executor to the target, records the currently running and requested systems, and starts activation in a systemd service. A target lock prevents overlapping transactional activations, including requests from different controllers or machine aliases. `nixos-rebuild` and other deployment tools do not participate in this lock; do not run them concurrently.
+`status` reports the latest operation without building. `pending` means activation or recovery is still running; `rolled-back` and `rollback-failed` are failures; `unknown` means the last operation has no observable final result. `rollback` restores the previous recorded NixOS system after its service stops. A new deployment is blocked while the previous outcome is unknown.
 
-A target-side watchdog is armed before activation. After activation and target health checks pass, the CLI confirms the deployment through a fresh SSH request. If activation fails, a check fails or hangs, or confirmation never arrives, the watchdog stops the activation process group and restores the previous system when the deadline expires. The watchdog continues if the controller exits or SSH disconnects. The CLI normally waits for the result, for up to 15 minutes of polling. A lost connection or observation timeout does not cancel activation and does not mean activation failed. Use `status` after reconnecting to reconcile the outcome. Service logs are available with `journalctl -u <unit>`, using the unit reported by status.
+The target also attempts recovery after reboot if a deployment was left unconfirmed and the new system reaches userspace. Recovery cannot fix an early boot failure, reverse application data changes, or undo side effects of activation scripts. A kernel change still needs a reboot. The last operation and retained system paths live under `/var/lib/devenv-machines` and `/nix/var/nix/gcroots/devenv-machines/` on the target. Older history can be removed after confirming no operation needs it; keep the latest operation and its executor.
 
-`status` returns JSON keyed by machine name without building machine outputs. With no names, it selects all configured remote NixOS machines. The record includes the deployment ID, operation, previous and requested store paths, phase, unit, and outcome. `uninitialized` means no executor has been installed. `pending` means activation, confirmation, or watchdog recovery is still pending. `rolled-back` means the watchdog restored the previous system; `rollback-failed` records a failed recovery attempt and includes `rollbackError`. Both are deployment failures for the CLI. `unknown` means a recorded operation has no terminal result and its service is no longer running or cannot be observed. A succeeded record describes that deployment's result, not an ongoing health check or proof that nobody subsequently changed the system.
+## nix-darwin and home-manager
 
-`rollback` switches to the last operation's recorded previous NixOS system. It requires no local build and can also recover an interrupted operation once its service is known to have stopped. An active service or an observation error blocks rollback to avoid competing switches. A new deployment is blocked while the previous outcome is unknown. Rollback itself is recorded and can fail; inspect its result before taking further action.
-
-Configure application health checks and the total deadline per machine:
-
-```nix
-machines.server.deploy = {
-  rollbackTimeout = 300; # 30 to 600 seconds, including activation and confirmation
-  healthCheck = ''
-    /run/current-system/sw/bin/systemctl is-active --quiet my-app.service
-  '';
-};
-```
-
-Health checks run as root with `set -euo pipefail`; use absolute paths for tools. The default check is `true`, in addition to checking the system profile and running-system paths. The deadline starts before activation, so allow time for slow service startup and SSH reconnection. Automatic recovery itself has a five-minute limit. Confirmation is specific to the deployment ID and is rejected after its deadline. A lost confirmation response is ambiguous: use `status` to determine whether it committed.
-
-NixOS configurations built by machines include a persistent `devenv-machines-recover` service. After reboot, it detects an unconfirmed deployment from an earlier boot and launches rollback once `multi-user.target` is reached. The recovery attempt is recorded before launch, and `status` includes its `recoveryUnit` and `recoveryBootId`. Confirmed deployments remain committed across reboot. Recovery restores the system profile and boot configuration as well as switching the running configuration.
-
-Boot recovery requires the booted configuration to include this service and reach userspace with the retained closures and state available. It cannot recover a kernel or early-boot failure. An interrupted rollback or ambiguous boot-recovery launch is **not** retried automatically, including on later reboots; inspect `status` and use explicit `rollback`. Changing kernels still requires a subsequent reboot. Success requires activation, matching system paths, health checks, and controller confirmation. It does not guarantee reversibility of application data or activation-script side effects. Home-manager is not included in reviewed NixOS deployment and is not reverted by `machines rollback`.
-
-State is stored under `/var/lib/devenv-machines`, with the latest record in `current.json`. Each operation retains its previous system, requested system, and executor through roots under `/nix/var/nix/gcroots/devenv-machines/<deployment-id>`. These roots deliberately retain recovery history through garbage collection. Older operation directories can be removed manually when no operation is running and their systems are no longer needed. Keep the latest operation's directory and the `executor` link for status and rollback. The helper and closures must remain available on disk; a broken system that cannot boot or accept SSH requires out-of-band recovery.
-
-## nix-darwin
-
-nix-darwin machines follow the same shape. Set `system` to a Darwin value and provide a `nix-darwin` module:
+A nix-darwin machine uses a Darwin `system` and a `nix-darwin` module:
 
 ```nix title="devenv.nix"
 { ... }: {
@@ -322,26 +221,12 @@ nix-darwin machines follow the same shape. Set `system` to a Darwin value and pr
 }
 ```
 
-Deploy with:
+Run `devenv machines deploy mac` to switch it. There is no `machines install` for macOS. A non-root SSH user needs passwordless `sudo` because activation is noninteractive. nix-darwin deployment has no automatic rollback.
 
-```sh
-$ devenv machines deploy mac
-```
-
-This is equivalent to `darwin-rebuild switch` over SSH. There is no `install` equivalent for darwin, since Apple ships the OS. Consequently, the `install.*` bootstrap settings—including SecretSpec—are NixOS-only.
-
-Two macOS specific things to know before deploying:
-
-- **sudo over SSH and TouchID.** On macOS, admin user `sudo` can be gated on TouchID, which cannot be satisfied by devenv's non-interactive SSH command. Either SSH in as `root` (which requires enabling root login and is not recommended by Apple), or configure passwordless `sudo` for the deploy user in the nix-darwin module (`security.sudo.extraConfig` or the equivalent). devenv invokes `sudo -H` automatically for non-root targets.
-- **Activation expects `HOME=/var/root`.** darwin activation uses launchd and `defaults` which resolve paths relative to `$HOME`, and without an explicit `HOME` set the activation misbehaves in subtle ways. devenv sets `HOME=/var/root` for the remote activation step so you do not need to; this is documented here so you are not surprised if you look at the remote command line.
-
-## home-manager
-
-home-manager is the one case where `target.host` is genuinely optional. Leave it unset for a local activation, or set it for remote:
+A home-manager machine can activate locally or over SSH:
 
 ```nix title="devenv.nix"
 { ... }: {
-  # Local activation: no target.host, runs on the current machine.
   machines.me = {
     home-manager = {
       home.username = "jdoe";
@@ -350,7 +235,6 @@ home-manager is the one case where `target.host` is genuinely optional. Leave it
     };
   };
 
-  # Remote activation: target.host set, runs over SSH.
   machines.workstation = {
     target.host = "jdoe@workstation.lan";
     home-manager = {
@@ -362,31 +246,18 @@ home-manager is the one case where `target.host` is genuinely optional. Leave it
 }
 ```
 
-Activation runs `home-manager switch`:
+`devenv machines deploy me` activates locally. `devenv machines deploy workstation` activates over SSH. home-manager also has no automatic rollback.
 
-```sh
-$ devenv machines deploy me
-$ devenv machines deploy workstation
-```
+### Combine system and user roles
 
-## Combining roles on one machine
-
-A single entry can carry more than one role. Both modules apply to the same host, using the same `target`:
+Add `home-manager` to the same machine to deploy the user's configuration after NixOS or nix-darwin succeeds. Both roles use the same `target.host`:
 
 ```nix title="devenv.nix"
 { ... }: {
   machines.server = {
     system = "x86_64-linux";
-    target.host = "root@192.0.2.10";
-
-    nixos = {
-      services.openssh.enable = true;
-      users.users.jdoe = {
-        isNormalUser = true;
-        extraGroups = [ "wheel" ];
-      };
-    };
-
+    target.host = "root@server.example.com";
+    nixos = import ./nixos/server.nix;
     home-manager = {
       home.username = "jdoe";
       home.homeDirectory = "/home/jdoe";
@@ -396,392 +267,99 @@ A single entry can carry more than one role. Both modules apply to the same host
 }
 ```
 
-`devenv machines install server` provisions only the NixOS role. After the target reboots, `devenv machines deploy server` reviews and activates all declared roles in order, including the home-manager configuration for `jdoe`.
+`install` provisions only NixOS. After the first boot, `deploy` activates both roles. The system role runs first, then home-manager as `home.username`. Make sure that user exists and its home directory matches the system configuration. Pin the user's UID and group GID on a new NixOS host so later changes do not break file ownership.
 
-Roles activate in a fixed order: NixOS (or nix-darwin) first, then home-manager. home-manager depends on the user existing on the target, so running it after the system switch is the only order that works for a fresh entry.
+The roles are separate activations. If home-manager fails after NixOS succeeds, the NixOS deployment remains applied. NixOS rollback does not revert home-manager files.
 
-When the shared SSH target logs in as `root` or as a different administrator, devenv runs the home-manager activation as `home.username` with `HOME` set to `home.homeDirectory`. It uses `runuser` for root sessions and falls back to passwordless `sudo` for administrator sessions.
+## Deploy several machines
 
-The two roles are not one transaction. NixOS must complete its transaction and confirmation before home-manager starts. If NixOS fails, home-manager is not attempted. If home-manager fails after NixOS succeeds, the confirmed NixOS system stays applied and the machine is reported as failed. The same ordering applies to nix-darwin and home-manager, but neither role has automatic rollback. Inspect completed roles before retrying; activation scripts can run again and can have side effects.
+With no names, `devenv machines deploy` selects all machines with `target.host`. Local home-manager machines must be named explicitly. To limit the deployment, pass names:
 
-A couple of footguns to know about when combining roles on one entry:
+```sh
+devenv machines deploy
+devenv machines deploy server1 server2
+devenv machines deploy me
+```
 
-- **Pin `users.users.<name>.uid` and `users.groups.<name>.gid` explicitly.** On a fresh install the user is created from the NixOS configuration, and if the uid is not pinned, a later NixOS change that renumbers it will silently break ownership of every file home-manager wrote under that user. Pinning both values up front avoids this class of bug entirely.
-- **Make sure `home.homeDirectory` matches the path NixOS actually creates.** A `/Users/jdoe` value copy pasted from a nix-darwin example will activate cleanly on a Linux target and write files to the wrong place, because home-manager does not cross check the NixOS user's `home` attribute. Keep the two in sync, or factor them through a shared `let` binding.
+The command builds and reviews every selected role, checks every target, and copies every remote output before activating any machine. By default, machines activate one at a time in name order. `--max-concurrent N` activates batches of up to N. If a batch fails, active machines finish but later batches do not start. Successful activations remain applied; the fleet is not one transaction.
 
-## Secrets
+There are no machine tags or CLI group selectors. Use explicit names or declare different sets of machines in [profiles](/profiles/) and run, for example, `devenv --profile staging machines deploy`.
 
-Use [sops-nix](https://github.com/Mic92/sops-nix) or [agenix](https://github.com/ryantm/agenix) inside your `nixos` or `home-manager` module for steady-state secret management. Both integrate cleanly with the standard NixOS activation that `deploy` runs.
+### Build for another platform
 
-:::caution[Do not inline secrets into Nix modules]
+By default, devenv builds on the machine running the command. For a mixed fleet, `--use-machines-as-builders` lets C-Nix use declared remote machines as builders for their matching `system`:
 
-Any literal string you embed directly into a module, for example `environment.etc."foo".text = "hunter2";` or a password baked into a `services.*` option, lands in the world readable `/nix/store`. Every user on the target can read it, and the value is also copied to every substituter the target trusts. Always route runtime secrets through sops-nix or agenix (or equivalent) rather than embedding them.
-:::
+```sh
+devenv machines deploy --use-machines-as-builders
+```
+
+The flag also works with `install`, but a fresh target cannot build its own system. Another declared machine with the matching architecture must be available. This flag currently requires the C-Nix backend. Plain `devenv build` does not accept it.
+
+Remote builders cannot use `target.sshOpts`. Put builder authentication and routing in an SSH host alias instead, configured for the user running the nix-daemon. The target must accept the copied paths: make the invoking user trusted with `nix.settings.trusted-users`, or sign the paths with a key the target trusts. Otherwise the copy can fail with a missing trusted signature. Devenv enables substituters for these builders.
+
+## Bootstrap files and secrets for NixOS installs
+
+Use sops-nix or agenix in your NixOS or home-manager modules for ongoing secret management. Never put a secret literal in a Nix module: it would be copied into the readable Nix store. `install` can place the initial credentials needed on first boot.
+
+| Option | When it runs | Purpose |
+| --- | --- | --- |
+| `install.encryptionKeys` | Before disko | Send local key files used by the disk layout, such as a LUKS key |
+| `install.extraFiles` | After nixos-install | Copy local files into the installed system |
+| `install.secrets` | After extra files | Write named SecretSpec values into the installed system |
+| `install.copyHostKeys` | Before reboot | Preserve the installer's SSH host keys |
+
+Use **strings** for local file paths, such as `"secrets/server.key"`, rather than Nix path literals such as `./secrets/server.key`. Nix path literals copy file contents into the Nix store. File owners use numeric `uid:gid` because the installer may not know the users in the new system. For `install.secrets`, modes such as `0400` and `0600` are accepted. All local file payloads require pre-pinned SSH host keys; see [SSH settings](#ssh-settings).
 
 ### Bootstrapping from SecretSpec
 
-Runtime secret stores still need an initial credential—for example the age identity that lets sops-nix decrypt secrets on first boot. `install.secrets` writes those bootstrap files from the active [SecretSpec](/integrations/secretspec/) profile after `nixos-install` and before reboot:
-
-```yaml title="devenv.yaml"
-secretspec:
-  enable: true
-  provider: keyring
-  profile: production
-```
+For example, you can provide the age key that sops-nix needs on first boot. Declare the secret in `secretspec.toml`:
 
 ```toml title="secretspec.toml"
 [project]
 name = "infrastructure"
 revision = "1.0"
-require_reason = false
 
 [profiles.production]
-WEB1_AGE_KEY = { description = "sops age identity for web1" }
+SERVER_AGE_KEY = { description = "sops age identity for server" }
 ```
 
-```nix title="devenv.nix"
-machines.web1 = {
-  target.host = "root@web1.example.com";
+Then add this mapping to your existing machine declaration:
 
-  install.secrets."/var/lib/sops-nix/key.txt" = {
-    secret = "WEB1_AGE_KEY";
+```nix title="devenv.nix"
+{ ... }: {
+  machines.server.install.secrets."/var/lib/sops-nix/key.txt" = {
+    secret = "SERVER_AGE_KEY";
     owner = "0:0";
     mode = "0600";
   };
-
-  nixos = {
-    sops.age.keyFile = "/var/lib/sops-nix/key.txt";
-    # ...
-  };
-};
+}
 ```
 
-The attribute name is an absolute path in the installed system. `secret` is a name from the selected SecretSpec profile. The default execution mode is `local`: values are resolved and materialized on the workstation before any selected machine starts preflight or destructive work, then streamed to SSH on stdin. They do not appear in machine metadata, process arguments, remote scripts, or Nix store paths. During `machines install`, devenv also withholds resolved SecretSpec values from Nix evaluation—`config.secretspec.secrets` is empty for that invocation—so imported modules cannot accidentally interpolate a bootstrap credential into a derivation. Profile and provider metadata remain available.
+In the NixOS module, configure sops-nix and set `sops.age.keyFile = "/var/lib/sops-nix/key.txt";`. By default, `execution = "local"`: devenv resolves the value on your workstation and streams it over SSH. Enable SecretSpec in `devenv.yaml`, then configure its provider and profile there or with `--secretspec-provider` and `--secretspec-profile`. The value is not put in the Nix store. Bootstrap files are written only by `install`, not refreshed by `deploy`.
 
-All local install file transfers—SecretSpec values, encryption keys, and extra files—use a byte-counted frame. The receiver writes under `umask 077` to a temporary file in the destination directory, rejects truncation, applies ownership and permissions, syncs it, and atomically renames it into place. A failed transfer leaves an existing destination unchanged and removes the temporary file. Payload copies use zeroize-on-drop memory, and core dumps are disabled for the install process and its children.
-
-File ownership must use numeric `uid:gid`, because the live installer does not know users declared only in the new NixOS system. Secret modes cannot contain special or execute bits, group write, or permissions for other users; `0400`, `0600`, and `0640` are accepted.
-
-SecretSpec entries with `as_path = true` are supported: devenv reads the retained temporary file and sends its contents, not its local filename. When installing several machines, every entry can select different secret names, or several entries can reference one shared secret. The provider and profile are global to the invocation; override them with `--secretspec-provider` and `--secretspec-profile`.
-
-#### Resolving on the target
-
-To keep provider credentials and resolved values off the workstation, select target execution for a machine:
-
-```nix title="devenv.nix"
-machines.web1 = {
-  target.host = "root@web1.example.com";
-
-  install.secretspec = {
-    execution = "target";
-    profile = "production";
-  };
-
-  install.secrets."/var/lib/sops-nix/key.txt" = {
-    secret = "WEB1_AGE_KEY";
-    owner = "0:0";
-    mode = "0600";
-  };
-
-  nixos = {
-    sops.age.keyFile = "/var/lib/sops-nix/key.txt";
-    # ...
-  };
-};
-```
-
-In this mode, devenv parses `secretspec.toml` but never asks the workstation's provider for this machine's values. It flattens manifest inheritance, forces only the requested entries to file output, and sends the self-contained declaration manifest—without any fetched provider values—to the installer over SSH. Profiles, scopes, provider aliases, composed declarations, and validation policy are retained so the target runs normal SecretSpec resolution rather than a devenv-specific provider implementation. Committed SecretSpec defaults remain part of that manifest, so do not use defaults for values the workstation must not know. The target-architecture `secretspec` executable is included in the NixOS system closure; after `nixos-install`, the live installer runs it directly from that closure and asks only for each `install.secrets` reference. Resolved bytes stay in a private target-side temporary directory and are atomically installed beneath `/mnt`.
-
-Target execution deliberately does not inherit the workstation's SecretSpec provider or profile. When `provider` is `null`, devenv omits `--provider`, preserving manifest provider references, target environment selection, and target-global SecretSpec configuration. An explicit value is an opt-in override and, like SecretSpec's own `--provider`, applies to the complete resolution including references. Treat this option as a non-secret provider selector: it is machine metadata and becomes part of the remote command, so credentials belong in target-side provider configuration rather than the override. `profile` behaves the same way: when omitted, SecretSpec selects it from the target environment or target-global configuration and ultimately falls back to `default`. Set it explicitly when the machine declaration should enforce a profile. Devenv also removes workstation-side `SECRETSPEC_*` selector variables from the `ssh` child, preventing an OpenSSH `SendEnv` rule from silently restoring the workstation selection.
-
-Target-only bootstrapping does not require `secretspec.enable` in `devenv.yaml`; only the committed `secretspec.toml` declaration is required on the workstation. Global `--secretspec-provider` and `--secretspec-profile` flags affect local execution, not target execution.
-
-Devenv never copies or explicitly forwards provider credentials. They must already be available to the **live installer** through workload identity, instance metadata, its SecretSpec global configuration, or another provider-native mechanism. Credentials that become available only after boot are not usable by this installer-time mode. A short-lived, machine-scoped bootstrap credential can also be provisioned independently, but forwarding the workstation's long-lived credential defeats the isolation this mode provides. For installs that transmit sensitive payloads, devenv clears inherited OpenSSH `SendEnv` rules so ambient workstation credentials cannot be forwarded even when the server accepts them.
-
-The resolver is the SecretSpec executable bundled with the same devenv release as the machines module, built for the target architecture. It does not use `pkgs.secretspec`, so an older or independently versioned nixpkgs package cannot drift from the manifest implementation in devenv. Providers that require helper commands can add target-architecture packages:
+To resolve the secret in the temporary installer instead, set:
 
 ```nix
-install.secretspec = {
+machines.server.install.secretspec = {
   execution = "target";
-  extraPackages = targetPkgs: [ targetPkgs.sops targetPkgs.pass ];
+  profile = "production";
 };
 ```
 
-The dedicated launcher references the bundled resolver's exact store path, so an unrelated system package cannot win a `bin/secretspec` collision. `extraPackages` enter a private resolver `PATH`, making provider helper commands available from the live installer without adding them to the installed system's global command namespace.
+This sends the committed SecretSpec declaration without fetching the value on the workstation. The installer must already have access to the provider, for example through instance identity. Target execution does not require `secretspec.enable` in `devenv.yaml`; global SecretSpec CLI flags apply only to local execution. You can add provider helper programs with `install.secretspec.extraPackages = pkgs: [ pkgs.sops ];`. Target execution keeps provider credentials off the workstation, but the workstation still controls the system it installs, so review that configuration before trusting it with secrets.
 
-Target execution protects secrets from an honest workstation process, but a workstation that controls a malicious NixOS configuration could still install software that exfiltrates values after the target fetches them. Removing that deeper trust requires independently verified or signed system closures and, where appropriate, Secure or Measured Boot with provider-side attestation.
-
-`install.secrets` is intentionally bootstrap-only. It runs as part of the `install` phase, after `install.extraFiles` (so a SecretSpec file wins if both target the same path) and before `install.copyHostKeys` and reboot. It is not reapplied by `devenv machines deploy`; use sops-nix, agenix, or another runtime mechanism for rotation.
-
-LUKS root unlock keys are a separate case: they are consumed by disko at install time, not at runtime. Point disko's `passwordFile` or `settings.keyFile` at an installer path and map that path to a local source with `install.encryptionKeys`. devenv reads the source on the workstation and streams it to the live installer before disko runs, without putting it in the Nix store.
-
-## Deploying multiple machines
-
-`devenv machines deploy` without arguments selects every machine with `target.host`. A mixed fleet gets one review and confirmation, with all system and home-manager outputs prepared before activation. Local-only entries are excluded unless named explicitly:
-
-```sh
-devenv machines deploy              # All remote machines, across platforms
-devenv machines deploy --yes        # The same fleet without an interactive prompt
-devenv machines deploy me           # Explicitly include a local home-manager entry
-```
-
-You can also pass several names explicitly:
-
-```sh
-$ devenv machines deploy server1 server2 workstation
-```
-
-Bulk behavior applies to `deploy` only. `install` always requires explicit names, since it wipes disks.
-
-### Filtering machines
-
-There are no CLI tags, groups, or label selectors on `machines` itself. If you want to roll out a subset (for example staging before production), the supported options are:
-
-- Pass the names explicitly on the command line, as above.
-- Declare machines inside [profiles](/profiles/) and activate the profile for the run:
-
-    ```nix title="devenv.nix"
-    {
-      profiles = {
-        staging.module = {
-          machines.web1 = { system = "x86_64-linux"; target.host = "root@staging-web1"; nixos = { ... }; };
-          machines.web2 = { system = "x86_64-linux"; target.host = "root@staging-web2"; nixos = { ... }; };
-        };
-
-        production.module = {
-          machines.web1 = { system = "x86_64-linux"; target.host = "root@prod-web1"; nixos = { ... }; };
-        };
-      };
-    }
-    ```
-
-    Then scope a run to one tier with `devenv --profile staging machines deploy`. Profiles compose with hostname and user profiles, so the same mechanism lets you gate machines on the operator or the workstation running the deploy.
-
-Keep this at the Nix layer rather than wrapping `devenv machines deploy` in a shell loop: the bulk run reports a single summary and a single exit code, which is the point of running it as one command.
-
-### Parallelism and failure handling
-
-All deployments build and review every selected role, copy every remote output, and recheck all targets before activation. Preparation failure prevents every activation, including local home-manager activation.
-
-By default, machines activate sequentially in name order. `--max-concurrent N` on `deploy` or `apply` activates batches of up to N machines. Roles within each machine remain sequential: system first, home-manager second. If any machine fails, the remaining active machines in its batch finish, and no later batch starts. Successful activations remain applied; the command reports completed machines and failures and exits nonzero. This is not a fleet-wide transaction.
-
-NixOS retains its health checks, SSH confirmation, and rollback deadline at every concurrency level. Direct roles do not gain automatic rollback by sharing a fleet with NixOS. The same `--max-concurrent` flag also caps concurrent `install` jobs. (`-j` is the global Nix build-job setting.)
-
-## Progress and logs
-
-`install` and `deploy` report progress through devenv's activity tracing system. The `deploy` and `plan` commands use line-based progress so their summaries and confirmation prompts remain visible. For other commands, in TUI mode each machine shows up as its own tracked operation, with distinct phases for build, copy, and activation so you can see which step a stuck run is waiting on. When the TUI is disabled (for example, when tracing is routed to stderr), the same events are emitted as log lines, keeping CI output readable.
-
-Deployment reports each completed machine. Failures identify the affected role and previously completed machines.
-
-## Cross-platform deploys
-
-A single `devenv.nix` can declare machines for different systems, and `devenv machines deploy` handles each one independently. The interesting question is where the closure for a machine gets built when its `system` does not match the host running devenv.
-
-By default, devenv builds locally. If the current host can't realize a derivation for the target's `system`, the build fails loudly rather than silently falling back to building somewhere else.
-
-Pass `--use-machines-as-builders` to change that. With the flag set, devenv adds every entry with `target.host` to Nix's remote-builder list, tagged with that entry's `system`. Nix can then route a build to a machine whose system matches the derivation—for example, an x86_64-linux builder can build for an x86_64-linux target while devenv itself runs on aarch64-darwin. The flag applies to builds performed by that `machines deploy` or `machines install` invocation; plain `devenv build` does not expose this flag.
-
-Nix's builder specification cannot represent arbitrary per-machine OpenSSH options. If a candidate builder has `target.sshOpts`, devenv rejects `--use-machines-as-builders` instead of silently connecting without them. Put builder-specific settings such as `IdentityFile` or `ProxyJump` in an SSH `Host` alias and use that alias in `target.host`.
-
-```sh
-$ devenv machines deploy --use-machines-as-builders
-```
-
-`install` is more constrained than `deploy`: the freshly kexec'd target has no usable Nix yet, so it can never be its own builder. Cross architecture installs therefore need either a local host whose `system` matches, or `--use-machines-as-builders` with another machine in the attrset that matches. Without one of those, run `devenv machines install` from a host whose architecture matches the fresh target. This is the same constraint nixos-anywhere operates under.
-
-### Builder trust
-
-The orchestrator (the host running `devenv machines deploy`) copies the closure built on the peer builder into the target. For that copy to succeed, the target's nix-daemon has to accept paths that were not signed by a locally trusted key. You have two ways to satisfy that requirement:
-
-- Add the invoking user to `nix.settings.trusted-users` on the target, for example `nix.settings.trusted-users = [ "root" "@wheel" ];`. Trusted users are allowed to push unsigned paths. This is the easier option and the one most users pick.
-- Sign the store paths before pushing them, by configuring matching `nix.settings.secret-key-files` on the builder and `nix.settings.trusted-public-keys` on the target.
-
-Without one of these, the copy step fails with `error: cannot add path '/nix/store/...' because it lacks a valid signature by a trusted key`. This is the number one failure mode for first time cross arch deploys.
-
-### Substituters on the builder
-
-devenv sets `builders-use-substitutes = true` on the ephemeral builder configuration it generates for `--use-machines-as-builders`. This lets the remote builder pull dependencies from the same substituters the orchestrator uses, instead of forcing the orchestrator to download every dependency locally and re upload it to the builder. For large closures the difference is significant.
-
-### SSH config and the nix-daemon
-
-The nix-daemon runs as `root` (or a dedicated build user), not as your interactive user, and it reads SSH configuration from that user's home directory. If you have custom host aliases, jump hosts, or identity files in your own `~/.ssh/config`, the daemon will not see them when it opens the builder connection. The generated C-Nix `builders` setting carries the SSH destination and system, but not arbitrary per-machine `target.sshOpts`; configure builder authentication and routing in the daemon user's SSH configuration. `target.sshOpts` still applies to devenv's direct SSH and `nix copy` connections.
-
-## Listing machines
-
-`devenv machines info` prints a table of every machine declared in `devenv.nix` with the metadata devenv uses to build, deploy, and install them:
-
-```sh
-$ devenv machines info
-+--------+--------------+-----------------+--------------+
-| Name   | System       | Target          | Roles        |
-+--------+--------------+-----------------+--------------+
-| server | x86_64-linux | root@192.0.2.10 | nixos        |
-+--------+--------------+-----------------+--------------+
-| me     | x86_64-linux | (no target)     | home-manager |
-+--------+--------------+-----------------+--------------+
-```
-
-Pass one or more names to restrict the listing, or no names to print every machine. Unknown names produce the same "Unknown machine(s)" error shape as `devenv machines deploy`. The command is strictly read-only: it evaluates `machinesMeta` and formats it, without forcing any `build.*` closures or touching any target.
-
-## Building without deploying
-
-Every machine is also exposed as a build target, so you can inspect or cache the closure without touching a remote. `devenv build machines.<name>` realises every role the machine declares (`nixos`, `nix-darwin`, `home-manager`) by flattening through the per-role build paths at `machines.<name>.build.<role>`:
-
-```sh
-$ devenv build machines.server
-/nix/store/...-nixos-system-server-24.11
-```
-
-Ask for a single role by naming it directly:
-
-```sh
-$ devenv build machines.server.build.nixos
-/nix/store/...-nixos-system-server-24.11
-
-$ devenv build machines.workstation.build.home-manager
-/nix/store/...-home-manager-generation
-```
-
-This mirrors the `devenv build outputs.<name>` pattern from [Outputs](/outputs/): the build walker picks up output-typed sub-options (`machines.<name>.build.nixos`, `.nix-darwin`, `.home-manager`) and exposes them under `build.*`. The user-facing `machines.<name>.nixos` / `.nix-darwin` / `.home-manager` options still hold the module definitions you wrote, unchanged, so they remain readable via `devenv eval`.
-
-Under the hood, each role resolves to its standard closure:
-
-- `nixos` → `nixpkgs.lib.nixosSystem` `config.system.build.toplevel`, with `disko.nixosModules.disko` auto-imported and, when `hardware.facter` is non-null, `nixos-facter-modules.nixosModules.facter` auto-imported too.
-- `nix-darwin` → `nix-darwin.lib.darwinSystem` `config.system.build.toplevel`.
-- `home-manager` → `home-manager.lib.homeManagerConfiguration` `activationPackage`.
-
-The supporting inputs (`disko`, `nixos-facter-modules`, `nix-darwin`, `home-manager`) are resolved lazily: a machine that only sets `home-manager` never forces `disko`, so you do not need to add every input unless the corresponding role is actually used. When a role is set without its backing input, `devenv build` fails with a targeted `devenv inputs add` hint pointing at exactly the input that is missing.
-
-## Known limitations
-
-A few behaviors are explicit non features, called out so you do not infer them from the tools devenv machines is compared to:
-
-- **nix-darwin and home-manager have no automatic rollback.** These roles can leave partial activation effects. NixOS roles use the rollback behavior described above, including in mixed fleets.
-- **Only `switch` activation.** There is no `boot`, `test`, or `dry-activate` mode, and no `--reboot` flag. If you need a reboot after a kernel update, follow `deploy` with a manual `ssh <host> systemctl reboot`.
-- **Health checks cover transactional NixOS only.** Configure `deploy.healthCheck`; direct activation reports the activation script result.
-- **State is local to each controller and target.** Saved plans live under `.devenv/machine-plans`; deployment checkpoints and recovery roots live on the target. There is no shared fleet coordinator.
-- **Resume is phase-based, not stateful.** Use `--phases` to restart at a known boundary after inspecting the target. devenv does not record completed phases or automatically infer where to resume.
-- **Multi role entries are not transactional.** NixOS plus home-manager on one entry can partially succeed. See [Combining roles on one machine](#combining-roles-on-one-machine) for the exact semantics.
-- **No CLI tags, groups, or label filters.** Filter at the Nix layer with `lib.filterAttrs`, or pass the names you want explicitly. See [Filtering machines](#filtering-machines).
+For other bootstrap files, use `install.extraFiles` with a string source path. For disk encryption, point disko's `passwordFile` or `settings.keyFile` at an installer path and map it to a local string path with `install.encryptionKeys`. `install.copyHostKeys = true` preserves SSH identity across first boot.
 
 ## Troubleshooting
 
-Common failure symptoms and what they usually mean:
-
-- **`Too many authentication failures` when connecting.** Your `ssh-agent` has more keys loaded than the remote `MaxAuthTries` allows, and the remote disconnects before the right key is offered. For direct deploy/install connections, pass `[ "-o" "IdentitiesOnly=yes" ]` via `target.sshOpts`; for Nix remote-builder connections, set it in the nix-daemon user's SSH configuration.
-- **Install hangs right after kexec.** The kexec'd installer most likely came up on a different IP than the one you started against, because DHCP handed it a new lease. Check the console or the DHCP server's lease table for the installer's new address, and use a static address or a MAC reservation for next time.
-- **`cannot add path '/nix/store/...' because it lacks a valid signature by a trusted key`.** A cross arch deploy is pushing an unsigned closure and the target's nix-daemon is refusing it. Add the invoking user to `nix.settings.trusted-users` on the target, or sign the paths. See [Builder trust](#builder-trust).
-- **`Host key verification failed` on first contact.** devenv normally uses `StrictHostKeyChecking=accept-new`, but installs that transmit `install.secrets`, `install.encryptionKeys`, or `install.extraFiles` force `yes` from the first connection. Pre-populate `~/.ssh/known_hosts` (or the file selected with `UserKnownHostsFile`) with every pre- and post-kexec target identity before starting the install.
-
-## Roadmap
-
-The machines work is organized into independently useful slices. Status labels below distinguish the current implementation from proposed follow-up interfaces.
-
-### Slice 1: hardware detection via nixos-facter
-
-**Status:** implemented.
-
-Adds the `machines.<name>.hardware.facter` option and the `.machines/<name>/facter.json` convention (see [Hardware detection with nixos-facter](#hardware-detection-with-nixos-facter)). During install, the facter phase SSHes into the installer, runs `nixos-facter`, writes the report to `.machines/<name>/facter.json`, and runs `git add --intent-to-add`. The module imports `nixos-facter-modules.nixosModules.facter` and wires `facter.reportPath` whenever `hardware.facter` is non-null.
-
-### Slice 2: install phases and disko modes
-
-**Status:** implemented.
-
-Adds a phase aware install command that can be stopped after any phase and resumed later:
-
-```sh
-$ devenv machines install web1 --phases kexec,facter,disko,install,reboot
-$ devenv machines install web1 --stop-after-disko
-$ devenv machines install web1 --no-reboot
-```
-
-Phase order is `kexec -> facter -> disko -> install -> reboot`. Any non empty subset is valid, which unlocks resume after a mid copy network drop (`--phases install,reboot`), reformat without re kexec (`--phases disko`), and controlled rollouts where each phase is inspected before the next runs.
-
-Also adds `--disko-mode disko|format|mount` for non destructive and recovery flows:
-
-- `disko` (default) is the current destructive path: destroy partitions, create, mount.
-- `format` creates partitions without destroying existing ones, useful when initializing a second disk alongside an existing layout.
-- `mount` mounts an existing layout without touching partitions, which is the recovery path when the rootfs is gone but data partitions survived.
-
-### Slice 3: bootstrap files and install time secrets
-
-**Status:** implemented.
-
-Runtime secret stores (sops-nix, agenix) solve the steady state problem but leave the bootstrap problem: the key needed to decrypt the first secret has to arrive on the target somehow. Slice 3 adds four install time options per machine:
-
-```nix title="devenv.nix"
-machines.web1 = {
-  install = {
-    extraFiles = {
-      "/var/lib/secret-age-key" = {
-        source = "secrets/web1-age.key";
-        owner = "0:0";
-        mode = "0600";
-      };
-    };
-
-    secrets = {
-      "/var/lib/sops-nix/key.txt" = {
-        secret = "WEB1_AGE_KEY";
-        owner = "0:0";
-        mode = "0600";
-      };
-    };
-
-    encryptionKeys = {
-      "/tmp/luks.key" = "secrets/web1-luks.key";
-    };
-
-    copyHostKeys = true;
-  };
-};
-```
-
-Paths are given as strings (absolute or relative to the devenv project root), **not** as Nix path literals (`./secrets/…`). This is load-bearing: a Nix path literal would copy the secret into `/nix/store`, which is world-readable. Strings are read by the CLI at install time and never leave the host.
-
-- `install.extraFiles` copies files onto `/` of the new system after install, before reboot. Use it for age/sops master keys, SSH host keys, `/var/lib/*` seeds. Matches nixos-anywhere's `--extra-files` and `--chown`.
-- `install.secrets` resolves named values from the active SecretSpec profile after `nixos-install`. The default `install.secretspec.execution = "local"` streams them from the workstation; `"target"` resolves them directly on the installer without exposing values or provider credentials to the workstation.
-- `install.encryptionKeys` drops keyfiles into the installer **before disko runs**, so LUKS layouts with `passwordFile = "/tmp/luks.key"` can unlock. The keys live on the host running `devenv machines install`, not in the store.
-- `install.copyHostKeys` copies `/etc/ssh/ssh_host_*` from the live installer into the installed system, keeping the post-kexec SSH identity stable across the first boot.
-
-### Slice 4: build placement
-
-**Status:** proposed.
-
-A future interface could replace `--use-machines-as-builders` with richer `--build-on auto|local|remote` vocabulary:
-
-- `auto` (default) builds locally when the current host can realize the target's `system`, otherwise routes to a matching machine in the attrset.
-- `local` forces local builds and fails loudly if the current host cannot produce the target's `system`.
-- `remote` forces building on the target itself. Not useful for `install`, since a freshly kexec'd target has no usable Nix, but valid for `deploy`.
-
-The current implementation exposes only `--use-machines-as-builders`.
-
-### Slice 5: kexec override
-
-**Status:** implemented.
-
-Adds a per machine escape hatch for hosts where the default `nixos-images` kexec tarball does not fit:
-
-```nix title="devenv.nix"
-machines.armbox = {
-  system = "aarch64-linux";
-  target.host = "root@armbox.lan";
-  install.kexec = {
-    image = "https://example.com/custom-kexec-aarch64.tar.gz";
-    postSshPort = 2222;
-  };
-};
-```
-
-- `install.kexec.image` points at an alternate HTTP(S) kexec tarball fetched on the remote. Needed for VPN-enabled installers, non-standard architectures, or locked-down cloud kernels.
-- `install.kexec.postSshPort` sets the SSH port to reconnect to after kexec lands in the installer, for targets whose live sshd listens on a non 22 port.
-
-### Slice 6: host fact probing
-
-**Status:** implemented.
-
-Internal only, with no user-facing option. When the kexec phase is selected, install probes the target before changing it and verifies that SSH is running as root and that `tar` and `curl` are available. Resume runs that omit kexec skip this probe because the target is already expected to be in installer state.
+| Symptom | What to check |
+| --- | --- |
+| Install hangs after kexec | DHCP may have given the temporary installer another IP. Check its console or lease table; use a fixed address or reservation. |
+| `Host key verification failed` | Installs sending local files require known keys for both the original host and temporary installer. |
+| `Too many authentication failures` | Set `target.sshOpts = [ "-o" "IdentitiesOnly=yes" ];`. For remote builders, configure the nix-daemon user's SSH settings. |
+| Copy rejects a path with no trusted signature | Trust the invoking user on the target or sign the path with a trusted key. |
+| Connection drops during deployment | Run `devenv machines status server` before retrying; the target may still be activating or rolling back. |
 
 ## Reference
 
-See the [options reference](/reference/options/#machines) for the full schema.
+The old `configurations` option still evaluates through a compatibility alias, but use `machines` in new files. See the [machines options reference](/reference/options/#machines) for the full schema.

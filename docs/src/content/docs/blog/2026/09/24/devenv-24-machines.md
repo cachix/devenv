@@ -8,7 +8,7 @@ authors:
     url: "https://github.com/domenkozar"
 ---
 
-devenv 2.4 introduces [Machines](https://devenv.sh/machines). 
+devenv 2.4 introduces [Machines](/machines/).
 
 Define machine configurations alongside your development environment, then build and deploy them with `devenv machines`. 
 
