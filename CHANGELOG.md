@@ -9,10 +9,18 @@
 - Fixed `devenv lsp` aborting on startup with `Already registered store with name 'Dummy Store'` ([#3196](https://github.com/cachix/devenv/issues/3196)).
 
 - Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
+- `devenv machines install` builds the replacement NixOS system before partitioning disks, so a failed system build does not erase the existing installation. Explicit disk-only operations still run without building a system.
 
 - Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 - Fixed `devenv shell` crashing with SIGABRT and leaving a coredump when its terminal window is closed while output is being written ([#3203](https://github.com/cachix/devenv/issues/3203)).
+
+### Improvements
+
+- Added an experimental target-side deployment executor for NixOS, with activation independent of SSH, deployment locking, health checks, persistent status, and explicit rollback. Unconfirmed deployments roll back after a deadline or reboot once NixOS reaches userspace; inspect and recover deployments with `machines status` and `machines rollback`.
+- Added configuration access checks to NixOS machine plans and `devenv machines check` to inspect them without building. Reviewed deployments reject disabled SSH or root login, report uncertain access changes, and require regenerated fleet plans.
+- Mixed NixOS, nix-darwin, and home-manager fleets share one review and confirmation. Every role is built and copied before activation; system roles run before home-manager. `--max-concurrent` supports bounded activation batches that stop after a failure.
+- `devenv machines deploy` builds a fleet plan, shows changes, asks for confirmation, and applies those exact outputs. NixOS uses generation checks and transactional rollback; nix-darwin and home-manager use direct activation. Use `--yes` for automation. `machines plan` saves a reusable plan ID; JSON export is optional with `--json`.
 
 ## 2.3.1 (2026-09-11)
 

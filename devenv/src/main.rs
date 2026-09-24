@@ -47,8 +47,8 @@ use devenv::{
     SecretSettings, ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel},
     cli::{
-        Cli, CliOptions, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand,
-        TraceOutputSpec, UserConfigCommand,
+        Cli, CliOptions, Commands, ContainerCommand, InputsCommand, InstallPhase, MachinesCommand,
+        ProcessesCommand, TasksCommand, TraceOutputSpec, UserConfigCommand,
     },
     is_ai_agent,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
@@ -576,6 +576,25 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     if matches!(command, Commands::Update { .. }) {
         nix_settings.refresh_fetchers = true;
     }
+    if matches!(
+        command,
+        Commands::Machines {
+            command: MachinesCommand::Check { .. }
+        }
+    ) {
+        // Evaluation may reuse already-realized IFD outputs (including the
+        // nixpkgs bootstrap), but may not build locally or on remote builders.
+        nix_settings.nix_options.extend([
+            "max-jobs".into(),
+            "0".into(),
+            "builders".into(),
+            "".into(),
+            "substitute".into(),
+            "false".into(),
+            "always-allow-substitutes".into(),
+            "false".into(),
+        ]);
+    }
     let mut shell_settings = ShellSettings::resolve_with_shell_hint(
         devenv_core::ShellOptions::from(cli.shell_args),
         &config,
@@ -612,6 +631,12 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
     let shutdown = Shutdown::new();
+    let expose_secretspec_values_to_nix = !matches!(
+        &command,
+        Commands::Machines {
+            command: MachinesCommand::Install { .. }
+        }
+    );
 
     let devenv_options = devenv::DevenvOptions {
         inputs: config.inputs,
@@ -634,6 +659,7 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
             .map(|environment| environment.state.clone()),
         shell_cwd,
         is_testing,
+        expose_secretspec_values_to_nix,
         require_project_file,
     };
 
@@ -1223,6 +1249,8 @@ enum CommandResult {
     Done,
     /// Print this string after UI cleanup
     Print(String),
+    /// Print a structured check report, then exit with its policy result.
+    CheckReport(String, bool),
     /// Exec into this command after cleanup (TUI shutdown, terminal restore)
     Exec(Command),
     /// Exit with a specific code (e.g., from shell exit)
@@ -1247,6 +1275,15 @@ impl CommandResult {
             CommandResult::Done => Ok(()),
             CommandResult::Print(output) => {
                 print!("{output}");
+                Ok(())
+            }
+            CommandResult::CheckReport(output, failed) => {
+                use std::io::Write;
+                print!("{output}");
+                io::stdout().flush().into_diagnostic()?;
+                if failed {
+                    process::exit(1);
+                }
                 Ok(())
             }
             CommandResult::Exec(mut cmd) => {
@@ -1540,6 +1577,95 @@ async fn dispatch_command(
             TasksCommand::List { json } => {
                 let output = devenv.tasks_list(json).await?;
                 Ok(CommandResult::Print(format!("{output}\n")))
+            }
+        },
+        Commands::Machines { command } => match command {
+            MachinesCommand::Check { names, json } => {
+                let (output, failed) = devenv.machines_check(&names, json).await?;
+                Ok(CommandResult::CheckReport(output, failed))
+            }
+            MachinesCommand::Apply {
+                plan,
+                max_concurrent,
+            } => {
+                devenv.machines_apply(&plan, max_concurrent).await?;
+                Ok(CommandResult::Done)
+            }
+            MachinesCommand::Plan { names, json } => Ok(CommandResult::Print(
+                devenv.machines_saved_plan(&names, json).await?,
+            )),
+            MachinesCommand::Status { names } => {
+                Ok(CommandResult::Print(devenv.machines_status(&names).await?))
+            }
+            MachinesCommand::Rollback { name } => {
+                devenv.machines_rollback(&name).await?;
+                Ok(CommandResult::Done)
+            }
+            MachinesCommand::Info { names } => {
+                let output = devenv.machines_info(&names).await?;
+                Ok(CommandResult::Print(output))
+            }
+            MachinesCommand::Install {
+                max_concurrent,
+                use_machines_as_builders,
+                phases,
+                stop_after_disko,
+                no_reboot,
+                disko_mode,
+                names,
+            } => {
+                use std::collections::HashSet;
+                let phase_set: HashSet<InstallPhase> = if let Some(p) = phases {
+                    p.into_iter().collect()
+                } else if stop_after_disko {
+                    [
+                        InstallPhase::Kexec,
+                        InstallPhase::Facter,
+                        InstallPhase::Disko,
+                    ]
+                    .into_iter()
+                    .collect()
+                } else if no_reboot {
+                    [
+                        InstallPhase::Kexec,
+                        InstallPhase::Facter,
+                        InstallPhase::Disko,
+                        InstallPhase::Install,
+                    ]
+                    .into_iter()
+                    .collect()
+                } else {
+                    [
+                        InstallPhase::Kexec,
+                        InstallPhase::Facter,
+                        InstallPhase::Disko,
+                        InstallPhase::Install,
+                        InstallPhase::Reboot,
+                    ]
+                    .into_iter()
+                    .collect()
+                };
+                devenv
+                    .machines_install(
+                        &names,
+                        max_concurrent,
+                        &phase_set,
+                        disko_mode,
+                        use_machines_as_builders,
+                    )
+                    .await?;
+                Ok(CommandResult::Done)
+            }
+            MachinesCommand::Deploy {
+                yes,
+                max_concurrent,
+                use_machines_as_builders,
+                names,
+            } => {
+                devenv
+                    .machines_deploy(&names, max_concurrent, use_machines_as_builders, yes)
+                    .await?;
+                Ok(CommandResult::Done)
             }
         },
         Commands::Changelogs {} => Ok(devenv

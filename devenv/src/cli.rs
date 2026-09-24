@@ -916,6 +916,11 @@ pub enum Commands {
         command: InputsCommand,
     },
 
+    Machines {
+        #[command(subcommand)]
+        command: MachinesCommand,
+    },
+
     #[command(about = "Show relevant changelogs.")]
     Changelogs {},
 
@@ -1033,6 +1038,7 @@ impl Commands {
             Self::Down {} => "down",
             Self::Processes { .. } => "processes",
             Self::Tasks { .. } => "tasks",
+            Self::Machines { .. } => "machines",
             Self::Changelogs {} => "changelogs",
             Self::Assemble => "assemble",
             Self::PrintDevEnv { .. } => "print-dev-env",
@@ -1058,6 +1064,11 @@ impl Commands {
                 | Self::Mcp { http: None }
                 | Self::Lsp { .. }
                 | Self::PrintPaths
+                | Self::Machines {
+                    command: MachinesCommand::Deploy { .. }
+                        | MachinesCommand::Plan { .. }
+                        | MachinesCommand::Check { .. }
+                }
         )
     }
 }
@@ -1072,6 +1083,28 @@ pub enum UserConfigCommand {
     Show,
     #[command(about = "Print the JSON Schema for the user configuration.")]
     Schema,
+}
+
+/// A phase in the `devenv machines install` pipeline.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InstallPhase {
+    Kexec,
+    Facter,
+    Disko,
+    Install,
+    Reboot,
+}
+
+/// Disko partitioning mode for `devenv machines install`.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum DiskoMode {
+    /// Destroy existing partitions, create new layout, mount (default).
+    #[default]
+    Disko,
+    /// Create partitions without destroying existing ones.
+    Format,
+    /// Mount existing partitions without touching the layout.
+    Mount,
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
@@ -1260,6 +1293,153 @@ pub enum ContainerCommand {
 
         #[arg(long)]
         copy_args: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+#[clap(
+    about = "Build and deploy NixOS, nix-darwin, and home-manager machines. https://devenv.sh/machines/",
+    arg_required_else_help(true)
+)]
+pub enum MachinesCommand {
+    #[command(about = "Check declared NixOS access changes without building or deploying.")]
+    Check {
+        #[arg(long, help = "Print structured findings as JSON.")]
+        json: bool,
+        #[arg(help = "Machine names. Defaults to all remote NixOS machines.")]
+        names: Vec<String>,
+    },
+    #[command(about = "Apply every pinned role in a reviewed fleet deployment plan.")]
+    Apply {
+        #[arg(help = "Saved plan ID, or an exported JSON file.")]
+        plan: PathBuf,
+        #[arg(
+            long,
+            value_name = "N",
+            help = "Activate at most N machines per batch (default: 1). Stop after a failed batch."
+        )]
+        max_concurrent: Option<usize>,
+    },
+    #[command(about = "Build and save a fleet deployment plan for review.")]
+    Plan {
+        #[arg(
+            long,
+            help = "Export the plan as JSON instead of showing a summary and saved plan ID."
+        )]
+        json: bool,
+        #[arg(help = "Machine names. Defaults to every machine with target.host.")]
+        names: Vec<String>,
+    },
+    #[command(
+        about = "Read target-side NixOS deployment state as JSON without building or activating."
+    )]
+    Status {
+        #[arg(help = "Machine names. Defaults to all remote NixOS machines.")]
+        names: Vec<String>,
+    },
+    #[command(
+        about = "Roll back a transactional NixOS deployment to its recorded previous system."
+    )]
+    Rollback {
+        #[arg(
+            help = "The NixOS machine to roll back. Requires a recorded transactional deployment."
+        )]
+        name: String,
+    },
+    #[command(
+        about = "List every machine declared in devenv.nix and the metadata devenv uses to build, deploy, and install them."
+    )]
+    Info {
+        #[arg(
+            help = "Optional machine names to restrict the listing to. With no names, every machine is shown."
+        )]
+        names: Vec<String>,
+    },
+
+    #[command(
+        about = "Install NixOS on a fresh target: kexec into the installer, partition via disko, copy the closure, install the bootloader, reboot. https://devenv.sh/machines/#installing-on-a-fresh-host"
+    )]
+    Install {
+        #[arg(
+            long = "max-concurrent",
+            value_name = "N",
+            help = "Maximum number of machines to install in parallel. Defaults to unbounded. Pass 1 for sequential installs."
+        )]
+        max_concurrent: Option<usize>,
+
+        #[arg(
+            long,
+            help = "Treat every machine with a reachable target.host as a candidate Nix remote builder for cross-architecture builds."
+        )]
+        use_machines_as_builders: bool,
+
+        #[arg(
+            long,
+            value_delimiter = ',',
+            help = "Comma-separated list of install phases to run: kexec, facter, disko, install, reboot. Default is all phases. Conflicts with --stop-after-disko and --no-reboot.",
+            conflicts_with_all = ["stop_after_disko", "no_reboot"]
+        )]
+        phases: Option<Vec<InstallPhase>>,
+
+        #[arg(
+            long,
+            help = "Stop after the disko phase (equivalent to --phases kexec,facter,disko).",
+            conflicts_with_all = ["phases", "no_reboot"]
+        )]
+        stop_after_disko: bool,
+
+        #[arg(
+            long,
+            help = "Run all phases except reboot (equivalent to --phases kexec,facter,disko,install).",
+            conflicts_with_all = ["phases", "stop_after_disko"]
+        )]
+        no_reboot: bool,
+
+        #[arg(
+            long,
+            value_enum,
+            default_value_t = DiskoMode::Disko,
+            help = "Disko partitioning mode: disko (default, destroy/create/mount), format (create missing storage structures without the destroy phase), mount (mount existing filesystems)."
+        )]
+        disko_mode: DiskoMode,
+
+        #[arg(
+            help = "Machine names to install. At least one name is required — unlike `deploy`, `install` never runs bare because it wipes disks.",
+            required = true
+        )]
+        names: Vec<String>,
+    },
+
+    #[command(
+        about = "Build, review, and deploy NixOS, nix-darwin, and home-manager together. https://devenv.sh/machines/#updating-an-existing-host"
+    )]
+    Deploy {
+        #[arg(
+            long,
+            help = "Apply the displayed fleet plan without an interactive confirmation."
+        )]
+        yes: bool,
+        // Note: `-j` is already taken by the global `max_jobs` Nix option
+        // (see `NixCliArgs`), so `--max-concurrent` intentionally has no
+        // short alias. Users who want sequential behaviour pass
+        // `--max-concurrent 1`.
+        #[arg(
+            long = "max-concurrent",
+            value_name = "N",
+            help = "Activate at most N machines per batch (default: 1). Stop after a failed batch."
+        )]
+        max_concurrent: Option<usize>,
+
+        #[arg(
+            long,
+            help = "Treat every machine with a reachable target.host as a candidate Nix remote builder for cross-architecture builds. When a machine's system differs from the local host, a matching machine is used as the builder."
+        )]
+        use_machines_as_builders: bool,
+
+        #[arg(
+            help = "Machine names to deploy. With no names, deploys every machine in the attrset that has `target.host` set; machines without a host are skipped."
+        )]
+        names: Vec<String>,
     },
 }
 
