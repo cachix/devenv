@@ -32,7 +32,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "2.3.2"
+version = "2.4.0"
 edition = "2024"
 license = "APACHE-2.0"
 homepage = "https://devenv.sh/"
