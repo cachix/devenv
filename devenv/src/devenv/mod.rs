@@ -1634,6 +1634,10 @@ impl Devenv {
 
     /// Invalidate cached state for hot-reload.
     pub async fn invalidate_for_reload(&self) -> Result<()> {
+        // The process manager may have started, stopped or reassigned ports
+        // since the previous evaluation.
+        self.port_allocator.clear_seeds();
+        self.seed_running_ports().await;
         self.require_cnix()?.invalidate_eval_state()
     }
 
@@ -1705,6 +1709,13 @@ impl Devenv {
     pub(crate) async fn dotenv_watch_paths(&self) -> Result<Vec<PathBuf>> {
         let config = self.dotenv_config().await?;
         Ok(config.watch_paths(&self.devenv_root))
+    }
+
+    /// Files whose changes alter the ports a running process manager assigns.
+    /// The manager writes its PID file once it answers port queries and
+    /// removes it on shutdown, so watching it re-evaluates the environment.
+    pub(crate) fn process_manager_watch_paths(&self) -> Vec<PathBuf> {
+        vec![self.native_manager_pid_file()]
     }
 
     pub async fn prepare_shell(
@@ -3509,8 +3520,19 @@ impl Devenv {
         .await
     }
 
+    /// Read allocations from a running native manager without enabling new
+    /// port allocation for commands that only inspect the environment.
+    pub async fn seed_running_ports(&self) {
+        self.load_running_ports(false).await;
+    }
+
     /// Reserve ports already in use by a running native process manager so
-    /// that Nix evaluation does not hand them out as fresh allocations.
+    /// that process-starting commands do not hand them out again.
+    pub async fn reserve_running_ports(&self) {
+        self.load_running_ports(true).await;
+    }
+
+    /// Seed manager assignments before Nix evaluation.
     ///
     /// Only seeds from a manager backed by a live PID file. A manager whose PID
     /// file is gone is shutting down (or already dead): its socket can keep
@@ -3521,8 +3543,8 @@ impl Devenv {
     /// PID file mirrors the liveness signal used by `up()`'s "already running"
     /// guard.
     ///
-    /// Best-effort: failures are logged at trace level and do not propagate.
-    pub async fn reserve_running_ports(&self) {
+    /// Best-effort: failures are logged and do not propagate.
+    async fn load_running_ports(&self, enable_new_allocations: bool) {
         // A healthy native manager has both a live PID file and an answering
         // socket. If the PID file is not alive, fall back to the generic
         // running-processes check and do not seed from the socket.
@@ -3535,12 +3557,28 @@ impl Devenv {
 
         self.port_allocator.set_allow_in_use(false);
 
-        match processes::NativeManagerClient::api_request(
-            &self.native_socket_path(),
+        let socket_path = self.native_socket_path();
+        let request = processes::NativeManagerClient::api_request(
+            &socket_path,
             &processes::ApiRequest::Ports,
-        )
-        .await
-        {
+        );
+        let response = if enable_new_allocations {
+            // Allocating without the manager's assignments would hand out
+            // ports that differ from the running processes, so wait for them.
+            request.await
+        } else {
+            // Reading runs before every CLI command. A socket that accepts but
+            // never answers must not leave those commands waiting indefinitely.
+            match tokio::time::timeout(std::time::Duration::from_secs(2), request).await {
+                Ok(response) => response,
+                Err(_) => {
+                    warn!("timed out querying native manager for ports, using base ports");
+                    return;
+                }
+            }
+        };
+
+        match response {
             Ok(processes::ApiResponse::PortAllocations { ports }) => {
                 let seeds: Vec<(String, String, u16)> = ports
                     .into_iter()
@@ -3552,7 +3590,9 @@ impl Devenv {
                         "Seeded port allocator from native manager"
                     );
                     self.port_allocator.seed(&seeds);
-                    self.port_allocator.set_enabled(true);
+                    if enable_new_allocations {
+                        self.port_allocator.set_enabled(true);
+                    }
                 }
             }
             Ok(_) => {
@@ -3635,6 +3675,7 @@ impl Devenv {
 
         let mut input_paths = env.inputs.clone();
         input_paths.extend(self.dotenv_watch_paths().await?);
+        input_paths.extend(self.process_manager_watch_paths());
         input_paths.sort();
         input_paths.dedup();
 

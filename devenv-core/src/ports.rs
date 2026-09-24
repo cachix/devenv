@@ -87,6 +87,8 @@ impl Drop for PortReservations {
 struct PortEntry {
     port: u16,
     base: u16,
+    /// True when this value came from a running process manager.
+    seeded: bool,
     /// Listeners holding the port reservation. May contain an IPv4 listener,
     /// an IPv6 listener, or both. Empty after `take_reservations()` is called.
     listeners: Vec<TcpListener>,
@@ -122,7 +124,7 @@ pub struct PortAllocator {
     strict: AtomicBool,
     /// When true, allow replay to accept ports already in use (skip binding).
     allow_in_use: AtomicBool,
-    /// When false, return the base port without reserving or caching.
+    /// When false, read manager assignments but leave other ports at their base.
     enabled: AtomicBool,
 }
 
@@ -180,14 +182,52 @@ impl PortAllocator {
             ports.entry(key).or_insert(PortEntry {
                 port: *port,
                 base: *port,
+                seeded: true,
                 listeners: vec![],
             });
         }
     }
 
+    /// Forget ports supplied by a running process manager, keeping ports
+    /// this allocator reserved itself.
+    ///
+    /// Used before seeding again when the manager may have started, stopped
+    /// or reassigned ports since the last evaluation.
+    pub fn clear_seeds(&self) {
+        self.ports
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .retain(|_, entry| !entry.seeded);
+    }
+
+    /// Whether a running process manager supplied any port values.
+    pub fn has_seeded_ports(&self) -> bool {
+        self.ports
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .values()
+            .any(|entry| entry.seeded)
+    }
+
+    /// Stable cache key state for ports supplied by a running manager.
+    pub fn seeded_ports_cache_key(&self) -> String {
+        let ports = self
+            .ports
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut seeds: Vec<_> = ports
+            .iter()
+            .filter(|(_, entry)| entry.seeded)
+            .map(|((process, name), entry)| (process, name, entry.port))
+            .collect();
+        seeds.sort();
+        format!("{seeds:?}")
+    }
+
     /// Enable or disable port allocation.
     ///
-    /// When disabled, `allocate()` returns the base port without reserving it.
+    /// When disabled, `allocate()` returns manager assignments for seeded ports
+    /// and the base port for all others, without making new reservations.
     pub fn set_enabled(&self, enabled: bool) {
         self.enabled.store(enabled, Ordering::SeqCst);
     }
@@ -206,16 +246,19 @@ impl PortAllocator {
     ///
     /// In strict mode, only tries the base port and fails with process info if unavailable.
     pub fn allocate(&self, process_name: &str, port_name: &str, base: u16) -> Result<u16, String> {
-        if !self.enabled.load(Ordering::SeqCst) {
-            return Ok(base);
-        }
-
+        let enabled = self.enabled.load(Ordering::SeqCst);
         let mut ports = self.ports.lock().map_err(|e| e.to_string())?;
         let key = (process_name.to_string(), port_name.to_string());
 
         // Check cache first - return existing allocation if present
-        if let Some(entry) = ports.get(&key) {
+        if let Some(entry) = ports.get(&key)
+            && (enabled || entry.seeded)
+        {
             return Ok(entry.port);
+        }
+
+        if !enabled {
+            return Ok(base);
         }
 
         let strict = self.strict.load(Ordering::SeqCst);
@@ -242,6 +285,7 @@ impl PortAllocator {
                         PortEntry {
                             port: base,
                             base,
+                            seeded: false,
                             listeners,
                         },
                     );
@@ -279,6 +323,7 @@ impl PortAllocator {
                 PortEntry {
                     port,
                     base,
+                    seeded: false,
                     listeners,
                 },
             );
@@ -367,6 +412,7 @@ impl PortAllocator {
                     PortEntry {
                         port,
                         base: port,
+                        seeded: false,
                         listeners,
                     },
                 );
@@ -395,6 +441,7 @@ impl PortAllocator {
                         PortEntry {
                             port,
                             base: port,
+                            seeded: false,
                             listeners: vec![],
                         },
                     );
@@ -411,7 +458,13 @@ impl PortAllocator {
     /// Used after a replay failure to reset state before re-evaluation.
     pub fn clear(&self) {
         if let Ok(mut ports) = self.ports.lock() {
-            ports.clear();
+            if self.is_enabled() {
+                ports.clear();
+            } else {
+                // Keep manager assignments if another resource invalidates a
+                // cached evaluation before this command re-evaluates Nix.
+                ports.retain(|_, entry| entry.seeded);
+            }
         }
     }
 }
@@ -421,6 +474,11 @@ impl ReplayableResource for PortAllocator {
     const TYPE_ID: &'static str = "ports";
 
     fn snapshot(&self) -> PortSpec {
+        if !self.is_enabled() {
+            // Reading manager assignments does not reserve ports and needs no
+            // replay. Their values are part of the evaluation cache key.
+            return PortSpec::default();
+        }
         let ports = self
             .ports
             .lock()
@@ -439,6 +497,9 @@ impl ReplayableResource for PortAllocator {
     }
 
     fn is_empty(&self) -> bool {
+        if !self.is_enabled() {
+            return true;
+        }
         self.ports
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -446,6 +507,15 @@ impl ReplayableResource for PortAllocator {
     }
 
     fn replay(&self, spec: &PortSpec) -> Result<(), ReplayError> {
+        if !self.is_enabled() {
+            return if spec.allocations.is_empty() {
+                Ok(())
+            } else {
+                Err(ReplayError::Unavailable(
+                    "port allocation is disabled for this command".to_string(),
+                ))
+            };
+        }
         for alloc in &spec.allocations {
             self.allocate_exact(&alloc.process_name, &alloc.port_name, alloc.allocated_port)
                 .map_err(ReplayError::Unavailable)?;
@@ -1228,6 +1298,7 @@ mod tests {
     #[test]
     fn test_seed_visible_in_snapshot() {
         let allocator = PortAllocator::new();
+        allocator.set_enabled(true);
         allocator.seed(&[("pg".into(), "main".into(), 5433)]);
 
         let spec = allocator.snapshot();
@@ -1242,5 +1313,45 @@ mod tests {
         let allocator = PortAllocator::new();
         allocator.seed(&[]);
         assert!(allocator.snapshot().allocations.is_empty());
+    }
+
+    #[test]
+    fn test_seeded_ports_are_read_without_allocating_new_ports() {
+        let allocator = PortAllocator::new();
+        allocator.seed(&[("pg".into(), "main".into(), 5433)]);
+
+        assert!(!allocator.is_enabled());
+        assert!(allocator.has_seeded_ports());
+        assert_eq!(allocator.allocate("pg", "main", 5432).unwrap(), 5433);
+        assert_eq!(allocator.allocate("other", "main", 5432).unwrap(), 5432);
+        assert!(allocator.snapshot().allocations.is_empty());
+        assert!(allocator.take_reservations().is_empty());
+
+        // Invalidating a cached evaluation must keep the manager assignment.
+        allocator.clear();
+        assert_eq!(allocator.allocate("pg", "main", 5432).unwrap(), 5433);
+    }
+
+    #[test]
+    fn test_clear_seeds_allows_new_manager_assignments() {
+        let allocator = PortAllocator::new();
+        let empty = allocator.seeded_ports_cache_key();
+        allocator.seed(&[("pg".into(), "main".into(), 5433)]);
+
+        allocator.clear_seeds();
+        assert!(!allocator.has_seeded_ports());
+        assert_eq!(empty, allocator.seeded_ports_cache_key());
+        assert_eq!(allocator.allocate("pg", "main", 5432).unwrap(), 5432);
+
+        allocator.seed(&[("pg".into(), "main".into(), 5434)]);
+        assert_eq!(allocator.allocate("pg", "main", 5432).unwrap(), 5434);
+    }
+
+    #[test]
+    fn test_seeded_ports_change_cache_key() {
+        let allocator = PortAllocator::new();
+        let empty = allocator.seeded_ports_cache_key();
+        allocator.seed(&[("pg".into(), "main".into(), 5433)]);
+        assert_ne!(empty, allocator.seeded_ports_cache_key());
     }
 }
