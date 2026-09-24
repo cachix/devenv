@@ -4,8 +4,10 @@
 
 ### Bug Fixes
 
+- Fixed `devenv shell` and direnv resolving allocated service ports to the base port while a process manager is running. Shell commands now read the running service's port without allocating new ports, so PostgreSQL's `PGPORT` points to the intended database. direnv and the hot reloading shell update the environment when processes start or stop ([#3208](https://github.com/cachix/devenv/issues/3208)).
 - Release evaluation memory after `devenv mcp` initializes its package and option caches, reducing idle memory usage ([#3065](https://github.com/cachix/devenv/issues/3065)).
 - Fixed `devenv lsp` aborting on startup with `Already registered store with name 'Dummy Store'` ([#3196](https://github.com/cachix/devenv/issues/3196)).
+
 - Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
 
 - Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).

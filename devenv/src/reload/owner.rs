@@ -188,6 +188,9 @@ async fn add_watch_paths(devenv: &Devenv, watcher: &WatcherHandle) {
         }
         Err(e) => tracing::warn!("Failed to resolve dotenv watch paths: {}", e),
     }
+    watcher
+        .watch_logical_many(devenv.process_manager_watch_paths())
+        .await;
 
     let Some(pool) = devenv.eval_cache_pool() else {
         return;

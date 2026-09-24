@@ -1107,6 +1107,11 @@ async fn run_backend(
 
     let devenv = Devenv::new(devenv_options, shutdown.clone()).await?;
 
+    // Commands that evaluate the environment need the ports already assigned
+    // by a running process manager before their first Nix evaluation. Reading
+    // those assignments must not allocate new ports for unrelated commands.
+    devenv.seed_running_ports().await;
+
     // PTY shell hands Devenv off to an owner task; we reclaim it after the session.
     if use_pty && let Commands::Shell { cmd: None, args } = command {
         // Pre-compute shell environment while we still own Devenv directly.

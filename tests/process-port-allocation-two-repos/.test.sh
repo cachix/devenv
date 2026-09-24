@@ -92,6 +92,7 @@ let
   allocatedPort = config.processes.web.ports.http.value;
 in
 {
+  imports = [ ./extra.nix ];
   env.ALLOCATED_PORT = toString allocatedPort;
 
   processes.web = {
@@ -103,6 +104,9 @@ in
     '';
   };
 }
+NIX
+  cat > "$repo/extra.nix" <<'NIX'
+{ ... }: { }
 NIX
   python3 - "$repo/devenv.nix" "$base_port" <<'PYEDIT'
 from pathlib import Path
@@ -154,6 +158,17 @@ finally:
     for listener in listeners:
         listener.close()
 PY
+}
+
+manager_pid_file() {
+  local dotfile hash
+  dotfile="$(cd "$1" && pwd -P)/.devenv"
+  if command -v sha256sum >/dev/null 2>&1; then
+    hash=$(printf '%s' "$dotfile" | sha256sum | cut -c1-7)
+  else
+    hash=$(printf '%s' "$dotfile" | shasum -a 256 | cut -c1-7)
+  fi
+  printf '%s/devenv-%s/processes/native-manager.pid\n' "${XDG_RUNTIME_DIR:-/tmp}" "$hash"
 }
 
 start_repo() {
@@ -231,6 +246,46 @@ fi
 
 if [ "$repo1_process_port" = "$repo2_process_port" ]; then
   echo "Expected two running repos to have distinct process ports"
+  exit 1
+fi
+
+repo2_pid_file=$(manager_pid_file repo2)
+wait_until 15 test -s "$repo2_pid_file" || { cat repo2/up.log; exit 1; }
+repo2_shell_port=$(cd repo2 && devenv --no-tui shell -- printenv ALLOCATED_PORT | tail -n 1 | tr -d '[:space:]')
+if [ "$repo2_shell_port" != "$repo2_process_port" ]; then
+  echo "Expected repo2 shell to report allocated port $repo2_process_port, got $repo2_shell_port"
+  exit 1
+fi
+
+# direnv reloads when the manager starts or stops, since its ports change.
+if ! grep -qxF "$repo2_pid_file" repo2/.devenv/input-paths.txt; then
+  echo "Expected repo2 input-paths.txt to watch $repo2_pid_file"
+  cat repo2/.devenv/input-paths.txt
+  exit 1
+fi
+
+# A command that only reads the environment must not allocate a port for a
+# process added after the manager started. Its base port is already occupied.
+cat > repo2/extra.nix <<'NIX'
+{ config, ... }: {
+  env.UNSTARTED_PORT = toString config.processes.unstarted.ports.http.value;
+  processes.unstarted = {
+    ports.http.allocate = __BASE_PORT__;
+    start.enable = false;
+    exec = "sleep 60";
+  };
+}
+NIX
+python3 - repo2/extra.nix "$base_port" <<'PYEDIT'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace("__BASE_PORT__", sys.argv[2]))
+PYEDIT
+unstarted_shell_port=$(cd repo2 && devenv --no-tui shell -- printenv UNSTARTED_PORT | tail -n 1 | tr -d '[:space:]')
+if [ "$unstarted_shell_port" != "$base_port" ]; then
+  echo "Expected shell to leave unstarted process at base port $base_port, got $unstarted_shell_port"
   exit 1
 fi
 

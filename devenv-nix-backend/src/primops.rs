@@ -258,14 +258,15 @@ impl PrimopRegistration for AllocatePortPrimop {
     }
 
     fn is_enabled(&self) -> bool {
-        self.allocator.is_enabled()
+        self.allocator.is_enabled() || self.allocator.has_seeded_ports()
     }
 
     fn cache_key_fragment(&self) -> String {
         format!(
-            "enabled={}:strict={}",
+            "enabled={}:strict={}:seeds={}",
             self.allocator.is_enabled(),
-            self.allocator.is_strict()
+            self.allocator.is_strict(),
+            self.allocator.seeded_ports_cache_key()
         )
     }
 
@@ -344,5 +345,18 @@ mod tests {
         second.add(AllocatePortPrimop::new(second_allocator));
 
         assert_eq!(first.cache_key_fragment(), second.cache_key_fragment());
+    }
+
+    #[test]
+    fn seeded_ports_enable_primop_and_change_cache_key() {
+        let allocator = Arc::new(PortAllocator::new());
+        let primop = AllocatePortPrimop::new(allocator.clone());
+        let without_manager = primop.cache_key_fragment();
+        assert!(!primop.is_enabled());
+
+        allocator.seed(&[("pg".into(), "main".into(), 5433)]);
+        assert!(primop.is_enabled());
+        assert!(!allocator.is_enabled());
+        assert_ne!(without_manager, primop.cache_key_fragment());
     }
 }
