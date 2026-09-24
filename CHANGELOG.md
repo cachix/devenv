@@ -4,27 +4,29 @@
 
 ## 2.4.0 (2026-09-24)
 
-### Bug Fixes
+### Machines (experimental)
 
-- Fixed `devenv shell` and direnv resolving allocated service ports to the base port while a process manager is running. Shell commands now read the running service's port without allocating new ports, so PostgreSQL's `PGPORT` points to the intended database. direnv and the hot reloading shell update the environment when processes start or stop ([#3208](https://github.com/cachix/devenv/issues/3208)).
-- Release evaluation memory after `devenv mcp` initializes its package and option caches, reducing idle memory usage ([#3065](https://github.com/cachix/devenv/issues/3065)).
-- Fixed `devenv lsp` aborting on startup with `Already registered store with name 'Dummy Store'` ([#3196](https://github.com/cachix/devenv/issues/3196)).
-
-- Fixed `devenv-run-tests --override-input` using different inputs in nested `devenv` commands.
-- `devenv machines install` builds the replacement NixOS system before partitioning disks, so a failed system build does not erase the existing installation. Explicit disk-only operations still run without building a system.
-
-- Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).
-- Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
-- Fixed `devenv shell` crashing with SIGABRT and leaving a coredump when its terminal window is closed while output is being written ([#3203](https://github.com/cachix/devenv/issues/3203)).
-- Fixed `devenv shell` running test setup such as `devenv:git-hooks:run` and tasks with `before = [ "devenv:enterTest" ]` ([#3184](https://github.com/cachix/devenv/issues/3184)).
+- Added `devenv machines` to define, build, install, and deploy machines alongside a development environment. It supports NixOS, nix-darwin, and home-manager. Use `devenv machines info` to inspect a configuration or `devenv build machines.<name>` to build it without contacting the target.
+- `devenv machines install <name>` sets up a new NixOS host over SSH. It detects hardware, builds the system before partitioning disks, installs NixOS, and reboots. A failed build stops before disk changes; explicit disk-only operations can still run without a build. Installation can also bootstrap secrets with SecretSpec.
+- `devenv machines deploy` builds the outputs, shows what will change, and asks for confirmation before activating them. Use `--yes` for automation. To review now and deploy later, save a plan with `devenv machines plan` and apply its plan ID with `devenv machines apply`; `--json` can export the plan.
+- `devenv machines check` reviews NixOS SSH access changes without building. Deployments reject configurations that disable SSH or root login, flag uncertain access changes, and reject stale plans.
+- NixOS activation runs on the target under a lock, with health checks and automatic rollback if it fails or is not confirmed before the deadline. Recovery can also run after reboot once NixOS reaches userspace. Use `devenv machines status` and `devenv machines rollback` to inspect or recover a deployment.
+- A single plan can include NixOS, nix-darwin, and home-manager roles. All roles are built and remote outputs copied before activation; system roles activate before home-manager. `--max-concurrent` limits parallel activation and stops later batches after a failure. NixOS checks the current generation and supports rollback; nix-darwin and home-manager activate directly.
 
 ### Improvements
 
-- Added an experimental target-side deployment executor for NixOS, with activation independent of SSH, deployment locking, health checks, persistent status, and explicit rollback. Unconfirmed deployments roll back after a deadline or reboot once NixOS reaches userspace; inspect and recover deployments with `machines status` and `machines rollback`.
-- Added configuration access checks to NixOS machine plans and `devenv machines check` to inspect them without building. Reviewed deployments reject disabled SSH or root login, report uncertain access changes, and require regenerated fleet plans.
-- Mixed NixOS, nix-darwin, and home-manager fleets share one review and confirmation. Every role is built and copied before activation; system roles run before home-manager. `--max-concurrent` supports bounded activation batches that stop after a failure.
-- `devenv machines deploy` builds a fleet plan, shows changes, asks for confirmation, and applies those exact outputs. NixOS uses generation checks and transactional rollback; nix-darwin and home-manager use direct activation. Use `--yes` for automation. `machines plan` saves a reusable plan ID; JSON export is optional with `--json`.
-- Added `tasks.<name>.wantedBy` to choose which tasks select a task, separately from `after`/`before` ordering. Garage now configures its layout and buckets when started with `devenv up garage` as well as bare `devenv up` ([#2852](https://github.com/cachix/devenv/issues/2852)).
+- Added `tasks.<name>.wantedBy` to select a task when another task runs. `after` and `before` still control ordering. Garage now sets up its layout and buckets with both `devenv up garage` and `devenv up` ([#2852](https://github.com/cachix/devenv/issues/2852)).
+
+### Bug Fixes
+
+- `devenv shell` and direnv now use the port allocated to a running service instead of its base port. For example, PostgreSQL's `PGPORT` points to the running database. Direnv and the hot reloading shell also update their environments when processes start or stop ([#3208](https://github.com/cachix/devenv/issues/3208)).
+- `devenv shell` now handles quoted commands such as `devenv shell "git log"` ([#3187](https://github.com/cachix/devenv/issues/3187)).
+- Closing a terminal while `devenv shell` writes output no longer crashes it or leaves a coredump ([#3203](https://github.com/cachix/devenv/issues/3203)).
+- `devenv shell` no longer runs test setup, including `devenv:git-hooks:run` and tasks with `before = [ "devenv:enterTest" ]` ([#3184](https://github.com/cachix/devenv/issues/3184)).
+- Treefmt now runs after `devenv:files` during shell entry, avoiding intermittent errors when it reads managed files.
+- `devenv mcp` releases evaluation memory after loading its package and option caches, reducing idle memory use ([#3065](https://github.com/cachix/devenv/issues/3065)).
+- `devenv lsp` no longer fails at startup with `Already registered store with name 'Dummy Store'` ([#3196](https://github.com/cachix/devenv/issues/3196)).
+- Nested `devenv` commands in `devenv-run-tests --override-input` now use the same overridden inputs.
 
 ## 2.3.1 (2026-09-11)
 
