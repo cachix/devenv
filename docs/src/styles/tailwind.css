@@ -50,6 +50,17 @@
   color: var(--sl-color-text-accent);
 }
 
+/* Restore markers and indentation removed by Tailwind's reset in articles. */
+.sl-markdown-content ul:not(:where(.not-content *)) {
+  list-style-type: disc;
+  padding-inline-start: 1.5rem;
+}
+
+.sl-markdown-content ol:not(:where(.not-content *)) {
+  list-style-type: decimal;
+  padding-inline-start: 1.5rem;
+}
+
 /* ── Reference options page: skip rendering offscreen option blocks. ── */
 .option-block {
   content-visibility: auto;
