@@ -2,6 +2,10 @@
 
 ## 2.4.1 (unreleased)
 
+### Bug Fixes
+
+- MySQL now creates configured databases and users when started with `devenv up`, including `devenv up mysql` ([#2843](https://github.com/cachix/devenv/issues/2843)).
+
 ## 2.4.0 (2026-09-24)
 
 ### Machines (experimental)
