@@ -10,6 +10,13 @@ let
     rollbackTimeout = 30;
     healthCheck = "true";
   };
+  confirmationExecutor = import (inputs.devenv.modules + /machines/deploy.nix) {
+    inherit pkgs;
+    # A loaded CI VM can spend most of 30 seconds in NixOS activation before
+    # the controller gets a chance to confirm the successful deployment.
+    rollbackTimeout = 90;
+    healthCheck = "true";
+  };
   faultShell = pkgs.writeShellScript "devenv-test-ssh-fault" ''
     set -eu
     mode=$(cat /run/devenv-ssh-fault 2>/dev/null || true)
@@ -77,4 +84,5 @@ in
 {
   outputs.ssh-driver = test.driver;
   outputs.ssh-executor = executor;
+  outputs.ssh-confirmation-executor = confirmationExecutor;
 }

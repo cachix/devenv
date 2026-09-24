@@ -13,6 +13,7 @@ machine.wait_for_unit("sshd.service")
 project = Path(os.environ["DEVENV_SSH_TEST_PROJECT"])
 cli = os.environ["DEVENV_SSH_TEST_CLI"]
 executor_package = os.environ["DEVENV_SSH_TEST_EXECUTOR"]
+confirmation_executor_package = os.environ["DEVENV_SSH_TEST_CONFIRMATION_EXECUTOR"]
 with socket.socket() as listener:
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
@@ -51,8 +52,8 @@ opts = [
         "[ " + " ".join(json.dumps(v) for v in opts) + " ]",
     )
 )
-# All scenarios reuse exactly these closures. The target observes its own state
-# through the executor, and the controller independently checks over SSH.
+# Each scenario reuses the same system closures. The target observes its own
+# state through the executor, and the controller independently checks over SSH.
 facts = json.loads(Path(original, "etc/devenv/machine-facts.json").read_text())
 requested = json.loads(Path(updated, "etc/devenv/machine-facts.json").read_text())
 assert facts == requested
@@ -157,6 +158,11 @@ machine.succeed("systemctl start sshd.service")
 machine.wait_for_unit("sshd.service")
 
 for mode in ["lost-start", "during-switch", "controller-exit", "lost-confirm"]:
+    if mode == "lost-confirm":
+        # Successful confirmation needs time for a full NixOS activation.
+        # Keep the shorter watchdog deadline for the rollback scenarios above.
+        plan["machines"]["server"]["nixos"]["executor"] = confirmation_executor_package
+        plan_file.write_text(json.dumps(plan))
     machine.succeed(
         "echo "
         + shlex.quote(mode)
@@ -184,6 +190,6 @@ for mode in ["lost-start", "during-switch", "controller-exit", "lost-confirm"]:
     check_controller_status(outcome)
 
 # A lost confirmation response must not later cause watchdog rollback.
-machine.sleep(32)
+machine.sleep(92)
 assert_generation(updated)
 assert state()["outcome"] == "succeeded"
