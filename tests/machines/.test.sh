@@ -6,7 +6,8 @@ set -euo pipefail
 export SECRET_MACHINE_AGE_KEY="bootstrap-test-value"
 
 # 1. Schema evaluates and an empty machine has the expected default system.
-devenv eval 'machines.empty.system' | jq -e '.["machines.empty.system"] == "x86_64-linux"'
+host_system=$(nix eval --raw --impure --expr builtins.currentSystem)
+devenv eval 'machines.empty.system' | jq -e --arg system "$host_system" '.["machines.empty.system"] == $system'
 
 # 2. A machine with no roles has all build.* outputs null.
 devenv eval 'machines.empty.build.nixos' | jq -e '.["machines.empty.build.nixos"] == null'
