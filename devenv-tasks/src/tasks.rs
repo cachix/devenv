@@ -124,6 +124,8 @@ impl TasksBuilder {
             roots,
             root_names: self.config.roots,
             graph,
+            wants: HashMap::new(),
+            wanted_by_declared: HashSet::new(),
             notify_finished,
             notify_ui: Arc::new(Notify::new()),
             tasks_order: vec![],
@@ -170,6 +172,10 @@ pub struct Tasks {
     // Stored for reporting
     pub(crate) root_names: Vec<String>,
     pub(crate) graph: DiGraph<Arc<RwLock<TaskState>>, DependencyKind>,
+    /// Tasks selected whenever the key task is selected (`wanted_by`, reversed).
+    pub(crate) wants: HashMap<NodeIndex, Vec<NodeIndex>>,
+    /// Tasks that declare `wanted_by`. Ordering edges never select them.
+    pub(crate) wanted_by_declared: HashSet<NodeIndex>,
     pub(crate) tasks_order: Vec<NodeIndex>,
     pub(crate) notify_finished: Arc<Notify>,
     pub(crate) notify_ui: Arc<Notify>,
@@ -393,6 +399,8 @@ impl Tasks {
         let mut unresolved = HashSet::new();
         let mut edges_to_add = Vec::new();
         let mut validation_errors = Vec::new();
+        let mut wants: HashMap<NodeIndex, Vec<NodeIndex>> = HashMap::new();
+        let mut wanted_by_declared = HashSet::new();
 
         for index in self.graph.node_indices() {
             let task_state = &self.graph[index].read().await;
@@ -502,6 +510,23 @@ impl Tasks {
                     unresolved.insert((task_state.task.name.clone(), before_name.clone()));
                 }
             }
+
+            if let Some(wanted_by) = &task_state.task.wanted_by {
+                wanted_by_declared.insert(index);
+                for name in wanted_by {
+                    if name.contains('@') {
+                        validation_errors.push(format!(
+                            "Task '{}' lists '{}' in wantedBy, which only selects tasks and takes no suffix. \
+                             Use after or before to order the tasks.",
+                            task_state.task.name, name
+                        ));
+                    } else if let Some(&selector) = task_indices.get(name) {
+                        wants.entry(selector).or_default().push(index);
+                    } else {
+                        unresolved.insert((task_state.task.name.clone(), name.clone()));
+                    }
+                }
+            }
         }
 
         // Return validation errors first
@@ -512,6 +537,8 @@ impl Tasks {
         for (from, to, kind) in edges_to_add {
             self.graph.update_edge(from, to, kind);
         }
+        self.wants = wants;
+        self.wanted_by_declared = wanted_by_declared;
 
         if unresolved.is_empty() {
             Ok(())
@@ -525,98 +552,40 @@ impl Tasks {
         let mut subgraph = DiGraph::new();
         let mut node_map = HashMap::new();
         let mut visited = HashSet::new();
-        let mut to_visit = Vec::new();
-
-        // Start with root nodes
-        for &root_index in &self.roots {
-            to_visit.push(root_index);
-        }
 
         // Find nodes to include based on run_mode
-        match self.run_mode {
-            RunMode::Single => {
-                // Only include the root nodes themselves
-                visited = self.roots.iter().cloned().collect();
-            }
-            RunMode::After => {
-                // Include root nodes and all tasks that come after (successor nodes)
-                while let Some(node) = to_visit.pop() {
-                    if visited.insert(node) {
-                        // Add outgoing neighbors (tasks that come after this one)
-                        for neighbor in self
-                            .graph
+        if self.run_mode == RunMode::Single {
+            visited = self.roots.iter().cloned().collect();
+        } else {
+            let upstream = matches!(self.run_mode, RunMode::Before | RunMode::All);
+            let downstream = matches!(self.run_mode, RunMode::After | RunMode::All);
+            // Roots and wanted tasks are active: they select the tasks that run
+            // after them. Prerequisites are passive, so a shared prerequisite
+            // never selects unrelated dependents.
+            // See: https://github.com/cachix/devenv/issues/2337
+            let mut activated = HashSet::new();
+            let mut to_visit: Vec<(NodeIndex, bool)> =
+                self.roots.iter().map(|&root| (root, true)).collect();
+            while let Some((node, active)) = to_visit.pop() {
+                if visited.insert(node) {
+                    if let Some(wanted) = self.wants.get(&node) {
+                        to_visit.extend(wanted.iter().map(|&task| (task, true)));
+                    }
+                    if upstream {
+                        to_visit.extend(
+                            self.graph
+                                .neighbors_directed(node, petgraph::Direction::Incoming)
+                                .map(|prerequisite| (prerequisite, false)),
+                        );
+                    }
+                }
+                if active && downstream && activated.insert(node) {
+                    to_visit.extend(
+                        self.graph
                             .neighbors_directed(node, petgraph::Direction::Outgoing)
-                        {
-                            to_visit.push(neighbor);
-                        }
-                    }
-                }
-            }
-            RunMode::Before => {
-                // Include root nodes and all tasks that come before (predecessor nodes)
-                while let Some(node) = to_visit.pop() {
-                    if visited.insert(node) {
-                        // Add incoming neighbors (tasks that come before this one)
-                        for neighbor in self
-                            .graph
-                            .neighbors_directed(node, petgraph::Direction::Incoming)
-                        {
-                            to_visit.push(neighbor);
-                        }
-                    }
-                }
-            }
-            RunMode::All => {
-                // Include prerequisites (incoming) and dependents (outgoing) separately.
-                // This avoids "direction bouncing" through intermediate nodes that would
-                // incorrectly include unrelated tasks sharing a common prerequisite.
-                // See: https://github.com/cachix/devenv/issues/2337
-
-                // First: traverse incoming edges (prerequisites) from roots
-                while let Some(node) = to_visit.pop() {
-                    if visited.insert(node) {
-                        for neighbor in self
-                            .graph
-                            .neighbors_directed(node, petgraph::Direction::Incoming)
-                        {
-                            to_visit.push(neighbor);
-                        }
-                    }
-                }
-
-                // Second: traverse outgoing edges (dependents) from roots
-                // Start by adding outgoing neighbors of roots (roots are already visited)
-                for &root_index in &self.roots {
-                    for neighbor in self
-                        .graph
-                        .neighbors_directed(root_index, petgraph::Direction::Outgoing)
-                    {
-                        to_visit.push(neighbor);
-                    }
-                }
-                while let Some(node) = to_visit.pop() {
-                    if visited.insert(node) {
-                        for neighbor in self
-                            .graph
-                            .neighbors_directed(node, petgraph::Direction::Outgoing)
-                        {
-                            to_visit.push(neighbor);
-                        }
-                    }
-                }
-
-                // Include every selected task's prerequisites without traversing
-                // outward from those prerequisites.
-                to_visit.extend(visited.iter().copied());
-                while let Some(node) = to_visit.pop() {
-                    for neighbor in self
-                        .graph
-                        .neighbors_directed(node, petgraph::Direction::Incoming)
-                    {
-                        if visited.insert(neighbor) {
-                            to_visit.push(neighbor);
-                        }
-                    }
+                            .filter(|dependent| !self.wanted_by_declared.contains(dependent))
+                            .map(|dependent| (dependent, true)),
+                    );
                 }
             }
         }
@@ -2003,6 +1972,201 @@ mod schedule_tests {
             names.push(tasks.graph[*idx].read().await.task.name.clone());
         }
         names
+    }
+
+    fn wanted_by(mut task: TaskConfig, by: Vec<&str>) -> TaskConfig {
+        task.wanted_by = Some(by.into_iter().map(String::from).collect());
+        task
+    }
+
+    async fn sorted_task_names(
+        task_configs: Vec<TaskConfig>,
+        root: &str,
+        run_mode: RunMode,
+    ) -> Vec<String> {
+        let (tasks, _tmp) =
+            build_test_tasks_with_run_mode(task_configs, vec![root.to_string()], run_mode, false)
+                .await;
+        let mut names = task_names(&tasks).await;
+        names.sort();
+        names
+    }
+
+    async fn build_error(task_configs: Vec<TaskConfig>, root: &str) -> Error {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config {
+            tasks: task_configs,
+            roots: vec![root.to_string()],
+            run_mode: RunMode::All,
+            runtime_dir: tmp.path().join("runtime"),
+            cache_dir: tmp.path().join("cache"),
+            sudo_context: None,
+            env: HashMap::new(),
+            bash: String::new(),
+            ignore_process_deps: false,
+            exit_on_idle: None,
+            supervisor: SupervisionMode::Native,
+            capability_broker: None,
+        };
+        Tasks::builder(
+            config,
+            VerbosityLevel::Normal,
+            tokio_shutdown::Shutdown::new(),
+        )
+        .build()
+        .await
+        .err()
+        .expect("task graph should be rejected")
+    }
+
+    // Shell and test entry as wired by src/modules/tasks.nix and git-hooks.nix.
+    fn enter_tasks() -> Vec<TaskConfig> {
+        let mut install = oneshot_task("devenv:git-hooks:install", vec![]);
+        install.before = vec!["devenv:enterShell".to_string()];
+        let mut run = oneshot_task("devenv:git-hooks:run", vec!["devenv:git-hooks:install"]);
+        run.before = vec!["devenv:enterTest".to_string()];
+        let mut seed = oneshot_task("app:seed", vec!["devenv:enterShell"]);
+        seed.before = vec!["devenv:enterTest".to_string()];
+        vec![
+            oneshot_task("devenv:enterShell", vec![]),
+            wanted_by(
+                oneshot_task("devenv:enterTest", vec!["devenv:enterShell"]),
+                vec![],
+            ),
+            install,
+            run,
+            seed,
+            oneshot_task("app:test-only", vec!["devenv:enterTest"]),
+            wanted_by(
+                oneshot_task("app:shell-hook", vec!["devenv:enterShell"]),
+                vec!["devenv:enterShell"],
+            ),
+        ]
+    }
+
+    #[tokio::test]
+    async fn shell_entry_does_not_select_task_with_empty_wanted_by() {
+        for mode in [RunMode::After, RunMode::All] {
+            assert_eq!(
+                sorted_task_names(enter_tasks(), "devenv:enterShell", mode).await,
+                if mode == RunMode::All {
+                    vec![
+                        "app:seed",
+                        "app:shell-hook",
+                        "devenv:enterShell",
+                        "devenv:git-hooks:install",
+                    ]
+                } else {
+                    vec!["app:seed", "app:shell-hook", "devenv:enterShell"]
+                },
+                "{mode:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_entry_selects_shell_and_test_setup() {
+        let (tasks, _tmp) =
+            build_test_tasks(enter_tasks(), vec!["devenv:enterTest".to_string()], false).await;
+        let names = task_names(&tasks).await;
+        let position = |name: &str| {
+            names
+                .iter()
+                .position(|task| task == name)
+                .unwrap_or_else(|| panic!("{name} not scheduled in {names:?}"))
+        };
+        assert_eq!(names.len(), 7, "{names:?}");
+        assert!(position("devenv:git-hooks:install") < position("devenv:enterShell"));
+        assert!(position("devenv:enterShell") < position("app:shell-hook"));
+        assert!(position("devenv:enterShell") < position("devenv:enterTest"));
+        assert!(position("devenv:git-hooks:run") < position("devenv:enterTest"));
+        assert!(position("app:seed") < position("devenv:enterTest"));
+        assert!(position("devenv:enterTest") < position("app:test-only"));
+    }
+
+    #[tokio::test]
+    async fn wanted_by_selects_in_every_mode_but_single() {
+        let tasks = vec![
+            oneshot_task("devenv:processes:db", vec![]),
+            wanted_by(
+                oneshot_task("devenv:db:configure", vec!["devenv:processes:db"]),
+                vec!["devenv:processes:db"],
+            ),
+            oneshot_task("devenv:db:after-only", vec!["devenv:processes:db"]),
+        ];
+        for (mode, expected) in [
+            (RunMode::Single, vec!["devenv:processes:db"]),
+            (
+                RunMode::Before,
+                vec!["devenv:db:configure", "devenv:processes:db"],
+            ),
+            (
+                RunMode::After,
+                vec![
+                    "devenv:db:after-only",
+                    "devenv:db:configure",
+                    "devenv:processes:db",
+                ],
+            ),
+            (
+                RunMode::All,
+                vec![
+                    "devenv:db:after-only",
+                    "devenv:db:configure",
+                    "devenv:processes:db",
+                ],
+            ),
+        ] {
+            assert_eq!(
+                sorted_task_names(tasks.clone(), "devenv:processes:db", mode).await,
+                expected,
+                "{mode:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn wanted_by_from_prerequisite_selects_task() {
+        // Prerequisites stay passive for ordering edges but still trigger wantedBy.
+        let tasks = vec![
+            oneshot_task("app:db", vec![]),
+            oneshot_task("app:server", vec!["app:db"]),
+            oneshot_task("app:unrelated", vec!["app:db"]),
+            wanted_by(oneshot_task("app:migrate", vec!["app:db"]), vec!["app:db"]),
+        ];
+        assert_eq!(
+            sorted_task_names(tasks, "app:server", RunMode::All).await,
+            ["app:db", "app:migrate", "app:server"]
+        );
+    }
+
+    #[tokio::test]
+    async fn wanted_by_rejects_suffix_and_unknown_task() {
+        let error = build_error(
+            vec![
+                oneshot_task("app:db", vec![]),
+                wanted_by(oneshot_task("app:migrate", vec![]), vec!["app:db@ready"]),
+            ],
+            "app:db",
+        )
+        .await;
+        assert!(
+            matches!(&error, Error::InvalidDependency(message) if message.contains("takes no suffix")),
+            "{error:?}"
+        );
+
+        let error = build_error(
+            vec![wanted_by(
+                oneshot_task("app:migrate", vec![]),
+                vec!["app:missing"],
+            )],
+            "app:migrate",
+        )
+        .await;
+        assert!(
+            matches!(&error, Error::TasksNotFound(missing) if missing == &[("app:migrate".to_string(), "app:missing".to_string())]),
+            "{error:?}"
+        );
     }
 
     #[tokio::test]

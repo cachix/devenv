@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -ex
 
-# Blocks until garage's readiness probe passes (which requires the bucket to
-# exist) and fails if garage-configure dies, so the checks below can't race.
+# Blocks until Garage's readiness probe passes, which requires the bucket to
+# exist. Configuration failures also fail process startup.
 wait_for_processes
 
 curl -sf -H "Authorization: Bearer devtoken" \

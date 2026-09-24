@@ -14,6 +14,7 @@
 - Fixed `devenv shell "git log"` and other quoted commands failing with `not found` ([#3187](https://github.com/cachix/devenv/issues/3187)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 - Fixed `devenv shell` crashing with SIGABRT and leaving a coredump when its terminal window is closed while output is being written ([#3203](https://github.com/cachix/devenv/issues/3203)).
+- Fixed `devenv shell` running test setup such as `devenv:git-hooks:run` and tasks with `before = [ "devenv:enterTest" ]` ([#3184](https://github.com/cachix/devenv/issues/3184)).
 
 ### Improvements
 
@@ -21,6 +22,7 @@
 - Added configuration access checks to NixOS machine plans and `devenv machines check` to inspect them without building. Reviewed deployments reject disabled SSH or root login, report uncertain access changes, and require regenerated fleet plans.
 - Mixed NixOS, nix-darwin, and home-manager fleets share one review and confirmation. Every role is built and copied before activation; system roles run before home-manager. `--max-concurrent` supports bounded activation batches that stop after a failure.
 - `devenv machines deploy` builds a fleet plan, shows changes, asks for confirmation, and applies those exact outputs. NixOS uses generation checks and transactional rollback; nix-darwin and home-manager use direct activation. Use `--yes` for automation. `machines plan` saves a reusable plan ID; JSON export is optional with `--json`.
+- Added `tasks.<name>.wantedBy` to choose which tasks select a task, separately from `after`/`before` ordering. Garage now configures its layout and buckets when started with `devenv up garage` as well as bare `devenv up` ([#2852](https://github.com/cachix/devenv/issues/2852)).
 
 ## 2.3.1 (2026-09-11)
 

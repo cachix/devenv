@@ -5,6 +5,8 @@ let
   readyType = import ./lib/ready.nix { inherit lib; };
 
   devenv-tasks = import ./tasks/package.nix { inherit pkgs lib; };
+  supportsWantedBy = config.devenv.cli.version == null
+    || lib.versionAtLeast config.devenv.cli.version "2.3.2";
 
   taskType = types.submodule
     ({ name, config, ... }:
@@ -112,6 +114,7 @@ let
               status = config.statusCommand;
               after = config.after;
               before = config.before;
+              wanted_by = config.wantedBy;
               command = config.command;
               input = config.input;
               exec_if_modified = config.execIfModified;
@@ -174,6 +177,22 @@ let
               - `task@completed` - the dependent waits for this task to finish (soft dependency)
             '';
             default = [ ];
+          };
+          wantedBy = lib.mkOption {
+            type = types.nullOr (types.listOf types.str);
+            default = null;
+            example = [ "devenv:enterShell" ];
+            description = ''
+              Tasks that select this task when they run, like systemd's `wantedBy`.
+
+              When unset, running a task also runs the tasks ordered after it
+              (in `after` and `all` modes). Once set, only the listed tasks select
+              this task, and `after`/`before` only order it. It still runs when
+              named directly or when a selected task runs after it.
+              Use `[ ]` to opt out of being selected by ordering edges.
+
+              This does not order the tasks, so combine it with `after` or `before`.
+            '';
           };
           input = lib.mkOption {
             type = types.attrsOf types.anything;
@@ -427,7 +446,26 @@ in
   };
 
   config = {
+    changelogs = [
+      {
+        date = "2026-09-22";
+        title = "Shell entry no longer runs test setup tasks";
+        when = supportsWantedBy;
+        description = ''
+          `devenv shell` no longer runs `devenv:enterTest` or tasks attached to it,
+          such as `devenv:git-hooks:run`. `devenv test` still runs shell setup first.
+
+          Tasks can set `wantedBy` to choose which tasks select them, like systemd.
+          For example, `wantedBy = [ "devenv:processes:db" ];` runs a setup task
+          whenever the `db` process starts, including under `devenv up`.
+        '';
+      }
+    ];
     assertions = [
+      {
+        assertion = supportsWantedBy || lib.all (task: task.wantedBy == null) (lib.attrValues config.tasks);
+        message = "tasks.*.wantedBy requires devenv 2.3.2 or newer.";
+      }
       {
         assertion = lib.all (task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);
         message = "The 'exports' option for a task can only be set when 'package' is a bash package.";
@@ -469,6 +507,8 @@ in
       "devenv:enterTest" = {
         description = "Runs when entering the test environment";
         after = [ "devenv:enterShell" ];
+        # Only runs as the `devenv test` root, never because shell entry ran.
+        wantedBy = lib.mkIf supportsWantedBy [ ];
       };
     };
     # In devenv 2.0+, Rust runs enterShell tasks before shell spawns (with TUI progress).

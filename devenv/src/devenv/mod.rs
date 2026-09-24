@@ -1142,7 +1142,8 @@ impl Devenv {
         }
 
         // Dependency closure of the requested processes, traversing `after`
-        // edges and reversed `before` edges through tasks of every type
+        // edges, reversed `before` edges and reversed `wantedBy` (the
+        // scheduler selects wanted tasks too) through tasks of every type
         // (a process may depend on a oneshot that depends on a process).
         // `@kind` suffixes are stripped: the closure asks "which tasks does
         // this launch need", not how readiness is judged.
@@ -1160,6 +1161,9 @@ impl Devenv {
                 .extend(t.after.iter().map(|d| dep_name(d)));
             for b in &t.before {
                 edges.entry(dep_name(b)).or_default().push(t.name.clone());
+            }
+            for w in t.wanted_by.iter().flatten() {
+                edges.entry(w.clone()).or_default().push(t.name.clone());
             }
         }
         let mut needed: HashSet<String> = HashSet::new();
@@ -4084,6 +4088,7 @@ struct TaskListItem<'a> {
     r#type: tasks::TaskType,
     after: &'a [String],
     before: &'a [String],
+    wanted_by: Option<&'a [String]>,
     has_exec: bool,
     has_status: bool,
     cwd: Option<&'a str>,
@@ -4099,6 +4104,7 @@ fn format_tasks_json(tasks: &[tasks::TaskConfig]) -> Result<String> {
             r#type: task.r#type,
             after: &task.after,
             before: &task.before,
+            wanted_by: task.wanted_by.as_deref(),
             has_exec: task.command.is_some(),
             has_status: task.status.is_some(),
             cwd: task.cwd.as_deref(),
@@ -4969,6 +4975,29 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
     }
 
     #[test]
+    fn resolve_launch_processes_follows_wanted_by() {
+        // beta wants configure, which needs alpha. gamma is unrelated.
+        let mut configs = vec![
+            process_task("alpha", true),
+            process_task("beta", true),
+            process_task("gamma", true),
+            tasks::TaskConfig {
+                name: "devenv:beta:configure".to_string(),
+                after: vec![format!("{}alpha", devenv_tasks::PROCESS_TASK_PREFIX)],
+                wanted_by: Some(vec![format!("{}beta", devenv_tasks::PROCESS_TASK_PREFIX)]),
+                ..Default::default()
+            },
+        ];
+
+        Devenv::resolve_launch_processes(&mut configs, &["beta".to_string()]).unwrap();
+
+        let enable = |i: usize| configs[i].process.as_ref().unwrap().start.enable;
+        assert!(enable(0), "alpha launches for the task beta wants");
+        assert!(enable(1), "requested beta launches");
+        assert!(!enable(2), "unrelated gamma is disabled");
+    }
+
+    #[test]
     fn resolve_launch_processes_rejects_unknown_names() {
         let mut configs = vec![process_task("alpha", true)];
         let err = Devenv::resolve_launch_processes(&mut configs, &["nosuch".to_string()])
@@ -5180,6 +5209,7 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
                     "type": "oneshot",
                     "after": ["test:build"],
                     "before": ["test:report"],
+                    "wantedBy": null,
                     "hasExec": true,
                     "hasStatus": true,
                     "cwd": "crates/app",

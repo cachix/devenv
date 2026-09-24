@@ -241,7 +241,7 @@ See [Dependency states](/tasks/#dependency-states) for the full semantics, and [
 
 :::caution[Setup tasks that run after a process]
 
-`devenv up` schedules processes in `before` mode, which runs each process's upstream dependencies but **not** tasks that run *after* it. A setup or configure task wired downstream of a process — e.g. `processes.<name>.before = [ "devenv:<name>:configure" ]` — is skipped under `devenv up` and never runs. Use `devenv up --mode all`, or see [Processes as tasks](/tasks/#processes-as-tasks) for details.
+`devenv up` schedules processes in `before` mode, which runs each process's upstream dependencies but **not** tasks that run *after* it. A setup or configure task wired downstream of a process — e.g. `processes.<name>.before = [ "devenv:<name>:configure" ]` — is skipped under `devenv up` and never runs. Add `wantedBy = [ "devenv:processes:<name>" ];` to the setup task (2.3.2+), use `devenv up --mode all`, or see [Processes as tasks](/tasks/#processes-as-tasks) for details.
 :::
 
 

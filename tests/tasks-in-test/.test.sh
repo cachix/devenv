@@ -29,6 +29,16 @@ test -z "${DEVENV_TEST_NOT_EXPORTED:-}"
 # enterTest-only task should have run (devenv test runs enterTest root,
 # which depends on enterShell)
 test "$DEVENV_TEST_ENTER_TEST_RAN" = "yes"
+test -f "$DEVENV_STATE/enter-test-ran"
+
+# Entering a shell must not run enterTest or tasks attached only to it,
+# even when a shell task also runs before enterTest.
+rm "$DEVENV_STATE/enter-test-ran" "$DEVENV_STATE/wanted-by-shell-ran"
+devenv shell -- true
+test ! -e "$DEVENV_STATE/enter-test-ran"
+
+# A wantedBy hook runs on shell entry.
+test -f "$DEVENV_STATE/wanted-by-shell-ran"
 
 # Task depending on a process with exec readiness probe should have run.
 # Regression test for https://github.com/cachix/devenv/issues/2713

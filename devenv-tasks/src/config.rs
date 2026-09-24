@@ -15,6 +15,10 @@ pub struct TaskConfig {
     pub after: Vec<String>,
     #[serde(default)]
     pub before: Vec<String>,
+    /// Tasks that select this task when they run. When set, `after` and
+    /// `before` only order this task and no longer select it.
+    #[serde(default)]
+    pub wanted_by: Option<Vec<String>>,
     #[serde(default)]
     pub command: Option<String>,
     #[serde(default)]
@@ -40,12 +44,12 @@ pub struct TaskConfig {
 pub enum RunMode {
     /// Run only the specified task without dependencies
     Single,
-    /// Run the specified task and all tasks that depend on it (downstream tasks)
+    /// Run the specified task and the tasks that run after it (downstream tasks)
     After,
     /// Run all dependency tasks first, then the specified task (upstream tasks)
     Before,
     #[default]
-    /// Run the complete dependency graph (upstream and downstream tasks)
+    /// Run the specified task with its upstream and downstream tasks
     All,
 }
 

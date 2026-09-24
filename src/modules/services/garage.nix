@@ -7,6 +7,8 @@
 let
   cfg = config.services.garage;
   types = lib.types;
+  supportsWantedBy = config.devenv.cli.version == null
+    || lib.versionAtLeast config.devenv.cli.version "2.3.2";
 
   parsePort = addr: lib.toInt (lib.last (lib.splitString ":" addr));
   parseHost = addr: lib.head (lib.splitString ":" addr);
@@ -249,6 +251,19 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    changelogs = [
+      {
+        date = "2026-09-22";
+        title = "services.garage: configure layout and buckets on named starts";
+        when = supportsWantedBy;
+        description = ''
+          `devenv up garage` now configures the Garage layout and buckets.
+          Configuration runs as a task after the server starts, so
+          `garage-configure` no longer appears as a separate process.
+        '';
+      }
+    ];
+
     assertions = [
       {
         assertion = cfg.adminToken != "";
@@ -277,7 +292,18 @@ in
       GARAGE_CONFIG_FILE = "${configFile}";
     };
 
-    processes.garage-configure = {
+    # Select configuration when Garage starts, including `devenv up garage`.
+    # It must run after the server starts because it applies the layout through
+    # the Garage CLI, before the server's ready probe can see the buckets.
+    tasks."devenv:garage:configure" = lib.mkIf supportsWantedBy {
+      exec = "exec ${configureScript}/bin/configure";
+      after = [ "devenv:processes:garage@started" ];
+      wantedBy = [ "devenv:processes:garage" ];
+    };
+
+    # Older CLIs cannot read wantedBy. Bare `devenv up` still starts this
+    # process as an independent root, as it did before 2.3.2.
+    processes.garage-configure = lib.mkIf (!supportsWantedBy) {
       exec = "exec ${configureScript}/bin/configure";
       after = [ "devenv:processes:garage@started" ];
     };
