@@ -12,6 +12,12 @@ set -ex
 
 PORT=
 PORT_FILE=.devenv/state/http-port
+STOPPED_FILE=.devenv/state/up-stopped
+FOREGROUND_PID=
+
+stopped_count_is() {
+  test -f "$STOPPED_FILE" && test "$(wc -l < "$STOPPED_FILE")" -eq "$1"
+}
 
 load_port() {
   wait_until 30 test -s "$PORT_FILE" || return 1
@@ -45,6 +51,9 @@ cleanup() {
       fi
     done
   fi
+  if [ -n "$FOREGROUND_PID" ]; then
+    kill -TERM "$FOREGROUND_PID" 2>/dev/null || true
+  fi
   devenv processes down >/dev/null 2>&1 || true
   wait_for_http_gone "$PORT" || status=1
   exit "$status"
@@ -53,11 +62,14 @@ trap cleanup EXIT INT TERM
 
 # === Test 1: up -d then down cleans up ===
 echo "--- Test 1: basic up -d / down ---"
+rm -f "$STOPPED_FILE"
 start_daemon
 devenv processes wait
 wait_for_http_ready "$PORT"
+test ! -e "$STOPPED_FILE"
 devenv processes down
 wait_for_http_gone "$PORT" || { echo "FAIL: port still bound after down"; exit 1; }
+test "$(wc -l < "$STOPPED_FILE")" -eq 1
 echo "PASS: basic up -d / down"
 
 # === Test 2: up -d attaches when a daemon is already running ===
@@ -151,5 +163,22 @@ devenv processes down
 wait_for_http_gone "$PORT" || { echo "FAIL: port bound after concurrent start cleanup"; exit 1; }
 wait_for_pid_gone "$DAEMON_PID" || { echo "FAIL: concurrent-start daemon survived down"; exit 1; }
 echo "PASS: concurrent daemon startup"
+
+test "$(wc -l < "$STOPPED_FILE")" -eq 6
+
+# === Test 6: foreground signal runs cleanup ===
+echo "--- Test 6: foreground signal ---"
+rm -f "$PORT_FILE"
+devenv up --no-tui >foreground-up.txt 2>&1 &
+FOREGROUND_PID=$!
+load_port
+wait_for_http_ready "$PORT"
+stopped_count_is 6
+kill -TERM "$FOREGROUND_PID"
+wait_until 30 stopped_count_is 7
+wait "$FOREGROUND_PID"
+FOREGROUND_PID=
+wait_for_http_gone "$PORT"
+echo "PASS: foreground signal"
 
 echo "All daemon-down tests passed!"

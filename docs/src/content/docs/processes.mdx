@@ -239,6 +239,21 @@ For **task** dependencies:
 
 See [Dependency states](/tasks/#dependency-states) for the full semantics, and [Execution modes](/tasks/#execution-modes) for how `devenv up` and `devenv tasks run` decide which dependencies to schedule.
 
+### Cleanup after `devenv up`
+
+With the native process manager, a task depending on `devenv:up@stopped` runs after all processes have stopped, including after Ctrl-C or `devenv processes down`:
+
+```nix title="devenv.nix"
+{
+  tasks."app:cleanup" = {
+    exec = "rm -f ./server.pid";
+    after = [ "devenv:up@stopped" ];
+  };
+}
+```
+
+This is a manager-wide hook. Stopping one process while others remain running does not trigger it. Available in devenv 2.4.1 and later.
+
 :::caution[Setup tasks that run after a process]
 
 `devenv up` schedules processes in `before` mode, which runs each process's upstream dependencies but **not** tasks that run *after* it. A setup or configure task wired downstream of a process — e.g. `processes.<name>.before = [ "devenv:<name>:configure" ]` — is skipped under `devenv up` and never runs. Add `wantedBy = [ "devenv:processes:<name>" ];` to the setup task (2.3.2+), use `devenv up --mode all`, or see [Processes as tasks](/tasks/#processes-as-tasks) for details.

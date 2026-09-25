@@ -1,4 +1,5 @@
-use crate::Tasks;
+use crate::{Config, RunMode, Tasks};
+use devenv_core::VerbosityLevel;
 use devenv_mailbox::{FrontendEvent, ProcessCommand};
 use devenv_processes::{
     ApiRequest, ApiResponse, AttachEvent, LogStream, ManagerResidence, OnIdle, ProcessInfo,
@@ -9,7 +10,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{OnceCell, mpsc};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
@@ -17,6 +18,7 @@ use tracing::{debug, info, trace, warn};
 const ATTACH_WRITE_STALL_TIMEOUT: Duration = Duration::from_secs(30);
 const ATTACH_BACKLOG_LINES: usize = 50;
 const ATTACH_EVENT_CHANNEL_CAPACITY: usize = 2048;
+const UP_SHUTDOWN_TASK_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Default)]
 struct AttachTailers(Vec<JoinHandle<()>>);
@@ -71,11 +73,30 @@ fn latest_queued_process_command(rx: &mut mpsc::Receiver<FrontendEvent>) -> Opti
 pub struct NativeProcessManager {
     tasks: Arc<Tasks>,
     residence: ManagerResidence,
+    up_shutdown_config: Option<Config>,
+    up_shutdown_once: OnceCell<Result<(), String>>,
 }
 
 impl NativeProcessManager {
     pub fn new(tasks: Arc<Tasks>, residence: ManagerResidence) -> Self {
-        Self { tasks, residence }
+        Self {
+            tasks,
+            residence,
+            up_shutdown_config: None,
+            up_shutdown_once: OnceCell::new(),
+        }
+    }
+
+    /// Register the tasks selected by `devenv:up@stopped` for this manager.
+    pub fn with_up_shutdown_config(mut self, config: Config) -> Self {
+        if config
+            .tasks
+            .iter()
+            .any(|task| task.after.iter().any(|dep| dep == "devenv:up@stopped"))
+        {
+            self.up_shutdown_config = Some(config);
+        }
+        self
     }
 
     pub fn tasks(&self) -> &Arc<Tasks> {
@@ -99,7 +120,60 @@ impl NativeProcessManager {
     }
 
     pub async fn stop_all(&self) -> Result<()> {
-        self.process_runner().stop_all().await
+        let stopped = self.process_runner().stop_all().await;
+        let cleanup = self.run_up_shutdown_tasks().await;
+        stopped?;
+        cleanup
+    }
+
+    async fn run_up_shutdown_tasks(&self) -> Result<()> {
+        let result = self
+            .up_shutdown_once
+            .get_or_init(|| async {
+                self.execute_up_shutdown_tasks()
+                    .await
+                    .map_err(|error| format!("{error:?}"))
+            })
+            .await;
+        result.clone().map_err(|error| miette::miette!("{error}"))
+    }
+
+    async fn execute_up_shutdown_tasks(&self) -> Result<()> {
+        let Some(mut config) = self.up_shutdown_config.clone() else {
+            return Ok(());
+        };
+        config.roots = vec!["devenv:up".to_string()];
+        config.run_mode = RunMode::After;
+        config.capability_broker = None;
+
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let tasks = Arc::new(
+            Tasks::builder(config, VerbosityLevel::Normal, Arc::clone(&shutdown))
+                .with_up_shutdown()
+                .build()
+                .await
+                .map_err(|error| miette::miette!("Invalid devenv:up@stopped tasks: {error}"))?,
+        );
+
+        let run_tasks = Arc::clone(&tasks);
+        let mut run = tokio::spawn(async move { run_tasks.run(false).await });
+        match tokio::time::timeout(UP_SHUTDOWN_TASK_TIMEOUT, &mut run).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => return Err(miette::miette!("Shutdown task runner failed: {error}")),
+            Err(_) => {
+                shutdown.shutdown();
+                let _ = tokio::time::timeout(Duration::from_secs(5), &mut run).await;
+                if !run.is_finished() {
+                    run.abort();
+                }
+                return Err(miette::miette!("devenv:up@stopped tasks timed out"));
+            }
+        }
+
+        if tasks.get_completion_status().await.has_failures() {
+            return Err(miette::miette!("devenv:up@stopped tasks failed"));
+        }
+        Ok(())
     }
 
     /// Whether every process is terminal, ready, or waiting only on work that
@@ -196,8 +270,10 @@ impl NativeProcessManager {
             .process_runner()
             .run_until(cancellation_token, mode)
             .await;
+        let cleanup = self.run_up_shutdown_tasks().await;
         info!("Manager event loop stopped");
-        result
+        result?;
+        cleanup
     }
 
     fn process_not_found(name: &str) -> ApiResponse {
@@ -572,6 +648,7 @@ mod tests {
         RestartConfig, RestartPolicy, SupervisionMode,
     };
     use std::collections::{BTreeMap, HashMap};
+    use std::os::unix::fs::PermissionsExt;
 
     async fn test_manager(
         temp_dir: &tempfile::TempDir,
@@ -714,6 +791,89 @@ mod tests {
         })
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for attached {name} to reach {expected}"))
+    }
+
+    #[tokio::test]
+    async fn up_stopped_tasks_run_in_order_once_after_processes_stop() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path().join("runtime");
+        std::fs::create_dir_all(&runtime_dir).unwrap();
+        let marker = temp_dir.path().join("shutdown-order");
+
+        let mut cleanup_tasks = Vec::new();
+        for (name, after, line) in [
+            ("test:cleanup", "devenv:up@stopped", "first"),
+            ("test:verify", "test:cleanup", "second"),
+        ] {
+            let script = temp_dir.path().join(name.replace(':', "-"));
+            std::fs::write(
+                &script,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' '{line}' >> '{}'\n",
+                    marker.display()
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            cleanup_tasks.push(TaskConfig {
+                name: name.to_string(),
+                after: vec![after.to_string()],
+                command: Some(script.to_string_lossy().into_owned()),
+                ..Default::default()
+            });
+        }
+
+        let mut task_configs = vec![TaskConfig {
+            name: "devenv:up".to_string(),
+            ..Default::default()
+        }];
+        task_configs.push(process_task("web", "exec tail -f /dev/null"));
+        task_configs.extend(cleanup_tasks);
+        let config = Config {
+            tasks: task_configs,
+            roots: vec!["devenv:processes:web".to_string()],
+            run_mode: RunMode::Before,
+            runtime_dir,
+            cache_dir: temp_dir.path().join("cache"),
+            sudo_context: None,
+            env: HashMap::new(),
+            bash: String::new(),
+            ignore_process_deps: false,
+            exit_on_idle: Some(false),
+            supervisor: SupervisionMode::Native,
+            capability_broker: None,
+        };
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let tasks = Arc::new(
+            Tasks::builder(
+                config.clone(),
+                VerbosityLevel::Normal,
+                Arc::clone(&shutdown),
+            )
+            .build()
+            .await
+            .unwrap(),
+        );
+        let manager = NativeProcessManager::new(tasks, ManagerResidence::InProcess)
+            .with_up_shutdown_config(config);
+
+        manager
+            .process_runner()
+            .start_command(&long_running_config("web"), None)
+            .await
+            .unwrap();
+        wait_for_phase(&manager, "web", ProcessPhase::Ready).await;
+        assert!(!marker.exists(), "shutdown tasks ran during startup");
+
+        shutdown.shutdown();
+        manager.stop_all().await.unwrap();
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "first\nsecond\n");
+        manager.stop_all().await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&marker).unwrap(),
+            "first\nsecond\n",
+            "shutdown tasks ran more than once"
+        );
     }
 
     #[tokio::test]

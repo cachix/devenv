@@ -2958,18 +2958,25 @@ impl Devenv {
             .await?;
 
             let tasks_runner = Arc::new(
-                tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
-                    .build()
-                    .await
-                    .map_err(|e| miette!("Failed to build task runner: {}", e))?,
+                tasks::Tasks::builder(
+                    config.clone(),
+                    VerbosityLevel::Normal,
+                    self.shutdown.clone(),
+                )
+                .build()
+                .await
+                .map_err(|e| miette!("Failed to build task runner: {}", e))?,
             );
 
             // The persistent manager owns the task execution scope. That scope
             // owns the one process runner used by all of its process tasks.
-            let manager = Arc::new(tasks::NativeProcessManager::new(
-                Arc::clone(&tasks_runner),
-                processes::ManagerResidence::InProcess,
-            ));
+            let manager = Arc::new(
+                tasks::NativeProcessManager::new(
+                    Arc::clone(&tasks_runner),
+                    processes::ManagerResidence::InProcess,
+                )
+                .with_up_shutdown_config(config),
+            );
 
             // Start command processing before task execution so that
             // Ctrl-R works even while tasks are still running (e.g. when
@@ -2991,7 +2998,7 @@ impl Devenv {
             if task_status.has_failures() {
                 // A caller such as `devenv test` must not leave successfully
                 // started process siblings behind when another task fails.
-                let _ = tasks_runner.process_runner().stop_all().await;
+                let _ = manager.stop_all().await;
                 bail!("Process tasks failed");
             }
 

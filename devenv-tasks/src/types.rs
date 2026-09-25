@@ -30,6 +30,8 @@ pub enum DependencyKind {
     Succeeded,
     /// Satisfied by any terminal outcome without propagating failure.
     Completed,
+    /// Satisfied after the native `devenv up` manager has stopped.
+    Stopped,
 }
 
 /// Dependency specification with optional suffix
@@ -341,6 +343,9 @@ fn is_completed_dep_satisfied(completed: &TaskCompleted, kind: &DependencyKind) 
 
         // @completed — any completion (soft)
         (_, DependencyKind::Completed) => DepSatisfaction::Satisfied,
+
+        // The synthetic devenv:up task is run only during manager teardown.
+        (_, DependencyKind::Stopped) => DepSatisfaction::Satisfied,
 
         // Completed but doesn't satisfy the required kind
         (_, _) => DepSatisfaction::NeverSatisfiable,

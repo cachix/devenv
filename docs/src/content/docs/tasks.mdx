@@ -386,7 +386,18 @@ You can also run tasks after a process finishes by depending on its `@completed`
 }
 ```
 
-This ensures that cleanup tasks like removing PID files or clearing caches are executed when the application server stops.
+This runs when `app:cleanup` is selected in a task run and the application server finishes. For cleanup when the entire native `devenv up` session stops, use `devenv:up@stopped` instead:
+
+```nix title="devenv.nix"
+{
+  tasks."app:cleanup" = {
+    exec = "rm -f ./server.pid";
+    after = [ "devenv:up@stopped" ];
+  };
+}
+```
+
+`devenv up` runs this task after stopping all processes. It runs for foreground shutdown and `devenv processes down` after `devenv up -d`. It does not run when only one process is stopped while the manager remains active. This dependency is supported by the native manager in devenv 2.4.1 and later.
 
 :::caution[Setup tasks attached to processes and `devenv up`]
 

@@ -2280,7 +2280,8 @@ impl ProcessManagerControl for NativeManagerClient {
 
         // Wait for shutdown with exponential backoff.
         let start = std::time::Instant::now();
-        let max_wait = Duration::from_secs(30);
+        // Leave time for lifecycle tasks after process teardown.
+        let max_wait = Duration::from_secs(60);
         let mut interval = Duration::from_millis(100);
         let max_interval = Duration::from_secs(1);
 

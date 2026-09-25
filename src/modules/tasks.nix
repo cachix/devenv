@@ -7,6 +7,8 @@ let
   devenv-tasks = import ./tasks/package.nix { inherit pkgs lib; };
   supportsWantedBy = config.devenv.cli.version == null
     || lib.versionAtLeast config.devenv.cli.version "2.3.2";
+  supportsUpStopped = config.devenv.cli.version == null
+    || lib.versionAtLeast config.devenv.cli.version "2.4.1";
 
   taskType = types.submodule
     ({ name, config, ... }:
@@ -157,6 +159,7 @@ let
               - `task` or `task@ready` - wait for task to be ready/healthy (default for processes, processes only)
               - `task@succeeded` - wait for task to exit successfully (default for tasks, tasks only)
               - `task@completed` - wait for task to finish, regardless of exit code (soft dependency)
+              - `devenv:up@stopped` - run after the native process manager stops
 
               Example: `after = [ "pnpm:install@completed" ];` allows this task to run
               even if pnpm:install fails.
@@ -494,6 +497,9 @@ in
         config.tasks;
 
     tasks = {
+      "devenv:up" = lib.mkIf supportsUpStopped {
+        description = "Native process manager lifecycle";
+      };
       "devenv:enterShell" = {
         description = "Runs when entering the shell";
         exec = ''

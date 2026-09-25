@@ -28,6 +28,7 @@ pub struct TasksBuilder {
     db_path: Option<PathBuf>,
     shutdown: Arc<tokio_shutdown::Shutdown>,
     refresh_task_cache: bool,
+    up_shutdown: bool,
 }
 
 impl TasksBuilder {
@@ -43,6 +44,7 @@ impl TasksBuilder {
             db_path: None,
             shutdown,
             refresh_task_cache: false,
+            up_shutdown: false,
         }
     }
 
@@ -58,8 +60,15 @@ impl TasksBuilder {
         self
     }
 
+    /// Build the task graph that runs after the native `devenv up` manager stops.
+    pub fn with_up_shutdown(mut self) -> Self {
+        self.up_shutdown = true;
+        self
+    }
+
     /// Build the Tasks instance
     pub async fn build(self) -> Result<Tasks, Error> {
+        let up_shutdown = self.up_shutdown;
         let supervisor = self.config.supervisor;
         // External managers own ordering and invoke one wrapper per process.
         let ignore_process_deps =
@@ -96,6 +105,17 @@ impl TasksBuilder {
         let mut task_indices = HashMap::new();
         for task in self.config.tasks {
             let name = task.name.clone();
+            if name == "devenv:up"
+                && (task.r#type != TaskType::Oneshot
+                    || task.command.is_some()
+                    || !task.after.is_empty()
+                    || !task.before.is_empty()
+                    || task.wanted_by.is_some())
+            {
+                return Err(Error::InvalidDependency(
+                    "devenv:up is a reserved lifecycle task and cannot be configured".into(),
+                ));
+            }
             if !task.name.contains(':')
                 || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
@@ -147,6 +167,29 @@ impl TasksBuilder {
 
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
+        let mut selected_up = false;
+        for &index in &tasks.tasks_order {
+            if tasks.graph[index].read().await.task.name == "devenv:up" {
+                selected_up = true;
+                break;
+            }
+        }
+        if selected_up && !up_shutdown {
+            return Err(Error::InvalidDependency(
+                "devenv:up@stopped can only run when the native process manager stops".into(),
+            ));
+        }
+        if up_shutdown {
+            for &index in &tasks.tasks_order {
+                let task = tasks.graph[index].read().await;
+                if task.task.r#type == TaskType::Process {
+                    return Err(Error::InvalidDependency(format!(
+                        "shutdown task graph selects process '{}'; stopping devenv cannot start processes",
+                        task.task.name
+                    )));
+                }
+            }
+        }
         tasks.scheduled_task_indices = Mutex::new(tasks.tasks_order.iter().copied().collect());
         // Dynamic starts address nodes outside the initial schedule.
         for index in tasks.graph.node_indices() {
@@ -422,6 +465,16 @@ impl Tasks {
                         }
                     });
 
+                    if resolved_kind == DependencyKind::Stopped
+                        && (dep_spec.name != "devenv:up"
+                            || task_state.task.r#type == TaskType::Process)
+                    {
+                        validation_errors.push(format!(
+                            "Task '{}' uses @stopped, which is only supported as after = [ \"devenv:up@stopped\" ] on a oneshot task",
+                            task_state.task.name
+                        ));
+                    }
+
                     // Validate suffix is compatible with the dependency's task type
                     match (dep_task.task.r#type, resolved_kind) {
                         (TaskType::Oneshot, DependencyKind::Ready) => {
@@ -462,6 +515,13 @@ impl Tasks {
             for before_name in &task_state.task.before {
                 // Parse dependency with optional suffix
                 let dep_spec = parse_dependency(before_name)?;
+
+                if dep_spec.kind == Some(DependencyKind::Stopped) {
+                    validation_errors.push(format!(
+                        "Task '{}' uses @stopped in before; use after = [ \"devenv:up@stopped\" ] instead",
+                        task_state.task.name
+                    ));
+                }
 
                 if let Some(before_idx) = task_indices.get(&dep_spec.name) {
                     // For 'before' relationships, the current task is the dependency source
@@ -2322,6 +2382,7 @@ mod schedule_tests {
                     DependencyKind::Ready => "ready",
                     DependencyKind::Succeeded => "succeeded",
                     DependencyKind::Completed => "completed",
+                    DependencyKind::Stopped => unreachable!(),
                 }),
             }
         }
@@ -2485,7 +2546,7 @@ mod schedule_tests {
                         finished = source_finished.to_string_lossy(),
                         exit = case.exit.code(),
                     ),
-                    (DependencyKind::Succeeded, _) => unreachable!(),
+                    (DependencyKind::Succeeded | DependencyKind::Stopped, _) => unreachable!(),
                 };
                 let source_script = executable_script(files.path(), "process-source", &source_body);
                 let mut source =
@@ -2499,7 +2560,7 @@ mod schedule_tests {
                     DependencyKind::Started => None,
                     DependencyKind::Ready => Some(&source_ready),
                     DependencyKind::Completed => Some(&source_finished),
-                    DependencyKind::Succeeded => unreachable!(),
+                    DependencyKind::Succeeded | DependencyKind::Stopped => unreachable!(),
                 };
                 let validate = required.map_or_else(String::new, |required| {
                     format!("test -f '{}' || exit 91\n", required.to_string_lossy())
@@ -2547,7 +2608,7 @@ mod schedule_tests {
                         finished = source_finished.to_string_lossy(),
                         exit = case.exit.code(),
                     ),
-                    DependencyKind::Ready => unreachable!(),
+                    DependencyKind::Ready | DependencyKind::Stopped => unreachable!(),
                 };
                 let source_script = executable_script(files.path(), "oneshot-source", &source_body);
                 let mut source = oneshot_task(&source_name, vec![]);
@@ -2556,7 +2617,7 @@ mod schedule_tests {
                 let required = match case.dependency.kind() {
                     DependencyKind::Started => None,
                     DependencyKind::Succeeded | DependencyKind::Completed => Some(&source_finished),
-                    DependencyKind::Ready => unreachable!(),
+                    DependencyKind::Ready | DependencyKind::Stopped => unreachable!(),
                 };
                 let validate = required.map_or_else(String::new, |required| {
                     format!("test -f '{}' || exit 92\n", required.to_string_lossy())
@@ -2826,7 +2887,7 @@ mod schedule_tests {
                 finished = source_finished.to_string_lossy(),
                 exit = case.exit.code(),
             ),
-            DependencyKind::Ready => unreachable!(),
+            DependencyKind::Ready | DependencyKind::Stopped => unreachable!(),
         };
         let source_script = executable_script(files.path(), "source", &source_body);
         let mut source = oneshot_task(source_name, vec![]);
@@ -2835,7 +2896,7 @@ mod schedule_tests {
         let required = match case.dependency.kind() {
             DependencyKind::Started => None,
             DependencyKind::Succeeded | DependencyKind::Completed => Some(&source_finished),
-            DependencyKind::Ready => unreachable!(),
+            DependencyKind::Ready | DependencyKind::Stopped => unreachable!(),
         };
         let validate = required.map_or_else(String::new, |required| {
             format!("test -f '{}' || exit 92\n", required.to_string_lossy())
@@ -3002,7 +3063,7 @@ mod schedule_tests {
                 finished = source_finished.to_string_lossy(),
                 exit = case.exit.code(),
             ),
-            (DependencyKind::Succeeded, _) => unreachable!(),
+            (DependencyKind::Succeeded | DependencyKind::Stopped, _) => unreachable!(),
         };
         let source_script = executable_script(files.path(), "source", &source_body);
         let mut source =
@@ -3020,7 +3081,7 @@ mod schedule_tests {
             DependencyKind::Ready => Some(&source_ready),
             DependencyKind::Completed if source_stays_not_started => None,
             DependencyKind::Completed => Some(&source_finished),
-            DependencyKind::Succeeded => unreachable!(),
+            DependencyKind::Succeeded | DependencyKind::Stopped => unreachable!(),
         };
         let validate = required.map_or_else(String::new, |required| {
             format!("test -f '{}' || exit 91\n", required.to_string_lossy())
