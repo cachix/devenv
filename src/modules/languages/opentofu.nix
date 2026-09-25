@@ -19,8 +19,8 @@ in
 
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.terraform-ls;
-        defaultText = lib.literalExpression "pkgs.terraform-ls";
+        default = pkgs.tofu-ls;
+        defaultText = lib.literalExpression "pkgs.tofu-ls";
         description = "The OpenTofu language server package to use.";
       };
     };
