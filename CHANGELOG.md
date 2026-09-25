@@ -7,6 +7,10 @@
 - MySQL now creates configured databases and users when started with `devenv up`, including `devenv up mysql` ([#2843](https://github.com/cachix/devenv/issues/2843)).
 - fish auto-activation no longer hangs when `env` is a fish function, such as grc's wrapper ([#3222](https://github.com/cachix/devenv/issues/3222)).
 
+### Improvements
+
+- Native `devenv up` now runs tasks with `after = [ "devenv:up@stopped" ]` after all processes stop. This restores manager-wide cleanup, including removal of hostctl entries, for foreground and detached sessions ([#3217](https://github.com/cachix/devenv/issues/3217)).
+
 ## 2.4.0 (2026-09-24)
 
 ### Machines (experimental)

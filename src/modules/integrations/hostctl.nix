@@ -55,6 +55,8 @@ let
     devenv_hostctl remove ${config.hostsProfileName}
   '';
   isNative = config.process.manager.implementation == "native";
+  supportsUpStopped = config.devenv.cli.version == null
+    || lib.versionAtLeast config.devenv.cli.version "2.4.1";
   processTaskNames = lib.mapAttrsToList (name: _: "devenv:processes:${name}") config.processes;
 in
 {
@@ -84,6 +86,12 @@ in
       # (e.g. /etc/hosts is read-only on NixOS).
       before = map (name: "${name}@completed") processTaskNames;
       description = "Configure /etc/hosts entries with hostctl";
+    };
+
+    tasks."devenv:hostctl:teardown" = lib.mkIf (isNative && supportsUpStopped) {
+      exec = teardownScript;
+      after = [ "devenv:up@stopped" ];
+      description = "Remove /etc/hosts entries configured by devenv";
     };
 
     process.manager.before = lib.mkIf (!isNative) setupScript;

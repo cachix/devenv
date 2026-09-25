@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{OnceCell, mpsc};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
@@ -17,6 +17,7 @@ use tracing::{debug, info, trace, warn};
 const ATTACH_WRITE_STALL_TIMEOUT: Duration = Duration::from_secs(30);
 const ATTACH_BACKLOG_LINES: usize = 50;
 const ATTACH_EVENT_CHANNEL_CAPACITY: usize = 2048;
+const STOP_TASK_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Default)]
 struct AttachTailers(Vec<JoinHandle<()>>);
@@ -71,11 +72,18 @@ fn latest_queued_process_command(rx: &mut mpsc::Receiver<FrontendEvent>) -> Opti
 pub struct NativeProcessManager {
     tasks: Arc<Tasks>,
     residence: ManagerResidence,
+    stop_tasks_once: OnceCell<Result<(), String>>,
+    stop_requested: CancellationToken,
 }
 
 impl NativeProcessManager {
     pub fn new(tasks: Arc<Tasks>, residence: ManagerResidence) -> Self {
-        Self { tasks, residence }
+        Self {
+            tasks,
+            residence,
+            stop_tasks_once: OnceCell::new(),
+            stop_requested: CancellationToken::new(),
+        }
     }
 
     pub fn tasks(&self) -> &Arc<Tasks> {
@@ -99,7 +107,48 @@ impl NativeProcessManager {
     }
 
     pub async fn stop_all(&self) -> Result<()> {
-        self.process_runner().stop_all().await
+        let stopped = self.process_runner().stop_all().await;
+        let cleanup = self.run_stop_tasks().await;
+        stopped?;
+        cleanup
+    }
+
+    async fn run_stop_tasks(&self) -> Result<()> {
+        let result = self
+            .stop_tasks_once
+            .get_or_init(|| async {
+                self.execute_stop_tasks()
+                    .await
+                    .map_err(|error| format!("{error:?}"))
+            })
+            .await;
+        result.clone().map_err(|error| miette::miette!("{error}"))
+    }
+
+    async fn execute_stop_tasks(&self) -> Result<()> {
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let tasks = Arc::clone(&self.tasks);
+        let run_shutdown = Arc::clone(&shutdown);
+        let mut run = tokio::spawn(async move { tasks.run_manager_stopped(run_shutdown).await });
+        match tokio::time::timeout(STOP_TASK_TIMEOUT, &mut run).await {
+            Ok(Ok(Some(status)))
+                if status.failed > 0 || status.dependency_failed > 0 || status.cancelled > 0 =>
+            {
+                return Err(miette::miette!("devenv:up@stopped tasks failed"));
+            }
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => return Err(miette::miette!("Shutdown task runner failed: {error}")),
+            Err(_) => {
+                shutdown.shutdown();
+                let _ = tokio::time::timeout(Duration::from_secs(5), &mut run).await;
+                if !run.is_finished() {
+                    run.abort();
+                }
+                return Err(miette::miette!("devenv:up@stopped tasks timed out"));
+            }
+        }
+
+        Ok(())
     }
 
     /// Whether every process is terminal, ready, or waiting only on work that
@@ -192,12 +241,14 @@ impl NativeProcessManager {
         if let Some(rx) = frontend_event_rx {
             self.start_command_listener(rx);
         }
-        let result = self
-            .process_runner()
-            .run_until(cancellation_token, mode)
-            .await;
+        let result = tokio::select! {
+            result = self.process_runner().run_until(cancellation_token, mode) => result,
+            _ = self.stop_requested.cancelled() => Ok(()),
+        };
+        let cleanup = self.run_stop_tasks().await;
         info!("Manager event loop stopped");
-        result
+        result?;
+        cleanup
     }
 
     fn process_not_found(name: &str) -> ApiResponse {
@@ -216,6 +267,7 @@ impl NativeProcessManager {
             return;
         }
 
+        let mut stop_manager = false;
         let response = match serde_json::from_str::<ApiRequest>(&line) {
             Ok(ApiRequest::Wait) => manager.handle_wait().await,
             Ok(ApiRequest::List) => ApiResponse::ProcessList {
@@ -281,6 +333,15 @@ impl NativeProcessManager {
                     message: format!("failed to stop process '{name}': {error}"),
                 },
             },
+            Ok(ApiRequest::StopManager) => {
+                stop_manager = true;
+                match manager.stop_all().await {
+                    Ok(()) => ApiResponse::Ok,
+                    Err(error) => ApiResponse::Error {
+                        message: format!("failed to stop native manager: {error}"),
+                    },
+                }
+            }
             Ok(ApiRequest::Ports) => ApiResponse::PortAllocations {
                 ports: manager.process_runner().port_allocations().await,
             },
@@ -296,6 +357,9 @@ impl NativeProcessManager {
         if let Ok(mut json) = serde_json::to_vec(&response) {
             json.push(b'\n');
             let _ = writer.write_all(&json).await;
+        }
+        if stop_manager {
+            manager.stop_requested.cancel();
         }
     }
 
@@ -572,6 +636,7 @@ mod tests {
         RestartConfig, RestartPolicy, SupervisionMode,
     };
     use std::collections::{BTreeMap, HashMap};
+    use std::os::unix::fs::PermissionsExt;
 
     async fn test_manager(
         temp_dir: &tempfile::TempDir,
@@ -598,6 +663,7 @@ mod tests {
         let shutdown = tokio_shutdown::Shutdown::new();
         let tasks = Arc::new(
             Tasks::builder(config, VerbosityLevel::Normal, shutdown)
+                .with_native_manager_lifecycle()
                 .build()
                 .await
                 .unwrap(),
@@ -714,6 +780,234 @@ mod tests {
         })
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for attached {name} to reach {expected}"))
+    }
+
+    #[tokio::test]
+    async fn up_stopped_tasks_run_in_order_once_after_processes_stop() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path().join("runtime");
+        std::fs::create_dir_all(&runtime_dir).unwrap();
+        let marker = temp_dir.path().join("shutdown-order");
+
+        let mut cleanup_tasks = Vec::new();
+        for (name, after, line) in [
+            ("test:cleanup", "devenv:up@stopped", "first"),
+            ("test:verify", "test:cleanup", "second"),
+        ] {
+            let script = temp_dir.path().join(name.replace(':', "-"));
+            std::fs::write(
+                &script,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' '{line}' >> '{}'\n",
+                    marker.display()
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            cleanup_tasks.push(TaskConfig {
+                name: name.to_string(),
+                after: vec![after.to_string()],
+                command: Some(script.to_string_lossy().into_owned()),
+                ..Default::default()
+            });
+        }
+
+        let mut task_configs = Vec::new();
+        task_configs.push(process_task("web", "exec tail -f /dev/null"));
+        task_configs.extend(cleanup_tasks);
+        let config = Config {
+            tasks: task_configs,
+            roots: vec!["devenv:processes:web".to_string()],
+            run_mode: RunMode::Before,
+            runtime_dir,
+            cache_dir: temp_dir.path().join("cache"),
+            sudo_context: None,
+            env: HashMap::new(),
+            bash: String::new(),
+            ignore_process_deps: false,
+            exit_on_idle: Some(false),
+            supervisor: SupervisionMode::Native,
+            capability_broker: None,
+        };
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let tasks = Arc::new(
+            Tasks::builder(config, VerbosityLevel::Normal, Arc::clone(&shutdown))
+                .with_native_manager_lifecycle()
+                .build()
+                .await
+                .unwrap(),
+        );
+        let manager = NativeProcessManager::new(tasks, ManagerResidence::InProcess);
+
+        manager
+            .process_runner()
+            .start_command(&long_running_config("web"), None)
+            .await
+            .unwrap();
+        wait_for_phase(&manager, "web", ProcessPhase::Ready).await;
+        assert!(!marker.exists(), "shutdown tasks ran during startup");
+
+        shutdown.shutdown();
+        manager.stop_all().await.unwrap();
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "first\nsecond\n");
+        manager.stop_all().await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&marker).unwrap(),
+            "first\nsecond\n",
+            "shutdown tasks ran more than once"
+        );
+    }
+
+    #[tokio::test]
+    async fn manager_stop_reuses_startup_outputs_without_rerunning_startup_tasks() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path().join("runtime");
+        std::fs::create_dir_all(&runtime_dir).unwrap();
+        let marker = temp_dir.path().join("task-order");
+        let setup = temp_dir.path().join("setup.sh");
+        std::fs::write(
+            &setup,
+            format!(
+                "#!/bin/sh\nprintf 'setup\\n' >> '{}'\nprintf '{{\"value\":\"from-start\"}}\\n' > \"$DEVENV_TASK_OUTPUT_FILE\"\n",
+                marker.display()
+            ),
+        )
+        .unwrap();
+        let cleanup = temp_dir.path().join("cleanup.sh");
+        std::fs::write(
+            &cleanup,
+            format!(
+                "#!/bin/sh\ncase \"$DEVENV_TASKS_OUTPUTS\" in\n  *'\"test:setup\":{{\"value\":\"from-start\"}}'*) ;;\n  *) exit 1 ;;\nesac\nprintf 'cleanup\\n' >> '{}'\n",
+                marker.display()
+            ),
+        )
+        .unwrap();
+        for script in [&setup, &cleanup] {
+            std::fs::set_permissions(script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let config = Config {
+            tasks: vec![
+                TaskConfig {
+                    name: "test:setup".into(),
+                    command: Some(setup.to_string_lossy().into_owned()),
+                    ..Default::default()
+                },
+                TaskConfig {
+                    name: "test:cleanup".into(),
+                    command: Some(cleanup.to_string_lossy().into_owned()),
+                    after: vec!["devenv:up@stopped".into(), "test:setup".into()],
+                    ..Default::default()
+                },
+            ],
+            roots: vec!["test:setup".into()],
+            run_mode: RunMode::Before,
+            runtime_dir,
+            cache_dir: temp_dir.path().join("cache"),
+            sudo_context: None,
+            env: HashMap::new(),
+            bash: String::new(),
+            ignore_process_deps: false,
+            exit_on_idle: Some(false),
+            supervisor: SupervisionMode::Native,
+            capability_broker: None,
+        };
+        let tasks = Arc::new(
+            Tasks::builder(
+                config,
+                VerbosityLevel::Normal,
+                tokio_shutdown::Shutdown::new(),
+            )
+            .with_native_manager_lifecycle()
+            .build()
+            .await
+            .unwrap(),
+        );
+        tasks.run(false).await;
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "setup\n");
+
+        let manager = NativeProcessManager::new(tasks, ManagerResidence::InProcess);
+        manager.stop_all().await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&marker).unwrap(),
+            "setup\ncleanup\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn manager_stop_api_reports_cleanup_failure() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = test_manager(
+            &temp_dir,
+            vec![
+                TaskConfig {
+                    name: "test:cleanup".into(),
+                    command: Some("exit 7".into()),
+                    after: vec!["devenv:up@stopped".into()],
+                    ..Default::default()
+                },
+                TaskConfig {
+                    name: "test:report".into(),
+                    command: Some("true".into()),
+                    after: vec!["test:cleanup@completed".into()],
+                    ..Default::default()
+                },
+            ],
+            ManagerResidence::Daemon,
+        )
+        .await;
+        let server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
+        let event_loop = tokio::spawn(async move {
+            manager
+                .run_event_loop(CancellationToken::new(), None, OnIdle::Linger)
+                .await
+        });
+        let response = NativeManagerClient::api_request(
+            &server.manager().api_socket_path(),
+            &ApiRequest::StopManager,
+        )
+        .await
+        .unwrap();
+        assert!(
+            matches!(response, ApiResponse::Error { message } if message.contains("devenv:up@stopped tasks failed"))
+        );
+        assert!(event_loop.await.unwrap().is_err());
+    }
+
+    #[tokio::test]
+    async fn manager_stop_rejects_process_tasks_before_launch() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path().join("runtime");
+        std::fs::create_dir_all(&runtime_dir).unwrap();
+        let mut process = process_task("late", "exec tail -f /dev/null");
+        process.after.push("devenv:up@stopped".into());
+        let config = Config {
+            tasks: vec![process],
+            roots: Vec::new(),
+            run_mode: RunMode::All,
+            runtime_dir,
+            cache_dir: temp_dir.path().join("cache"),
+            sudo_context: None,
+            env: HashMap::new(),
+            bash: String::new(),
+            ignore_process_deps: false,
+            exit_on_idle: Some(false),
+            supervisor: SupervisionMode::Native,
+            capability_broker: None,
+        };
+        let error = Tasks::builder(
+            config,
+            VerbosityLevel::Normal,
+            tokio_shutdown::Shutdown::new(),
+        )
+        .with_native_manager_lifecycle()
+        .build()
+        .await
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cannot run after the native manager stops")
+        );
     }
 
     #[tokio::test]
