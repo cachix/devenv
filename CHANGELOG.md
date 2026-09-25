@@ -2,6 +2,10 @@
 
 ## 2.4.1 (unreleased)
 
+### Improvements
+
+- `devenv processes list` and `devenv processes wait` now work with process-compose, so those projects no longer need to call `process-compose` directly for status and readiness ([#2950](https://github.com/cachix/devenv/issues/2950)).
+
 ## 2.4.0 (2026-09-24)
 
 ### Machines (experimental)

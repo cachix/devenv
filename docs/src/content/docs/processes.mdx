@@ -44,7 +44,8 @@ $ devenv down
 `devenv down` is a shorthand for `devenv processes down`.
 
 
-With the native process manager, wait for all processes to become ready (useful in CI):
+Wait for all processes to become ready (useful in CI). The native manager and
+process-compose both support `devenv processes wait` and `devenv processes list`:
 
 ```sh
 $ devenv processes wait --timeout 120
@@ -592,7 +593,7 @@ capabilities that devenv may use, and the CLI rejects unsupported operations bef
 | Manager | Background start | devenv attach | Wait ready | Individual control | Cold-start subset |
 | --- | --- | --- | --- | --- | --- |
 | native | Yes | Yes | Yes | Yes | Yes |
-| process-compose | Yes | No | No | No | Yes |
+| process-compose | Yes | No | Yes | No | Yes |
 | overmind | Yes | No | No | No | Yes |
 | honcho | Yes | No | No | No | Yes |
 | hivemind | Yes | No | No | No | No |
@@ -618,7 +619,7 @@ hosts and stops each manager:
 | Manager | Terminal adapter | Stop adapter | Client adapter |
 | --- | --- | --- | --- |
 | native | `none` | `native-api` | `native-api` |
-| process-compose | `none` | `process-scope` | `none` |
+| process-compose | `none` | `process-scope` | `process-compose` |
 | overmind | `none` | `command` | `none` |
 | honcho | `none` | `process-scope` | `none` |
 | hivemind | `none` | `process-scope` | `none` |
@@ -637,8 +638,8 @@ The stop adapters mean:
   manager and its descendants have exited.
 
 The client adapter names the protocol used for attach, readiness, and individual process control. `native-api`
-uses devenv's native manager socket; `none` means those capabilities must remain disabled. A future external client
-protocol can be added as a new adapter without conflating its transport with the operations it implements.
+uses devenv's native manager socket; `process-compose` uses the process-compose CLI over its control socket for
+`devenv processes list` and `devenv processes wait`; `none` means those capabilities must remain disabled.
 
 `devenv down` is supported for every manager that supports background start. The stop adapter describes how that
 shutdown is performed; it is not itself an optional operation capability.
