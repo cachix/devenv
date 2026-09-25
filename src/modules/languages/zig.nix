@@ -25,6 +25,15 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  # zig-overlay imports files directly from its nixpkgs input. devenv-nixpkgs
+  # is a wrapper flake, so its source root is not the package set's source.
+  # Import the overlay with the source that produced pkgs instead.
+  zigPackages = import "${zig-overlay.outPath}/default.nix" {
+    inherit pkgs;
+    nixpkgs = pkgs.path;
+    system = pkgs.stdenv.hostPlatform.system;
+  };
+
   zls = config.lib.getInput {
     name = "zls";
     url = "github:zigtools/zls/${zlsVersion}";
@@ -70,7 +79,7 @@ in
 
   config = lib.mkIf cfg.enable {
     languages.zig.package = lib.mkIf (cfg.version != null) (
-      zig-overlay.packages.${pkgs.stdenv.system}.${cfg.version}
+      zigPackages.${cfg.version}
     );
 
     languages.zig.lsp.package = lib.mkIf (cfg.version != null) (
