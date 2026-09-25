@@ -1,0 +1,3 @@
+{
+  languages.julia.enable = true;
+}
