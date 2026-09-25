@@ -2959,6 +2959,7 @@ impl Devenv {
 
             let tasks_runner = Arc::new(
                 tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
+                    .with_native_manager_lifecycle()
                     .build()
                     .await
                     .map_err(|e| miette!("Failed to build task runner: {}", e))?,
@@ -2991,7 +2992,7 @@ impl Devenv {
             if task_status.has_failures() {
                 // A caller such as `devenv test` must not leave successfully
                 // started process siblings behind when another task fails.
-                let _ = tasks_runner.process_runner().stop_all().await;
+                let _ = manager.stop_all().await;
                 bail!("Process tasks failed");
             }
 

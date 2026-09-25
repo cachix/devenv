@@ -37,6 +37,7 @@ pub fn run(config_file: &Path) -> Result<()> {
                 devenv_core::VerbosityLevel::Normal,
                 shutdown.clone(),
             )
+            .with_native_manager_lifecycle()
             .build()
             .await
             .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?,
