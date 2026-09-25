@@ -56,13 +56,14 @@ function _devenv_hook_activate
     if test -n "$DEVENV_ROOT"
         return
     end
-    # `command` skips user functions named `env` (e.g. grc wraps it and pipes stdout).
+    # `command` skips user functions shadowing external tools (e.g. grc wraps
+    # `env` and pipes stdout, so `devenv shell` never sees the terminal).
     command env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook _DEVENV_SHELL_HINT=fish devenv shell@DEVENV_SHELL_ARGS@
     # If the devenv shell exited due to cd outside the project, follow the user there
     set -l exit_dir_file "$project_dir/.devenv/exit-dir"
     if test -f "$exit_dir_file"
-        set -l target_dir (cat "$exit_dir_file")
-        rm -f "$exit_dir_file"
+        set -l target_dir (command cat "$exit_dir_file")
+        command rm -f "$exit_dir_file"
         if test -d "$target_dir"
             # `builtin cd`, not `cd`: avoids "zoxide: infinite loop detected"
             # when the user overrides `cd` (e.g. `zoxide init --cmd=cd`).
@@ -103,9 +104,9 @@ function _devenv_hook --on-event fish_prompt
     # Suppress stderr when re-checking the same untrusted PWD (hint already shown).
     set -l project_dir
     if test "$_DEVENV_HOOK_UNTRUSTED" = "$PWD"
-        set project_dir (devenv hook-should-activate 2>/dev/null)
+        set project_dir (command devenv hook-should-activate 2>/dev/null)
     else
-        set project_dir (devenv hook-should-activate)
+        set project_dir (command devenv hook-should-activate)
     end
     set -l exit_code $status
 
