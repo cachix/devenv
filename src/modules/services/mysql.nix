@@ -6,6 +6,8 @@
 with lib; let
   cfg = config.services.mysql;
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
+  supportsWantedBy = config.devenv.cli.version == null
+    || versionAtLeast config.devenv.cli.version "2.3.2";
 
   # MariaDB 11.x renamed every `mysql*` client to `mariadb-*` and prints a
   # deprecation warning on every invocation of the old name. Oracle MySQL
@@ -349,6 +351,7 @@ in
     # race against an un-initialised server.
     tasks."devenv:mysql:configure" = {
       exec = configureScript;
+      wantedBy = mkIf supportsWantedBy [ "devenv:processes:mysql" ];
     };
   };
 }
