@@ -7,8 +7,6 @@ let
   devenv-tasks = import ./tasks/package.nix { inherit pkgs lib; };
   supportsWantedBy = config.devenv.cli.version == null
     || lib.versionAtLeast config.devenv.cli.version "2.3.2";
-  supportsUpStopped = config.devenv.cli.version == null
-    || lib.versionAtLeast config.devenv.cli.version "2.4.1";
 
   taskType = types.submodule
     ({ name, config, ... }:
@@ -497,9 +495,6 @@ in
         config.tasks;
 
     tasks = {
-      "devenv:up" = lib.mkIf supportsUpStopped {
-        description = "Native process manager lifecycle";
-      };
       "devenv:enterShell" = {
         description = "Runs when entering the shell";
         exec = ''

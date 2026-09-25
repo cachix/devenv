@@ -252,7 +252,7 @@ With the native process manager, a task depending on `devenv:up@stopped` runs af
 }
 ```
 
-This is a manager-wide hook. Stopping one process while others remain running does not trigger it. Available in devenv 2.4.1 and later.
+This is a manager-wide hook. Stopping one process while others remain running does not trigger it. Cleanup tasks can depend on other cleanup tasks and read outputs from tasks that ran during startup. The native manager validates the cleanup graph before starting processes. `devenv processes down` reports a cleanup task failure. Available in devenv 2.4.1 and later.
 
 :::caution[Setup tasks that run after a process]
 

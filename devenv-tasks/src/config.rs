@@ -102,7 +102,6 @@ impl TryFrom<serde_json::Value> for Config {
 /// - "task@ready" -> DependencySpec { name: "task", kind: Some(Ready) }
 /// - "task@succeeded" -> DependencySpec { name: "task", kind: Some(Succeeded) }
 /// - "task@completed" -> DependencySpec { name: "task", kind: Some(Completed) }
-/// - "devenv:up@stopped" -> DependencySpec { name: "devenv:up", kind: Some(Stopped) }
 ///
 /// Default behavior (when kind is None):
 /// - For process tasks: wait for ready (@ready)
@@ -132,10 +131,9 @@ pub fn parse_dependency(dep: &str) -> Result<DependencySpec, Error> {
             "ready" => Some(DependencyKind::Ready),
             "succeeded" => Some(DependencyKind::Succeeded),
             "completed" => Some(DependencyKind::Completed),
-            "stopped" => Some(DependencyKind::Stopped),
             _ => {
                 return Err(Error::InvalidDependency(format!(
-                    "Invalid dependency '{}': suffix must be '@started', '@ready', '@succeeded', '@completed', or '@stopped', got '@{}'",
+                    "Invalid dependency '{}': suffix must be '@started', '@ready', '@succeeded', or '@completed', got '@{}'",
                     dep, suffix
                 )));
             }
@@ -195,20 +193,14 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_dependency_stopped_suffix() {
-        let spec = parse_dependency("devenv:up@stopped").unwrap();
-        assert_eq!(spec.name, "devenv:up");
-        assert_eq!(spec.kind, Some(DependencyKind::Stopped));
-    }
-
-    #[test]
     fn test_parse_dependency_invalid_suffix() {
         let result = parse_dependency("postgres@invalid");
         assert!(result.is_err());
         assert!(
-            result.unwrap_err().to_string().contains(
-                "must be '@started', '@ready', '@succeeded', '@completed', or '@stopped'"
-            )
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must be '@started', '@ready', '@succeeded', or '@completed'")
         );
     }
 

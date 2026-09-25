@@ -46,6 +46,8 @@ pub enum ApiRequest {
     Start { names: Vec<String> },
     /// Stop a running process.
     Stop { name: String },
+    /// Stop the manager and report the result of its cleanup tasks.
+    StopManager,
     /// Query all port allocations from running processes.
     Ports,
     /// Hold the connection open and stream `AttachEvent` lines (snapshot,
@@ -2254,34 +2256,69 @@ impl ProcessManagerControl for NativeManagerClient {
 
         info!("Stopping native process manager (PID: {})", manager_pid);
 
-        match signal::kill(pid, NixSignal::SIGTERM) {
-            Ok(()) => {
-                debug!("Sent SIGTERM to manager process (PID {})", pid);
+        // A current daemon reports cleanup failures over the control socket.
+        // Older daemons do not know this request, so retain the signal path.
+        let start = std::time::Instant::now();
+        let max_wait = Duration::from_secs(60);
+        let socket_path = self.state_dir.join(crate::NATIVE_SOCKET_NAME);
+        let mut use_signal = true;
+        let mut stop_result = None;
+        if socket_path.exists() {
+            match tokio::time::timeout(
+                max_wait,
+                Self::api_request(&socket_path, &ApiRequest::StopManager),
+            )
+            .await
+            {
+                Ok(Ok(ApiResponse::Ok)) => use_signal = false,
+                Ok(Ok(ApiResponse::Error { message }))
+                    if message.starts_with("invalid request: unknown variant") => {}
+                Ok(Ok(ApiResponse::Error { message })) => {
+                    use_signal = false;
+                    stop_result = Some(Err(miette::miette!("Native manager error: {message}")));
+                }
+                Ok(Ok(other)) => {
+                    warn!(?other, "Unexpected manager stop response, using SIGTERM");
+                }
+                Ok(Err(error)) => {
+                    warn!(%error, "Manager stop request failed, using SIGTERM");
+                }
+                Err(_) => {
+                    stop_result = Some(Err(miette::miette!(
+                        "Native process manager did not finish stopping within {} seconds",
+                        max_wait.as_secs()
+                    )));
+                }
             }
-            Err(nix::errno::Errno::ESRCH) => {
-                warn!(
-                    "Manager process (PID {}) not found - removing stale PID file",
-                    pid
-                );
-                tokio::fs::remove_file(&manager_pid_file)
-                    .await
-                    .into_diagnostic()
-                    .wrap_err("Failed to remove stale PID file")?;
-                return Ok(());
-            }
-            Err(error) => {
-                bail!(
-                    "Failed to send SIGTERM to manager process (PID {}): {}",
-                    pid,
-                    error
-                );
+        }
+
+        if use_signal {
+            match signal::kill(pid, NixSignal::SIGTERM) {
+                Ok(()) => {
+                    debug!("Sent SIGTERM to manager process (PID {})", pid);
+                }
+                Err(nix::errno::Errno::ESRCH) => {
+                    warn!(
+                        "Manager process (PID {}) not found - removing stale PID file",
+                        pid
+                    );
+                    tokio::fs::remove_file(&manager_pid_file)
+                        .await
+                        .into_diagnostic()
+                        .wrap_err("Failed to remove stale PID file")?;
+                    return stop_result.unwrap_or(Ok(()));
+                }
+                Err(error) => {
+                    bail!(
+                        "Failed to send SIGTERM to manager process (PID {}): {}",
+                        pid,
+                        error
+                    );
+                }
             }
         }
 
         // Wait for shutdown with exponential backoff.
-        let start = std::time::Instant::now();
-        // Leave time for lifecycle tasks after process teardown.
-        let max_wait = Duration::from_secs(60);
         let mut interval = Duration::from_millis(100);
         let max_interval = Duration::from_secs(1);
 
@@ -2300,6 +2337,10 @@ impl ProcessManagerControl for NativeManagerClient {
                         }
 
                         tokio::time::sleep(Duration::from_millis(100)).await;
+                        stop_result = Some(Err(miette::miette!(
+                            "Native process manager did not stop within {} seconds",
+                            max_wait.as_secs()
+                        )));
                         break;
                     }
 
@@ -2326,7 +2367,7 @@ impl ProcessManagerControl for NativeManagerClient {
         let _ = tokio::fs::remove_file(&manager_pid_file).await;
 
         info!("Native process manager stopped");
-        Ok(())
+        stop_result.unwrap_or(Ok(()))
     }
 
     async fn is_running(&self) -> bool {

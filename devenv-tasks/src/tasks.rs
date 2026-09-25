@@ -1,4 +1,4 @@
-use crate::config::{Config, RunMode, parse_dependency};
+use crate::config::{Config, RunMode, TaskConfig, parse_dependency};
 use crate::error::Error;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
@@ -21,6 +21,23 @@ use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::time::Instant;
 use tracing::{error, instrument};
 
+const MANAGER_STOPPED_DEPENDENCY: &str = "devenv:up@stopped";
+const MANAGER_EVENT_TASK: &str = "devenv:up";
+
+struct StopPlan {
+    event: NodeIndex,
+    roots: Vec<NodeIndex>,
+    order: Vec<NodeIndex>,
+    dependency_sources: HashSet<NodeIndex>,
+}
+
+struct RunSelection<'a> {
+    roots: &'a [NodeIndex],
+    order: &'a [NodeIndex],
+    dependency_sources: HashSet<NodeIndex>,
+    shutdown: Arc<tokio_shutdown::Shutdown>,
+}
+
 /// Builder for Tasks configuration
 pub struct TasksBuilder {
     config: Config,
@@ -28,7 +45,7 @@ pub struct TasksBuilder {
     db_path: Option<PathBuf>,
     shutdown: Arc<tokio_shutdown::Shutdown>,
     refresh_task_cache: bool,
-    up_shutdown: bool,
+    native_manager_lifecycle: bool,
 }
 
 impl TasksBuilder {
@@ -44,7 +61,7 @@ impl TasksBuilder {
             db_path: None,
             shutdown,
             refresh_task_cache: false,
-            up_shutdown: false,
+            native_manager_lifecycle: false,
         }
     }
 
@@ -60,15 +77,15 @@ impl TasksBuilder {
         self
     }
 
-    /// Build the task graph that runs after the native `devenv up` manager stops.
-    pub fn with_up_shutdown(mut self) -> Self {
-        self.up_shutdown = true;
+    /// Prepare the native manager's startup and stop plans in one task graph.
+    pub fn with_native_manager_lifecycle(mut self) -> Self {
+        self.native_manager_lifecycle = true;
         self
     }
 
     /// Build the Tasks instance
     pub async fn build(self) -> Result<Tasks, Error> {
-        let up_shutdown = self.up_shutdown;
+        let native_manager_lifecycle = self.native_manager_lifecycle;
         let supervisor = self.config.supervisor;
         // External managers own ordering and invoke one wrapper per process.
         let ignore_process_deps =
@@ -101,21 +118,31 @@ impl TasksBuilder {
         pm.set_task_notify(Arc::clone(&notify_finished));
         let process_runner = Arc::new(pm);
 
+        let mut task_configs = self.config.tasks;
+        if task_configs
+            .iter()
+            .any(|task| task.name == MANAGER_EVENT_TASK)
+        {
+            return Err(Error::InvalidDependency(
+                "devenv:up is a reserved manager lifecycle event".into(),
+            ));
+        }
+        let has_manager_stopped_tasks = task_configs.iter().any(|task| {
+            task.after
+                .iter()
+                .any(|dependency| dependency == MANAGER_STOPPED_DEPENDENCY)
+        });
+        if has_manager_stopped_tasks {
+            task_configs.push(TaskConfig {
+                name: MANAGER_EVENT_TASK.to_string(),
+                ..Default::default()
+            });
+        }
+
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
-        for task in self.config.tasks {
+        for task in task_configs {
             let name = task.name.clone();
-            if name == "devenv:up"
-                && (task.r#type != TaskType::Oneshot
-                    || task.command.is_some()
-                    || !task.after.is_empty()
-                    || !task.before.is_empty()
-                    || task.wanted_by.is_some())
-            {
-                return Err(Error::InvalidDependency(
-                    "devenv:up is a reserved lifecycle task and cannot be configured".into(),
-                ));
-            }
             if !task.name.contains(':')
                 || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
@@ -140,6 +167,7 @@ impl TasksBuilder {
         }
 
         let roots = Tasks::resolve_namespace_roots(&self.config.roots, &task_indices)?;
+        let manager_event_index = task_indices.get(MANAGER_EVENT_TASK).copied();
         let mut tasks = Tasks {
             roots,
             root_names: self.config.roots,
@@ -149,6 +177,7 @@ impl TasksBuilder {
             notify_finished,
             notify_ui: Arc::new(Notify::new()),
             tasks_order: vec![],
+            stop_plan: None,
             run_mode: self.config.run_mode,
             cache,
             shutdown: self.shutdown,
@@ -166,29 +195,56 @@ impl TasksBuilder {
         };
 
         tasks.resolve_dependencies(task_indices).await?;
-        tasks.tasks_order = tasks.schedule().await?;
-        let mut selected_up = false;
-        for &index in &tasks.tasks_order {
-            if tasks.graph[index].read().await.task.name == "devenv:up" {
-                selected_up = true;
-                break;
-            }
-        }
-        if selected_up && !up_shutdown {
+        tasks.tasks_order = tasks.schedule(&tasks.roots, tasks.run_mode, None).await?;
+        if manager_event_index.is_some_and(|event| tasks.tasks_order.contains(&event)) {
             return Err(Error::InvalidDependency(
                 "devenv:up@stopped can only run when the native process manager stops".into(),
             ));
         }
-        if up_shutdown {
-            for &index in &tasks.tasks_order {
+        if native_manager_lifecycle && let Some(event) = manager_event_index {
+            let stop_roots = vec![event];
+            let startup: HashSet<_> = tasks.tasks_order.iter().copied().collect();
+            let downstream = tasks.schedule(&stop_roots, RunMode::After, None).await?;
+            // Startup tasks retain their state and outputs. Their own prerequisites
+            // have already run, so do not pull those into the stop plan again.
+            let full_order = tasks
+                .schedule(&stop_roots, RunMode::All, Some(&startup))
+                .await?;
+
+            for &index in &downstream {
                 let task = tasks.graph[index].read().await;
                 if task.task.r#type == TaskType::Process {
                     return Err(Error::InvalidDependency(format!(
-                        "shutdown task graph selects process '{}'; stopping devenv cannot start processes",
+                        "manager stop tasks cannot start process '{}'",
+                        task.task.name
+                    )));
+                }
+                if startup.contains(&index) {
+                    return Err(Error::InvalidDependency(format!(
+                        "manager stop task '{}' is also selected during startup",
                         task.task.name
                     )));
                 }
             }
+            for &index in &full_order {
+                let task = tasks.graph[index].read().await;
+                if task.task.r#type == TaskType::Process {
+                    return Err(Error::InvalidDependency(format!(
+                        "manager stop task '{}' depends on a process; depend on devenv:up@stopped instead",
+                        task.task.name
+                    )));
+                }
+            }
+            tasks.stop_plan = Some(StopPlan {
+                event,
+                roots: stop_roots,
+                order: full_order
+                    .iter()
+                    .copied()
+                    .filter(|index| *index != event && !startup.contains(index))
+                    .collect(),
+                dependency_sources: full_order.into_iter().collect(),
+            });
         }
         tasks.scheduled_task_indices = Mutex::new(tasks.tasks_order.iter().copied().collect());
         // Dynamic starts address nodes outside the initial schedule.
@@ -220,6 +276,7 @@ pub struct Tasks {
     /// Tasks that declare `wanted_by`. Ordering edges never select them.
     pub(crate) wanted_by_declared: HashSet<NodeIndex>,
     pub(crate) tasks_order: Vec<NodeIndex>,
+    stop_plan: Option<StopPlan>,
     pub(crate) notify_finished: Arc<Notify>,
     pub(crate) notify_ui: Arc<Notify>,
     pub(crate) run_mode: RunMode,
@@ -291,13 +348,18 @@ impl Tasks {
 
     /// Get the current task completion status
     pub async fn get_completion_status(&self) -> TasksStatus {
+        self.completion_status_for(&self.tasks_order, &self.roots)
+            .await
+    }
+
+    async fn completion_status_for(&self, order: &[NodeIndex], roots: &[NodeIndex]) -> TasksStatus {
         let mut status = TasksStatus::new();
 
         // `tasks_order` is fixed after `schedule()`, so the scheduled set is
         // constant for this call; build it once rather than per failed task.
-        let scheduled: HashSet<NodeIndex> = self.tasks_order.iter().copied().collect();
+        let scheduled: HashSet<NodeIndex> = order.iter().copied().collect();
 
-        for index in &self.tasks_order {
+        for index in order {
             let task_state = self.graph[*index].read().await;
             match &task_state.status {
                 // A process task node stays `Pending` for its whole live
@@ -314,7 +376,7 @@ impl Tasks {
                                 == Some(ExitStatus::Failure)
                             {
                                 status.failed += 1;
-                                if self.is_soft_failure(index, &scheduled) {
+                                if self.is_soft_failure(index, roots, &scheduled) {
                                     status.soft_failed += 1;
                                 }
                             } else {
@@ -323,7 +385,7 @@ impl Tasks {
                         }
                         Some(ProcessPhase::GaveUp) => {
                             status.failed += 1;
-                            if self.is_soft_failure(index, &scheduled) {
+                            if self.is_soft_failure(index, roots, &scheduled) {
                                 status.soft_failed += 1;
                             }
                         }
@@ -342,14 +404,14 @@ impl Tasks {
                     TaskCompleted::Success(_, _) => status.succeeded += 1,
                     TaskCompleted::Failed(_, _) => {
                         status.failed += 1;
-                        if self.is_soft_failure(index, &scheduled) {
+                        if self.is_soft_failure(index, roots, &scheduled) {
                             status.soft_failed += 1;
                         }
                     }
                     TaskCompleted::Skipped(_) => status.skipped += 1,
                     TaskCompleted::DependencyFailed => {
                         status.dependency_failed += 1;
-                        if self.is_soft_failure(index, &scheduled) {
+                        if self.is_soft_failure(index, roots, &scheduled) {
                             status.soft_dependency_failed += 1;
                         }
                     }
@@ -367,8 +429,13 @@ impl Tasks {
     /// 1. The task is NOT a root task, AND
     /// 2. The task has at least one outgoing edge (someone depends on it), AND
     /// 3. ALL outgoing edges use `DependencyKind::Completed`
-    fn is_soft_failure(&self, index: &NodeIndex, scheduled: &HashSet<NodeIndex>) -> bool {
-        if self.roots.contains(index) {
+    fn is_soft_failure(
+        &self,
+        index: &NodeIndex,
+        roots: &[NodeIndex],
+        scheduled: &HashSet<NodeIndex>,
+    ) -> bool {
+        if roots.contains(index) {
             return false;
         }
         // Only dependents scheduled in this run count. The graph now retains
@@ -449,6 +516,31 @@ impl Tasks {
             let task_state = &self.graph[index].read().await;
 
             for dep_name in &task_state.task.after {
+                if dep_name == MANAGER_STOPPED_DEPENDENCY {
+                    if task_state.task.r#type == TaskType::Process {
+                        validation_errors.push(format!(
+                            "Process '{}' cannot run after the native manager stops",
+                            task_state.task.name
+                        ));
+                    }
+                    if task_state.task.wanted_by.is_some() {
+                        validation_errors.push(format!(
+                            "Task '{}' cannot combine devenv:up@stopped with wantedBy",
+                            task_state.task.name
+                        ));
+                    }
+                    if let Some(&event) = task_indices.get(MANAGER_EVENT_TASK) {
+                        edges_to_add.push((event, index, DependencyKind::Succeeded));
+                    }
+                    continue;
+                }
+                if dep_name == MANAGER_EVENT_TASK || dep_name.starts_with("devenv:up@") {
+                    validation_errors.push(format!(
+                        "Task '{}' can only depend on the manager event as devenv:up@stopped",
+                        task_state.task.name
+                    ));
+                    continue;
+                }
                 // Parse dependency with optional suffix
                 let dep_spec = parse_dependency(dep_name)?;
 
@@ -464,16 +556,6 @@ impl Tasks {
                             DependencyKind::Succeeded
                         }
                     });
-
-                    if resolved_kind == DependencyKind::Stopped
-                        && (dep_spec.name != "devenv:up"
-                            || task_state.task.r#type == TaskType::Process)
-                    {
-                        validation_errors.push(format!(
-                            "Task '{}' uses @stopped, which is only supported as after = [ \"devenv:up@stopped\" ] on a oneshot task",
-                            task_state.task.name
-                        ));
-                    }
 
                     // Validate suffix is compatible with the dependency's task type
                     match (dep_task.task.r#type, resolved_kind) {
@@ -513,15 +595,15 @@ impl Tasks {
             }
 
             for before_name in &task_state.task.before {
-                // Parse dependency with optional suffix
-                let dep_spec = parse_dependency(before_name)?;
-
-                if dep_spec.kind == Some(DependencyKind::Stopped) {
+                if before_name == MANAGER_EVENT_TASK || before_name.starts_with("devenv:up@") {
                     validation_errors.push(format!(
-                        "Task '{}' uses @stopped in before; use after = [ \"devenv:up@stopped\" ] instead",
+                        "Task '{}' cannot declare before the manager stop event",
                         task_state.task.name
                     ));
+                    continue;
                 }
+                // Parse dependency with optional suffix
+                let dep_spec = parse_dependency(before_name)?;
 
                 if let Some(before_idx) = task_indices.get(&dep_spec.name) {
                     // For 'before' relationships, the current task is the dependency source
@@ -574,7 +656,12 @@ impl Tasks {
             if let Some(wanted_by) = &task_state.task.wanted_by {
                 wanted_by_declared.insert(index);
                 for name in wanted_by {
-                    if name.contains('@') {
+                    if name == MANAGER_EVENT_TASK {
+                        validation_errors.push(format!(
+                            "Task '{}' cannot list the manager stop event in wantedBy",
+                            task_state.task.name
+                        ));
+                    } else if name.contains('@') {
                         validation_errors.push(format!(
                             "Task '{}' lists '{}' in wantedBy, which only selects tasks and takes no suffix. \
                              Use after or before to order the tasks.",
@@ -608,26 +695,34 @@ impl Tasks {
     }
 
     #[instrument(skip(self), fields(graph, subgraph), ret)]
-    async fn schedule(&mut self) -> Result<Vec<NodeIndex>, Error> {
+    async fn schedule(
+        &self,
+        roots: &[NodeIndex],
+        run_mode: RunMode,
+        precompleted: Option<&HashSet<NodeIndex>>,
+    ) -> Result<Vec<NodeIndex>, Error> {
         let mut subgraph = DiGraph::new();
         let mut node_map = HashMap::new();
         let mut visited = HashSet::new();
 
         // Find nodes to include based on run_mode
-        if self.run_mode == RunMode::Single {
-            visited = self.roots.iter().cloned().collect();
+        if run_mode == RunMode::Single {
+            visited = roots.iter().cloned().collect();
         } else {
-            let upstream = matches!(self.run_mode, RunMode::Before | RunMode::All);
-            let downstream = matches!(self.run_mode, RunMode::After | RunMode::All);
+            let upstream = matches!(run_mode, RunMode::Before | RunMode::All);
+            let downstream = matches!(run_mode, RunMode::After | RunMode::All);
             // Roots and wanted tasks are active: they select the tasks that run
             // after them. Prerequisites are passive, so a shared prerequisite
             // never selects unrelated dependents.
             // See: https://github.com/cachix/devenv/issues/2337
             let mut activated = HashSet::new();
             let mut to_visit: Vec<(NodeIndex, bool)> =
-                self.roots.iter().map(|&root| (root, true)).collect();
+                roots.iter().map(|&root| (root, true)).collect();
             while let Some((node, active)) = to_visit.pop() {
                 if visited.insert(node) {
+                    if precompleted.is_some_and(|completed| completed.contains(&node)) {
+                        continue;
+                    }
                     if let Some(wanted) = self.wants.get(&node) {
                         to_visit.extend(wanted.iter().map(|&task| (task, true)));
                     }
@@ -652,7 +747,7 @@ impl Tasks {
 
         // External managers own ordering for non-root process tasks.
         if self.ignore_process_deps {
-            let root_set: HashSet<NodeIndex> = self.roots.iter().cloned().collect();
+            let root_set: HashSet<NodeIndex> = roots.iter().cloned().collect();
             let mut to_remove = Vec::new();
             for &node in &visited {
                 if root_set.contains(&node) {
@@ -714,14 +809,64 @@ impl Tasks {
             ))
         ));
 
-        self.run_internal(orchestration_activity, is_process_mode)
-            .await
+        self.run_internal(
+            orchestration_activity,
+            is_process_mode,
+            RunSelection {
+                roots: &self.roots,
+                order: &self.tasks_order,
+                dependency_sources: self.tasks_order.iter().copied().collect(),
+                shutdown: Arc::clone(&self.shutdown),
+            },
+        )
+        .await
     }
 
     /// Run process tasks under a caller-provided activity.
     #[instrument(skip(self, parent_activity))]
     pub async fn run_with_parent_activity(&self, parent_activity: Arc<Activity>) -> Outputs {
-        self.run_internal(parent_activity, true).await
+        self.run_internal(
+            parent_activity,
+            true,
+            RunSelection {
+                roots: &self.roots,
+                order: &self.tasks_order,
+                dependency_sources: self.tasks_order.iter().copied().collect(),
+                shutdown: Arc::clone(&self.shutdown),
+            },
+        )
+        .await
+    }
+
+    /// Run the prevalidated manager stop plan against the existing task graph.
+    pub async fn run_manager_stopped(
+        &self,
+        shutdown: Arc<tokio_shutdown::Shutdown>,
+    ) -> Option<TasksStatus> {
+        let plan = self.stop_plan.as_ref()?;
+        // The event is a graph node for dependency resolution, but it has no
+        // command or activity. Publish its completion when the manager stops.
+        self.graph[plan.event].write().await.status = TaskStatus::Completed(
+            TaskCompleted::Success(std::time::Duration::ZERO, Output(None)),
+        );
+        self.notify_finished.notify_waiters();
+        let activity = Arc::new(devenv_activity::start!(
+            Activity::operation("Running manager stop tasks")
+                .parent(None)
+                .detail(format!("{} tasks", plan.order.len()))
+        ));
+        self.run_internal(
+            activity,
+            false,
+            RunSelection {
+                roots: &plan.roots,
+                order: &plan.order,
+                dependency_sources: plan.dependency_sources.clone(),
+                shutdown,
+            },
+        )
+        .await;
+        Some(self.completion_status_for(&plan.order, &plan.roots).await)
     }
 
     /// Schedule named process tasks and their dependencies against the live graph.
@@ -1295,16 +1440,17 @@ impl Tasks {
         &self,
         orchestration_activity: Arc<Activity>,
         register_unscheduled_processes: bool,
+        selection: RunSelection<'_>,
     ) -> Outputs {
         // Assign activity IDs upfront for all tasks
         let mut task_ids: HashMap<NodeIndex, u64> = HashMap::new();
-        for &index in &self.tasks_order {
+        for &index in selection.order {
             task_ids.insert(index, next_id());
         }
 
         // Build TaskInfo for all tasks
         let mut task_infos: Vec<TaskInfo> = Vec::new();
-        for &index in &self.tasks_order {
+        for &index in selection.order {
             let task_state = self.graph[index].read().await;
             let task_id = task_ids[&index];
 
@@ -1319,8 +1465,8 @@ impl Tasks {
         // Compute hierarchy edges using the extracted function
         let edges = compute_hierarchy_edges(
             &self.graph,
-            &self.tasks_order,
-            &self.roots,
+            selection.order,
+            selection.roots,
             &task_ids,
             orchestration_activity.id(),
         );
@@ -1328,12 +1474,12 @@ impl Tasks {
         // Emit hierarchy once upfront
         emit_task_hierarchy(task_infos, edges);
 
-        let total_tasks = self.tasks_order.len() as u64;
+        let total_tasks = selection.order.len() as u64;
         let completed_tasks = Arc::new(std::sync::atomic::AtomicU64::new(0));
-        let scheduled: HashSet<NodeIndex> = self.tasks_order.iter().copied().collect();
+        let scheduled: HashSet<NodeIndex> = selection.order.iter().copied().collect();
 
         let outputs = Arc::clone(&self.outputs);
-        let mut running_tasks = self.shutdown.join_set();
+        let mut running_tasks = selection.shutdown.join_set();
 
         // Long-lived runners register the full graph for later dynamic starts.
         // Transient task runners expose only their cold schedule.
@@ -1341,10 +1487,10 @@ impl Tasks {
         let process_indices: Vec<_> = if register_unscheduled_processes {
             self.graph.node_indices().collect()
         } else {
-            self.tasks_order.clone()
+            selection.order.to_vec()
         };
         for index in process_indices {
-            if self.shutdown.is_cancelled() {
+            if selection.shutdown.is_cancelled() {
                 break;
             }
             let ts = self.graph[index].read().await;
@@ -1366,7 +1512,7 @@ impl Tasks {
                         // After/All also schedule downstream processes. Only
                         // override those required by a scheduled dependent.
                         if !register_unscheduled_processes
-                            && !self.roots.contains(&index)
+                            && !selection.roots.contains(&index)
                             && self
                                 .graph
                                 .edges(index)
@@ -1410,7 +1556,7 @@ impl Tasks {
             }
         }
 
-        for index in &self.tasks_order {
+        for index in selection.order {
             let task_state = &self.graph[*index];
             let task_activity_id = task_ids[index];
 
@@ -1422,7 +1568,7 @@ impl Tasks {
                 ts.task.r#type == TaskType::Process
             };
 
-            if self.shutdown.is_cancelled() {
+            if selection.shutdown.is_cancelled() {
                 Self::mark_task_skipped(
                     task_state,
                     task_activity_id,
@@ -1458,7 +1604,7 @@ impl Tasks {
                     }
                 };
 
-                let deps = self.collect_scheduled_deps(*index, &scheduled);
+                let deps = self.collect_scheduled_deps(*index, &selection.dependency_sources);
 
                 let task_state_clone = Arc::clone(task_state);
                 let notify_finished_clone = Arc::clone(&self.notify_finished);
@@ -1466,7 +1612,7 @@ impl Tasks {
                 let process_runner_clone = self.process_runner.clone();
                 let orchestration_activity_clone = Arc::clone(&orchestration_activity);
                 let completed_tasks_clone = Arc::clone(&completed_tasks);
-                let shutdown_clone = Arc::clone(&self.shutdown);
+                let shutdown_clone = Arc::clone(&selection.shutdown);
 
                 running_tasks.spawn(move || {
                     let orchestration_activity_inner = Arc::clone(&orchestration_activity_clone);
@@ -1582,7 +1728,7 @@ impl Tasks {
 
             // Oneshot task: spawn into background with dependency checking,
             // so independent tasks can run in parallel.
-            let deps = self.collect_scheduled_deps(*index, &scheduled);
+            let deps = self.collect_scheduled_deps(*index, &selection.dependency_sources);
 
             // TODO: consider Arc-ing self at this point
             let task_state_clone = Arc::clone(task_state);
@@ -1591,7 +1737,7 @@ impl Tasks {
             let notify_ui_clone = Arc::clone(&self.notify_ui);
             // TODO: remove this clone
             let cache = Arc::new(self.cache.clone());
-            let shutdown_clone = Arc::clone(&self.shutdown);
+            let shutdown_clone = Arc::clone(&selection.shutdown);
             let process_runner_clone = Arc::clone(&self.process_runner);
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
@@ -1636,8 +1782,8 @@ impl Tasks {
         // wait_all() aborts spawned futures on shutdown so that run_event_loop()
         // can proceed to stop_all(). Aborted futures never write back their
         // completion status, so sweep any still-Running tasks to Cancelled.
-        if self.shutdown.is_cancelled() {
-            for &index in &self.tasks_order {
+        if selection.shutdown.is_cancelled() {
+            for &index in selection.order {
                 let (is_process, task_name, running_oneshot_start) = {
                     let task_state = self.graph[index].read().await;
                     let running_start = match &task_state.status {
@@ -1680,7 +1826,9 @@ impl Tasks {
         }
 
         // Check completion status and mark orchestration activity accordingly
-        let status = self.get_completion_status().await;
+        let status = self
+            .completion_status_for(selection.order, selection.roots)
+            .await;
 
         if status.has_failures() {
             orchestration_activity.fail();
@@ -2382,7 +2530,6 @@ mod schedule_tests {
                     DependencyKind::Ready => "ready",
                     DependencyKind::Succeeded => "succeeded",
                     DependencyKind::Completed => "completed",
-                    DependencyKind::Stopped => unreachable!(),
                 }),
             }
         }
@@ -2546,7 +2693,7 @@ mod schedule_tests {
                         finished = source_finished.to_string_lossy(),
                         exit = case.exit.code(),
                     ),
-                    (DependencyKind::Succeeded | DependencyKind::Stopped, _) => unreachable!(),
+                    (DependencyKind::Succeeded, _) => unreachable!(),
                 };
                 let source_script = executable_script(files.path(), "process-source", &source_body);
                 let mut source =
@@ -2560,7 +2707,7 @@ mod schedule_tests {
                     DependencyKind::Started => None,
                     DependencyKind::Ready => Some(&source_ready),
                     DependencyKind::Completed => Some(&source_finished),
-                    DependencyKind::Succeeded | DependencyKind::Stopped => unreachable!(),
+                    DependencyKind::Succeeded => unreachable!(),
                 };
                 let validate = required.map_or_else(String::new, |required| {
                     format!("test -f '{}' || exit 91\n", required.to_string_lossy())
@@ -2608,7 +2755,7 @@ mod schedule_tests {
                         finished = source_finished.to_string_lossy(),
                         exit = case.exit.code(),
                     ),
-                    DependencyKind::Ready | DependencyKind::Stopped => unreachable!(),
+                    DependencyKind::Ready => unreachable!(),
                 };
                 let source_script = executable_script(files.path(), "oneshot-source", &source_body);
                 let mut source = oneshot_task(&source_name, vec![]);
@@ -2617,7 +2764,7 @@ mod schedule_tests {
                 let required = match case.dependency.kind() {
                     DependencyKind::Started => None,
                     DependencyKind::Succeeded | DependencyKind::Completed => Some(&source_finished),
-                    DependencyKind::Ready | DependencyKind::Stopped => unreachable!(),
+                    DependencyKind::Ready => unreachable!(),
                 };
                 let validate = required.map_or_else(String::new, |required| {
                     format!("test -f '{}' || exit 92\n", required.to_string_lossy())
@@ -2887,7 +3034,7 @@ mod schedule_tests {
                 finished = source_finished.to_string_lossy(),
                 exit = case.exit.code(),
             ),
-            DependencyKind::Ready | DependencyKind::Stopped => unreachable!(),
+            DependencyKind::Ready => unreachable!(),
         };
         let source_script = executable_script(files.path(), "source", &source_body);
         let mut source = oneshot_task(source_name, vec![]);
@@ -2896,7 +3043,7 @@ mod schedule_tests {
         let required = match case.dependency.kind() {
             DependencyKind::Started => None,
             DependencyKind::Succeeded | DependencyKind::Completed => Some(&source_finished),
-            DependencyKind::Ready | DependencyKind::Stopped => unreachable!(),
+            DependencyKind::Ready => unreachable!(),
         };
         let validate = required.map_or_else(String::new, |required| {
             format!("test -f '{}' || exit 92\n", required.to_string_lossy())
@@ -3063,7 +3210,7 @@ mod schedule_tests {
                 finished = source_finished.to_string_lossy(),
                 exit = case.exit.code(),
             ),
-            (DependencyKind::Succeeded | DependencyKind::Stopped, _) => unreachable!(),
+            (DependencyKind::Succeeded, _) => unreachable!(),
         };
         let source_script = executable_script(files.path(), "source", &source_body);
         let mut source =
@@ -3081,7 +3228,7 @@ mod schedule_tests {
             DependencyKind::Ready => Some(&source_ready),
             DependencyKind::Completed if source_stays_not_started => None,
             DependencyKind::Completed => Some(&source_finished),
-            DependencyKind::Succeeded | DependencyKind::Stopped => unreachable!(),
+            DependencyKind::Succeeded => unreachable!(),
         };
         let validate = required.map_or_else(String::new, |required| {
             format!("test -f '{}' || exit 91\n", required.to_string_lossy())

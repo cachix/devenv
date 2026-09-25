@@ -26,6 +26,10 @@ in
         echo "HTTP process was still running during cleanup" >&2
         exit 1
       fi
+      if test -e "${config.devenv.state}/fail-stop"; then
+        echo "cleanup failure requested by test" >&2
+        exit 1
+      fi
       printf 'stopped\n' >> "${config.devenv.state}/up-stopped"
     '';
   };

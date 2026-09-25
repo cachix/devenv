@@ -397,7 +397,7 @@ This runs when `app:cleanup` is selected in a task run and the application serve
 }
 ```
 
-`devenv up` runs this task after stopping all processes. It runs for foreground shutdown and `devenv processes down` after `devenv up -d`. It does not run when only one process is stopped while the manager remains active. This dependency is supported by the native manager in devenv 2.4.1 and later.
+`devenv up` runs this task after stopping all processes. It runs for foreground shutdown and `devenv processes down` after `devenv up -d`. It does not run when only one process is stopped while the manager remains active. Cleanup tasks can use outputs from startup tasks and depend on one another. The native manager validates their dependencies before starting processes, and `devenv processes down` reports cleanup failures. This dependency is supported by the native manager in devenv 2.4.1 and later.
 
 :::caution[Setup tasks attached to processes and `devenv up`]
 

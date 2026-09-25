@@ -33,10 +33,11 @@ pub fn run(config_file: &Path) -> Result<()> {
 
         let tasks_runner = Arc::new(
             tasks::Tasks::builder(
-                config.clone(),
+                config,
                 devenv_core::VerbosityLevel::Normal,
                 shutdown.clone(),
             )
+            .with_native_manager_lifecycle()
             .build()
             .await
             .map_err(|e| miette::miette!("Failed to build task runner: {}", e))?,
@@ -46,13 +47,10 @@ pub fn run(config_file: &Path) -> Result<()> {
             devenv_activity::Activity::operation("Running processes").parent(None)
         );
 
-        let manager = Arc::new(
-            tasks::NativeProcessManager::new(
-                Arc::clone(&tasks_runner),
-                devenv::processes::ManagerResidence::Daemon,
-            )
-            .with_up_shutdown_config(config),
-        );
+        let manager = Arc::new(tasks::NativeProcessManager::new(
+            Arc::clone(&tasks_runner),
+            devenv::processes::ManagerResidence::Daemon,
+        ));
 
         let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
 

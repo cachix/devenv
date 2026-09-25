@@ -181,4 +181,22 @@ FOREGROUND_PID=
 wait_for_http_gone "$PORT"
 echo "PASS: foreground signal"
 
+# === Test 7: down reports a cleanup task failure ===
+echo "--- Test 7: cleanup failure is reported ---"
+start_daemon
+devenv processes wait
+wait_for_http_ready "$PORT"
+touch .devenv/state/fail-stop
+if devenv processes down >failed-down.txt 2>&1; then
+  echo "FAIL: down succeeded despite cleanup failure"
+  exit 1
+fi
+grep -q 'devenv:up@stopped tasks failed' failed-down.txt || {
+  cat failed-down.txt
+  exit 1
+}
+wait_for_http_gone "$PORT"
+rm -f .devenv/state/fail-stop
+echo "PASS: cleanup failure is reported"
+
 echo "All daemon-down tests passed!"
