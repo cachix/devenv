@@ -112,7 +112,7 @@ package
 *Default:*
 
 ```nix
-pkgs.terraform-ls
+pkgs.tofu-ls
 ```
 
 *Declared by:*
