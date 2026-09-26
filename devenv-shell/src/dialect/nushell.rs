@@ -193,7 +193,7 @@ exit 1
             // This avoids quoting issues from embedding bash code in nushell strings.
             let bash_helper = format!(
                 "#!/usr/bin/env bash\n{}",
-                super::bash_reload_subprocess_script(
+                super::nushell_reload_subprocess_script(
                     super::BashDialect.env_diff_helpers(),
                     reload_file,
                 )
@@ -235,16 +235,18 @@ exit 1
 # --- devenv hot-reload support ---
 
 # Apply a reload: run the bash helper script to compute the env diff,
-# then parse `export -p` output and apply environment changes.
+# then apply only the variables changed by devenv.
 def --env __devenv_reload_apply [] {{
     let reload_file = "{reload_file}"
     if ($reload_file | path exists) {{
         let bash_output = (bash "{helper_path}" | complete)
         if ($bash_output.exit_code == 0) {{
-            # Parse `declare -x VAR="value"` lines from bash export -p output
+            # Parse changed exports and removals from the bash helper.
             for line in ($bash_output.stdout | lines) {{
                 let trimmed = ($line | str trim)
-                if ($trimmed | str starts-with "declare -x ") {{
+                if ($trimmed | str starts-with "unset ") {{
+                    hide-env -i ($trimmed | str substring 6..)
+                }} else if ($trimmed | str starts-with "declare -x ") {{
                     let vardef = ($trimmed | str substring 11..)
                     let eq_pos = ($vardef | str index-of "=")
                     if $eq_pos >= 0 {{

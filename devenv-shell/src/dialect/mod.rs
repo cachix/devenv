@@ -107,8 +107,68 @@ pub(crate) fn xdg_config_home() -> Option<PathBuf> {
 /// reload (matching bash's behavior), falling back to discarding it when no
 /// controlling terminal is available.
 pub(crate) fn bash_reload_subprocess_script(env_diff_helpers: &str, reload_file: &str) -> String {
+    bash_reload_subprocess_script_with_output(env_diff_helpers, reload_file, "", "export -p")
+}
+
+/// Nushell must only import variables touched by devenv. Importing the entire
+/// bash environment turns structured Nushell variables (such as DIRS_LIST)
+/// into strings when they pass through the bash subprocess.
+pub(crate) fn nushell_reload_subprocess_script(
+    env_diff_helpers: &str,
+    reload_file: &str,
+) -> String {
+    bash_reload_subprocess_script_with_output(
+        env_diff_helpers,
+        reload_file,
+        r#"declare -A _devenv_reload_names=()
+__devenv_collect_reload_names() {
+    local line name
+    while IFS= read -r line; do
+        case "$line" in
+            P:declare\ -x\ *)
+                name="${line#P:declare -x }"
+                name="${name%%=*}" ;;
+            N:*) name="${line#N:}" ;;
+            *) continue ;;
+        esac
+        [[ "$name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] && _devenv_reload_names["$name"]=1
+    done < <(__devenv_deserialize_diff "$1")
+}
+__devenv_collect_reload_names "$_DEVENV_DIFF""#,
+        r#"__devenv_collect_reload_names "$_DEVENV_DIFF"
+# The diff itself is needed to reverse this reload on the next one.
+_devenv_reload_names[_DEVENV_DIFF]=1
+
+while IFS= read -r _devenv_reload_line; do
+    [[ "$_devenv_reload_line" == declare\ -x\ * ]] || continue
+    _devenv_reload_name="${_devenv_reload_line#declare -x }"
+    _devenv_reload_name="${_devenv_reload_name%%=*}"
+    if [[ -n "${_devenv_reload_names[$_devenv_reload_name]+x}" ]]; then
+        if [[ "$_devenv_reload_line" == *=* ]]; then
+            printf '%s\n' "$_devenv_reload_line"
+        else
+            printf 'unset %s\n' "$_devenv_reload_name"
+        fi
+        unset "_devenv_reload_names[$_devenv_reload_name]"
+    fi
+done < <(export -p)
+
+for _devenv_reload_name in "${!_devenv_reload_names[@]}"; do
+    printf 'unset %s\n' "$_devenv_reload_name"
+done"#,
+    )
+}
+
+fn bash_reload_subprocess_script_with_output(
+    env_diff_helpers: &str,
+    reload_file: &str,
+    before_reload: &str,
+    output: &str,
+) -> String {
     format!(
         r#"{env_diff_helpers}
+
+{before_reload}
 
 # Reverse previous diff
 __devenv_apply_reverse_diff
@@ -135,10 +195,12 @@ unset _devenv_reload_out
 __devenv_compute_diff "$_before"
 rm -f "$_before"
 
-# Output current environment for the calling shell to parse
-export -p"#,
+# Output environment data for the calling shell to apply
+{output}"#,
         env_diff_helpers = env_diff_helpers,
+        before_reload = before_reload,
         reload_file = reload_file,
+        output = output,
     )
 }
 
@@ -234,6 +296,43 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         );
 
         let _ = std::fs::remove_file(&reload_file);
+    }
+
+    #[test]
+    fn nushell_reload_subprocess_only_emits_changed_variables() {
+        let tmp = unique_tmp_dir("nu-reload-exports");
+        let reload_file = tmp.join("reload.sh");
+        std::fs::write(&reload_file, "export DEVENV_RELOAD_ADDED=added\n").unwrap();
+        let initial_diff = Command::new("bash")
+            .args([
+                "-c",
+                "printf 'N:DEVENV_RELOAD_REMOVED\\n' | gzip -c | base64 -w0",
+            ])
+            .output()
+            .unwrap();
+        assert!(initial_diff.status.success());
+        let script = nushell_reload_subprocess_script(
+            BashDialect.env_diff_helpers(),
+            reload_file.to_str().unwrap(),
+        );
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(script)
+            .env(
+                "_DEVENV_DIFF",
+                String::from_utf8(initial_diff.stdout).unwrap(),
+            )
+            .env("DEVENV_RELOAD_REMOVED", "old")
+            .env("DIRS_LIST", "/tmp")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("declare -x DEVENV_RELOAD_ADDED=\"added\""));
+        assert!(stdout.contains("unset DEVENV_RELOAD_REMOVED"));
+        assert!(stdout.contains("declare -x _DEVENV_DIFF="));
+        assert!(!stdout.contains("DIRS_LIST"));
+        let _ = std::fs::remove_dir_all(tmp);
     }
 
     /// Regression tests for https://github.com/cachix/devenv/issues/2861
@@ -473,6 +572,83 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         assert!(config.contains("keycode: \"f12\""));
         assert!(!config.contains("keycode: char_r"));
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Regression test for https://github.com/cachix/devenv/issues/3230.
+    /// `std/dirs` exports DIRS_LIST as a string to bash, but keeps it as a list
+    /// inside Nushell. A reload must leave that Nushell value intact.
+    #[test]
+    fn nushell_reload_preserves_structured_vars_and_removes_old_exports() {
+        if Command::new("nu").arg("--version").output().is_err() {
+            return;
+        }
+
+        let tmp = unique_tmp_dir("nu-reload-structured-env");
+        let reload_file = tmp.join("reload.sh");
+        std::fs::write(
+            &reload_file,
+            "export DEVENV_RELOAD_TEST_VAR=updated\nexport DEVENV_RELOAD_ADDED=added\n",
+        )
+        .unwrap();
+        let initial_diff = Command::new("bash")
+            .args([
+                "-c",
+                "printf 'N:DEVENV_RELOAD_TEST_VAR\\nN:DEVENV_RELOAD_REMOVED\\n' | gzip -c | base64 -w0",
+            ])
+            .output()
+            .unwrap();
+        assert!(initial_diff.status.success());
+
+        let shell_keybindings = ShellKeybindings::default();
+        let reload_file_str = reload_file.to_str().unwrap();
+        let ctx = RcfileContext {
+            env_script_path: Path::new("/dev/null"),
+            env_diff_helpers: "",
+            reload_hook: reload_file_str,
+            target_shell_path: None,
+            init_dir: &tmp,
+            shell_keybindings: &shell_keybindings,
+            prompt_prefix: false,
+        };
+        NushellDialect.write_init_files(&ctx).unwrap();
+        let config_nu = tmp.join("nu/config.nu");
+        let config = std::fs::read_to_string(&config_nu).unwrap();
+        // Avoid sourcing the developer's own Nushell configuration.
+        let config = config
+            .lines()
+            .filter(|line| !line.starts_with("source "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&config_nu, config).unwrap();
+
+        let script = format!(
+            "use std/dirs\nsource {config_nu:?}\n__devenv_reload_apply\nprint ($env.DIRS_LIST | describe)\nprint $env.DEVENV_RELOAD_TEST_VAR\nprint $env.DEVENV_RELOAD_ADDED\nprint ('DEVENV_RELOAD_REMOVED' in $env)\ndirs add /tmp\nprint ($env.DIRS_LIST | describe)\n"
+        );
+        let output = Command::new("nu")
+            .arg("--no-config-file")
+            .arg("-c")
+            .arg(&script)
+            .env(
+                "_DEVENV_DIFF",
+                String::from_utf8(initial_diff.stdout).unwrap(),
+            )
+            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+            .env("DEVENV_RELOAD_TEST_VAR", "old")
+            .env("DEVENV_RELOAD_REMOVED", "old")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Nushell reload failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .collect::<Vec<_>>(),
+            ["list<string>", "updated", "added", "false", "list<string>"]
+        );
+        let _ = std::fs::remove_dir_all(tmp);
     }
 
     #[test]
