@@ -100,6 +100,7 @@ impl TasksBuilder {
                 || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
                 || task.name.ends_with(':')
+                || task.name.contains("::")
                 || task.name.contains('@')
                 || !task
                     .name

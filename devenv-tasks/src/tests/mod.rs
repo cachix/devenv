@@ -29,6 +29,7 @@ async fn test_task_name() -> Result<(), Error> {
         ":invalid",
         "invalid:",
         "invalid",
+        "invalid::name",
     ];
 
     for task in invalid_names {
@@ -4433,6 +4434,7 @@ mod property_tests {
                     && name.split(':').count() >= 2
                     && !name.starts_with(':')
                     && !name.ends_with(':')
+                    && !name.contains("::")
                     && name
                         .chars()
                         .all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-')
