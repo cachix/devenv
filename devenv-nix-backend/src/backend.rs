@@ -333,7 +333,19 @@ impl NixCBackend {
                         &self.paths.lock_file,
                     ),
                     excluded_envs: vec!["NIXPKGS_CONFIG".to_string()],
-                    excluded_paths: vec![self.nixpkgs_config_path.clone()],
+                    excluded_paths: {
+                        let state = self.paths.dotfile.join("state");
+                        vec![
+                            self.nixpkgs_config_path.clone(),
+                            self.paths.dotfile.clone(),
+                            // A `tasks.db` prefix doesn't cover `-wal`/`-shm`.
+                            state.join("tasks.db"),
+                            state.join("tasks.db-wal"),
+                            state.join("tasks.db-shm"),
+                            state.join("git-hooks"),
+                        ]
+                    },
+                    excluded_path_exceptions: vec![self.paths.dotfile.join("state")],
                 };
                 let service = CachingEvalService::with_config(pool.clone(), config.clone());
                 let invalidation_flag = self.devenv_value_invalidated.clone();
