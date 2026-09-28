@@ -10,6 +10,10 @@ in
 {
   process.manager.implementation = "process-compose";
 
+  # `devenv test` starts the processes: provide the interpreter `repl` runs
+  # instead of relying on one being on the host's PATH.
+  packages = [ pkgs.python3 ];
+
   # An interactive process must be a direct child of the process-compose PTY.
   # Routing it through the `devenv-tasks` runner pipes its stdout/stderr and
   # breaks interactivity (no prompt, block-buffered output). Its generated
