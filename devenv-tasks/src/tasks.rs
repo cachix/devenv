@@ -15,7 +15,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{EdgeRef, Reversed};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::time::Instant;
@@ -240,6 +240,14 @@ impl Tasks {
     /// Returns the process runner used by process tasks.
     pub fn process_runner(&self) -> &Arc<ProcessRunner> {
         &self.process_runner
+    }
+
+    /// Connect a capability broker before the task runner is shared or run.
+    /// This lets callers validate the task graph before prompting for sudo.
+    pub fn set_capability_broker(&mut self, path: &Path) -> miette::Result<()> {
+        let runner = Arc::get_mut(&mut self.process_runner)
+            .ok_or_else(|| miette::miette!("Cannot configure a shared process runner"))?;
+        runner.set_capability_broker(path)
     }
 
     /// Wakes on task completions and process-map transitions.

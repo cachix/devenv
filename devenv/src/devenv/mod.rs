@@ -2928,7 +2928,7 @@ impl Devenv {
             let capability_requests = capability_requests(&task_configs);
             let capabilities_required_now = capabilities_required_now(&task_configs);
 
-            let mut config = self
+            let config = self
                 .make_task_config(roots, task_configs, task_mode, envs)
                 .await?;
 
@@ -2983,21 +2983,11 @@ impl Devenv {
                 return Ok(ProcessStartOutcome::Completed);
             }
 
-            config.capability_broker = processes::start_capability_broker(
-                &capability_requests,
-                capabilities_required_now,
-                self.process_runtime_dir()?,
-                options.frontend_command_tx.as_ref(),
-                std::process::Stdio::inherit(),
-            )
-            .await?;
-
-            let tasks_runner = Arc::new(
+            let mut tasks_runner =
                 tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
                     .build()
                     .await
-                    .map_err(|e| miette!("Failed to build task runner: {}", e))?,
-            );
+                    .map_err(|e| miette!("Failed to build task runner: {}", e))?;
 
             if options.mode == ClientRunMode::ReturnAfterStart {
                 let blockers = tasks_runner.disabled_process_dependencies().await;
@@ -3014,6 +3004,22 @@ impl Devenv {
                     );
                 }
             }
+
+            if let Some(broker) = processes::start_capability_broker(
+                &capability_requests,
+                capabilities_required_now,
+                self.process_runtime_dir()?,
+                options.frontend_command_tx.as_ref(),
+                std::process::Stdio::inherit(),
+            )
+            .await?
+            {
+                tasks_runner
+                    .set_capability_broker(&broker)
+                    .wrap_err("Failed to connect capability broker")?;
+            }
+
+            let tasks_runner = Arc::new(tasks_runner);
 
             // The persistent manager owns the task execution scope. That scope
             // owns the one process runner used by all of its process tasks.
