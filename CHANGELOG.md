@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Starting a process on demand now starts never-started, enabled process dependencies. Explicitly stopped and disabled dependencies stay off ([#3229](https://github.com/cachix/devenv/issues/3229)).
 - Nushell hot reload no longer breaks commands that use structured environment variables and now removes variables that disappeared after a reload ([#3230](https://github.com/cachix/devenv/issues/3230)).
 - MySQL now creates configured databases and users when started with `devenv up`, including `devenv up mysql` ([#2843](https://github.com/cachix/devenv/issues/2843)).
 - fish auto-activation no longer hangs when `env` is a fish function, such as grc's wrapper ([#3222](https://github.com/cachix/devenv/issues/3222)).
