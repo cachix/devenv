@@ -51,7 +51,20 @@ pub fn run(config_file: &Path) -> Result<()> {
             devenv::processes::ManagerResidence::Daemon,
         ));
 
-        let _outputs = tasks_runner.run_with_parent_activity(Arc::new(phase)).await;
+        let (scheduled_tx, scheduled_rx) = tokio::sync::oneshot::channel();
+        let initial_tasks = {
+            let tasks_runner = Arc::clone(&tasks_runner);
+            tokio::spawn(async move {
+                tasks_runner
+                    .run_with_parent_activity_and_signal_scheduled(Arc::new(phase), scheduled_tx)
+                    .await
+            })
+        };
+
+        scheduled_rx
+            .await
+            .into_diagnostic()
+            .wrap_err("Initial process scheduling stopped before the manager was available")?;
 
         let api_server = tasks::NativeApiServer::start(manager)?;
 
@@ -69,6 +82,10 @@ pub fn run(config_file: &Path) -> Result<()> {
             )
             .await
             .map_err(|e| miette::miette!("Process manager error: {}", e));
+
+        // Shutdown cancels the task runner's remaining work. Finish its
+        // cancellation sweep before removing the manager's PID file.
+        let _ = initial_tasks.await;
 
         let _ = tokio::fs::remove_file(&pid_file).await;
         result
