@@ -23,6 +23,7 @@
 ### Improvements
 
 - Added `tasks.<name>.wantedBy` to select a task when another task runs. `after` and `before` still control ordering. Garage now sets up its layout and buckets with both `devenv up garage` and `devenv up` ([#2852](https://github.com/cachix/devenv/issues/2852)).
+- Bash, Zsh, and Fish completion now suggests configured process names for `devenv up` and named `devenv processes` commands.
 
 ### Bug Fixes
 
