@@ -680,8 +680,9 @@ impl Tasks {
     /// Schedule named process tasks and their dependencies against the live graph.
     ///
     /// Names omit the `devenv:processes:` prefix. The result classifies each
-    /// unique name as scheduled, skipped, unknown, or failed. This returns after
-    /// scheduling; dependencies may keep a process `Waiting` in the background.
+    /// unique requested name and started prerequisite as scheduled, skipped,
+    /// unknown, or failed. This returns after scheduling; dependencies may keep
+    /// a process `Waiting` in the background.
     pub async fn start_with_deps<I, S>(&self, names: I) -> StartOutcome
     where
         I: IntoIterator<Item = S>,
@@ -691,9 +692,37 @@ impl Tasks {
         let _serialize = self.start_with_deps_lock.lock().await;
         let mut outcome = StartOutcome::default();
 
+        // Start never-started process prerequisites before their requested
+        // dependents. An explicitly stopped prerequisite stays stopped.
+        let mut expanded = Vec::new();
+        for name in names.into_iter().map(Into::into) {
+            let task_name = format!("{PROCESS_TASK_PREFIX}{name}");
+            if let Some(&index) = self.task_index_by_name.get(&task_name)
+                && !matches!(
+                    self.process_runner.get_phase(&name).await,
+                    Some(ProcessPhase::Starting | ProcessPhase::Ready)
+                )
+            {
+                expanded.extend(
+                    self.unstarted_process_dependencies(index)
+                        .await
+                        .into_iter()
+                        .map(|dependency| (dependency, false)),
+                );
+            }
+            expanded.push((name, true));
+        }
+
         // Deduplicate without changing result order.
         let mut seen = std::collections::HashSet::new();
-        for name in names.into_iter().map(Into::into) {
+        for (name, explicitly_requested) in expanded {
+            // A stop can race closure discovery. Only a requested process may
+            // re-arm an entry that the user has explicitly stopped.
+            if !explicitly_requested
+                && self.process_runner.get_phase(&name).await != Some(ProcessPhase::NotStarted)
+            {
+                continue;
+            }
             if !seen.insert(name.clone()) {
                 continue;
             }
@@ -810,6 +839,64 @@ impl Tasks {
         }
 
         outcome
+    }
+
+    /// Find process prerequisites that are eligible for a dynamic start.
+    /// Traverse pending one-shots too, since they can depend on processes.
+    async fn unstarted_process_dependencies(&self, root: NodeIndex) -> Vec<String> {
+        let mut stack = vec![(root, false)];
+        let mut visited = HashSet::new();
+        let mut processes = Vec::new();
+
+        while let Some((node, after_dependencies)) = stack.pop() {
+            if after_dependencies {
+                if node != root {
+                    let task = self.graph[node].read().await;
+                    if task.task.r#type == TaskType::Process {
+                        let name = crate::types::process_name(&task.task.name);
+                        if self.process_runner.get_phase(name).await
+                            == Some(ProcessPhase::NotStarted)
+                        {
+                            processes.push(name.to_string());
+                        }
+                    }
+                }
+                continue;
+            }
+            if !visited.insert(node) {
+                continue;
+            }
+            stack.push((node, true));
+
+            for edge in self
+                .graph
+                .edges_directed(node, petgraph::Direction::Incoming)
+            {
+                let predecessor = edge.source();
+                let state = self.graph[predecessor].read().await;
+                let visit = if state.task.r#type == TaskType::Process {
+                    let name = crate::types::process_name(&state.task.name);
+                    match self.process_runner.get_phase(name).await {
+                        Some(ProcessPhase::NotStarted) => {
+                            *edge.weight() != DependencyKind::Completed
+                                && state
+                                    .task
+                                    .process
+                                    .as_ref()
+                                    .is_none_or(|process| process.start.enable)
+                        }
+                        Some(ProcessPhase::Waiting) => true,
+                        _ => false,
+                    }
+                } else {
+                    !matches!(state.status, TaskStatus::Completed(_))
+                };
+                if visit {
+                    stack.push((predecessor, false));
+                }
+            }
+        }
+        processes
     }
 
     /// Publish one task's terminal progress and wake observers.
@@ -3159,21 +3246,14 @@ mod schedule_tests {
         let outcome = tasks.start_with_deps(["downstream"]).await;
         assert_eq!(
             outcome.scheduled,
-            ["downstream"],
+            if case.dependency.kind() == DependencyKind::Completed {
+                vec!["downstream".to_string()]
+            } else {
+                vec!["source".to_string(), "downstream".to_string()]
+            },
             "{}: dynamic root was not scheduled",
             case_name
         );
-
-        if case.dependency.kind() != DependencyKind::Completed {
-            assert_eq!(
-                tasks.process_runner().get_phase("downstream").await,
-                Some(ProcessPhase::Waiting),
-                "{}: downstream must wait while its process predecessor is not started",
-                case_name
-            );
-            let outcome = tasks.start_with_deps(["source"]).await;
-            assert_eq!(outcome.scheduled, ["source"]);
-        }
 
         wait_task_completed(&tasks, bridge_name).await;
         if case.dependency.allows_dependent(case.exit) {
@@ -3359,13 +3439,7 @@ mod schedule_tests {
         if dynamic {
             wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
             let outcome = tasks.start_with_deps(["backend"]).await;
-            assert_eq!(outcome.scheduled, ["backend"]);
-            assert_eq!(
-                tasks.process_runner().get_phase("backend").await,
-                Some(ProcessPhase::Waiting)
-            );
-            let outcome = tasks.start_with_deps(["source"]).await;
-            assert_eq!(outcome.scheduled, ["source"]);
+            assert_eq!(outcome.scheduled, ["source", "backend"]);
         }
         wait_phase(&tasks, "backend", ProcessPhase::Ready).await;
 
@@ -3918,6 +3992,76 @@ mod schedule_tests {
         assert_eq!(outcome.scheduled, ["gamma"]);
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
 
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn start_with_deps_starts_never_started_process_prerequisites() {
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![
+                long_process_task("db", vec![]),
+                long_process_task("helper", vec![]),
+                long_process_task("app", vec!["helper@started"]),
+                long_process_task("unrelated", vec![]),
+            ],
+            vec![format!("{PROCESS_TASK_PREFIX}db")],
+            RunMode::Before,
+            false,
+        )
+        .await;
+
+        tasks.run(true).await;
+        wait_phase(&tasks, "db", ProcessPhase::Ready).await;
+        assert_eq!(
+            tasks.process_runner().get_phase("helper").await,
+            Some(ProcessPhase::NotStarted)
+        );
+
+        let outcome = tasks.start_with_deps(["app"]).await;
+        assert_eq!(outcome.scheduled, ["helper", "app"]);
+        wait_phase(&tasks, "app", ProcessPhase::Ready).await;
+        assert_eq!(
+            tasks.process_runner().get_phase("unrelated").await,
+            Some(ProcessPhase::NotStarted)
+        );
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn start_with_deps_keeps_disabled_process_prerequisites_off() {
+        let mut helper = long_process_task("helper", vec![]);
+        helper.process = Some(ProcessConfig {
+            start: devenv_processes::config::StartConfig { enable: false },
+            ..Default::default()
+        });
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![
+                long_process_task("db", vec![]),
+                helper,
+                long_process_task("app", vec!["helper@started"]),
+            ],
+            vec![format!("{PROCESS_TASK_PREFIX}db")],
+            RunMode::Before,
+            false,
+        )
+        .await;
+
+        tasks.run(true).await;
+        wait_phase(&tasks, "db", ProcessPhase::Ready).await;
+        let outcome = tasks.start_with_deps(["app"]).await;
+        assert_eq!(outcome.scheduled, ["app"]);
+        assert_eq!(
+            tasks.process_runner().get_phase("helper").await,
+            Some(ProcessPhase::NotStarted)
+        );
+        assert_eq!(
+            tasks.process_runner().get_phase("app").await,
+            Some(ProcessPhase::Waiting)
+        );
+
+        let outcome = tasks.start_with_deps(["helper"]).await;
+        assert_eq!(outcome.scheduled, ["helper"]);
+        wait_phase(&tasks, "app", ProcessPhase::Ready).await;
         tasks.process_runner().stop_all().await.unwrap();
     }
 

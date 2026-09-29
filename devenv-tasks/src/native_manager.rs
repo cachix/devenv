@@ -817,6 +817,70 @@ mod tests {
         manager.stop_all().await.unwrap();
     }
 
+    #[tokio::test]
+    async fn start_request_starts_never_started_process_dependencies() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut helper = process_task("helper", "exec tail -f /dev/null");
+        helper.process.as_mut().unwrap().start.enable = true;
+        let mut app = process_task("app", "exec tail -f /dev/null");
+        app.process.as_mut().unwrap().start.enable = true;
+        app.after = vec![format!("{}helper@started", crate::PROCESS_TASK_PREFIX)];
+        let mut unrelated = process_task("unrelated", "exec tail -f /dev/null");
+        unrelated.process.as_mut().unwrap().start.enable = true;
+
+        let manager = test_manager(
+            &temp_dir,
+            vec![
+                process_task("db", "exec tail -f /dev/null"),
+                helper,
+                app,
+                unrelated,
+            ],
+            ManagerResidence::Daemon,
+        )
+        .await;
+        manager.tasks.run(true).await;
+        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
+
+        let response = NativeManagerClient::api_request(
+            &manager.api_socket_path(),
+            &ApiRequest::Start {
+                names: vec!["db".to_string()],
+            },
+        )
+        .await
+        .unwrap();
+        assert!(matches!(response, ApiResponse::Start { outcome } if outcome.scheduled == ["db"]));
+        wait_for_phase(&manager, "db", ProcessPhase::Ready).await;
+        assert_eq!(
+            manager.process_runner().get_phase("helper").await,
+            Some(ProcessPhase::NotStarted)
+        );
+
+        let response = NativeManagerClient::api_request(
+            &manager.api_socket_path(),
+            &ApiRequest::Start {
+                names: vec!["app".to_string()],
+            },
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            response,
+            ApiResponse::Start { outcome }
+                if outcome.scheduled == ["helper", "app"]
+                    && outcome.skipped.is_empty()
+                    && outcome.unknown.is_empty()
+                    && outcome.failed.is_empty()
+        ));
+        wait_for_phase(&manager, "app", ProcessPhase::Ready).await;
+        assert_eq!(
+            manager.process_runner().get_phase("unrelated").await,
+            Some(ProcessPhase::NotStarted)
+        );
+        manager.stop_all().await.unwrap();
+    }
+
     /// Closing the requesting socket must not cancel work owned by the daemon.
     #[tokio::test]
     async fn interrupted_start_client_does_not_cancel_daemon_work() {
