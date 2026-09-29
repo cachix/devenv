@@ -4,7 +4,7 @@ use devenv_core::config::NixBackendType;
 use devenv_core::settings::{
     CacheOptions, InputOverrides, NixOptions, SecretOptions, ShellOptions, flag,
 };
-use devenv_tasks::RunMode;
+use devenv_tasks::{PROCESS_TASK_PREFIX, RunMode};
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -626,10 +626,19 @@ impl TracingCliArgs {
     }
 }
 
-/// Complete task names by reading from .devenv/task-names.txt cache file.
-/// Walks up from current directory to find the project root.
-/// If cache doesn't exist, spawns `devenv tasks list` in background to populate it.
-fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
+fn matching_cached_names<'a>(content: &'a str, current: &str, prefix: &str) -> Vec<&'a str> {
+    content
+        .lines()
+        .filter_map(|name| name.strip_prefix(prefix))
+        .filter(|name| !name.is_empty() && name.starts_with(current))
+        .collect()
+}
+
+/// Complete task or process names from the task-name cache. Process tasks use
+/// the `devenv:processes:` prefix, which is stripped from process suggestions.
+/// Walks up from the current directory and starts `devenv tasks list` in the
+/// background to populate a missing cache.
+fn complete_cached_names(current: &OsStr, prefix: &str) -> Vec<CompletionCandidate> {
     let current_str = current.to_str().unwrap_or("");
 
     // Walk up from current directory to find .devenv directory or devenv.nix/devenv.yaml
@@ -640,9 +649,8 @@ fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
 
         if cache_path.exists() {
             if let Ok(content) = fs::read_to_string(&cache_path) {
-                return content
-                    .lines()
-                    .filter(|name| !name.is_empty() && name.starts_with(current_str))
+                return matching_cached_names(&content, current_str, prefix)
+                    .into_iter()
                     .map(CompletionCandidate::new)
                     .collect();
             }
@@ -663,6 +671,14 @@ fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
     }
 
     Vec::new()
+}
+
+fn complete_task_names(current: &OsStr) -> Vec<CompletionCandidate> {
+    complete_cached_names(current, "")
+}
+
+fn complete_process_names(current: &OsStr) -> Vec<CompletionCandidate> {
+    complete_cached_names(current, PROCESS_TASK_PREFIX)
 }
 
 #[derive(Parser)]
@@ -1117,7 +1133,7 @@ pub enum HookShell {
 
 #[derive(clap::Args, Clone, Debug)]
 pub struct UpArgs {
-    #[arg(help = "Start a specific process(es).")]
+    #[arg(help = "Start a specific process(es).", add = ArgValueCompleter::new(complete_process_names))]
     pub processes: Vec<String>,
 
     #[arg(short, long, help = "Start processes in the background.")]
@@ -1173,13 +1189,13 @@ pub enum ProcessesCommand {
 
     #[command(about = "Get the status of a process.")]
     Status {
-        #[arg(help = "Name of the process.")]
+        #[arg(help = "Name of the process.", add = ArgValueCompleter::new(complete_process_names))]
         name: String,
     },
 
     #[command(about = "Get logs for a process.")]
     Logs {
-        #[arg(help = "Name of the process.")]
+        #[arg(help = "Name of the process.", add = ArgValueCompleter::new(complete_process_names))]
         name: String,
 
         #[arg(
@@ -1199,7 +1215,7 @@ pub enum ProcessesCommand {
 
     #[command(about = "Restart a process.")]
     Restart {
-        #[arg(help = "Name of the process.")]
+        #[arg(help = "Name of the process.", add = ArgValueCompleter::new(complete_process_names))]
         name: String,
     },
 
@@ -1208,7 +1224,8 @@ pub enum ProcessesCommand {
     )]
     Start {
         #[arg(
-            help = "Name of the process. If omitted, starts all processes (same as 'up'). A named process always starts in the background, starting the process manager if needed."
+            help = "Name of the process. If omitted, starts all processes (same as 'up'). A named process always starts in the background, starting the process manager if needed.",
+            add = ArgValueCompleter::new(complete_process_names)
         )]
         name: Option<String>,
 
@@ -1218,7 +1235,10 @@ pub enum ProcessesCommand {
 
     #[command(about = "Stop a running process (or all processes if no name given).")]
     Stop {
-        #[arg(help = "Name of the process. If omitted, stops all processes (same as 'down').")]
+        #[arg(
+            help = "Name of the process. If omitted, stops all processes (same as 'down').",
+            add = ArgValueCompleter::new(complete_process_names)
+        )]
         name: Option<String>,
     },
 }
@@ -1466,6 +1486,24 @@ mod tests {
     use super::*;
     use clap::{Parser, crate_version};
     use std::sync::{Mutex, MutexGuard};
+
+    #[test]
+    fn process_completion_uses_only_process_tasks_and_strips_prefix() {
+        let cached = "devenv:enterShell\ndevenv:processes:api\ndevenv:processes:app\ndevenv:processes:worker\ncustom:api\n";
+
+        assert_eq!(
+            matching_cached_names(cached, "ap", PROCESS_TASK_PREFIX),
+            vec!["api", "app"]
+        );
+        assert_eq!(
+            matching_cached_names(cached, "", PROCESS_TASK_PREFIX),
+            vec!["api", "app", "worker"]
+        );
+        assert_eq!(
+            matching_cached_names(cached, "devenv:processes:ap", ""),
+            vec!["devenv:processes:api", "devenv:processes:app"]
+        );
+    }
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
