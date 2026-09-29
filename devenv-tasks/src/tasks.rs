@@ -887,6 +887,40 @@ impl Tasks {
             .collect()
     }
 
+    /// Find cold-start dependencies that cannot progress without manually
+    /// starting a process disabled by `start.enable = false`. A noninteractive
+    /// caller such as `devenv test` cannot perform that action.
+    pub async fn disabled_process_dependencies(&self) -> Vec<(String, String)> {
+        let scheduled: HashSet<_> = self.tasks_order.iter().copied().collect();
+        let mut blockers = Vec::new();
+        for &index in &self.tasks_order {
+            let dependent_name = self.graph[index].read().await.task.name.clone();
+            for edge in self
+                .graph
+                .edges_directed(index, petgraph::Direction::Incoming)
+            {
+                if !scheduled.contains(&edge.source())
+                    || *edge.weight() == DependencyKind::Completed
+                {
+                    continue;
+                }
+                let dependency = self.graph[edge.source()].read().await;
+                if dependency.task.r#type == TaskType::Process
+                    && dependency
+                        .task
+                        .process
+                        .as_ref()
+                        .is_some_and(|process| !process.start.enable)
+                {
+                    blockers.push((dependent_name.clone(), dependency.task.name.clone()));
+                }
+            }
+        }
+        blockers.sort();
+        blockers.dedup();
+        blockers
+    }
+
     /// Start unseen one-shots in a dynamic dependency closure exactly once.
     /// Process dependencies still require explicit starts.
     async fn schedule_unseen_oneshot_dependencies(&self, index: NodeIndex) {
@@ -4372,6 +4406,58 @@ mod schedule_tests {
         assert!(!tasks.dependency_parked("gamma").await);
 
         tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn disabled_process_dependencies_report_blockers_in_the_cold_schedule() {
+        let mut disabled = long_process_task("disabled", vec![]);
+        disabled.process = Some(ProcessConfig {
+            start: devenv_processes::config::StartConfig { enable: false },
+            ready: Some(devenv_processes::ReadyConfig {
+                exec: Some("true".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let mut bridge = oneshot_task("test:bridge", vec![]);
+        bridge.after = vec![format!("{PROCESS_TASK_PREFIX}disabled@started")];
+        let mut app = long_process_task("app", vec![]);
+        app.after = vec!["test:bridge@succeeded".to_string()];
+        let mut unrelated = long_process_task("unrelated", vec![]);
+        unrelated.after = vec![format!("{PROCESS_TASK_PREFIX}disabled@started")];
+
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![
+                disabled,
+                long_process_task("direct", vec!["disabled"]),
+                long_process_task("completed", vec!["disabled@completed"]),
+                bridge,
+                app,
+                unrelated,
+            ],
+            vec![
+                format!("{PROCESS_TASK_PREFIX}direct"),
+                format!("{PROCESS_TASK_PREFIX}completed"),
+                format!("{PROCESS_TASK_PREFIX}app"),
+            ],
+            RunMode::Before,
+            false,
+        )
+        .await;
+
+        assert_eq!(
+            tasks.disabled_process_dependencies().await,
+            vec![
+                (
+                    format!("{PROCESS_TASK_PREFIX}direct"),
+                    format!("{PROCESS_TASK_PREFIX}disabled"),
+                ),
+                (
+                    "test:bridge".to_string(),
+                    format!("{PROCESS_TASK_PREFIX}disabled"),
+                ),
+            ]
+        );
     }
 
     #[tokio::test]

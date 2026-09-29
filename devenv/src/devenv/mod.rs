@@ -2999,6 +2999,22 @@ impl Devenv {
                     .map_err(|e| miette!("Failed to build task runner: {}", e))?,
             );
 
+            if options.mode == ClientRunMode::ReturnAfterStart {
+                let blockers = tasks_runner.disabled_process_dependencies().await;
+                if !blockers.is_empty() {
+                    let details = blockers
+                        .iter()
+                        .map(|(dependent, dependency)| {
+                            format!("'{dependent}' waits for '{dependency}' (start.enable = false)")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    bail!(
+                        "Process dependencies cannot start: {details}. Enable the dependency or make the dependency edge conditional."
+                    );
+                }
+            }
+
             // The persistent manager owns the task execution scope. That scope
             // owns the one process runner used by all of its process tasks.
             let manager = Arc::new(tasks::NativeProcessManager::new(
