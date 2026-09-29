@@ -292,8 +292,8 @@ fn should_clear_proxy_routes(
 }
 
 /// Keep the startup lock and proxy routes while a slow daemon is still alive.
-/// The PID file is published after its initial tasks settle, which can take
-/// longer than a fixed timeout on a cold build.
+/// The PID file is published after the initial process graph is registered.
+/// A slow or stuck daemon must not cause premature proxy route cleanup.
 async fn wait_for_daemon_pid(
     child: &mut std::process::Child,
     pid_file: &Path,
