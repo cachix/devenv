@@ -127,8 +127,8 @@ let
   healthHost = if healthListeners == [ ] then "localhost" else (builtins.head healthListeners).host;
   probeHost =
     if healthHost == "" || healthHost == "0.0.0.0" then "127.0.0.1"
-    else if healthHost == "[::]" then "::1"
-    else lib.removeSuffix "]" (lib.removePrefix "[" healthHost);
+    else if healthHost == "[::]" then "[::1]"
+    else healthHost;
 
   otelConfig =
     if cfg.configFile == null
