@@ -1,0 +1,7 @@
+syntax = "proto3";
+package opentelemetry.proto.collector.trace.v1;
+service TraceService {
+  rpc Export(ExportTraceServiceRequest) returns (ExportTraceServiceResponse);
+}
+message ExportTraceServiceRequest {}
+message ExportTraceServiceResponse {}
