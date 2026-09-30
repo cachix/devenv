@@ -56,7 +56,7 @@ let
       in
       lib.concatMap
         (protocol:
-          lib.optionals (builtins.hasAttr protocol protocols && protocols.${protocol} != null) (
+          lib.optionals (builtins.hasAttr protocol protocols) (
             endpointListener (portName protocol) [ "receivers" receiverName "protocols" protocol ]
               (asAttrs protocols.${protocol})
               (if protocol == "grpc" then "localhost:4317" else "localhost:4318")

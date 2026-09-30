@@ -155,6 +155,12 @@ let
   ephemeralHealth = evaluate {
     settings.extensions.health_check.endpoint = "localhost:0";
   };
+  nullProtocols = evaluate {
+    settings.receivers.otlp.protocols = {
+      grpc = null;
+      http = null;
+    };
+  };
 in
 assert builtins.length standard.changelogs == 1;
 assert raw.changelogs == [ ];
@@ -182,6 +188,7 @@ assert
   custom.ports == {
     health = 14000;
     "otlp-app-grpc" = 15000;
+    "otlp-app-http" = 4318;
     metrics = 16000;
     "metrics-2" = 17000;
   };
@@ -189,7 +196,7 @@ assert custom.process.ready.http.get.host == "127.0.0.1";
 assert custom.process.ready.http.get.path == "/health";
 assert custom.settings.receivers."otlp/app".protocols.grpc.endpoint == "[::1]:15100";
 assert custom.settings.receivers."otlp/app".protocols.grpc.max_recv_msg_size_mib == 16;
-assert custom.settings.receivers."otlp/app".protocols.http == null;
+assert custom.settings.receivers."otlp/app".protocols.http.endpoint == "localhost:4418";
 assert
   (builtins.elemAt custom.settings.service.telemetry.metrics.readers 0)
   .periodic.exporter.otlp.endpoint == "https://remote:4318";
@@ -202,7 +209,11 @@ assert
 assert
   (builtins.elemAt custom.settings.service.telemetry.metrics.readers 2).pull.exporter.prometheus.port
   == 17100;
-assert disabled.ports == { grpc = 4317; };
+assert
+  disabled.ports == {
+    grpc = 4317;
+    http = 4318;
+  };
 assert disabled.process.ready == null;
 assert disabled.settings.service.telemetry.metrics.readers == [ ];
 assert unmanaged.ports == { health = 13133; };
@@ -229,6 +240,10 @@ assert templatedHealth.settings.extensions.health_check.endpoint == "\${env:OTEL
 assert !(builtins.hasAttr "health" ephemeralHealth.ports);
 assert ephemeralHealth.process.ready == null;
 assert ephemeralHealth.settings.extensions.health_check.endpoint == "localhost:0";
+assert nullProtocols.ports.grpc == 4317;
+assert nullProtocols.ports.http == 4318;
+assert nullProtocols.settings.receivers.otlp.protocols.grpc.endpoint == "localhost:4417";
+assert nullProtocols.settings.receivers.otlp.protocols.http.endpoint == "localhost:4418";
 assert
   defaults.ports == {
     health = 13133;
