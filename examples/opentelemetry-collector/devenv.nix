@@ -6,6 +6,10 @@ let
   dbName = "otel";
 in
 {
+  enterTest = ''
+    export OTEL_HEALTH_PORT=${toString config.processes.opentelemetry-collector.ports.health.value}
+  '';
+
   services.clickhouse = {
     enable = true;
   };
