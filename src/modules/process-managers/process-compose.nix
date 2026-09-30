@@ -117,7 +117,7 @@ in
       default = {
         background_start = true;
         devenv_attach = false;
-        wait_ready = false;
+        wait_ready = true;
         individual_control = false;
         cold_start_subset = true;
       };
@@ -127,7 +127,7 @@ in
       type = processManagerTypes.adapter;
       internal = true;
       readOnly = true;
-      default = { terminal = "none"; stop = "process-scope"; client = "none"; };
+      default = { terminal = "none"; stop = "process-scope"; client = "process-compose"; };
       description = "Runtime adapter settings of the process-compose process manager.";
     };
 

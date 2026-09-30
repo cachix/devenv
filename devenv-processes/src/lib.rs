@@ -49,6 +49,7 @@ pub mod log_tailer;
 pub mod manager;
 pub mod manager_capabilities;
 pub mod pid;
+pub mod process_compose;
 mod process_guardian;
 pub mod process_scope;
 pub mod pty;
