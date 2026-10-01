@@ -378,6 +378,16 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
     pub impure: bool,
+    /// Sandbox shell commands, tasks, and services using [nono](https://nono.sh).
+    /// Allows writes in the project, devenv state, and temporary directories,
+    /// and reads from the Nix store and system tooling. Network access remains enabled.
+    /// Requires a nixpkgs input providing `nono` and an OS supported by nono.
+    /// See [Sandboxing](/integrations/nono/).
+    ///
+    /// Default: `false`.
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(merge = schematic::merge::replace)]
+    pub sandbox: bool,
     /// Select the Nix backend used to evaluate `devenv.nix`.
     ///
     /// Default: `nix`.
@@ -2660,6 +2670,16 @@ imports:
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
         fs::write(temp_dir.path().join("devenv.yaml"), yaml).expect("Failed to write devenv.yaml");
         Config::load_from(temp_dir.path()).expect("Failed to load config")
+    }
+
+    #[test]
+    fn sandbox_defaults_to_false_and_local_config_can_disable_it() {
+        assert!(!load_yaml("").sandbox);
+        assert!(load_yaml("sandbox: true\n").sandbox);
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("devenv.yaml"), "sandbox: true\n").unwrap();
+        fs::write(dir.path().join("devenv.local.yaml"), "sandbox: false\n").unwrap();
+        assert!(!Config::load_from(dir.path()).unwrap().sandbox);
     }
 
     const SNAKE_CASE_INPUT: &str = r#"

@@ -151,6 +151,7 @@ export default defineConfig({
             { label: 'Files & Variables', slug: 'files-and-variables' },
             { label: 'Creating Files', slug: 'creating-files' },
             { label: 'SecretSpec', slug: 'integrations/secretspec' },
+            { label: 'Sandboxing', slug: 'integrations/nono' },
             { label: 'Tasks', slug: 'tasks' },
             { label: 'Git Hooks', slug: 'git-hooks' },
             { label: 'Tests', slug: 'tests' },

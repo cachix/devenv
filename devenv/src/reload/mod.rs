@@ -32,6 +32,7 @@ pub struct DevenvShellBuilder {
     pub args: Vec<String>,
     pub initial_env_script: String,
     pub bash_path: String,
+    pub sandbox_bash_path: Option<String>,
     pub clean: Clean,
     pub dotfile: PathBuf,
     pub task_exports: BTreeMap<String, String>,
@@ -130,7 +131,8 @@ impl DevenvShellBuilder {
         write_file(&rcfile_path, &dialect.rcfile_content(&rcfile_ctx), "rcfile")?;
 
         let interactive_args = dialect.interactive_args();
-        let mut cmd_builder = CommandBuilder::new(bash);
+        let mut cmd_builder =
+            CommandBuilder::new(self.sandbox_bash_path.as_deref().unwrap_or(bash));
         for arg in &interactive_args.prefix {
             cmd_builder.arg(arg);
         }

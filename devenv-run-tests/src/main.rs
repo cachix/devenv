@@ -594,6 +594,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             let nixpkgs_config = config.nixpkgs_config(&nix_settings.system);
             let secret_settings = SecretSettings::resolve(SecretOptions::default(), &config);
             let options = DevenvOptions {
+                sandbox: config.sandbox,
                 inputs: config.inputs,
                 imports: config.imports,
                 git_root: config.git_root,

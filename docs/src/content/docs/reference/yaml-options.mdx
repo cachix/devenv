@@ -224,6 +224,16 @@ Set to `true` to enforce that the CLI version matches the modules version
 
 *Type:* `boolean | string`
 
+## sandbox
+
+Sandbox shell commands, tasks, and services using [nono](https://nono.sh).
+Allows writes in the project, devenv state, and temporary directories,
+and reads from the Nix store and system tooling. Network access remains enabled.
+Requires a nixpkgs input providing `nono` and an OS supported by nono.
+See [Sandboxing](/integrations/nono/).
+
+*Type:* `boolean` · *Default:* `false`
+
 ## secretspec.cachix_auth_token
 
 <VersionCompatibility version="2.2" />
