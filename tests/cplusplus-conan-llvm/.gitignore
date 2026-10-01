@@ -1,0 +1,13 @@
+# Conan
+.conan2
+.conanrc
+conan.lock
+
+# conan-flake
+/conan-toolchain/config/
+/devenv-toolchain/config/
+
+# CMake
+CMakeUserPresets.json
+/conan-toolchain/build
+/devenv-toolchain/build/
