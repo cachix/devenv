@@ -171,6 +171,55 @@ pub enum SecretspecAsPathFiles {
     /// process. `print-dev-env` needs them: direnv loads its output into a
     /// shell that devenv neither starts nor sees exit.
     Runtime,
+    /// Temporary files handed to a detached process manager, which removes
+    /// them when it exits. Removed with this `Devenv` if no manager takes
+    /// them over, for example when it attaches to one that is running.
+    Detached,
+}
+
+/// Temporary `as_path` SecretSpec files that outlive the resolution that
+/// created them. Removed when dropped, unless [`Self::disarm`] hands them to
+/// their next owner first.
+#[derive(Debug)]
+pub struct SecretspecHandoffFiles {
+    paths: Vec<PathBuf>,
+}
+
+impl SecretspecHandoffFiles {
+    pub fn new(paths: Vec<PathBuf>) -> Self {
+        Self { paths }
+    }
+
+    pub fn paths(&self) -> &[PathBuf] {
+        &self.paths
+    }
+
+    /// Leave the files on disk: their new owner removes them.
+    pub fn disarm(mut self) {
+        self.paths.clear();
+    }
+}
+
+impl Drop for SecretspecHandoffFiles {
+    fn drop(&mut self) {
+        for path in &self.paths {
+            if let Err(error) = std::fs::remove_file(path)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                warn!(path = %path.display(), %error, "failed to remove secretspec as_path file");
+            }
+        }
+    }
+}
+
+/// Where [`resolve_secretspec_into`] leaves `as_path` files.
+enum AsPathTarget<'a> {
+    /// Owned by the resolution and removed with it.
+    Owned,
+    /// Copied to stable files in this directory.
+    Runtime(&'a Path),
+    /// Kept on disk, with their paths appended here for a later owner.
+    Kept(&'a mut Vec<PathBuf>),
 }
 
 #[derive(Clone, Debug)]
@@ -503,6 +552,8 @@ pub struct Devenv {
     // Whether `secretspec` owns temporary `as_path` files, which are deleted
     // when the last reference to it is dropped.
     secretspec_owns_files: bool,
+    // Kept `as_path` files waiting for a detached process manager to own them.
+    secretspec_handoff: std::sync::Mutex<Option<SecretspecHandoffFiles>>,
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
@@ -707,17 +758,20 @@ impl Devenv {
         // inspected the evaluated per-machine execution mode. Local-mode
         // installs resolve on demand there; target-only installs never expose
         // provider credentials or values to this process.
+        let mut secretspec_kept_files = Vec::new();
         if expose_secretspec_values_to_nix {
-            let as_path_dir = match secretspec_as_path_files {
-                SecretspecAsPathFiles::Owned => None,
-                SecretspecAsPathFiles::Runtime => Some(devenv_runtime.join(SECRETSPEC_AS_PATH_DIR)),
+            let runtime_dir = devenv_runtime.join(SECRETSPEC_AS_PATH_DIR);
+            let target = match secretspec_as_path_files {
+                SecretspecAsPathFiles::Owned => AsPathTarget::Owned,
+                SecretspecAsPathFiles::Runtime => AsPathTarget::Runtime(&runtime_dir),
+                SecretspecAsPathFiles::Detached => AsPathTarget::Kept(&mut secretspec_kept_files),
             };
             resolve_secretspec_into(
                 &devenv_root,
                 &secret_settings,
                 &mut secretspec_cell,
                 &mut secretspec_as_paths,
-                as_path_dir.as_deref(),
+                target,
             )?;
         }
         let secretspec_owns_files = secretspec_as_path_files == SecretspecAsPathFiles::Owned
@@ -927,6 +981,10 @@ impl Devenv {
             eval_inputs,
             secretspec: secretspec_cell.into_inner().map(Arc::new),
             secretspec_owns_files,
+            secretspec_handoff: std::sync::Mutex::new(
+                (!secretspec_kept_files.is_empty())
+                    .then(|| SecretspecHandoffFiles::new(secretspec_kept_files)),
+            ),
             port_allocator,
             native_api_server: OnceCell::new(),
             shutdown,
@@ -3196,6 +3254,7 @@ impl Devenv {
                 env: envs,
             };
             manager.start_background(start_request).await?;
+            self.hand_secretspec_files_to_external_manager()?;
             Ok(ProcessStartOutcome::Completed)
         } else {
             let command = manager.prepare_follow_command(&processes, &envs).await?;
@@ -3334,6 +3393,13 @@ impl Devenv {
             cmd.process_group(0);
         }
 
+        // The daemon removes the kept `as_path` files when it exits. Until it
+        // is up, they stay ours, so a failed start still removes them.
+        let secretspec_files = self.take_secretspec_handoff();
+        for path in secretspec_files.iter().flat_map(|files| files.paths()) {
+            cmd.arg("--remove-on-exit").arg(path);
+        }
+
         let mut child = cmd
             .spawn()
             .map_err(|e| miette!("Failed to spawn daemon: {}", e))?;
@@ -3344,6 +3410,9 @@ impl Devenv {
             std::time::Duration::from_secs(120),
         )
         .await?;
+        if let Some(files) = secretspec_files {
+            files.disarm();
+        }
 
         let pid = std::fs::read_to_string(&pid_file)
             .map(|s| s.trim().to_string())
@@ -3380,6 +3449,55 @@ impl Devenv {
 
         manager.stop().await?;
         crate::proxy::clear(&self.proxy_owner());
+        self.remove_external_manager_secretspec_files()?;
+        Ok(())
+    }
+
+    fn take_secretspec_handoff(&self) -> Option<SecretspecHandoffFiles> {
+        self.secretspec_handoff
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+    }
+
+    /// List of kept `as_path` files that a detached external process manager
+    /// reads. Unlike the native daemon, the manager cannot remove them
+    /// itself, so `down` does.
+    fn external_manager_secretspec_files(&self) -> Result<PathBuf> {
+        Ok(self.process_runtime_dir()?.join("secretspec-files"))
+    }
+
+    fn hand_secretspec_files_to_external_manager(&self) -> Result<()> {
+        let Some(files) = self.take_secretspec_handoff() else {
+            return Ok(());
+        };
+        let list = files
+            .paths()
+            .iter()
+            .map(|path| format!("{}\n", path.display()))
+            .collect::<String>();
+        std::fs::write(self.external_manager_secretspec_files()?, list)
+            .into_diagnostic()
+            .wrap_err("Failed to record SecretSpec files for the process manager")?;
+        files.disarm();
+        Ok(())
+    }
+
+    fn remove_external_manager_secretspec_files(&self) -> Result<()> {
+        let list_path = self.external_manager_secretspec_files()?;
+        let list = match std::fs::read_to_string(&list_path) {
+            Ok(list) => list,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                return Err(error)
+                    .into_diagnostic()
+                    .wrap_err_with(|| format!("Failed to read {}", list_path.display()));
+            }
+        };
+        drop(SecretspecHandoffFiles::new(
+            list.lines().map(PathBuf::from).collect(),
+        ));
+        let _ = std::fs::remove_file(&list_path);
         Ok(())
     }
 
@@ -4348,7 +4466,7 @@ fn resolve_secretspec_into(
     secret_settings: &SecretSettings,
     cell: &mut OnceCell<ResolvedSecrets>,
     as_paths: &mut HashSet<String>,
-    as_path_dir: Option<&Path>,
+    as_path_target: AsPathTarget<'_>,
 ) -> Result<()> {
     let secretspec_path = devenv_root.join("secretspec.toml");
     if !secretspec_path.exists() {
@@ -4403,7 +4521,7 @@ fn resolve_secretspec_into(
         secrets.set_profile(profile_str);
     }
 
-    let validated_secrets = match secrets.validate()? {
+    let mut validated_secrets = match secrets.validate()? {
         Ok(validated) => validated,
         Err(e) => {
             return Err(SecretsNeedPrompting {
@@ -4430,8 +4548,17 @@ fn resolve_secretspec_into(
         .iter()
         .map(|(key, value)| Ok((key.clone(), secretspec_text(key, value.expose_secret())?)))
         .collect::<Result<HashMap<_, _>>>()?;
-    if let Some(dir) = as_path_dir {
-        persist_as_path_secrets(dir, &as_path_names, &mut resolved_secrets)?;
+    match as_path_target {
+        AsPathTarget::Owned => {}
+        AsPathTarget::Runtime(dir) => {
+            persist_as_path_secrets(dir, &as_path_names, &mut resolved_secrets)?
+        }
+        AsPathTarget::Kept(kept) => kept.extend(
+            validated_secrets
+                .keep_temp_files()
+                .into_diagnostic()
+                .wrap_err("Failed to keep SecretSpec as_path files")?,
+        ),
     }
     let resolved = validated_secrets.into_resolved(resolved_secrets);
 
@@ -4948,8 +5075,14 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         let mut cell = OnceCell::new();
         let mut as_paths = HashSet::new();
 
-        resolve_secretspec_into(root.path(), &settings, &mut cell, &mut as_paths, None)
-            .expect("resolve project SecretSpec");
+        resolve_secretspec_into(
+            root.path(),
+            &settings,
+            &mut cell,
+            &mut as_paths,
+            AsPathTarget::Owned,
+        )
+        .expect("resolve project SecretSpec");
 
         assert!(as_paths.contains("BOOTSTRAP_KEY"));
         let path = PathBuf::from(&cell.get().unwrap().secrets["BOOTSTRAP_KEY"]);
@@ -4979,8 +5112,14 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
 
     fn resolve_into_runtime(root: &Path, settings: &SecretSettings, dir: &Path) -> ResolvedSecrets {
         let mut cell = OnceCell::new();
-        resolve_secretspec_into(root, settings, &mut cell, &mut HashSet::new(), Some(dir))
-            .expect("resolve project SecretSpec");
+        resolve_secretspec_into(
+            root,
+            settings,
+            &mut cell,
+            &mut HashSet::new(),
+            AsPathTarget::Runtime(dir),
+        )
+        .expect("resolve project SecretSpec");
         cell.into_inner().expect("resolved secrets")
     }
 
@@ -5063,12 +5202,50 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
             &settings,
             &mut cell,
             &mut HashSet::new(),
-            Some(&dir),
+            AsPathTarget::Runtime(&dir),
         )
         .expect_err("a path-like secret name must be rejected");
 
         assert!(error.to_string().contains("Invalid secret name"), "{error}");
         assert!(!runtime.path().join("ESCAPE").exists());
+    }
+
+    #[test]
+    fn kept_as_path_files_outlive_the_resolution_until_their_owner_drops() {
+        let root = tempfile::tempdir().expect("create project root");
+        let settings = as_path_project(
+            root.path(),
+            "TLS_KEY = { description = \"key\", as_path = true }\n",
+            "TLS_KEY=key-contents\n",
+        );
+        let mut cell = OnceCell::new();
+        let mut kept = Vec::new();
+
+        resolve_secretspec_into(
+            root.path(),
+            &settings,
+            &mut cell,
+            &mut HashSet::new(),
+            AsPathTarget::Kept(&mut kept),
+        )
+        .expect("resolve project SecretSpec");
+        let path = PathBuf::from(&cell.into_inner().expect("resolved").secrets["TLS_KEY"]);
+
+        assert_eq!(kept, vec![path.clone()]);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "key-contents");
+        drop(SecretspecHandoffFiles::new(kept));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn disarmed_handoff_files_stay_for_their_next_owner() {
+        let file = tempfile::NamedTempFile::new().expect("create file");
+        let (_, path) = file.keep().expect("keep file");
+
+        SecretspecHandoffFiles::new(vec![path.clone()]).disarm();
+
+        assert!(path.exists());
+        std::fs::remove_file(path).expect("remove file");
     }
 
     #[test]

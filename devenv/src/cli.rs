@@ -1030,6 +1030,10 @@ pub enum Commands {
     DaemonProcesses {
         /// Path to the serialized task config JSON file
         config_file: PathBuf,
+        /// Files the daemon removes when it exits, such as the SecretSpec
+        /// `as_path` files its processes read.
+        #[arg(long = "remove-on-exit")]
+        remove_on_exit: Vec<PathBuf>,
     },
 }
 

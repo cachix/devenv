@@ -23,3 +23,13 @@ status=0
 devenv shell -- bash -c 'exit 7' || status=$?
 test "$status" = 7
 echo "✓ devenv shell -- <cmd> exits with the command's status"
+
+# `devenv up -d` hands the file to the detached process manager, which reads
+# it after this client exits and removes it when it stops.
+devenv up -d
+devenv processes wait
+path=$(cat watched-path)
+test "$(cat "$path")" = "test-key"
+devenv processes down
+test ! -e "$path"
+echo "✓ devenv up -d kept $path for the manager, which removed it on stop"
