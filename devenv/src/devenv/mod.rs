@@ -165,6 +165,7 @@ pub struct DevenvOptions {
     pub cache_settings: CacheSettings,
     pub secret_settings: SecretSettings,
     pub input_overrides: InputOverrides,
+    pub sandbox: bool,
     pub from_external: bool,
     pub require_version_match: bool,
     pub devenv_root: Option<PathBuf>,
@@ -233,6 +234,7 @@ impl Default for DevenvOptions {
             cache_settings: CacheSettings::default(),
             secret_settings: SecretSettings::default(),
             input_overrides: InputOverrides::default(),
+            sandbox: false,
             from_external: false,
             require_version_match: false,
             devenv_root: None,
@@ -461,6 +463,7 @@ pub struct Devenv {
     process_runtime_dir: SyncOnceCell<PathBuf>,
 
     has_processes: OnceCell<bool>,
+    sandbox_bash: OnceCell<String>,
 
     // Cached DevEnv result from get_dev_environment_inner, used by up() to avoid
     // redundant activity wrapping when prepare_shell is called later. Unlike the
@@ -888,6 +891,7 @@ impl Devenv {
             cachix_manager,
             cachix: OnceCell::new(),
             has_processes: OnceCell::new(),
+            sandbox_bash: OnceCell::new(),
             dev_env_cache: std::sync::RwLock::new(None),
             eval_cache_pool,
             eval_inputs,
@@ -1855,7 +1859,8 @@ impl Devenv {
 
         let bash = self.get_bash_path().await?;
 
-        let mut shell_cmd = process::Command::new(&bash);
+        let launcher = self.sandbox_bash_path().await?;
+        let mut shell_cmd = process::Command::new(launcher.as_deref().unwrap_or(&bash));
 
         // When the project root was discovered in a parent directory, run from
         // where the user actually invoked devenv rather than the root we
@@ -2179,8 +2184,29 @@ impl Devenv {
         let tasks_json = fs::read_to_string(&tasks_json_file[0])
             .await
             .map_err(|e| miette::miette!("Failed to read task config file: {}", e))?;
-        let tasks: Vec<tasks::TaskConfig> = serde_json::from_str(&tasks_json)
+        let mut tasks: Vec<tasks::TaskConfig> = serde_json::from_str(&tasks_json)
             .map_err(|e| miette::miette!("Failed to parse task config: {}", e))?;
+
+        if let Some(launcher) = self.sandbox_bash_path().await? {
+            let bash = self.get_bash_path().await?;
+            for task in &mut tasks {
+                for original in [&mut task.command, &mut task.status].into_iter().flatten() {
+                    let script = crate::sandbox::command_script(&bash, &launcher, original);
+                    *original = write_executable_script(&self.devenv_dotfile, &script)
+                        .to_string_lossy()
+                        .into_owned();
+                }
+                // Exec readiness probes also execute project-provided code.
+                if let Some(process) = &mut task.process
+                    && let Some(ready) = &mut process.ready
+                    && let Some(original) = &mut ready.exec
+                {
+                    let script = crate::sandbox::command_script(&bash, &launcher, original);
+                    let path = write_executable_script(&self.devenv_dotfile, &script);
+                    *original = shell_escape::escape(path.to_string_lossy()).into_owned();
+                }
+            }
+        }
 
         // Cache task names for shell completions
         let task_names: Vec<&str> = tasks.iter().map(|t| t.name.as_str()).collect();
@@ -2349,6 +2375,29 @@ impl Devenv {
             self.refresh_dev_environment().await?;
         }
         Ok(ret)
+    }
+
+    /// A bash-compatible launcher that applies the sandbox before executing bash.
+    pub async fn sandbox_bash_path(&self) -> Result<Option<String>> {
+        if !self.options.sandbox {
+            return Ok(None);
+        }
+        let launcher = self.sandbox_bash.get_or_try_init(|| async {
+            let bash = self.get_bash_path().await?;
+            let paths = self.backend.build_devenv(
+                &["pkgs.nono"],
+                BuildOptions { gc_root: Some(self.devenv_dot_gc.join("nono")) },
+            ).await.wrap_err("Failed to build nono for sandbox: true; your nixpkgs input must provide nono")?;
+            let nono = paths.first().ok_or_else(|| miette!("Building nono returned no store path"))?.0.join("bin/nono");
+            let paths = self.paths();
+            // nono requires granted directories to exist before applying its policy.
+            for path in [Some(&paths.runtime), paths.state.as_ref()] .into_iter().flatten() {
+                fs::create_dir_all(path).await.into_diagnostic().wrap_err("Failed to create sandbox runtime directory")?;
+            }
+            let script = crate::sandbox::launcher_script(&bash, &nono, &paths);
+            Ok::<_, miette::Report>(write_executable_script(&self.devenv_dotfile, &script).to_string_lossy().into_owned())
+        }).await?;
+        Ok(Some(launcher.clone()))
     }
 
     /// Get the path to bash.

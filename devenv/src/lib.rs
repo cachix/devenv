@@ -12,6 +12,7 @@ pub mod metadata;
 pub mod nix_log_bridge;
 mod proxy;
 pub mod reload;
+mod sandbox;
 pub(crate) mod shell_env;
 pub mod terminal;
 pub mod tracing;

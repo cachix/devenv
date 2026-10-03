@@ -71,6 +71,10 @@
       "description": "Relax the hermeticity of the environment.\n\nDefault: `false`.\n\nAdded in 1.0.",
       "type": "boolean"
     },
+    "sandbox": {
+      "description": "Sandbox shell commands, tasks, and services using [nono](https://nono.sh).\nAllows writes in the project, devenv state, and temporary directories,\nand reads from the Nix store and system tooling. Network access remains enabled.\nRequires a nixpkgs input providing `nono` and an OS supported by nono.\nSee [Sandboxing](/sandbox/).\n\nDefault: `false`.",
+      "type": "boolean"
+    },
     "backend": {
       "description": "Select the Nix backend used to evaluate `devenv.nix`.\n\nDefault: `nix`.",
       "$ref": "#/$defs/NixBackendType"

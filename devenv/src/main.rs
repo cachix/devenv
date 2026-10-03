@@ -648,6 +648,7 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         cache_settings,
         secret_settings,
         input_overrides,
+        sandbox: config.sandbox,
         from_external: from_source.is_some(),
         require_version_match,
         devenv_root: None,
@@ -1144,6 +1145,7 @@ async fn run_backend(
         // This must happen while TUI is active since get_dev_environment has #[activity].
         let dotfile = devenv.dotfile().to_path_buf();
         let bash_path = devenv.get_bash_path().await?;
+        let sandbox_bash_path = devenv.sandbox_bash_path().await?;
         let clean = devenv.options().shell_settings.clean.clone();
         let shell = devenv.options().shell_settings.shell.clone();
         let shell_path = devenv.options().shell_settings.shell_path.clone();
@@ -1161,6 +1163,7 @@ async fn run_backend(
             args,
             initial_env_script,
             bash_path,
+            sandbox_bash_path,
             clean,
             shell,
             shell_path,
@@ -1741,6 +1744,7 @@ struct ReloadShellArgs {
     args: Vec<String>,
     initial_env_script: String,
     bash_path: String,
+    sandbox_bash_path: Option<String>,
     clean: devenv_core::config::Clean,
     shell: String,
     shell_path: Option<std::path::PathBuf>,
@@ -1771,6 +1775,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         args,
         initial_env_script,
         bash_path,
+        sandbox_bash_path,
         clean,
         shell,
         shell_path,
@@ -1793,6 +1798,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         args,
         initial_env_script,
         bash_path,
+        sandbox_bash_path,
         clean,
         dotfile,
         task_exports,
