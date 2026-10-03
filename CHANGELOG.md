@@ -11,6 +11,7 @@
 - Detached process startup now publishes the manager as soon as processes are scheduled, without waiting for service readiness, and keeps HTTPS proxy routes during a slow startup ([#3216](https://github.com/cachix/devenv/issues/3216)).
 - `devenv test` with the native process manager now reports a process dependency on `start.enable = false` before starting services, instead of waiting indefinitely for the disabled process ([#3215](https://github.com/cachix/devenv/issues/3215)).
 - SecretSpec `as_path` secrets loaded through direnv now point at files that exist. `devenv print-dev-env` writes them to the project's runtime directory, readable only by you, instead of temporary files deleted when devenv exits. Each load replaces them, and they are removed with the runtime directory: at logout when `$XDG_RUNTIME_DIR` is set, otherwise by the system's `/tmp` cleanup.
+- SecretSpec `as_path` secrets now exist while `devenv shell -- <cmd>`, a non-interactive `devenv shell`, `devenv container run`, or a foreground external process manager runs. devenv used to delete their files before replacing itself with the command; when a project has `as_path` secrets it now runs the command as a child, forwards SIGTERM and SIGHUP to it, exits with its status, and deletes the files afterwards.
 
 ## 2.4.0 (2026-09-24)
 

@@ -46,6 +46,7 @@ nix-flake-lock.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+signal-hook.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true
 termimad.workspace = true
