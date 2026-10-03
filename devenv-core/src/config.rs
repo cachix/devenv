@@ -382,7 +382,7 @@ pub struct Config {
     /// Allows writes in the project, devenv state, and temporary directories,
     /// and reads from the Nix store and system tooling. Network access remains enabled.
     /// Requires a nixpkgs input providing `nono` and an OS supported by nono.
-    /// See [Sandboxing](/integrations/nono/).
+    /// See [Sandboxing](/sandbox/).
     ///
     /// Default: `false`.
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
