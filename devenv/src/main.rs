@@ -631,6 +631,11 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
     let shutdown = Shutdown::new();
+    let secretspec_as_path_files = if matches!(&command, Commands::PrintDevEnv { .. }) {
+        devenv::SecretspecAsPathFiles::Runtime
+    } else {
+        devenv::SecretspecAsPathFiles::Owned
+    };
     let expose_secretspec_values_to_nix = !matches!(
         &command,
         Commands::Machines {
@@ -660,6 +665,7 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
         shell_cwd,
         is_testing,
         expose_secretspec_values_to_nix,
+        secretspec_as_path_files,
         require_project_file,
     };
 
