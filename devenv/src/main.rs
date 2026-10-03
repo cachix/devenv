@@ -137,8 +137,11 @@ fn main_inner() -> Result<()> {
                 let home = devenv_core::paths::resolve_home()?;
                 return commands::hook::should_activate(&home);
             }
-            Commands::DaemonProcesses { config_file } => {
-                return commands::daemon_processes::run(config_file);
+            Commands::DaemonProcesses {
+                config_file,
+                remove_on_exit,
+            } => {
+                return commands::daemon_processes::run(config_file, remove_on_exit);
             }
             Commands::Init {
                 target,
@@ -637,6 +640,8 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     let shutdown = Shutdown::new();
     let secretspec_as_path_files = if matches!(&command, Commands::PrintDevEnv { .. }) {
         devenv::SecretspecAsPathFiles::Runtime
+    } else if may_detach_processes(&command) {
+        devenv::SecretspecAsPathFiles::Detached
     } else {
         devenv::SecretspecAsPathFiles::Owned
     };
@@ -897,6 +902,21 @@ fn drain_signals(events: mpsc::Receiver<Event>, shutdown: Arc<Shutdown>) {
             }
         }
     });
+}
+
+/// Whether `command` can leave processes running after devenv exits.
+fn may_detach_processes(command: &Commands) -> bool {
+    match command {
+        Commands::Up { up_args } => up_args.detach,
+        Commands::Processes { command } => match command {
+            ProcessesCommand::Up { up_args } => up_args.detach,
+            ProcessesCommand::Start { name: None, detach } => *detach,
+            // A named start runs in the background when no manager is running.
+            ProcessesCommand::Start { name: Some(_), .. } => true,
+            _ => false,
+        },
+        _ => false,
+    }
 }
 
 /// PID of the command devenv supervises instead of exec-ing, or 0.

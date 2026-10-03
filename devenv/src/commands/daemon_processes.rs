@@ -6,14 +6,17 @@
 //! file, disconnects its standard streams, and spawns it in a separate process
 //! group. The implementation does not create a new Unix session.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use devenv::tasks;
 use miette::{IntoDiagnostic, Result, WrapErr};
 use tokio_shutdown::Shutdown;
 
-pub fn run(config_file: &Path) -> Result<()> {
+pub fn run(config_file: &Path, remove_on_exit: &[PathBuf]) -> Result<()> {
+    // The processes this daemon runs read these files, so they go when it does.
+    let _owned_files = devenv::SecretspecHandoffFiles::new(remove_on_exit.to_vec());
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
