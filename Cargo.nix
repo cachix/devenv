@@ -8744,6 +8744,10 @@ rec {
             packageId = "shell-escape";
           }
           {
+            name = "signal-hook";
+            packageId = "signal-hook 0.4.4";
+          }
+          {
             name = "similar";
             packageId = "similar 3.1.1";
           }

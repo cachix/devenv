@@ -44,7 +44,7 @@ use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
     CacheSettings, ClientRunMode, Config, Devenv, InputOverrides, NixSettings, ProcessStartOutcome,
-    SecretSettings, ShellSettings, VerbosityLevel,
+    SecretSettings, SecretspecFileGuard, ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel},
     cli::{
         Cli, CliOptions, Commands, ContainerCommand, InputsCommand, InstallPhase, MachinesCommand,
@@ -65,7 +65,11 @@ use std::{
     os, panic,
     path::{Path, PathBuf},
     process::{self, Command},
-    sync::{Arc, mpsc},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicI32, Ordering},
+        mpsc,
+    },
     time::{Duration, Instant},
 };
 use tempfile::TempDir;
@@ -886,10 +890,73 @@ fn drain_signals(events: mpsc::Receiver<Event>, shutdown: Arc<Shutdown>) {
     std::thread::spawn(move || {
         for event in events {
             if let Event::Signal(signal) = event {
+                if forward_to_supervised_child(signal) {
+                    continue;
+                }
                 shutdown.handle_signal(signal);
             }
         }
     });
+}
+
+/// PID of the command devenv supervises instead of exec-ing, or 0.
+/// See [`run_supervised`].
+static SUPERVISED_CHILD: AtomicI32 = AtomicI32::new(0);
+
+/// Hand `signal` to the supervised command, if there is one, rather than
+/// shutting devenv down underneath it.
+fn forward_to_supervised_child(signal: tokio_shutdown::Signal) -> bool {
+    let pid = SUPERVISED_CHILD.load(Ordering::SeqCst);
+    if pid == 0 {
+        return false;
+    }
+    // The terminal already delivers Ctrl-C to the command, which shares
+    // devenv's process group; forwarding it too would deliver it twice.
+    if signal != tokio_shutdown::Signal::SIGINT {
+        let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), signal);
+    }
+    true
+}
+
+/// Run `command` as a child instead of exec-ing it, so `guard` can delete the
+/// temporary SecretSpec `as_path` files once it exits. Exits with the child's
+/// status, or 128 + N when a signal killed it.
+fn run_supervised(mut command: Command, guard: SecretspecFileGuard) -> Result<()> {
+    use os::unix::process::ExitStatusExt;
+
+    // Ctrl-\ reaches the command through the terminal; without a handler it
+    // would also kill devenv before the files are deleted. Unlike an ignored
+    // disposition, a handler is reset in the child when it execs.
+    signal_hook::flag::register(
+        signal_hook::consts::SIGQUIT,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .into_diagnostic()
+    .wrap_err("Failed to handle SIGQUIT")?;
+
+    let mut child = command
+        .spawn()
+        .map_err(|err| miette::miette!("Failed to run: {}", err))?;
+    SUPERVISED_CHILD.store(child.id() as i32, Ordering::SeqCst);
+    let status = child.wait().into_diagnostic();
+    SUPERVISED_CHILD.store(0, Ordering::SeqCst);
+    drop(guard);
+    let status = status?;
+    process::exit(
+        status
+            .code()
+            .or_else(|| status.signal().map(|signal| 128 + signal))
+            .unwrap_or(1),
+    );
+}
+
+/// Exec into `command`, or supervise it when SecretSpec `as_path` files must
+/// be deleted after it exits: `exec` would never run that cleanup.
+fn exec_or_supervise(devenv: &Devenv, command: Command) -> CommandResult {
+    match devenv.secretspec_file_guard() {
+        Some(guard) => CommandResult::Supervise(command, guard),
+        None => CommandResult::Exec(command),
+    }
 }
 
 fn backend_thread_main(
@@ -1259,6 +1326,9 @@ enum CommandResult {
     CheckReport(String, bool),
     /// Exec into this command after cleanup (TUI shutdown, terminal restore)
     Exec(Command),
+    /// Like `Exec`, but run the command as a child so the guarded SecretSpec
+    /// files can be deleted once it exits.
+    Supervise(Command, SecretspecFileGuard),
     /// Exit with a specific code (e.g., from shell exit)
     ExitCode(i32),
     /// Eval failed under `--nix-debugger`: launch the Nix debugger REPL with
@@ -1297,6 +1367,7 @@ impl CommandResult {
                 let err = cmd.exec();
                 miette::bail!("Failed to exec: {}", err);
             }
+            CommandResult::Supervise(cmd, guard) => run_supervised(cmd, guard),
             CommandResult::ExitCode(code) => {
                 process::exit(code);
             }
@@ -1317,7 +1388,9 @@ async fn run_up(
 ) -> Result<CommandResult> {
     match devenv.up(processes, mode, options, verbosity).await? {
         ProcessStartOutcome::Completed => Ok(CommandResult::Done),
-        ProcessStartOutcome::Exec(shell_command) => Ok(CommandResult::Exec(shell_command.command)),
+        ProcessStartOutcome::Exec(shell_command) => {
+            Ok(exec_or_supervise(devenv, shell_command.command))
+        }
     }
 }
 
@@ -1379,7 +1452,7 @@ async fn dispatch_command(
                 None => devenv.shell().await?,
             };
 
-            Ok(CommandResult::Exec(shell_config.command))
+            Ok(exec_or_supervise(devenv, shell_config.command))
         }
         Commands::Test { .. } => {
             devenv.test(verbosity).await?;
@@ -1402,7 +1475,7 @@ async fn dispatch_command(
             }
             ContainerCommand::Run { name, copy_args } => {
                 let shell_config = devenv.container_run(&name, &copy_args, verbosity).await?;
-                Ok(CommandResult::Exec(shell_config.command))
+                Ok(exec_or_supervise(devenv, shell_config.command))
             }
         },
         Commands::Generate => {

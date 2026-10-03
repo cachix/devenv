@@ -154,6 +154,12 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
         .unwrap_or(0)
 });
 
+/// Keeps temporary `as_path` SecretSpec files on disk until dropped.
+/// See [`Devenv::secretspec_file_guard`].
+pub struct SecretspecFileGuard {
+    _resolved: Arc<ResolvedSecrets>,
+}
+
 /// Where `as_path` SecretSpec values are written.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SecretspecAsPathFiles {
@@ -491,8 +497,12 @@ pub struct Devenv {
     // lifecycle phases can validate the exact inputs used by evaluation.
     eval_inputs: Arc<devenv_eval_cache::EvalInputTracker>,
 
-    // Secretspec resolved data to pass to Nix
-    secretspec: OnceCell<ResolvedSecrets>,
+    // Secretspec resolved data to pass to Nix. Shared so a supervised command
+    // can keep its `as_path` files alive after this `Devenv` is dropped.
+    secretspec: Option<Arc<ResolvedSecrets>>,
+    // Whether `secretspec` owns temporary `as_path` files, which are deleted
+    // when the last reference to it is dropped.
+    secretspec_owns_files: bool,
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
@@ -710,6 +720,8 @@ impl Devenv {
                 as_path_dir.as_deref(),
             )?;
         }
+        let secretspec_owns_files = secretspec_as_path_files == SecretspecAsPathFiles::Owned
+            && !secretspec_as_paths.is_empty();
         let secretspec_provider_override = secret_settings
             .secretspec
             .as_ref()
@@ -913,7 +925,8 @@ impl Devenv {
             dev_env_cache: std::sync::RwLock::new(None),
             eval_cache_pool,
             eval_inputs,
-            secretspec: secretspec_cell,
+            secretspec: secretspec_cell.into_inner().map(Arc::new),
+            secretspec_owns_files,
             port_allocator,
             native_api_server: OnceCell::new(),
             shutdown,
@@ -3734,7 +3747,21 @@ impl Devenv {
     }
 
     pub fn secretspec(&self) -> Option<&ResolvedSecrets> {
-        self.secretspec.get()
+        self.secretspec.as_deref()
+    }
+
+    /// Keep the temporary `as_path` SecretSpec files on disk for as long as
+    /// the returned guard lives, even after this `Devenv` is dropped.
+    ///
+    /// `None` when there are no such files, so a caller can still replace the
+    /// process with `exec`, which would otherwise outlive their deletion.
+    pub fn secretspec_file_guard(&self) -> Option<SecretspecFileGuard> {
+        if !self.secretspec_owns_files {
+            return None;
+        }
+        self.secretspec.clone().map(|resolved| SecretspecFileGuard {
+            _resolved: resolved,
+        })
     }
 
     /// Inner implementation without activity wrapper.
