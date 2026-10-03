@@ -21,8 +21,8 @@ mod util;
 
 pub use devenv::{
     ClientRunMode, DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessOptions,
-    ProcessStartOutcome, SecretsNeedPrompting, SecretsPromptSource, ShellCommand,
-    format_shell_exports, is_ai_agent, load_cachix_secretspec, push_shell_fragment,
+    ProcessStartOutcome, SecretsNeedPrompting, SecretsPromptSource, SecretspecAsPathFiles,
+    ShellCommand, format_shell_exports, is_ai_agent, load_cachix_secretspec, push_shell_fragment,
 };
 pub use devenv_tasks as tasks;
 pub use metadata::{InfoSections, InputAttribute, InputMetadata, InputSource, Metadata};

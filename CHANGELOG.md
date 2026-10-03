@@ -43,6 +43,7 @@
 - Fixed auto-activation waiting for the next prompt when you `cd` from one devenv project directly into another, so you had to press Enter before the second project's shell started. It now starts right away ([#3129](https://github.com/cachix/devenv/issues/3129)).
 - `devenv up` and `devenv test` no longer run the prerequisites of a process with `start.enable = false`. They now run when that process is started, or when an enabled process depends on it ([#3272](https://github.com/cachix/devenv/issues/3272)).
 - Fixed `languages.javascript.npm.install.enable` corrupting `node_modules` when several shells start at once. Concurrent shells now wait for one npm install to finish instead of running their own.
+- SecretSpec `as_path` secrets loaded through direnv now point at files that exist. `devenv print-dev-env` writes them to the project's runtime directory, readable only by you, instead of temporary files deleted when devenv exits. Each load replaces them, and they are removed with the runtime directory: at logout when `$XDG_RUNTIME_DIR` is set, otherwise by the system's `/tmp` cleanup.
 
 ## 2.4.0 (2026-09-24)
 
