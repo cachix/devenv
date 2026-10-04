@@ -71,6 +71,10 @@
       "description": "Relax the hermeticity of the environment.\n\nDefault: `false`.\n\nAdded in 1.0.",
       "type": "boolean"
     },
+    "sandbox": {
+      "description": "Sandbox shell commands, tasks, and services using [nono](https://nono.sh).\nAllows writes in the project, devenv state, and temporary directories,\nand reads from the Nix store and system tooling.\nRequires a nixpkgs input providing `nono` and an OS supported by nono.\nSee [Sandboxing](/sandbox/).",
+      "$ref": "#/$defs/SandboxConfig"
+    },
     "backend": {
       "description": "Select the Nix backend used to evaluate `devenv.nix`.\n\nDefault: `nix`.",
       "$ref": "#/$defs/NixBackendType"
@@ -359,6 +363,55 @@
         "enabled",
         "keep"
       ]
+    },
+    "SandboxConfig": {
+      "description": "Runtime sandbox configuration.",
+      "type": "object",
+      "properties": {
+        "enable": {
+          "description": "Enable sandboxing for shells, tasks, and services.\nOverrides the global user setting when specified.\n\nDefault: `false`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "read": {
+          "description": "Additional files or directories with read-only access.\nRelative paths resolve from the project root; `~/` expands to the home directory.\nPaths must exist. Lists accumulate across imports and local configuration.\n\nDefault: `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "write": {
+          "description": "Additional files or directories with read and write access.\nRelative paths resolve from the project root; `~/` expands to the home directory.\nPaths must exist. Lists accumulate across imports and local configuration.\n\nDefault: `[]`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "networking": {
+          "description": "Network permissions for sandboxed commands.",
+          "$ref": "#/$defs/SandboxNetworking",
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "SandboxNetworking": {
+      "description": "Network permissions for sandboxed commands.",
+      "type": "object",
+      "properties": {
+        "enable": {
+          "description": "Allow network access. Set to `false` to block IP networking with nono.\nOverrides the global user setting when specified.\nLocal Unix sockets remain subject to nono's socket permissions.\n\nDefault: `true`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "NixBackendType": {
       "type": "string",

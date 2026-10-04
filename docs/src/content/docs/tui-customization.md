@@ -2,7 +2,7 @@
 title: "TUI customization"
 ---
 
-The devenv TUI reads personal settings from a versioned YAML file. These settings affect presentation and interaction only. They are separate from the reproducible project configuration in `devenv.nix` and `devenv.yaml`.
+The devenv TUI reads personal settings from a versioned YAML file. The `tui` and `shell` sections affect presentation and interaction. The same user configuration file can also declare [sandbox defaults and additional paths](/sandbox/) under `sandbox`. They are separate from the reproducible project configuration in `devenv.nix` and `devenv.yaml`.
 
 The default path is `$XDG_CONFIG_HOME/devenv/config.yaml`, falling back to `~/.config/devenv/config.yaml`. This path is the same on Linux, macOS, and Linux distributions running under WSL.
 

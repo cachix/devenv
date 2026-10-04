@@ -2,6 +2,10 @@
 
 ## 2.4.1 (unreleased)
 
+### Improvements
+
+- Added opt-in `sandbox.enable: true` in `devenv.yaml` to sandbox shell commands, tasks, and services with nono. Configure additional read-only and read/write paths with `sandbox.read` and `sandbox.write` in project and user configuration, and block networking with `sandbox.networking.enable: false`.
+
 ### Bug Fixes
 
 - Nushell hot reload no longer breaks commands that use structured environment variables and now removes variables that disappeared after a reload ([#3230](https://github.com/cachix/devenv/issues/3230)).

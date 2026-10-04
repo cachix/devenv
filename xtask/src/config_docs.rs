@@ -137,7 +137,10 @@ fn collect_sections(
     let opaque = parse_description(&description).opaque;
 
     // Map types (BTreeMap<String, T>) -> emit "<path>.<name>.<sub>" sections via additionalProperties.
-    if let Some(additional) = resolved.get("additionalProperties") {
+    if let Some(additional) = resolved
+        .get("additionalProperties")
+        .filter(|v| **v != false)
+    {
         let wildcard_path = format!("{}.\\<name\\>", path);
         let inner_ref = ref_target(additional);
         let cycle = inner_ref
@@ -393,7 +396,7 @@ fn scalar_label_inner(
             format!("list of {}", item_label)
         }
         "object" => {
-            if let Some(additional) = schema.get("additionalProperties") {
+            if let Some(additional) = schema.get("additionalProperties").filter(|v| **v != false) {
                 let inner_ref = ref_target(additional);
                 let inner = inner_ref
                     .map(|n| humanize_ref_name(&n))
@@ -446,6 +449,9 @@ mod tests {
         assert!(rendered.contains("## nixpkgs.allow_unfree\n"));
         assert!(rendered.contains("## inputs.\\<name\\>.url\n"));
         assert!(rendered.contains("## require_version\n"));
+        assert!(rendered.contains("## sandbox.read\n"));
+        assert!(rendered.contains("## sandbox.write\n"));
+        assert!(rendered.contains("## sandbox.networking.enable\n"));
         assert!(rendered.contains("*Type:* `boolean | string`"));
         assert!(rendered.contains(
             "import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';"
