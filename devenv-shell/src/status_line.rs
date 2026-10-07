@@ -12,6 +12,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
+use crate::indicators::{Indicator, Indicators};
 use crate::keybindings::{ShellAction, ShellKeybindings};
 
 // ============================================================================
@@ -295,6 +296,7 @@ fn watching_elements(count: usize) -> Vec<AnyElement<'static>> {
 pub struct StatusLine {
     state: StatusState,
     keybindings: ShellKeybindings,
+    indicators: Indicators,
     enabled: bool,
     /// Current spinner frame index (animated manually since we don't use iocraft runtime)
     spinner_frame: usize,
@@ -485,6 +487,7 @@ impl StatusLine {
         Self {
             state: StatusState::new(),
             keybindings: ShellKeybindings::default(),
+            indicators: Indicators::default(),
             enabled: true,
             spinner_frame: 0,
             last_spinner_update: Instant::now(),
@@ -519,6 +522,12 @@ impl StatusLine {
 
     pub fn set_keybindings(&mut self, keybindings: ShellKeybindings) {
         self.keybindings = keybindings;
+        self.cached_state = None;
+    }
+
+    /// Select the glyphs used for indicators that have an emoji form.
+    pub fn set_indicators(&mut self, indicators: Indicators) {
+        self.indicators = indicators;
         self.cached_state = None;
     }
 
@@ -723,12 +732,13 @@ impl StatusLine {
             let keybind = self
                 .keybindings
                 .key_label(ShellAction::TogglePause, use_short);
+            let glyph = self.indicators.glyph(Indicator::Paused);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                        View(margin_right: 2) {
-                            Text(content: "⏸", color: COLOR_SECONDARY)
+                        View(margin_right: glyph.gap) {
+                            Text(content: glyph.text, color: COLOR_SECONDARY)
                         }
                         Text(content: "devenv ", color: COLOR_SECONDARY)
                         Text(content: "paused", weight: Weight::Bold, color: COLOR_ACTIVE)
@@ -752,12 +762,13 @@ impl StatusLine {
                 .keybindings
                 .key_label(ShellAction::TogglePause, use_short);
             let count_str = self.state.watched_file_count.to_string();
+            let glyph = self.indicators.glyph(Indicator::Watching);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                        View(margin_right: 2) {
-                            Text(content: "👁", color: COLOR_SECONDARY)
+                        View(margin_right: glyph.gap) {
+                            Text(content: glyph.text, color: COLOR_SECONDARY)
                         }
                         Text(content: "devenv ", color: COLOR_SECONDARY)
                         Text(content: "watching ", weight: Weight::Bold, color: COLOR_ACTIVE)
@@ -1011,6 +1022,154 @@ mod tests {
         assert_draw_matches_fresh_render(&mut status_line, 80);
         assert_ne!(status_line.cached_content, first_spinner_content);
         assert_eq!(status_line.cached_spinner_frame, Some(1));
+    }
+
+    /// Strip SGR sequences, leaving the text a terminal would show.
+    fn plain_text(content: &[u8]) -> String {
+        let mut text = String::new();
+        let mut chars = String::from_utf8_lossy(content)
+            .into_owned()
+            .chars()
+            .collect::<Vec<_>>()
+            .into_iter();
+        while let Some(ch) = chars.next() {
+            if ch == '\u{1b}' {
+                for ch in chars.by_ref() {
+                    if ch.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            } else {
+                text.push(ch);
+            }
+        }
+        text.trim_end().to_string()
+    }
+
+    fn status_line_with(emoji: bool, configure: impl FnOnce(&mut StatusLine)) -> StatusLine {
+        let mut status_line = StatusLine::new();
+        status_line.set_indicators(Indicators::new(emoji));
+        configure(&mut status_line);
+        status_line
+    }
+
+    /// Assert the layout of a left label and right key hint on an 80-column row.
+    fn assert_row(row: &str, left: &str, right: &str) {
+        assert!(row.starts_with(left), "{row:?} should start with {left:?}");
+        assert!(row.ends_with(right), "{row:?} should end with {right:?}");
+        // The row is padded to the full width, leaving one column on the right.
+        assert_eq!(row.chars().count(), 79, "{row:?}");
+        let middle = &row[left.len()..row.len() - right.len()];
+        assert!(middle.chars().all(|ch| ch == ' '), "{row:?}");
+    }
+
+    #[test]
+    fn watching_indicator_follows_the_emoji_setting() {
+        let watching = |emoji| {
+            let status_line =
+                status_line_with(emoji, |sl| sl.state_mut().set_watched_file_count(11));
+            plain_text(&uncached_content(&status_line, 80))
+        };
+
+        assert_row(
+            &watching(true),
+            " 👁  devenv watching 11 files",
+            "Ctrl+Alt+D pause",
+        );
+        assert_row(
+            &watching(false),
+            " ◎ devenv watching 11 files",
+            "Ctrl+Alt+D pause",
+        );
+    }
+
+    #[test]
+    fn paused_indicator_follows_the_emoji_setting() {
+        let paused = |emoji| {
+            let status_line = status_line_with(emoji, |sl| sl.state_mut().set_paused(true));
+            plain_text(&uncached_content(&status_line, 80))
+        };
+
+        assert_row(&paused(true), " ⏸  devenv paused", "Ctrl+Alt+D resume");
+        assert_row(&paused(false), " ‖ devenv paused", "Ctrl+Alt+D resume");
+    }
+
+    #[test]
+    fn emoji_is_the_default() {
+        let mut default = StatusLine::new();
+        default.state_mut().set_watched_file_count(2);
+        let explicit = status_line_with(true, |sl| sl.state_mut().set_watched_file_count(2));
+        assert_eq!(
+            uncached_content(&default, 80),
+            uncached_content(&explicit, 80)
+        );
+    }
+
+    #[test]
+    fn non_emoji_labels_align_with_the_other_states() {
+        // The label starts in the same column after every single-cell glyph.
+        let column = |content: &[u8]| {
+            let text = plain_text(content);
+            text.find("devenv").map(|byte| text[..byte].chars().count())
+        };
+        let watching = status_line_with(false, |sl| sl.state_mut().set_watched_file_count(1));
+        let paused = status_line_with(false, |sl| sl.state_mut().set_paused(true));
+        let ready = status_line_with(false, |sl| {
+            sl.state_mut()
+                .set_reload_ready(vec![PathBuf::from("a.nix")])
+        });
+        let expected = column(&uncached_content(&ready, 80));
+        assert_eq!(column(&uncached_content(&watching, 80)), expected);
+        assert_eq!(column(&uncached_content(&paused, 80)), expected);
+    }
+
+    #[test]
+    fn emoji_setting_does_not_change_other_states() {
+        let render = |emoji| {
+            let mut contents = Vec::new();
+            let mut status_line = status_line_with(emoji, |_| {});
+            contents.push(uncached_content(&status_line, 80));
+
+            status_line
+                .state_mut()
+                .set_building(vec![PathBuf::from("devenv.nix")]);
+            status_line.state_mut().build_start = None;
+            contents.push(uncached_content(&status_line, 80));
+
+            status_line
+                .state_mut()
+                .set_reload_ready(vec![PathBuf::from("devenv.nix")]);
+            status_line.state_mut().set_watched_file_count(3);
+            contents.push(uncached_content(&status_line, 80));
+
+            status_line.state_mut().set_reloaded();
+            contents.push(uncached_content(&status_line, 80));
+
+            status_line
+                .state_mut()
+                .set_build_failed(vec![PathBuf::from("devenv.nix")], "error".to_string());
+            contents.push(uncached_content(&status_line, 80));
+            contents
+        };
+        assert_eq!(render(true), render(false));
+    }
+
+    #[test]
+    fn status_line_cache_invalidates_when_indicators_change() {
+        let mut status_line = StatusLine::new();
+        status_line.state_mut().set_watched_file_count(2);
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        let emoji = status_line.cached_content.clone();
+        assert!(String::from_utf8_lossy(&emoji).contains('👁'));
+
+        status_line.set_indicators(Indicators::new(false));
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        assert_ne!(status_line.cached_content, emoji);
+        assert!(!String::from_utf8_lossy(&status_line.cached_content).contains('👁'));
+
+        status_line.set_indicators(Indicators::new(true));
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        assert_eq!(status_line.cached_content, emoji);
     }
 
     #[test]

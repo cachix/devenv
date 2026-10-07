@@ -2,6 +2,10 @@
 
 ## 2.4.1 (unreleased)
 
+### Improvements
+
+- Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
+
 ### Bug Fixes
 
 - Nushell hot reload no longer breaks commands that use structured environment variables and now removes variables that disappeared after a reload ([#3230](https://github.com/cachix/devenv/issues/3230)).

@@ -8,6 +8,7 @@ use crate::escape_state::{
     EscapeState, cleanup_forwarded_modes as escape_state_cleanup,
     process_escape_events as escape_state_process,
 };
+use crate::indicators::Indicators;
 use crate::keybindings::{ShellAction, ShellKeybindings};
 use crate::protocol::{ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
@@ -1639,6 +1640,12 @@ impl ShellSession {
     pub fn with_keybindings(mut self, keybindings: ShellKeybindings) -> Self {
         self.status_line.set_keybindings(keybindings.clone());
         self.config.keybindings = keybindings;
+        self
+    }
+
+    /// Select the glyphs used for status-line indicators.
+    pub fn with_indicators(mut self, indicators: Indicators) -> Self {
+        self.status_line.set_indicators(indicators);
         self
     }
 

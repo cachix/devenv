@@ -45,6 +45,7 @@ This example keeps the TUI at the command's terminal position, adds profiles and
 
 version: 1
 tui:
+  emoji: true
   viewport: inline
   theme:
     preset: devenv
@@ -97,6 +98,25 @@ tui:
 tui:
   viewport: top
 ```
+
+## Emoji and glyphs
+
+`tui.emoji` selects between emoji and non-emoji Unicode glyphs for display indicators. It defaults to `true`, which keeps the existing output. Added in devenv 2.4.1.
+
+```yaml
+version: 1
+tui:
+  emoji: false
+```
+
+It applies to the persistent status line in an interactive `devenv shell`. The TUI's activity views currently use no emoji, so the setting changes nothing there:
+
+| Indicator | `emoji: true` | `emoji: false` |
+| --- | --- | --- |
+| Watching files (`devenv watching 11 files`) | `👁` | `◎` |
+| File watching paused (`devenv paused`) | `⏸` | `‖` |
+
+Terminals disagree on how wide emoji are, so the non-emoji glyphs are plain single-column symbols. Other symbols, such as the braille spinner and the checkmark, are not emoji and do not change. The setting does not hide the status line (see `tui.statusline.enabled`), disable file watching, or change automatic reloads, text, colors, or keybindings. Changes take effect when you start a new shell.
 
 ## Statusline layouts
 
