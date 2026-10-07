@@ -20,10 +20,10 @@
   };
 
   # Use a slow producer and a reader to exercise the integration's ordering edge.
-  tasks."devenv:files".exec = lib.mkForce ''
-    sleep 1
-    printf 'managed content\n' > managed.txt
-  '';
+  tasks."test:delay-files" = {
+    exec = "sleep 1";
+    before = [ "devenv:files" ];
+  };
   tasks."devenv:treefmt:run".exec = lib.mkForce ''
     grep -qx "managed content" managed.txt
   '';
