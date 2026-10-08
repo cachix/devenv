@@ -312,6 +312,62 @@ pub struct Nixpkgs {
     pub per_platform: BTreeMap<String, NixpkgsConfig>,
 }
 
+/// Runtime sandbox configuration.
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
+pub struct SandboxConfig {
+    /// Enable sandboxing for shells, tasks, and services.
+    /// Overrides the global user setting when specified.
+    ///
+    /// Default: `false`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[setting(merge = schematic::merge::replace)]
+    pub enable: Option<bool>,
+    /// Additional files or directories with read-only access.
+    /// Relative paths resolve from the project root; `~/` expands to the home directory.
+    /// Paths must exist. Lists accumulate across imports and local configuration.
+    ///
+    /// Default: `[]`.
+    #[setting(merge = schematic::merge::append_vec)]
+    pub read: Vec<PathBuf>,
+    /// Additional files or directories with read and write access.
+    /// Relative paths resolve from the project root; `~/` expands to the home directory.
+    /// Paths must exist. Lists accumulate across imports and local configuration.
+    ///
+    /// Default: `[]`.
+    #[setting(merge = schematic::merge::append_vec)]
+    pub write: Vec<PathBuf>,
+    /// Network permissions for sandboxed commands.
+    #[setting(nested)]
+    pub networking: SandboxNetworking,
+}
+
+impl SandboxConfig {
+    pub fn is_enabled(&self) -> bool {
+        self.enable.unwrap_or(false)
+    }
+}
+
+/// Network permissions for sandboxed commands.
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
+pub struct SandboxNetworking {
+    /// Allow network access. Set to `false` to block IP networking with nono.
+    /// Overrides the global user setting when specified.
+    /// Local Unix sockets remain subject to nono's socket permissions.
+    ///
+    /// Default: `true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[setting(merge = schematic::merge::replace)]
+    pub enable: Option<bool>,
+}
+
+impl SandboxNetworking {
+    pub fn is_enabled(&self) -> bool {
+        self.enable.unwrap_or(true)
+    }
+}
+
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
 #[config(allow_unknown_fields)]
 #[serde(rename_all = "snake_case")]
@@ -378,6 +434,14 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     #[setting(merge = schematic::merge::replace)]
     pub impure: bool,
+    /// Sandbox shell commands, tasks, and services using [nono](https://nono.sh).
+    /// Allows writes in the project, devenv state, and temporary directories,
+    /// and reads from the Nix store and system tooling.
+    /// Requires a nixpkgs input providing `nono` and an OS supported by nono.
+    /// See [Sandboxing](/sandbox/).
+    #[serde(default, skip_serializing_if = "is_default")]
+    #[setting(nested)]
+    pub sandbox: SandboxConfig,
     /// Select the Nix backend used to evaluate `devenv.nix`.
     ///
     /// Default: `nix`.
@@ -2660,6 +2724,47 @@ imports:
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
         fs::write(temp_dir.path().join("devenv.yaml"), yaml).expect("Failed to write devenv.yaml");
         Config::load_from(temp_dir.path()).expect("Failed to load config")
+    }
+
+    #[test]
+    fn sandbox_settings_accumulate_across_project_and_local_config() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("devenv.yaml"),
+            "sandbox:\n  enable: true\n  read: [shared]\n  write: [cache]\n  networking:\n    enable: false\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("devenv.local.yaml"),
+            "sandbox:\n  read: [personal]\n  write: [local-cache]\n  networking:\n    enable: true\n",
+        )
+        .unwrap();
+        let config = Config::load_from(dir.path()).unwrap();
+        assert!(config.sandbox.is_enabled());
+        assert!(config.sandbox.networking.is_enabled());
+        assert_eq!(
+            config.sandbox.read,
+            vec![PathBuf::from("shared"), PathBuf::from("personal")]
+        );
+        assert_eq!(
+            config.sandbox.write,
+            vec![PathBuf::from("cache"), PathBuf::from("local-cache")]
+        );
+    }
+
+    #[test]
+    fn sandbox_defaults_to_false_and_local_config_can_disable_it() {
+        assert!(!load_yaml("").sandbox.is_enabled());
+        assert!(load_yaml("").sandbox.networking.is_enabled());
+        assert!(load_yaml("sandbox:\n  enable: true\n").sandbox.is_enabled());
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("devenv.yaml"), "sandbox:\n  enable: true\n").unwrap();
+        fs::write(
+            dir.path().join("devenv.local.yaml"),
+            "sandbox:\n  enable: false\n",
+        )
+        .unwrap();
+        assert!(!Config::load_from(dir.path()).unwrap().sandbox.is_enabled());
     }
 
     const SNAKE_CASE_INPUT: &str = r#"

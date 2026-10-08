@@ -224,6 +224,53 @@ Set to `true` to enforce that the CLI version matches the modules version
 
 *Type:* `boolean | string`
 
+## sandbox
+
+Sandbox shell commands, tasks, and services using [nono](https://nono.sh).
+Allows writes in the project, devenv state, and temporary directories,
+and reads from the Nix store and system tooling.
+Requires a nixpkgs input providing `nono` and an OS supported by nono.
+See [Sandboxing](/sandbox/).
+
+*Type:* `attribute set`
+
+## sandbox.enable
+
+Enable sandboxing for shells, tasks, and services.
+Overrides the global user setting when specified.
+
+*Type:* `boolean` · *Default:* `false`
+
+## sandbox.networking
+
+Network permissions for sandboxed commands.
+
+*Type:* `attribute set`
+
+## sandbox.networking.enable
+
+Allow network access. Set to `false` to block IP networking with nono.
+Overrides the global user setting when specified.
+Local Unix sockets remain subject to nono's socket permissions.
+
+*Type:* `boolean` · *Default:* `true`
+
+## sandbox.read
+
+Additional files or directories with read-only access.
+Relative paths resolve from the project root; `~/` expands to the home directory.
+Paths must exist. Lists accumulate across imports and local configuration.
+
+*Type:* `list of string` · *Default:* `[]`
+
+## sandbox.write
+
+Additional files or directories with read and write access.
+Relative paths resolve from the project root; `~/` expands to the home directory.
+Paths must exist. Lists accumulate across imports and local configuration.
+
+*Type:* `list of string` · *Default:* `[]`
+
 ## secretspec.cachix_auth_token
 
 <VersionCompatibility version="2.2" />

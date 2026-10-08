@@ -86,6 +86,15 @@
         "prompt_prefix": true,
         "keybindings": {}
       }
+    },
+    "sandbox": {
+      "description": "Personal sandbox defaults, overridden by explicit project settings.",
+      "$ref": "#/$defs/SandboxPreferences",
+      "default": {
+        "read": [],
+        "write": [],
+        "networking": {}
+      }
     }
   },
   "additionalProperties": false,
@@ -924,6 +933,52 @@
       "not": {
         "pattern": "(?:^|[\\t\\n\\r ])(?:(?:ctrl|shift)\\+)*ctrl\\+(?:(?:ctrl|shift)\\+)*c(?:$|[\\t\\n\\r ])"
       }
+    },
+    "SandboxPreferences": {
+      "type": "object",
+      "properties": {
+        "enable": {
+          "description": "Enable sandboxing by default. Explicit project settings take precedence.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "read": {
+          "description": "Additional read-only files or directories. Paths must exist.\nRelative paths resolve from the user config directory; `~/` expands to HOME.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "write": {
+          "description": "Additional read/write files or directories. Paths must exist.\nRelative paths resolve from the user config directory; `~/` expands to HOME.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "networking": {
+          "$ref": "#/$defs/SandboxNetworkPreferences",
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "SandboxNetworkPreferences": {
+      "type": "object",
+      "properties": {
+        "enable": {
+          "description": "Allow network access by default (true if unspecified).\nExplicit project settings take precedence.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

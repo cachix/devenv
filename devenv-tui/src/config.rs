@@ -56,6 +56,34 @@ pub struct UserConfig {
     pub tui: TuiPreferences,
     #[serde(default)]
     pub shell: ShellPreferences,
+    /// Personal sandbox defaults, overridden by explicit project settings.
+    #[serde(default)]
+    pub sandbox: SandboxPreferences,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SandboxPreferences {
+    /// Enable sandboxing by default. Explicit project settings take precedence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable: Option<bool>,
+    /// Additional read-only files or directories. Paths must exist.
+    /// Relative paths resolve from the user config directory; `~/` expands to HOME.
+    pub read: Vec<PathBuf>,
+    /// Additional read/write files or directories. Paths must exist.
+    /// Relative paths resolve from the user config directory; `~/` expands to HOME.
+    pub write: Vec<PathBuf>,
+    #[serde(default)]
+    pub networking: SandboxNetworkPreferences,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SandboxNetworkPreferences {
+    /// Allow network access by default (true if unspecified).
+    /// Explicit project settings take precedence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable: Option<bool>,
 }
 
 impl Default for UserConfig {
@@ -64,6 +92,7 @@ impl Default for UserConfig {
             version: USER_CONFIG_VERSION,
             tui: TuiPreferences::default(),
             shell: ShellPreferences::default(),
+            sandbox: SandboxPreferences::default(),
         }
     }
 }
