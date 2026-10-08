@@ -15,6 +15,8 @@ pub(crate) fn empty_to_none(s: String) -> Option<String> {
 // Create a constant for embedded migrations
 pub const MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!();
 
+pub const DB_FILENAME: &str = "nix-eval-cache.db";
+
 /// The row type for the `file_input` table.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FileInputRow {

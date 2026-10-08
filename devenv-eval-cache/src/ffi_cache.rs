@@ -4,7 +4,7 @@
 //! when using the FFI backend instead of the CLI backend.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -68,7 +68,11 @@ pub struct CachingConfig {
     /// Additional paths to watch for changes beyond those detected during eval.
     pub extra_watch_paths: Vec<PathBuf>,
     /// Paths to exclude from cache invalidation (e.g., generated files).
+    /// Matched per path component (`Path::starts_with`), not per byte.
     pub excluded_paths: Vec<PathBuf>,
+    /// Paths re-included from `excluded_paths`. The longest matching entry
+    /// across both lists decides; ties go to the exception.
+    pub excluded_path_exceptions: Vec<PathBuf>,
     /// Environment variable names to exclude from cache invalidation
     /// (e.g., vars already tracked via NixArgs).
     pub excluded_envs: Vec<String>,
@@ -346,12 +350,7 @@ fn ops_to_identities(
             }
         };
 
-        if source.starts_with("/nix/store")
-            || !source.is_absolute()
-            || config
-                .excluded_paths
-                .iter()
-                .any(|excluded| source.starts_with(excluded))
+        if source.starts_with("/nix/store") || !source.is_absolute() || is_excluded(&source, config)
         {
             continue;
         }
@@ -365,6 +364,24 @@ fn ops_to_identities(
         identities.insert_path(path.clone(), true);
     }
     identities
+}
+
+fn is_excluded(source: &Path, config: &CachingConfig) -> bool {
+    let longest = |rules: &[PathBuf]| {
+        rules
+            .iter()
+            .filter(|p| source.starts_with(p))
+            .map(|p| p.components().count())
+            .max()
+    };
+    match (
+        longest(&config.excluded_paths),
+        longest(&config.excluded_path_exceptions),
+    ) {
+        (None, _) => false,
+        (Some(_), None) => true,
+        (Some(e), Some(a)) => e > a,
+    }
 }
 
 #[cfg(test)]
@@ -483,6 +500,75 @@ mod tests {
         }];
         let inputs = ops_to_inputs(ops, &config);
         assert!(inputs.is_empty());
+    }
+
+    #[test]
+    fn test_ops_to_inputs_excluded_path_exceptions_kept() {
+        let config = CachingConfig {
+            excluded_paths: vec![PathBuf::from("/excluded")],
+            excluded_path_exceptions: vec![PathBuf::from("/excluded/keep")],
+            ..Default::default()
+        };
+        let ops = vec![
+            EvalOp::ReadFile {
+                source: PathBuf::from("/excluded/internal.db"),
+            },
+            EvalOp::ReadFile {
+                source: PathBuf::from("/excluded/keep/user-file.txt"),
+            },
+        ];
+        let inputs = ops_to_inputs(ops, &config);
+        assert_eq!(inputs.len(), 1);
+        match &inputs[0] {
+            Input::File(desc) => {
+                assert_eq!(desc.path, PathBuf::from("/excluded/keep/user-file.txt"))
+            }
+            _ => panic!("expected file input"),
+        }
+    }
+
+    #[test]
+    fn test_ops_to_inputs_longest_prefix_re_excludes_leaf() {
+        let config = CachingConfig {
+            excluded_paths: vec![
+                PathBuf::from("/d"),
+                PathBuf::from("/d/state/tasks.db"),
+                PathBuf::from("/d/state/tasks.db-wal"),
+                PathBuf::from("/d/state/tasks.db-shm"),
+                PathBuf::from("/d/state/git-hooks"),
+            ],
+            excluded_path_exceptions: vec![PathBuf::from("/d/state")],
+            ..Default::default()
+        };
+        let ops = vec![
+            EvalOp::ReadFile {
+                source: PathBuf::from("/d/shell-env.sh"),
+            },
+            EvalOp::ReadFile {
+                source: PathBuf::from("/d/state/postgres/data"),
+            },
+            EvalOp::ReadFile {
+                source: PathBuf::from("/d/state/tasks.db"),
+            },
+            EvalOp::ReadFile {
+                source: PathBuf::from("/d/state/tasks.db-wal"),
+            },
+            EvalOp::ReadFile {
+                source: PathBuf::from("/d/state/tasks.db-shm"),
+            },
+            EvalOp::ReadFile {
+                source: PathBuf::from("/d/state/git-hooks/config.json"),
+            },
+        ];
+        let inputs = ops_to_inputs(ops, &config);
+        let kept: Vec<_> = inputs
+            .iter()
+            .map(|i| match i {
+                Input::File(d) => d.path.clone(),
+                _ => panic!(),
+            })
+            .collect();
+        assert_eq!(kept, vec![PathBuf::from("/d/state/postgres/data")]);
     }
 
     #[test]
