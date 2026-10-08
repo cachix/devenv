@@ -2,6 +2,10 @@
 
 ## 2.4.1 (unreleased)
 
+### Improvements
+
+- `devenv processes list` and `devenv processes wait` now work with process-compose, so those projects no longer need to call `process-compose` directly for status and readiness ([#2950](https://github.com/cachix/devenv/issues/2950)).
+
 ### Bug Fixes
 
 - Fixed `devenv machines install` hanging while uploading store paths when no SSH connection was already open ([#3254](https://github.com/cachix/devenv/issues/3254)).

@@ -85,6 +85,8 @@ pub enum ManagerClient {
     #[default]
     None,
     NativeApi,
+    /// process-compose CLI over its control socket (`list` / readiness wait).
+    ProcessCompose,
 }
 
 /// Runtime adapter settings, separate from user-visible capabilities.
@@ -189,6 +191,7 @@ pub fn fallback_capabilities(manager: &str) -> Option<ManagerCapabilities> {
         },
         "process-compose" => ManagerCapabilities {
             background_start: true,
+            wait_ready: true,
             cold_start_subset: true,
             ..ManagerCapabilities::default()
         },
@@ -230,7 +233,11 @@ pub fn fallback_adapter(manager: &str) -> Option<ManagerAdapter> {
             stop: ManagerStopMethod::ProcessScope,
             client: ManagerClient::None,
         },
-        "process-compose" | "honcho" | "hivemind" => ManagerAdapter::default(),
+        "process-compose" => ManagerAdapter {
+            client: ManagerClient::ProcessCompose,
+            ..ManagerAdapter::default()
+        },
+        "honcho" | "hivemind" => ManagerAdapter::default(),
         _ => return None,
     };
     Some(adapter)
@@ -285,6 +292,11 @@ mod tests {
         assert!(fallback_capabilities("honcho").unwrap().background_start);
         assert!(fallback_capabilities("hivemind").unwrap().background_start);
         assert!(!fallback_capabilities("mprocs").unwrap().background_start);
+        assert!(fallback_capabilities("process-compose").unwrap().wait_ready);
+        assert_eq!(
+            fallback_adapter("process-compose").unwrap().client,
+            ManagerClient::ProcessCompose
+        );
         assert_eq!(
             fallback_adapter("mprocs").unwrap().terminal,
             ManagerTerminal::Controlling
