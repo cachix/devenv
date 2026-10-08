@@ -1,0 +1,1 @@
+Use `uv run` to run your main file using this project structure. See the [uv documentation](https://docs.astral.sh/uv/). Make sure `.python-version` matches your desired python version, or uv may download it's own python.
