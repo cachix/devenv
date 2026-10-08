@@ -1122,11 +1122,22 @@ fn target_secretspec_installer_script(
 /// Build the `NIX_SSHOPTS` env var value used by `nix copy`. Nix parses this
 /// as a shell-style word list, so preserve every argv token's boundary.
 fn nix_ssh_opts_env(user_opts: &[String]) -> String {
-    ssh_opts_argv(user_opts)
-        .iter()
-        .map(|token| shell_quote(token))
-        .collect::<Vec<_>>()
-        .join(" ")
+    // Nix waits for this local command to signal that SSH is connected. Pin
+    // both settings before the install policy and configured options because
+    // OpenSSH uses the first value. Direct SSH commands retain the policy's
+    // PermitLocalCommand=no; only Nix's fixed handshake is allowed here.
+    [
+        "-o",
+        "PermitLocalCommand=yes",
+        "-o",
+        "LocalCommand=echo started",
+    ]
+    .into_iter()
+    .map(String::from)
+    .chain(ssh_opts_argv(user_opts))
+    .map(|token| shell_quote(&token))
+    .collect::<Vec<_>>()
+    .join(" ")
 }
 
 /// One row in the `devenv machines info` table. Columns follow the
@@ -3560,8 +3571,26 @@ mod tests {
         let env = nix_ssh_opts_env(&user);
         assert_eq!(
             env,
-            r#"'-o' 'ProxyCommand=ssh -W %h:%p bastion' '-i' '/tmp/team'\''s identity' '-o' 'StrictHostKeyChecking=accept-new' '-o' 'ConnectTimeout=10'"#
+            r#"'-o' 'PermitLocalCommand=yes' '-o' 'LocalCommand=echo started' '-o' 'ProxyCommand=ssh -W %h:%p bastion' '-i' '/tmp/team'\''s identity' '-o' 'StrictHostKeyChecking=accept-new' '-o' 'ConnectTimeout=10'"#
         );
+    }
+
+    #[test]
+    fn nix_ssh_handshake_overrides_sensitive_install_policy_and_custom_local_command() {
+        let user = vec![
+            "-o".to_string(),
+            "LocalCommand=touch /tmp/unwanted".to_string(),
+        ];
+        let configured = sensitive_install_ssh_opts(&user);
+        let env = nix_ssh_opts_env(&configured);
+        assert!(env.starts_with("'-o' 'PermitLocalCommand=yes' '-o' 'LocalCommand=echo started' "));
+        assert!(env.contains("'StrictHostKeyChecking=yes'"));
+        assert!(env.contains("'ClearAllForwardings=yes'"));
+        assert!(env.contains("'SendEnv=-*'"));
+
+        let direct = ssh_opts_argv(&configured);
+        assert!(direct.iter().any(|opt| opt == "PermitLocalCommand=no"));
+        assert!(!direct.iter().any(|opt| opt == "PermitLocalCommand=yes"));
     }
 
     #[cfg(target_os = "linux")]
