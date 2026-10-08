@@ -1632,12 +1632,15 @@ impl Tasks {
             let _ = scheduled_signal.send(());
         }
 
-        // Wait for all tasks to complete
-        running_tasks.wait_all().await;
+        // Task dependency and readiness waits observe shutdown themselves.
+        // Let running one-shots drain their process scopes before returning;
+        // aborting their futures skips the executor's cancellation cleanup.
+        running_tasks.wait_all_gracefully().await;
 
-        // wait_all() aborts spawned futures on shutdown so that run_event_loop()
-        // can proceed to stop_all(). Aborted futures never write back their
-        // completion status, so sweep any still-Running tasks to Cancelled.
+        // Process tasks leave their lifecycle status with the manager. Mark
+        // still-pending processes cancelled before run_event_loop() proceeds
+        // to stop_all(). Tasks skipped before their future started also need
+        // their cancellation status recorded here.
         if self.shutdown.is_cancelled() {
             for &index in &self.tasks_order {
                 let (is_process, task_name, running_oneshot_start) = {
@@ -3429,6 +3432,87 @@ mod schedule_tests {
     async fn heterogeneous_diamond_is_deduplicated_on_cold_and_dynamic_start() {
         run_heterogeneous_diamond(false).await;
         run_heterogeneous_diamond(true).await;
+    }
+
+    #[tokio::test]
+    async fn shutdown_drains_nested_oneshot_processes_before_returning() {
+        struct FixtureCleanup(std::path::PathBuf);
+
+        impl Drop for FixtureCleanup {
+            fn drop(&mut self) {
+                // Only signal the session created by this fixture, including
+                // when an assertion fails on the unfixed scheduler.
+                if let Ok(pid) = std::fs::read_to_string(self.0.join("leader.pid"))
+                    && let Ok(pid) = pid.trim().parse::<i32>()
+                {
+                    let _ = nix::sys::signal::killpg(
+                        nix::unistd::Pid::from_raw(pid),
+                        nix::sys::signal::Signal::SIGKILL,
+                    );
+                }
+            }
+        }
+
+        let files = tempfile::tempdir().unwrap();
+        let _cleanup = FixtureCleanup(files.path().to_path_buf());
+        let started = named_pipe(files.path(), "started");
+        let script = executable_script(
+            files.path(),
+            "observer",
+            &format!(
+                "trap '' TERM INT\necho $$ > '{dir}/leader.pid'\n\
+                 sh -c 'trap \"\" TERM INT; echo $$ > \"$1/nested.pid\"; \
+                 printf x > \"$1/started\"; exec sleep 120' sh '{dir}' &\nwait",
+                dir = files.path().display(),
+            ),
+        );
+        let mut observer = oneshot_task("test:observer", vec![]);
+        observer.command = Some(script.to_string_lossy().into_owned());
+        let dependent = oneshot_task("test:dependent", vec!["test:observer"]);
+        let (tasks, _tmp) = build_test_tasks(
+            vec![observer, dependent],
+            vec!["test:dependent".into()],
+            false,
+        )
+        .await;
+        let tasks = Arc::new(tasks);
+        let listener = listen_for_pipe_signal(started);
+        let running = Arc::clone(&tasks);
+        let run = tokio::spawn(async move { running.run(true).await });
+        wait_for_pipe_signal(listener, "nested task child to start").await;
+
+        let nested_pid: i32 = std::fs::read_to_string(files.path().join("nested.pid"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        tasks.shutdown.shutdown();
+        tokio::time::timeout(std::time::Duration::from_secs(10), run)
+            .await
+            .expect("cancelled task did not finish cleanup")
+            .expect("scheduler panicked");
+
+        // A zombie is already stopped, even if init has not reaped it yet.
+        let state = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", &nested_pid.to_string()])
+            .output()
+            .unwrap();
+        let state = String::from_utf8_lossy(&state.stdout);
+        assert!(
+            state.trim().is_empty() || state.trim().starts_with('Z'),
+            "scheduler returned with nested task child {nested_pid} still alive: {state}"
+        );
+        for name in ["test:observer", "test:dependent"] {
+            let state = tasks.graph[tasks.task_index_by_name[name]].read().await;
+            assert!(
+                matches!(
+                    state.status,
+                    TaskStatus::Completed(TaskCompleted::Cancelled(_))
+                ),
+                "{name} did not record cancellation: {:?}",
+                state.status
+            );
+        }
     }
 
     #[tokio::test]
