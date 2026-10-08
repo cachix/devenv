@@ -1,7 +1,7 @@
 { pkgs, lib, config, ... }:
 
 let
-  inherit (builtins) dirOf mapAttrs;
+  inherit (builtins) baseNameOf dirOf mapAttrs;
   inherit (lib) types optionalAttrs optionalString mkOption attrNames filter length mapAttrsToList concatStringsSep head assertMsg;
   inherit (types) attrsOf submodule;
 
@@ -101,7 +101,7 @@ let
 
         - `symlink` (default): symlink to the read-only file in the Nix store. Edits are not possible; devenv keeps the link pointed at the current contents.
         - `seed`: copy the file into place once, only if it does not already exist, and make it writable. Existing files are left untouched, so your edits are preserved. Useful for seeding configuration from templates the user then edits.
-        - `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. Useful when a tool must write to the file in place but devenv should remain the source of truth.
+        - `copy`: copy the file into place as a writable file, overwriting it with fresh contents on every shell entry. The file is replaced atomically, so tools that walk the project never see it missing. Useful when a tool must write to the file in place but devenv should remain the source of truth.
       '';
     };
   };
@@ -127,6 +127,49 @@ let
     fi
   '';
 
+  # Materialize the store contents at `filename` as a writable copy.
+  #
+  # A regular file is staged next to its destination and renamed over it, so the destination
+  # is never missing: tools that walk the project concurrently (a tree-wide formatter, an
+  # editor's file watcher) would otherwise stat a path that has momentarily disappeared.
+  writeCopyScript = filename: fileOption: ''
+    mkdir -p "${dirOf filename}"
+    if [ -d ${fileOption.file} ]; then
+      # A directory cannot be swapped in atomically: `mv` onto an existing directory moves
+      # the copy *inside* it and `mv -T` is GNU-only, so replace it in place.
+      rm -rf "${filename}"
+      cp -RL ${fileOption.file} "${filename}"
+      chmod -R u+w "${filename}"
+    else
+      # `mktemp -d` with a template (the portable form, BSD/macOS included) gives an
+      # unpredictable 0700 directory next to the destination, hence on the same filesystem.
+      # Letting `cp` create the file inside it keeps the store mode, executable bit included.
+      _devenv_staging=$(mktemp -d "${dirOf filename}/.${baseNameOf filename}.XXXXXX")
+      # A directory at the destination would swallow the rename: `mv` moves the staged file
+      # *inside* it. `mv` resolves a symlink to a directory as well, so unlink the link
+      # itself - `rm` on a symlink never touches its target. Only a destination that is
+      # already a symlink to a directory goes briefly missing here, never a managed file.
+      if [ -d "${filename}" ]; then
+        if [ -L "${filename}" ]; then
+          rm -f "${filename}"
+        else
+          rm -rf "${filename}"
+        fi
+      fi
+      # `mv -f` renames: it replaces an existing regular file atomically, and replaces any
+      # remaining symlink itself instead of following it. Both hold for GNU and BSD `mv`.
+      if ! {
+        cp -L ${fileOption.file} "$_devenv_staging/file" &&
+          chmod u+w "$_devenv_staging/file" &&
+          mv -f "$_devenv_staging/file" "${filename}"
+      }; then
+        rm -rf "$_devenv_staging"
+        exit 1
+      fi
+      rmdir "$_devenv_staging"
+    fi
+  '';
+
   # Copy the file into place as a writable file the user can edit.
   # "seed" only creates the file when missing; "copy" overwrites it every time.
   createCopyScript = filename: fileOption: ''
@@ -134,20 +177,21 @@ let
     if [ -L "${filename}" ] && [[ "$(readlink "${filename}")" == /nix/store/* ]]; then
       rm "${filename}"
     fi
-    ${optionalString (fileOption.copyMode == "copy") ''
+    ${if fileOption.copyMode == "copy" then ''
       if [ -e "${filename}" ] || [ -L "${filename}" ]; then
         echo "Overwriting ${filename}"
-        rm -rf "${filename}"
+      else
+        echo "Creating ${filename}"
+      fi
+      ${writeCopyScript filename fileOption}
+    '' else ''
+      if [ -e "${filename}" ]; then
+        echo "Keeping existing ${filename}"
+      else
+        echo "Creating ${filename}"
+        ${writeCopyScript filename fileOption}
       fi
     ''}
-    if [ -e "${filename}" ]; then
-      echo "Keeping existing ${filename}"
-    else
-      echo "Creating ${filename}"
-      mkdir -p "${dirOf filename}"
-      cp -RL ${fileOption.file} "${filename}"
-      chmod -R u+w "${filename}"
-    fi
     echo "${filename}" >> "$DEVENV_FILES_CREATED"
   '';
 

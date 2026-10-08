@@ -26,8 +26,6 @@ use devenv_core::{
 use devenv_mailbox::{FrontendCommand, FrontendEvent};
 use devenv_shell::dialect::{BashDialect, RcfileContext, ShellDialect, create_dialect};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use nix::sys::signal;
-use nix::unistd::Pid;
 use once_cell::sync::{Lazy, OnceCell as SyncOnceCell};
 use processes::ProcessManagerControl as _;
 use serde::Serialize;
@@ -291,6 +289,43 @@ fn should_clear_proxy_routes(
     start_failed: bool,
 ) -> bool {
     owns_foreground_manager || (!manager_was_running && start_failed)
+}
+
+/// Keep the startup lock and proxy routes while a slow daemon is still alive.
+/// The PID file is published after the initial process graph is registered.
+/// A slow or stuck daemon must not cause premature proxy route cleanup.
+async fn wait_for_daemon_pid(
+    child: &mut std::process::Child,
+    pid_file: &Path,
+    log_file_path: &Path,
+    warning_after: std::time::Duration,
+) -> Result<()> {
+    let start = std::time::Instant::now();
+    let mut warned = false;
+    loop {
+        if matches!(
+            processes::check_pid_file(pid_file).await,
+            Ok(processes::PidStatus::Running(_))
+        ) {
+            return Ok(());
+        }
+        if let Some(status) = child
+            .try_wait()
+            .into_diagnostic()
+            .wrap_err("Failed to check daemon startup status")?
+        {
+            let log_contents = std::fs::read_to_string(log_file_path).unwrap_or_default();
+            bail!("Daemon exited unexpectedly ({status}). Logs:\n{log_contents}");
+        }
+        if !warned && start.elapsed() >= warning_after {
+            warn!(
+                pid = child.id(),
+                "Daemon is still starting; waiting for its manager PID file"
+            );
+            warned = true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 }
 
 /// A shell command ready to be executed.
@@ -1222,10 +1257,10 @@ impl Devenv {
     /// dependencies, and out-of-subset dependencies are all resolved exactly
     /// like the cold-start path — the CLI no longer re-derives them.
     ///
-    /// The reply is truthful: it reports per name whether the daemon scheduled
-    /// it, skipped it (already running or pending), did not know it (the
-    /// manager was started with a different configuration), or failed to
-    /// schedule it. Unknown and failed names bail; so does a reply where
+    /// The reply reports requested names and automatically started prerequisites
+    /// as scheduled, skipped (already running or pending), unknown (the manager
+    /// was started with a different configuration), or failed. Unknown and
+    /// failed names bail; so does a reply where
     /// nothing was scheduled or skipped, so `devenv up` exits nonzero when it
     /// acted on nothing.
     async fn attach_start_up_processes(&self, names: &[String]) -> Result<()> {
@@ -2893,7 +2928,7 @@ impl Devenv {
             let capability_requests = capability_requests(&task_configs);
             let capabilities_required_now = capabilities_required_now(&task_configs);
 
-            let mut config = self
+            let config = self
                 .make_task_config(roots, task_configs, task_mode, envs)
                 .await?;
 
@@ -2948,21 +2983,43 @@ impl Devenv {
                 return Ok(ProcessStartOutcome::Completed);
             }
 
-            config.capability_broker = processes::start_capability_broker(
+            let mut tasks_runner =
+                tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
+                    .build()
+                    .await
+                    .map_err(|e| miette!("Failed to build task runner: {}", e))?;
+
+            if options.mode == ClientRunMode::ReturnAfterStart {
+                let blockers = tasks_runner.disabled_process_dependencies().await;
+                if !blockers.is_empty() {
+                    let details = blockers
+                        .iter()
+                        .map(|(dependent, dependency)| {
+                            format!("'{dependent}' waits for '{dependency}' (start.enable = false)")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    bail!(
+                        "Process dependencies cannot start: {details}. Enable the dependency or make the dependency edge conditional."
+                    );
+                }
+            }
+
+            if let Some(broker) = processes::start_capability_broker(
                 &capability_requests,
                 capabilities_required_now,
                 self.process_runtime_dir()?,
                 options.frontend_command_tx.as_ref(),
                 std::process::Stdio::inherit(),
             )
-            .await?;
+            .await?
+            {
+                tasks_runner
+                    .set_capability_broker(&broker)
+                    .wrap_err("Failed to connect capability broker")?;
+            }
 
-            let tasks_runner = Arc::new(
-                tasks::Tasks::builder(config, VerbosityLevel::Normal, self.shutdown.clone())
-                    .build()
-                    .await
-                    .map_err(|e| miette!("Failed to build task runner: {}", e))?,
-            );
+            let tasks_runner = Arc::new(tasks_runner);
 
             // The persistent manager owns the task execution scope. That scope
             // owns the one process runner used by all of its process tasks.
@@ -3242,41 +3299,16 @@ impl Devenv {
             cmd.process_group(0);
         }
 
-        let child = cmd
+        let mut child = cmd
             .spawn()
             .map_err(|e| miette!("Failed to spawn daemon: {}", e))?;
-        let child_pid = child.id();
-
-        // Wait for the daemon to write its PID file (meaning processes are started)
-        let start = std::time::Instant::now();
-        let max_wait = std::time::Duration::from_secs(120);
-        while start.elapsed() < max_wait {
-            if matches!(
-                processes::check_pid_file(&pid_file).await,
-                Ok(processes::PidStatus::Running(_))
-            ) {
-                break;
-            }
-            // Check if the daemon exited early (crash)
-            if signal::kill(Pid::from_raw(child_pid as i32), None).is_err() {
-                let log_contents = std::fs::read_to_string(&log_file_path).unwrap_or_default();
-                bail!("Daemon exited unexpectedly. Logs:\n{}", log_contents);
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-
-        if !matches!(
-            processes::check_pid_file(&pid_file).await,
-            Ok(processes::PidStatus::Running(_))
-        ) {
-            let log_contents = std::fs::read_to_string(&log_file_path).unwrap_or_default();
-            bail!(
-                "Daemon failed to start within {}s. Check logs at: {}\n{}",
-                max_wait.as_secs(),
-                log_file_path.display(),
-                log_contents
-            );
-        }
+        wait_for_daemon_pid(
+            &mut child,
+            &pid_file,
+            &log_file_path,
+            std::time::Duration::from_secs(120),
+        )
+        .await?;
 
         let pid = std::fs::read_to_string(&pid_file)
             .map(|s| s.trim().to_string())
@@ -4590,6 +4622,7 @@ mod tests {
 
     #[test]
     fn seeds_ports_only_from_a_live_native_manager() {
+        use nix::unistd::Pid;
         use processes::PidStatus;
 
         let live = PidStatus::Running(Pid::from_raw(1));
@@ -4855,6 +4888,66 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         assert!(!should_clear_proxy_routes(true, false, true));
         assert!(should_clear_proxy_routes(false, false, true));
         assert!(should_clear_proxy_routes(false, true, false));
+    }
+
+    #[tokio::test]
+    async fn daemon_pid_wait_accepts_late_live_child() {
+        let temp = tempfile::tempdir().unwrap();
+        let pid_file = temp.path().join("native-manager.pid");
+        let log_file = temp.path().join("daemon.log");
+        let mut child = std::process::Command::new("sleep")
+            .arg("10")
+            .spawn()
+            .unwrap();
+        let child_pid = child.id();
+        let delayed_pid_file = pid_file.clone();
+        let publish_pid = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            processes::write_pid(&delayed_pid_file, child_pid)
+                .await
+                .unwrap();
+        });
+
+        tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            wait_for_daemon_pid(
+                &mut child,
+                &pid_file,
+                &log_file,
+                std::time::Duration::from_millis(10),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        publish_pid.await.unwrap();
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
+    #[tokio::test]
+    async fn daemon_pid_wait_reports_exited_child() {
+        let temp = tempfile::tempdir().unwrap();
+        let pid_file = temp.path().join("native-manager.pid");
+        let log_file = temp.path().join("daemon.log");
+        let mut child = std::process::Command::new("sh")
+            .args(["-c", "exit 7"])
+            .spawn()
+            .unwrap();
+
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            wait_for_daemon_pid(
+                &mut child,
+                &pid_file,
+                &log_file,
+                std::time::Duration::from_secs(120),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap_err();
+        assert!(error.to_string().contains("Daemon exited unexpectedly"));
     }
 
     #[test]

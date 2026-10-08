@@ -4,11 +4,14 @@
 
 ### Bug Fixes
 
+- Fixed `devenv machines install` hanging while uploading store paths when no SSH connection was already open ([#3254](https://github.com/cachix/devenv/issues/3254)).
 - Nushell hot reload no longer breaks commands that use structured environment variables and now removes variables that disappeared after a reload ([#3230](https://github.com/cachix/devenv/issues/3230)).
 - MySQL now creates configured databases and users when started with `devenv up`, including `devenv up mysql` ([#2843](https://github.com/cachix/devenv/issues/2843)).
 - fish auto-activation no longer hangs when `env` is a fish function, such as grc's wrapper ([#3222](https://github.com/cachix/devenv/issues/3222)).
 - Task names containing `::`, such as `foo::bar`, are now rejected with an invalid task name error. Previously they were accepted but could not be run by name ([#3227](https://github.com/cachix/devenv/issues/3227)).
 - `devenv shell` no longer reloads in an endless loop, and configurations that read the project directory (such as `lib.fileset.fromSource ./.`) no longer rebuild on every run because of files devenv writes under `.devenv/`. Changes to files in `.devenv/state/` still trigger a reload.
+- Detached process startup now publishes the manager as soon as processes are scheduled, without waiting for service readiness, and keeps HTTPS proxy routes during a slow startup ([#3216](https://github.com/cachix/devenv/issues/3216)).
+- `devenv test` with the native process manager now reports a process dependency on `start.enable = false` before starting services, instead of waiting indefinitely for the disabled process ([#3215](https://github.com/cachix/devenv/issues/3215)).
 
 ## 2.4.0 (2026-09-24)
 
@@ -24,6 +27,7 @@
 ### Improvements
 
 - Added `tasks.<name>.wantedBy` to select a task when another task runs. `after` and `before` still control ordering. Garage now sets up its layout and buckets with both `devenv up garage` and `devenv up` ([#2852](https://github.com/cachix/devenv/issues/2852)).
+- Bash, Zsh, and Fish completion now suggests configured process names for `devenv up` and named `devenv processes` commands.
 
 ### Bug Fixes
 
@@ -42,6 +46,10 @@
 
 - Fixed `cachix.pull` containing duplicate caches. The module adds `devenv` (and `cachix.push`) to the list, so a cache also listed in `devenv.nix` was registered twice and Nix warned `Substituter '...' is already present in the substituters list` on every command. The option now deduplicates its value.
 - Fixed devenv no longer fetching the public signing keys of the caches in `cachix.pull`, a regression from the 2.0 rewrite. Only keys already present in `cachix_trusted_keys.json` were passed to Nix, so on a machine that had only ever run 2.x `extra-trusted-public-keys` was empty and Nix could not verify paths from those caches. The keys are fetched from the Cachix API again (using the resolved auth token for private caches) and cached ([#3176](https://github.com/cachix/devenv/issues/3176)).
+
+### Bug Fixes
+
+- Fixed `devenv shell` intermittently failing with a treefmt error such as `failed to stat <file>: no such file or directory` when `treefmt.enable = true` and the project has files managed by devenv. The tree-wide formatter now runs after devenv has written those files, and a file with `copyMode = "copy"` is replaced atomically, so tools that walk the project never see it missing.
 
 ## 2.3.0 (2026-09-07)
 

@@ -555,18 +555,30 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
         // Run .patch.sh if it exists (must run before loading config)
         let patch_script = PathBuf::from(".patch.sh");
-        if patch_script.exists() {
+        let patch_result = if patch_script.exists() {
             devenv_activity::message(ActivityLevel::Info, "Running .patch.sh");
             let mut command = tokio::process::Command::new("bash");
             command.arg(&patch_script);
             with_test_env_path(&mut command);
-            let _ = command.status().await.into_diagnostic()?;
-        }
+            let status = command.status().await.into_diagnostic()?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err(miette::miette!(
+                    "Patch script failed. Status code: {}",
+                    status.code().unwrap_or(1)
+                ))
+            }
+        } else {
+            Ok(())
+        };
 
         // A script to run inside the shell before the test.
         let setup_script = ".setup.sh";
 
-        let status: miette::Result<()> = if test_config.use_shell {
+        let status: miette::Result<()> = if let Err(error) = patch_result {
+            Err(error)
+        } else if test_config.use_shell {
             // Now load config from the current directory (which might be temp dir)
             let mut config = Config::load_from(&devenv_root)?;
             for input in args.override_inputs.chunks_exact(2) {
