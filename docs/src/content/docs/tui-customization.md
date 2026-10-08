@@ -113,10 +113,10 @@ It applies to the persistent status line in an interactive `devenv shell`. The T
 
 | Indicator | `emoji: true` | `emoji: false` |
 | --- | --- | --- |
-| Watching files (`devenv watching 11 files`) | `👁` | `◎` |
-| File watching paused (`devenv paused`) | `⏸` | `‖` |
+| Watching files (`devenv watching 11 files`) | `👁` | `◉` |
+| File watching paused (`devenv paused`) | `⏸` | `○` |
 
-Terminals disagree on how wide emoji are, so the non-emoji glyphs are plain single-column symbols. Other symbols, such as the braille spinner and the checkmark, are not emoji and do not change. The setting does not hide the status line (see `tui.statusline.enabled`), disable file watching, or change automatic reloads, text, colors, or keybindings. Changes take effect when you start a new shell.
+Terminals disagree on how wide emoji are, so the non-emoji glyphs are the plain single-column status dots that devenv also uses for process states. Other symbols, such as the braille spinner and the checkmark, are not emoji and do not change. The setting does not hide the status line (see `tui.statusline.enabled`), disable file watching, or change automatic reloads, text, colors, or keybindings. Changes take effect when you start a new shell.
 
 ## Statusline layouts
 

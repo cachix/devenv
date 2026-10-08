@@ -1078,7 +1078,7 @@ mod tests {
         );
         assert_row(
             &watching(false),
-            " ◎ devenv watching 11 files",
+            " ◉ devenv watching 11 files",
             "Ctrl+Alt+D pause",
         );
     }
@@ -1091,7 +1091,7 @@ mod tests {
         };
 
         assert_row(&paused(true), " ⏸  devenv paused", "Ctrl+Alt+D resume");
-        assert_row(&paused(false), " ‖ devenv paused", "Ctrl+Alt+D resume");
+        assert_row(&paused(false), " ○ devenv paused", "Ctrl+Alt+D resume");
     }
 
     #[test]

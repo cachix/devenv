@@ -9,6 +9,8 @@
 //! already used by the status line, so the label that follows lines up with
 //! every other status.
 
+use crate::status_line::{DOT_RING, DOT_RUNNING};
+
 /// A display indicator with an emoji and a non-emoji form.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Indicator {
@@ -59,13 +61,17 @@ impl Indicators {
             (true, Indicator::Watching) => Glyph {
                 text: "👁", gap: 2
             },
-            // Single-cell symbols, so the label starts in the same column as
-            // after the checkmark, cross, and spinner.
+            // The status dots used for process states: alive while watching,
+            // an idle ring while paused. They are single-cell symbols, so the
+            // label starts in the same column as after the checkmark, cross,
+            // and spinner.
             (false, Indicator::Paused) => Glyph {
-                text: "‖", gap: 1
+                text: DOT_RING,
+                gap: 1,
             },
             (false, Indicator::Watching) => Glyph {
-                text: "◎", gap: 1
+                text: DOT_RUNNING,
+                gap: 1,
             },
         }
     }
