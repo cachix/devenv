@@ -18,6 +18,7 @@
 - Task names containing `::`, such as `foo::bar`, are now rejected with an invalid task name error. Previously they were accepted but could not be run by name ([#3227](https://github.com/cachix/devenv/issues/3227)).
 - Detached process startup now publishes the manager as soon as processes are scheduled, without waiting for service readiness, and keeps HTTPS proxy routes during a slow startup ([#3216](https://github.com/cachix/devenv/issues/3216)).
 - `devenv test` with the native process manager now reports a process dependency on `start.enable = false` before starting services, instead of waiting indefinitely for the disabled process ([#3215](https://github.com/cachix/devenv/issues/3215)).
+- SecretSpec `as_path` secrets loaded through direnv now point at files that exist. `devenv print-dev-env` writes them to the project's runtime directory, readable only by you, instead of temporary files deleted when devenv exits. Each load replaces them, and they are removed with the runtime directory: at logout when `$XDG_RUNTIME_DIR` is set, otherwise by the system's `/tmp` cleanup.
 
 ## 2.4.0 (2026-09-24)
 
