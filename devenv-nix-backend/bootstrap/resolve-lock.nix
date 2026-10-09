@@ -87,8 +87,50 @@ let
               && builtins.substring 0 1 (resolvedLocked.path or "") == "/";
 
             fetchedSource = builtins.fetchTree (node.info or { } // removeAttrs resolvedLocked [ "dir" ]);
+
+            # fetchTree only reuses the store path of an input marked `__final`, which
+            # it refuses from Nix code, so it would refetch a source the store holds.
+            storedPath =
+              builtins.unsafeDiscardStringContext
+                (derivation {
+                  name = "source";
+                  system = "builtin";
+                  builder = "builtin:fetchurl";
+                  outputHashMode = "recursive";
+                  outputHash = locked.narHash;
+                }).outPath;
+            isStored =
+              builtins.elem (locked.type or null) [
+                "git"
+                "github"
+                "gitlab"
+                "sourcehut"
+                "tarball"
+              ]
+              && locked ? narHash
+              && builtins.pathExists storedPath;
+            storedSource =
+              builtins.intersectAttrs {
+                lastModified = null;
+                narHash = null;
+                rev = null;
+                revCount = null;
+              } locked
+              // {
+                outPath = builtins.appendContext storedPath { ${storedPath}.path = true; };
+              }
+              // (
+                if locked ? lastModified then
+                  { lastModifiedDate = formatSecondsSinceEpoch locked.lastModified; }
+                else
+                  { }
+              )
+              // (if locked ? rev then { shortRev = builtins.substring 0 7 locked.rev; } else { })
+              // (if locked.type == "git" then { submodules = locked.submodules or false; } else { });
           in
-          if isLivePath then
+          if isStored then
+            storedSource
+          else if isLivePath then
             {
               # Keep fetchTree's public metadata available to flakes that use
               # self.narHash or self.lastModified. These inherited values stay

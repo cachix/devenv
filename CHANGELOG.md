@@ -18,6 +18,7 @@
 - Task names containing `::`, such as `foo::bar`, are now rejected with an invalid task name error. Previously they were accepted but could not be run by name ([#3227](https://github.com/cachix/devenv/issues/3227)).
 - Detached process startup now publishes the manager as soon as processes are scheduled, without waiting for service readiness, and keeps HTTPS proxy routes during a slow startup ([#3216](https://github.com/cachix/devenv/issues/3216)).
 - `devenv test` with the native process manager now reports a process dependency on `start.enable = false` before starting services, instead of waiting indefinitely for the disabled process ([#3215](https://github.com/cachix/devenv/issues/3215)).
+- Locked git, GitHub, GitLab, SourceHut, and tarball inputs whose source is already in the Nix store are now used from the store instead of fetched again, so `devenv shell` keeps working when the input's remote is unreachable.
 
 ## 2.4.0 (2026-09-24)
 
