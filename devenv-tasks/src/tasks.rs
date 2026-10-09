@@ -3809,7 +3809,7 @@ mod schedule_tests {
 
     /// Wait for a lifecycle notification that publishes the requested phase.
     async fn wait_phase(tasks: &Tasks, name: &str, want: ProcessPhase) {
-        tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        let waited = tokio::time::timeout(std::time::Duration::from_secs(60), async {
             loop {
                 let notified = tasks.notify_finished.notified();
                 tokio::pin!(notified);
@@ -3820,8 +3820,12 @@ mod schedule_tests {
                 notified.await;
             }
         })
-        .await
-        .unwrap_or_else(|_| panic!("timed out waiting for process {name} to reach {want:?}"))
+        .await;
+        assert!(
+            waited.is_ok(),
+            "timed out waiting for process {name} to reach {want:?}; current phase: {:?}",
+            tasks.process_runner().get_phase(name).await
+        )
     }
 
     async fn wait_task_completed(tasks: &Tasks, name: &str) {
@@ -4491,6 +4495,86 @@ mod schedule_tests {
             );
         }
 
+        tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_start_stop_keeps_explicitly_stopped_dependencies_off() {
+        let mut source = long_process_task("source", vec![]);
+        source.process = Some(ProcessConfig {
+            ready: Some(devenv_processes::ReadyConfig {
+                exec: Some("true".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![
+                long_process_task("alpha", vec![]),
+                source,
+                long_process_task("downstream", vec!["source@ready"]),
+            ],
+            vec![format!("{PROCESS_TASK_PREFIX}alpha")],
+            RunMode::Before,
+            false,
+        )
+        .await;
+        tasks.run(true).await;
+        wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
+        tasks.start_with_deps(["downstream"]).await;
+        wait_phase(&tasks, "source", ProcessPhase::Ready).await;
+        wait_phase(&tasks, "downstream", ProcessPhase::Ready).await;
+
+        for cycle in 0..25 {
+            eprintln!("start/stop cycle {cycle}");
+            tasks
+                .process_runner()
+                .stop_and_keep("downstream")
+                .await
+                .unwrap();
+            let (first, second, stopped) = tokio::join!(
+                tasks.start_with_deps(["downstream"]),
+                tasks.start_with_deps(["downstream"]),
+                tasks.process_runner().stop_and_keep("source"),
+            );
+            stopped.unwrap();
+            assert!(first.failed.is_empty() && second.failed.is_empty());
+            assert_eq!(
+                first
+                    .scheduled
+                    .iter()
+                    .chain(&second.scheduled)
+                    .filter(|name| name.as_str() == "downstream")
+                    .count(),
+                1,
+                "duplicate downstream start in cycle {cycle}"
+            );
+            wait_phase(&tasks, "source", ProcessPhase::Stopped).await;
+
+            // Stop the dependent after the race, then start it again. Its
+            // explicitly stopped prerequisite must remain off until requested.
+            tasks.process_runner().cancel_waiting("downstream").await;
+            if tasks.process_runner().get_phase("downstream").await != Some(ProcessPhase::Stopped) {
+                wait_phase(&tasks, "downstream", ProcessPhase::Ready).await;
+                tasks
+                    .process_runner()
+                    .stop_and_keep("downstream")
+                    .await
+                    .unwrap();
+            }
+            let outcome = tasks.start_with_deps(["downstream"]).await;
+            assert_eq!(outcome.scheduled, ["downstream"]);
+            wait_phase(&tasks, "downstream", ProcessPhase::Waiting).await;
+            assert_eq!(
+                tasks.process_runner().get_phase("source").await,
+                Some(ProcessPhase::Stopped),
+                "implicit start resurrected stopped source in cycle {cycle}"
+            );
+            let source_outcome = tasks.start_with_deps(["source"]).await;
+            assert_eq!(source_outcome.scheduled, ["source"], "cycle {cycle}");
+            wait_phase(&tasks, "source", ProcessPhase::Ready).await;
+            wait_phase(&tasks, "downstream", ProcessPhase::Ready).await;
+        }
         tasks.process_runner().stop_all().await.unwrap();
     }
 
