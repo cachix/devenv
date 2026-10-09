@@ -233,6 +233,8 @@ pub struct JobHandle {
     pub status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     /// Supervisor task handling restarts
     pub supervisor_task: JoinHandle<()>,
+    /// Job controller task, joined before publishing a completed stop.
+    pub job_task: JoinHandle<()>,
     /// Channel to send lifecycle commands (restart/stop) into the supervisor loop.
     pub cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
     /// Output reader tasks (stdout, stderr)
@@ -344,6 +346,7 @@ fn lifecycle_phase(terminal_phase: Option<ProcessPhase>) -> ProcessPhase {
 /// Resources consumed by [`ProcessRunner::finish_stop`].
 struct StopParts {
     job: Arc<Job>,
+    job_task: JoinHandle<()>,
     cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
     supervisor_task: JoinHandle<()>,
     notify_forwarder: JoinHandle<()>,
@@ -371,6 +374,7 @@ fn take_active_for_stop(
         resources,
         cmd_tx,
         supervisor_task,
+        job_task,
         notify_forwarder,
         output_readers,
         ..
@@ -398,6 +402,7 @@ fn take_active_for_stop(
 
     StopParts {
         job,
+        job_task,
         cmd_tx,
         supervisor_task,
         notify_forwarder,
@@ -780,6 +785,7 @@ async fn wait_for_port_conflicts_to_settle(ports: &[u16], timeout: Duration) -> 
 /// Everything a launch produces before the entry settles to Active.
 struct LaunchSetup {
     job: Arc<Job>,
+    job_task: JoinHandle<()>,
     status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     notify_socket: Option<Arc<NotifySocket>>,
@@ -798,6 +804,9 @@ impl LaunchSetup {
         self.stdout_tailer.abort();
         self.stderr_tailer.abort();
         crate::process_guardian::stop_job(&self.job, &self.scopes, &self.shutdown).await;
+        self.job.unset_spawn_child_fn().await;
+        self.job.delete().await;
+        let _ = self.job_task.await;
     }
 }
 
@@ -1395,6 +1404,7 @@ impl ProcessRunner {
                                 status_rx: setup.status_rx,
                                 cmd_tx,
                                 supervisor_task,
+                                job_task: setup.job_task,
                                 output_readers: Some((setup.stdout_tailer, setup.stderr_tailer)),
                                 notify_forwarder,
                             }),
@@ -1479,7 +1489,7 @@ impl ProcessRunner {
         let _ = std::fs::write(&proc_cmd.stdout_log, "");
         let _ = std::fs::write(&proc_cmd.stderr_log, "");
 
-        let (job, _task) = start_job(proc_cmd.command);
+        let (job, job_task) = start_job(proc_cmd.command);
         let job = Arc::new(job);
         let scopes = Arc::new(crate::process_guardian::ProcessScopeRegistry::default());
 
@@ -1597,7 +1607,9 @@ impl ProcessRunner {
 
         job.start().await;
         if let Ok(error) = start_error_rx.try_recv() {
+            job.unset_spawn_child_fn().await;
             job.delete().await;
+            let _ = job_task.await;
             bail!("Failed to spawn process '{}': {}", config.name, error);
         }
         // Spawn file tailers to emit output to activity
@@ -1618,6 +1630,7 @@ impl ProcessRunner {
 
         Ok(LaunchSetup {
             job,
+            job_task,
             status_tx,
             status_rx,
             notify_socket,
@@ -1637,6 +1650,7 @@ impl ProcessRunner {
     async fn finish_stop(&self, name: &str, parts: StopParts) {
         let StopParts {
             job,
+            job_task,
             cmd_tx,
             supervisor_task,
             notify_forwarder,
@@ -1655,6 +1669,12 @@ impl ProcessRunner {
         }
 
         crate::process_guardian::stop_job(&job, &scopes, &shutdown).await;
+        // The controller's spawn hook owns the process claim. Dropping the
+        // last job handle only queues its exit, so a rapid restart can race
+        // that release. Join the controller before making Stopped visible.
+        job.unset_spawn_child_fn().await;
+        job.delete().await;
+        let _ = job_task.await;
 
         if !ports.is_empty() {
             let release_status =
@@ -3124,8 +3144,19 @@ mod tests {
         let manager = ProcessRunner::new(temp_dir.path().to_path_buf()).unwrap();
         let config = long_running_config("restartable");
 
-        manager.start_command(&config, None).await.unwrap();
+        // A caller may still hold its launch result when stop finishes.
+        let original_job = manager.start_command(&config, None).await.unwrap().unwrap();
         assert!(manager.list().await.contains(&"restartable".to_string()));
+        // A custom spawner can hold ownership too, and is shared with the
+        // retained job handle independently of the controller task.
+        let custom_owner = Arc::new(());
+        let owner = Arc::downgrade(&custom_owner);
+        original_job
+            .set_spawn_child_fn(move |_| {
+                let _owner = &custom_owner;
+                Err(std::io::Error::other("stopped job must not spawn"))
+            })
+            .await;
 
         manager.stop_and_keep("restartable").await.unwrap();
         assert_eq!(
@@ -3133,12 +3164,20 @@ mod tests {
             Some(ProcessPhase::Stopped)
         );
 
+        assert!(
+            owner.upgrade().is_none(),
+            "stopped job retained its custom spawner"
+        );
         manager.start_not_started("restartable").await.unwrap();
         assert!(
             manager.list().await.contains(&"restartable".to_string()),
             "process should be active again after restart"
         );
 
+        assert!(
+            original_job.is_dead(),
+            "stopped job must release its ownership claim"
+        );
         let _ = manager.stop_all().await;
     }
 
