@@ -4392,10 +4392,21 @@ mod schedule_tests {
 
     #[tokio::test]
     async fn concurrent_dynamic_starts_launch_each_process_and_oneshot_once() {
+        check_concurrent_dynamic_starts(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_dynamic_starts_share_never_started_process_prerequisite() {
+        check_concurrent_dynamic_starts(true).await;
+    }
+
+    async fn check_concurrent_dynamic_starts(shared_process: bool) {
         let scripts = tempfile::tempdir().unwrap();
         let setup_count = scripts.path().join("setup-count");
         let beta_count = scripts.path().join("beta-count");
         let gamma_count = scripts.path().join("gamma-count");
+        let source_count = scripts.path().join("source-count");
+        let source_ready = scripts.path().join("source-ready");
 
         let setup_script = scripts.path().join("setup");
         std::fs::write(
@@ -4411,6 +4422,9 @@ mod schedule_tests {
         let setup_name = "devenv:tasks:shared-setup";
         let mut setup = oneshot_task(setup_name, vec![]);
         setup.command = Some(setup_script.to_string_lossy().into_owned());
+        if shared_process {
+            setup.after = vec![format!("{PROCESS_TASK_PREFIX}source@ready")];
+        }
 
         let mut beta = process_task_with_command(
             "beta",
@@ -4433,8 +4447,27 @@ mod schedule_tests {
         gamma.after = vec![setup_name.to_string()];
         gamma.process = Some(no_restart_process_config(Some(&gamma_count)));
 
+        let mut configs = vec![long_process_task("alpha", vec![]), setup, beta, gamma];
+        if shared_process {
+            let mut source = process_task_with_command(
+                "source",
+                vec![],
+                &format!(
+                    "echo source >> '{}'; exec tail -f /dev/null",
+                    source_count.display()
+                ),
+            );
+            let mut config = no_restart_process_config(Some(&source_ready));
+            config.ready.as_mut().unwrap().exec = Some(format!(
+                "test -f '{}' && test -f '{}'",
+                source_ready.display(),
+                source_count.display()
+            ));
+            source.process = Some(config);
+            configs.push(source);
+        }
         let (tasks, _tmp) = build_test_tasks_with_run_mode(
-            vec![long_process_task("alpha", vec![]), setup, beta, gamma],
+            configs,
             vec![format!("{PROCESS_TASK_PREFIX}alpha")],
             RunMode::Before,
             false,
@@ -4445,12 +4478,40 @@ mod schedule_tests {
         tasks.run(true).await;
         wait_phase(&tasks, "alpha", ProcessPhase::Ready).await;
 
+        if shared_process {
+            assert_eq!(
+                tasks.process_runner().get_phase("source").await,
+                Some(ProcessPhase::NotStarted)
+            );
+        }
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
         let first_tasks = Arc::clone(&tasks);
+        let first_barrier = Arc::clone(&barrier);
+        let first = tokio::spawn(async move {
+            first_barrier.wait().await;
+            if shared_process {
+                first_tasks.start_with_deps(["beta", "beta"]).await
+            } else {
+                first_tasks.start_with_deps(["beta", "gamma", "beta"]).await
+            }
+        });
         let second_tasks = Arc::clone(&tasks);
-        let (first, second) = tokio::join!(
-            async move { first_tasks.start_with_deps(["beta", "gamma", "beta"]).await },
-            async move { second_tasks.start_with_deps(["beta"]).await },
-        );
+        let second_barrier = Arc::clone(&barrier);
+        let second = tokio::spawn(async move {
+            second_barrier.wait().await;
+            if shared_process {
+                second_tasks.start_with_deps(["gamma", "beta"]).await
+            } else {
+                second_tasks.start_with_deps(["beta"]).await
+            }
+        });
+        barrier.wait().await;
+        // The source stays unready until these requests have both replied.
+        let (first, second) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            (first.await.unwrap(), second.await.unwrap())
+        })
+        .await
+        .expect("concurrent start requests waited for prerequisite readiness");
 
         let beta_scheduled = first
             .scheduled
@@ -4477,6 +4538,37 @@ mod schedule_tests {
         );
         assert!(first.failed.is_empty() && second.failed.is_empty());
 
+        if shared_process {
+            assert_eq!(
+                first
+                    .scheduled
+                    .iter()
+                    .chain(&second.scheduled)
+                    .filter(|name| name.as_str() == "source")
+                    .count(),
+                1,
+                "shared never-started prerequisite must be scheduled exactly once"
+            );
+            wait_phase(&tasks, "source", ProcessPhase::Starting).await;
+            assert_eq!(
+                tasks.process_runner().get_phase("beta").await,
+                Some(ProcessPhase::Waiting)
+            );
+            assert_eq!(
+                tasks.process_runner().get_phase("gamma").await,
+                Some(ProcessPhase::Waiting)
+            );
+            for path in [&setup_count, &beta_count, &gamma_count] {
+                assert!(
+                    !path.exists(),
+                    "{} ran before prerequisite readiness",
+                    path.display()
+                );
+            }
+            std::fs::write(&source_ready, "ready").unwrap();
+            wait_phase(&tasks, "source", ProcessPhase::Ready).await;
+        }
+
         wait_phase(&tasks, "beta", ProcessPhase::Ready).await;
         wait_phase(&tasks, "gamma", ProcessPhase::Ready).await;
         wait_task_completed(&tasks, setup_name).await;
@@ -4495,6 +4587,13 @@ mod schedule_tests {
             );
         }
 
+        if shared_process {
+            assert_eq!(
+                std::fs::read_to_string(source_count).unwrap(),
+                "source\n",
+                "shared process prerequisite must launch exactly once"
+            );
+        }
         tasks.process_runner().stop_all().await.unwrap();
     }
 
