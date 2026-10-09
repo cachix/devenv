@@ -10,6 +10,7 @@
 //! - `posix_activates_sibling_after_cd_out` — #2944
 //! - `activates_again_after_returning_to_the_same_project` — stale
 //!   `_DEVENV_HOOK_ACTIVATED` after a follow-cd (`nu_` variant for nushell)
+//! - `fish_hook_bypasses_user_functions_shadowing_external_tools` — #3222
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -495,6 +496,61 @@ fn fish_follow_cd_out_preserves_history_for_cd_dash() {
         "fish `cd -` did not return to the project directory that \
          `_devenv_builtin_cd_with_history` left.\nstdout: {stdout}\nstderr: {}",
         String::from_utf8_lossy(&out.stderr),
+    );
+}
+
+#[test]
+fn fish_hook_bypasses_user_functions_shadowing_external_tools() {
+    // #3222: grc's fish plugin defines `function env; grc.wrap env $argv; end`,
+    // which pipes stdout through `grcat`, so the hook-spawned `devenv shell`
+    // never saw the terminal and auto-activation hung. The hook must reach the
+    // real executables for every external tool it runs.
+    if !have("fish") {
+        return;
+    }
+    let project = fake_project();
+    let target = tempfile::tempdir().unwrap();
+    let (shim_dir, calls) = cd_out_shim(project.path(), target.path());
+
+    let bin = devenv_bin();
+    let script = format!(
+        "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR\n\
+         for tool in env cat rm devenv\n\
+             function $tool --inherit-variable tool\n\
+                 echo INTERCEPTED_$tool\n\
+                 return 97\n\
+             end\n\
+         end\n\
+         {bin} hook fish | source\n\
+         {po}\n\
+         builtin cd {project:?}\n\
+         _devenv_hook\n\
+         echo AFTER=$PWD\n",
+        po = fish_path_override(shim_dir.path()),
+        project = project.path(),
+    );
+    let out = run("fish", &script);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stdout.contains("INTERCEPTED_"),
+        "fish hook called a user function instead of the real tool.\n\
+         stdout: {stdout}\nstderr: {stderr}",
+    );
+    let recorded = fs::read_to_string(&calls).unwrap_or_default();
+    assert_eq!(
+        recorded,
+        format!("shell {}\n", project.path().display()),
+        "fish hook did not spawn exactly one devenv shell.\nstdout: {stdout}\nstderr: {stderr}",
+    );
+    assert!(
+        stdout.contains(&format!("AFTER={}", target.path().display())),
+        "fish hook did not follow the user out via the exit-dir file.\n\
+         stdout: {stdout}\nstderr: {stderr}",
+    );
+    assert!(
+        !project.path().join(".devenv/exit-dir").exists(),
+        "fish hook did not remove the exit-dir file",
     );
 }
 
