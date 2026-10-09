@@ -103,12 +103,12 @@ DAEMON_PID=$(sed -n '1p' "$PID_FILE")
 kill -0 "$DAEMON_PID"
 
 # E04: plain interactive `devenv up` attaches and a second Ctrl-C detaches.
-# First attach on a fresh daemon: "Serving HTTP" is still the newest alpha
-# line, and seeing it guarantees alpha is bound before the marker fetch.
+# Readiness probes can push the startup line out of the visible log backlog.
+# Check readiness directly, then synchronize on a fresh request marker.
+http_is_ready "$PORT_ALPHA"
 set +e
 devenv-run-tests pty plain-up.typescript "devenv up" >/dev/null <<EOF
 expect:Attached to the running process manager
-expect:Serving HTTP
 run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/plain-up-marker
 expect:plain-up-marker
 send:\003

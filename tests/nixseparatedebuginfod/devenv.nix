@@ -6,7 +6,6 @@
 }:
 
 let
-  cfg = config.services.nixseparatedebuginfod;
   fs = lib.fileset;
   inherit (pkgs.stdenv) mkDerivation;
 
@@ -30,7 +29,7 @@ in
   services.nixseparatedebuginfod.enable = true;
 
   enterTest = ''
-    wait_for_port ${toString cfg.port} 120
+    wait_for_port ${toString config.processes.nixseparatedebuginfod.ports.main.value} 120
     echo 'Querying ${lib.getExe cbin}'
     ${pkgs.elfutils}/bin/debuginfod-find debuginfo ${lib.getExe cbin}
   '';
