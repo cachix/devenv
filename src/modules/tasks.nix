@@ -510,7 +510,14 @@ in
         # Only runs as the `devenv test` root, never because shell entry ran.
         wantedBy = lib.mkIf supportsWantedBy [ ];
       };
+      "devenv:exitShell" = {
+        description = "Runs after the interactive shell exits";
+        exec = lib.mkIf (config.exitShell != "") config.exitShell;
+      };
     };
+    warnings = lib.optional
+      (config.exitShell != "" && (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.4.1"))
+      "exitShell requires devenv 2.4.1 or newer and is ignored by this CLI.";
     # In devenv 2.0+, Rust runs enterShell tasks before shell spawns (with TUI progress).
     # When cli.version is null (flakes integration) or pre-2.0, run tasks via bash hook.
     enterShell = lib.mkIf (config.devenv.cli.version == null || lib.versionOlder config.devenv.cli.version "2.0") ''

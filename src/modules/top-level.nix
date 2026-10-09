@@ -99,6 +99,19 @@ in
       default = "";
     };
 
+    exitShell = lib.mkOption {
+      type = types.lines;
+      description = ''
+        Bash code to execute after the interactive `devenv shell` exits.
+
+        Runs as the `devenv:exitShell` task in a separate process, not inside the exiting shell.
+        Not run by direnv, `devenv shell -- <cmd>`, or shells started with `--no-reload`.
+        Supported by devenv 2.4.1 or newer.
+      '';
+      default = "";
+      example = "devenv down";
+    };
+
     overlays = lib.mkOption {
       type = types.listOf (types.functionTo (types.functionTo types.attrs));
       description = "List of overlays to apply to pkgs. Each overlay is a function that takes two arguments: final and prev. Supported by devenv 1.4.2 or newer.";
