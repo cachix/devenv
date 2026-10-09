@@ -25,12 +25,33 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  # zig-overlay imports files directly from its nixpkgs input. devenv-nixpkgs
+  # is a wrapper flake, so its source root is not the package set's source.
+  # Import the overlay with the source that produced pkgs instead.
+  zigPackages = import "${zig-overlay.outPath}/default.nix" {
+    inherit pkgs;
+    nixpkgs = pkgs.path;
+    system = pkgs.stdenv.hostPlatform.system;
+  };
+
   zls = config.lib.getInput {
     name = "zls";
     url = "github:zigtools/zls/${zlsVersion}";
     attribute = "languages.zig.version";
-    follows = [ "nixpkgs" "zig-overlay" ];
+    follows = [ "nixpkgs" ] ++ lib.optional (lib.versionOlder zlsVersion "0.16.0") "zig-overlay";
   };
+
+  # Older ZLS releases build with zig-overlay themselves. Supply the corrected
+  # packages there too, preserving the compiler version selected by ZLS.
+  zlsPackages =
+    if zls.inputs ? zig-overlay then
+      ((import "${zls.outPath}/flake.nix").outputs (zls.inputs // {
+        self = zls;
+        zig-overlay = zig-overlay // {
+          packages.${pkgs.stdenv.hostPlatform.system} = zigPackages;
+        };
+      })).packages
+    else zls.packages;
 in
 {
   imports = [
@@ -45,7 +66,8 @@ in
       default = null;
       description = ''
         The Zig version to use.
-        This automatically sets the `languages.zig.package` and `languages.zig.lsp.package` using [zig-overlay](https://github.com/mitchellh/zig-overlay).
+        This sets `languages.zig.package` using [zig-overlay](https://github.com/mitchellh/zig-overlay)
+        and `languages.zig.lsp.package` using the matching [ZLS](https://github.com/zigtools/zls) release.
       '';
       example = "0.15.1";
     };
@@ -70,11 +92,11 @@ in
 
   config = lib.mkIf cfg.enable {
     languages.zig.package = lib.mkIf (cfg.version != null) (
-      zig-overlay.packages.${pkgs.stdenv.system}.${cfg.version}
+      zigPackages.${cfg.version}
     );
 
     languages.zig.lsp.package = lib.mkIf (cfg.version != null) (
-      zls.packages.${pkgs.stdenv.system}.zls
+      zlsPackages.${pkgs.stdenv.hostPlatform.system}.zls
     );
 
     packages = [

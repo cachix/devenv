@@ -120,7 +120,17 @@ in
     };
 
     clientPackage = lib.mkOption {
-      default = pkgs.minio-client;
+      # go-m1cpu's cgo initializer crashes when an Apple CPU's IOKit frequency
+      # properties are missing: https://github.com/shoenig/go-m1cpu/issues/25.
+      # The pure Go build avoids that initializer and supports the same commands.
+      default =
+        if pkgs.stdenv.hostPlatform.isDarwin && pkgs.stdenv.hostPlatform.isAarch64 then
+          pkgs.minio-client.overrideAttrs
+            (old: {
+              env = (old.env or { }) // { CGO_ENABLED = "0"; };
+            })
+        else
+          pkgs.minio-client;
       defaultText = lib.literalExpression "pkgs.minio-client";
       type = types.package;
       description = "MinIO client package to use.";

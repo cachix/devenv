@@ -15,7 +15,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{EdgeRef, Reversed};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::time::Instant;
@@ -240,6 +240,14 @@ impl Tasks {
     /// Returns the process runner used by process tasks.
     pub fn process_runner(&self) -> &Arc<ProcessRunner> {
         &self.process_runner
+    }
+
+    /// Connect a capability broker before the task runner is shared or run.
+    /// This lets callers validate the task graph before prompting for sudo.
+    pub fn set_capability_broker(&mut self, path: &Path) -> miette::Result<()> {
+        let runner = Arc::get_mut(&mut self.process_runner)
+            .ok_or_else(|| miette::miette!("Cannot configure a shared process runner"))?;
+        runner.set_capability_broker(path)
     }
 
     /// Wakes on task completions and process-map transitions.
@@ -655,14 +663,26 @@ impl Tasks {
             ))
         ));
 
-        self.run_internal(orchestration_activity, is_process_mode)
+        self.run_internal(orchestration_activity, is_process_mode, None)
             .await
     }
 
     /// Run process tasks under a caller-provided activity.
     #[instrument(skip(self, parent_activity))]
     pub async fn run_with_parent_activity(&self, parent_activity: Arc<Activity>) -> Outputs {
-        self.run_internal(parent_activity, true).await
+        self.run_internal(parent_activity, true, None).await
+    }
+
+    /// Signal once the initial process graph is registered and scheduled.
+    /// The daemon can expose its API before long-running tasks or readiness
+    /// probes settle, while clients still see the full process graph.
+    pub async fn run_with_parent_activity_and_signal_scheduled(
+        &self,
+        parent_activity: Arc<Activity>,
+        scheduled: tokio::sync::oneshot::Sender<()>,
+    ) -> Outputs {
+        self.run_internal(parent_activity, true, Some(scheduled))
+            .await
     }
 
     /// Schedule named process tasks and their dependencies against the live graph.
@@ -960,6 +980,40 @@ impl Tasks {
             .filter(|edge| scheduled.contains(&edge.source()))
             .map(|edge| (self.graph[edge.source()].clone(), *edge.weight()))
             .collect()
+    }
+
+    /// Find cold-start dependencies that cannot progress without manually
+    /// starting a process disabled by `start.enable = false`. A noninteractive
+    /// caller such as `devenv test` cannot perform that action.
+    pub async fn disabled_process_dependencies(&self) -> Vec<(String, String)> {
+        let scheduled: HashSet<_> = self.tasks_order.iter().copied().collect();
+        let mut blockers = Vec::new();
+        for &index in &self.tasks_order {
+            let dependent_name = self.graph[index].read().await.task.name.clone();
+            for edge in self
+                .graph
+                .edges_directed(index, petgraph::Direction::Incoming)
+            {
+                if !scheduled.contains(&edge.source())
+                    || *edge.weight() == DependencyKind::Completed
+                {
+                    continue;
+                }
+                let dependency = self.graph[edge.source()].read().await;
+                if dependency.task.r#type == TaskType::Process
+                    && dependency
+                        .task
+                        .process
+                        .as_ref()
+                        .is_some_and(|process| !process.start.enable)
+                {
+                    blockers.push((dependent_name.clone(), dependency.task.name.clone()));
+                }
+            }
+        }
+        blockers.sort();
+        blockers.dedup();
+        blockers
     }
 
     /// Start unseen one-shots in a dynamic dependency closure exactly once.
@@ -1323,6 +1377,7 @@ impl Tasks {
         &self,
         orchestration_activity: Arc<Activity>,
         register_unscheduled_processes: bool,
+        scheduled_signal: Option<tokio::sync::oneshot::Sender<()>>,
     ) -> Outputs {
         // Assign activity IDs upfront for all tasks
         let mut task_ids: HashMap<NodeIndex, u64> = HashMap::new();
@@ -1656,6 +1711,12 @@ impl Tasks {
                 }
                 .in_activity(&orchestration_activity_clone)
             });
+        }
+
+        // All process entries are registered before the daemon advertises its
+        // API. Task execution and readiness checks continue in the background.
+        if let Some(scheduled_signal) = scheduled_signal {
+            let _ = scheduled_signal.send(());
         }
 
         // Wait for all tasks to complete
@@ -2350,6 +2411,60 @@ mod schedule_tests {
 
     fn long_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
         process_task_with_command(name, after, "exec tail -f /dev/null")
+    }
+
+    #[tokio::test]
+    async fn daemon_can_publish_manager_before_initial_tasks_settle() {
+        let files = tempfile::tempdir().unwrap();
+        let hold = named_pipe(files.path(), "hold-setup");
+        let mut setup = oneshot_task("test:setup", vec![]);
+        setup.command = Some(
+            executable_script(
+                files.path(),
+                "setup",
+                &format!("read _ < '{}'", hold.display()),
+            )
+            .to_string_lossy()
+            .into_owned(),
+        );
+        let mut app = long_process_task("app", vec![]);
+        app.after = vec!["test:setup@succeeded".to_string()];
+        let (tasks, _tmp) = build_test_tasks(
+            vec![setup, app],
+            vec![format!("{PROCESS_TASK_PREFIX}app")],
+            false,
+        )
+        .await;
+        let tasks = Arc::new(tasks);
+        let (scheduled_tx, scheduled_rx) = tokio::sync::oneshot::channel();
+        let running = Arc::clone(&tasks);
+        let run = tokio::spawn(async move {
+            running
+                .run_with_parent_activity_and_signal_scheduled(
+                    Arc::new(devenv_activity::start!(
+                        Activity::operation("Running processes").parent(None)
+                    )),
+                    scheduled_tx,
+                )
+                .await
+        });
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), scheduled_rx)
+            .await
+            .expect("process graph was not scheduled")
+            .expect("process scheduling ended without a signal");
+        assert!(!run.is_finished(), "setup should still be running");
+        assert_eq!(
+            tasks.process_runner().get_phase("app").await,
+            Some(ProcessPhase::Waiting)
+        );
+
+        tasks.shutdown.shutdown();
+        tokio::time::timeout(std::time::Duration::from_secs(10), run)
+            .await
+            .expect("cancelled task run did not settle")
+            .expect("task run panicked");
+        tasks.process_runner().stop_all().await.unwrap();
     }
 
     fn self_exit_process_task(name: &str, after: Vec<&str>) -> TaskConfig {
@@ -4443,6 +4558,58 @@ mod schedule_tests {
         assert!(!tasks.dependency_parked("gamma").await);
 
         tasks.process_runner().stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn disabled_process_dependencies_report_blockers_in_the_cold_schedule() {
+        let mut disabled = long_process_task("disabled", vec![]);
+        disabled.process = Some(ProcessConfig {
+            start: devenv_processes::config::StartConfig { enable: false },
+            ready: Some(devenv_processes::ReadyConfig {
+                exec: Some("true".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let mut bridge = oneshot_task("test:bridge", vec![]);
+        bridge.after = vec![format!("{PROCESS_TASK_PREFIX}disabled@started")];
+        let mut app = long_process_task("app", vec![]);
+        app.after = vec!["test:bridge@succeeded".to_string()];
+        let mut unrelated = long_process_task("unrelated", vec![]);
+        unrelated.after = vec![format!("{PROCESS_TASK_PREFIX}disabled@started")];
+
+        let (tasks, _tmp) = build_test_tasks_with_run_mode(
+            vec![
+                disabled,
+                long_process_task("direct", vec!["disabled"]),
+                long_process_task("completed", vec!["disabled@completed"]),
+                bridge,
+                app,
+                unrelated,
+            ],
+            vec![
+                format!("{PROCESS_TASK_PREFIX}direct"),
+                format!("{PROCESS_TASK_PREFIX}completed"),
+                format!("{PROCESS_TASK_PREFIX}app"),
+            ],
+            RunMode::Before,
+            false,
+        )
+        .await;
+
+        assert_eq!(
+            tasks.disabled_process_dependencies().await,
+            vec![
+                (
+                    format!("{PROCESS_TASK_PREFIX}direct"),
+                    format!("{PROCESS_TASK_PREFIX}disabled"),
+                ),
+                (
+                    "test:bridge".to_string(),
+                    format!("{PROCESS_TASK_PREFIX}disabled"),
+                ),
+            ]
+        );
     }
 
     #[tokio::test]
