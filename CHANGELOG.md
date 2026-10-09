@@ -4,7 +4,7 @@
 
 ### Bug Fixes
 
-- Task cancellation now waits for nested commands to stop before the scheduler exits ([#3251](https://github.com/cachix/devenv/issues/3251)).
+- Task cancellation now stops status checks and waits for nested commands to stop before the scheduler exits ([#3251](https://github.com/cachix/devenv/issues/3251)).
 - Fixed `devenv machines install` hanging while uploading store paths when no SSH connection was already open ([#3254](https://github.com/cachix/devenv/issues/3254)).
 - Nushell hot reload no longer breaks commands that use structured environment variables and now removes variables that disappeared after a reload ([#3230](https://github.com/cachix/devenv/issues/3230)).
 - MySQL now creates configured databases and users when started with `devenv up`, including `devenv up mysql` ([#2843](https://github.com/cachix/devenv/issues/2843)).

@@ -6,6 +6,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug)]
 pub struct ExecutionResult {
     pub success: bool,
+    /// Whether the command exited, including termination by a signal.
+    pub exited: bool,
     pub pid: Option<u32>,
     pub exit_code: Option<i32>,
     pub stdout_lines: Vec<(std::time::Instant, String)>,
@@ -17,6 +19,7 @@ impl ExecutionResult {
     fn failed(error: impl Into<String>) -> Self {
         Self {
             success: false,
+            exited: false,
             pid: None,
             exit_code: None,
             stdout_lines: Vec::new(),
@@ -218,6 +221,7 @@ pub async fn execute(
                         error!("Error waiting for command: {}", e);
                         return ExecutionResult {
                             success: false,
+                            exited: false,
                             pid: Some(child_pid),
                             exit_code: None,
                             stdout_lines,
@@ -242,6 +246,7 @@ pub async fn execute(
                     )
                 });
                 let (wait_result, cleanup_result) = tokio::join!(child.wait(), cleanup);
+                let exited = wait_result.is_ok();
                 let exit_code = match wait_result {
                     Ok(status) => status.code(),
                     Err(error) => {
@@ -257,6 +262,7 @@ pub async fn execute(
 
                 return ExecutionResult {
                     success: false,
+                    exited,
                     pid: Some(child_pid),
                     exit_code,
                     stdout_lines,
@@ -270,6 +276,7 @@ pub async fn execute(
     let success = exit_status.map(|s| s.success()).unwrap_or(false);
     ExecutionResult {
         success,
+        exited: exit_status.is_some(),
         pid: Some(child_pid),
         exit_code: exit_status.and_then(|status| status.code()),
         stdout_lines,

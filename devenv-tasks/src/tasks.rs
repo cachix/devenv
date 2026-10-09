@@ -3436,6 +3436,54 @@ mod schedule_tests {
 
     #[tokio::test]
     async fn shutdown_drains_nested_oneshot_processes_before_returning() {
+        check_shutdown_drains_nested_task_processes(false).await;
+    }
+
+    #[tokio::test]
+    async fn shutdown_drains_nested_status_processes_before_returning() {
+        check_shutdown_drains_nested_task_processes(true).await;
+    }
+
+    #[tokio::test]
+    async fn status_probe_exit_preserves_cache_hit_and_miss_behavior() {
+        for (probe, cached) in [
+            ("exit 0", true),
+            ("exit 1", false),
+            ("kill -TERM $$", false),
+        ] {
+            let files = tempfile::tempdir().unwrap();
+            let status = executable_script(files.path(), "status", probe);
+            let command = executable_script(files.path(), "command", "touch command-ran");
+            let mut task = oneshot_task("test:status", vec![]);
+            task.status = Some(status.to_string_lossy().into_owned());
+            task.command = Some(command.to_string_lossy().into_owned());
+            task.cwd = Some(files.path().to_string_lossy().into_owned());
+            let (tasks, _tmp) =
+                build_test_tasks(vec![task], vec!["test:status".into()], false).await;
+            tasks.run(false).await;
+            let state = tasks.graph[tasks.task_index_by_name["test:status"]]
+                .read()
+                .await;
+            if cached {
+                assert!(matches!(
+                    state.status,
+                    TaskStatus::Completed(TaskCompleted::Skipped(_))
+                ));
+            } else {
+                assert!(
+                    matches!(
+                        state.status,
+                        TaskStatus::Completed(TaskCompleted::Success(_, _))
+                    ),
+                    "status probe {probe} must be a cache miss: {:?}",
+                    state.status
+                );
+            }
+            assert_eq!(files.path().join("command-ran").exists(), !cached);
+        }
+    }
+
+    async fn check_shutdown_drains_nested_task_processes(status_check: bool) {
         struct FixtureCleanup(std::path::PathBuf);
 
         impl Drop for FixtureCleanup {
@@ -3467,7 +3515,14 @@ mod schedule_tests {
             ),
         );
         let mut observer = oneshot_task("test:observer", vec![]);
-        observer.command = Some(script.to_string_lossy().into_owned());
+        if status_check {
+            observer.status = Some(script.to_string_lossy().into_owned());
+            let command = executable_script(files.path(), "command", "touch command-ran");
+            observer.command = Some(command.to_string_lossy().into_owned());
+            observer.cwd = Some(files.path().to_string_lossy().into_owned());
+        } else {
+            observer.command = Some(script.to_string_lossy().into_owned());
+        }
         let dependent = oneshot_task("test:dependent", vec!["test:observer"]);
         let (tasks, _tmp) = build_test_tasks(
             vec![observer, dependent],
@@ -3501,6 +3556,10 @@ mod schedule_tests {
         assert!(
             state.trim().is_empty() || state.trim().starts_with('Z'),
             "scheduler returned with nested task child {nested_pid} still alive: {state}"
+        );
+        assert!(
+            !files.path().join("command-ran").exists(),
+            "cancelled status check must not run the task command"
         );
         for name in ["test:observer", "test:dependent"] {
             let state = tasks.graph[tasks.task_index_by_name[name]].read().await;
