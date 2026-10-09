@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Added `machines.<name>.builder.sshKey` and `builder.publicHostKey` so `--use-machines-as-builders` works when the nix-daemon (root) cannot use your SSH agent or `known_hosts` ([#3262](https://github.com/cachix/devenv/issues/3262)).
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
 
 ### Bug Fixes

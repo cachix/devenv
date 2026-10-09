@@ -295,7 +295,17 @@ devenv machines deploy --use-machines-as-builders
 
 The flag also works with `install`, but a fresh target cannot build its own system. Another declared machine with the matching architecture must be available. This flag currently requires the C-Nix backend. Plain `devenv build` does not accept it.
 
-Remote builders cannot use `target.sshOpts`. Put builder authentication and routing in an SSH host alias instead, configured for the user running the nix-daemon. The target must accept the copied paths: make the invoking user trusted with `nix.settings.trusted-users`, or sign the paths with a key the target trusts. Otherwise the copy can fail with a missing trusted signature. Devenv enables substituters for these builders.
+Remote builders cannot use `target.sshOpts`. On multi-user Nix the nix-daemon opens builder connections as root, so your own SSH agent, keys and `known_hosts` are not used. Give the daemon a key it can read and pin the builder's host key:
+
+```nix
+machines.server.builder = {
+  sshKey = "/etc/nix/builder_ed25519";
+  # base64 -w0 /etc/ssh/ssh_host_ed25519_key.pub
+  publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUJyZXBsYWNlbWU=";
+};
+```
+
+Otherwise, put builder authentication and routing in an SSH host alias configured for the user running the nix-daemon. The target must accept the copied paths: make the invoking user trusted with `nix.settings.trusted-users`, or sign the paths with a key the target trusts. Otherwise the copy can fail with a missing trusted signature. Devenv enables substituters for these builders.
 
 ## Bootstrap files and secrets for NixOS installs
 
