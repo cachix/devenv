@@ -337,6 +337,8 @@ struct MachineSecretspec {
 struct MachineMeta {
     system: String,
     target: MachineTarget,
+    #[serde(default)]
+    builder: MachineBuilder,
     #[serde(rename = "hasNixos")]
     has_nixos: bool,
     #[serde(rename = "hasNixDarwin")]
@@ -388,6 +390,16 @@ struct TargetBootstrapInstall<'a> {
 struct MachineInstallCheck {
     #[serde(rename = "hasRootAuth")]
     has_root_auth: bool,
+}
+
+/// Remote builder overrides. Nix's daemon opens builder connections as root,
+/// so the invoking user's SSH identity and known_hosts are not available.
+#[derive(Debug, Clone, Default, Deserialize)]
+struct MachineBuilder {
+    #[serde(rename = "sshKey")]
+    ssh_key: Option<String>,
+    #[serde(rename = "publicHostKey")]
+    public_host_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -561,8 +573,9 @@ fn selected_host_identities(
 /// machine with `target.host` set and a matching `system` becomes a
 /// candidate remote builder. Returns `None` if no builders are available.
 ///
-/// Format: `ssh://user@host system` (one entry per builder), joined by `;`
-/// for Nix's `builders` setting.
+/// Format: `ssh://user@host system [sshKey - - - - publicHostKey]` (one
+/// entry per builder, unset fields as `-`), joined by `;` for Nix's
+/// `builders` setting.
 fn resolve_builders_config(
     meta: &BTreeMap<String, MachineMeta>,
     excluded: &HashSet<MachineHostIdentity>,
@@ -588,7 +601,22 @@ fn resolve_builders_config(
                      target.sshOpts before using --use-machines-as-builders."
                 );
             }
-            Ok(Some(format!("{} {}", target.nix_copy_uri(), m.system)))
+            let field = |option: &str, value: &Option<String>| -> Result<String> {
+                match value.as_deref() {
+                    None => Ok("-".to_string()),
+                    Some(v) if v.is_empty() || v.contains(char::is_whitespace) || v.contains(';') => {
+                        bail!("machines.{name}.builder.{option} must be non-empty without whitespace or ';'")
+                    }
+                    Some(v) => Ok(v.to_string()),
+                }
+            };
+            let ssh_key = field("sshKey", &m.builder.ssh_key)?;
+            let host_key = field("publicHostKey", &m.builder.public_host_key)?;
+            let mut entry = format!("{} {}", target.nix_copy_uri(), m.system);
+            if ssh_key != "-" || host_key != "-" {
+                entry.push_str(&format!(" {ssh_key} - - - - {host_key}"));
+            }
+            Ok(Some(entry))
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()
@@ -4022,6 +4050,7 @@ remote = "awssm"
                 host: host.map(str::to_string),
                 ssh_opts: vec![],
             },
+            builder: MachineBuilder::default(),
             has_nixos,
             has_nix_darwin: false,
             has_home_manager: !has_nixos,
@@ -4063,6 +4092,62 @@ remote = "awssm"
     }
 
     #[test]
+    fn resolve_builders_config_emits_builder_ssh_key_and_host_key() {
+        let machine = |builder: MachineBuilder| MachineMeta {
+            system: "x86_64-linux".to_string(),
+            target: MachineTarget {
+                host: Some("root@builder.example.com".to_string()),
+                ssh_opts: vec![],
+            },
+            builder,
+            has_nixos: true,
+            has_nix_darwin: false,
+            has_home_manager: false,
+            kexec_image: None,
+            kexec_post_ssh_port: None,
+            copy_host_keys: false,
+            secretspec: MachineSecretspec::default(),
+            bootstrap_secrets: Vec::new(),
+            extra_files: BTreeMap::new(),
+            encryption_keys: BTreeMap::new(),
+        };
+        let resolve = |builder: MachineBuilder| {
+            let meta = BTreeMap::from([("builder".to_string(), machine(builder))]);
+            resolve_builders_config(&meta, &HashSet::new())
+        };
+
+        assert_eq!(
+            resolve(MachineBuilder {
+                ssh_key: Some("/etc/nix/builder_ed25519".to_string()),
+                public_host_key: Some("c3NoLWVkMjU1MTkgQUFBQQ==".to_string()),
+            })
+            .unwrap()
+            .unwrap(),
+            "ssh://root@builder.example.com x86_64-linux /etc/nix/builder_ed25519 - - - - c3NoLWVkMjU1MTkgQUFBQQ=="
+        );
+        assert_eq!(
+            resolve(MachineBuilder {
+                ssh_key: None,
+                public_host_key: Some("c3NoLWVkMjU1MTkgQUFBQQ==".to_string()),
+            })
+            .unwrap()
+            .unwrap(),
+            "ssh://root@builder.example.com x86_64-linux - - - - - c3NoLWVkMjU1MTkgQUFBQQ=="
+        );
+
+        let error = resolve(MachineBuilder {
+            ssh_key: Some("/path with space/key".to_string()),
+            public_host_key: None,
+        })
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("machines.builder.builder.sshKey")
+        );
+    }
+
+    #[test]
     fn resolve_builders_config_rejects_target_ssh_opts() {
         let mut meta = BTreeMap::new();
         meta.insert(
@@ -4073,6 +4158,7 @@ remote = "awssm"
                     host: Some("builder-alias".to_string()),
                     ssh_opts: vec!["-o".to_string(), "ProxyJump=bastion".to_string()],
                 },
+                builder: MachineBuilder::default(),
                 has_nixos: true,
                 has_nix_darwin: false,
                 has_home_manager: false,

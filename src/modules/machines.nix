@@ -298,6 +298,31 @@ let
         description = "SSH destination for install and deploy. See the `target.host` and `target.sshOpts` suboptions.";
       };
 
+      builder = {
+        sshKey = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = ''
+            Private SSH key used when this machine serves as a remote builder
+            (`--use-machines-as-builders`). The nix-daemon opens builder
+            connections as root, so the key must be readable by the daemon.
+            Use a string; relative paths resolve against the devenv root.
+          '';
+          example = "/etc/nix/builder_ed25519";
+        };
+
+        publicHostKey = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = ''
+            Base64-encoded public host key of this machine, used to verify it
+            as a remote builder without root's `known_hosts`.
+            Output of `base64 -w0 /etc/ssh/ssh_host_ed25519_key.pub`.
+          '';
+          example = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUJyZXBsYWNlbWU=";
+        };
+      };
+
       nixos = lib.mkOption {
         type = lib.types.nullOr lib.types.unspecified;
         description = "NixOS configuration for the machine.";
@@ -788,6 +813,21 @@ in
               };
             };
           };
+          builder = lib.mkOption {
+            description = "Remote builder settings copied into CLI metadata.";
+            type = lib.types.submodule {
+              options = {
+                sshKey = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  description = "Absolute builder SSH key path.";
+                };
+                publicHostKey = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  description = "Base64 builder public host key.";
+                };
+              };
+            };
+          };
           hasNixos = lib.mkOption {
             type = lib.types.bool;
             description = "Whether the machine defines a NixOS role.";
@@ -862,6 +902,10 @@ in
     (_name: m: {
       inherit (m) system;
       target = { inherit (m.target) host sshOpts; };
+      builder = {
+        sshKey = if m.builder.sshKey == null then null else resolveInstallPath m.builder.sshKey;
+        inherit (m.builder) publicHostKey;
+      };
       hasNixos = m.nixos != null;
       hasNixDarwin = m.nix-darwin != null;
       hasHomeManager = m.home-manager != null;
