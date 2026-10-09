@@ -904,10 +904,16 @@ fn backend_thread_main(
     })
 }
 
+/// Presentation settings for the interactive PTY shell session.
+struct ShellSessionOptions {
+    keybindings: devenv_shell::keybindings::ShellKeybindings,
+    indicators: devenv_shell::indicators::Indicators,
+}
+
 fn frontend_thread_main(
     renderer: Renderer,
     session_status_line: Option<bool>,
-    shell_keybindings: devenv_shell::keybindings::ShellKeybindings,
+    shell_session: ShellSessionOptions,
     frontend_rx: tokio_mpsc::Receiver<FrontendCommand>,
     event_tx: tokio_mpsc::Sender<FrontendEvent>,
     verbosity: VerbosityLevel,
@@ -924,7 +930,8 @@ fn frontend_thread_main(
             .block_on(
                 ShellSession::with_defaults()
                     .with_status_line(show_status_line)
-                    .with_keybindings(shell_keybindings)
+                    .with_keybindings(shell_session.keybindings)
+                    .with_indicators(shell_session.indicators)
                     .with_shutdown_token(shutdown.cancellation_token())
                     .run(frontend_rx, event_tx, SessionIo::default()),
             )
@@ -960,7 +967,10 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
 
     let (renderer, _activity_guard) = Renderer::init(&frontend);
     let tui = matches!(&renderer, Renderer::Tui { .. });
-    let shell_keybindings = frontend.shell_keybindings.clone();
+    let shell_session = ShellSessionOptions {
+        keybindings: frontend.shell_keybindings.clone(),
+        indicators: frontend.tui_preferences.indicators(),
+    };
 
     let _tracing_guard = devenv_tracing::init_tracing(frontend.log_level, &frontend.tracing_specs);
 
@@ -1045,7 +1055,7 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
                 frontend_thread_main(
                     renderer,
                     session_status_line,
-                    shell_keybindings,
+                    shell_session,
                     frontend_rx,
                     event_tx,
                     verbosity,

@@ -1,6 +1,7 @@
 #![cfg(feature = "test-pty")]
 
 use devenv_mailbox::{FrontendCommand, FrontendEvent, ProcessCommand};
+use devenv_shell::indicators::Indicators;
 use devenv_shell::keybindings::{ShellAction, ShellKeyChord, ShellKeyCode, ShellKeybindings};
 use devenv_shell::vt_utils::{DEFAULT_MAX_SCROLLBACK, active_point, row_plain_text, screen_point};
 use devenv_shell::{
@@ -824,13 +825,17 @@ async fn test_build_failed_error_toggle() {
     let _ = handle.await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_watching_paused_status_line() {
+/// Drive a session through watching, paused, and resumed, and snapshot the
+/// status line in the last two states.
+async fn assert_watching_paused_status_line(
+    session: ShellSession,
+    paused_snapshot: &'static str,
+    resumed_snapshot: &'static str,
+) {
     let (io, mut stdin_ours, mut stdout_ours) = test_io();
     let (cmd_tx, cmd_rx) = mpsc::channel(10);
     let (event_tx, _event_rx) = mpsc::channel(10);
 
-    let session = status_line_session();
     let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
 
     cmd_tx.send(spawn_cmd("read unused")).await.unwrap();
@@ -854,7 +859,7 @@ async fn test_watching_paused_status_line() {
         Duration::from_secs(5),
     ));
     let rows = render(&all_bytes, 80, 24);
-    insta::assert_snapshot!("paused", rows[23]);
+    insta::assert_snapshot!(paused_snapshot, rows[23]);
 
     // Resume watching
     cmd_tx
@@ -867,12 +872,24 @@ async fn test_watching_paused_status_line() {
         Duration::from_secs(5),
     ));
     let rows = render(&all_bytes, 80, 24);
-    insta::assert_snapshot!("resumed", rows[23]);
+    insta::assert_snapshot!(resumed_snapshot, rows[23]);
 
     let _ = stdin_ours.write_all(b"\n");
     drop(stdin_ours);
     drop(cmd_tx);
     let _ = handle.await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_watching_paused_status_line() {
+    assert_watching_paused_status_line(status_line_session(), "paused", "resumed").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_watching_paused_status_line_without_emoji() {
+    let session = status_line_session().with_indicators(Indicators::new(false));
+    assert_watching_paused_status_line(session, "paused_without_emoji", "resumed_without_emoji")
+        .await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
