@@ -2299,6 +2299,63 @@ impl Devenv {
         Ok((exports, messages))
     }
 
+    /// Run exitShell tasks after an interactive shell session ends.
+    ///
+    /// Returns `None` when nothing is attached to `devenv:exitShell`, skipping
+    /// the environment capture.
+    ///
+    /// Uses its own shutdown handle: the session often ends because of a
+    /// signal (e.g. SIGHUP from a closed terminal) that already cancelled the
+    /// CLI-wide one, and cleanup such as `devenv down` must still run. A
+    /// repeated signal still force-exits through the global handler.
+    pub async fn run_exit_shell_tasks(
+        &self,
+        verbosity: VerbosityLevel,
+    ) -> Result<Option<tasks::TasksStatus>> {
+        const ROOT: &str = "devenv:exitShell";
+
+        let task_configs = self.load_tasks().await?;
+        let has_work = task_configs.iter().any(|task| {
+            if task.name == ROOT {
+                task.command.is_some()
+            } else {
+                task.before.iter().chain(&task.after).any(|dep| dep == ROOT)
+                    || task
+                        .wanted_by
+                        .as_ref()
+                        .is_some_and(|wanted| wanted.iter().any(|dep| dep == ROOT))
+            }
+        });
+        if !has_work {
+            return Ok(None);
+        }
+
+        let envs = self.capture_shell_environment().await?;
+        let config = tasks::Config {
+            roots: vec![ROOT.to_string()],
+            tasks: task_configs,
+            run_mode: devenv_tasks::RunMode::All,
+            runtime_dir: self.devenv_runtime.clone(),
+            cache_dir: self.devenv_state_dir(),
+            sudo_context: None,
+            env: envs,
+            bash: self.get_bash_path().await?,
+            ignore_process_deps: false,
+            exit_on_idle: Some(false),
+            supervisor: devenv_processes::SupervisionMode::Native,
+            capability_broker: None,
+        };
+
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))
+            .build()
+            .await?;
+        let result = run_tasks(tasks, true).await;
+        shutdown.shutdown_and_wait().await;
+        let (status, _outputs) = result?;
+        Ok(Some(status))
+    }
+
     /// Run tasks with the given roots, storing exports on self for prepare_shell().
     async fn run_tasks_with_roots(
         &self,

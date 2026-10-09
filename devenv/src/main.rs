@@ -1198,6 +1198,9 @@ async fn run_backend(
         });
         let devenv = tokio::task::block_in_place(|| owner_handle.join())
             .map_err(|e| miette::miette!("Devenv owner thread panicked: {}", panic_message(e)))?;
+        if result.is_ok() {
+            run_exit_shell_tasks(&devenv, verbosity).await;
+        }
         return debugger_or_err(result, nix_debugger, devenv);
     }
 
@@ -1235,6 +1238,23 @@ async fn run_backend(
     let _ = frontend_tx.send(FrontendCommand::ExitRenderer).await;
 
     debugger_or_err(result, nix_debugger, devenv)
+}
+
+/// Run exitShell tasks once the interactive shell has exited. The renderer and
+/// shell session are gone by now, so failures go straight to stderr, and they
+/// never replace the shell's exit code.
+async fn run_exit_shell_tasks(devenv: &devenv::Devenv, verbosity: VerbosityLevel) {
+    // The terminal may already be gone (window closed, SIGHUP), so a failed
+    // write must not panic like `eprintln!` would.
+    match devenv.run_exit_shell_tasks(verbosity).await {
+        Ok(Some(status)) if status.has_failures() => {
+            let _ = writeln!(io::stderr(), "devenv: exitShell tasks failed");
+        }
+        Ok(_) => {}
+        Err(err) => {
+            let _ = writeln!(io::stderr(), "devenv: exitShell tasks failed: {err:?}");
+        }
+    }
 }
 
 /// On error with `--nix-debugger`, defer to the debugger REPL by carrying the

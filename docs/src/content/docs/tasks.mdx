@@ -179,6 +179,23 @@ Succeeded         devenv:enterShell         13ms
 Many devenv modules automatically hook into these events.
 For example, enabling git hooks registers `devenv:git-hooks:install` as a dependency of `devenv:enterShell`.
 
+## exitShell
+
+<VersionCompatibility version="2.4.1" />
+
+`devenv:exitShell` runs after an interactive `devenv shell` exits, including when the terminal is closed.
+Set `exitShell` for a one-liner, or attach tasks with `before = [ "devenv:exitShell" ];`.
+For example, to stop processes started with `devenv up -d` when you leave the shell:
+
+```nix title="devenv.nix"
+{
+  exitShell = "devenv down";
+}
+```
+
+`exitShell` runs as a task in a separate process, not inside the exiting shell, so it cannot see variables set interactively.
+It does not run for `devenv shell -- <cmd>`, `devenv shell --no-reload`, non-terminal sessions, or direnv.
+
 ## Using your favourite language
 
 Tasks can also use another package for execution, for example when entering the shell:
