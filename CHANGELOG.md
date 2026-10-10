@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 
+- `devenv inputs add` now edits only the added input in `devenv.yaml`, keeping the file's comments, key order and formatting. It no longer writes inputs from `imports` or `devenv.local.yaml` into `devenv.yaml` ([#3268](https://github.com/cachix/devenv/issues/3268)).
 - Task cancellation now stops status checks and waits for nested commands to stop before the scheduler exits ([#3251](https://github.com/cachix/devenv/issues/3251)).
 - Fixed rapid process restarts failing because a stopped process still held its ownership claim.
 - Starting a process on demand now starts never-started, enabled process dependencies. Explicitly stopped and disabled dependencies stay off ([#3229](https://github.com/cachix/devenv/issues/3229)).
