@@ -31,6 +31,9 @@ in
 {
   languages.rust.enable = true;
   enterTest = ''
+    test "$RUST_SRC_PATH" = "${pkgs.rustPlatform.rustLibSrc}"
+    test -f "$RUST_SRC_PATH/core/Cargo.toml"
+
     ${lib.optionalString clangLinker ''
       if ! command -v clang >/dev/null; then
         echo "clang linker driver is not available"

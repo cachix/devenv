@@ -5,6 +5,10 @@
   };
 
   enterTest = ''
+    test -z "''${RUST_SRC_PATH+x}"
+    sysroot=$(rustc --print sysroot)
+    test -f "$sysroot/lib/rustlib/src/rust/library/core/Cargo.toml"
+
     # Verify rust toolchain is available
     rustc --version
     cargo --version
