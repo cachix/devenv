@@ -1385,6 +1385,64 @@ impl Config {
         Ok(())
     }
 
+    /// Add an input to the `devenv.yaml` in `root_dir`, overwriting any input with the
+    /// same name. Only that entry is edited, so the file's comments, key order and
+    /// formatting survive, and only the file's own contents are written: inputs from
+    /// `imports` and `devenv.local.yaml` stay where they are defined. `self` is the
+    /// loaded configuration, against which `follows` are resolved. Returns `false` when
+    /// the file had to be rewritten instead, which drops its comments.
+    pub fn add_input_to_file(
+        &self,
+        root_dir: &Path,
+        name: &str,
+        url: &str,
+        follows: &[String],
+    ) -> Result<bool> {
+        let mut resolved = Config {
+            inputs: self.inputs.clone(),
+            ..Default::default()
+        };
+        resolved.add_input(name, url, follows)?;
+        let input = resolved
+            .inputs
+            .remove(name)
+            .expect("add_input inserts the input");
+
+        let path = root_dir.join(YAML_CONFIG);
+        if !path.exists() {
+            let mut config = Config::default();
+            config.inputs.insert(name.to_string(), input);
+            config.write_to(root_dir)?;
+            return Ok(true);
+        }
+        let text = std::fs::read_to_string(&path)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to read {}", path.display()))?;
+
+        if let Some(edited) = upsert_input_in_yaml(&text, name, &input) {
+            std::fs::write(&path, edited)
+                .into_diagnostic()
+                .wrap_err("Failed to write devenv.yaml")?;
+            return Ok(true);
+        }
+
+        let mut own: serde_yaml::Value = serde_yaml::from_str(&text)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to parse {}", path.display()))?;
+        set_input(&mut own, name, &input)
+            .ok_or_else(|| miette::miette!("{} is not a YAML mapping", path.display()))?;
+        let yaml = serde_yaml::to_string(&own)
+            .into_diagnostic()
+            .wrap_err("Failed to serialize devenv.yaml")?;
+        std::fs::write(
+            &path,
+            format!("# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json\n{yaml}"),
+        )
+        .into_diagnostic()
+        .wrap_err("Failed to write devenv.yaml")?;
+        Ok(false)
+    }
+
     /// Add a new input, overwriting any existing input with the same name.
     pub fn add_input(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
         // A set of inputs built from the follows list.
@@ -1531,6 +1589,119 @@ fn is_default<T: Default + PartialEq>(t: &T) -> bool {
     t == &T::default()
 }
 
+/// Sets `inputs.<name>` in a parsed `devenv.yaml`, creating `inputs` if needed.
+fn set_input(document: &mut serde_yaml::Value, name: &str, input: &Input) -> Option<()> {
+    if document.is_null() {
+        *document = serde_yaml::Value::Mapping(Default::default());
+    }
+    let inputs = document
+        .as_mapping_mut()?
+        .entry("inputs".into())
+        .or_insert_with(|| serde_yaml::Value::Mapping(Default::default()));
+    if inputs.is_null() {
+        *inputs = serde_yaml::Value::Mapping(Default::default());
+    }
+    inputs
+        .as_mapping_mut()?
+        .insert(name.into(), serde_yaml::to_value(input).ok()?);
+    Some(())
+}
+
+/// Returns `text` with the input `name` set to `input` under its block-style top-level
+/// `inputs:` mapping, leaving every other line as it was, or `None` when the file has
+/// a shape this line editor does not handle (flow style, unusual indentation) or the
+/// edit would not parse to exactly the intended document.
+fn upsert_input_in_yaml(text: &str, name: &str, input: &Input) -> Option<String> {
+    let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let lines: Vec<&str> = text.lines().collect();
+    let indent = |line: &str| line.len() - line.trim_start_matches(' ').len();
+    let is_content = |line: &str| {
+        let trimmed = line.trim();
+        !trimmed.is_empty() && !trimmed.starts_with('#')
+    };
+    let is_top_level_key = |line: &str| is_content(line) && indent(line) == 0;
+    let key_of = |line: &str| -> Option<String> {
+        let (key, _) = line.trim().split_once(':')?;
+        Some(
+            key.trim()
+                .trim_matches(|c| c == '"' || c == '\'')
+                .to_string(),
+        )
+    };
+
+    let entry = serde_yaml::to_string(&BTreeMap::from([(name, input)])).ok()?;
+    let render = |child_indent: usize| -> Vec<String> {
+        entry
+            .lines()
+            .map(|line| format!("{}{line}", " ".repeat(child_indent)))
+            .collect()
+    };
+
+    let mut out: Vec<String> = lines.iter().map(|line| line.to_string()).collect();
+    let header = lines
+        .iter()
+        .position(|line| is_top_level_key(line) && key_of(line).as_deref() == Some("inputs"));
+    match header {
+        None => {
+            while out.last().is_some_and(|line| line.trim().is_empty()) {
+                out.pop();
+            }
+            out.push("inputs:".to_string());
+            out.extend(render(2));
+        }
+        Some(header) => {
+            // Only a bare `inputs:` (optionally commented) starts a block mapping.
+            let value = lines[header].split_once(':')?.1;
+            if !value.trim().is_empty() && !value.trim().starts_with('#') {
+                return None;
+            }
+            let end = (header + 1..lines.len())
+                .find(|&i| is_top_level_key(lines[i]))
+                .unwrap_or(lines.len());
+            let children: Vec<usize> = (header + 1..end)
+                .filter(|&i| is_content(lines[i]))
+                .collect();
+            let child_indent = children.first().map_or(2, |&i| indent(lines[i]));
+            if child_indent == 0 {
+                return None;
+            }
+            let existing = children.iter().copied().find(|&i| {
+                indent(lines[i]) == child_indent && key_of(lines[i]).as_deref() == Some(name)
+            });
+            match existing {
+                Some(start) => {
+                    // The entry runs to its next sibling; comments directly above
+                    // that sibling stay with it.
+                    let mut stop = children
+                        .iter()
+                        .copied()
+                        .find(|&i| i > start && indent(lines[i]) <= child_indent)
+                        .unwrap_or(end);
+                    while stop > start + 1 && !is_content(lines[stop - 1]) {
+                        stop -= 1;
+                    }
+                    out.splice(start..stop, render(child_indent));
+                }
+                None => {
+                    let after = children.last().map_or(header + 1, |&i| i + 1);
+                    out.splice(after..after, render(child_indent));
+                }
+            }
+        }
+    }
+
+    let mut edited = out.join(newline);
+    if text.is_empty() || text.ends_with('\n') {
+        edited.push_str(newline);
+    }
+
+    // The edit must change nothing but that one input.
+    let mut expected: serde_yaml::Value = serde_yaml::from_str(text).ok()?;
+    set_input(&mut expected, name, input)?;
+    let actual: serde_yaml::Value = serde_yaml::from_str(&edited).ok()?;
+    (actual == expected).then_some(edited)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1578,6 +1749,148 @@ mod tests {
         assert_eq!(config.inputs.len(), 2);
         let input = &config.inputs["input-with-follows"];
         assert_eq!(input.inputs.len(), 2);
+    }
+
+    const COMMENTED_YAML: &str = "\
+allow_unfree: true
+inputs:
+  # Pinned to the CLI release.
+  devenv:
+    url: github:cachix/devenv/v2.4.0?dir=src/modules
+  # Partitioning for machines.
+  disko:
+    url: github:nix-community/disko
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+# Trailing note about imports.
+imports:
+  - ./sub
+";
+
+    fn add_to_file(yaml: Option<&str>, name: &str, url: &str, follows: &[&str]) -> String {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        if let Some(yaml) = yaml {
+            fs::write(temp_dir.path().join(YAML_CONFIG), yaml)
+                .expect("Failed to write devenv.yaml");
+        }
+        let follows: Vec<String> = follows.iter().map(|f| f.to_string()).collect();
+        let loaded = Config::load_from(temp_dir.path()).expect("Failed to load config");
+        let in_place = loaded
+            .add_input_to_file(temp_dir.path(), name, url, &follows)
+            .expect("Failed to add input");
+        assert_eq!(in_place, !yaml.is_some_and(|yaml| yaml.contains('{')));
+        fs::read_to_string(temp_dir.path().join(YAML_CONFIG)).expect("Failed to read devenv.yaml")
+    }
+
+    #[test]
+    fn add_input_to_file_keeps_comments_and_order() {
+        let written = add_to_file(
+            Some(COMMENTED_YAML),
+            "nix2container",
+            "github:nlewo/nix2container",
+            &["nixpkgs"],
+        );
+        let expected = COMMENTED_YAML.replace(
+            "    url: github:cachix/devenv-nixpkgs/rolling\n",
+            "    url: github:cachix/devenv-nixpkgs/rolling\n  nix2container:\n    url: github:nlewo/nix2container\n    inputs:\n      nixpkgs:\n        follows: nixpkgs\n",
+        );
+        assert_eq!(written, expected);
+    }
+
+    #[test]
+    fn add_input_to_file_replaces_an_existing_input_in_place() {
+        let written = add_to_file(
+            Some(COMMENTED_YAML),
+            "disko",
+            "github:nix-community/disko/v1",
+            &[],
+        );
+        let expected = COMMENTED_YAML.replace(
+            "    url: github:nix-community/disko\n    inputs:\n      nixpkgs:\n        follows: nixpkgs\n",
+            "    url: github:nix-community/disko/v1\n",
+        );
+        assert_eq!(written, expected);
+    }
+
+    #[test]
+    fn add_input_to_file_appends_an_inputs_block() {
+        let written = add_to_file(
+            Some("# Only comments and settings.\nallow_unfree: true\n"),
+            "nixpkgs",
+            "github:NixOS/nixpkgs",
+            &[],
+        );
+        assert_eq!(
+            written,
+            "# Only comments and settings.\nallow_unfree: true\ninputs:\n  nixpkgs:\n    url: github:NixOS/nixpkgs\n"
+        );
+    }
+
+    #[test]
+    fn add_input_to_file_rewrites_flow_style_inputs() {
+        let written = add_to_file(
+            Some("inputs: {nixpkgs: {url: github:NixOS/nixpkgs}}\n"),
+            "other",
+            "github:org/repo",
+            &["nixpkgs"],
+        );
+        let config = load_yaml(&written);
+        assert_eq!(config.inputs.len(), 2);
+        assert_eq!(
+            config.inputs["other"].inputs["nixpkgs"].follows.as_deref(),
+            Some("nixpkgs")
+        );
+    }
+
+    #[test]
+    fn add_input_to_file_creates_a_missing_file() {
+        let written = add_to_file(None, "nixpkgs", "github:NixOS/nixpkgs", &[]);
+        assert!(
+            written.starts_with(
+                "# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json\n"
+            )
+        );
+        assert!(written.contains("nixpkgs:\n    url: github:NixOS/nixpkgs"));
+    }
+
+    #[test]
+    fn add_input_to_file_writes_neither_imported_nor_local_inputs() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp_dir.path();
+        fs::write(
+            root.join(YAML_CONFIG),
+            "inputs:\n  nixpkgs:\n    url: github:NixOS/nixpkgs\nimports:\n  - ./sub\n",
+        )
+        .expect("Failed to write devenv.yaml");
+        fs::create_dir(root.join("sub")).expect("Failed to create sub");
+        fs::write(
+            root.join("sub").join(YAML_CONFIG),
+            "inputs:\n  from-import:\n    url: github:org/imported\n",
+        )
+        .expect("Failed to write sub/devenv.yaml");
+        fs::write(
+            root.join(YAML_LOCAL_CONFIG),
+            "inputs:\n  from-local:\n    url: github:org/local\n",
+        )
+        .expect("Failed to write devenv.local.yaml");
+
+        let loaded = Config::load_from(root).expect("Failed to load config");
+        assert!(
+            loaded.inputs.contains_key("from-import") && loaded.inputs.contains_key("from-local")
+        );
+        loaded
+            .add_input_to_file(root, "new", "github:org/new", &["from-import".to_string()])
+            .expect("Failed to add input");
+
+        let written =
+            fs::read_to_string(root.join(YAML_CONFIG)).expect("Failed to read devenv.yaml");
+        assert_eq!(
+            written,
+            "inputs:\n  nixpkgs:\n    url: github:NixOS/nixpkgs\n  new:\n    url: github:org/new\n    inputs:\n      from-import:\n        follows: from-import\nimports:\n  - ./sub\n"
+        );
     }
 
     #[test]
