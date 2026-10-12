@@ -55,6 +55,14 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
+### Custom toolchain packages
+
+Set `languages.rust.toolchainPackage` to supply an aggregate toolchain built elsewhere.
+Since devenv 2.4.1, custom packages and `toolchainFile` profiles use the selected compiler's sysroot for standard-library source discovery instead of injecting sources from another toolchain.
+Include `rust-src` in these toolchains for standard-library navigation in rust-analyzer.
+
+If your sources are installed separately, set `env.RUST_SRC_PATH` to the matching standard-library source directory. This setting also overrides the default source path for component-based toolchains.
+
 ## Examples
 
 ### Basic setup with latest stable
