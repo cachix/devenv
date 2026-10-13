@@ -42,8 +42,8 @@ pub struct DevenvShellBuilder {
     /// (`getpwuid`). When present and the path exists, used directly instead
     /// of `resolve_shell_path` so stripped environments still find the shell.
     pub shell_path: Option<PathBuf>,
-    /// Directory to start the interactive shell in. Set when the project root
-    /// was discovered in a parent directory; `None` uses the build context cwd.
+    /// Directory the interactive shell moves to once its environment is set
+    /// up. Set when the project root was discovered in a parent directory.
     pub shell_cwd: Option<PathBuf>,
     pub shell_keybindings: ShellKeybindings,
 }
@@ -91,6 +91,7 @@ impl DevenvShellBuilder {
             &mut env_script,
             &BashDialect.format_task_messages(&self.task_messages),
         );
+        push_shell_fragment(&mut env_script, crate::shell_env::CD_INTO_SHELL_CWD);
         write_file(&env_script_path, &env_script, "env script")?;
 
         tracing::trace!("Shell setting: {:?}", self.shell);
@@ -142,11 +143,16 @@ impl DevenvShellBuilder {
             cmd_builder.arg(arg);
         }
 
-        cmd_builder.cwd(self.shell_cwd.as_deref().unwrap_or(&ctx.cwd));
+        cmd_builder.cwd(&ctx.cwd);
         set_reload_file_env(&mut cmd_builder, ctx);
 
         let shell_for_env = target_shell_path.as_deref().unwrap_or(bash);
-        crate::shell_env::apply_shell_env(&mut cmd_builder, shell_for_env, &self.clean);
+        crate::shell_env::apply_shell_env(
+            &mut cmd_builder,
+            shell_for_env,
+            &self.clean,
+            self.shell_cwd.as_deref(),
+        );
 
         Ok(cmd_builder)
     }

@@ -11,6 +11,7 @@
 //! - `activates_again_after_returning_to_the_same_project` — stale
 //!   `_DEVENV_HOOK_ACTIVATED` after a follow-cd (`nu_` variant for nushell)
 //! - `fish_hook_bypasses_user_functions_shadowing_external_tools` — #3222
+//! - `activation_from_subdirectory_keeps_the_caller_directory` — #3041
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -221,6 +222,81 @@ fn forwarded_shell_args_preserve_boundaries_in_every_shell() {
         assert!(
             !marker.exists(),
             "[{shell}] evaluated shell syntax from a forwarded argument"
+        );
+    }
+}
+
+#[test]
+fn activation_from_subdirectory_keeps_the_caller_directory() {
+    let project = fake_project();
+    let subdir = project.path().join("sub");
+    fs::create_dir(&subdir).unwrap();
+
+    for shell in ["bash", "zsh", "fish", "nu"] {
+        if !have(shell) {
+            continue;
+        }
+        let hook_dir = tempfile::tempdir().unwrap();
+        let hook = generated_hook(shell, &[], hook_dir.path());
+        let shim_dir = tempfile::tempdir().unwrap();
+        let calls = shim_dir.path().join("calls");
+        let shim = shim_dir.path().join("devenv");
+        fs::write(
+            &shim,
+            format!(
+                r#"#!/bin/sh
+case "$1" in
+  hook-should-activate)
+    printf '%s\n' {project:?}
+    ;;
+  shell)
+    printf '%s\n%s\n' "$PWD" "$_DEVENV_HOOK_DIR" > {calls:?}
+    ;;
+esac
+"#,
+                project = project.path(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&shim, fs::Permissions::from_mode(0o755)).unwrap();
+        let script = match shell {
+            "fish" => format!(
+                "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 {path}\n\
+                 cd {subdir:?}\n\
+                 _devenv_hook\n",
+                path = fish_path_override(shim_dir.path()),
+            ),
+            "nu" => format!(
+                "hide-env -i DEVENV_ROOT\nhide-env -i _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 $env.PATH = ($env.PATH | prepend {shim:?})\n\
+                 cd {subdir:?}\n\
+                 _devenv_hook\n",
+                shim = shim_dir.path(),
+            ),
+            _ => format!(
+                "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 {path}\n\
+                 cd {subdir:?}\n\
+                 _devenv_hook\n",
+                path = posix_path_override(shim_dir.path()),
+            ),
+        };
+
+        let output = run(shell, &script);
+        assert!(
+            output.status.success(),
+            "[{shell}] hook failed.\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert_eq!(
+            fs::read_to_string(&calls).unwrap_or_default(),
+            format!("{}\n{}\n", subdir.display(), project.path().display()),
+            "[{shell}] devenv shell must start where the user entered the project"
         );
     }
 }

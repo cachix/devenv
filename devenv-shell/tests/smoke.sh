@@ -19,7 +19,7 @@ export PATH="$(dirname "$DEVENV_SMOKE_BIN"):$PATH"
 export DEVENV_NO_AI_AGENT=1 TERM=xterm-256color
 unset CI DEVENV_TUI DEVENV_TRACE_TO DEVENV_SHELL_TYPE _DEVENV_SHELL_HINT _DEVENV_HOOK_DIR DEVENV_ROOT
 "$DEVENV_SMOKE_BIN" --version > "$output/version.txt"
-mkdir -p "$work/project"
+mkdir -p "$work/project/sub"
 cd "$work/project"
 # Reuse the repository's pinned nixpkgs rather than resolve a moving branch.
 cp "$modules/../../devenv.lock" devenv.lock
@@ -62,15 +62,24 @@ done
 # match the nested devenv shell's prompt, which contains the same PS1 text.
 "$DEVENV_SMOKE_BIN" allow
 cd "$work"
+ln -s project link
 "$driver" pty --step-timeout 180 "$output/hook.typescript" \
   'export PS1="SMOKE_OUTER> "; exec bash --noprofile --norc -i' <<'EOF'
 expect:SMOKE_OUTER>
 send:PROMPT_COMMAND='echo SMOKE_PARENT_READY'; eval "$("$DEVENV_SMOKE_BIN" hook bash)"\n
 expect:SMOKE_OUTER>
-send:cd project\n
+send:cd project/sub\n
 expect:SMOKE_READY
 send:printf 'HOOK_RESULT=%s\\n' "$((SMOKE_VALUE + 1))"\n
 expect:HOOK_RESULT=7320
+send:printf 'HOOK_DIR=%s\\n' "${PWD#"$DEVENV_ROOT"}"\n
+expect:HOOK_DIR=/sub
+send:exit\n
+expect:SMOKE_PARENT_READY
+send:cd ../../link/sub\n
+expect:SMOKE_READY
+send:printf 'LINK_DIR=%s\\n' "${PWD#"$DEVENV_ROOT"}"\n
+expect:LINK_DIR=/sub
 send:exit\n
 expect:SMOKE_PARENT_READY
 send:exit\n

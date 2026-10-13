@@ -1857,13 +1857,6 @@ impl Devenv {
 
         let mut shell_cmd = process::Command::new(&bash);
 
-        // When the project root was discovered in a parent directory, run from
-        // where the user actually invoked devenv rather than the root we
-        // chdir'd into. The env is root-scoped; the working directory is not.
-        if let Some(cwd) = &self.shell_cwd {
-            shell_cmd.current_dir(cwd);
-        }
-
         // The Nix output ends with "exec bash" which would start a new shell without
         // the devenv environment. Strip it for ALL modes - we handle shell execution ourselves.
         let output_str = String::from_utf8_lossy(output);
@@ -1912,6 +1905,7 @@ impl Devenv {
             push_shell_fragment(&mut script, &dotenv_activation);
             push_shell_fragment(&mut script, &task_exports);
             push_shell_fragment(&mut script, &dotenv_messages);
+            push_shell_fragment(&mut script, crate::shell_env::CD_INTO_SHELL_CWD);
             // Pass the command via args to avoid changing the script hash.
             // $1 expands before eval; `set --` hides the wrapper's positional parameters.
             // TODO(sander): Add a mode for raw shell source, like `bash -c`.
@@ -1941,6 +1935,7 @@ impl Devenv {
                 push_shell_fragment(&mut env_content, &task_exports);
                 push_shell_fragment(&mut env_content, &task_messages);
                 push_shell_fragment(&mut env_content, &dotenv_messages);
+                push_shell_fragment(&mut env_content, crate::shell_env::CD_INTO_SHELL_CWD);
                 std::fs::write(&env_script_path, &env_content)
                     .into_diagnostic()
                     .wrap_err("Failed to write env script")?;
@@ -1973,6 +1968,7 @@ impl Devenv {
                 push_shell_fragment(&mut script, &task_exports);
                 push_shell_fragment(&mut script, &task_messages);
                 push_shell_fragment(&mut script, &dotenv_messages);
+                push_shell_fragment(&mut script, crate::shell_env::CD_INTO_SHELL_CWD);
                 if self.options.shell_settings.prompt_prefix {
                     script.push_str(BashDialect.prompt_prefix());
                     script.push('\n');
@@ -1992,6 +1988,7 @@ impl Devenv {
             &mut shell_cmd,
             shell_for_env,
             &self.options.shell_settings.clean,
+            self.shell_cwd.as_deref(),
         );
 
         // Inject OTEL trace context so instrumented subprocesses join the trace.

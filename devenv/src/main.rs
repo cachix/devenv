@@ -75,6 +75,7 @@ use tracing::{info, instrument};
 
 const DEVENV_CALLER: &str = "_DEVENV_CALLER";
 const DEVENV_SHELL_HINT: &str = "_DEVENV_SHELL_HINT";
+const DEVENV_HOOK_DIR: &str = "_DEVENV_HOOK_DIR";
 
 fn main() {
     if let Some(code) = devenv_processes::maybe_run_process_guardian() {
@@ -156,7 +157,7 @@ fn main_inner() -> Result<()> {
             _ => {}
         }
 
-        let prepared = prepare_command(cli, invocation.shell_hint.as_deref())?;
+        let prepared = prepare_command(cli, &invocation)?;
 
         match run(prepared, invocation.caller) {
             Err(err) => match err.downcast::<devenv::SecretsNeedPrompting>() {
@@ -258,12 +259,14 @@ enum Caller {
 struct Invocation {
     caller: Caller,
     shell_hint: Option<String>,
+    hook_dir: Option<PathBuf>,
 }
 
 impl Invocation {
     fn from_env() -> Self {
         let caller = env::var_os(DEVENV_CALLER);
         let shell_hint = env::var(DEVENV_SHELL_HINT).ok();
+        let hook_dir = env::var_os(DEVENV_HOOK_DIR).map(PathBuf::from);
         // This runs before devenv starts any threads. Removing the one-shot
         // invocation metadata prevents commands launched by an activated shell
         // from inheriting the original caller or its ambient shell hint.
@@ -275,21 +278,30 @@ impl Invocation {
         Self::from_parts(
             caller.as_deref().and_then(|value| value.to_str()),
             shell_hint,
+            hook_dir,
         )
     }
 
-    fn from_parts(caller: Option<&str>, shell_hint: Option<String>) -> Self {
+    fn from_parts(
+        caller: Option<&str>,
+        shell_hint: Option<String>,
+        hook_dir: Option<PathBuf>,
+    ) -> Self {
         let caller = match caller {
             Some("direnv") => Caller::Direnv,
             Some("hook") => Caller::Hook,
             _ => Caller::Cli,
         };
-        let shell_hint = match caller {
-            Caller::Hook => shell_hint,
-            Caller::Cli | Caller::Direnv => None,
+        let (shell_hint, hook_dir) = match caller {
+            Caller::Hook => (shell_hint, hook_dir),
+            Caller::Cli | Caller::Direnv => (None, None),
         };
 
-        Self { caller, shell_hint }
+        Self {
+            caller,
+            shell_hint,
+            hook_dir,
+        }
     }
 }
 
@@ -423,7 +435,7 @@ fn enter_discovered_project_root() -> Result<()> {
 }
 
 /// Prepare a config-backed CLI command for execution.
-fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCommand> {
+fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedCommand> {
     // --- Project discovery and working directory ---
 
     // Source priority: explicit `--from` / `-O` overrides > a local devenv.nix
@@ -432,16 +444,18 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     // supplied.
     // Has to run before Config::load() reads "./devenv.yaml".
     let original_cwd = env::current_dir().ok();
-    let user_config_path = cli.user_config.as_deref().map(|path| {
-        devenv_core::paths::resolve_against(path, original_cwd.as_deref().unwrap_or(Path::new(".")))
-    });
+    let start_dir = invocation.hook_dir.as_deref().or(original_cwd.as_deref());
+    let user_config_path = cli
+        .user_config
+        .as_deref()
+        .map(|path| devenv_core::paths::resolve_against(path, start_dir.unwrap_or(Path::new("."))));
     let command = cli.command;
     let has_overrides = !cli.input_overrides.nix_module_options.is_empty();
     let mut from_source = cli.from.clone();
     let mut project_root = None;
     if from_source.is_none()
         && !has_overrides
-        && let Some(cwd) = original_cwd.as_deref()
+        && let Some(cwd) = start_dir
     {
         project_root = devenv_core::paths::find_project_root(cwd);
         if let Some(root) = project_root.as_deref() {
@@ -467,9 +481,10 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     }
 
     let discovered_root = project_root
-        .as_ref()
-        .filter(|r| Some(r.as_path()) != original_cwd.as_deref())
-        .cloned();
+        .as_deref()
+        .or(start_dir)
+        .filter(|r| Some(*r) != original_cwd.as_deref())
+        .map(Path::to_path_buf);
     // When discovery moves us into a parent root, remember the directory the
     // user actually invoked from so the interactive shell and `-- cmd` still
     // run there. The devenv environment is root-scoped; the cwd is not.
@@ -598,7 +613,7 @@ fn prepare_command(mut cli: Cli, shell_hint: Option<&str>) -> Result<PreparedCom
     let mut shell_settings = ShellSettings::resolve_with_shell_hint(
         devenv_core::ShellOptions::from(cli.shell_args),
         &config,
-        shell_hint,
+        invocation.shell_hint.as_deref(),
     );
     shell_settings.prompt_prefix = config.prompt_prefix.unwrap_or(user_prompt_prefix);
     frontend.tui_context = Arc::new(devenv_tui::TuiRunContext {
@@ -1966,21 +1981,36 @@ mod tests {
 
     #[test]
     fn shell_hint_is_only_accepted_from_hook_invocations() {
-        let hook = Invocation::from_parts(Some("hook"), Some("zsh".to_string()));
+        let hook = Invocation::from_parts(Some("hook"), Some("zsh".to_string()), None);
         assert!(matches!(hook.caller, Caller::Hook));
         assert_eq!(hook.shell_hint.as_deref(), Some("zsh"));
 
-        let cli = Invocation::from_parts(None, Some("zsh".to_string()));
+        let cli = Invocation::from_parts(None, Some("zsh".to_string()), None);
         assert!(matches!(cli.caller, Caller::Cli));
         assert!(cli.shell_hint.is_none());
 
-        let direnv = Invocation::from_parts(Some("direnv"), Some("zsh".to_string()));
+        let direnv = Invocation::from_parts(Some("direnv"), Some("zsh".to_string()), None);
         assert!(matches!(direnv.caller, Caller::Direnv));
         assert!(direnv.shell_hint.is_none());
     }
 
+    #[test]
+    fn hook_dir_is_only_accepted_from_hook_invocations() {
+        let dir = PathBuf::from("/project");
+
+        let hook = Invocation::from_parts(Some("hook"), None, Some(dir.clone()));
+        assert_eq!(hook.hook_dir.as_deref(), Some(dir.as_path()));
+
+        let cli = Invocation::from_parts(None, None, Some(dir.clone()));
+        assert!(cli.hook_dir.is_none());
+
+        let direnv = Invocation::from_parts(Some("direnv"), None, Some(dir));
+        assert!(direnv.hook_dir.is_none());
+    }
+
     struct ProcessStateGuard {
         cwd: PathBuf,
+        pwd: Option<OsString>,
         devenv_home: Option<OsString>,
     }
 
@@ -1988,6 +2018,7 @@ mod tests {
         fn set(cwd: &Path, devenv_home: &Path) -> Self {
             let guard = Self {
                 cwd: env::current_dir().unwrap(),
+                pwd: env::var_os("PWD"),
                 devenv_home: env::var_os("DEVENV_HOME"),
             };
             env::set_current_dir(cwd).unwrap();
@@ -2004,6 +2035,10 @@ mod tests {
             // SAFETY: See ProcessStateGuard::set; restoration happens before
             // PROCESS_STATE_LOCK is released, including during unwinding.
             unsafe {
+                match &self.pwd {
+                    Some(pwd) => env::set_var("PWD", pwd),
+                    None => env::remove_var("PWD"),
+                }
                 match &self.devenv_home {
                     Some(home) => env::set_var("DEVENV_HOME", home),
                     None => env::remove_var("DEVENV_HOME"),
@@ -2019,15 +2054,16 @@ mod tests {
         fs::write(project.path().join("devenv.nix"), "{ }\n").unwrap();
         let devenv_home = project.path().join("devenv-home");
         let _state = ProcessStateGuard::set(project.path(), &devenv_home);
+        let cli_invocation = Invocation::from_parts(None, None, None);
 
         commands::hook::allow(&devenv_home, None, &["base".to_string()]).unwrap();
 
         let cli = <Cli as clap::Parser>::parse_from(["devenv", "shell"]);
-        let prepared = prepare_command(cli, None).unwrap();
+        let prepared = prepare_command(cli, &cli_invocation).unwrap();
         assert_eq!(prepared.backend.devenv.shell_settings.profiles, ["base"]);
 
         let cli = <Cli as clap::Parser>::parse_from(["devenv", "--profile=explicit", "shell"]);
-        let prepared = prepare_command(cli, None).unwrap();
+        let prepared = prepare_command(cli, &cli_invocation).unwrap();
         assert_eq!(
             prepared.backend.devenv.shell_settings.profiles,
             ["explicit"]
@@ -2035,8 +2071,35 @@ mod tests {
 
         commands::hook::allow(&devenv_home, None, &[]).unwrap();
         let cli = <Cli as clap::Parser>::parse_from(["devenv", "shell"]);
-        let prepared = prepare_command(cli, None).unwrap();
+        let prepared = prepare_command(cli, &cli_invocation).unwrap();
         assert!(prepared.backend.devenv.shell_settings.profiles.is_empty());
+    }
+
+    #[test]
+    fn hook_invocation_resolves_its_project_from_a_subdirectory() {
+        let _lock = PROCESS_STATE_LOCK.lock().unwrap();
+        let project = TempDir::new().unwrap();
+        let root = fs::canonicalize(project.path()).unwrap();
+        fs::write(root.join("devenv.nix"), "{ }\n").unwrap();
+        let subdir = root.join("sub");
+        fs::create_dir(&subdir).unwrap();
+        let _state = ProcessStateGuard::set(&subdir, &root.join("devenv-home"));
+        let hook = Invocation::from_parts(Some("hook"), None, Some(root.clone()));
+
+        for args in [
+            &["devenv", "shell"][..],
+            &["devenv", "--option", "env.FOO:string", "bar", "shell"][..],
+        ] {
+            env::set_current_dir(&subdir).unwrap();
+            let cli = <Cli as clap::Parser>::parse_from(args);
+            let prepared = prepare_command(cli, &hook).unwrap();
+            assert_eq!(env::current_dir().unwrap(), root, "{args:?}");
+            assert_eq!(
+                prepared.backend.devenv.shell_cwd.as_deref(),
+                Some(subdir.as_path()),
+                "{args:?}"
+            );
+        }
     }
 
     #[test]

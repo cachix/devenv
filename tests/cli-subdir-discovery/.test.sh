@@ -19,6 +19,16 @@ mkdir -p sub/nested
 (cd sub && echo 'echo ran-in-sub' > rel.sh
  devenv shell -- bash rel.sh | grep -Fq ran-in-sub)
 
+(cd sub && devenv shell -- sh -c 'pwd -P > cmd-pwd')
+test "$(cat entershell-pwd)" = "$proj_root"
+test "$(cat sub/cmd-pwd)" = "$proj_root/sub"
+
+(cd sub && _DEVENV_CALLER=hook _DEVENV_HOOK_DIR="$proj_root" \
+  devenv -O env.HOOK_OPTION:string set shell -- sh -c 'printf %s "$HOOK_OPTION" > hook-option')
+test "$(cat sub/hook-option)" = set
+test ! -e sub/.devenv
+test ! -e sub/devenv.lock
+
 # `inputs add` from a subdir edits the enclosing project's devenv.yaml, not a
 # stray one in the subdir.
 (cd sub/nested && devenv inputs add subdir-discovery-input github:NixOS/nixpkgs)
