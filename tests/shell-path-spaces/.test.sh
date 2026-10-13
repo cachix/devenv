@@ -4,42 +4,41 @@ set -euo pipefail
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 space_dir="$PWD/Some App/bin"
-mkdir -p "$space_dir"
-export PATH="$space_dir:$PATH"
+tail_dir="$PWD/After Space/bin"
+mkdir -p "$space_dir" "$tail_dir" "$PWD/zsh-config"
+export PATH="$space_dir:$PATH:$tail_dir"
+export ZDOTDIR="$PWD/zsh-config"
 
-# Piped stdin is not a TTY, so this uses prepare_shell (not the PTY reload
-# path). `--shell zsh` writes `.devenv/shell-env.sh` — the assembly that glued
-# task PATH exports onto `eval "${shellHook:-}"`. zsh itself does not need to
-# start: the env script is sourced by bash before exec.
-set +e
-echo exit | devenv --no-reload --shell zsh shell \
-  >devenv-shell.stdout 2>devenv-shell.stderr
-set -e
-
+# Piped stdin exercises prepare_shell's env-script path. zsh is provided by
+# the fixture so a missing shell cannot be mistaken for a successful test.
+cat > shell-commands.zsh <<'COMMANDS'
+printf 'PATH_CHECK=%s\n' "$PATH"
+exit
+COMMANDS
+if ! devenv --no-reload --shell zsh shell <shell-commands.zsh \
+  >devenv-shell.stdout 2>devenv-shell.stderr; then
+  cat devenv-shell.stdout devenv-shell.stderr >&2
+  fail "zsh shell failed"
+fi
 if grep -q "not a valid identifier" devenv-shell.stdout devenv-shell.stderr; then
-  echo "stdout:" >&2
-  cat devenv-shell.stdout >&2
-  echo "stderr:" >&2
-  cat devenv-shell.stderr >&2
-  fail "devenv shell reported 'not a valid identifier' (PATH word-split at a space)"
+  cat devenv-shell.stdout devenv-shell.stderr >&2
+  fail "PATH exports were parsed without their quotes"
 fi
 
-env_script=.devenv/shell-env.sh
-[ -f "$env_script" ] || fail "expected $env_script to be written for --shell zsh"
+check_path() {
+  local value="$1"
+  for directory in "$space_dir" "$tail_dir" "$PWD/.devenv/state/venv/bin"; do
+    case ":$value:" in
+      *":$directory:"*) ;;
+      *) fail "missing PATH entry '$directory' in: $value" ;;
+    esac
+  done
+}
 
-if grep -E 'eval "\$\{shellHook:-\}"export' "$env_script"; then
-  fail "task exports were glued onto the eval \"\${shellHook:-}\" line"
+shell_path=$(sed -n 's/^PATH_CHECK=//p' devenv-shell.stdout)
+check_path "$shell_path"
+[ -f .devenv/shell-env.sh ] || fail "env script was not written"
+if grep -E 'eval "\$\{shellHook:-\}"export' .devenv/shell-env.sh; then
+  fail "task exports were glued onto the shell hook"
 fi
-
-if ! grep -E "^export PATH=.*Some App" "$env_script"; then
-  fail "shell-env.sh PATH export is missing the space-containing directory"
-fi
-
-# Non-interactive bash path (bash_init_script + task exports) must also keep it.
-cmd_path=$(devenv shell -- printenv PATH)
-case ":$cmd_path:" in
-  *":$space_dir:"*) ;;
-  *) fail "devenv shell -- truncated PATH; missing '$space_dir' in: $cmd_path" ;;
-esac
-
-echo "OK: PATH with spaces survives venv/task exports"
+check_path "$(devenv shell -- printenv PATH)"

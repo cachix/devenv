@@ -104,6 +104,10 @@ list of strings concatenated with “\\n”
 
 Listen address for SMTP.
 
+Either ` <host>:<port> `, where the port is the base devenv allocates
+from, or a unix socket as ` unix:<path>:<permissions> `, which is passed
+to mailpit as given. Mailpit requires the permissions.
+
 
 
 *Type:*
@@ -117,6 +121,14 @@ string
 "127.0.0.1:1025"
 ```
 
+
+
+*Example:*
+
+```nix
+"unix:${config.env.DEVENV_RUNTIME}/mailpit-smtp.sock:660"
+```
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
 
@@ -127,6 +139,10 @@ string
 
 
 Listen address for UI.
+
+Either ` <host>:<port> `, where the port is the base devenv allocates
+from, or a unix socket as ` unix:<path>:<permissions> `, which is passed
+to mailpit as given. Mailpit requires the permissions.
 
 
 
@@ -139,6 +155,14 @@ string
 
 ```nix
 "127.0.0.1:8025"
+```
+
+
+
+*Example:*
+
+```nix
+"unix:${config.env.DEVENV_RUNTIME}/mailpit-ui.sock:660"
 ```
 
 *Declared by:*

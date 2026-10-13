@@ -2,12 +2,20 @@
 
 ## 2.4.1 (unreleased)
 
+### Improvements
+
+- Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
+
 ### Bug Fixes
 
 - Fixed `devenv shell` printing `bash: export: … not a valid identifier` and truncating `PATH` at the first space when a task re-exports `PATH` (for example Python venv activation) and the parent `PATH` contains a directory with a space ([#3165](https://github.com/cachix/devenv/issues/3165)).
+- Task cancellation now stops status checks and waits for nested commands to stop before the scheduler exits ([#3251](https://github.com/cachix/devenv/issues/3251)).
+- Fixed rapid process restarts failing because a stopped process still held its ownership claim.
+- Starting a process on demand now starts never-started, enabled process dependencies. Explicitly stopped and disabled dependencies stay off ([#3229](https://github.com/cachix/devenv/issues/3229)).
+- Fixed `devenv machines install` hanging while uploading store paths when no SSH connection was already open ([#3254](https://github.com/cachix/devenv/issues/3254)).
 - Nushell hot reload no longer breaks commands that use structured environment variables and now removes variables that disappeared after a reload ([#3230](https://github.com/cachix/devenv/issues/3230)).
 - MySQL now creates configured databases and users when started with `devenv up`, including `devenv up mysql` ([#2843](https://github.com/cachix/devenv/issues/2843)).
-- fish auto-activation no longer hangs when `env` is a fish function, such as grc's wrapper ([#3222](https://github.com/cachix/devenv/issues/3222)).
+- fish auto-activation no longer hangs when `env` is a fish function, such as grc's wrapper; `cat`, `rm` and `devenv` functions are bypassed too ([#3222](https://github.com/cachix/devenv/issues/3222)).
 - Task names containing `::`, such as `foo::bar`, are now rejected with an invalid task name error. Previously they were accepted but could not be run by name ([#3227](https://github.com/cachix/devenv/issues/3227)).
 - Detached process startup now publishes the manager as soon as processes are scheduled, without waiting for service readiness, and keeps HTTPS proxy routes during a slow startup ([#3216](https://github.com/cachix/devenv/issues/3216)).
 - `devenv test` with the native process manager now reports a process dependency on `start.enable = false` before starting services, instead of waiting indefinitely for the disabled process ([#3215](https://github.com/cachix/devenv/issues/3215)).

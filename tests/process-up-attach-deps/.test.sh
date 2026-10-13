@@ -81,8 +81,8 @@ grep -q "Scheduled: beta" up_beta.txt || {
 }
 # The Up reply is sent only after beta is re-armed as waiting, so its state is
 # immediately observable — no polling needed.
-devenv processes list | grep -E '^beta\b' | grep -q waiting || {
-  echo "FAIL: beta should be waiting on gamma; got:"; devenv processes list | grep -E '^beta\b'
+devenv processes list | awk '$1 == "beta" && $2 == "waiting" { found = 1 } END { exit !found }' || {
+  echo "FAIL: beta should be waiting on gamma; got:"; devenv processes list
   devenv processes down || true; exit 1;
 }
 # beta must not have launched: its gamma dependency is stopped.

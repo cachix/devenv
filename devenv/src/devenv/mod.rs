@@ -5563,23 +5563,17 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         let output = std::process::Command::new("bash")
             .args(["--noprofile", "--norc"])
             .arg(&script_path)
+            .env_remove("shellHook")
             .output()
             .expect("run bash");
         let _ = std::fs::remove_file(&script_path);
 
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            !stderr.contains("not a valid identifier"),
-            "bash must not word-split PATH at spaces:\n{stderr}"
-        );
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(
-            stdout.contains("Some App"),
-            "PATH must not be truncated at the first space, got: {stdout}"
-        );
-        assert!(
-            stdout.contains("/tmp/venv/bin"),
-            "venv bin dir should remain on PATH, got: {stdout}"
+        assert!(output.status.success(), "bash failed: {stderr}");
+        assert!(stderr.is_empty(), "bash emitted errors: {stderr}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            "/tmp/venv/bin:/tmp/Some App/bin:/usr/bin"
         );
     }
 }

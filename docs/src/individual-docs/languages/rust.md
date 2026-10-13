@@ -50,6 +50,14 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
+### Custom toolchain packages
+
+Set `languages.rust.toolchainPackage` to supply an aggregate toolchain built elsewhere.
+Since devenv 2.4.1, custom packages and `toolchainFile` profiles use the selected compiler's sysroot for standard-library source discovery instead of injecting sources from another toolchain.
+Include `rust-src` in these toolchains for standard-library navigation in rust-analyzer.
+
+If your sources are installed separately, set `env.RUST_SRC_PATH` to the matching standard-library source directory. This setting also overrides the default source path for component-based toolchains.
+
 ## Examples
 
 ### Basic setup with latest stable
@@ -140,3 +148,10 @@ Rust tools integrate seamlessly with [git hooks](/reference/options/#git-hooksho
 [comment]: # (Please add your documentation on top of this line)
 
 @AUTOGEN_OPTIONS@
+
+### Language server with toolchain files
+
+Since devenv 2.4.1, toolchain files that omit `rust-analyzer`, including minimal profiles, use the standalone `pkgs.rust-analyzer` language server by default.
+If the file includes rust-analyzer, devenv uses the server from that toolchain instead.
+To keep the server tied to a pinned compiler version, list `rust-analyzer` in the file's components.
+Set `languages.rust.lsp.package` to select another server, or disable it with `languages.rust.lsp.enable = false`.

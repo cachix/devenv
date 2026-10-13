@@ -516,63 +516,72 @@ impl TaskState {
                     output_file_path: std::path::Path::new("/dev/null"),
                     exports_file_path: exports_file.path(),
                 };
-                let mut command = ctx.build_command();
-
-                // Create a Command activity for the status check (automatically parented to task_activity)
+                // Status probes need the same process-scope cancellation
+                // cleanup as the task command so graceful joins can finish.
                 let status_activity = devenv_activity::start!(
                     Activity::command("check status")
                         .command(cmd)
                         .level(ActivityLevel::Debug),
                     devenv.command.exit_code = tracing::field::Empty,
-                    devenv.command.stdout_bytes = tracing::field::Empty,
-                    devenv.command.stderr_bytes = tracing::field::Empty
+                    devenv.command.stdout_line_count = tracing::field::Empty,
+                    devenv.command.stderr_line_count = tracing::field::Empty
                 );
-
-                match command.output().await {
-                    Ok(output) => {
-                        if let Some(exit_code) = output.status.code() {
-                            status_activity.record("devenv.command.exit_code", exit_code as i64);
-                        }
-                        status_activity.record("devenv.command.stdout_bytes", output.stdout.len());
-                        status_activity.record("devenv.command.stderr_bytes", output.stderr.len());
-                        // A nonzero exit is a normal status/cache miss: fall through
-                        // to run the command. Only a spawn/execution error of the
-                        // status probe itself (the `Err` arm below) is a real failure.
-                        if output.status.success() {
-                            // Start with cached output, merge in any exports from the status command
-                            let mut result = cached_output.unwrap_or_else(|| serde_json::json!({}));
-                            if let Ok(data) = tokio::fs::read(exports_file.path()).await {
-                                let exports = Self::parse_exports(&data);
-                                if let (false, Some(env_obj)) = (
-                                    exports.is_empty(),
-                                    get_or_create_devenv_env_mut(&mut result),
-                                ) {
-                                    for (k, v) in exports {
-                                        env_obj.insert(k, serde_json::Value::String(v));
-                                    }
-                                }
+                let result = crate::executor::execute(
+                    ctx,
+                    &crate::executor::NoOpCallback,
+                    cancellation.clone(),
+                )
+                .await;
+                if let Some(exit_code) = result.exit_code {
+                    status_activity.record("devenv.command.exit_code", exit_code as i64);
+                }
+                status_activity.record(
+                    "devenv.command.stdout_line_count",
+                    result.stdout_lines.len(),
+                );
+                status_activity.record(
+                    "devenv.command.stderr_line_count",
+                    result.stderr_lines.len(),
+                );
+                if result.error.as_deref() == Some("Task cancelled") {
+                    status_activity.cancel();
+                    task_activity.cancel();
+                    return Ok(TaskCompleted::Cancelled(Some(now.elapsed())));
+                }
+                if result.success {
+                    // Start with cached output, merge in any exports from the status command
+                    let mut result = cached_output.unwrap_or_else(|| serde_json::json!({}));
+                    if let Ok(data) = tokio::fs::read(exports_file.path()).await {
+                        let exports = Self::parse_exports(&data);
+                        if let (false, Some(env_obj)) = (
+                            exports.is_empty(),
+                            get_or_create_devenv_env_mut(&mut result),
+                        ) {
+                            for (k, v) in exports {
+                                env_obj.insert(k, serde_json::Value::String(v));
                             }
-                            let output = Output(Some(result));
-                            tracing::trace!(
-                                "Task {} skipped with output: {:?}",
-                                self.task.name,
-                                output
-                            );
-                            task_activity.cached();
-                            return Ok(TaskCompleted::Skipped(Skipped::Cached(output)));
                         }
                     }
-                    Err(e) => {
-                        status_activity.fail_with_description(e.to_string());
-                        return Ok(TaskCompleted::Failed(
-                            now.elapsed(),
-                            TaskFailure {
-                                stdout: Vec::new(),
-                                stderr: Vec::new(),
-                                error: e.to_string(),
-                            },
-                        ));
-                    }
+                    let output = Output(Some(result));
+                    tracing::trace!("Task {} skipped with output: {:?}", self.task.name, output);
+                    task_activity.cached();
+                    return Ok(TaskCompleted::Skipped(Skipped::Cached(output)));
+                }
+                // A nonzero exit is a normal cache miss. A spawn/execution
+                // error of the probe itself is a task failure.
+                if !result.exited {
+                    let error = result
+                        .error
+                        .unwrap_or_else(|| "Status command failed".to_string());
+                    status_activity.fail_with_description(&error);
+                    return Ok(TaskCompleted::Failed(
+                        now.elapsed(),
+                        TaskFailure {
+                            stdout: result.stdout_lines,
+                            stderr: result.stderr_lines,
+                            error,
+                        },
+                    ));
                 }
             } else if !self.task.exec_if_modified.is_empty() {
                 let files_modified = match self.check_files_modified(cache).await {

@@ -14,6 +14,20 @@ in
       defaultText = lib.literalExpression "pkgs.beamPackages.elixir";
     };
 
+    erlang.package = lib.mkOption {
+      type = lib.types.package;
+      default = cfg.package.erlang or (lib.findFirst
+        (package: (package.pname or "") == "erlang")
+        (throw "Cannot determine the Erlang runtime for languages.elixir.package; set languages.elixir.erlang.package explicitly.")
+        (cfg.package.buildInputs or [ ]));
+      defaultText = lib.literalExpression "the Erlang runtime used to build languages.elixir.package";
+      description = ''
+        The Erlang runtime to include in the environment alongside Elixir.
+        Defaults to the runtime used to build the selected Elixir package.
+        Set this explicitly for custom packages that do not expose their Erlang dependency.
+      '';
+    };
+
     lsp = {
       enable = lib.mkEnableOption "Elixir Language Server" // { default = true; };
 
@@ -29,6 +43,16 @@ in
   config = lib.mkMerge [
     {
       changelogs = [
+        {
+          date = "2026-10-09";
+          title = "languages.elixir now includes its matching Erlang runtime";
+          when = cfg.enable;
+          description = ''
+            Elixir environments now provide `erl`, `erlc`, and `escript` from the Erlang runtime used to build the selected Elixir package.
+            This prevents tools from using a missing or mismatched OTP runtime.
+            Custom packages can select the runtime with `languages.elixir.erlang.package`.
+          '';
+        }
         {
           date = "2026-08-24";
           title = "languages.elixir.package and languages.elixir.lsp.package default to the pkgs.beamPackages set";
@@ -50,6 +74,7 @@ in
 
       packages = [
         cfg.package
+        cfg.erlang.package
       ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
     })
   ];

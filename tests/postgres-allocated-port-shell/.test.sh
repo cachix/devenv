@@ -50,7 +50,9 @@ make_repo repo1
 make_repo repo2
 
 (cd repo1 && devenv --no-tui up -d > up.log 2>&1) || { cat repo1/up.log; exit 1; }
+(cd repo1 && devenv --no-tui processes wait --timeout 90) || { cat repo1/up.log; exit 1; }
 (cd repo2 && devenv --no-tui up -d > up.log 2>&1) || { cat repo2/up.log; exit 1; }
+(cd repo2 && devenv --no-tui processes wait --timeout 90) || { cat repo2/up.log; exit 1; }
 
 repo1_status=$(cd repo1 && devenv --no-tui processes list)
 repo2_status=$(cd repo2 && devenv --no-tui processes list)

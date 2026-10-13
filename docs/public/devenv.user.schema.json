@@ -12,6 +12,7 @@
     "tui": {
       "$ref": "#/$defs/TuiPreferences",
       "default": {
+        "emoji": true,
         "viewport": "inline",
         "theme": {
           "preset": "devenv",
@@ -96,6 +97,11 @@
     "TuiPreferences": {
       "type": "object",
       "properties": {
+        "emoji": {
+          "description": "Use emoji for display indicators, such as the eye in the shell status line.\nSet to `false` to use non-emoji Unicode glyphs instead.",
+          "type": "boolean",
+          "default": true
+        },
         "viewport": {
           "$ref": "#/$defs/ViewportPlacement",
           "default": "inline"

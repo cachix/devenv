@@ -443,6 +443,21 @@ where
         }
     }
 
+    /// Wait for tasks to finish their own cancellation and cleanup paths.
+    ///
+    /// Unlike `wait_all`, this does not abort futures on shutdown. Every task
+    /// must observe the cancellation token itself and return after cleanup.
+    /// Panics are propagated to the caller.
+    pub async fn wait_all_gracefully(&mut self) {
+        while let Some(result) = self.join_set.join_next().await {
+            match result {
+                Ok(_) => {}
+                Err(err) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
+                Err(err) => panic!("{err}"),
+            }
+        }
+    }
+
     /// Check if the join set is empty
     pub fn is_empty(&self) -> bool {
         self.join_set.is_empty()
@@ -488,6 +503,42 @@ mod tests {
                 .expect("signal was not observed after runtime drop");
         });
         assert_eq!(shutdown.last_signal(), Some(Signal::SIGHUP));
+    }
+
+    #[tokio::test]
+    async fn graceful_join_waits_for_cancellation_cleanup() {
+        let shutdown = Shutdown::new();
+        let mut tasks = shutdown.join_set();
+        let token = shutdown.cancellation_token();
+        let (started_tx, started_rx) = oneshot::channel();
+        let (cleaning_tx, cleaning_rx) = oneshot::channel();
+        let (finish_tx, finish_rx) = oneshot::channel();
+        tasks.spawn(move || async move {
+            started_tx.send(()).unwrap();
+            token.cancelled().await;
+            cleaning_tx.send(()).unwrap();
+            finish_rx.await.unwrap();
+        });
+        started_rx.await.unwrap();
+        shutdown.shutdown();
+
+        let wait = tokio::spawn(async move { tasks.wait_all_gracefully().await });
+        cleaning_rx.await.expect("cleanup was aborted");
+        assert!(!wait.is_finished(), "join returned before cleanup finished");
+        finish_tx.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), wait)
+            .await
+            .expect("join did not finish after cleanup")
+            .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "cleanup task panicked")]
+    async fn graceful_join_propagates_panics() {
+        let shutdown = Shutdown::new();
+        let mut tasks = shutdown.join_set::<()>();
+        tasks.spawn(|| async { panic!("cleanup task panicked") });
+        tasks.wait_all_gracefully().await;
     }
 
     #[tokio::test]

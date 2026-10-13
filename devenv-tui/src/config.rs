@@ -1,5 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crossterm::style::Color;
+use devenv_shell::indicators::Indicators;
 use devenv_shell::keybindings::{ShellAction, ShellKeyChord, ShellKeyCode, ShellKeybindings};
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -209,9 +210,12 @@ impl TuiRunContext {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct TuiPreferences {
+    /// Use emoji for display indicators, such as the eye in the shell status line.
+    /// Set to `false` to use non-emoji Unicode glyphs instead.
+    pub emoji: bool,
     pub viewport: ViewportPlacement,
     pub theme: ThemeConfig,
     pub statusline: StatuslineConfig,
@@ -219,7 +223,25 @@ pub struct TuiPreferences {
     pub behavior: BehaviorConfig,
 }
 
+impl Default for TuiPreferences {
+    fn default() -> Self {
+        Self {
+            emoji: true,
+            viewport: ViewportPlacement::default(),
+            theme: ThemeConfig::default(),
+            statusline: StatuslineConfig::default(),
+            keybindings: KeybindingsConfig::default(),
+            behavior: BehaviorConfig::default(),
+        }
+    }
+}
+
 impl TuiPreferences {
+    /// The glyphs for display indicators that have an emoji form.
+    pub fn indicators(&self) -> Indicators {
+        Indicators::new(self.emoji)
+    }
+
     pub fn validate(&self) -> Result<(), UserConfigError> {
         self.theme.validate()?;
         self.statusline.validate(&self.theme.palette)?;
@@ -1796,6 +1818,78 @@ mod tests {
     }
 
     #[test]
+    fn tui_emoji_defaults_to_true() {
+        assert!(TuiPreferences::default().emoji);
+        assert!(UserConfig::default().tui.emoji);
+        assert!(TuiPreferences::default().indicators().emoji());
+        for yaml in [
+            "version: 1\n",
+            "version: 1\ntui: {}\n",
+            "version: 1\ntui:\n  viewport: top\n  statusline:\n    enabled: false\n",
+        ] {
+            let config = UserConfig::from_yaml("config.yaml", yaml.into()).unwrap();
+            assert!(config.tui.emoji, "{yaml}");
+            assert_eq!(config.tui.indicators(), Indicators::new(true), "{yaml}");
+        }
+    }
+
+    #[test]
+    fn tui_emoji_can_be_disabled_without_changing_other_settings() {
+        let config =
+            UserConfig::from_yaml("config.yaml", "version: 1\ntui:\n  emoji: false\n".into())
+                .unwrap();
+        assert!(!config.tui.emoji);
+        assert_eq!(config.tui.indicators(), Indicators::new(false));
+        // Everything else keeps its default, including statusline visibility.
+        assert!(config.tui.statusline.enabled);
+        assert!(config.tui.uses_default_statusline());
+        assert_eq!(config.tui.viewport, ViewportPlacement::Inline);
+
+        let enabled =
+            UserConfig::from_yaml("config.yaml", "version: 1\ntui:\n  emoji: true\n".into())
+                .unwrap();
+        assert!(enabled.tui.emoji);
+    }
+
+    #[test]
+    fn tui_emoji_must_be_a_boolean() {
+        for value in ["maybe", "1", "[]"] {
+            let error = UserConfig::from_yaml(
+                "config.yaml",
+                format!("version: 1\ntui:\n  emoji: {value}\n"),
+            )
+            .unwrap_err();
+            assert!(matches!(error, UserConfigError::Parse { .. }), "{value}");
+        }
+    }
+
+    #[test]
+    fn tui_emoji_round_trips() {
+        for emoji in [true, false] {
+            let mut config = UserConfig::default();
+            config.tui.emoji = emoji;
+            let parsed = UserConfig::from_yaml("config.yaml", config.to_yaml().unwrap()).unwrap();
+            assert_eq!(parsed.tui.emoji, emoji);
+        }
+    }
+
+    #[test]
+    fn tui_emoji_indicators_use_single_cell_glyphs_without_emoji() {
+        use unicode_width::UnicodeWidthStr;
+
+        let indicators = TuiPreferences {
+            emoji: false,
+            ..TuiPreferences::default()
+        }
+        .indicators();
+        for indicator in devenv_shell::indicators::Indicator::ALL {
+            let glyph = indicators.glyph(indicator);
+            assert_eq!(glyph.text.width(), 1, "{indicator:?}");
+            assert_eq!(glyph.gap, 1, "{indicator:?}");
+        }
+    }
+
+    #[test]
     fn default_config_round_trips() {
         let config = UserConfig::default();
         let serialized = config.to_yaml().unwrap();
@@ -1815,6 +1909,14 @@ mod tests {
         let schema = serde_json::to_value(schemars::schema_for!(UserConfig)).unwrap();
 
         assert!(schema.pointer("/properties/$schema").is_none());
+        assert_eq!(
+            schema.pointer("/$defs/TuiPreferences/properties/emoji/type"),
+            Some(&"boolean".into())
+        );
+        assert_eq!(
+            schema.pointer("/$defs/TuiPreferences/properties/emoji/default"),
+            Some(&true.into())
+        );
         assert_eq!(
             schema.pointer("/properties/version/minimum"),
             Some(&1.into())

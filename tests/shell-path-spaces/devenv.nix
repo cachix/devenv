@@ -1,4 +1,6 @@
+{ pkgs, ... }:
 {
+  packages = [ pkgs.zsh ];
   # Simulate Python venv activation: an enterShell task re-prepends a directory
   # to PATH and exports PATH. Combined with a space-containing PATH entry this
   # used to glue `export PATH='…'` onto `eval "${shellHook:-}"` in shell-env.sh.
