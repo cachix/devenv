@@ -12,7 +12,7 @@ async fn failed_prerequisite_is_visible_under_each_process_with_stopped_filter()
     let (mut events, handle) = devenv_activity::init();
     let _guard = handle.install();
     // Keep this as one test: the activity transport is process-global.
-    for shared in [false, true] {
+    for (shared, prerequisite_count) in [(false, 1), (true, 1), (false, 6)] {
         let temp = tempfile::tempdir().unwrap();
         let script = temp.path().join("setup");
         std::fs::write(
@@ -26,17 +26,23 @@ async fn failed_prerequisite_is_visible_under_each_process_with_stopped_filter()
         } else {
             vec!["alpha"]
         };
-        let mut configs = vec![TaskConfig {
-            name: "test:setup".into(),
-            command: Some(script.to_string_lossy().into_owned()),
-            ..Default::default()
-        }];
+        let prerequisites: Vec<String> = (0..prerequisite_count)
+            .map(|index| format!("test:setup-{index}"))
+            .collect();
+        let mut configs: Vec<TaskConfig> = prerequisites
+            .iter()
+            .map(|name| TaskConfig {
+                name: name.clone(),
+                command: Some(script.to_string_lossy().into_owned()),
+                ..Default::default()
+            })
+            .collect();
         for name in &names {
             configs.push(TaskConfig {
                 name: format!("devenv:processes:{name}"),
                 r#type: TaskType::Process,
                 command: Some("true".into()),
-                after: vec!["test:setup".into()],
+                after: prerequisites.clone(),
                 ..Default::default()
             });
         }
@@ -77,11 +83,11 @@ async fn failed_prerequisite_is_visible_under_each_process_with_stopped_filter()
         let display = model.get_display_activities(&ui);
         let failures: Vec<_> = display
             .iter()
-            .filter(|d| d.activity.name == "test:setup")
+            .filter(|d| prerequisites.contains(&d.activity.name))
             .collect();
         assert_eq!(
             failures.len(),
-            names.len(),
+            names.len() * prerequisite_count,
             "failed shared tasks must be visible under every process"
         );
         for failure in failures {
