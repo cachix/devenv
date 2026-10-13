@@ -462,7 +462,7 @@ Depends on the configured toolchain:
 
  - ` nixpkgs ` channel: ` pkgs.rust-analyzer `.
  - non-nixpkgs channel: the ` rust-analyzer ` component from the rust-overlay toolchain, with a fallback to ` pkgs.rust-analyzer ` if not present in the manifest.
- - ` toolchainFile `: the aggregated toolchain package derived from the file.
+ - ` toolchainFile `: the aggregated toolchain package if it contains rust-analyzer, otherwise ` pkgs.rust-analyzer `.
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -824,3 +824,10 @@ false
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+### Language server with toolchain files
+
+Since devenv 2.4.1, toolchain files that omit `rust-analyzer`, including minimal profiles, use the standalone `pkgs.rust-analyzer` language server by default.
+If the file includes rust-analyzer, devenv uses the server from that toolchain instead.
+To keep the server tied to a pinned compiler version, list `rust-analyzer` in the file's components.
+Set `languages.rust.lsp.package` to select another server, or disable it with `languages.rust.lsp.enable = false`.
