@@ -8,18 +8,22 @@ set -euo pipefail
 step() { echo; echo "── $* ──"; }
 fail() { echo "✗ $*" >&2; exit 1; }
 
+# Consume the complete output so matching cannot give the producer SIGPIPE
+# under pipefail. Keep grep's exit status for the assertion.
+matches() { grep "$@" >/dev/null; }
+
 rm -f devenv.yaml
 
 step "shell exports cmdline + task-defined env vars"
-devenv shell -- env | grep -q DEVENV_CMDLINE
-devenv shell -- env | grep -q "DEVENV_CLI_TEST_VAR=hello-from-task"
+devenv shell -- env | matches DEVENV_CMDLINE
+devenv shell -- env | matches "DEVENV_CLI_TEST_VAR=hello-from-task"
 
 step "build + inspect a single package attribute"
 devenv build languages.python.package
 
 step "shell forwards arguments verbatim and to subdirs"
-devenv shell ls -- -la | grep -q "\.test\.sh"
-devenv shell ls ../ | grep -q "cli"
+devenv shell ls -- -la | matches "\.test\.sh"
+devenv shell ls ../ | matches "cli"
 
 step "shell accepts command strings and literal arguments with or without --"
 for separator in '' --; do
@@ -65,26 +69,26 @@ devenv shell -- sh -c 'exit 3' || rc=$?
 [[ "$rc" == 3 ]] || fail "shell did not preserve exit status 3, got $rc"
 
 step "info/show surface enabled languages"
-devenv info | grep -q "python3-"
-devenv show | grep -q "python3-"
+devenv info | matches "python3-"
+devenv show | matches "python3-"
 
 step "search returns packages and writes trace cache hits"
 devenv search ncdu 2>&1 \
-  | grep -Eq "Found [0-9]+ packages and [0-9]+ options for 'ncdu'"
+  | matches -E "Found [0-9]+ packages and [0-9]+ options for 'ncdu'"
 RUST_LOG=trace devenv --verbose --trace-output file:search-trace.log \
   search '^ncdu$' 2>&1 \
-  | grep -Eq "Found [0-9]+ packages and [0-9]+ options"
-grep "cache hit" search-trace.log | grep -q optionsJSON \
+  | matches -E "Found [0-9]+ packages and [0-9]+ options"
+grep "cache hit" search-trace.log | matches optionsJSON \
   || fail "expected an optionsJSON cache hit in search-trace.log"
 devenv search xyznonexistentpackagexyz 2>&1 \
-  | grep -Eq "Found 0 packages and 0 options"
+  | matches -E "Found 0 packages and 0 options"
 
 step "up fails when no processes are defined"
 if devenv up; then fail "devenv up should fail without processes"; fi
 
 step "unknown profile is reported clearly"
 out=$(devenv --profile some-profile info 2>&1 || true)
-echo "$out" | grep -q "Profile 'some-profile' not found" \
+echo "$out" | matches "Profile 'some-profile' not found" \
   || fail "expected 'Profile not found' error, got: $out"
 
 step "--from loads an external project and ignores local devenv.nix"
@@ -94,8 +98,8 @@ from_test_dir="$(cd from-test && pwd)"
 # we used the --from devenv.nix, not the local one.
 for path in "path:$from_test_dir" "path:./from-test"; do
   out=$(devenv --from "$path" info)
-  echo "$out" | grep -q "rust-toolchain" || fail "--from=$path missing rust toolchain"
-  ! echo "$out" | grep -q "python3" || fail "--from=$path leaked local python3"
+  echo "$out" | matches "rust-toolchain" || fail "--from=$path missing rust toolchain"
+  ! echo "$out" | matches "python3" || fail "--from=$path leaked local python3"
 done
 
 step "--from ignores the local devenv.local.nix"
@@ -117,7 +121,7 @@ cat > devenv.local.nix <<'EOF'
 EOF
 out=$(devenv --from "path:$from_test_dir" info) \
   || fail "--from failed with a local devenv.local.nix present"
-echo "$out" | grep -q "rust-toolchain" \
+echo "$out" | matches "rust-toolchain" \
   || fail "--from=$from_test_dir missing rust toolchain"
 popd >/dev/null
 rm -rf test-local-override
@@ -125,12 +129,12 @@ rm -rf test-local-override
 step "--from works in a directory without devenv.nix"
 mkdir -p test-from-only && pushd test-from-only >/dev/null
 out=$(devenv --from "path:$from_test_dir" info)
-echo "$out" | grep -q "rust-toolchain" || fail "--from didn't load remote project"
+echo "$out" | matches "rust-toolchain" || fail "--from didn't load remote project"
 popd >/dev/null
 rm -rf test-from-only
 
 step "-O packages:pkgs appends ad-hoc packages"
-devenv -O packages:pkgs "hello" shell -- hello | grep -q "Hello, world"
+devenv -O packages:pkgs "hello" shell -- hello | matches "Hello, world"
 
 # Containers are Linux-only.
 if [[ "$(uname)" == "Linux" ]]; then
@@ -138,6 +142,6 @@ if [[ "$(uname)" == "Linux" ]]; then
   if devenv container build shell; then fail "container build should fail without inputs"; fi
   devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin --follows nixpkgs
   devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
-  devenv container build shell | grep -q image-shell.json
+  devenv container build shell | matches image-shell.json
   devenv gc
 fi
