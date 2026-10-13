@@ -126,11 +126,11 @@ jobs:
 
       # devenv-tasks is outside Cargo's default workspace members. Run its
       # process scheduling regressions explicitly on Linux and macOS.
-      - name: Check concurrent process scheduling
+      - name: Check process scheduling and dependency errors
         run: |
           ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- \
             cargo nextest run -p devenv-tasks -j 2 --retries 0 \
-              -E 'test(concurrent_dynamic_starts_share_never_started_process_prerequisite) | test(concurrent_start_stop_keeps_explicitly_stopped_dependencies_off)'
+              -E 'test(concurrent_dynamic_starts_share_never_started_process_prerequisite) | test(concurrent_start_stop_keeps_explicitly_stopped_dependencies_off) | test(failed_prerequisite_is_visible_under_each_process_with_stopped_filter)'
 
       # Exercise the actual terminal boundary on every platform: PTY resize,
       # crossterm key decoding, rendering, and reactive process commands.

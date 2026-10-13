@@ -38,6 +38,7 @@ default = []
 test-all = ["devenv-processes/test-all"]
 
 [dev-dependencies]
+devenv-tui.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true
 tokio-test.workspace = true

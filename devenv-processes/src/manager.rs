@@ -994,6 +994,20 @@ impl ProcessRunner {
         infos
     }
 
+    /// Activity used to display a registered process, across lifecycle phases.
+    pub async fn activity_id(&self, name: &str) -> Option<u64> {
+        let processes = self.processes.read().await;
+        let activity = match processes.get(name)? {
+            ProcessEntry::NotStarted { activity, .. }
+            | ProcessEntry::Waiting { activity, .. }
+            | ProcessEntry::Launching { activity, .. }
+            | ProcessEntry::Stopping { activity, .. }
+            | ProcessEntry::Stopped { activity, .. } => activity,
+            ProcessEntry::Active(handle) => &handle.resources.activity,
+        };
+        Some(activity.id())
+    }
+
     /// Return information about one managed process.
     pub async fn process_info_by_name(&self, name: &str) -> Option<ProcessInfo> {
         let processes = self.processes.read().await;

@@ -1370,7 +1370,7 @@ impl ActivityModel {
                     ..
                 }),
                 _,
-            ) => true,
+            ) => !self.has_failed_task_descendant(activity.id),
             _ => false,
         }
     }
@@ -1417,6 +1417,33 @@ impl ActivityModel {
             return false;
         }
         is_shell_activity
+    }
+
+    /// A stopped process must not hide the task error that prevented its start.
+    fn has_failed_task_descendant(&self, activity_id: u64) -> bool {
+        let mut pending = vec![activity_id];
+        let mut visited = HashSet::from([activity_id]);
+        while let Some(parent_id) = pending.pop() {
+            for child in self
+                .activities
+                .values()
+                .filter(|child| self.is_direct_child_of(child, parent_id))
+            {
+                if !visited.insert(child.id) {
+                    continue;
+                }
+                if matches!(child.variant, ActivityVariant::Task(_))
+                    && matches!(
+                        child.state,
+                        NixActivityState::Completed { success: false, .. }
+                    )
+                {
+                    return true;
+                }
+                pending.push(child.id);
+            }
+        }
+        false
     }
 
     fn has_diagnostic_descendant(&self, activity_id: u64) -> bool {

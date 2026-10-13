@@ -8,6 +8,8 @@
 
 ### Bug Fixes
 
+- Process dependency failures now remain visible in the TUI with the failed task and its error output, including when stopped processes are hidden ([#3017](https://github.com/cachix/devenv/issues/3017)).
+
 - Task cancellation now stops status checks and waits for nested commands to stop before the scheduler exits ([#3251](https://github.com/cachix/devenv/issues/3251)).
 - Fixed rapid process restarts failing because a stopped process still held its ownership claim.
 - Starting a process on demand now starts never-started, enabled process dependencies. Explicitly stopped and disabled dependencies stay off ([#3229](https://github.com/cachix/devenv/issues/3229)).
