@@ -10035,10 +10035,6 @@ rec {
         ];
         devDependencies = [
           {
-            name = "devenv-tui";
-            packageId = "devenv-tui";
-          }
-          {
             name = "nix";
             packageId = "nix 0.31.3";
             features = [ "fs" "poll" "process" "resource" "signal" "term" "signal" ];

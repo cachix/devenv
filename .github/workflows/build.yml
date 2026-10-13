@@ -129,7 +129,7 @@ jobs:
       - name: Check process scheduling and dependency errors
         run: |
           ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- \
-            cargo nextest run -p devenv-tasks -j 2 --retries 0 \
+            cargo nextest run -p devenv-tasks -p devenv -j 2 --retries 0 \
               -E 'test(concurrent_dynamic_starts_share_never_started_process_prerequisite) | test(concurrent_start_stop_keeps_explicitly_stopped_dependencies_off) | test(failed_prerequisite_is_visible_under_each_process_with_stopped_filter)'
 
       # Exercise the actual terminal boundary on every platform: PTY resize,
