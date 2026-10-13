@@ -9,7 +9,7 @@
 ### Bug Fixes
 
 - Failed process prerequisites and their error output now remain visible in the TUI, including shared prerequisites and when stopped processes are hidden ([#3017](https://github.com/cachix/devenv/issues/3017)). Processes with more than five prerequisites also show the full task list.
-
+- Fixed `devenv shell` printing `bash: export: … not a valid identifier` and truncating `PATH` at the first space when a task re-exports `PATH` (for example Python venv activation) and the parent `PATH` contains a directory with a space ([#3165](https://github.com/cachix/devenv/issues/3165)).
 - Task cancellation now stops status checks and waits for nested commands to stop before the scheduler exits ([#3251](https://github.com/cachix/devenv/issues/3251)).
 - Fixed rapid process restarts failing because a stopped process still held its ownership claim.
 - Starting a process on demand now starts never-started, enabled process dependencies. Explicitly stopped and disabled dependencies stay off ([#3229](https://github.com/cachix/devenv/issues/3229)).
