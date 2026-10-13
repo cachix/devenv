@@ -27,6 +27,19 @@ let
     cfg.components
     ++ lib.optional cfg.cranelift.enable "rustc-codegen-cranelift-preview";
 
+  nixpkgsToolchain = pkgs.symlinkJoin {
+    name = "rust-toolchain-${cfg.channel}";
+    paths = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) componentsToInstall;
+  };
+
+  # Component sources only describe the toolchain we generated. An overridden
+  # aggregate package discovers its own sources through rustc's sysroot.
+  sourcePathFor = generatedToolchain:
+    if cfg.toolchainPackage.outPath != generatedToolchain.outPath then null
+    else if cfg.toolchain ? rust-src
+    then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
+    else pkgs.rustPlatform.rustLibSrc;
+
   validChannels = [ "nixpkgs" "stable" "beta" "nightly" ];
 
   rust-overlay = config.lib.getInput {
@@ -281,6 +294,15 @@ in
           '';
         }
         {
+          date = "2026-10-12";
+          title = "Custom Rust toolchains now use their own standard-library sources";
+          when = cfg.enable;
+          description = ''
+            Custom `languages.rust.toolchainPackage` packages and `toolchainFile` profiles no longer use standard-library sources from a different toolchain.
+            rust-analyzer discovers sources from the selected compiler's sysroot. Include `rust-src` in your toolchain, or set `env.RUST_SRC_PATH` explicitly for sources installed separately.
+          '';
+        }
+        {
           date = "2026-03-08";
           title = "`languages.rust.import` now uses your configured toolchain";
           when = cfg.enable;
@@ -447,13 +469,6 @@ in
             optionalEnv = cond: str: if cond then str else null;
           in
           {
-            # RUST_SRC_PATH is necessary when rust-src is not at the same location as
-            # as rustc. This is the case with the rust toolchain from nixpkgs.
-            RUST_SRC_PATH =
-              if cfg.toolchain ? rust-src
-              then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
-              else pkgs.rustPlatform.rustLibSrc;
-
             CARGO_UNSTABLE_CODEGEN_BACKEND = optionalEnv cfg.cranelift.enable "true";
             CARGO_PROFILE_DEV_CODEGEN_BACKEND = optionalEnv cfg.cranelift.enable "cranelift";
             CARGO_PROFILE_DEV_BUILD_OVERRIDE_CODEGEN_BACKEND = optionalEnv cfg.cranelift.forceBuildScriptsLlvm "llvm";
@@ -469,6 +484,10 @@ in
             "CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" =
               if forceLldWithClang then clangLinkerDriver else lib.getExe pkgs.clang;
           };
+
+        # Do not inherit another shell's sources when this toolchain uses its
+        # own sysroot. Explicit env.RUST_SRC_PATH overrides remain authoritative.
+        unsetEnvVars = lib.optional (config.env.RUST_SRC_PATH == null) "RUST_SRC_PATH";
 
         git-hooks.tools = {
           cargo = config.lib.mkOverrideDefault cfg.toolchainPackage;
@@ -505,6 +524,7 @@ in
           && builtins.elem (toString analyzerComponent) (map toString toolchainFromFile.paths);
       in
       {
+        env.RUST_SRC_PATH = lib.mkDefault null;
         languages.rust.toolchainPackage = toolchainFromFile;
         languages.rust.lsp.package = lib.mkDefault (
           if hasAnalyzer then toolchainFromFile else pkgs.rust-analyzer
@@ -514,12 +534,8 @@ in
     ))
 
     (lib.mkIf (cfg.toolchainFile == null && cfg.channel == "nixpkgs") {
-      languages.rust.toolchainPackage = lib.mkDefault (
-        pkgs.symlinkJoin {
-          name = "rust-toolchain-${cfg.channel}";
-          paths = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) componentsToInstall;
-        }
-      );
+      env.RUST_SRC_PATH = lib.mkDefault (sourcePathFor nixpkgsToolchain);
+      languages.rust.toolchainPackage = lib.mkDefault nixpkgsToolchain;
       languages.rust.lsp.package = lib.mkDefault cfg.toolchain.rust-analyzer;
       packages = [ cfg.toolchainPackage ];
     })
@@ -601,6 +617,7 @@ in
         };
       in
       {
+        env.RUST_SRC_PATH = lib.mkDefault (sourcePathFor profile);
         languages.rust.toolchain = builtins.mapAttrs (_: lib.mkDefault) toolchainComponents;
         languages.rust.toolchainPackage = lib.mkDefault profile;
         languages.rust.lsp.package = lib.mkDefault (
