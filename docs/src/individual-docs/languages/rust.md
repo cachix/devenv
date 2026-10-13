@@ -148,3 +148,10 @@ Rust tools integrate seamlessly with [git hooks](/reference/options/#git-hooksho
 [comment]: # (Please add your documentation on top of this line)
 
 @AUTOGEN_OPTIONS@
+
+### Language server with toolchain files
+
+Since devenv 2.4.1, toolchain files that omit `rust-analyzer`, including minimal profiles, use the standalone `pkgs.rust-analyzer` language server by default.
+If the file includes rust-analyzer, devenv uses the server from that toolchain instead.
+To keep the server tied to a pinned compiler version, list `rust-analyzer` in the file's components.
+Set `languages.rust.lsp.package` to select another server, or disable it with `languages.rust.lsp.enable = false`.
