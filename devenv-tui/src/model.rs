@@ -1370,7 +1370,7 @@ impl ActivityModel {
                     ..
                 }),
                 _,
-            ) => true,
+            ) => !self.has_failed_task_descendant(activity.id),
             _ => false,
         }
     }
@@ -1419,10 +1419,36 @@ impl ActivityModel {
         is_shell_activity
     }
 
+    /// A stopped process must not hide the task error that prevented its start.
+    fn has_failed_task_descendant(&self, activity_id: u64) -> bool {
+        self.has_descendant_matching(activity_id, |child| {
+            matches!(child.variant, ActivityVariant::Task(_))
+                && matches!(
+                    child.state,
+                    NixActivityState::Completed { success: false, .. }
+                )
+        })
+    }
+
     fn has_diagnostic_descendant(&self, activity_id: u64) -> bool {
+        self.has_descendant_matching(activity_id, |child| {
+            matches!(
+                child.variant,
+                ActivityVariant::Message(MessageActivity {
+                    level: ActivityLevel::Error | ActivityLevel::Warn,
+                    ..
+                })
+            )
+        })
+    }
+
+    fn has_descendant_matching(
+        &self,
+        activity_id: u64,
+        predicate: impl Fn(&Activity) -> bool,
+    ) -> bool {
         let mut pending = vec![activity_id];
         let mut visited = HashSet::from([activity_id]);
-
         while let Some(parent_id) = pending.pop() {
             for child in self
                 .activities
@@ -1432,19 +1458,12 @@ impl ActivityModel {
                 if !visited.insert(child.id) {
                     continue;
                 }
-                if matches!(
-                    child.variant,
-                    ActivityVariant::Message(MessageActivity {
-                        level: ActivityLevel::Error | ActivityLevel::Warn,
-                        ..
-                    })
-                ) {
+                if predicate(child) {
                     return true;
                 }
                 pending.push(child.id);
             }
         }
-
         false
     }
 
@@ -1672,7 +1691,7 @@ impl ActivityModel {
     /// Prioritizes active activities, then lingering completed ones, then older completed ones.
     /// Returns a tuple of (visible_children, total_children_count, hidden_count).
     ///
-    /// Task activities always show all their children without linger/limit restrictions,
+    /// Task and process activities show all their children without linger/limit restrictions,
     /// so completed tasks remain visible after execution.
     fn get_children(
         &self,
@@ -1681,11 +1700,13 @@ impl ActivityModel {
     ) -> (Vec<&Activity>, usize, usize) {
         let now = Instant::now();
 
-        // Check if parent is a Task activity - tasks always show all children
-        let parent_is_task = self
-            .activities
-            .get(&parent_id)
-            .is_some_and(|a| matches!(a.variant, ActivityVariant::Task(_)));
+        // Process prerequisites need the same visibility as ordinary task children.
+        let parent_is_task_or_process = self.activities.get(&parent_id).is_some_and(|a| {
+            matches!(
+                a.variant,
+                ActivityVariant::Task(_) | ActivityVariant::Process(_)
+            )
+        });
 
         // Get all children of this parent (including additional parents),
         // excluding hidden activities.
@@ -1704,7 +1725,7 @@ impl ActivityModel {
         let has_process_children = all_children
             .iter()
             .any(|a| matches!(a.variant, ActivityVariant::Process(_)));
-        if parent_is_task || has_process_children {
+        if parent_is_task_or_process || has_process_children {
             // Sort non-process activities first (by id), then processes alphabetically
             all_children.sort_by(|a, b| {
                 let a_is_process = matches!(a.variant, ActivityVariant::Process(_));

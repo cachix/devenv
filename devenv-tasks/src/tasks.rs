@@ -1385,32 +1385,6 @@ impl Tasks {
             task_ids.insert(index, next_id());
         }
 
-        // Build TaskInfo for all tasks
-        let mut task_infos: Vec<TaskInfo> = Vec::new();
-        for &index in &self.tasks_order {
-            let task_state = self.graph[index].read().await;
-            let task_id = task_ids[&index];
-
-            task_infos.push(TaskInfo {
-                id: task_id,
-                name: task_state.task.name.clone(),
-                show_output: task_state.task.show_output,
-                is_process: task_state.task.r#type == crate::types::TaskType::Process,
-            });
-        }
-
-        // Compute hierarchy edges using the extracted function
-        let edges = compute_hierarchy_edges(
-            &self.graph,
-            &self.tasks_order,
-            &self.roots,
-            &task_ids,
-            orchestration_activity.id(),
-        );
-
-        // Emit hierarchy once upfront
-        emit_task_hierarchy(task_infos, edges);
-
         let total_tasks = self.tasks_order.len() as u64;
         let completed_tasks = Arc::new(std::sync::atomic::AtomicU64::new(0));
         let scheduled: HashSet<NodeIndex> = self.tasks_order.iter().copied().collect();
@@ -1492,6 +1466,41 @@ impl Tasks {
                 }
             }
         }
+
+        // Process registration creates the actual TUI activities. Use those
+        // IDs as dependency parents rather than the unused process-task IDs.
+        let mut display_ids = HashMap::new();
+        let mut task_infos = Vec::new();
+        for &index in &self.tasks_order {
+            let state = self.graph[index].read().await;
+            let is_process = state.task.r#type == TaskType::Process;
+            let id = if is_process {
+                let name = crate::types::process_name(&state.task.name);
+                let Some(id) = self.process_runner.activity_id(name).await else {
+                    // Failed registration leaves no process parent. Its
+                    // prerequisites fall back to the orchestration activity.
+                    continue;
+                };
+                id
+            } else {
+                task_ids[&index]
+            };
+            display_ids.insert(index, id);
+            task_infos.push(TaskInfo {
+                id,
+                name: state.task.name.clone(),
+                show_output: state.task.show_output,
+                is_process,
+            });
+        }
+        let edges = compute_hierarchy_edges(
+            &self.graph,
+            &self.tasks_order,
+            &self.roots,
+            &display_ids,
+            orchestration_activity.id(),
+        );
+        emit_task_hierarchy(task_infos, edges);
 
         for index in &self.tasks_order {
             let task_state = &self.graph[*index];
