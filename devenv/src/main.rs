@@ -1401,7 +1401,7 @@ async fn dispatch_command(
             Ok(CommandResult::Exec(shell_config.command))
         }
         Commands::Test { .. } => {
-            devenv.test(verbosity).await?;
+            devenv.test(verbosity, config_strict_ports).await?;
             Ok(CommandResult::Done)
         }
         Commands::Container { command } => match command {

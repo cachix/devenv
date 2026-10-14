@@ -20,6 +20,7 @@
 - Detached process startup now publishes the manager as soon as processes are scheduled, without waiting for service readiness, and keeps HTTPS proxy routes during a slow startup ([#3216](https://github.com/cachix/devenv/issues/3216)).
 - `devenv test` with the native process manager now reports a process dependency on `start.enable = false` before starting services, instead of waiting indefinitely for the disabled process ([#3215](https://github.com/cachix/devenv/issues/3215)).
 - Fixed auto-activation starting the devenv shell at the project root when you `cd` into a subdirectory. The shell now starts in the directory you entered, like `devenv shell` run from that directory ([#3041](https://github.com/cachix/devenv/issues/3041)).
+- `devenv test` now honours `strict_ports: true` and fails on a port conflict, as `devenv up` does, instead of silently moving the service to the next free port ([#3163](https://github.com/cachix/devenv/issues/3163)).
 - `enterShell` now runs from the project root when `devenv shell` starts in a subdirectory, before the shell moves to that subdirectory. Previously it ran in the subdirectory, so commands with relative paths, such as the JavaScript package install, looked in the wrong place.
 
 ## 2.4.0 (2026-09-24)
