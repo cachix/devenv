@@ -926,4 +926,82 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
+
+    /// Every Nushell shell in a project writes to
+    /// `.devenv/nu/reload_helper.sh`. Since Nushell executes the file each
+    /// time, the helper must not hardcode any individual shell's reload file
+    /// path; otherwise, earlier shells start applying the latest shell's reload
+    /// script. Also, this means old shells will error once new shells are
+    /// exited.
+    #[test]
+    fn nushell_reload_helper_is_shared_between_shells() {
+        if Command::new("nu").arg("--version").output().is_err() {
+            return;
+        }
+
+        let tmp = unique_tmp_dir("nu-reload-shared-helper");
+        let shell_keybindings = ShellKeybindings::default();
+
+        let write_init = |reload_file: &Path| {
+            let ctx = RcfileContext {
+                env_script_path: Path::new("/dev/null"),
+                env_diff_helpers: "",
+                reload_hook: reload_file.to_str().unwrap(),
+                target_shell_path: None,
+                init_dir: &tmp,
+                shell_keybindings: &shell_keybindings,
+                prompt_prefix: false,
+            };
+
+            NushellDialect.write_init_files(&ctx).unwrap();
+
+            std::fs::read_to_string(tmp.join("nu/config.nu"))
+                .unwrap()
+                .lines()
+                .filter(|line| !line.starts_with("source "))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        // Shell A starts and loads config.nu.
+        let reload_a = tmp.join("reload-a.sh");
+        let config_a = tmp.join("config-a.nu");
+        std::fs::write(&config_a, write_init(&reload_a)).unwrap();
+
+        // Shell B starts in the same directory
+        let reload_b = tmp.join("reload-b.sh");
+        write_init(&reload_b);
+
+        // Shell A sees DEVENV_RELOAD_TEST_VAR=from_a
+        std::fs::write(&reload_a, "export DEVENV_RELOAD_TEST_VAR=from_a\n").unwrap();
+
+        let script = format!(
+            r#"
+            source {config_a:?}
+            __devenv_reload_apply
+            print $env.DEVENV_RELOAD_TEST_VAR
+        "#
+        );
+
+        // If config reloaded, expect "from_a". Otherwise, var is unset and
+        // we'll see "old".
+        let output = Command::new("nu")
+            .arg("--no-config-file")
+            .arg("-c")
+            .arg(&script)
+            .env("_DEVENV_PATH", std::env::var("PATH").unwrap_or_default())
+            .env("DEVENV_RELOAD_TEST_VAR", "old")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "Nushell reload failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "from_a");
+        assert!(!reload_a.exists(), "shell A's reload file was not used");
+        let _ = std::fs::remove_dir_all(tmp);
+    }
 }
