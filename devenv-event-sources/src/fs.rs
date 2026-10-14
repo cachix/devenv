@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tokio::sync::{Mutex as AsyncMutex, mpsc};
+use tokio::sync::{Mutex as AsyncMutex, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::{trace, warn};
 use watchexec::{Config, WatchedPath};
@@ -446,6 +446,20 @@ pub struct WatcherHandle {
     operation_lock: Arc<AsyncMutex<()>>,
     config: Option<Arc<Config>>,
     recursive: bool,
+    /// Closed once the fs worker has exited; it never signals readiness after that.
+    fs_worker: watch::Receiver<()>,
+}
+
+/// Waits for the fs worker to apply a pathset change, or for the worker to
+/// exit. A worker that fails to start its native backend (e.g. inotify
+/// instance limit reached) returns without signalling, so waiting on
+/// readiness alone would hang.
+async fn wait_fs_ready(ready: &mut watch::Receiver<()>, fs_worker: &watch::Receiver<()>) {
+    let mut fs_worker = fs_worker.clone();
+    tokio::select! {
+        _ = ready.changed() => {}
+        _ = fs_worker.changed() => {}
+    }
 }
 
 fn direct_target(path: &Path) -> PathBuf {
@@ -708,7 +722,7 @@ impl WatcherHandle {
         }
 
         if changed && let Some(ref mut rx) = ready {
-            let _ = rx.changed().await;
+            wait_fs_ready(rx, &self.fs_worker).await;
         }
     }
 
@@ -750,7 +764,7 @@ impl WatcherHandle {
         }
 
         if let Some(ref mut rx) = ready {
-            let _ = rx.changed().await;
+            wait_fs_ready(rx, &self.fs_worker).await;
         }
     }
 
@@ -822,7 +836,7 @@ impl WatcherHandle {
         };
 
         if changed && let Some(ref mut rx) = ready {
-            let _ = rx.changed().await;
+            wait_fs_ready(rx, &self.fs_worker).await;
         }
     }
 
@@ -859,14 +873,14 @@ impl WatcherHandle {
                     .filter(|(path, _)| !active_anchors.contains(path.as_ref())),
             );
         }
-        let _ = ready.changed().await;
+        wait_fs_ready(&mut ready, &self.fs_worker).await;
 
         let mut ready = config.fs_ready();
         {
             let state = self.registrations.lock().unwrap();
             set_pathset(config, state.anchors());
         }
-        let _ = ready.changed().await;
+        wait_fs_ready(&mut ready, &self.fs_worker).await;
     }
 
     /// Force all watched paths to be re-registered with the OS.
@@ -904,7 +918,7 @@ impl WatcherHandle {
 
         // Wait for the clear to be processed
         if let Some(ref mut rx) = ready {
-            let _ = rx.changed().await;
+            wait_fs_ready(rx, &self.fs_worker).await;
         }
 
         // Now re-subscribe for the re-add
@@ -921,7 +935,7 @@ impl WatcherHandle {
         }
 
         if let Some(ref mut rx) = ready {
-            let _ = rx.changed().await;
+            wait_fs_ready(rx, &self.fs_worker).await;
         }
     }
 
@@ -975,6 +989,7 @@ impl FileWatcher {
                         operation_lock,
                         config: None,
                         recursive: config.recursive,
+                        fs_worker: watch::channel(()).1,
                     },
                     legacy_pending: VecDeque::new(),
                     tasks: Vec::new(),
@@ -1046,11 +1061,13 @@ impl FileWatcher {
 
         set_pathset(&wx_config, registrations.lock().unwrap().anchors());
 
+        let (fs_worker_alive, fs_worker) = watch::channel(());
         let handle = WatcherHandle {
             registrations: registrations.clone(),
             operation_lock,
             config: Some(wx_config.clone()),
             recursive: config.recursive,
+            fs_worker,
         };
 
         let mut watch_info = format!(
@@ -1103,6 +1120,7 @@ impl FileWatcher {
         let fs_config = wx_config.clone();
         let fs_errors = er_s;
         let fs_task = tokio::spawn(async move {
+            let _alive = fs_worker_alive;
             if let Err(e) = watchexec::sources::fs::worker(fs_config, fs_errors, ev_s).await {
                 warn!("fs worker for {} stopped: {}", watch_name, e);
                 devenv_activity::message(
@@ -1243,7 +1261,7 @@ impl FileWatcher {
         // Wait for the fs worker to finish registering OS watches.
         // Without this, file changes that happen immediately after
         // construction could be missed.
-        let _ = fs_ready.changed().await;
+        wait_fs_ready(&mut fs_ready, &handle.fs_worker).await;
 
         Self {
             rx,
@@ -2247,5 +2265,36 @@ mod tests {
         fs::set_permissions(&file_path, perms).expect("set perms 644");
 
         assert_no_event(&mut watcher, "metadata-only chmod").await;
+    }
+
+    #[tokio::test]
+    async fn test_watch_returns_when_fs_worker_has_stopped() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let target = temp_dir
+            .path()
+            .canonicalize()
+            .expect("canonicalize")
+            .join(".env");
+        let mut watcher = FileWatcher::new(
+            FileWatcherConfig {
+                paths: &[],
+                recursive: false,
+                ..Default::default()
+            },
+            "stopped-worker",
+        )
+        .await;
+        let handle = watcher.handle();
+
+        // Stands in for a worker that exits because its native backend could
+        // not be created, which happens on the first non-empty pathset.
+        let fs_task = watcher.tasks.remove(0);
+        fs_task.abort();
+        let _ = fs_task.await;
+
+        tokio::time::timeout(WATCH_TIMEOUT, handle.watch_logical(&target))
+            .await
+            .expect("watch must not wait for a stopped fs worker");
+        assert_eq!(handle.watched_paths(), vec![target]);
     }
 }
