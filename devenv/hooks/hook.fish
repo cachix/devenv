@@ -47,7 +47,7 @@ function _devenv_builtin_cd_with_history
     return $cd_status
 end
 
-# Spawn devenv shell in $project_dir and follow the user if they cd'd out.
+# Spawn devenv shell for $project_dir and follow the user if they cd'd out.
 function _devenv_hook_activate
     set -l project_dir $argv[1]
     # Something else (direnv loading a `.envrc` with `use devenv`, a manually
@@ -58,7 +58,7 @@ function _devenv_hook_activate
     end
     # `command` skips user functions shadowing external tools (e.g. grc wraps
     # `env` and pipes stdout, so `devenv shell` never sees the terminal).
-    command env -C $project_dir _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook _DEVENV_SHELL_HINT=fish devenv shell@DEVENV_SHELL_ARGS@
+    command env _DEVENV_HOOK_DIR=$project_dir _DEVENV_CALLER=hook _DEVENV_SHELL_HINT=fish devenv shell@DEVENV_SHELL_ARGS@
     # If the devenv shell exited due to cd outside the project, follow the user there
     set -l exit_dir_file "$project_dir/.devenv/exit-dir"
     if test -f "$exit_dir_file"
