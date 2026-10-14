@@ -1469,31 +1469,28 @@ impl Tasks {
 
         // Process registration creates the actual TUI activities. Use those
         // IDs as dependency parents rather than the unused process-task IDs.
-        let mut display_ids = task_ids.clone();
-        for &index in &self.tasks_order {
-            let state = self.graph[index].read().await;
-            if state.task.r#type == TaskType::Process {
-                let name = crate::types::process_name(&state.task.name);
-                if let Some(id) = self.process_runner.activity_id(name).await {
-                    display_ids.insert(index, id);
-                } else {
-                    // Failed registration leaves no process parent. Its
-                    // prerequisites fall back to the orchestration activity.
-                    display_ids.remove(&index);
-                }
-            }
-        }
+        let mut display_ids = HashMap::new();
         let mut task_infos = Vec::new();
         for &index in &self.tasks_order {
-            let Some(&id) = display_ids.get(&index) else {
-                continue;
-            };
             let state = self.graph[index].read().await;
+            let is_process = state.task.r#type == TaskType::Process;
+            let id = if is_process {
+                let name = crate::types::process_name(&state.task.name);
+                let Some(id) = self.process_runner.activity_id(name).await else {
+                    // Failed registration leaves no process parent. Its
+                    // prerequisites fall back to the orchestration activity.
+                    continue;
+                };
+                id
+            } else {
+                task_ids[&index]
+            };
+            display_ids.insert(index, id);
             task_infos.push(TaskInfo {
                 id,
                 name: state.task.name.clone(),
                 show_output: state.task.show_output,
-                is_process: state.task.r#type == TaskType::Process,
+                is_process,
             });
         }
         let edges = compute_hierarchy_edges(

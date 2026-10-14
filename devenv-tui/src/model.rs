@@ -1421,35 +1421,34 @@ impl ActivityModel {
 
     /// A stopped process must not hide the task error that prevented its start.
     fn has_failed_task_descendant(&self, activity_id: u64) -> bool {
-        let mut pending = vec![activity_id];
-        let mut visited = HashSet::from([activity_id]);
-        while let Some(parent_id) = pending.pop() {
-            for child in self
-                .activities
-                .values()
-                .filter(|child| self.is_direct_child_of(child, parent_id))
-            {
-                if !visited.insert(child.id) {
-                    continue;
-                }
-                if matches!(child.variant, ActivityVariant::Task(_))
-                    && matches!(
-                        child.state,
-                        NixActivityState::Completed { success: false, .. }
-                    )
-                {
-                    return true;
-                }
-                pending.push(child.id);
-            }
-        }
-        false
+        self.has_descendant_matching(activity_id, |child| {
+            matches!(child.variant, ActivityVariant::Task(_))
+                && matches!(
+                    child.state,
+                    NixActivityState::Completed { success: false, .. }
+                )
+        })
     }
 
     fn has_diagnostic_descendant(&self, activity_id: u64) -> bool {
+        self.has_descendant_matching(activity_id, |child| {
+            matches!(
+                child.variant,
+                ActivityVariant::Message(MessageActivity {
+                    level: ActivityLevel::Error | ActivityLevel::Warn,
+                    ..
+                })
+            )
+        })
+    }
+
+    fn has_descendant_matching(
+        &self,
+        activity_id: u64,
+        predicate: impl Fn(&Activity) -> bool,
+    ) -> bool {
         let mut pending = vec![activity_id];
         let mut visited = HashSet::from([activity_id]);
-
         while let Some(parent_id) = pending.pop() {
             for child in self
                 .activities
@@ -1459,19 +1458,12 @@ impl ActivityModel {
                 if !visited.insert(child.id) {
                     continue;
                 }
-                if matches!(
-                    child.variant,
-                    ActivityVariant::Message(MessageActivity {
-                        level: ActivityLevel::Error | ActivityLevel::Warn,
-                        ..
-                    })
-                ) {
+                if predicate(child) {
                     return true;
                 }
                 pending.push(child.id);
             }
         }
-
         false
     }
 
