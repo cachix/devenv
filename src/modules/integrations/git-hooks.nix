@@ -171,13 +171,13 @@ in
               );
               managedConfig = toString cfg.configFile;
               staticInstallKey = builtins.hashString "sha256" (builtins.toJSON {
-                version = 3;
+                version = 4;
                 toolExecutable = executable;
                 gitExecutable = git;
                 configFile = managedConfig;
                 inherit expectedHooks;
               });
-              installHook = hook: ''"$tool_executable" install -c "$config_path" -t ${lib.escapeShellArg hook}'';
+              installHook = hook: ''"$tool_executable" install ''${config_flag[@]+"''${config_flag[@]}"} -t ${lib.escapeShellArg hook}'';
             in
             ''
               set -euo pipefail
@@ -212,6 +212,17 @@ in
               fi
 
               installation_key="$static_key"$'\n'"$hooks_dir"$'\n'"$config_path"$'\n'"$config_fingerprint"
+
+              # A hook installed with -c names one worktree's config, and linked
+              # worktrees can share one hooks directory. When the config sits at
+              # the default path of the repository root, install without -c so
+              # each worktree's hook reads its own config.
+              config_flag=(-c "$config_path")
+              if [ ${lib.escapeShellArg cfg.configPath} = .pre-commit-config.yaml ] \
+                && toplevel="$($git_executable rev-parse --show-toplevel 2>/dev/null)" \
+                && [ "$toplevel" -ef "$DEVENV_ROOT" ]; then
+                config_flag=()
+              fi
 
               hook_fingerprint() {
                 local hook_path="$1"
