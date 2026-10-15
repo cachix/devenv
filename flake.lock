@@ -1,33 +1,5 @@
 {
   "nodes": {
-    "cachix": {
-      "inputs": {
-        "devenv": [],
-        "flake-compat": [
-          "flake-compat"
-        ],
-        "git-hooks": [
-          "git-hooks"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1788181969,
-        "narHash": "sha256-OUB6hPlFBB9FRdZgZXSye4lDOg+fbrqKe8ePv2IM7NY=",
-        "owner": "cachix",
-        "repo": "cachix",
-        "rev": "98093e8eea6c1635ef1337a576fa76f3e8bd4f39",
-        "type": "github"
-      },
-      "original": {
-        "owner": "cachix",
-        "ref": "latest",
-        "repo": "cachix",
-        "type": "github"
-      }
-    },
     "crate2nix": {
       "flake": false,
       "locked": {
@@ -215,7 +187,6 @@
     },
     "root": {
       "inputs": {
-        "cachix": "cachix",
         "crate2nix": "crate2nix",
         "flake-compat": "flake-compat",
         "flake-parts": "flake-parts",

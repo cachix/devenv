@@ -37,6 +37,15 @@ We have a rule that new features need to come with documentation and tests (`dev
 - `cargo fmt` - Format code.
 - `cargo clippy` - Lint code.
 
+The flake package must also evaluate without import-from-derivation, including
+when evaluating a Darwin package on Linux. Check this without building packages:
+
+```sh
+nix eval --raw .#packages.aarch64-darwin.devenv.drvPath \
+  --option allow-import-from-derivation false \
+  --option builders "" --option max-jobs 0 --option substitute false
+```
+
 ## Adding changelogs for breaking and behavior changes
 
 When making breaking changes or important behavior changes that affect users, add a changelog entry so they are informed after running `devenv update`.
