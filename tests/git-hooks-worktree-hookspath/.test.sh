@@ -58,6 +58,13 @@ if ! test -f "$(git rev-parse --git-common-dir)/hooks/pre-commit"; then
   exit 1
 fi
 
+# Worktrees share this hooks directory, so the hook must not pin one
+# worktree's config by its absolute path.
+if grep -qF "$PWD/.pre-commit-config.yaml" "$(git rev-parse --git-common-dir)/hooks/pre-commit"; then
+  echo "pre-commit hook names this worktree's config path"
+  exit 1
+fi
+
 printf 'change\n' >> tracked.txt
 git add tracked.txt
 git -c user.name=test -c user.email=test@example.com commit -q -m "trigger hook"
