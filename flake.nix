@@ -36,15 +36,6 @@
       nixpkgs-regression.follows = "";
     };
   };
-  inputs.cachix = {
-    url = "github:cachix/cachix/latest";
-    inputs = {
-      nixpkgs.follows = "nixpkgs";
-      flake-compat.follows = "flake-compat";
-      git-hooks.follows = "git-hooks";
-      devenv.follows = "";
-    };
-  };
   inputs.nixd = {
     url = "github:nix-community/nixd";
     inputs = {
@@ -96,7 +87,9 @@
             # Nix C/C++ libraries below. `overlays.default` only sets `nix`.
             inputs.nix.overlays.internal
             (final: prev: {
-              inherit (inputs.cachix.packages.${system}) cachix;
+              # Cachix is a runtime executable, including for static devenv builds.
+              # Use nixpkgs' generated expression rather than evaluating cabal2nix.
+              inherit (nixpkgs.legacyPackages.${system}) cachix;
               # [static-link-spike] Build the Nix C++/C-API libraries with
               # default_library=static so they link *into* the devenv binary
               # instead of as ~14 shared objects. This removes the Nix cluster
