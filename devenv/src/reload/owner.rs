@@ -117,6 +117,33 @@ pub fn spawn_owner(
     (DevenvClient { tx }, handle)
 }
 
+/// Mirrors the dotfile exclusions the Nix backend passes to `CachingConfig`,
+/// so eval-cache rows recorded before that filter existed aren't watched.
+fn is_watchable_input(path: &Path, dotfile: &Path) -> bool {
+    if !path.exists() || path.starts_with("/nix/store") {
+        return false;
+    }
+    if !path.starts_with(dotfile) {
+        return true;
+    }
+    let state = dotfile.join("state");
+    if !path.starts_with(&state) {
+        return false;
+    }
+    // A `tasks.db` prefix doesn't cover `-wal`/`-shm`.
+    for internal in [
+        state.join("tasks.db"),
+        state.join("tasks.db-wal"),
+        state.join("tasks.db-shm"),
+        state.join("git-hooks"),
+    ] {
+        if path.starts_with(&internal) {
+            return false;
+        }
+    }
+    true
+}
+
 async fn handle_request(devenv: &Devenv, req: DevenvRequest, verbosity: VerbosityLevel) {
     match req {
         DevenvRequest::PrepareExec { cmd, args, reply } => {
@@ -195,23 +222,29 @@ async fn add_watch_paths(devenv: &Devenv, watcher: &WatcherHandle) {
     let Some(pool) = devenv.eval_cache_pool() else {
         return;
     };
+    let dotfile = devenv.dotfile().to_path_buf();
 
     if let Some(cache_key) = devenv.shell_cache_key()
-        && watch_by_key(pool, &cache_key.key_hash, watcher).await
+        && watch_by_key(pool, &cache_key.key_hash, watcher, &dotfile).await
     {
         return;
     }
 
-    watch_all_tracked(pool, watcher).await;
+    watch_all_tracked(pool, watcher, &dotfile).await;
 }
 
-async fn watch_by_key(pool: &sqlx::SqlitePool, key_hash: &str, watcher: &WatcherHandle) -> bool {
+async fn watch_by_key(
+    pool: &sqlx::SqlitePool,
+    key_hash: &str,
+    watcher: &WatcherHandle,
+    dotfile: &Path,
+) -> bool {
     match devenv_eval_cache::get_file_inputs_by_key_hash(pool, key_hash).await {
         Ok(inputs) if !inputs.is_empty() => {
             let paths: Vec<PathBuf> = inputs
                 .into_iter()
                 .map(|i| i.path)
-                .filter(|p| watchable(p))
+                .filter(|p| is_watchable_input(p, dotfile))
                 .collect();
             watcher.watch_logical_many(paths).await;
             true
@@ -224,10 +257,13 @@ async fn watch_by_key(pool: &sqlx::SqlitePool, key_hash: &str, watcher: &Watcher
     }
 }
 
-async fn watch_all_tracked(pool: &sqlx::SqlitePool, watcher: &WatcherHandle) {
+async fn watch_all_tracked(pool: &sqlx::SqlitePool, watcher: &WatcherHandle, dotfile: &Path) {
     match devenv_eval_cache::get_all_tracked_file_paths(pool).await {
         Ok(paths) => {
-            let filtered: Vec<PathBuf> = paths.into_iter().filter(|p| watchable(p)).collect();
+            let filtered: Vec<PathBuf> = paths
+                .into_iter()
+                .filter(|p| is_watchable_input(p, dotfile))
+                .collect();
             watcher.watch_logical_many(filtered).await;
         }
         Err(e) => {
@@ -236,6 +272,113 @@ async fn watch_all_tracked(pool: &sqlx::SqlitePool, watcher: &WatcherHandle) {
     }
 }
 
-fn watchable(path: &Path) -> bool {
-    path.exists() && !path.starts_with("/nix/store")
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn rejects_devenv_internal_files() {
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv");
+        std::fs::create_dir_all(&dotfile).unwrap();
+
+        for internal in [
+            "nix-eval-cache.db",
+            "nix-eval-cache.db-wal",
+            "nix-eval-cache.db-shm",
+            "tasks.db",
+            "tasks.db-wal",
+            "imports.txt",
+            "shell-env.sh",
+            "input-paths.txt",
+        ] {
+            let path = dotfile.join(internal);
+            std::fs::write(&path, b"").unwrap();
+            assert!(
+                !is_watchable_input(&path, &dotfile),
+                "{} must be excluded from watch set",
+                internal
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_devenv_internal_subdirs() {
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv");
+        let bootstrap = dotfile.join("bootstrap");
+        std::fs::create_dir_all(&bootstrap).unwrap();
+        let lib = bootstrap.join("bootstrapLib.nix");
+        std::fs::write(&lib, b"{}").unwrap();
+
+        assert!(!is_watchable_input(&lib, &dotfile));
+    }
+
+    #[test]
+    fn rejects_nix_store_and_missing_paths() {
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv");
+        std::fs::create_dir_all(&dotfile).unwrap();
+
+        assert!(!is_watchable_input(
+            Path::new("/nix/store/abc-foo/x.nix"),
+            &dotfile
+        ));
+        assert!(!is_watchable_input(
+            &temp.path().join("does-not-exist"),
+            &dotfile
+        ));
+    }
+
+    #[test]
+    fn accepts_real_user_input_files() {
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv");
+        std::fs::create_dir_all(&dotfile).unwrap();
+
+        let user_file = temp.path().join("devenv.nix");
+        std::fs::write(&user_file, b"{}").unwrap();
+
+        assert!(is_watchable_input(&user_file, &dotfile));
+    }
+
+    #[test]
+    fn accepts_files_under_devenv_state() {
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv");
+        let state_dir = dotfile.join("state");
+        std::fs::create_dir_all(state_dir.join("mkcert")).unwrap();
+
+        let state_file = state_dir.join("mkcert/rootCA.pem");
+        std::fs::write(&state_file, b"").unwrap();
+
+        assert!(is_watchable_input(&state_file, &dotfile));
+    }
+
+    #[test]
+    fn rejects_devenv_managed_state_leaves() {
+        let temp = TempDir::new().unwrap();
+        let dotfile = temp.path().join(".devenv");
+        let state_dir = dotfile.join("state");
+        std::fs::create_dir_all(state_dir.join("git-hooks")).unwrap();
+
+        for internal in [
+            "tasks.db",
+            "tasks.db-wal",
+            "tasks.db-shm",
+            "git-hooks/config.json",
+        ] {
+            let path = state_dir.join(internal);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            std::fs::write(&path, b"").unwrap();
+            assert!(
+                !is_watchable_input(&path, &dotfile),
+                "{} must be excluded from watch set",
+                internal
+            );
+        }
+    }
 }
