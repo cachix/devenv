@@ -2515,10 +2515,12 @@ impl Devenv {
         .await
     }
 
-    pub async fn test(&self, verbosity: VerbosityLevel) -> Result<()> {
+    pub async fn test(&self, verbosity: VerbosityLevel, strict_ports: bool) -> Result<()> {
         // Enable port allocation before assemble so that ports resolved
         // during Nix evaluation (e.g. in enterTest) are properly allocated.
+        self.port_allocator.set_strict(strict_ports);
         self.port_allocator.set_enabled(true);
+        self.reserve_running_ports().await;
         self.setup_cachix().await?;
 
         // ── Phase 1: Configuring shell ──────────────────────────────

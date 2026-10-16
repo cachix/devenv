@@ -581,6 +581,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         } else if test_config.use_shell {
             // Now load config from the current directory (which might be temp dir)
             let mut config = Config::load_from(&devenv_root)?;
+            let strict_ports = config.strict_ports.unwrap_or(false);
             for input in args.override_inputs.chunks_exact(2) {
                 config
                     .override_input_url(&input[0], &input[1])
@@ -636,7 +637,9 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
                 }
             }
 
-            devenv.test(devenv::VerbosityLevel::Normal).await
+            devenv
+                .test(devenv::VerbosityLevel::Normal, strict_ports)
+                .await
         } else {
             // Run .test.sh directly - it must exist when run_test_sh is false
             if PathBuf::from(".test.sh").exists() {
