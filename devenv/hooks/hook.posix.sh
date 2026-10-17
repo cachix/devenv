@@ -40,9 +40,24 @@ _devenv_hook() {
         return $previous_exit_status
     fi
 
+    # Following the user out of a devenv shell can land them in another
+    # project. Check again whenever the directory changed, so that project
+    # activates now rather than on the next prompt (#3129). A loop rather than
+    # recursion, so hopping between projects doesn't grow the call stack.
+    local checked_dir=""
+    while [[ "$PWD" != "$checked_dir" ]]; do
+        checked_dir="$PWD"
+        _devenv_hook_check
+    done
+    return $previous_exit_status
+}
+
+# One activation check for $PWD; `_devenv_hook` repeats it after following the
+# user out of a devenv shell.
+_devenv_hook_check() {
     # Just exited the devenv shell for this dir — don't re-spawn until you leave.
     if [[ "$_DEVENV_HOOK_ACTIVATED" == "$PWD" ]]; then
-        return $previous_exit_status
+        return
     fi
     _DEVENV_HOOK_ACTIVATED=""
 
@@ -82,5 +97,4 @@ _devenv_hook() {
         # Untrusted project; hint already printed to stderr, suppress on retry.
         _DEVENV_HOOK_UNTRUSTED="$PWD"
     fi
-    return $previous_exit_status
 }
