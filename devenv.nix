@@ -20,12 +20,6 @@ in
 
     RUST_LOG = "devenv=debug";
     RUST_LOG_SPAN_EVENTS = "full";
-  }
-  // lib.optionalAttrs (system == "aarch64-linux") {
-    # Match the flake build's linker for Cargo tests using the Ghostty archive.
-    CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER = lib.getExe' (pkgs.stdenv.cc.override {
-      bintools = pkgs.llvmPackages.bintools;
-    }) "cc";
   };
 
   # Configure Claude Code
@@ -102,8 +96,8 @@ in
     pkgs.cargo-insta # Snapshot testing for Rust
     pkgs.cargo-nextest # Test runner with process isolation
     inputs.crate2nix.packages.${system}.default # Generate Cargo.nix from Cargo.lock
-    (pkgs.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" {
-      optimize = "ReleaseSafe";
+    (pkgs.callPackage ./nix/libghostty-vt.nix {
+      ghostty = inputs.ghostty;
     }).dev # pkg-config provider for libghostty-vt-sys
   ];
 

@@ -195,8 +195,8 @@
                     });
                   };
               crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
-              libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" {
-                optimize = "ReleaseSafe";
+              libghostty-vt = final.callPackage ./nix/libghostty-vt.nix {
+                ghostty = inputs.ghostty;
               };
             })
           ];
