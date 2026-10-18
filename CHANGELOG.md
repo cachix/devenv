@@ -8,7 +8,7 @@
 
 ### Bug Fixes
 
-- Fixed source builds with Meson 1.12 and ARM Linux linking with binutils 2.46.
+- Fixed source builds with Meson 1.12 and Linux linking failures caused by malformed Ghostty compiler-runtime objects.
 - Updated bundled Nix to 2.35.3 with upstream security fixes ([#3287](https://github.com/cachix/devenv/issues/3287)).
 - Failed process prerequisites and their error output now remain visible in the TUI, including shared prerequisites and when stopped processes are hidden ([#3017](https://github.com/cachix/devenv/issues/3017)). Processes with more than five prerequisites also show the full task list.
 - Fixed `devenv shell` printing `bash: export: … not a valid identifier` and truncating `PATH` at the first space when a task re-exports `PATH` (for example Python venv activation) and the parent `PATH` contains a directory with a space ([#3165](https://github.com/cachix/devenv/issues/3165)).
