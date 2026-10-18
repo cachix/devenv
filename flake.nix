@@ -218,27 +218,10 @@
           rustToolchainStatic = pkgs.rust-bin.stable.latest.default.override {
             targets = [ pkgsStatic.stdenv.hostPlatform.rust.rustcTarget ];
           };
-          # [tier2] libghostty-vt links libc++ for its vendored simdutf, which
-          # makes Zig build its bundled libc++ for the target. Ghostty's nix
-          # build sets `dontSetZigDefaultFlags` and passes no `-Dtarget`, so
-          # Zig builds for `native-native` — and building libc++ for the
-          # *native-detected* musl fails (libc++ <__locale> references ctype
-          # masks the detected musl doesn't expose). Passing an explicit
-          # `-Dtarget=<arch>-linux-musl` makes Zig use its own known-good musl
-          # config, so libc++ (and thus SIMD) builds cleanly. The simd C++ is
-          # compiled SIMDUTF_NO_LIBCXX/-fno-exceptions/-fno-rtti, so the static
-          # archive we link references no libc++ symbols at runtime.
-          # darwin has no musl-style static libc, so the native build is
-          # already ABI-identical; only musl needs an explicit zig target.
+          # Darwin has no musl-style static libc; reuse the native library.
+          # Linux's explicit musl target is set by the shared Ghostty package.
           libghosttyVtStatic =
-            if pkgsStatic.stdenv.hostPlatform.isDarwin then
-              pkgs.libghostty-vt
-            else
-              pkgsStatic.libghostty-vt.overrideAttrs (old: {
-                zigBuildFlags = old.zigBuildFlags ++ [
-                  "-Dtarget=${pkgsStatic.stdenv.hostPlatform.parsed.cpu.name}-linux-musl"
-                ];
-              });
+            if pkgsStatic.stdenv.hostPlatform.isDarwin then pkgs.libghostty-vt else pkgsStatic.libghostty-vt;
           workspaceStatic = pkgsStatic.callPackage ./nix/workspace.nix {
             inherit gitRev;
             rustc = rustToolchainStatic;
