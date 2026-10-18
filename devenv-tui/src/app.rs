@@ -625,7 +625,27 @@ pub(crate) fn handle_interrupt_prompt_action(
     true
 }
 
-/// Save the current terminal state before starting the TUI.
+/// Restore the caller's terminal settings when command execution finishes.
+///
+/// Keep this guard alive until both the backend and frontend have stopped, since
+/// tasks can change their inherited terminal even when the TUI is disabled.
+#[must_use = "keep the guard alive until command execution finishes"]
+pub struct TerminalStateGuard(());
+
+impl TerminalStateGuard {
+    pub fn save() -> Self {
+        save_terminal_state();
+        Self(())
+    }
+}
+
+impl Drop for TerminalStateGuard {
+    fn drop(&mut self) {
+        restore_terminal_state();
+    }
+}
+
+/// Save the current terminal state before starting the TUI or any tasks.
 ///
 /// Must be called before iocraft's render_loop enters raw mode, so we have
 /// the original (cooked) terminal settings to restore later. This is more
@@ -646,20 +666,21 @@ pub fn save_terminal_state() {
     }
 }
 
-/// Restore terminal to normal state.
-/// Register this on panic to restore terminal state if the app crashes without running Drop.
-pub fn restore_terminal() {
-    let mut stderr = io::stderr();
-
-    // Restore original terminal settings saved before TUI started.
-    // This is the authoritative restoration — it always restores the
-    // exact terminal state from before the TUI was initialized.
+/// Restore the saved terminal settings without emitting display escape sequences.
+pub fn restore_terminal_state() {
     #[cfg(unix)]
     if let Some(original) = ORIGINAL_TERMIOS.get() {
         use std::os::unix::io::AsRawFd;
         let fd = io::stdin().as_raw_fd();
         unsafe { libc::tcsetattr(fd, libc::TCSANOW, original) };
     }
+}
+
+/// Restore terminal settings and the TUI's display modes.
+/// Register this on panic to restore terminal state if the app crashes without running Drop.
+pub fn restore_terminal() {
+    restore_terminal_state();
+    let mut stderr = io::stderr();
 
     // Pop keyboard enhancement flags if iocraft pushed them.
     // iocraft enables the Kitty keyboard protocol (PushKeyboardEnhancementFlags)
@@ -1503,6 +1524,75 @@ mod tests {
     };
     use devenv_activity::{ActivityLevel, ActivityOutcome};
     use tokio::sync::mpsc;
+
+    // Re-execute in a child so stdin and Crossterm's global raw-mode snapshot
+    // belong to an isolated PTY, never to the test runner's terminal.
+    #[cfg(unix)]
+    #[test]
+    fn command_guard_restores_terminal_after_killed_task() {
+        use nix::pty::openpty;
+        use nix::sys::termios::{OutputFlags, tcgetattr};
+        use std::os::unix::process::ExitStatusExt;
+        use std::process::{Command, Stdio};
+
+        const CHILD: &str = "DEVENV_TEST_TERMINAL_RESTORE";
+        if std::env::var_os(CHILD).is_some() {
+            let stdin = io::stdin();
+            let original = tcgetattr(&stdin).unwrap();
+            assert!(original.output_flags.contains(OutputFlags::ONLCR));
+
+            for (use_tui, fail) in [(false, false), (false, true), (true, false), (true, true)] {
+                let run_command = || -> Result<(), ()> {
+                    let _guard = TerminalStateGuard::save();
+                    let status = Command::new("sh")
+                        .args(["-c", "stty -onlcr; kill -KILL $$"])
+                        .stdin(Stdio::inherit())
+                        .status()
+                        .unwrap();
+                    assert_eq!(status.signal(), Some(nix::libc::SIGKILL));
+                    assert!(
+                        !tcgetattr(&stdin)
+                            .unwrap()
+                            .output_flags
+                            .contains(OutputFlags::ONLCR)
+                    );
+
+                    if use_tui {
+                        // A task can change settings before the frontend enters
+                        // raw mode. Crossterm then saves the changed settings.
+                        terminal::enable_raw_mode().unwrap();
+                        terminal::disable_raw_mode().unwrap();
+                        assert_ne!(tcgetattr(&stdin).unwrap(), original);
+                    }
+                    if fail {
+                        return Err(());
+                    }
+                    Ok(())
+                };
+                assert_eq!(run_command().is_err(), fail);
+                assert_eq!(tcgetattr(&stdin).unwrap(), original);
+            }
+            return;
+        }
+
+        let pty = openpty(None, None).unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "app::tests::command_guard_restores_terminal_after_killed_task",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .stdin(Stdio::from(pty.slave))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "PTY child failed:\n{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     fn activity_navigation_supports_arrow_vim_and_half_page_keys() {
