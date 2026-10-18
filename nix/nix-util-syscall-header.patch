@@ -1,0 +1,14 @@
+diff --git a/src/libutil/unix/file-descriptor.cc b/src/libutil/unix/file-descriptor.cc
+--- a/src/libutil/unix/file-descriptor.cc
++++ b/src/libutil/unix/file-descriptor.cc
+@@ -6,6 +6,10 @@
+ #include <unistd.h>
+ #include <span>
+ 
++#ifdef __linux__
++#  include <sys/syscall.h>
++#endif
++
+ #include "util-unix-config-private.hh"
+ 
+ namespace nix {
