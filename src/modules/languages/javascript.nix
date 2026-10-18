@@ -13,6 +13,13 @@ let
 
   dirPrefix = lib.optionalString (cfg.directory != config.devenv.root) "${cfg.directory}/";
 
+  # PATH needs an absolute entry, or the binaries are only found from the directory the shell started in.
+  nodeModulesBinPath =
+    if lib.hasPrefix "/" cfg.directory then
+      "${cfg.directory}/node_modules/.bin"
+    else
+      "${config.devenv.root}/${cfg.directory}/node_modules/.bin";
+
   initNpmScript = pkgs.writeShellScript "init-npm.sh" ''
     function _devenv-npm-install()
     {
@@ -380,7 +387,7 @@ in
       '')
       ++ [
         ''
-          export PATH="${nodeModulesPath}/.bin:$PATH"
+          export PATH="${nodeModulesBinPath}:$PATH"
         ''
       ]
     );
