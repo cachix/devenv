@@ -109,6 +109,13 @@
                   let
                     staticComponents = prev.nixComponents2.overrideScope (
                       _finalScope: prevScope: {
+                        # musl uses Nix's syscall fallback for close_range;
+                        # its syscall numbers need an explicit header.
+                        nix-util = prevScope.nix-util.overrideAttrs (old: {
+                          patches =
+                            (old.patches or [ ])
+                            ++ prev.lib.optionals prev.stdenv.hostPlatform.isLinux [ ./nix/nix-util-syscall-header.patch ];
+                        });
                         nix-store =
                           (prevScope.nix-store.override (
                             {
