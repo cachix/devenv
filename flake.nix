@@ -109,16 +109,22 @@
                   let
                     staticComponents = prev.nixComponents2.overrideScope (
                       _finalScope: prevScope: {
-                        nix-store = prevScope.nix-store.override (
-                          {
-                            withAWS = false;
-                          }
-                          # nixpkgs gates this on isStatic alone, but the
-                          # sandbox shell is Linux-only and needs busybox.
-                          // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isDarwin {
-                            embeddedSandboxShell = false;
-                          }
-                        );
+                        nix-store =
+                          (prevScope.nix-store.override (
+                            {
+                              withAWS = false;
+                            }
+                            # nixpkgs gates this on isStatic alone, but the
+                            # sandbox shell is Linux-only and needs busybox.
+                            // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isDarwin {
+                              embeddedSandboxShell = false;
+                            }
+                          )).overrideAttrs
+                            {
+                              # Nix has build/*.cc sources. Meson 1.12 mistakes them
+                              # for generated files when its output directory is build/.
+                              mesonBuildDir = "_build";
+                            };
                       }
                     );
                   in
@@ -133,7 +139,10 @@
                           # aws-crt-cpp is a CMake dep with no .pc, so keeping S3
                           # needs the aws-c-* stack linked explicitly. Re-enable S3
                           # and link the aws libs once the startup win is confirmed.
-                          nix-store = prevScope.nix-store.override { withAWS = false; };
+                          nix-store = (prevScope.nix-store.override { withAWS = false; }).overrideAttrs {
+                            # Keep Meson's output separate from the build/*.cc sources.
+                            mesonBuildDir = "_build";
+                          };
                         }
                       )).overrideAllMesonComponents
                         (

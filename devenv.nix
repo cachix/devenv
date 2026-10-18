@@ -20,6 +20,12 @@ in
 
     RUST_LOG = "devenv=debug";
     RUST_LOG_SPAN_EVENTS = "full";
+  }
+  // lib.optionalAttrs (system == "aarch64-linux") {
+    # Match the flake build's linker for Cargo tests using the Ghostty archive.
+    CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER = lib.getExe' (pkgs.stdenv.cc.override {
+      bintools = pkgs.llvmPackages.bintools;
+    }) "cc";
   };
 
   # Configure Claude Code
