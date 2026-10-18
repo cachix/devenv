@@ -1,6 +1,6 @@
-diff --git a/src/libutil/unix/file-descriptor.cc b/src/libutil/unix/file-descriptor.cc
---- a/src/libutil/unix/file-descriptor.cc
-+++ b/src/libutil/unix/file-descriptor.cc
+diff --git a/unix/file-descriptor.cc b/unix/file-descriptor.cc
+--- a/unix/file-descriptor.cc
++++ b/unix/file-descriptor.cc
 @@ -6,6 +6,10 @@
  #include <unistd.h>
  #include <span>
