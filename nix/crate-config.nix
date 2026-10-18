@@ -58,27 +58,6 @@ let
     ];
   };
 
-  # GNU ld.bfd 2.46 rejects the bundled Zig compiler-rt's section-symbol
-  # relocations on aarch64. LLD handles that archive, including its unwind data.
-  # Keep the compiler driver and Nix's wrapped linker for library paths/rpaths.
-  withGhosttyLinker =
-    override: attrs:
-    let
-      result = override attrs;
-    in
-    result
-    //
-      lib.optionalAttrs
-        (stdenv.hostPlatform.isLinux && stdenv.hostPlatform.isAarch64 && !stdenv.hostPlatform.isStatic)
-        {
-          extraRustcOpts = (result.extraRustcOpts or (attrs.extraRustcOpts or [ ])) ++ [
-            "-C"
-            "linker=${
-              lib.getExe' (stdenv.cc.override { bintools = llvmPackages.bintools; }) "${stdenv.cc.targetPrefix}cc"
-            }"
-          ];
-        };
-
   # [static-link-spike] Tell pkg-config to emit the static link line (Libs.private),
   # so the now-static Nix C++ libs (libnixstore/expr/util) are pulled in transitively
   # when crates link the C-API libs.
@@ -192,7 +171,7 @@ let
   ];
 
   # Shared override for crates linking against nix, openssl, dbus, and bindgen.
-  devenvBase = withGhosttyLinker (
+  devenvBase =
     attrs:
     {
       buildInputs =
@@ -219,8 +198,7 @@ let
         ++ staticIconvLinkOpts
         ++ staticBoostLinkOpts;
     }
-    // staticPkgConfig
-  );
+    // staticPkgConfig;
 in
 {
   # Main devenv crate
@@ -271,7 +249,7 @@ in
   devenv-reload = tracingUnstable;
   devenv-shell = tracingUnstable;
   devenv-tasks = tracingUnstable;
-  devenv-tui = withGhosttyLinker tracingUnstable;
+  devenv-tui = tracingUnstable;
   devenv-activity = tracingUnstable;
 
   # The tracing crate needs tracing_unstable to enable valuable support

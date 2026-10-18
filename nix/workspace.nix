@@ -118,15 +118,44 @@ let
   buildRustCrateForPkgs =
     pkgs:
     let
-      base = pkgs.buildRustCrate.override {
-        inherit rustc cargo;
-        defaultCrateOverrides = defaultCrateOverrides // crateConfig;
-      };
+      buildWith =
+        stdenv:
+        pkgs.buildRustCrate.override {
+          inherit rustc cargo stdenv;
+          defaultCrateOverrides = defaultCrateOverrides // crateConfig;
+        };
+      base = buildWith pkgs.stdenv;
+      # buildRustCrate chooses its linker from stdenv after extraRustcOpts.
+      # Use an LLVM-backed compiler wrapper for the executables that link
+      # Ghostty's compiler-rt archive, which GNU ld.bfd 2.46 rejects on ARM.
+      lld = buildWith (
+        pkgs.overrideCC pkgs.stdenv (
+          pkgs.stdenv.cc.override {
+            bintools = pkgs.llvmPackages.bintools;
+          }
+        )
+      );
+      builder =
+        crate:
+        if
+          pkgs.stdenv.hostPlatform.isLinux
+          && pkgs.stdenv.hostPlatform.isAarch64
+          && !pkgs.stdenv.hostPlatform.isStatic
+          && builtins.elem crate.crateName [
+            "devenv"
+            "devenv-run-tests"
+            "devenv-tui"
+            "xtask"
+          ]
+        then
+          lld crate
+        else
+          base crate;
     in
     if buildStatic && pkgs.stdenv.hostPlatform.isStatic then
-      (crate: base (injectStatic crate))
+      (crate: builder (injectStatic crate))
     else
-      base;
+      builder;
 
   cargoNix = callPackage ../Cargo.nix {
     inherit buildRustCrateForPkgs;
