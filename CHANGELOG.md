@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 
+- Fixed machine metadata failing to load when encryption key or extra file target paths contain dots, such as `/tmp/luks.key` ([#3277](https://github.com/cachix/devenv/issues/3277)).
 - Fixed source builds with Meson 1.12, missing syscall declarations in static Linux builds, and Linux linking failures caused by malformed Ghostty compiler-runtime objects.
 - Updated bundled Nix to 2.35.3 with upstream security fixes ([#3287](https://github.com/cachix/devenv/issues/3287)).
 - Failed process prerequisites and their error output now remain visible in the TUI, including shared prerequisites and when stopped processes are hidden ([#3017](https://github.com/cachix/devenv/issues/3017)). Processes with more than five prerequisites also show the full task list.
