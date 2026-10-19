@@ -182,6 +182,28 @@ impl ShellKeyChord {
         }
     }
 
+    /// Whether `input` is this chord, in its legacy encoding or as sent once the
+    /// foreground program enables the kitty keyboard protocol (`CSI cp;mod u`) or
+    /// xterm modifyOtherKeys (`CSI 27;mod;cp ~`).
+    pub fn matches_input(&self, input: &[u8]) -> bool {
+        if self.terminal_bytes() == input {
+            return true;
+        }
+        let expected = match self.code {
+            ShellKeyCode::Char(character) => character.to_lowercase().next(),
+            ShellKeyCode::Space => Some(' '),
+            _ => None,
+        };
+        match (expected, decode_enhanced_key(input)) {
+            (Some(expected), Some((codepoint, modifiers))) => {
+                modifiers == self.xterm_modifier(false) - 1
+                    && char::from_u32(codepoint).and_then(|c| c.to_lowercase().next())
+                        == Some(expected)
+            }
+            _ => false,
+        }
+    }
+
     fn character_bytes(&self, character: char) -> Vec<u8> {
         let emitted = if self.shift {
             shifted_character(character)
@@ -383,7 +405,7 @@ impl ShellKeybindings {
         ShellAction::INTERCEPTED.into_iter().find(|action| {
             self.bindings(*action)
                 .iter()
-                .any(|binding| binding.terminal_bytes() == input)
+                .any(|binding| binding.matches_input(input))
         })
     }
 
@@ -435,6 +457,39 @@ pub struct ShellKeybindingConflict {
     pub first: ShellAction,
     pub second: ShellAction,
     pub chord: String,
+}
+
+/// Decode a kitty `CSI cp[:alt];mod[:event] u` or modifyOtherKeys
+/// `CSI 27;mod;cp ~` key press into its codepoint and modifier bits
+/// (shift=1, alt=2, ctrl=4). Lock-state bits are ignored; release events are rejected.
+fn decode_enhanced_key(input: &[u8]) -> Option<(u32, u8)> {
+    let body = input.strip_prefix(b"\x1b[")?;
+    let (&last, body) = body.split_last()?;
+    let body = std::str::from_utf8(body).ok()?;
+    let mut fields = body.split(';');
+    let number = |field: &str| field.split(':').next()?.parse::<u32>().ok();
+    let (codepoint, modifier) = match last {
+        b'u' => {
+            let codepoint = number(fields.next()?)?;
+            let modifier = fields.next().unwrap_or("1");
+            if modifier.split(':').nth(1) == Some("3") {
+                return None;
+            }
+            (codepoint, number(modifier)?)
+        }
+        b'~' => {
+            if number(fields.next()?)? != 27 {
+                return None;
+            }
+            let modifier = number(fields.next()?)?;
+            (number(fields.next()?)?, modifier)
+        }
+        _ => return None,
+    };
+    if fields.next().is_some() || modifier == 0 {
+        return None;
+    }
+    Some((codepoint, ((modifier - 1) & 0b0011_1111) as u8))
 }
 
 fn control_byte(character: char) -> Option<u8> {
@@ -498,6 +553,39 @@ mod tests {
             bindings.bindings(ShellAction::ToggleError)[0].terminal_bytes(),
             [0x1b, 0x05]
         );
+    }
+
+    #[test]
+    fn default_chords_match_enhanced_keyboard_encodings() {
+        let bindings = ShellKeybindings::default();
+        // kitty CSI u, with and without event/alternate sub-fields and lock bits
+        assert_eq!(
+            bindings.action_for_input(b"\x1b[100;7u"),
+            Some(ShellAction::TogglePause)
+        );
+        assert_eq!(
+            bindings.action_for_input(b"\x1b[119;7:1u"),
+            Some(ShellAction::ListWatchedFiles)
+        );
+        assert_eq!(
+            bindings.action_for_input(b"\x1b[101:69;71u"),
+            Some(ShellAction::ToggleError)
+        );
+        // modifyOtherKeys
+        assert_eq!(
+            bindings.action_for_input(b"\x1b[27;7;100~"),
+            Some(ShellAction::TogglePause)
+        );
+        // legacy still works
+        assert_eq!(
+            bindings.action_for_input(b"\x1b\x04"),
+            Some(ShellAction::TogglePause)
+        );
+        // wrong modifiers, release events and other keys do not match
+        assert_eq!(bindings.action_for_input(b"\x1b[100;5u"), None);
+        assert_eq!(bindings.action_for_input(b"\x1b[100;7:3u"), None);
+        assert_eq!(bindings.action_for_input(b"\x1b[120;7u"), None);
+        assert_eq!(bindings.action_for_input(b"\x1b[27;7;120~"), None);
     }
 
     #[test]
