@@ -49,3 +49,23 @@ precedence. Devenv does not modify those files or your Git configuration files.
 
 The defaults are empty and leave Git's configuration and attributes unchanged.
 Install any tools referenced by your settings through `packages`.
+
+## Mergiraf
+
+Enable [Mergiraf](https://mergiraf.org/) to use syntax-aware merging during
+Git merges, rebases, and cherry-picks:
+
+```nix
+{
+  mergiraf.enable = true;
+}
+```
+
+This installs Mergiraf, registers its merge driver through `git.config`, and
+selects it for all files through `git.attributes`. Unsupported formats fall back
+to text merging. Repository attributes can override the selected driver.
+
+The integration defaults `merge.conflictStyle` to `diff3`, which includes the
+base revision needed by `mergiraf solve path/to/file` for existing conflicts.
+Use `mergiraf review` to inspect syntax-aware resolutions when prompted.
+To temporarily use Git's text merging, run `mergiraf=0 git merge <branch>`.
