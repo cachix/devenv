@@ -9,6 +9,7 @@
 ### Bug Fixes
 
 - `devenv inputs add` preserves surrounding YAML comments, formatting, and key order, and no longer copies imported or local inputs into `devenv.yaml` ([#3268](https://github.com/cachix/devenv/issues/3268)).
+- Fixed `languages.rust.lld.enable`, `mold.enable` and `wild.enable` breaking builds for other targets such as `wasm32-unknown-unknown` (for example with Dioxus). They also no longer cause cargo to ignore `[build] rustflags` from the project's `.cargo/config.toml`. The selected linker now applies only to the host target and takes priority over a `[target.<host>] linker` set in `.cargo/config.toml`. `wild.enable` no longer requires the nightly channel on aarch64 Linux.
 - Fixed machine metadata failing to load when encryption key or extra file target paths contain dots, such as `/tmp/luks.key` ([#3277](https://github.com/cachix/devenv/issues/3277)).
 - Fixed source builds with Meson 1.12, missing syscall declarations in static Linux builds, and Linux linking failures caused by malformed Ghostty compiler-runtime objects.
 - Restore terminal settings after tasks exit or are killed, preventing subsequent terminal output from remaining misaligned ([#3292](https://github.com/cachix/devenv/issues/3292)).
