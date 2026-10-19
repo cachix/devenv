@@ -124,6 +124,7 @@ const serviceSeeds: ServiceSeed[] = [
   { slug: 'nats', label: 'NATS', icon: 'natsdotio', color: '#27AAE1', darkColor: '#45BDED' },
   { slug: 'nginx', label: 'nginx', icon: 'nginx', color: '#009639', darkColor: '#33C66A' },
   { slug: 'nixseparatedebuginfod', label: 'Nixseparatedebuginfod', icon: 'nixos', color: '#5277C3', darkColor: '#7FA0E2' },
+  { slug: 'ollama', label: 'Ollama', icon: 'ollama', aliases: ['llm', 'ai'], color: '#000000', darkColor: '#F5F5F5' },
   { slug: 'opensearch', label: 'OpenSearch', icon: 'opensearch', color: '#005EB8', darkColor: '#4A9BE8' },
   { slug: 'opentelemetry-collector', label: 'OpenTelemetry Collector', icon: 'opentelemetry', color: '#000000', darkColor: '#F5F5F5' },
   { slug: 'postgres', label: 'PostgreSQL', icon: 'postgresql', aliases: ['postgres', 'pgsql', 'sql'], color: '#4169E1', darkColor: '#7895F0', lines: ['  services.postgres = {', '    enable = true;', '    initialDatabases = [{ name = "app"; }];', '  };'] },
