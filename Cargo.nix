@@ -10193,6 +10193,11 @@ rec {
             features = [ "filters" "json" ];
           }
           {
+            name = "nix";
+            packageId = "nix 0.31.3";
+            features = [ "fs" "poll" "process" "resource" "signal" "term" ];
+          }
+          {
             name = "proptest";
             packageId = "proptest";
           }
