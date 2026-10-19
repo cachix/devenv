@@ -128,6 +128,23 @@ components = ["rustfmt", "clippy"]
 profile = "minimal"
 ```
 
+### Testing against your MSRV
+
+Since devenv 2.4.1, `languages.rust.cargoRustVersion` reads the `rust-version` field from the `Cargo.toml` in a directory, so you can pin the toolchain to your minimum supported Rust version:
+
+```nix
+{ config, ... }:
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+    version = config.languages.rust.cargoRustVersion ./.;
+  };
+}
+```
+
+Point it at a directory whose `Cargo.toml` sets `rust-version`. For a workspace, that is the workspace root with `rust-version` under `[workspace.package]`. Members that inherit it with `rust-version.workspace = true` are not resolved, so pass the root directory instead (for example `../..` from `crates/foo/devenv.nix`). Versions such as `1.70` are expanded to `1.70.0`.
+
 ## Integration with other tools
 
 ### Git hooks
