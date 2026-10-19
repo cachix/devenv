@@ -299,7 +299,7 @@ let
       };
 
       nixos = lib.mkOption {
-        type = lib.types.nullOr lib.types.unspecified;
+        type = lib.types.nullOr lib.types.deferredModule;
         description = "NixOS configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
@@ -566,7 +566,7 @@ let
       };
 
       home-manager = lib.mkOption {
-        type = lib.types.nullOr lib.types.unspecified;
+        type = lib.types.nullOr lib.types.deferredModule;
         description = "Home Manager configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
@@ -579,7 +579,7 @@ let
       };
 
       nix-darwin = lib.mkOption {
-        type = lib.types.nullOr lib.types.unspecified;
+        type = lib.types.nullOr lib.types.deferredModule;
         description = "nix-darwin configuration for the machine.";
         default = null;
         example = lib.literalExpression ''

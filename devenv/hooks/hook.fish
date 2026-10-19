@@ -69,8 +69,8 @@ function _devenv_hook_activate
             # when the user overrides `cd` (e.g. `zoxide init --cmd=cd`).
             _devenv_builtin_cd_with_history "$target_dir"
             # We followed the user out, so the "don't re-spawn" guard in
-            # `_devenv_hook` no longer applies: it only exists for exiting the
-            # shell and staying put. Leaving it set to the project dir would
+            # `_devenv_hook_check` no longer applies: it only exists for exiting
+            # the shell and staying put. Leaving it set to the project dir would
             # silently skip activation the next time the user cd's back in.
             set -g _DEVENV_HOOK_ACTIVATED ""
         end
@@ -95,6 +95,20 @@ function _devenv_hook --on-event fish_prompt
         return
     end
 
+    # Following the user out of a devenv shell can land them in another
+    # project. Check again whenever the directory changed, so that project
+    # activates now rather than on the next prompt (#3129). A loop rather than
+    # recursion, so hopping between projects doesn't grow the call stack.
+    set -l checked_dir
+    while test "$PWD" != "$checked_dir"
+        set checked_dir $PWD
+        _devenv_hook_check
+    end
+end
+
+# One activation check for $PWD; `_devenv_hook` repeats it after following the
+# user out of a devenv shell.
+function _devenv_hook_check
     # Just exited the devenv shell for this dir — don't re-spawn until you leave.
     if test "$_DEVENV_HOOK_ACTIVATED" = "$PWD"
         return

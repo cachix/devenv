@@ -152,6 +152,7 @@ export default defineConfig({
             { label: 'Creating Files', slug: 'creating-files' },
             { label: 'SecretSpec', slug: 'integrations/secretspec' },
             { label: 'Tasks', slug: 'tasks' },
+            { label: 'Git', slug: 'git' },
             { label: 'Git Hooks', slug: 'git-hooks' },
             { label: 'Tests', slug: 'tests' },
             { label: 'Pinning', slug: 'pinning' },

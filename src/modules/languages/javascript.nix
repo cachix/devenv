@@ -13,6 +13,13 @@ let
 
   dirPrefix = lib.optionalString (cfg.directory != config.devenv.root) "${cfg.directory}/";
 
+  # PATH needs an absolute entry, or the binaries are only found from the directory the shell started in.
+  nodeModulesBinPath =
+    if lib.hasPrefix "/" cfg.directory then
+      "${cfg.directory}/node_modules/.bin"
+    else
+      "${config.devenv.root}/${cfg.directory}/node_modules/.bin";
+
   initNpmScript = pkgs.writeShellScript "init-npm.sh" ''
     function _devenv-npm-install()
     {
@@ -86,13 +93,17 @@ let
 
       if [ "$ACTUAL_PNPM_CHECKSUM" != "$EXPECTED_PNPM_CHECKSUM" ]
       then
-        if ${cfg.pnpm.package}/bin/pnpm install ${
+        # Shell setup has no interactive prompt handling. Only disable the
+        # purge confirmation; keep the caller's CI and lockfile policy intact.
+        if ${cfg.pnpm.package}/bin/pnpm install --config.confirmModulesPurge=false ${
           lib.optionalString (cfg.directory != config.devenv.root) "--dir ${cfg.directory}"
         }
         then
           echo "$ACTUAL_PNPM_CHECKSUM" > "$PNPM_CHECKSUM_FILE"
         else
-          echo "Install failed. Run 'pnpm install' manually."
+          local install_status=$?
+          echo "pnpm install failed. Run 'pnpm install' manually." >&2
+          return "$install_status"
         fi
       fi
     }
@@ -366,7 +377,7 @@ in
         source ${initNpmScript}
       '')
       ++ (lib.optional cfg.pnpm.install.enable ''
-        source ${initPnpmScript}
+        source ${initPnpmScript} || exit $?
       '')
       ++ (lib.optional cfg.yarn.install.enable ''
         source ${initYarnScript}
@@ -376,7 +387,7 @@ in
       '')
       ++ [
         ''
-          export PATH="${nodeModulesPath}/.bin:$PATH"
+          export PATH="${nodeModulesBinPath}:$PATH"
         ''
       ]
     );

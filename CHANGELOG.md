@@ -8,6 +8,10 @@
 
 ### Bug Fixes
 
+- Fixed machine metadata failing to load when encryption key or extra file target paths contain dots, such as `/tmp/luks.key` ([#3277](https://github.com/cachix/devenv/issues/3277)).
+- Fixed source builds with Meson 1.12, missing syscall declarations in static Linux builds, and Linux linking failures caused by malformed Ghostty compiler-runtime objects.
+- Restore terminal settings after tasks exit or are killed, preventing subsequent terminal output from remaining misaligned ([#3292](https://github.com/cachix/devenv/issues/3292)).
+- Updated bundled Nix to 2.35.3 with upstream security fixes ([#3287](https://github.com/cachix/devenv/issues/3287)).
 - Failed process prerequisites and their error output now remain visible in the TUI, including shared prerequisites and when stopped processes are hidden ([#3017](https://github.com/cachix/devenv/issues/3017)). Processes with more than five prerequisites also show the full task list.
 - Fixed `devenv shell` printing `bash: export: … not a valid identifier` and truncating `PATH` at the first space when a task re-exports `PATH` (for example Python venv activation) and the parent `PATH` contains a directory with a space ([#3165](https://github.com/cachix/devenv/issues/3165)).
 - Task cancellation now stops status checks and waits for nested commands to stop before the scheduler exits ([#3251](https://github.com/cachix/devenv/issues/3251)).
@@ -22,7 +26,9 @@
 - `devenv test` with the native process manager now reports a process dependency on `start.enable = false` before starting services, instead of waiting indefinitely for the disabled process ([#3215](https://github.com/cachix/devenv/issues/3215)).
 - Fixed auto-activation starting the devenv shell at the project root when you `cd` into a subdirectory. The shell now starts in the directory you entered, like `devenv shell` run from that directory ([#3041](https://github.com/cachix/devenv/issues/3041)).
 - `devenv shell` no longer hangs when the file watcher cannot start, for example when the inotify instance limit (`fs.inotify.max_user_instances`) is reached. The shell now starts without hot reload ([#3281](https://github.com/cachix/devenv/issues/3281)).
+- `devenv test` now honours `strict_ports: true` and fails on a port conflict, as `devenv up` does, instead of silently moving the service to the next free port ([#3163](https://github.com/cachix/devenv/issues/3163)).
 - `enterShell` now runs from the project root when `devenv shell` starts in a subdirectory, before the shell moves to that subdirectory. Previously it ran in the subdirectory, so commands with relative paths, such as the JavaScript package install, looked in the wrong place.
+- Fixed auto-activation waiting for the next prompt when you `cd` from one devenv project directly into another, so you had to press Enter before the second project's shell started. It now starts right away ([#3129](https://github.com/cachix/devenv/issues/3129)).
 - `devenv up` and `devenv test` no longer run the prerequisites of a process with `start.enable = false`. They now run when that process is started, or when an enabled process depends on it ([#3272](https://github.com/cachix/devenv/issues/3272)).
 
 ## 2.4.0 (2026-09-24)

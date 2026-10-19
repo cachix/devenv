@@ -195,7 +195,7 @@ exit 1
                 "#!/usr/bin/env bash\n{}",
                 super::nushell_reload_subprocess_script(
                     super::BashDialect.env_diff_helpers(),
-                    reload_file,
+                    "$1",
                 )
             );
             std::fs::write(&helper_script, &bash_helper)?;
@@ -239,7 +239,7 @@ exit 1
 def --env __devenv_reload_apply [] {{
     let reload_file = "{reload_file}"
     if ($reload_file | path exists) {{
-        let bash_output = (bash "{helper_path}" | complete)
+        let bash_output = (bash "{helper_path}" $reload_file | complete)
         if ($bash_output.exit_code == 0) {{
             # Parse changed exports and removals from the bash helper.
             for line in ($bash_output.stdout | lines) {{
