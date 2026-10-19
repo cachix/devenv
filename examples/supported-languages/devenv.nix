@@ -54,6 +54,7 @@
   languages.solidity.enable = true;
   languages.standardml.enable = true;
   languages.swift.enable = true;
+  languages.tailwindcss.enable = true;
   languages.terraform.enable = true;
   languages.texlive.enable = true;
   languages.typescript.enable = true;

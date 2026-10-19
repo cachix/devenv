@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Added Tailwind CSS language support via `languages.tailwindcss.enable`, providing the Tailwind CSS v4 CLI and the Tailwind CSS language server.
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
 
 ### Bug Fixes
