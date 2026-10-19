@@ -4,6 +4,8 @@
 
 ### Improvements
 
+- Added the `dagger` integration, which installs the [Dagger](https://dagger.io/) CLI from the `dagger` input and can set the Dagger release and engine. Set `dagger.dang.enable = true` to also install Dang.
+- Added `languages.dang` for [Dang](https://github.com/vito/dang), a scripting language for Dagger modules.
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
 
 ### Bug Fixes
