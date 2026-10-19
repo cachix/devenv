@@ -27,6 +27,7 @@
 - `devenv shell` no longer hangs when the file watcher cannot start, for example when the inotify instance limit (`fs.inotify.max_user_instances`) is reached. The shell now starts without hot reload ([#3281](https://github.com/cachix/devenv/issues/3281)).
 - `devenv test` now honours `strict_ports: true` and fails on a port conflict, as `devenv up` does, instead of silently moving the service to the next free port ([#3163](https://github.com/cachix/devenv/issues/3163)).
 - `enterShell` now runs from the project root when `devenv shell` starts in a subdirectory, before the shell moves to that subdirectory. Previously it ran in the subdirectory, so commands with relative paths, such as the JavaScript package install, looked in the wrong place.
+- Fixed auto-activation waiting for the next prompt when you `cd` from one devenv project directly into another, so you had to press Enter before the second project's shell started. It now starts right away ([#3129](https://github.com/cachix/devenv/issues/3129)).
 
 ## 2.4.0 (2026-09-24)
 

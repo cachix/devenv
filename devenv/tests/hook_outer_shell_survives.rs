@@ -8,6 +8,7 @@
 //! - `fish_activation_skips_if_already_active` — avoid stacking devenv shells
 //! - `fish_follow_cd_out_preserves_history_for_cd_dash` — #2853
 //! - `posix_activates_sibling_after_cd_out` — #2944
+//! - `activates_sibling_without_waiting_for_the_next_prompt` — #3129
 //! - `activates_again_after_returning_to_the_same_project` — stale
 //!   `_DEVENV_HOOK_ACTIVATED` after a follow-cd (`nu_` variant for nushell)
 //! - `fish_hook_bypasses_user_functions_shadowing_external_tools` — #3222
@@ -773,6 +774,79 @@ fn posix_activates_sibling_after_cd_out() {
             recorded.contains(&format!("shell {}", project_b.display())),
             "[{shell}] sibling project was not activated after cd-out.\nRecorded:\n{recorded}\nstdout: {stdout}\nstderr: {}",
             String::from_utf8_lossy(&out.stderr),
+        );
+    }
+}
+
+#[test]
+fn activates_sibling_without_waiting_for_the_next_prompt() {
+    // A `cd` from one project straight into another exits the first project's
+    // shell, and the hook follows the user into the second one from inside the
+    // prompt that activated the first (#3129). That prompt's activation check
+    // has already run, so the second project must be checked right after
+    // following the user there, not on the next prompt (an extra Enter).
+    for shell in ["bash", "zsh", "fish", "nu"] {
+        if !have(shell) {
+            continue;
+        }
+        let parent = tempfile::tempdir().unwrap();
+        let project_a = parent.path().join("project-a");
+        let project_b = parent.path().join("project-b");
+        fs::create_dir_all(project_a.join(".devenv")).unwrap();
+        fs::create_dir_all(project_b.join(".devenv")).unwrap();
+        let hook_dir = tempfile::tempdir().unwrap();
+        let hook = generated_hook(shell, &[], hook_dir.path());
+        let (shim_dir, calls) = sibling_activation_shim(&project_a, &project_b);
+        let script = match shell {
+            "fish" => format!(
+                "set -e DEVENV_ROOT; set -e _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 {path}\n\
+                 cd {project_a:?}\n\
+                 _devenv_hook\n\
+                 echo PWD=$PWD\n",
+                path = fish_path_override(shim_dir.path()),
+            ),
+            "nu" => format!(
+                "hide-env -i DEVENV_ROOT\nhide-env -i _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 $env.PATH = ($env.PATH | prepend {shim:?})\n\
+                 cd {project_a:?}\n\
+                 _devenv_hook\n\
+                 print $\"PWD=($env.PWD)\"\n",
+                shim = shim_dir.path(),
+            ),
+            _ => format!(
+                "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+                 source {hook:?}\n\
+                 {path}\n\
+                 cd {project_a:?}\n\
+                 _devenv_hook\n\
+                 printf 'PWD=%s\\n' \"$PWD\"\n",
+                path = posix_path_override(shim_dir.path()),
+            ),
+        };
+
+        let out = run(shell, &script);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            out.status.success(),
+            "[{shell}] hook failed.\nstdout: {stdout}\nstderr: {stderr}",
+        );
+        assert!(
+            stdout.contains(&format!("PWD={}", project_b.display())),
+            "[{shell}] parent shell did not follow exit-dir to sibling.\nstdout: {stdout}\nstderr: {stderr}",
+        );
+        assert_eq!(
+            fs::read_to_string(&calls).unwrap_or_default(),
+            format!(
+                "shell {}\nshell {}\n",
+                project_a.display(),
+                project_b.display()
+            ),
+            "[{shell}] sibling project was not activated in the same prompt as the cd-out.\n\
+             stdout: {stdout}\nstderr: {stderr}",
         );
     }
 }
