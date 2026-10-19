@@ -2938,6 +2938,7 @@ dependencies = [
  "iocraft",
  "libc",
  "miette",
+ "nix 0.31.3",
  "proptest",
  "schemars 1.2.1",
  "serde",

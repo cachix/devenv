@@ -70,6 +70,7 @@ name = "tui-replay"
 path = "src/bin/tui-replay.rs"
 
 [dev-dependencies]
+nix.workspace = true
 insta.workspace = true
 devenv-activity = { workspace = true, features = ["test-helpers"] }
 tokio = { workspace = true, features = ["test-util"] }
