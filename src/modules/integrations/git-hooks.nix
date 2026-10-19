@@ -112,6 +112,15 @@ in
     {
       changelogs = [
         {
+          date = "2026-10-19";
+          title = "git-hooks use each worktree's own configuration";
+          when = cfg.enable;
+          description = ''
+            Git hooks installed into a directory shared by linked worktrees now use the configuration from the worktree where Git runs.
+            This also applies to custom config paths and devenv configurations in repository subdirectories.
+          '';
+        }
+        {
           date = "2026-09-04";
           title = "git-hooks are reinstalled only when something changed";
           when = cfg.enable;
@@ -171,13 +180,13 @@ in
               );
               managedConfig = toString cfg.configFile;
               staticInstallKey = builtins.hashString "sha256" (builtins.toJSON {
-                version = 3;
+                version = 4;
                 toolExecutable = executable;
                 gitExecutable = git;
                 configFile = managedConfig;
                 inherit expectedHooks;
               });
-              installHook = hook: ''"$tool_executable" install -c "$config_path" -t ${lib.escapeShellArg hook}'';
+              installHook = hook: ''"$tool_executable" install -c "$hook_config_path" -t ${lib.escapeShellArg hook}'';
             in
             ''
               set -euo pipefail
@@ -191,8 +200,7 @@ in
               key_file="$state_dir/key"
               manifest_file="$state_dir/hooks"
 
-              # The absolute hooks path is the only repository-derived input to
-              # the installed hook. One query covers ordinary repositories,
+              # Resolve the hooks directory with one query for ordinary repositories,
               # linked worktrees, submodules, bare repositories, and core.hooksPath.
               if ! hooks_dir="$($git_executable rev-parse --path-format=absolute --git-path hooks 2>&1)"; then
                 echo 1>&2 "WARNING: git-hooks.nix: skipping hook installation: $hooks_dir"
@@ -263,12 +271,21 @@ in
               fi
               echo "devenv: git-hooks install cache decision=$cache_decision"
 
+              # Git runs hooks from the repository root. Keep the config path
+              # relative to it so shared hooks use each worktree's own config,
+              # including when devenv lives in a subdirectory. Retain -c to
+              # select only this config rather than discovering a prek workspace.
+              hook_config_path="$($git_executable -C "$DEVENV_ROOT" rev-parse --show-prefix)"${lib.escapeShellArg cfg.configPath}
+
               mkdir -p "$state_dir"
               cleanup_git_hooks_cache() {
                 rm -f "''${new_manifest:-}" "''${new_key:-}"
               }
               trap cleanup_git_hooks_cache EXIT
 
+              # Install from the same directory that Git uses when running hooks,
+              # including for runners that resolve -c against their working directory.
+              cd "$($git_executable -C "$DEVENV_ROOT" rev-parse --show-toplevel)"
               ${lib.concatMapStringsSep "\n" installHook expectedHooks}
 
               new_manifest="$(mktemp "$state_dir/hooks.new.XXXXXX")"
