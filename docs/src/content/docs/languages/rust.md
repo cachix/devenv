@@ -133,6 +133,23 @@ components = ["rustfmt", "clippy"]
 profile = "minimal"
 ```
 
+### Testing against your MSRV
+
+Since devenv 2.4.1, `languages.rust.cargoRustVersion` reads the `rust-version` field from the `Cargo.toml` in a directory, so you can pin the toolchain to your minimum supported Rust version:
+
+```nix
+{ config, ... }:
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+    version = config.languages.rust.cargoRustVersion ./.;
+  };
+}
+```
+
+Point it at a directory whose `Cargo.toml` sets `rust-version`. For a workspace, that is the workspace root with `rust-version` under `[workspace.package]`. Members that inherit it with `rust-version.workspace = true` are not resolved, so pass the root directory instead (for example `../..` from `crates/foo/devenv.nix`). Versions such as `1.70` are expanded to `1.70.0`.
+
 ## Integration with other tools
 
 ### Git hooks
@@ -186,7 +203,50 @@ true
 
 
 
+### languages.rust.cargoRustVersion
+
+Read the minimum supported Rust version (` rust-version `) from the
+` Cargo.toml ` in the given directory. Point it at a directory whose
+` Cargo.toml ` sets ` rust-version ` itself.
+
+Uses ` package.rust-version `, falling back to ` workspace.package.rust-version `
+in the same file, so workspace roots work. Workspace members that inherit
+the version with ` rust-version.workspace = true ` are not resolved; pass
+the workspace root directory instead. Versions are padded to three
+components (for example ` 1.70 ` becomes ` 1.70.0 `) so the result can be
+passed to ` languages.rust.version `.
+
+Example usage to test against your MSRV:
+
+```nix
+{ config, ... }:
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+    version = config.languages.rust.cargoRustVersion ./.;
+  };
+}
+```
+
+
+
+*Type:*
+function that evaluates to a(n) string *(read only)*
+
+
+
+*Default:*
+a function reading ` rust-version ` from ` <path>/Cargo.toml `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ### languages.rust.channel
+
+
 
 The rustup toolchain to install.
 

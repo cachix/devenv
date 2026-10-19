@@ -81,6 +81,31 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  # Read `rust-version` (the MSRV) from the Cargo.toml in `path`.
+  # Falls back to `[workspace.package]` in the same file, so workspace roots
+  # work. Members inheriting with `rust-version.workspace = true` are not
+  # resolved: the workspace root is not searched for, so callers must pass the
+  # root directory. Pads the version to three components (e.g. "1.70" ->
+  # "1.70.0") so it can be used as a rust-overlay toolchain version.
+  cargoRustVersion = path:
+    let
+      cargoTomlPath = path + "/Cargo.toml";
+      cargoToml =
+        if builtins.pathExists cargoTomlPath
+        then builtins.fromTOML (builtins.readFile cargoTomlPath)
+        else throw "languages.rust.cargoRustVersion: ${toString cargoTomlPath} does not exist";
+      packageVersion = cargoToml.package.rust-version or null;
+      workspaceVersion = cargoToml.workspace.package.rust-version or null;
+      version =
+        if builtins.isString packageVersion then packageVersion
+        else if builtins.isString workspaceVersion then workspaceVersion
+        else if packageVersion == { workspace = true; }
+        then throw "languages.rust.cargoRustVersion: ${toString cargoTomlPath} inherits `rust-version` from its workspace; pass the workspace root directory (the one whose Cargo.toml sets `workspace.package.rust-version`) instead"
+        else throw "languages.rust.cargoRustVersion: no `rust-version` set in ${toString cargoTomlPath} (checked `package.rust-version` and `workspace.package.rust-version`)";
+      components = lib.splitVersion version;
+    in
+    lib.concatStringsSep "." (components ++ lib.genList (_: "0") (lib.max 0 (3 - lib.length components)));
+
   crate2nix = config.lib.getInput {
     name = "crate2nix";
     url = "github:nix-community/crate2nix";
@@ -289,6 +314,37 @@ in
       description = ''
         The aggregated toolchain package, which includes the configured components and targets.
         This is automatically set based on the channel and components configuration.
+      '';
+    };
+
+    cargoRustVersion = lib.mkOption {
+      type = lib.types.functionTo lib.types.str;
+      default = cargoRustVersion;
+      defaultText = lib.literalMD "a function reading `rust-version` from `<path>/Cargo.toml`";
+      readOnly = true;
+      description = ''
+        Read the minimum supported Rust version (`rust-version`) from the
+        `Cargo.toml` in the given directory. Point it at a directory whose
+        `Cargo.toml` sets `rust-version` itself.
+
+        Uses `package.rust-version`, falling back to `workspace.package.rust-version`
+        in the same file, so workspace roots work. Workspace members that inherit
+        the version with `rust-version.workspace = true` are not resolved; pass
+        the workspace root directory instead. Versions are padded to three
+        components (for example `1.70` becomes `1.70.0`) so the result can be
+        passed to `languages.rust.version`.
+
+        Example usage to test against your MSRV:
+        ```nix
+        { config, ... }:
+        {
+          languages.rust = {
+            enable = true;
+            channel = "stable";
+            version = config.languages.rust.cargoRustVersion ./.;
+          };
+        }
+        ```
       '';
     };
 
