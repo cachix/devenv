@@ -1,0 +1,9 @@
+diff --git a/unix/file-descriptor.cc b/unix/file-descriptor.cc
+--- a/unix/file-descriptor.cc
++++ b/unix/file-descriptor.cc
+@@ -7 +7,5 @@
+ #include <span>
++
++#ifdef __linux__
++#  include <sys/syscall.h>
++#endif

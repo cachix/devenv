@@ -96,8 +96,8 @@ in
     pkgs.cargo-insta # Snapshot testing for Rust
     pkgs.cargo-nextest # Test runner with process isolation
     inputs.crate2nix.packages.${system}.default # Generate Cargo.nix from Cargo.lock
-    (pkgs.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" {
-      optimize = "ReleaseSafe";
+    (pkgs.callPackage ./nix/libghostty-vt.nix {
+      ghostty = inputs.ghostty;
     }).dev # pkg-config provider for libghostty-vt-sys
   ];
 

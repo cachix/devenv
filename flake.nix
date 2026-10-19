@@ -109,16 +109,29 @@
                   let
                     staticComponents = prev.nixComponents2.overrideScope (
                       _finalScope: prevScope: {
-                        nix-store = prevScope.nix-store.override (
-                          {
-                            withAWS = false;
-                          }
-                          # nixpkgs gates this on isStatic alone, but the
-                          # sandbox shell is Linux-only and needs busybox.
-                          // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isDarwin {
-                            embeddedSandboxShell = false;
-                          }
-                        );
+                        # musl uses Nix's syscall fallback for close_range;
+                        # its syscall numbers need an explicit header.
+                        nix-util = prevScope.nix-util.overrideAttrs (old: {
+                          patches =
+                            (old.patches or [ ])
+                            ++ prev.lib.optionals prev.stdenv.hostPlatform.isLinux [ ./nix/nix-util-syscall-header.patch ];
+                        });
+                        nix-store =
+                          (prevScope.nix-store.override (
+                            {
+                              withAWS = false;
+                            }
+                            # nixpkgs gates this on isStatic alone, but the
+                            # sandbox shell is Linux-only and needs busybox.
+                            // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isDarwin {
+                              embeddedSandboxShell = false;
+                            }
+                          )).overrideAttrs
+                            {
+                              # Nix has build/*.cc sources. Meson 1.12 mistakes them
+                              # for generated files when its output directory is build/.
+                              mesonBuildDir = "_build";
+                            };
                       }
                     );
                   in
@@ -133,7 +146,10 @@
                           # aws-crt-cpp is a CMake dep with no .pc, so keeping S3
                           # needs the aws-c-* stack linked explicitly. Re-enable S3
                           # and link the aws libs once the startup win is confirmed.
-                          nix-store = prevScope.nix-store.override { withAWS = false; };
+                          nix-store = (prevScope.nix-store.override { withAWS = false; }).overrideAttrs {
+                            # Keep Meson's output separate from the build/*.cc sources.
+                            mesonBuildDir = "_build";
+                          };
                         }
                       )).overrideAllMesonComponents
                         (
@@ -186,8 +202,8 @@
                     });
                   };
               crate2nix = final.callPackage "${inputs.crate2nix}/crate2nix/default.nix" { };
-              libghostty-vt = final.callPackage "${inputs.ghostty}/nix/libghostty-vt.nix" {
-                optimize = "ReleaseSafe";
+              libghostty-vt = final.callPackage ./nix/libghostty-vt.nix {
+                ghostty = inputs.ghostty;
               };
             })
           ];
@@ -209,27 +225,10 @@
           rustToolchainStatic = pkgs.rust-bin.stable.latest.default.override {
             targets = [ pkgsStatic.stdenv.hostPlatform.rust.rustcTarget ];
           };
-          # [tier2] libghostty-vt links libc++ for its vendored simdutf, which
-          # makes Zig build its bundled libc++ for the target. Ghostty's nix
-          # build sets `dontSetZigDefaultFlags` and passes no `-Dtarget`, so
-          # Zig builds for `native-native` — and building libc++ for the
-          # *native-detected* musl fails (libc++ <__locale> references ctype
-          # masks the detected musl doesn't expose). Passing an explicit
-          # `-Dtarget=<arch>-linux-musl` makes Zig use its own known-good musl
-          # config, so libc++ (and thus SIMD) builds cleanly. The simd C++ is
-          # compiled SIMDUTF_NO_LIBCXX/-fno-exceptions/-fno-rtti, so the static
-          # archive we link references no libc++ symbols at runtime.
-          # darwin has no musl-style static libc, so the native build is
-          # already ABI-identical; only musl needs an explicit zig target.
+          # Darwin has no musl-style static libc; reuse the native library.
+          # Linux's explicit musl target is set by the shared Ghostty package.
           libghosttyVtStatic =
-            if pkgsStatic.stdenv.hostPlatform.isDarwin then
-              pkgs.libghostty-vt
-            else
-              pkgsStatic.libghostty-vt.overrideAttrs (old: {
-                zigBuildFlags = old.zigBuildFlags ++ [
-                  "-Dtarget=${pkgsStatic.stdenv.hostPlatform.parsed.cpu.name}-linux-musl"
-                ];
-              });
+            if pkgsStatic.stdenv.hostPlatform.isDarwin then pkgs.libghostty-vt else pkgsStatic.libghostty-vt;
           workspaceStatic = pkgsStatic.callPackage ./nix/workspace.nix {
             inherit gitRev;
             rustc = rustToolchainStatic;
