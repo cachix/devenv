@@ -1,0 +1,58 @@
+---
+title: "Dagger"
+---
+
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
+<VersionCompatibility version="2.4.1" />
+
+[Dagger](https://dagger.io/) runs composable, containerized workflows.
+The integration installs the Dagger CLI from [dagger/nix](https://github.com/dagger/nix) and opts out of Dagger telemetry by setting `DO_NOT_TRACK=1`.
+
+## Set up
+
+Add the `dagger` input:
+
+```sh
+$ devenv inputs add dagger github:dagger/nix --follows nixpkgs
+```
+
+Then enable the integration:
+
+```nix title="devenv.nix"
+{
+  dagger.enable = true;
+}
+```
+
+## Configuration
+
+```nix title="devenv.nix"
+{
+  dagger = {
+    enable = true;
+
+    # Install Dang, a scripting language for Dagger modules.
+    dang.enable = true;
+
+    # Exported as DAGGER_X_RELEASE.
+    version = "v0.20.0";
+
+    # Exported as DAGGER_ENGINE.
+    engine = "cloud";
+  };
+}
+```
+
+`dagger.engine` accepts the following values:
+
+- Dagger Cloud: `cloud`
+- OCI image: `image://IMAGE` or `image+RUNTIME://IMAGE`
+- Running container: `container://NAME` or `container+RUNTIME://NAME`
+- Direct connection: `tcp://HOST:PORT` (no authentication), `tls://HOST[:PORT]`, `ssh://[USER@]HOST[:PORT]`, `kube-pod://POD`, or `unix://PATH`
+- Legacy Docker: `docker-image://IMAGE` or `docker-container://NAME`
+
+`RUNTIME` can be `docker`, `apple`, `podman`, `finch`, or `nerdctl`.
+
+Set `dagger.package` to use a different Dagger CLI package.
+See [`languages.dang`](/languages/dang/) for Dang options.
