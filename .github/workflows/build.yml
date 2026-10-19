@@ -131,6 +131,13 @@ jobs:
         run: |
           ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- cargo nextest run -j 4 --features devenv/test-all --retries 3
 
+      # devenv-tui is outside Cargo's default workspace test set.
+      - name: Check terminal settings after killed tasks
+        run: |
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- \
+            cargo nextest run -p devenv-tui --lib --retries 0 \
+              -E 'test(command_guard_restores_terminal_after_killed_task)'
+
       # devenv-tasks is outside Cargo's default workspace members. Run its
       # process scheduling regressions explicitly on Linux and macOS.
       - name: Check process scheduling and dependency errors

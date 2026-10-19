@@ -980,6 +980,7 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
         shutdown,
     } = prepared;
 
+    let _terminal_state = devenv_tui::app::TerminalStateGuard::save();
     let (renderer, _activity_guard) = Renderer::init(&frontend);
     let tui = matches!(&renderer, Renderer::Tui { .. });
     let shell_session = ShellSessionOptions {
@@ -993,11 +994,9 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
         tracing::info!("using project root {}", root.display());
     }
 
-    // TUI terminal setup: save state before raw mode, install a restore hook
-    // for panics. Force-exit (second Ctrl+C) is handled below.
+    // Install a display restore hook for panics. The command-scoped guard
+    // restores terminal settings on ordinary exits, including errors.
     if tui {
-        devenv_tui::app::save_terminal_state();
-
         let prev_hook = panic::take_hook();
         panic::set_hook(Box::new(move |info| {
             devenv_tui::app::restore_terminal();
@@ -1013,6 +1012,8 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
         devenv_processes::kill_process_scopes();
         if tui {
             devenv_tui::app::restore_terminal();
+        } else {
+            devenv_tui::app::restore_terminal_state();
         }
     });
 
