@@ -1385,6 +1385,101 @@ impl Config {
         Ok(())
     }
 
+    /// Edit only this file's input, preserving surrounding YAML presentation.
+    /// Resolve follows against the loaded configuration, but never write merged
+    /// imports or local overrides back into the project's file. Unsupported edits
+    /// fail before writing rather than falling back to a lossy rewrite.
+    pub fn add_input_to_file(
+        &self,
+        root_dir: &Path,
+        name: &str,
+        url: &str,
+        follows: &[String],
+    ) -> Result<()> {
+        let mut resolved = Config {
+            inputs: self.inputs.clone(),
+            ..Default::default()
+        };
+        resolved.add_input(name, url, follows)?;
+        let input = &resolved.inputs[name];
+        let path = root_dir.join(YAML_CONFIG);
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                "# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json\n".to_string()
+            }
+            Err(error) => {
+                return Err(error)
+                    .into_diagnostic()
+                    .wrap_err_with(|| format!("Failed to read {}", path.display()));
+            }
+        };
+
+        let mut expected: serde_yaml::Value = serde_yaml::from_str(&text)
+            .into_diagnostic()
+            .wrap_err("Failed to parse devenv.yaml")?;
+        if expected.is_null() {
+            expected = serde_yaml::Value::Mapping(Default::default());
+        }
+        let inputs = expected
+            .as_mapping_mut()
+            .ok_or_else(|| miette::miette!("devenv.yaml must contain a YAML mapping"))?
+            .entry("inputs".into())
+            .or_insert(serde_yaml::Value::Null);
+        if inputs.is_null() {
+            *inputs = serde_yaml::Value::Mapping(Default::default());
+        }
+        inputs
+            .as_mapping_mut()
+            .ok_or_else(|| miette::miette!("devenv.yaml inputs must be a YAML mapping"))?
+            .insert(name.into(), serde_yaml::to_value(input).into_diagnostic()?);
+
+        // Keep the whole stream: comments and directives can live outside the
+        // document node itself.
+        let file: yaml_edit::YamlFile = text
+            .parse()
+            .into_diagnostic()
+            .wrap_err("Failed to parse devenv.yaml for editing")?;
+        let document = file.ensure_document();
+        if document.get_mapping("inputs").is_none() {
+            let inputs = if document
+                .as_mapping()
+                .is_some_and(|mapping| mapping.is_flow_style())
+            {
+                yaml_edit::Mapping::new_flow()
+            } else {
+                yaml_edit::Mapping::new_pending_block()
+            };
+            document.set("inputs", inputs);
+        }
+        let inputs = document
+            .get_mapping("inputs")
+            .ok_or_else(|| miette::miette!("Cannot edit devenv.yaml inputs in place"))?;
+        // A nested block mapping is not valid inside a flow mapping. JSON gives
+        // us a properly escaped flow-style fragment without hand-rendering YAML.
+        let fragment = if inputs.is_flow_style() {
+            serde_json::to_string(input).into_diagnostic()?
+        } else {
+            serde_yaml::to_string(input).into_diagnostic()?
+        };
+        let fragment: yaml_edit::Document = fragment.parse().into_diagnostic()?;
+        let mapping = fragment
+            .as_mapping()
+            .ok_or_else(|| miette::miette!("Serialized input must be a YAML mapping"))?;
+        inputs.set(name, mapping);
+
+        let edited = file.to_string();
+        let actual: serde_yaml::Value = serde_yaml::from_str(&edited).into_diagnostic().wrap_err(
+            "Cannot edit devenv.yaml without invalidating its YAML; file was not changed",
+        )?;
+        if actual != expected {
+            bail!("Cannot edit devenv.yaml without changing other values; file was not changed");
+        }
+        std::fs::write(&path, edited)
+            .into_diagnostic()
+            .wrap_err("Failed to write devenv.yaml")
+    }
+
     /// Add a new input, overwriting any existing input with the same name.
     pub fn add_input(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
         // A set of inputs built from the follows list.
@@ -1594,6 +1689,189 @@ mod tests {
                 .contains("Input other does not exist so it can't be followed."),
             "unexpected error: {err}"
         );
+    }
+
+    fn add_input_in_file(yaml: Option<&str>, name: &str, follows: &[String]) -> String {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(YAML_CONFIG);
+        if let Some(yaml) = yaml {
+            fs::write(&path, yaml).unwrap();
+        }
+        Config::load_from(directory.path())
+            .unwrap()
+            .add_input_to_file(directory.path(), name, "github:org/new", follows)
+            .unwrap();
+        fs::read_to_string(path).unwrap()
+    }
+
+    #[test]
+    fn add_input_to_file_preserves_comments_and_order() {
+        let yaml = "# header\nallow_unfree: true\ninputs:\n  # existing input\n  old:\n    url: 'github:org/old' # inline\n# imports note\nimports: []\n";
+        let written = add_input_in_file(Some(yaml), "new", &["nixpkgs".into()]);
+        assert_eq!(
+            written,
+            yaml.replace(
+                "# imports note",
+                "  new:\n    url: github:org/new\n    inputs:\n      nixpkgs:\n        follows: nixpkgs\n# imports note"
+            )
+        );
+    }
+
+    #[test]
+    fn add_input_to_file_replaces_an_existing_input_in_place() {
+        let yaml = "inputs:\n  # old input\n  old:\n    url: github:org/old\n    inputs:\n      nixpkgs:\n        follows: nixpkgs\n  # sibling\n  sibling:\n    url: 'github:org/sibling' # keep\n";
+        assert_eq!(
+            add_input_in_file(Some(yaml), "old", &[]),
+            yaml.replace(
+                "    url: github:org/old\n    inputs:\n      nixpkgs:\n        follows: nixpkgs\n",
+                "    url: github:org/new\n"
+            )
+        );
+    }
+
+    #[test]
+    fn add_input_to_file_edits_flow_mappings() {
+        let yaml = "# header\ninputs: {old: {url: 'github:org/old'}} # inline\n";
+        let written = add_input_in_file(Some(yaml), "new", &["nixpkgs".into()]);
+        assert!(written.starts_with("# header\ninputs: {old: {url: 'github:org/old'}, "));
+        assert!(written.ends_with("} # inline\n"));
+        let config = load_yaml(&written);
+        assert_eq!(config.inputs.len(), 2);
+        assert_eq!(
+            config.inputs["new"].inputs["nixpkgs"].follows.as_deref(),
+            Some("nixpkgs")
+        );
+    }
+
+    #[test]
+    fn add_input_to_file_handles_escaped_keys_and_document_markers() {
+        let yaml =
+            "# header\n---\n\"inpu\\u0074s\":\n  old:\n    url: github:org/old\n...\n# footer\n";
+        let written = add_input_in_file(Some(yaml), "new", &[]);
+        assert_eq!(
+            written,
+            yaml.replace("...", "  new:\n    url: github:org/new\n...")
+        );
+    }
+
+    #[test]
+    fn add_input_to_file_initializes_missing_or_empty_inputs() {
+        for yaml in [
+            "",
+            "# header\n",
+            "# header\ninputs:\n",
+            "# header\ninputs: null\n",
+            "# header\ninputs: {}\n",
+            "# header\nallow_unfree: true\n\n\n",
+            "{allow_unfree: true}\n",
+            "{inputs: null}\n",
+        ] {
+            let written = add_input_in_file(Some(yaml), "new", &[]);
+            if yaml.starts_with("# header") {
+                assert!(written.starts_with("# header\n"));
+            }
+            if yaml.ends_with("\n\n\n") {
+                assert!(written.contains("\n\n\n"));
+            }
+            assert_eq!(
+                load_yaml(&written).inputs["new"].url.as_deref(),
+                Some("github:org/new")
+            );
+        }
+        let written = add_input_in_file(None, "new", &[]);
+        assert!(
+            written.starts_with(
+                "# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json\n"
+            )
+        );
+        assert_eq!(
+            load_yaml(&written).inputs["new"].url.as_deref(),
+            Some("github:org/new")
+        );
+    }
+
+    #[test]
+    fn add_input_to_file_preserves_existing_line_endings() {
+        for yaml in [
+            "# header\r\ninputs:\r\n  old:\r\n    url: github:org/old\r\n",
+            "# header\r\ninputs:\n  old:\n    url: github:org/old\n",
+        ] {
+            assert!(add_input_in_file(Some(yaml), "new", &[]).starts_with(yaml));
+        }
+    }
+
+    #[test]
+    fn add_input_to_file_escapes_names_and_urls() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(YAML_CONFIG);
+        let name = "new: input\nquoted";
+        let url = "path:/tmp/a: b # literal";
+        for yaml in ["inputs: {}\n", "inputs:\n  old:\n    url: github:org/old\n"] {
+            fs::write(&path, yaml).unwrap();
+            Config::load_from(directory.path())
+                .unwrap()
+                .add_input_to_file(directory.path(), name, url, &[])
+                .unwrap();
+            let written = fs::read_to_string(&path).unwrap();
+            assert_eq!(load_yaml(&written).inputs[name].url.as_deref(), Some(url));
+        }
+    }
+
+    #[test]
+    fn add_input_to_file_does_not_write_merged_inputs_or_settings() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let yaml = "# root\ninputs:\n  old:\n    url: github:org/old\nimports:\n  - ./sub\n";
+        fs::write(root.join(YAML_CONFIG), yaml).unwrap();
+        fs::create_dir(root.join("sub")).unwrap();
+        fs::write(
+            root.join("sub").join(YAML_CONFIG),
+            "inputs:\n  imported:\n    url: github:org/imported\n",
+        )
+        .unwrap();
+        fs::write(root.join(YAML_LOCAL_CONFIG), "allow_unfree: true\ninputs:\n  local:\n    url: github:org/local\n  old:\n    url: github:org/override\n").unwrap();
+        Config::load_from(root)
+            .unwrap()
+            .add_input_to_file(
+                root,
+                "new",
+                "github:org/new",
+                &["imported".into(), "local".into()],
+            )
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join(YAML_CONFIG)).unwrap(),
+            yaml.replace("imports:", "  new:\n    url: github:org/new\n    inputs:\n      imported:\n        follows: imported\n      local:\n        follows: local\nimports:")
+        );
+    }
+
+    #[test]
+    fn add_input_to_file_leaves_file_unchanged_on_errors() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let path = root.join(YAML_CONFIG);
+        for yaml in [
+            "inputs:\n  old: &base\n    url: github:org/old\n  sibling: *base\n",
+            "inputs: [not, a, mapping]\n",
+            "inputs: {\n",
+            "---\ninputs: {}\n---\ninputs: {}\n",
+        ] {
+            fs::write(&path, yaml).unwrap();
+            assert!(
+                Config::default()
+                    .add_input_to_file(root, "old", "github:org/new", &[])
+                    .is_err()
+            );
+            assert_eq!(fs::read_to_string(&path).unwrap(), yaml);
+        }
+        let yaml = "# header\ninputs: {}\n";
+        fs::write(&path, yaml).unwrap();
+        assert!(
+            Config::default()
+                .add_input_to_file(root, "new", "github:org/new", &["missing".into()])
+                .is_err()
+        );
+        assert_eq!(fs::read_to_string(path).unwrap(), yaml);
     }
 
     #[test]

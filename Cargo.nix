@@ -6994,6 +6994,22 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "link" ];
       };
+      "countme" = rec {
+        crateName = "countme";
+        version = "3.0.1";
+        edition = "2018";
+        sha256 = "0dn62hhvgmwyxslh14r4nlbvz8h50cp5mnn1qhqsw63vs7yva13p";
+        authors = [
+          "Aleksey Kladov <aleksey.kladov@gmail.com>"
+        ];
+        features = {
+          "dashmap" = [ "dep:dashmap" ];
+          "enable" = [ "dashmap" "once_cell" "rustc-hash" ];
+          "once_cell" = [ "dep:once_cell" ];
+          "print_at_exit" = [ "enable" ];
+          "rustc-hash" = [ "dep:rustc-hash" ];
+        };
+      };
       "cpubits" = rec {
         crateName = "cpubits";
         version = "0.1.1";
@@ -9131,6 +9147,11 @@ rec {
           {
             name = "xdg";
             packageId = "xdg";
+          }
+          {
+            name = "yaml-edit";
+            packageId = "yaml-edit";
+            usesDefaultFeatures = false;
           }
         ];
         devDependencies = [
@@ -14760,6 +14781,7 @@ rec {
           "rustc-dep-of-std" = [ "nightly" "core" "compiler_builtins" "alloc" "rustc-internal-api" ];
           "serde" = [ "dep:serde" ];
         };
+        resolvedDefaultFeatures = [ "inline-more" ];
       };
       "hashbrown 0.15.5" = rec {
         crateName = "hashbrown";
@@ -27043,6 +27065,39 @@ rec {
         sha256 = "12c1pibjxdjai80hpalxgqkzn30316x49iry4rdscrcn3mz42g1j";
 
       };
+      "rowan" = rec {
+        crateName = "rowan";
+        version = "0.16.1";
+        edition = "2021";
+        sha256 = "08azddgq9f9nir996h0y46j8va0wsz4112hv0ls9hd1fb2gklyj1";
+        authors = [
+          "Aleksey Kladov <aleksey.kladov@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "countme";
+            packageId = "countme";
+          }
+          {
+            name = "hashbrown";
+            packageId = "hashbrown 0.14.5";
+            usesDefaultFeatures = false;
+            features = [ "inline-more" ];
+          }
+          {
+            name = "rustc-hash";
+            packageId = "rustc-hash 1.1.0";
+          }
+          {
+            name = "text-size";
+            packageId = "text-size";
+          }
+        ];
+        features = {
+          "serde" = [ "dep:serde" ];
+          "serde1" = [ "serde" "text-size/serde" ];
+        };
+      };
       "rsa" = rec {
         crateName = "rsa";
         version = "0.9.10";
@@ -32892,6 +32947,20 @@ rec {
           }
         ];
 
+      };
+      "text-size" = rec {
+        crateName = "text-size";
+        version = "1.1.1";
+        edition = "2018";
+        sha256 = "0cwjbkl7w3xc8mnkhg1nwij6p5y2qkcfldgss8ddnawvhf3s32pi";
+        libName = "text_size";
+        authors = [
+          "Aleksey Kladov <aleksey.kladov@gmail.com>"
+          "Christopher Durham (CAD97) <cad97@cad97.com>"
+        ];
+        features = {
+          "serde" = [ "dep:serde" ];
+        };
       };
       "textwrap" = rec {
         crateName = "textwrap";
@@ -39694,6 +39763,28 @@ rec {
           }
         ];
 
+      };
+      "yaml-edit" = rec {
+        crateName = "yaml-edit";
+        version = "0.3.2";
+        edition = "2021";
+        sha256 = "1f6hk3pw50082c9xbfgqjw922rwidjj6q9685l55w1w07pg33rbr";
+        libName = "yaml_edit";
+        authors = [
+          "Jelmer Vernooĳ <jelmer@debian.org>"
+        ];
+        dependencies = [
+          {
+            name = "rowan";
+            packageId = "rowan";
+          }
+        ];
+        features = {
+          "base64" = [ "dep:base64" ];
+          "binary" = [ "base64" ];
+          "default" = [ "binary" ];
+          "regex" = [ "dep:regex" ];
+        };
       };
       "yansi" = rec {
         crateName = "yansi";
