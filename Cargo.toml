@@ -131,7 +131,8 @@ serde_dhall = { version = "0.13.0", default-features = false }
 serde_json = "1.0.149"
 serde_repr = "0.1.20"
 serde_with = "3"
-serde_yaml = "0.9.34"
+serde_norway = "0.9.42"
+yaml-edit = { version = "0.3.2", default-features = false }
 toml = "0.9.12"
 ser_nix = "0.2.4"
 similar = "3.1.0"

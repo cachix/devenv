@@ -41,7 +41,7 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 schemars.workspace = true
-serde_yaml.workspace = true
+serde_norway.workspace = true
 
 # Activity system
 devenv-activity.workspace = true
