@@ -14,7 +14,9 @@ git init -b main
 git config user.name Test
 git config user.email test@example.com
 git config commit.gpgsign false
-printf 'CHANGELOG.md merge=changelog-merge\n' > .gitattributes
+test "$(git check-attr merge -- CHANGELOG.md)" = 'CHANGELOG.md: merge: changelog-merge'
+test "$(git check-attr text -- example.txt)" = 'example.txt: text: set'
+test ! -e .gitattributes
 cat > CHANGELOG.md <<'EOF'
 # Changelog
 
@@ -63,3 +65,4 @@ grep -Fx -- '- Changed on main.' CHANGELOG.md
 grep -Fx -- '- Changed on other.' CHANGELOG.md
 git merge --abort
 cmp config-before .git/config
+test ! -e .gitattributes

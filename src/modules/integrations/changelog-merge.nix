@@ -19,18 +19,12 @@ in
   config = lib.mkIf cfg.enable {
     packages = [ cfg.package ];
 
-    # Append to Git's runtime configuration so existing entries are preserved.
-    # Track `CHANGELOG.md merge=changelog-merge` in .gitattributes to opt in.
-    enterShell = ''
-      _devenv_changelog_merge_count=''${GIT_CONFIG_COUNT:-0}
-      export "GIT_CONFIG_KEY_$_devenv_changelog_merge_count=merge.changelog-merge.name"
-      export "GIT_CONFIG_VALUE_$_devenv_changelog_merge_count=Keep a Changelog semantic merger"
-      export "GIT_CONFIG_KEY_$((_devenv_changelog_merge_count + 1))=merge.changelog-merge.driver"
-      export "GIT_CONFIG_VALUE_$((_devenv_changelog_merge_count + 1))="${lib.escapeShellArg driver}
-      export "GIT_CONFIG_KEY_$((_devenv_changelog_merge_count + 2))=merge.changelog-merge.recursive"
-      export "GIT_CONFIG_VALUE_$((_devenv_changelog_merge_count + 2))=binary"
-      export GIT_CONFIG_COUNT=$((_devenv_changelog_merge_count + 3))
-      unset _devenv_changelog_merge_count
-    '';
+    git.config.merge.changelog-merge = {
+      name = "Keep a Changelog semantic merger";
+      inherit driver;
+      recursive = "binary";
+    };
+
+    git.attributes = [ "CHANGELOG.md merge=changelog-merge" ];
   };
 }

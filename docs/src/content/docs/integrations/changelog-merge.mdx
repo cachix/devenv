@@ -10,8 +10,9 @@ import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro
 files semantically. Independent changelog entries from different branches are
 combined, while incompatible edits produce Git conflict markers.
 
-Enable the integration to install the nixpkgs package and configure Git's merge
-driver inside the devenv shell, including when activated through direnv:
+Enable the integration to install the nixpkgs package, configure Git's merge
+driver, and select it for `CHANGELOG.md` inside the devenv shell, including when
+activated through direnv:
 
 ```nix title="devenv.nix"
 {
@@ -19,15 +20,18 @@ driver inside the devenv shell, including when activated through direnv:
 }
 ```
 
-Add and commit this line in your repository's `.gitattributes`:
+The integration uses [`git.config` and `git.attributes`](/git/)
+and leaves repository and global Git configuration files untouched. Repository
+`.gitattributes` and `.git/info/attributes` rules take precedence over its attributes.
+You can override the executable with `changelog-merge.package` and add patterns for
+other changelogs with `git.attributes`:
 
-```gitattributes title=".gitattributes"
-CHANGELOG.md merge=changelog-merge
+```nix title="devenv.nix"
+{
+  changelog-merge.enable = true;
+  git.attributes = [ "packages/*/CHANGELOG.md merge=changelog-merge" ];
+}
 ```
-
-Use additional patterns for changelogs in other locations. The integration preserves
-existing Git environment configuration and leaves local and global Git configuration
-files untouched. You can override the executable with `changelog-merge.package`.
 
 Your nixpkgs input must include `pkgs.changelog-merge`. If your pin predates the
 package, update it or select a newer nixpkgs input in `devenv.yaml`.
