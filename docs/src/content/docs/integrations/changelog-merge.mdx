@@ -6,13 +6,12 @@ import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro
 
 <VersionCompatibility version="2.4.1" />
 
-[changelog-merge](https://github.com/cachix/changelog-merge) merges Keep a Changelog
-files semantically. Independent changelog entries from different branches are
-combined, while incompatible edits produce Git conflict markers.
+[changelog-merge](https://github.com/cachix/changelog-merge) helps avoid conflicts
+when contributors update a [Keep a Changelog](https://keepachangelog.com/) file on
+different branches. New entries from both branches are kept. Incompatible changes
+to the same entry produce conflicts that you resolve as usual.
 
-Enable the integration to install the nixpkgs package, configure Git's merge
-driver, and select it for `CHANGELOG.md` inside the devenv shell, including when
-activated through direnv:
+Enable it in your project:
 
 ```nix title="devenv.nix"
 {
@@ -20,29 +19,25 @@ activated through direnv:
 }
 ```
 
-The integration uses [`git.config` and `git.attributes`](/git/)
-and leaves repository and global Git configuration files untouched. Repository
-`.gitattributes` and `.git/info/attributes` rules take precedence over its attributes.
-You can override the executable with `changelog-merge.package` and add patterns for
-other changelogs with `git.attributes`:
-
-```nix title="devenv.nix"
-{
-  changelog-merge.enable = true;
-  git.attributes = [ "packages/*/CHANGELOG.md merge=changelog-merge" ];
-}
-```
-
-Your nixpkgs input must include `pkgs.changelog-merge`. If your pin predates the
-package, update it or select a newer nixpkgs input in `devenv.yaml`.
-
-Verify the configuration inside `devenv shell`:
+Files named `CHANGELOG.md` now use changelog-merge automatically when you merge,
+rebase, or cherry-pick inside your devenv environment:
 
 ```sh
-git check-attr merge -- CHANGELOG.md
-git config --get merge.changelog-merge.driver
+devenv shell
+git merge my-branch
 ```
 
-Git uses the driver for merges, rebases, and cherry-picks that require three-way
-merging. Each contributor and CI job needs the configured environment. Git commands
-outside it and hosted web merges on GitHub or GitLab do not use this driver.
+This also works when your environment is activated through direnv. Continue
+editing your changelog directly.
+
+To include changelogs with other names, add their paths or patterns:
+
+```nix title="devenv.nix"
+{
+  changelog-merge.enable = true;
+  git.attributes = [ "docs/CHANGES.md merge=changelog-merge" ];
+}
+```
+
+Each contributor or CI job performing merges needs to use the devenv environment.
+Merges through the GitHub or GitLab web interface do not use changelog-merge.
