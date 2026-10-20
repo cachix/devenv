@@ -316,7 +316,7 @@ impl TestConfig {
                 let content = fs::read_to_string(config_path)
                     .into_diagnostic()
                     .wrap_err("Failed to read .test-config file")?;
-                return serde_yaml::from_str(&content)
+                return serde_norway::from_str(&content)
                     .into_diagnostic()
                     .wrap_err("Failed to parse .test-config YAML");
             }
@@ -1236,11 +1236,11 @@ mod tests {
 
     #[test]
     fn test_config_accepts_size_strings_and_bytes() {
-        let config: TestConfig = serde_yaml::from_str("max_closure_size: 2 GB").unwrap();
+        let config: TestConfig = serde_norway::from_str("max_closure_size: 2 GB").unwrap();
         assert_eq!(config.max_closure_size, Some(2_000_000_000));
-        let config: TestConfig = serde_yaml::from_str("max_closure_size: 4096").unwrap();
+        let config: TestConfig = serde_norway::from_str("max_closure_size: 4096").unwrap();
         assert_eq!(config.max_closure_size, Some(4096));
-        let config: TestConfig = serde_yaml::from_str("use_shell: false").unwrap();
+        let config: TestConfig = serde_norway::from_str("use_shell: false").unwrap();
         assert_eq!(config.max_closure_size, None);
     }
 

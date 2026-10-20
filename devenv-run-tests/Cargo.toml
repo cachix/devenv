@@ -19,6 +19,6 @@ nix-bindings-expr.workspace = true
 nix-flake-lock.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml.workspace = true
+serde_norway.workspace = true
 globset.workspace = true
 shell-escape.workspace = true

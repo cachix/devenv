@@ -9115,12 +9115,12 @@ rec {
             packageId = "serde_json";
           }
           {
-            name = "serde_repr";
-            packageId = "serde_repr";
+            name = "serde_norway";
+            packageId = "serde_norway";
           }
           {
-            name = "serde_yaml";
-            packageId = "serde_yaml";
+            name = "serde_repr";
+            packageId = "serde_repr";
           }
           {
             name = "sha2";
@@ -9835,8 +9835,8 @@ rec {
             packageId = "serde_json";
           }
           {
-            name = "serde_yaml";
-            packageId = "serde_yaml";
+            name = "serde_norway";
+            packageId = "serde_norway";
           }
           {
             name = "shell-escape";
@@ -10163,8 +10163,8 @@ rec {
             packageId = "serde_json";
           }
           {
-            name = "serde_yaml";
-            packageId = "serde_yaml";
+            name = "serde_norway";
+            packageId = "serde_norway";
           }
           {
             name = "thiserror";

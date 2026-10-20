@@ -1372,7 +1372,7 @@ impl Config {
     }
 
     fn write_to(&self, root_dir: &Path) -> Result<()> {
-        let yaml = serde_yaml::to_string(&self)
+        let yaml = serde_norway::to_string(&self)
             .into_diagnostic()
             .wrap_err("Failed to serialize config to YAML")?;
         let content = format!(
@@ -1415,24 +1415,27 @@ impl Config {
             }
         };
 
-        let mut expected: serde_yaml::Value = serde_yaml::from_str(&text)
+        let mut expected: serde_norway::Value = serde_norway::from_str(&text)
             .into_diagnostic()
             .wrap_err("Failed to parse devenv.yaml")?;
         if expected.is_null() {
-            expected = serde_yaml::Value::Mapping(Default::default());
+            expected = serde_norway::Value::Mapping(Default::default());
         }
         let inputs = expected
             .as_mapping_mut()
             .ok_or_else(|| miette::miette!("devenv.yaml must contain a YAML mapping"))?
             .entry("inputs".into())
-            .or_insert(serde_yaml::Value::Null);
+            .or_insert(serde_norway::Value::Null);
         if inputs.is_null() {
-            *inputs = serde_yaml::Value::Mapping(Default::default());
+            *inputs = serde_norway::Value::Mapping(Default::default());
         }
         inputs
             .as_mapping_mut()
             .ok_or_else(|| miette::miette!("devenv.yaml inputs must be a YAML mapping"))?
-            .insert(name.into(), serde_yaml::to_value(input).into_diagnostic()?);
+            .insert(
+                name.into(),
+                serde_norway::to_value(input).into_diagnostic()?,
+            );
 
         // Keep the whole stream: comments and directives can live outside the
         // document node itself.
@@ -1460,7 +1463,7 @@ impl Config {
         let fragment = if inputs.is_flow_style() {
             serde_json::to_string(input).into_diagnostic()?
         } else {
-            serde_yaml::to_string(input).into_diagnostic()?
+            serde_norway::to_string(input).into_diagnostic()?
         };
         let fragment: yaml_edit::Document = fragment.parse().into_diagnostic()?;
         let mapping = fragment
@@ -1469,9 +1472,10 @@ impl Config {
         inputs.set(name, mapping);
 
         let edited = file.to_string();
-        let actual: serde_yaml::Value = serde_yaml::from_str(&edited).into_diagnostic().wrap_err(
-            "Cannot edit devenv.yaml without invalidating its YAML; file was not changed",
-        )?;
+        let actual: serde_norway::Value =
+            serde_norway::from_str(&edited).into_diagnostic().wrap_err(
+                "Cannot edit devenv.yaml without invalidating its YAML; file was not changed",
+            )?;
         if actual != expected {
             bail!("Cannot edit devenv.yaml without changing other values; file was not changed");
         }
@@ -1942,7 +1946,7 @@ mod tests {
     #[test]
     fn default_config_serializes_to_empty_yaml() {
         let config = Config::default();
-        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        let yaml = serde_norway::to_string(&config).expect("Failed to serialize config");
         assert_eq!(
             yaml.trim(),
             "{}",
@@ -1963,14 +1967,14 @@ mod tests {
             ..Default::default()
         };
 
-        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        let yaml = serde_norway::to_string(&config).expect("Failed to serialize config");
         assert!(yaml.contains("profile: production"));
     }
 
     #[test]
     fn profile_field_not_serialized_when_none() {
         let config = Config::default();
-        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        let yaml = serde_norway::to_string(&config).expect("Failed to serialize config");
         assert!(!yaml.contains("profile"));
     }
 
@@ -2005,14 +2009,14 @@ mod tests {
             ..Default::default()
         };
 
-        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        let yaml = serde_norway::to_string(&config).expect("Failed to serialize config");
         assert!(yaml.contains("strict_ports: true"));
     }
 
     #[test]
     fn strict_ports_field_not_serialized_when_none() {
         let config = Config::default();
-        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        let yaml = serde_norway::to_string(&config).expect("Failed to serialize config");
         assert!(!yaml.contains("strict_ports"));
     }
 
@@ -2881,27 +2885,29 @@ imports:
     #[test]
     fn require_version_yaml_bool() {
         let yaml = "require_version: true\n";
-        let parsed: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
-        let rv: RequireVersion = serde_yaml::from_value(parsed["require_version"].clone()).unwrap();
+        let parsed: serde_norway::Value = serde_norway::from_str(yaml).unwrap();
+        let rv: RequireVersion =
+            serde_norway::from_value(parsed["require_version"].clone()).unwrap();
         assert_eq!(rv, RequireVersion::Match(true));
     }
 
     #[test]
     fn require_version_yaml_string() {
         let yaml = "require_version: \">=2.0.0\"\n";
-        let parsed: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
-        let rv: RequireVersion = serde_yaml::from_value(parsed["require_version"].clone()).unwrap();
+        let parsed: serde_norway::Value = serde_norway::from_str(yaml).unwrap();
+        let rv: RequireVersion =
+            serde_norway::from_value(parsed["require_version"].clone()).unwrap();
         assert_eq!(rv, RequireVersion::Constraint(">=2.0.0".to_string()));
     }
 
     #[test]
     fn cachix_auth_token_yaml_bool() {
-        let enabled: CachixAuthToken = serde_yaml::from_str("true").unwrap();
+        let enabled: CachixAuthToken = serde_norway::from_str("true").unwrap();
         assert_eq!(enabled, CachixAuthToken::Enabled(true));
         assert_eq!(enabled.secret_name(), Some("CACHIX_AUTH_TOKEN"));
         assert!(enabled.is_required());
 
-        let disabled: CachixAuthToken = serde_yaml::from_str("false").unwrap();
+        let disabled: CachixAuthToken = serde_norway::from_str("false").unwrap();
         assert_eq!(disabled, CachixAuthToken::Enabled(false));
         assert_eq!(disabled.secret_name(), None);
         assert!(!disabled.is_required());
@@ -2909,7 +2915,7 @@ imports:
 
     #[test]
     fn cachix_auth_token_yaml_string() {
-        let setting: CachixAuthToken = serde_yaml::from_str("MY_TEAM_CACHIX_TOKEN").unwrap();
+        let setting: CachixAuthToken = serde_norway::from_str("MY_TEAM_CACHIX_TOKEN").unwrap();
         assert_eq!(
             setting,
             CachixAuthToken::Name("MY_TEAM_CACHIX_TOKEN".to_string())
@@ -2986,7 +2992,7 @@ nixpkgs:
     #[test]
     fn devenv_yaml_snake_case_parses() {
         let cfg = load_yaml(SNAKE_CASE_INPUT);
-        let expected: serde_yaml::Value = serde_yaml::from_str(
+        let expected: serde_norway::Value = serde_norway::from_str(
             r#"
 allow_unfree: true
 allow_unsupported_system: true
@@ -3007,7 +3013,7 @@ strict_ports: true
 "#,
         )
         .unwrap();
-        assert_eq!(serde_yaml::to_value(&cfg).unwrap(), expected);
+        assert_eq!(serde_norway::to_value(&cfg).unwrap(), expected);
 
         // skip_serializing fields don't appear in Value; check directly.
         let nixpkgs = cfg.nixpkgs.unwrap();
@@ -3022,8 +3028,8 @@ strict_ports: true
         let snake = load_yaml(SNAKE_CASE_INPUT);
         let camel = load_yaml(CAMELCASE_INPUT);
         assert_eq!(
-            serde_yaml::to_value(&camel).unwrap(),
-            serde_yaml::to_value(&snake).unwrap()
+            serde_norway::to_value(&camel).unwrap(),
+            serde_norway::to_value(&snake).unwrap()
         );
         // skip_serializing fields don't appear in Value; check directly.
         let snake_nixpkgs = snake.nixpkgs.unwrap();

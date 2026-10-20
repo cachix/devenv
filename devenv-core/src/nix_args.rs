@@ -535,7 +535,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        let expected: serde_yaml::Value = serde_yaml::from_str(
+        let expected: serde_norway::Value = serde_norway::from_str(
             r#"
 allowUnfree: true
 cudaSupport: true
@@ -547,7 +547,7 @@ android_sdk:
 "#,
         )
         .unwrap();
-        let actual = serde_yaml::to_value(NixpkgsConfigForNix::from(&cfg)).unwrap();
+        let actual = serde_norway::to_value(NixpkgsConfigForNix::from(&cfg)).unwrap();
         assert_eq!(actual, expected);
     }
 
