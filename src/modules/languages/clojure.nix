@@ -17,14 +17,24 @@ in
         description = "The Clojure language server package to use.";
       };
     };
+
+    jdk = {
+      package = lib.mkOption {
+        type = lib.types.nullOr lib.types.package;
+        default = null;
+        description = "The JDK package to use for Clojure. When `null`, the default JDK bundled with `pkgs.clojure` is used.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
-      (pkgs.clojure.override {
-        jdk = config.languages.java.jdk.package;
-      })
+      (
+        if cfg.jdk.package == null then
+          pkgs.clojure
+        else
+          pkgs.clojure.override { jdk = cfg.jdk.package; }
+      )
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
-    languages.java.enable = true;
   };
 }
