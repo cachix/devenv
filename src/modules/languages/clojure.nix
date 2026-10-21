@@ -20,21 +20,17 @@ in
 
     jdk = {
       package = lib.mkOption {
-        type = lib.types.nullOr lib.types.package;
-        default = null;
-        description = "The JDK package to use for Clojure. When `null`, the default JDK bundled with `pkgs.clojure` is used.";
+        type = lib.types.package;
+        default = config.languages.java.jdk.package;
+        defaultText = lib.literalExpression "config.languages.java.jdk.package";
+        description = "The JDK package to use for Clojure.";
       };
     };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
-      (
-        if cfg.jdk.package == null then
-          pkgs.clojure
-        else
-          pkgs.clojure.override { jdk = cfg.jdk.package; }
-      )
+      (pkgs.clojure.override { jdk = cfg.jdk.package; })
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }
