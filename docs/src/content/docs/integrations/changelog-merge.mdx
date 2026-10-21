@@ -11,7 +11,22 @@ when contributors update a [Keep a Changelog](https://keepachangelog.com/) file 
 different branches. New entries from both branches are kept. Incompatible changes
 to the same entry produce conflicts that you resolve as usual.
 
-Enable it in your project:
+This integration requires a recent nixpkgs version that includes `changelog-merge`.
+If your project uses an older pin, select a newer input:
+
+```yaml title="devenv.yaml"
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/master
+```
+
+Update your lock file:
+
+```sh
+devenv update nixpkgs
+```
+
+Then enable it in your project:
 
 ```nix title="devenv.nix"
 {

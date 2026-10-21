@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 
+- `devenv inputs add` preserves surrounding YAML comments, formatting, and key order, and no longer copies imported or local inputs into `devenv.yaml` ([#3268](https://github.com/cachix/devenv/issues/3268)).
 - Fixed machine metadata failing to load when encryption key or extra file target paths contain dots, such as `/tmp/luks.key` ([#3277](https://github.com/cachix/devenv/issues/3277)).
 - Fixed source builds with Meson 1.12, missing syscall declarations in static Linux builds, and Linux linking failures caused by malformed Ghostty compiler-runtime objects.
 - Restore terminal settings after tasks exit or are killed, preventing subsequent terminal output from remaining misaligned ([#3292](https://github.com/cachix/devenv/issues/3292)).
@@ -29,6 +30,7 @@
 - `devenv test` now honours `strict_ports: true` and fails on a port conflict, as `devenv up` does, instead of silently moving the service to the next free port ([#3163](https://github.com/cachix/devenv/issues/3163)).
 - `enterShell` now runs from the project root when `devenv shell` starts in a subdirectory, before the shell moves to that subdirectory. Previously it ran in the subdirectory, so commands with relative paths, such as the JavaScript package install, looked in the wrong place.
 - Fixed auto-activation waiting for the next prompt when you `cd` from one devenv project directly into another, so you had to press Enter before the second project's shell started. It now starts right away ([#3129](https://github.com/cachix/devenv/issues/3129)).
+- `devenv up` and `devenv test` no longer run the prerequisites of a process with `start.enable = false`. They now run when that process is started, or when an enabled process depends on it ([#3272](https://github.com/cachix/devenv/issues/3272)).
 
 ## 2.4.0 (2026-09-24)
 
