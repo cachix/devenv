@@ -14,16 +14,22 @@ let
 
   # Override the buildGoModule function to use the specified Go package.
   buildGoModule = pkgs.buildGoModule.override { go = cfg.package; };
-  # A helper function to rebuild a package with the specific Go version.
+  # vscode-go suggests rebuilding tools compiled with an older Go major/minor.
+  # https://github.com/golang/vscode-go/blob/72249dc940e5b6ec97b08e6690a5f042644e2bb5/src/goInstallTools.ts#L854-L859
+  # Tools may require a newer compiler than the project's pinned Go version.
+  # Keep nixpkgs' build unless the project needs a newer compiler, so that
+  # tools can understand the project's Go version without downgrading theirs.
   # It expects the package to have a `buildGo*Module` argument in its override function.
   # This will override multiple buildGo*Module arguments if they exist.
-  buildWithSpecificGo = pkg:
+  buildWithCompatibleGo = pkg:
     let
       overrideArgs = lib.functionArgs pkg.override;
       goModuleArgs = lib.filterAttrs (name: _: lib.match "buildGo.*Module" name != null) overrideArgs;
       goModuleOverrides = lib.mapAttrs (_: _: buildGoModule) goModuleArgs;
     in
-    if goModuleOverrides != { } then
+    if pkg ? go && lib.versionAtLeast pkg.go.version cfg.package.version then
+      pkg
+    else if goModuleOverrides != { } then
       pkg.override goModuleOverrides
     else
       throw ''
@@ -91,18 +97,17 @@ in
       cfg.package
     ]
     # Required by vscode-go
-    ++ lib.optional cfg.delve.enable (buildWithSpecificGo cfg.delve.package)
+    ++ lib.optional cfg.delve.enable (buildWithCompatibleGo cfg.delve.package)
     ++ [
-      # vscode-go expects all tool compiled with the same used go version, see: https://github.com/golang/vscode-go/blob/72249dc940e5b6ec97b08e6690a5f042644e2bb5/src/goInstallTools.ts#L721
-      (buildWithSpecificGo pkgs.gotools)
-      (buildWithSpecificGo pkgs.gomodifytags)
-      (buildWithSpecificGo pkgs.impl)
-      (buildWithSpecificGo pkgs.go-tools)
-      (buildWithSpecificGo pkgs.gotests)
+      (buildWithCompatibleGo pkgs.gotools)
+      (buildWithCompatibleGo pkgs.gomodifytags)
+      (buildWithCompatibleGo pkgs.impl)
+      (buildWithCompatibleGo pkgs.go-tools)
+      (buildWithCompatibleGo pkgs.gotests)
 
       # Required by vim-go
-      (buildWithSpecificGo pkgs.iferr)
-    ] ++ lib.optional cfg.lsp.enable (buildWithSpecificGo cfg.lsp.package);
+      (buildWithCompatibleGo pkgs.iferr)
+    ] ++ lib.optional cfg.lsp.enable (buildWithCompatibleGo cfg.lsp.package);
 
     hardeningDisable = lib.optional (cfg.enableHardeningWorkaround) "fortify";
 
