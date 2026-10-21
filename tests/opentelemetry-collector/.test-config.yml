@@ -1,0 +1,3 @@
+# Match the collector example's unsupported platform.
+broken_systems:
+  - x86_64-darwin
