@@ -27,6 +27,7 @@ mod gc_store;
 mod file_limit;
 
 pub mod lock;
+pub mod project;
 
 pub mod primops;
 pub use primops::{
@@ -351,6 +352,7 @@ pub fn validate_lock_file(
         root,
         inputs,
         Some(&old_lock),
+        &[],
     )?;
     if new_lock.has_changes(&old_lock)? {
         tracing::debug!("Lock validation found changes, writing updated lock");
@@ -371,6 +373,7 @@ pub(crate) fn resolve_lock_file(
     root: &Path,
     inputs: &BTreeMap<String, Input>,
     old_lock: Option<&LockFile>,
+    updates: &[String],
 ) -> Result<LockFile> {
     let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
         .context("Failed to create flake inputs")?;
@@ -385,7 +388,8 @@ pub(crate) fn resolve_lock_file(
         .with_inputs(flake_inputs)
         .source_path(source_path_str)
         .mode(LockMode::Virtual)
-        .use_registries(true);
+        .use_registries(true)
+        .update_inputs(updates.iter().cloned());
     if let Some(old_lock) = old_lock {
         locker = locker.old_lock_file(old_lock);
     }

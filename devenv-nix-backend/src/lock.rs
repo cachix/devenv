@@ -1,8 +1,7 @@
 //! Pre-bootstrap lock-file helpers.
 //!
-//! Most helpers operate on an explicit `EvalState` + `Store` + settings. The
-//! pre-backend [`resolve_config_imports`] entry point creates a transient store
-//! so locked sources can be read before the full configuration is available.
+//! Helpers operate on an explicit `EvalState` + `Store` + settings.
+//! Project composition is handled by [`crate::project`].
 //! Wrap construction + validation in [`with_lock_scope`] so the lazy
 //! `«nix-internal»/derivation-internal.nix` load nests under the activity.
 
@@ -11,10 +10,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use devenv_activity::{Activity, ActivityLevel, instrument_activity};
-use devenv_core::config::{Config, Input};
+use devenv_core::config::Input;
 use devenv_core::nix_log_bridge::NixLogBridge;
-use devenv_core::{NixSettings, StoreSettings};
-use miette::{IntoDiagnostic, Result, WrapErr, bail};
+use miette::{IntoDiagnostic, Result, WrapErr};
 use nix_bindings_expr::eval_state::{EvalState, EvalStateBuilder};
 use nix_bindings_fetchers::FetchersSettings;
 use nix_bindings_flake::{EvalStateBuilderExt, FlakeSettings, LockFile};
@@ -22,19 +20,20 @@ use nix_bindings_store::store::Store;
 
 use crate::anyhow_ext::AnyhowToMiette;
 
+const LOCK_SOURCES: &str = include_str!("../bootstrap/lock-sources.nix");
 const RESOLVE_INPUT_PATHS: &str = include_str!("../bootstrap/resolve-input-paths.nix");
-const MAX_CONFIG_IMPORT_PASSES: usize = 100;
 
 /// Build a transient `EvalState` for lock-file work. Drop it when done.
 pub fn build_eval_state(
     store: &Store,
     root: &Path,
     flake_settings: &FlakeSettings,
+    refresh_fetchers: bool,
 ) -> Result<EvalState> {
     let root_str = root
         .to_str()
         .ok_or_else(|| miette::miette!("Root path contains invalid UTF-8"))?;
-    EvalStateBuilder::new(store.clone())
+    let mut builder = EvalStateBuilder::new(store.clone())
         .to_miette()
         .wrap_err("Failed to create eval state builder")?
         .base_directory(root_str)
@@ -42,7 +41,14 @@ pub fn build_eval_state(
         .wrap_err("Failed to set base directory")?
         .flakes(flake_settings)
         .to_miette()
-        .wrap_err("Failed to configure flakes")?
+        .wrap_err("Failed to configure flakes")?;
+    if refresh_fetchers {
+        builder = builder
+            .fetch_setting("tarball-ttl", "0")
+            .to_miette()
+            .wrap_err("Failed to refresh imported input sources")?;
+    }
+    builder
         .build()
         .to_miette()
         .wrap_err("Failed to build eval state")
@@ -114,7 +120,7 @@ pub fn input_paths(
     input_paths_from_json(eval_state, root, names, &lock_json)
 }
 
-fn input_paths_from_lock(
+pub(crate) fn input_paths_from_lock(
     eval_state: &mut EvalState,
     root: &Path,
     names: &BTreeSet<String>,
@@ -153,7 +159,7 @@ fn input_paths_from_json(
         .into_diagnostic()
         .wrap_err("Failed to serialize composed lock file for Nix")?;
     let expression = format!(
-        "builtins.toJSON (({RESOLVE_INPUT_PATHS}) {{ src = {root_nix}; names = {names_nix}; lockFileJSON = {lock_nix}; }})"
+        "builtins.toJSON (({RESOLVE_INPUT_PATHS}) {{ src = {root_nix}; names = {names_nix}; lockFileJSON = {lock_nix}; sourceResolver = ({LOCK_SOURCES}); }})"
     );
 
     let value = eval_state
@@ -180,71 +186,6 @@ fn input_paths_from_json(
             Ok((name, path))
         })
         .collect()
-}
-
-/// Resolve input-style YAML imports to a fixed point.
-///
-/// `reload` reparses the project with the locked input source map and reapplies
-/// any caller-owned overlays (for example CLI input overrides). The root lock
-/// file remains the single lock graph: imported `devenv.lock` files are not
-/// merged, so existing config precedence also determines input precedence.
-pub fn resolve_config_imports<F>(
-    root: &Path,
-    mut config: Config,
-    nix_settings: &NixSettings,
-    mut reload: F,
-) -> Result<Config>
-where
-    F: FnMut(&BTreeMap<String, PathBuf>) -> Result<Config>,
-{
-    if config.input_import_names().is_empty() {
-        return Ok(config);
-    }
-
-    let _gc_registration = crate::backend::init_nix(nix_settings, &StoreSettings::default())?;
-    let store = crate::backend::open_store(&StoreSettings::default())?;
-    let (flake_settings, fetchers_settings) = crate::backend::build_settings()?;
-    let mut eval_state = build_eval_state(&store, root, &flake_settings)?;
-    let old_lock = crate::load_lock_file(&fetchers_settings, &root.join("devenv.lock"))
-        .to_miette()
-        .wrap_err("Failed to load lock file while resolving remote YAML imports")?;
-
-    for _ in 0..MAX_CONFIG_IMPORT_PASSES {
-        // Build each candidate from the on-disk graph so pins belonging only
-        // to imported YAML survive the initial, root-only config pass. Nothing
-        // is written until the complete import graph has stabilized.
-        let resolved_lock = crate::resolve_lock_file(
-            &eval_state,
-            &fetchers_settings,
-            &flake_settings,
-            root,
-            &config.inputs,
-            old_lock.as_ref(),
-        )
-        .to_miette()
-        .wrap_err("Failed to resolve inputs needed by remote YAML imports")?;
-
-        let sources = input_paths_from_lock(
-            &mut eval_state,
-            root,
-            &config.input_import_names(),
-            &resolved_lock,
-        )?;
-        let next = reload(&sources)?;
-        let import_graph_is_stable = next.inputs == config.inputs && next.imports == config.imports;
-        if import_graph_is_stable {
-            crate::write_lock_file(&resolved_lock, &root.join("devenv.lock"))
-                .to_miette()
-                .wrap_err("Failed to write lock file after composing remote YAML imports")?;
-            return Ok(next);
-        }
-        config = next;
-    }
-
-    bail!(
-        "Remote devenv.yaml imports did not stabilize after {} passes. Check for imports or inputs that change each other recursively.",
-        MAX_CONFIG_IMPORT_PASSES
-    )
 }
 
 /// Lock or update the requested inputs.

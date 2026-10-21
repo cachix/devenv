@@ -59,6 +59,12 @@ particular, when the shared configuration also declares `nixpkgs`, the root
 project's pinned `nixpkgs` is reused instead of creating a second one. Use
 distinct input names when the versions must remain independent.
 
+`devenv update shared-config` also discovers configuration from the updated
+revision and locks any inputs it adds or changes before writing `devenv.lock`.
+An update without an input name updates dependencies declared by imported YAML
+as well. Configuration discovery writes no intermediate lock files; a failed
+import leaves the previous lock unchanged.
+
 For a sibling checkout, use `url: path:../shared-config/` in the same example.
 The shared repository may also contain only a `devenv.nix` file.
 Combine this with [profiles](/profiles/) to define one shared configuration that adapts to each project.

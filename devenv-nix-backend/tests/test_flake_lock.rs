@@ -1,7 +1,7 @@
 #![cfg(feature = "test-nix-store")]
 //! Integration tests for flake locking.
 
-use devenv_core::{Config, NixOptions, NixSettings};
+use devenv_core::{Config, NixOptions};
 use devenv_nix_backend::{load_lock_file, lock};
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
@@ -191,16 +191,15 @@ imports:
     );
 
     let compose = || {
-        let config = Config::load_from(env.path()).expect("load root config");
-        lock::resolve_config_imports(
-            env.path(),
-            config,
-            &NixSettings::default(),
-            |input_sources| {
-                Config::load_from_with_source_and_input_sources(env.path(), None, input_sources)
-            },
+        let project = devenv_nix_backend::project::ProjectConfig::new(env.path());
+        let resolved = devenv_nix_backend::project::resolve_project(
+            &project,
+            NixOptions::default(),
+            devenv_nix_backend::project::UpdatePolicy::Preserve,
         )
-        .expect("compose remote config")
+        .expect("compose remote config");
+        resolved.write_lock().expect("write composed lock");
+        resolved.config
     };
 
     let composed = compose();

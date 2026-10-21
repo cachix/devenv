@@ -581,42 +581,18 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         } else if test_config.use_shell {
             // Now load config from the current directory (which might be temp dir)
             let devenv_input_url = format!("git+file:{}?dir=src/modules", cwd.display());
-            let apply_test_inputs = |config: &mut Config| -> Result<()> {
-                for input in args.override_inputs.chunks_exact(2) {
-                    config
-                        .override_input_url(&input[0], &input[1])
-                        .wrap_err(format!(
-                            "Failed to override input {} with {}",
-                            &input[0], &input[1]
-                        ))?;
-                }
-                config
-                    .add_input("devenv", &devenv_input_url, &[])
-                    .wrap_err("Failed to add devenv input")?;
-                Ok(())
-            };
-
-            let mut config = Config::load_from(&devenv_root)?;
-            apply_test_inputs(&mut config)?;
-
-            let preliminary_nix_settings = NixSettings {
-                backend: config.backend.clone(),
-                ..NixSettings::default()
-            };
-            config = devenv_nix_backend::lock::resolve_config_imports(
-                &devenv_root,
-                config,
-                &preliminary_nix_settings,
-                |input_sources| {
-                    let mut config = Config::load_from_with_source_and_input_sources(
-                        &devenv_root,
-                        None,
-                        input_sources,
-                    )?;
-                    apply_test_inputs(&mut config)?;
-                    Ok(config)
-                },
+            let mut project = devenv_nix_backend::project::ProjectConfig::new(&devenv_root);
+            project.input_overrides = args.override_inputs.clone();
+            let mut test_inputs = Config::default();
+            test_inputs.add_input("devenv", &devenv_input_url, &[])?;
+            project.extra_inputs = test_inputs.inputs;
+            let resolved = devenv_nix_backend::project::resolve_project(
+                &project,
+                Default::default(),
+                devenv_nix_backend::project::UpdatePolicy::Preserve,
             )?;
+            resolved.write_lock()?;
+            let config = resolved.config;
 
             let strict_ports = config.strict_ports.unwrap_or(false);
             let nix_settings = NixSettings {
