@@ -31,7 +31,6 @@ If you're searching for an example but can't find it, [let us know](https://gith
 - [lean4](https://github.com/cachix/devenv/tree/main/examples/lean4)
 - [mailpit](https://github.com/cachix/devenv/tree/main/examples/mailpit)
 - [meilisearch](https://github.com/cachix/devenv/tree/main/examples/meilisearch)
-- [minio](https://github.com/cachix/devenv/tree/main/examples/minio)
 - [mkcert](https://github.com/cachix/devenv/tree/main/examples/mkcert)
 - [modern-c](https://github.com/cachix/devenv/tree/main/examples/modern-c)
 - [mongodb](https://github.com/cachix/devenv/tree/main/examples/mongodb)

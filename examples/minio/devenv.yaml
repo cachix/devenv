@@ -1,3 +1,0 @@
-nixpkgs:
-  permitted_insecure_packages:
-    - "minio-2025-10-15T17-29-55Z"
