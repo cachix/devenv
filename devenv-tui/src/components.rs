@@ -689,8 +689,10 @@ impl<'a> DownloadActivityComponent<'a> {
             // Only show "from" text on wider terminals
             if terminal_width >= 80 {
                 line1_children.push(
-                    element!(Text(content: format!("from {}", substituter), color: substituter_color))
-                        .into_any(),
+                    element!(
+                        Text(content: format!("from {}", substituter), color: substituter_color)
+                    )
+                    .into_any(),
                 );
             }
         }
