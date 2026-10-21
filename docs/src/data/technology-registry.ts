@@ -87,6 +87,7 @@ const languageSeeds: ModuleSeed[] = [
   { slug: 'solidity', label: 'Solidity', icon: 'solidity' },
   { slug: 'standardml', label: 'Standard ML', icon: null },
   { slug: 'swift', label: 'Swift', icon: 'swift' },
+  { slug: 'tailwindcss', label: 'Tailwind CSS', icon: 'tailwindcss', aliases: ['tailwind'] },
   { slug: 'terraform', label: 'Terraform', icon: 'terraform' },
   { slug: 'texlive', label: 'TeX Live', icon: 'latex' },
   { slug: 'typescript', label: 'TypeScript', icon: 'typescript', aliases: ['ts'] },
