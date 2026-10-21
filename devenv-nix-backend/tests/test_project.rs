@@ -167,6 +167,121 @@ fn input_node(lock: &str, name: &str) -> Value {
 }
 
 #[nix_test]
+async fn cold_remote_sources_are_materialized_before_loading_yaml() {
+    let fixture = Fixture::new();
+    // Make a fresh source tree that cannot already exist in the store from
+    // another test. Locking the Git revision alone need not materialize it.
+    let yaml = format!("reload: false\n# {}\n", fixture.shared.path().display());
+    fixture.set_shared(&yaml);
+    let resolved = fixture.resolve(UpdatePolicy::Preserve);
+    assert_eq!(
+        fs::read_to_string(resolved.sources["shared"].join("devenv.yaml")).unwrap(),
+        yaml
+    );
+    assert_eq!(resolved.config.reload, Some(false));
+}
+
+#[nix_test]
+async fn root_and_nested_follows_can_target_remote_yaml_inputs() {
+    let fixture = Fixture::new();
+    let dependency_url = fixture.daemon.url(fixture.dependency.path());
+    fixture.set_shared(&format!(
+        "inputs:\n  imported-pkgs:\n    url: {dependency_url}\n"
+    ));
+    let root = fixture.project_dir.path().join("devenv.yaml");
+    let yaml = fs::read_to_string(&root).unwrap().replace(
+        &format!("  nixpkgs:\n    url: {dependency_url}"),
+        "  nixpkgs:\n    follows: pkgs-alias\n  pkgs-alias:\n    follows: imported-pkgs",
+    ).replace(
+        &format!("  unrelated:\n    url: {dependency_url}"),
+        &format!("  unrelated:\n    url: {dependency_url}\n    inputs:\n      child:\n        follows: imported-pkgs"),
+    );
+    // This flake declares the child overridden by the root's nested follows.
+    fs::write(
+        fixture.dependency.path().join("flake.nix"),
+        format!(
+            "{{ inputs.child.url = \"{}\"; outputs = {{ self, child }}: {{}}; }}",
+            fixture.daemon.url(fixture.replacement.path())
+        ),
+    )
+    .unwrap();
+    commit(fixture.dependency.path());
+    fs::write(root, yaml).unwrap();
+
+    fixture.write(&fixture.resolve(UpdatePolicy::Preserve));
+    let before = fixture.lock_contents();
+    let lock: Value = serde_json::from_str(&before).unwrap();
+    assert_eq!(
+        lock["nodes"]["root"]["inputs"]["nixpkgs"],
+        serde_json::json!(["pkgs-alias"])
+    );
+    assert_eq!(
+        input_node(&before, "unrelated")["inputs"]["child"],
+        serde_json::json!(["imported-pkgs"])
+    );
+    // Updating a deferred alias must be postponed until it has a target.
+    fixture.write(&fixture.resolve(UpdatePolicy::Input("nixpkgs")));
+    fixture.write(&fixture.resolve(UpdatePolicy::All));
+    fixture.write(&fixture.resolve(UpdatePolicy::Preserve));
+    assert_eq!(fixture.lock_contents(), before);
+}
+
+#[nix_test]
+async fn imported_alias_can_be_resolved_after_its_remote_target_is_discovered() {
+    let fixture = Fixture::new();
+    fs::write(
+        fixture.replacement.path().join("devenv.yaml"),
+        "reload: true\n",
+    )
+    .unwrap();
+    commit(fixture.replacement.path());
+    fixture.set_shared(&format!(
+        "inputs:\n  config-source:\n    url: {}\n    flake: false\n",
+        fixture.daemon.url(fixture.replacement.path())
+    ));
+    let root = fixture.project_dir.path().join("devenv.yaml");
+    let yaml = fs::read_to_string(&root).unwrap().replace(
+        "inputs:\n",
+        "inputs:\n  alias:\n    follows: config-source\n",
+    );
+    fs::write(root, format!("{yaml}  - alias\n")).unwrap();
+
+    let resolved = fixture.resolve(UpdatePolicy::Preserve);
+    assert_eq!(resolved.config.reload, Some(true));
+    assert!(resolved.sources["alias"].join("devenv.yaml").exists());
+    fixture.write(&resolved);
+    let before = fixture.lock_contents();
+    fixture.write(&fixture.resolve(UpdatePolicy::Preserve));
+    assert_eq!(fixture.lock_contents(), before);
+}
+
+#[nix_test]
+async fn unresolved_remote_follows_do_not_replace_the_existing_lock() {
+    let fixture = Fixture::new();
+    fixture.write(&fixture.resolve(UpdatePolicy::Preserve));
+    let before = fixture.lock_contents();
+    let root = fixture.project_dir.path().join("devenv.yaml");
+    let yaml = fs::read_to_string(&root).unwrap().replace(
+        &format!(
+            "  nixpkgs:\n    url: {}",
+            fixture.daemon.url(fixture.dependency.path())
+        ),
+        "  nixpkgs:\n    follows: missing-pkgs",
+    );
+    fs::write(root, yaml).unwrap();
+    let error = resolve_project(&fixture.project, NixOptions::default(), UpdatePolicy::All)
+        .err()
+        .expect("reject follows target absent from complete config");
+    assert!(
+        error
+            .to_string()
+            .contains("'nixpkgs' follows missing input 'missing-pkgs'"),
+        "{error:?}"
+    );
+    assert_eq!(fixture.lock_contents(), before);
+}
+
+#[nix_test]
 async fn update_composes_added_changed_and_removed_inputs_before_writing() {
     let fixture = Fixture::new();
     fixture.set_shared(&format!(

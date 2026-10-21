@@ -125,6 +125,7 @@ pub fn resolve_project(
     let mut updated = BTreeSet::new();
 
     for _ in 0..MAX_IMPORT_PASSES {
+        let (discovery_inputs, pending_follows) = discovery_inputs(&config.inputs);
         let updates: Vec<String> = match update {
             UpdatePolicy::Preserve => Vec::new(),
             UpdatePolicy::All => config
@@ -145,28 +146,47 @@ pub fn resolve_project(
                 vec![name.into()]
             }
             UpdatePolicy::Input(_) => Vec::new(),
-        };
+        }
+        .into_iter()
+        // A deferred alias has no node to update until its target is known.
+        .filter(|name: &String| {
+            !pending_follows.contains_key(name.split('/').next().unwrap_or(name))
+        })
+        .collect();
         let candidate = crate::resolve_lock_file(
             &eval_state,
             &fetchers_settings,
             &flake_settings,
             &project.root,
-            &config.inputs,
+            &discovery_inputs,
             baseline.as_ref(),
             &updates,
         )
         .to_miette()
         .wrap_err("Failed to resolve project inputs")?;
         updated.extend(updates);
+        let import_names = config
+            .input_import_names()
+            .into_iter()
+            .filter(|name| !pending_follows.contains_key(name))
+            .collect();
         let next_sources = crate::lock::input_paths_from_lock(
             &mut eval_state,
             &project.root,
-            &config.input_import_names(),
+            &import_names,
             &candidate,
         )?;
         let next = project.load(&next_sources, true)?;
         let stable = next.inputs == config.inputs && next.imports == config.imports;
         if stable {
+            if !pending_follows.is_empty() {
+                let unresolved = pending_follows
+                    .iter()
+                    .map(|(name, target)| format!("'{name}' follows missing input '{target}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                bail!("Unresolved follows after composing project: {unresolved}");
+            }
             if let UpdatePolicy::Input(name) = update
                 && !updated.contains(name)
             {
@@ -187,6 +207,70 @@ pub fn resolve_project(
         config = next;
     }
     bail!("Remote devenv.yaml imports did not stabilize after {MAX_IMPORT_PASSES} passes")
+}
+
+/// Ignore follows edges whose root target has not been discovered yet. Keep
+/// deferred root names as empty declarations so the default nixpkgs/devenv
+/// inputs are not fetched in their place. The complete config is never changed,
+/// and resolution cannot succeed while any follows edges remain deferred.
+fn discovery_inputs(
+    inputs: &BTreeMap<String, Input>,
+) -> (BTreeMap<String, Input>, BTreeMap<String, String>) {
+    let mut available: BTreeSet<_> = inputs
+        .iter()
+        .filter(|(_, input)| input.url.is_some() || input.follows.is_some())
+        .map(|(name, _)| name.as_str())
+        .chain(
+            ["nixpkgs", "devenv"]
+                .into_iter()
+                .filter(|name| !inputs.contains_key(*name)),
+        )
+        .collect();
+    // Propagate missing targets through aliases, including aliases declared
+    // before their targets in the map. Leave cycles to Nix's validation.
+    loop {
+        let missing: Vec<_> = available
+            .iter()
+            .copied()
+            .filter(|name| {
+                inputs
+                    .get(*name)
+                    .and_then(|input| input.follows.as_deref())
+                    .is_some_and(|target| {
+                        !target.is_empty() && !available.contains(target.split('/').next().unwrap())
+                    })
+            })
+            .collect();
+        if missing.is_empty() {
+            break;
+        }
+        for name in missing {
+            available.remove(name);
+        }
+    }
+    let mut discovery = inputs.clone();
+    let mut pending = BTreeMap::new();
+    for (name, input) in &mut discovery {
+        if let Some(target) = &input.follows
+            && !available.contains(name.as_str())
+        {
+            pending.insert(name.clone(), target.clone());
+            *input = Input::default();
+            continue;
+        }
+        input.inputs.retain(|nested_name, nested| {
+            if let Some(target) = &nested.follows
+                && !target.is_empty()
+                && !available.contains(target.split('/').next().unwrap())
+            {
+                pending.insert(format!("{name}/{nested_name}"), target.clone());
+                false
+            } else {
+                true
+            }
+        });
+    }
+    (discovery, pending)
 }
 
 /// Keep root edges absent from an incomplete candidate. Node IDs are local to

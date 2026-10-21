@@ -166,10 +166,14 @@ fn input_paths_from_json(
         .eval_from_string(&expression, "<devenv-input-imports>")
         .to_miette()
         .wrap_err("Failed to resolve imported input sources")?;
+    // fetchTree can return a lazy store path. Materialize the JSON's string
+    // context before opening those paths from Rust. Live local paths carry
+    // no store context and stay on the filesystem.
     let json = eval_state
-        .require_string(&value)
+        .realise_string(&value, false)
         .to_miette()
-        .wrap_err("Failed to read imported input sources")?;
+        .wrap_err("Failed to read imported input sources")?
+        .s;
     let paths: BTreeMap<String, PathBuf> = serde_json::from_str(&json)
         .into_diagnostic()
         .wrap_err("Failed to parse imported input sources")?;
