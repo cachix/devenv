@@ -1,0 +1,60 @@
+{ pkgs
+, config
+, lib
+, ...
+}:
+let
+  cfg = config.languages.vhdl;
+  compilerPackages = {
+    inherit
+      (pkgs)
+      ghdl-gcc
+      ghdl-llvm
+      ghdl-mcode
+      nvc
+      ;
+  };
+  defaultPackageText =
+    if pkgs.stdenv.isDarwin
+    then "pkgs.ghdl-llvm"
+    else "pkgs.ghdl-gcc";
+in
+{
+  options.languages.vhdl = {
+    enable = lib.mkEnableOption "tools for VHDL Development.";
+    compiler = lib.mkOption {
+      type = lib.types.enum (builtins.attrNames compilerPackages);
+      default =
+        if pkgs.stdenv.isDarwin
+        then "ghdl-llvm"
+        else "ghdl-gcc";
+      description = ''
+        The VHDL compiler to use.
+      '';
+    };
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = compilerPackages.${cfg.compiler};
+      defaultText = lib.literalExpression defaultPackageText;
+      description = "The VHDL package to use (automatically set based on compiler).";
+    };
+
+    lsp = {
+      enable = lib.mkEnableOption "VHDL Language Server." // { default = true; };
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.vhdl-ls;
+        defaultText = lib.literalExpression "pkgs.vhdl-ls";
+        description = ''
+          The VHDL language server package to use.
+
+          You can see this example of [vhdl-ls configuration](https://github.com/VHDL-LS/rust_hdl#example-vhdl_lstoml--quickstart) to start.
+        '';
+      };
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    packages = [ cfg.package ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
+  };
+}
