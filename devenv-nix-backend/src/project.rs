@@ -97,6 +97,18 @@ pub fn resolve_project(
     nix_options: NixOptions,
     update: UpdatePolicy<'_>,
 ) -> Result<ResolvedProject> {
+    // Nix resolves relative flake references using an absolute source path.
+    // In particular, passing "./devenv.nix" makes .?dir=... resolve at /.
+    let root = project
+        .root
+        .canonicalize()
+        .into_diagnostic()
+        .wrap_err_with(|| {
+            format!(
+                "Failed to canonicalize project root: {}",
+                project.root.display()
+            )
+        })?;
     let sources = BTreeMap::new();
     let mut config = project.load(&sources, true)?;
     if config.input_import_names().is_empty() && matches!(update, UpdatePolicy::Preserve) {
@@ -104,7 +116,7 @@ pub fn resolve_project(
             config: project.load(&sources, false)?,
             sources,
             lock: None,
-            root: project.root.clone(),
+            root: root.clone(),
         });
     }
 
@@ -113,13 +125,9 @@ pub fn resolve_project(
     let _gc_registration = crate::backend::init_nix(&settings, &StoreSettings::default())?;
     let store = crate::backend::open_store(&StoreSettings::default())?;
     let (flake_settings, fetchers_settings) = crate::backend::build_settings()?;
-    let mut eval_state = crate::lock::build_eval_state(
-        &store,
-        &project.root,
-        &flake_settings,
-        settings.refresh_fetchers,
-    )?;
-    let mut baseline = crate::load_lock_file(&fetchers_settings, &project.root.join("devenv.lock"))
+    let mut eval_state =
+        crate::lock::build_eval_state(&store, &root, &flake_settings, settings.refresh_fetchers)?;
+    let mut baseline = crate::load_lock_file(&fetchers_settings, &root.join("devenv.lock"))
         .to_miette()
         .wrap_err("Failed to load lock file while composing project")?;
     let mut updated = BTreeSet::new();
@@ -157,7 +165,7 @@ pub fn resolve_project(
             &eval_state,
             &fetchers_settings,
             &flake_settings,
-            &project.root,
+            &root,
             &discovery_inputs,
             baseline.as_ref(),
             &updates,
@@ -170,12 +178,8 @@ pub fn resolve_project(
             .into_iter()
             .filter(|name| !pending_follows.contains_key(name))
             .collect();
-        let next_sources = crate::lock::input_paths_from_lock(
-            &mut eval_state,
-            &project.root,
-            &import_names,
-            &candidate,
-        )?;
+        let next_sources =
+            crate::lock::input_paths_from_lock(&mut eval_state, &root, &import_names, &candidate)?;
         let next = project.load(&next_sources, true)?;
         let stable = next.inputs == config.inputs && next.imports == config.imports;
         if stable {
@@ -196,7 +200,7 @@ pub fn resolve_project(
                 config: project.load(&next_sources, false)?,
                 sources: next_sources,
                 lock: Some(candidate),
-                root: project.root.clone(),
+                root: root.clone(),
             });
         }
         baseline = Some(retain_missing_pins(

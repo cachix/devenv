@@ -167,6 +167,32 @@ fn input_node(lock: &str, name: &str) -> Value {
 }
 
 #[nix_test]
+async fn relative_project_root_resolves_local_flake_subdirectories() {
+    let mut fixture = Fixture::new();
+    let modules = fixture.project_dir.path().join("src/modules");
+    fs::create_dir_all(&modules).unwrap();
+    fs::write(modules.join("flake.nix"), "{ outputs = _: {}; }\n").unwrap();
+    let yaml_path = fixture.project_dir.path().join("devenv.yaml");
+    let yaml = fs::read_to_string(&yaml_path).unwrap().replace(
+        &format!(
+            "  devenv:\n    url: {}",
+            fixture.daemon.url(fixture.dependency.path())
+        ),
+        "  devenv:\n    url: .?dir=src/modules",
+    );
+    fs::write(yaml_path, yaml).unwrap();
+    fixture.project.root = ".".into();
+
+    let resolved = fixture.resolve(UpdatePolicy::Preserve);
+    assert_eq!(resolved.config.reload, Some(false));
+    fixture.write(&resolved);
+    let before = fixture.lock_contents();
+    fixture.write(&fixture.resolve(UpdatePolicy::Input("shared")));
+    fixture.write(&fixture.resolve(UpdatePolicy::All));
+    assert_eq!(fixture.lock_contents(), before);
+}
+
+#[nix_test]
 async fn cold_remote_sources_are_materialized_before_loading_yaml() {
     let fixture = Fixture::new();
     // Make a fresh source tree that cannot already exist in the store from
