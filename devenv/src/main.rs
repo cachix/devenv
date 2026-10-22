@@ -43,7 +43,7 @@ mod commands;
 use clap::{CommandFactory, crate_version};
 use clap_complete::CompleteEnv;
 use devenv::{
-    CacheSettings, ClientRunMode, Config, Devenv, InputOverrides, NixSettings, ProcessStartOutcome,
+    CacheSettings, ClientRunMode, Devenv, InputOverrides, NixSettings, ProcessStartOutcome,
     SecretSettings, ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel},
     cli::{
@@ -551,34 +551,41 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
             fs::canonicalize(&full_path).unwrap_or(full_path)
         });
 
-    let mut config = Config::load_with_source(from_path.as_deref())?;
-    config.check_version(crate_version!())?;
-
     let input_overrides = InputOverrides::from(cli.input_overrides);
-    for chunk in input_overrides.override_inputs.chunks_exact(2) {
-        let [name, url] = chunk else {
-            unreachable!("chunks_exact(2)")
-        };
-        config
-            .override_input_url(name, url)
-            .wrap_err_with(|| format!("Failed to override input {name} with URL {url}"))?;
-    }
-
-    // A non-path source (flake ref, via --from or a persisted binding) is
-    // fetched as the `from` input and its devenv.nix imported from the store.
-    // Its devenv.yaml is not merged (that needs a fetch before config load);
-    // `path:` sources get the full merge via Config::load_with_source above.
+    let mut project = devenv_nix_backend::project::ProjectConfig::new(".");
+    project.source_dir = from_path.clone();
+    project.input_overrides = input_overrides.override_inputs.clone();
+    // Remote --from sources contribute a Nix module, but are not YAML imports.
+    // Include their input before locking so updates cover it as well.
     if from_path.is_none()
         && let Some(from) = &from_source
     {
-        let from_input = devenv_core::config::Input {
-            url: Some(from.clone()),
-            flake: false,
-            follows: None,
-            inputs: BTreeMap::new(),
-            overlays: Vec::new(),
-        };
-        config.inputs.insert("from".to_string(), from_input);
+        project.extra_inputs.insert(
+            "from".into(),
+            devenv_core::config::Input {
+                url: Some(from.clone()),
+                flake: false,
+                ..Default::default()
+            },
+        );
+    }
+    let update = match &command {
+        Commands::Update { name: Some(name) } => {
+            devenv_nix_backend::project::UpdatePolicy::Input(name)
+        }
+        Commands::Update { name: None } => devenv_nix_backend::project::UpdatePolicy::All,
+        _ => devenv_nix_backend::project::UpdatePolicy::Preserve,
+    };
+    let resolved = devenv_nix_backend::project::resolve_project(
+        &project,
+        devenv_core::NixOptions::from(cli.nix_args.clone()),
+        update,
+    )?;
+    resolved.config.check_version(crate_version!())?;
+    resolved.write_lock()?;
+    let mut config = resolved.config;
+
+    if from_path.is_none() && from_source.is_some() {
         config.imports.push("from".to_string());
     }
 
@@ -1469,8 +1476,8 @@ async fn dispatch_command(
             let json = devenv.eval(&attributes).await?;
             Ok(CommandResult::Print(format!("{json}\n")))
         }
-        Commands::Update { name } => Ok(devenv
-            .update(&name)
+        Commands::Update { .. } => Ok(devenv
+            .show_new_changelogs()
             .await?
             .map_or(CommandResult::Done, CommandResult::Print)),
         Commands::Up { up_args } => {

@@ -811,6 +811,7 @@ impl Devenv {
                             &store,
                             &paths.root,
                             &flake_settings,
+                            nix_settings.refresh_fetchers,
                         )?;
                         devenv_nix_backend::lock::validate_and_load(
                             &eval_state,
@@ -2128,6 +2129,11 @@ impl Devenv {
         .in_activity(&activity)
         .await?;
 
+        self.show_new_changelogs().await
+    }
+
+    /// Display changes after a project update has completed resolution.
+    pub async fn show_new_changelogs(&self) -> Result<Option<String>> {
         let changelog = crate::changelog::Changelog::new(&self.backend, &self.paths());
         match changelog.show_new().await {
             Ok(output) => Ok(output),

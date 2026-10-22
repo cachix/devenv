@@ -8,7 +8,8 @@ A long-lived `EvalState` keeps an in-process evaluation cache across calls withi
 ## What's in here
 
 - `backend.rs` — `NixCBackend`, the `NixBackend` trait implementation.
-- `lib.rs`, `lock.rs` — input locking. Writes `devenv.lock`.
+- `lib.rs`, `lock.rs`: input locking and locked source resolution.
+- `project.rs`: compose YAML and select input revisions together, then write the completed lock once.
 - `cnix_store.rs` — wrapper around the C store API.
 - `build_environment.rs` — pure-Rust parser for cached `-env` JSON.
 - `cachix_daemon.rs`, `cachix_protocol.rs` — client and wire format for the cachix push daemon.

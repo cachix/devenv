@@ -1,0 +1,8 @@
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  shared:
+    url: "@REMOTE@"
+    flake: false
+imports:
+  - shared
