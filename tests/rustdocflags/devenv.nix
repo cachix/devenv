@@ -7,7 +7,7 @@
   };
 
   enterTest = ''
-    expected_rustdocflags="-C link-arg=-fuse-ld=lld --cfg devenv_custom_rustdoc_cfg"
+    expected_rustdocflags="--cfg devenv_custom_rustdoc_cfg"
     if [ "$RUSTDOCFLAGS" != "$expected_rustdocflags" ]; then
       echo "unexpected RUSTDOCFLAGS: $RUSTDOCFLAGS"
       exit 1

@@ -14,11 +14,43 @@ let
     && pkgs.stdenv.hostPlatform.rust.rustcTarget == "x86_64-unknown-linux-gnu"
     && !lib.any lib.id explicitLinkers;
 
-  # Pin the linker path so LLD does not need to be installed on PATH (and a
-  # stray ld.lld earlier on PATH cannot take over).
-  clangLinkerDriver = pkgs.writeShellScript "devenv-rust-linker" ''
-    exec ${lib.getExe pkgs.clang} --ld-path=${pkgs.llvmPackages.bintools}/bin/ld.lld "$@"
-  '';
+  # The C compiler that drives the final link for the host target.
+  useClangDriver = cfg.clangLinker.enable || pkgs.stdenv.cc.isClang;
+  linkerDriver =
+    if cfg.clangLinker.enable then lib.getExe pkgs.clang else "${pkgs.stdenv.cc}/bin/cc";
+
+  # Clang on Linux can be pointed at an exact LLD binary, so LLD does not need
+  # to be on PATH (and a stray ld.lld earlier on PATH cannot take over).
+  lldArgs =
+    if cfg.clangLinker.enable && pkgs.stdenv.hostPlatform.isLinux
+    then [ "--ld-path=${pkgs.llvmPackages.bintools}/bin/ld.lld" ]
+    else [ "-fuse-ld=lld" ];
+
+  # Extra driver arguments selecting the linker. Wild has no `-fuse-ld` support
+  # in released GCC, so put its `ld` first on the driver's program search path.
+  linkerArgs =
+    if cfg.mold.enable then [ "-fuse-ld=mold" ]
+    else if cfg.lld.enable || forceLldWithClang then lldArgs
+    else if cfg.wild.enable then [ "-B${pkgs.wild}/bin" ]
+    else [ ];
+
+  # The linker is configured only for the host target through
+  # CARGO_TARGET_<host>_LINKER, never through RUSTFLAGS:
+  # - RUSTFLAGS reaches every target, including wasm32, where rustc invokes
+  #   rust-lld directly and rejects driver flags such as `-fuse-ld`.
+  # - RUSTFLAGS makes cargo ignore `[build] rustflags` from a project's
+  #   `.cargo/config.toml` entirely.
+  #
+  # rustc infers how to drive the linker from its file name. A name ending in
+  # `-clang` or `-gcc` tells it this is a C compiler that does not use LLD, so
+  # it stops adding its own `-fuse-ld=lld` (on toolchains that link with LLD by
+  # default), which would otherwise come last and override the choice here.
+  hostLinker =
+    if linkerArgs == [ ] then linkerDriver
+    else
+      pkgs.writeShellScript "devenv-rust-linker-${if useClangDriver then "clang" else "gcc"}" ''
+        exec ${linkerDriver} ${lib.escapeShellArgs linkerArgs} "$@"
+      '';
 
   # The components to actually install in the toolchain. Appends the cranelift
   # codegen backend on top of the user-configured `components` (which keeps its
@@ -454,35 +486,18 @@ in
 
         env =
           let
-            moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=mold";
-            lldFlags = lib.optionalString cfg.lld.enable "-C link-arg=-fuse-ld=lld";
-            # TODO: Work around rustc's default lld selection and missing native GCC Wild support;
-            # use `-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin` for now, then switch to
-            # `-C link-arg=-fuse-ld=wild` once a released GCC supports it.
-            # `-C linker-features` is stable on x86_64-linux but gated behind `-Z unstable-options`
-            # on aarch64-linux, so add the flag there (requires nightly on that target).
-            wildFlags = lib.optionalString cfg.wild.enable (
-              "-C linker-features=-lld -C link-arg=-B${pkgs.wild}/bin"
-              + lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 " -Z unstable-options"
-            );
-            linkerFlags = lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags lldFlags wildFlags ]);
             optionalEnv = cond: str: if cond then str else null;
           in
           {
             CARGO_UNSTABLE_CODEGEN_BACKEND = optionalEnv cfg.cranelift.enable "true";
             CARGO_PROFILE_DEV_CODEGEN_BACKEND = optionalEnv cfg.cranelift.enable "cranelift";
             CARGO_PROFILE_DEV_BUILD_OVERRIDE_CODEGEN_BACKEND = optionalEnv cfg.cranelift.forceBuildScriptsLlvm "llvm";
-            RUSTFLAGS = optionalEnv (linkerFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ linkerFlags cfg.rustflags ]));
-            RUSTDOCFLAGS = optionalEnv (linkerFlags != "" || cfg.rustdocflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ linkerFlags cfg.rustdocflags ]));
+            RUSTFLAGS = optionalEnv (cfg.rustflags != "") cfg.rustflags;
+            RUSTDOCFLAGS = optionalEnv (cfg.rustdocflags != "") cfg.rustdocflags;
           }
-          # Configure the Clang linker driver through CARGO_TARGET_<triple>_LINKER
-          # rather than RUSTFLAGS. Setting RUSTFLAGS in the environment makes cargo
-          # ignore `[build] rustflags` from a project's `.cargo/config.toml` entirely,
-          # silently dropping any flags configured there (e.g. `--cfg tracing_unstable`).
-          # The per-target linker env var sets the linker without touching rustflags.
-          // lib.optionalAttrs cfg.clangLinker.enable {
-            "CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" =
-              if forceLldWithClang then clangLinkerDriver else lib.getExe pkgs.clang;
+          # See `hostLinker` for why the linker is not set through RUSTFLAGS.
+          // lib.optionalAttrs (cfg.clangLinker.enable || linkerArgs != [ ]) {
+            "CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" = hostLinker;
           };
 
         # Do not inherit another shell's sources when this toolchain uses its
