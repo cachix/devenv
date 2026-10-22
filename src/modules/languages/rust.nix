@@ -317,6 +317,15 @@ in
     {
       changelogs = [
         {
+          date = "2026-10-22";
+          title = "Large Rust links preserve response files through Nix's linker wrapper";
+          when = cfg.clangLinker.enable && pkgs.stdenv.hostPlatform.isLinux;
+          description = ''
+            Rust shells using Clang on Linux now enable response-file forwarding in Nix's linker wrapper.
+            This prevents large links from failing with `Argument list too long` after the wrapper expands a response file.
+          '';
+        }
+        {
           date = "2026-10-13";
           title = "Rust toolchain files without rust-analyzer now use a standalone language server";
           when = cfg.enable && cfg.toolchainFile != null && cfg.lsp.enable;
@@ -498,6 +507,11 @@ in
           # See `hostLinker` for why the linker is not set through RUSTFLAGS.
           // lib.optionalAttrs (cfg.clangLinker.enable || linkerArgs != [ ]) {
             "CARGO_TARGET_${pkgs.stdenv.hostPlatform.rust.cargoEnvVarTarget}_LINKER" = hostLinker;
+          }
+          // lib.optionalAttrs (cfg.clangLinker.enable && pkgs.stdenv.hostPlatform.isLinux) {
+            # Clang can forward a response file, but Nix's linker wrapper would
+            # otherwise expand it back into an oversized exec argument list.
+            NIX_LD_USE_RESPONSE_FILE = "1";
           };
 
         # Do not inherit another shell's sources when this toolchain uses its
