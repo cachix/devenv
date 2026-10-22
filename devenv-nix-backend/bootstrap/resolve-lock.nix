@@ -86,7 +86,30 @@ let
               && !(locked ? narHash)
               && builtins.substring 0 1 (resolvedLocked.path or "") == "/";
 
-            fetchedSource = builtins.fetchTree (node.info or { } // removeAttrs resolvedLocked [ "dir" ]);
+            sourceAttrs = node.info or { } // removeAttrs resolvedLocked [ "dir" ];
+            # Final fetches trust the lock's metadata and can substitute the
+            # source from a binary cache. Keep ordinary fetches for inputs
+            # whose missing metadata still needs to be supplied by the fetcher.
+            hasLockedMetadata =
+              sourceAttrs ? narHash
+              && (
+                sourceAttrs.type == "file"
+                || (
+                  builtins.elem sourceAttrs.type [
+                    "git"
+                    "github"
+                    "gitlab"
+                    "sourcehut"
+                    "tarball"
+                  ]
+                  && sourceAttrs ? lastModified
+                  && (sourceAttrs.type == "tarball" || sourceAttrs ? rev)
+                  && (sourceAttrs.type != "git" || (sourceAttrs.shallow or true) || sourceAttrs ? revCount)
+                )
+              );
+            fetchTree =
+              if hasLockedMetadata then builtins.fetchFinalTree or builtins.fetchTree else builtins.fetchTree;
+            fetchedSource = fetchTree sourceAttrs;
           in
           if isLivePath then
             {
