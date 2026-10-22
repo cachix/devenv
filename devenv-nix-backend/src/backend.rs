@@ -87,6 +87,11 @@ pub fn init_nix(
     store_settings: &StoreSettings,
 ) -> Result<ThreadRegistrationGuard> {
     crate::nix_init();
+    // The command library registers global evaluator settings. Initialize it
+    // explicitly so pre-backend callers do not depend on linker side effects.
+    nix_cmd::init()
+        .to_miette()
+        .wrap_err("Failed to initialize Nix command settings")?;
     let gc_registration = gc_register_my_thread()
         .to_miette()
         .wrap_err("Failed to register thread with Nix garbage collector")?;

@@ -28,26 +28,45 @@ If you enter the ``frontend`` directory, the environment will activate based on 
 If you enter the top-level project, the environment is combined with what's defined in ``backend/devenv.nix`` and ``frontend/devenv.nix``.
 For example, ``devenv up`` will start both the frontend and backend processes.
 
-<VersionCompatibility version="1.10" />
+<VersionCompatibility version="2.4.1" />
 
-Composing ``devenv.yaml`` files is now supported for local files (relative and absolute paths).
-Remote inputs are not yet supported for ``devenv.yaml`` imports.
-
+Local `devenv.yaml` composition was added in 1.10. Remote input composition
+is supported in 2.4.1 and later.
 
 ## Sharing configuration from another repository
 
-To keep your devenv configuration in a separate repository, for example when working on a team that doesn't use devenv, declare it as a `path:` input and import it:
+To keep your devenv configuration in a separate repository, declare it as an
+input and import the directory containing its `devenv.yaml` and `devenv.nix`:
 
 ```yaml title="devenv.yaml"
 inputs:
   shared-config:
-    url: path:../shared-config/
+    url: github:my-org/shared-devenv-config
     flake: false
 imports:
-- shared-config
+- shared-config/profiles/backend
 ```
 
-The sibling `shared-config` repository only needs a `devenv.nix` file.
+This uses the existing input import syntax; no additional YAML option is
+required. Imports inside the remote `devenv.yaml` are composed recursively,
+and relative `path:` inputs declared there resolve inside the fetched source.
+
+The importing project's `devenv.lock` is the single lock file for the composed
+environment. A `devenv.lock` in the imported repository is not merged. Input
+declarations use the same precedence as local YAML composition, so a declaration
+in the root project wins when both configurations use the same name. In
+particular, when the shared configuration also declares `nixpkgs`, the root
+project's pinned `nixpkgs` is reused instead of creating a second one. Use
+distinct input names when the versions must remain independent.
+
+`devenv update shared-config` also discovers configuration from the updated
+revision and locks any inputs it adds or changes before writing `devenv.lock`.
+An update without an input name updates dependencies declared by imported YAML
+as well. Configuration discovery writes no intermediate lock files; a failed
+import leaves the previous lock unchanged.
+
+For a sibling checkout, use `url: path:../shared-config/` in the same example.
+The shared repository may also contain only a `devenv.nix` file.
 Combine this with [profiles](/profiles/) to define one shared configuration that adapts to each project.
 
 <VersionCompatibility version="2.2" kind="changed">

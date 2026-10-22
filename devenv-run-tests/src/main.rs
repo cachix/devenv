@@ -580,26 +580,21 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             Err(error)
         } else if test_config.use_shell {
             // Now load config from the current directory (which might be temp dir)
-            let mut config = Config::load_from(&devenv_root)?;
+            let devenv_input_url = format!("git+file:{}?dir=src/modules", cwd.display());
+            let mut project = devenv_nix_backend::project::ProjectConfig::new(&devenv_root);
+            project.input_overrides = args.override_inputs.clone();
+            let mut test_inputs = Config::default();
+            test_inputs.add_input("devenv", &devenv_input_url, &[])?;
+            project.extra_inputs = test_inputs.inputs;
+            let resolved = devenv_nix_backend::project::resolve_project(
+                &project,
+                Default::default(),
+                devenv_nix_backend::project::UpdatePolicy::Preserve,
+            )?;
+            resolved.write_lock()?;
+            let config = resolved.config;
+
             let strict_ports = config.strict_ports.unwrap_or(false);
-            for input in args.override_inputs.chunks_exact(2) {
-                config
-                    .override_input_url(&input[0], &input[1])
-                    .wrap_err(format!(
-                        "Failed to override input {} with {}",
-                        &input[0], &input[1]
-                    ))?;
-            }
-
-            // Override the input for the devenv module
-            config
-                .add_input(
-                    "devenv",
-                    &format!("git+file:{}?dir=src/modules", cwd.display()),
-                    &[],
-                )
-                .wrap_err("Failed to add devenv input")?;
-
             let nix_settings = NixSettings {
                 backend: config.backend.clone(),
                 ..NixSettings::default()
