@@ -1,45 +1,70 @@
-name: "PR Test"
-
+name: PR Test
+run-name: Rust macOS linker matrix
 on:
-  pull_request:
-    paths-ignore:
-      - "docs/**"
-
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Git ref (tag or branch) to test'
         required: true
-        default: 'main'
         type: string
       only:
-        description: 'Only run specific tests (passed to --only flag)'
         required: false
         type: string
-
-concurrency:
-  group: "${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref }}"
-  cancel-in-progress: true
-
+permissions:
+  contents: read
 jobs:
-  pipeline:
-    name: pipeline (${{ matrix.system }})
-
+  macos-linker-matrix:
+    name: Rust linkers (${{ matrix.runner }})
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - system: aarch64-linux
-            runs-on: '["self-hosted", "linux", "ARM64"]'
-          - system: x86_64-linux
-            runs-on: '["self-hosted", "linux", "X64"]'
-          - system: aarch64-darwin
-            runs-on: '["self-hosted", "macOS", "ARM64"]'
-
-    uses: ./.github/workflows/per-system-pipeline.yml
-    secrets: inherit
-    with:
-      system: ${{ matrix.system }}
-      runs-on: ${{ matrix.runs-on }}
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
-      only: ${{ inputs.only }}
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - name: Record platform and cases
+        run: |
+          uname -srm
+          mkdir -p matrix-logs
+          nix eval --impure --json --file .github/rust-linker-matrix/matrix.nix evaluation > matrix-logs/evaluation.json
+          nix eval --impure --json --file .github/rust-linker-matrix/matrix.nix builds --apply 'map (p: { name = p.name; out = p.outPath; drv = p.drvPath; })' > matrix-logs/cases.json
+      - name: Test LLD first
+        run: nix build -L --impure --no-link --keep-going --json --file .github/rust-linker-matrix/matrix.nix lldBuilds > matrix-logs/lld-results.json
+      - name: Test all linker combinations
+        if: ${{ !cancelled() }}
+        run: nix build -L --impure --no-link --keep-going --json --file .github/rust-linker-matrix/matrix.nix builds > matrix-logs/build-results.json
+      - name: Collect individual results
+        if: ${{ always() }}
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, shutil, subprocess, os, re
+          root = pathlib.Path('matrix-logs')
+          if not (root / 'cases.json').exists():
+              raise SystemExit('Case evaluation did not finish')
+          results = []
+          for c in json.loads((root / 'cases.json').read_text()):
+              out = pathlib.Path(c['out'])
+              dest = root / c['name']
+              passed = out.exists()
+              if passed:
+                  shutil.copytree(out, dest)
+                  passed = bool(re.search(r'test result: ok\. 1 passed;', (dest / 'doctest.log').read_text()))
+              else:
+                  dest.mkdir(exist_ok=True)
+                  log = subprocess.run(['nix', 'log', c['drv']], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                  (dest / 'failure.log').write_text(log.stdout)
+              results.append(dict(name=c['name'], passed=passed))
+          (root / 'summary.json').write_text(json.dumps(results, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('| Case | Result |\n|---|---|\n')
+              for r in results:
+                  f.write('| ' + r['name'] + ' | ' + ('PASS' if r['passed'] else 'FAIL') + ' |\n')
+          print(json.dumps(results, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: rust-linker-matrix-${{ matrix.runner }}
+          path: matrix-logs
+          retention-days: 7
