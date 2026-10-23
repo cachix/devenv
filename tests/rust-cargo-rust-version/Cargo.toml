@@ -1,5 +1,6 @@
-[package]
-name = "msrv"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = ["crates/app"]
+resolver = "2"
+
+[workspace.package]
 rust-version = "1.80"

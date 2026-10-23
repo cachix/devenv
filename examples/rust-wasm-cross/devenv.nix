@@ -1,5 +1,10 @@
-{ pkgs, lib, ... }:
+{ pkgs, config, ... }:
 
+let
+  # wasm-bindgen-cli must match the wasm-bindgen crate version exactly.
+  wasmBindgenVersion = config.languages.rust.cargo.lockedVersion ./. "wasm-bindgen";
+  wasmBindgenCli = pkgs.wasm-bindgen-cli_0_2_100;
+in
 {
   languages.rust = {
     enable = true;
@@ -30,8 +35,15 @@
 
   packages = [
     pkgs.wasm-pack
-    pkgs.wasm-bindgen-cli_0_2_100
+    wasmBindgenCli
     pkgs.binaryen # use a newer version of wasm-opt
     pkgs.nodejs
+  ];
+
+  assertions = [
+    {
+      assertion = wasmBindgenCli.version == wasmBindgenVersion;
+      message = "wasm-bindgen-cli ${wasmBindgenCli.version} does not match wasm-bindgen ${wasmBindgenVersion} in Cargo.lock";
+    }
   ];
 }

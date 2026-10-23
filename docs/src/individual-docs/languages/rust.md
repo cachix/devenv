@@ -50,6 +50,8 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
+Since devenv 2.4.1, a `major.minor` version such as `"1.81"` selects the newest `1.81.x` release, as it does with rustup.
+
 ### Custom toolchain packages
 
 Set `languages.rust.toolchainPackage` to supply an aggregate toolchain built elsewhere.
@@ -107,6 +109,13 @@ If your sources are installed separately, set `env.RUST_SRC_PATH` to the matchin
 }
 ```
 
+## Toolchain from project files
+
+Rust projects describe their toolchain in two places, and devenv can read both:
+
+- `rust-toolchain.toml` declares the toolchain you develop with. Use `languages.rust.toolchainFile`.
+- `Cargo.toml` declares the minimum supported Rust version (`rust-version`). Use `languages.rust.cargo.rustVersion` to test against it.
+
 ### Using rust-toolchain.toml
 
 If your project uses a `rust-toolchain.toml` file, devenv can automatically configure the toolchain from it:
@@ -130,7 +139,7 @@ profile = "minimal"
 
 ### Testing against your MSRV
 
-Since devenv 2.4.1, `languages.rust.cargoRustVersion` reads the `rust-version` field from the `Cargo.toml` in a directory, so you can pin the toolchain to your minimum supported Rust version:
+Since devenv 2.4.1, `languages.rust.cargo.rustVersion` reads the `rust-version` field from `Cargo.toml`, so you can pin the toolchain to your minimum supported Rust version:
 
 ```nix
 { config, ... }:
@@ -138,12 +147,57 @@ Since devenv 2.4.1, `languages.rust.cargoRustVersion` reads the `rust-version` f
   languages.rust = {
     enable = true;
     channel = "stable";
-    version = config.languages.rust.cargoRustVersion ./.;
+    version = config.languages.rust.cargo.rustVersion ./.;
   };
 }
 ```
 
-Point it at a directory whose `Cargo.toml` sets `rust-version`. For a workspace, that is the workspace root with `rust-version` under `[workspace.package]`. Members that inherit it with `rust-version.workspace = true` are not resolved, so pass the root directory instead (for example `../..` from `crates/foo/devenv.nix`). Versions such as `1.70` are expanded to `1.70.0`.
+Pass the directory containing `Cargo.toml`, or the file itself. Workspaces are resolved the way Cargo does it: a member with `rust-version.workspace = true` takes the version from its workspace root, and the root itself reads `[workspace.package]`. Versions such as `1.70` are expanded to `1.70.0`, so the toolchain is the exact minimum release.
+
+## Reading Cargo.toml and Cargo.lock
+
+Since devenv 2.4.1, the functions under `languages.rust.cargo` read Cargo project files during evaluation, so other parts of your configuration can depend on them. They work without `languages.rust.enable`, and devenv tracks the files it reads: editing `Cargo.toml` or `Cargo.lock` invalidates the evaluation cache.
+
+### Matching a tool to a locked dependency
+
+Some tools must match the version of a library in your `Cargo.lock` exactly: `wasm-bindgen-cli` and `wasm-bindgen`, `sqlx-cli` and `sqlx`, `diesel_cli` and `diesel`. `lockedVersion` reads the locked version so you can assert the two stay in sync:
+
+```nix
+{ config, pkgs, ... }:
+let
+  wasmBindgenVersion = config.languages.rust.cargo.lockedVersion ./. "wasm-bindgen";
+  wasmBindgenCli = pkgs.wasm-bindgen-cli_0_2_100;
+in
+{
+  packages = [ wasmBindgenCli ];
+
+  assertions = [
+    {
+      assertion = wasmBindgenCli.version == wasmBindgenVersion;
+      message = "wasm-bindgen-cli ${wasmBindgenCli.version} does not match wasm-bindgen ${wasmBindgenVersion} in Cargo.lock";
+    }
+  ];
+}
+```
+
+`Cargo.lock` lives at the workspace root, so a workspace member directory is searched upwards until the lock file is found. Evaluation fails with a list of versions if the crate is locked at more than one.
+
+### Anything else in the files
+
+`readManifest` and `readLock` return the parsed files as attribute sets, for everything the helpers above do not cover:
+
+```nix
+{ config, ... }:
+let
+  manifest = config.languages.rust.cargo.readManifest ./.;
+  lock = config.languages.rust.cargo.readLock ./.;
+in
+{
+  env.APP_VERSION = manifest.package.version;
+  env.APP_EDITION = manifest.package.edition;
+  env.LOCKED_CRATES = toString (builtins.length lock.package);
+}
+```
 
 ## Integration with other tools
 

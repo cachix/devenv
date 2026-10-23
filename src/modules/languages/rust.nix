@@ -81,30 +81,7 @@ let
     follows = [ "nixpkgs" ];
   };
 
-  # Read `rust-version` (the MSRV) from the Cargo.toml in `path`.
-  # Falls back to `[workspace.package]` in the same file, so workspace roots
-  # work. Members inheriting with `rust-version.workspace = true` are not
-  # resolved: the workspace root is not searched for, so callers must pass the
-  # root directory. Pads the version to three components (e.g. "1.70" ->
-  # "1.70.0") so it can be used as a rust-overlay toolchain version.
-  cargoRustVersion = path:
-    let
-      cargoTomlPath = path + "/Cargo.toml";
-      cargoToml =
-        if builtins.pathExists cargoTomlPath
-        then builtins.fromTOML (builtins.readFile cargoTomlPath)
-        else throw "languages.rust.cargoRustVersion: ${toString cargoTomlPath} does not exist";
-      packageVersion = cargoToml.package.rust-version or null;
-      workspaceVersion = cargoToml.workspace.package.rust-version or null;
-      version =
-        if builtins.isString packageVersion then packageVersion
-        else if builtins.isString workspaceVersion then workspaceVersion
-        else if packageVersion == { workspace = true; }
-        then throw "languages.rust.cargoRustVersion: ${toString cargoTomlPath} inherits `rust-version` from its workspace; pass the workspace root directory (the one whose Cargo.toml sets `workspace.package.rust-version`) instead"
-        else throw "languages.rust.cargoRustVersion: no `rust-version` set in ${toString cargoTomlPath} (checked `package.rust-version` and `workspace.package.rust-version`)";
-      components = lib.splitVersion version;
-    in
-    lib.concatStringsSep "." (components ++ lib.genList (_: "0") (lib.max 0 (3 - lib.length components)));
+  cargo = import ../lib/cargo.nix { inherit lib; };
 
   crate2nix = config.lib.getInput {
     name = "crate2nix";
@@ -153,7 +130,8 @@ in
       default = "latest";
       defaultText = lib.literalExpression ''"latest"'';
       description = ''
-        Which version of rust to use, this value could be `latest`,`1.81.0`, `2021-01-01`.
+        Which version of rust to use, this value could be `latest`, `1.81.0`, `1.81`, `2021-01-01`.
+        A `major.minor` version such as `1.81` selects the newest `1.81.x` release.
         Only works when languages.rust.channel is NOT nixpkgs.
       '';
     };
@@ -317,36 +295,88 @@ in
       '';
     };
 
-    cargoRustVersion = lib.mkOption {
-      type = lib.types.functionTo lib.types.str;
-      default = cargoRustVersion;
-      defaultText = lib.literalMD "a function reading `rust-version` from `<path>/Cargo.toml`";
-      readOnly = true;
-      description = ''
-        Read the minimum supported Rust version (`rust-version`) from the
-        `Cargo.toml` in the given directory. Point it at a directory whose
-        `Cargo.toml` sets `rust-version` itself.
+    cargo =
+      let
+        mkCargoOption = name: type: description: lib.mkOption {
+          inherit type description;
+          default = cargo.${name};
+          defaultText = lib.literalMD "a function reading Cargo project files";
+          readOnly = true;
+        };
+      in
+      {
+        readManifest = mkCargoOption "readManifest" (lib.types.functionTo (lib.types.attrsOf lib.types.anything)) ''
+          Read a `Cargo.toml` into an attribute set, as [`builtins.fromTOML`](https://nix.dev/manual/nix/stable/language/builtins#builtins-fromTOML) returns it.
 
-        Uses `package.rust-version`, falling back to `workspace.package.rust-version`
-        in the same file, so workspace roots work. Workspace members that inherit
-        the version with `rust-version.workspace = true` are not resolved; pass
-        the workspace root directory instead. Versions are padded to three
-        components (for example `1.70` becomes `1.70.0`) so the result can be
-        passed to `languages.rust.version`.
+          Takes the directory containing `Cargo.toml`, or the path to the file itself.
 
-        Example usage to test against your MSRV:
-        ```nix
-        { config, ... }:
-        {
-          languages.rust = {
-            enable = true;
-            channel = "stable";
-            version = config.languages.rust.cargoRustVersion ./.;
-          };
-        }
-        ```
-      '';
-    };
+          Example usage:
+          ```nix
+          { config, ... }:
+          {
+            env.APP_VERSION = (config.languages.rust.cargo.readManifest ./.).package.version;
+          }
+          ```
+        '';
+
+        readLock = mkCargoOption "readLock" (lib.types.functionTo (lib.types.attrsOf lib.types.anything)) ''
+          Read a `Cargo.lock` into an attribute set, as [`builtins.fromTOML`](https://nix.dev/manual/nix/stable/language/builtins#builtins-fromTOML) returns it.
+          Locked packages are listed under `package`.
+
+          Takes a directory, or the path to the file itself. Since `Cargo.lock`
+          lives at the workspace root, a directory is searched upwards until a
+          `Cargo.lock` is found, so a workspace member directory works.
+        '';
+
+        rustVersion = mkCargoOption "rustVersion" (lib.types.functionTo lib.types.str) ''
+          Read the minimum supported Rust version (`rust-version`) of a Cargo
+          package or workspace, in a form `languages.rust.version` accepts.
+
+          Takes the directory containing `Cargo.toml`, or the path to the file
+          itself. Uses `package.rust-version`, resolving
+          `rust-version.workspace = true` through the workspace root the way
+          Cargo does, and falls back to `workspace.package.rust-version` for a
+          workspace root. Versions are padded to three components (`1.70`
+          becomes `1.70.0`), so the result pins the exact minimum release.
+
+          Example usage to test against your MSRV:
+          ```nix
+          { config, ... }:
+          {
+            languages.rust = {
+              enable = true;
+              channel = "stable";
+              version = config.languages.rust.cargo.rustVersion ./.;
+            };
+          }
+          ```
+        '';
+
+        lockedVersion = mkCargoOption "lockedVersion" (lib.types.functionTo (lib.types.functionTo lib.types.str)) ''
+          Read the version a crate is locked at in `Cargo.lock`.
+
+          Takes a directory (searched upwards for `Cargo.lock`, see `readLock`)
+          or the path to the file itself, and the crate name. Evaluation fails
+          if the crate is not in the lock file or is locked at several versions.
+
+          Useful to keep a tool in sync with the library version a project
+          depends on, for example `wasm-bindgen-cli` with `wasm-bindgen`:
+          ```nix
+          { config, pkgs, ... }:
+          let
+            wasmBindgenVersion = config.languages.rust.cargo.lockedVersion ./. "wasm-bindgen";
+          in
+          {
+            packages = [ pkgs.wasm-bindgen-cli ];
+
+            assertions = [{
+              assertion = pkgs.wasm-bindgen-cli.version == wasmBindgenVersion;
+              message = "wasm-bindgen-cli ''${pkgs.wasm-bindgen-cli.version} does not match wasm-bindgen ''${wasmBindgenVersion} in Cargo.lock";
+            }];
+          }
+          ```
+        '';
+      };
 
     import = lib.mkOption {
       type = lib.types.functionTo (lib.types.functionTo lib.types.package);
@@ -413,16 +443,11 @@ in
         let
           crate2nixTools = pkgs.callPackage "${crate2nix}/tools.nix" { };
 
-          # Try to infer package name from Cargo.toml or use directory name as fallback
-          packageName = args.packageName or (
-            let
-              cargoToml =
-                if builtins.pathExists (path + "/Cargo.toml")
-                then builtins.fromTOML (builtins.readFile (path + "/Cargo.toml"))
-                else { };
-            in
-              cargoToml.package.name or (builtins.baseNameOf (builtins.toString path))
-          );
+          # Infer the package name from Cargo.toml, falling back to the directory
+          # name for a virtual workspace manifest without a `[package]` table.
+          packageName = args.packageName
+            or (cargo.readManifest path).package.name
+            or (builtins.baseNameOf (builtins.toString path));
 
           # Use crate2nix IFD to auto-generate
           cargoNix =
@@ -646,7 +671,21 @@ in
 
         # Get the toolchain for component resolution with error handling
         channel = rustBin.${cfg.channel} or (throw "Invalid Rust channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (lib.filter (c: c != "nixpkgs") validChannels)}");
-        toolchain = channel.${cfg.version} or (throw "Invalid Rust version '${cfg.version}' for channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (builtins.attrNames channel)}");
+
+        # Exact keys (`latest`, `1.81.0`, beta/nightly dates) are looked up
+        # directly. A stable `major.minor` version such as `1.81` resolves to the
+        # newest `1.81.x` release through rust-overlay's own manifest selector,
+        # matching rustup and `fromRustupToolchain`.
+        #
+        # WARNING: private API
+        isMajorMinor = builtins.match "[0-9]+\\.[0-9]+" cfg.version != null;
+        toolchain =
+          channel.${cfg.version}
+            or (
+            if cfg.channel == "stable" && isMajorMinor
+            then rustBin._internal.toolchainFromManifest (rustBin._internal.selectManifest { channel = cfg.version; })
+            else throw "Invalid Rust version '${cfg.version}' for channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (builtins.attrNames channel)}"
+          );
         # Extract individual components from toolchain, avoiding the 'rust' profile, which triggers warnings.
         # This ensures target components like rust-std-${target} are available
         toolchainComponents = builtins.removeAttrs toolchain [ "rust" ];
