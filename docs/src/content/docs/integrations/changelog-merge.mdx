@@ -1,0 +1,58 @@
+---
+title: "changelog-merge"
+---
+
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
+<VersionCompatibility version="2.4.1" />
+
+[changelog-merge](https://github.com/cachix/changelog-merge) helps avoid conflicts
+when contributors update a [Keep a Changelog](https://keepachangelog.com/) file on
+different branches. New entries from both branches are kept. Incompatible changes
+to the same entry produce conflicts that you resolve as usual.
+
+This integration requires a recent nixpkgs version that includes `changelog-merge`.
+If your project uses an older pin, select a newer input:
+
+```yaml title="devenv.yaml"
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/master
+```
+
+Update your lock file:
+
+```sh
+devenv update nixpkgs
+```
+
+Then enable it in your project:
+
+```nix title="devenv.nix"
+{
+  changelog-merge.enable = true;
+}
+```
+
+Files named `CHANGELOG.md` now use changelog-merge automatically when you merge,
+rebase, or cherry-pick inside your devenv environment:
+
+```sh
+devenv shell
+git merge my-branch
+```
+
+This also works when your environment is activated through direnv. Continue
+editing your changelog directly.
+
+To include changelogs with other names, add their paths or patterns:
+
+```nix title="devenv.nix"
+{
+  changelog-merge.enable = true;
+  git.attributes = [ "docs/CHANGES.md merge=changelog-merge" ];
+}
+```
+
+Each contributor or CI job performing merges needs to use the devenv environment.
+Merges through the GitHub or GitLab web interface do not use changelog-merge.

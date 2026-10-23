@@ -1,0 +1,4 @@
+inputs:
+  # changelog-merge is newer than devenv's default nixpkgs pin.
+  nixpkgs:
+    url: github:NixOS/nixpkgs/master
