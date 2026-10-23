@@ -55,6 +55,8 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
+Since devenv 2.4.1, a `major.minor` version such as `"1.81"` selects the newest `1.81.x` release, as it does with rustup.
+
 ### Custom toolchain packages
 
 Set `languages.rust.toolchainPackage` to supply an aggregate toolchain built elsewhere.
@@ -112,6 +114,13 @@ If your sources are installed separately, set `env.RUST_SRC_PATH` to the matchin
 }
 ```
 
+## Toolchain from project files
+
+Rust projects describe their toolchain in two places, and devenv can read both:
+
+- `rust-toolchain.toml` declares the toolchain you develop with. Use `languages.rust.toolchainFile`.
+- `Cargo.toml` declares the minimum supported Rust version (`rust-version`). Use `languages.rust.cargo.rustVersion` to test against it.
+
 ### Using rust-toolchain.toml
 
 If your project uses a `rust-toolchain.toml` file, devenv can automatically configure the toolchain from it:
@@ -131,6 +140,68 @@ Example `rust-toolchain.toml`:
 channel = "stable"
 components = ["rustfmt", "clippy"]
 profile = "minimal"
+```
+
+### Testing against your MSRV
+
+Since devenv 2.4.1, `languages.rust.cargo.rustVersion` reads the `rust-version` field from `Cargo.toml`, so you can pin the toolchain to your minimum supported Rust version:
+
+```nix
+{ config, ... }:
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+    version = config.languages.rust.cargo.rustVersion ./.;
+  };
+}
+```
+
+Pass the directory containing `Cargo.toml`, or the file itself. Workspaces are resolved the way Cargo does it: a member with `rust-version.workspace = true` takes the version from its workspace root, and the root itself reads `[workspace.package]`. Versions such as `1.70` are expanded to `1.70.0`, so the toolchain is the exact minimum release.
+
+## Reading Cargo.toml and Cargo.lock
+
+Since devenv 2.4.1, the functions under `languages.rust.cargo` read Cargo project files during evaluation, so other parts of your configuration can depend on them. They work without `languages.rust.enable`, and devenv tracks the files it reads: editing `Cargo.toml` or `Cargo.lock` invalidates the evaluation cache.
+
+### Matching a tool to a locked dependency
+
+Some tools must match the version of a library in your `Cargo.lock` exactly: `wasm-bindgen-cli` and `wasm-bindgen`, `sqlx-cli` and `sqlx`, `diesel_cli` and `diesel`. `lockedVersion` reads the locked version so you can assert the two stay in sync:
+
+```nix
+{ config, pkgs, ... }:
+let
+  wasmBindgenVersion = config.languages.rust.cargo.lockedVersion ./. "wasm-bindgen";
+  wasmBindgenCli = pkgs.wasm-bindgen-cli_0_2_100;
+in
+{
+  packages = [ wasmBindgenCli ];
+
+  assertions = [
+    {
+      assertion = wasmBindgenCli.version == wasmBindgenVersion;
+      message = "wasm-bindgen-cli ${wasmBindgenCli.version} does not match wasm-bindgen ${wasmBindgenVersion} in Cargo.lock";
+    }
+  ];
+}
+```
+
+`Cargo.lock` lives at the workspace root, so a workspace member directory is searched upwards until the lock file is found. Evaluation fails with a list of versions if the crate is locked at more than one.
+
+### Anything else in the files
+
+`readManifest` and `readLock` return the parsed files as attribute sets, for everything the helpers above do not cover:
+
+```nix
+{ config, ... }:
+let
+  manifest = config.languages.rust.cargo.readManifest ./.;
+  lock = config.languages.rust.cargo.readLock ./.;
+in
+{
+  env.APP_VERSION = manifest.package.version;
+  env.APP_EDITION = manifest.package.edition;
+  env.LOCKED_CRATES = toString (builtins.length lock.package);
+}
 ```
 
 ## Integration with other tools
@@ -186,7 +257,150 @@ true
 
 
 
+### languages.rust.cargo.lockedVersion
+
+Read the version a crate is locked at in ` Cargo.lock `.
+
+Takes a directory (searched upwards for ` Cargo.lock `, see ` readLock `)
+or the path to the file itself, and the crate name. Evaluation fails
+if the crate is not in the lock file or is locked at several versions.
+
+Useful to keep a tool in sync with the library version a project
+depends on, for example ` wasm-bindgen-cli ` with ` wasm-bindgen `:
+
+```nix
+{ config, pkgs, ... }:
+let
+  wasmBindgenVersion = config.languages.rust.cargo.lockedVersion ./. "wasm-bindgen";
+in
+{
+  packages = [ pkgs.wasm-bindgen-cli ];
+
+  assertions = [{
+    assertion = pkgs.wasm-bindgen-cli.version == wasmBindgenVersion;
+    message = "wasm-bindgen-cli ${pkgs.wasm-bindgen-cli.version} does not match wasm-bindgen ${wasmBindgenVersion} in Cargo.lock";
+  }];
+}
+```
+
+
+
+*Type:*
+function that evaluates to a(n) function that evaluates to a(n) string *(read only)*
+
+
+
+*Default:*
+a function reading Cargo project files
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.cargo.readLock
+
+
+
+Read a ` Cargo.lock ` into an attribute set, as [` builtins.fromTOML `](https://nix.dev/manual/nix/stable/language/builtins#builtins-fromTOML) returns it.
+Locked packages are listed under ` package `.
+
+Takes a directory, or the path to the file itself. Since ` Cargo.lock `
+lives at the workspace root, a directory is searched upwards until a
+` Cargo.lock ` is found, so a workspace member directory works.
+
+
+
+*Type:*
+function that evaluates to a(n) attribute set of anything *(read only)*
+
+
+
+*Default:*
+a function reading Cargo project files
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.cargo.readManifest
+
+
+
+Read a ` Cargo.toml ` into an attribute set, as [` builtins.fromTOML `](https://nix.dev/manual/nix/stable/language/builtins#builtins-fromTOML) returns it.
+
+Takes the directory containing ` Cargo.toml `, or the path to the file itself.
+
+Example usage:
+
+```nix
+{ config, ... }:
+{
+  env.APP_VERSION = (config.languages.rust.cargo.readManifest ./.).package.version;
+}
+```
+
+
+
+*Type:*
+function that evaluates to a(n) attribute set of anything *(read only)*
+
+
+
+*Default:*
+a function reading Cargo project files
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+### languages.rust.cargo.rustVersion
+
+
+
+Read the minimum supported Rust version (` rust-version `) of a Cargo
+package or workspace, in a form ` languages.rust.version ` accepts.
+
+Takes the directory containing ` Cargo.toml `, or the path to the file
+itself. Uses ` package.rust-version `, resolving
+` rust-version.workspace = true ` through the workspace root the way
+Cargo does, and falls back to ` workspace.package.rust-version ` for a
+workspace root. Versions are padded to three components (` 1.70 `
+becomes ` 1.70.0 `), so the result pins the exact minimum release.
+
+Example usage to test against your MSRV:
+
+```nix
+{ config, ... }:
+{
+  languages.rust = {
+    enable = true;
+    channel = "stable";
+    version = config.languages.rust.cargo.rustVersion ./.;
+  };
+}
+```
+
+
+
+*Type:*
+function that evaluates to a(n) string *(read only)*
+
+
+
+*Default:*
+a function reading Cargo project files
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ### languages.rust.channel
+
+
 
 The rustup toolchain to install.
 
@@ -780,7 +994,8 @@ package
 
 
 
-Which version of rust to use, this value could be ` latest `,` 1.81.0 `, ` 2021-01-01 `.
+Which version of rust to use, this value could be ` latest `, ` 1.81.0 `, ` 1.81 `, ` 2021-01-01 `.
+A ` major.minor ` version such as ` 1.81 ` selects the newest ` 1.81.x ` release.
 Only works when languages.rust.channel is NOT nixpkgs.
 
 

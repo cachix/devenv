@@ -81,6 +81,8 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  cargo = import ../lib/cargo.nix { inherit lib; };
+
   crate2nix = config.lib.getInput {
     name = "crate2nix";
     url = "github:nix-community/crate2nix";
@@ -128,7 +130,8 @@ in
       default = "latest";
       defaultText = lib.literalExpression ''"latest"'';
       description = ''
-        Which version of rust to use, this value could be `latest`,`1.81.0`, `2021-01-01`.
+        Which version of rust to use, this value could be `latest`, `1.81.0`, `1.81`, `2021-01-01`.
+        A `major.minor` version such as `1.81` selects the newest `1.81.x` release.
         Only works when languages.rust.channel is NOT nixpkgs.
       '';
     };
@@ -292,6 +295,89 @@ in
       '';
     };
 
+    cargo =
+      let
+        mkCargoOption = name: type: description: lib.mkOption {
+          inherit type description;
+          default = cargo.${name};
+          defaultText = lib.literalMD "a function reading Cargo project files";
+          readOnly = true;
+        };
+      in
+      {
+        readManifest = mkCargoOption "readManifest" (lib.types.functionTo (lib.types.attrsOf lib.types.anything)) ''
+          Read a `Cargo.toml` into an attribute set, as [`builtins.fromTOML`](https://nix.dev/manual/nix/stable/language/builtins#builtins-fromTOML) returns it.
+
+          Takes the directory containing `Cargo.toml`, or the path to the file itself.
+
+          Example usage:
+          ```nix
+          { config, ... }:
+          {
+            env.APP_VERSION = (config.languages.rust.cargo.readManifest ./.).package.version;
+          }
+          ```
+        '';
+
+        readLock = mkCargoOption "readLock" (lib.types.functionTo (lib.types.attrsOf lib.types.anything)) ''
+          Read a `Cargo.lock` into an attribute set, as [`builtins.fromTOML`](https://nix.dev/manual/nix/stable/language/builtins#builtins-fromTOML) returns it.
+          Locked packages are listed under `package`.
+
+          Takes a directory, or the path to the file itself. Since `Cargo.lock`
+          lives at the workspace root, a directory is searched upwards until a
+          `Cargo.lock` is found, so a workspace member directory works.
+        '';
+
+        rustVersion = mkCargoOption "rustVersion" (lib.types.functionTo lib.types.str) ''
+          Read the minimum supported Rust version (`rust-version`) of a Cargo
+          package or workspace, in a form `languages.rust.version` accepts.
+
+          Takes the directory containing `Cargo.toml`, or the path to the file
+          itself. Uses `package.rust-version`, resolving
+          `rust-version.workspace = true` through the workspace root the way
+          Cargo does, and falls back to `workspace.package.rust-version` for a
+          workspace root. Versions are padded to three components (`1.70`
+          becomes `1.70.0`), so the result pins the exact minimum release.
+
+          Example usage to test against your MSRV:
+          ```nix
+          { config, ... }:
+          {
+            languages.rust = {
+              enable = true;
+              channel = "stable";
+              version = config.languages.rust.cargo.rustVersion ./.;
+            };
+          }
+          ```
+        '';
+
+        lockedVersion = mkCargoOption "lockedVersion" (lib.types.functionTo (lib.types.functionTo lib.types.str)) ''
+          Read the version a crate is locked at in `Cargo.lock`.
+
+          Takes a directory (searched upwards for `Cargo.lock`, see `readLock`)
+          or the path to the file itself, and the crate name. Evaluation fails
+          if the crate is not in the lock file or is locked at several versions.
+
+          Useful to keep a tool in sync with the library version a project
+          depends on, for example `wasm-bindgen-cli` with `wasm-bindgen`:
+          ```nix
+          { config, pkgs, ... }:
+          let
+            wasmBindgenVersion = config.languages.rust.cargo.lockedVersion ./. "wasm-bindgen";
+          in
+          {
+            packages = [ pkgs.wasm-bindgen-cli ];
+
+            assertions = [{
+              assertion = pkgs.wasm-bindgen-cli.version == wasmBindgenVersion;
+              message = "wasm-bindgen-cli ''${pkgs.wasm-bindgen-cli.version} does not match wasm-bindgen ''${wasmBindgenVersion} in Cargo.lock";
+            }];
+          }
+          ```
+        '';
+      };
+
     import = lib.mkOption {
       type = lib.types.functionTo (lib.types.functionTo lib.types.package);
       description = ''
@@ -357,16 +443,11 @@ in
         let
           crate2nixTools = pkgs.callPackage "${crate2nix}/tools.nix" { };
 
-          # Try to infer package name from Cargo.toml or use directory name as fallback
-          packageName = args.packageName or (
-            let
-              cargoToml =
-                if builtins.pathExists (path + "/Cargo.toml")
-                then builtins.fromTOML (builtins.readFile (path + "/Cargo.toml"))
-                else { };
-            in
-              cargoToml.package.name or (builtins.baseNameOf (builtins.toString path))
-          );
+          # Infer the package name from Cargo.toml, falling back to the directory
+          # name for a virtual workspace manifest without a `[package]` table.
+          packageName = args.packageName
+            or (cargo.readManifest path).package.name
+            or (builtins.baseNameOf (builtins.toString path));
 
           # Use crate2nix IFD to auto-generate
           cargoNix =
@@ -590,7 +671,21 @@ in
 
         # Get the toolchain for component resolution with error handling
         channel = rustBin.${cfg.channel} or (throw "Invalid Rust channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (lib.filter (c: c != "nixpkgs") validChannels)}");
-        toolchain = channel.${cfg.version} or (throw "Invalid Rust version '${cfg.version}' for channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (builtins.attrNames channel)}");
+
+        # Exact keys (`latest`, `1.81.0`, beta/nightly dates) are looked up
+        # directly. A stable `major.minor` version such as `1.81` resolves to the
+        # newest `1.81.x` release through rust-overlay's own manifest selector,
+        # matching rustup and `fromRustupToolchain`.
+        #
+        # WARNING: private API
+        isMajorMinor = builtins.match "[0-9]+\\.[0-9]+" cfg.version != null;
+        toolchain =
+          channel.${cfg.version}
+            or (
+            if cfg.channel == "stable" && isMajorMinor
+            then rustBin._internal.toolchainFromManifest (rustBin._internal.selectManifest { channel = cfg.version; })
+            else throw "Invalid Rust version '${cfg.version}' for channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (builtins.attrNames channel)}"
+          );
         # Extract individual components from toolchain, avoiding the 'rust' profile, which triggers warnings.
         # This ensures target components like rust-std-${target} are available
         toolchainComponents = builtins.removeAttrs toolchain [ "rust" ];
