@@ -1,0 +1,49 @@
+import java.nio.file.Files
+import java.nio.file.Path
+
+plugins {
+    id 'java'
+}
+
+class ProjectJdkPlugin implements Plugin<Project> {
+    void apply(Project project) {
+        if (JavaVersion.current() != JavaVersion.VERSION_17) {
+            throw new GradleException("Expected project JDK 17 in Gradle plugin; got ${System.getProperty('java.version')}")
+        }
+        project.logger.lifecycle("Plugin JVM: ${System.getProperty('java.home')}")
+    }
+}
+
+apply plugin: ProjectJdkPlugin
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.14.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    doFirst {
+        def compiler = javaCompiler.get().metadata
+        assert compiler.languageVersion.asInt() == 17
+        assert Files.isSameFile(
+            compiler.installationPath.file('bin/java').asFile.toPath(),
+            Path.of(System.getenv('JAVA_HOME'), 'bin', 'java'))
+        logger.lifecycle("Compiler JDK: ${compiler.installationPath}")
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    doFirst {
+        assert javaLauncher.get().metadata.languageVersion.asInt() == 17
+    }
+    testLogging {
+        events 'passed', 'failed'
+        showStandardStreams = true
+    }
+}
