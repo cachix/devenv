@@ -64,7 +64,16 @@ let
         lib.optionalString (cfg.directory != config.devenv.root) "cd ${cfg.directory}/ && "
       }npm init' to create one." >&2
     else
-      _devenv-npm-install
+      # Keep the lock outside node_modules, which clean-install deletes.
+      mkdir -p "${config.devenv.state}"
+      {
+        if ! ${lib.getExe pkgs.flock} -n 9
+        then
+          echo "Waiting for another shell to finish installing npm packages..." >&2
+          ${lib.getExe pkgs.flock} 9
+        fi
+        _devenv-npm-install
+      } 9>"${config.devenv.state}/npm-install.lock"
     fi
   '';
 
