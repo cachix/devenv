@@ -72,6 +72,13 @@ pub fn run(config_file: &Path) -> Result<()> {
         devenv::processes::write_pid(&pid_file, std::process::id())
             .await
             .map_err(|e| miette::miette!("Failed to write PID: {}", e))?;
+        // Keep the PID file from being reaped by periodic /tmp cleaners
+        // (such as macOS tmp_cleaner) while the daemon runs for days.
+        let pid_refresher = devenv::processes::PidFileRefresher::spawn(
+            pid_file.clone(),
+            std::process::id(),
+            devenv::processes::PID_FILE_REFRESH_INTERVAL,
+        );
 
         let result = api_server
             .manager()
@@ -87,6 +94,7 @@ pub fn run(config_file: &Path) -> Result<()> {
         // cancellation sweep before removing the manager's PID file.
         let _ = initial_tasks.await;
 
+        pid_refresher.stop().await;
         let _ = tokio::fs::remove_file(&pid_file).await;
         result
     })

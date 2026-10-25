@@ -78,7 +78,10 @@ pub use manager_capabilities::{
     DeclarationSource, ManagerAdapter, ManagerCapabilities, ManagerClient, ManagerDescriptor,
     ManagerOperation, ManagerStopMethod, ManagerTerminal, fallback_adapter, fallback_capabilities,
 };
-pub use pid::{PidStatus, check_pid_file, read_pid, remove_pid, write_pid};
+pub use pid::{
+    PID_FILE_REFRESH_INTERVAL, PidFileRefresher, PidStatus, check_pid_file, read_pid, refresh_pid,
+    remove_pid, write_pid,
+};
 pub use process_guardian::maybe_run_process_guardian;
 pub use process_scope::{PreparedProcessScope, ProcessScope, StopPolicy, stop_process_scopes};
 pub use pty::PtyProcess;

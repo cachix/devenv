@@ -3069,6 +3069,11 @@ impl Devenv {
                 .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
 
             if options.mode == ClientRunMode::Follow {
+                let pid_refresher = processes::PidFileRefresher::spawn(
+                    pid_file.clone(),
+                    std::process::id(),
+                    processes::PID_FILE_REFRESH_INTERVAL,
+                );
                 trace!(
                     "devenv.up: calling run_event_loop (native manager, following client), global_token_cancelled={}",
                     self.shutdown.is_cancelled()
@@ -3084,6 +3089,7 @@ impl Devenv {
                     .map_err(|e| miette!("Process manager error: {}", e));
                 trace!("devenv.up: run_event_loop returned");
 
+                pid_refresher.stop().await;
                 let _ = tokio::fs::remove_file(&pid_file).await;
                 drop(api_server);
                 result?;
