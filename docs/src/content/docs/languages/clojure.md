@@ -40,6 +40,30 @@ true
 
 
 
+### languages.clojure.jdk.package
+
+
+
+The JDK package to use for Clojure.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+config.languages.java.jdk.package
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
+
+
+
 ### languages.clojure.lsp.enable
 
 
