@@ -163,6 +163,11 @@ pub(crate) fn interrupt_prompt_key_hints(keymap: &Keymap, attached: bool, width:
     } else {
         [Action::Cancel, Action::Quit]
     };
+    // Attached, the quit key detaches, the same as Ctrl-C.
+    let detach_key = keymap
+        .key_label(KeyContext::Prompt, Action::Quit, width < 120)
+        .map(|key| format!("{key}/"))
+        .unwrap_or_default();
     let compact = width < 120;
     let mut hints = actions
         .into_iter()
@@ -183,9 +188,9 @@ pub(crate) fn interrupt_prompt_key_hints(keymap: &Keymap, attached: bool, width:
         })
         .collect::<Vec<_>>();
     hints.push(if attached && compact {
-        "^C:detach".to_string()
+        format!("{detach_key}^C:detach")
     } else if attached {
-        "Ctrl-C detach".to_string()
+        format!("{detach_key}Ctrl-C detach")
     } else if compact {
         "^C:quit".to_string()
     } else {
@@ -1198,7 +1203,7 @@ mod tests {
         let attached = interrupt_prompt_key_hints(&keymap, true, 160);
         assert!(attached.contains("c cancel"));
         assert!(attached.contains("s stop manager"));
-        assert!(attached.contains("Ctrl-C detach"));
+        assert!(attached.contains("q/Ctrl-C detach"));
         assert!(!attached.contains("q quit"));
 
         let starting = interrupt_prompt_key_hints(&keymap, false, 160);
@@ -1209,7 +1214,7 @@ mod tests {
 
         assert_eq!(
             interrupt_prompt_key_hints(&keymap, true, 80),
-            "c:cancel s:stop ^C:detach"
+            "c:cancel s:stop q/^C:detach"
         );
         assert_eq!(
             interrupt_prompt_key_hints(&keymap, false, 80),

@@ -147,8 +147,9 @@ triage.
 - `Ctrl+X`: Stop the selected managed process
 - `Ctrl+H`: Hide or show stopped processes
 - `Ctrl+C`: Show the quit prompt without stopping managed processes
+- `q`: Detach when attached to a running process manager (`devenv processes attach`), leaving the processes running; otherwise show the quit prompt
 - `c` or `Esc`: Keep running and clear the prompt
-- `q` or `Ctrl+C`: Quit from the interrupt prompt
+- `q` or `Ctrl+C`: Quit from the interrupt prompt, or detach when attached
 - `Esc`: Close the inline preview, clear the selection, or cancel search
 
 ### Expanded Logs
@@ -164,5 +165,5 @@ Long lines wrap onto continuation rows so their full content stays readable.
 - `y`: Copy the selection, or the complete retained log when nothing is selected
 - `Ctrl+C`: Copy the current selection, or show the quit prompt when no selection is active
 - `c` or `Esc`: Keep running and clear the prompt
-- `q` or `Ctrl+C`: Quit from the interrupt prompt
+- `q` or `Ctrl+C`: Quit from the interrupt prompt, or detach when attached
 - `q/Esc`: Return to main view

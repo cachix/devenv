@@ -563,6 +563,22 @@ pub(crate) fn request_interrupt_prompt(
     }
 }
 
+/// `q` in the main view. Attached to a running manager it detaches straight
+/// away, leaving the processes running, as a second Ctrl-C does. Otherwise
+/// quitting stops the processes, so it opens the quit prompt instead.
+pub(crate) fn handle_quit_key(
+    event_tx: Option<&ProcessCommandSender>,
+    ui_state: &Arc<RwLock<UiState>>,
+    shutdown: &Arc<Shutdown>,
+    attached: bool,
+) {
+    if attached {
+        shutdown.handle_interrupt();
+    } else {
+        request_interrupt_prompt(event_tx, ui_state, false);
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn handle_interrupt_prompt_key(
     key_event: &KeyEvent,
@@ -611,7 +627,8 @@ pub(crate) fn handle_interrupt_prompt_action(
                 ui.clear_interrupt_prompt();
             }
         }
-        Some(Action::Quit) if !attached => {
+        // Attached, the interrupt detaches and leaves the manager running.
+        Some(Action::Quit) => {
             shutdown.handle_interrupt();
         }
         Some(Action::Cancel) => {
@@ -1172,6 +1189,14 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 shutdown.handle_interrupt();
                             }
                         }
+                        KeyCode::Char('q') if action == Some(Action::Quit) => {
+                            handle_quit_key(
+                                event_tx.as_ref(),
+                                &ui_state,
+                                &shutdown,
+                                attached_flag.load(Ordering::Relaxed),
+                            );
+                        }
                         KeyCode::Char('r')
                             if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
@@ -1671,6 +1696,45 @@ mod tests {
             &quit, &ui_state, &shutdown, None
         ));
         assert!(shutdown.is_cancelled());
+    }
+
+    #[test]
+    fn test_quit_key_detaches_when_attached() {
+        // In the attached prompt, `q` detaches like a second Ctrl-C.
+        let ui_state = Arc::new(RwLock::new(UiState::new()));
+        ui_state.write().unwrap().show_interrupt_prompt(true);
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let quit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'));
+        assert!(handle_interrupt_prompt_key(
+            &quit, &ui_state, &shutdown, None
+        ));
+        assert!(shutdown.is_cancelled());
+
+        // In the main view, `q` detaches without a prompt.
+        let ui_state = Arc::new(RwLock::new(UiState::new()));
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let (tx, _rx) = mpsc::channel(1);
+        handle_quit_key(Some(&tx), &ui_state, &shutdown, true);
+        assert!(shutdown.is_cancelled());
+        assert!(!ui_state.read().unwrap().interrupt_prompt_active());
+    }
+
+    #[test]
+    fn test_quit_key_opens_the_quit_prompt_when_not_attached() {
+        // Quitting a foreground session stops its processes, so `q` asks first.
+        let ui_state = Arc::new(RwLock::new(UiState::new()));
+        let shutdown = tokio_shutdown::Shutdown::new();
+        let (tx, _rx) = mpsc::channel(1);
+        handle_quit_key(Some(&tx), &ui_state, &shutdown, false);
+        assert!(!shutdown.is_cancelled());
+        assert!(ui_state.read().unwrap().interrupt_prompt_active());
+        assert!(!ui_state.read().unwrap().interrupt_prompt_attached());
+
+        // Without a process session there is nothing to quit.
+        let ui_state = Arc::new(RwLock::new(UiState::new()));
+        handle_quit_key(None, &ui_state, &shutdown, false);
+        assert!(!shutdown.is_cancelled());
+        assert!(!ui_state.read().unwrap().interrupt_prompt_active());
     }
 
     #[test]

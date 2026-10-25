@@ -1056,6 +1056,7 @@ fn actions_for(context: KeyContext) -> &'static [Action] {
             Action::StopProcess,
             Action::ToggleStopped,
             Action::Cancel,
+            Action::Quit,
         ],
         KeyContext::ProcessSearch => &[
             Action::NextMatch,
@@ -1408,6 +1409,7 @@ fn default_bindings() -> Vec<(KeyContext, Action, Vec<&'static str>)> {
         (Main, StopProcess, vec!["ctrl+x"]),
         (Main, ToggleStopped, vec!["ctrl+h"]),
         (Main, Cancel, vec!["esc"]),
+        (Main, Quit, vec!["q"]),
         (ProcessSearch, NextMatch, vec!["down"]),
         (ProcessSearch, PreviousMatch, vec!["up"]),
         (ProcessSearch, Accept, vec!["enter"]),
