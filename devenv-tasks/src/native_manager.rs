@@ -498,6 +498,24 @@ impl NativeProcessManager {
     }
 }
 
+/// How often the running manager bumps its PID file's mtime. The runtime
+/// directory may live under `/tmp`, where macOS `tmp_cleaner` deletes files
+/// untouched for 3 days.
+const PID_FILE_REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
+
+fn touch_pid_file(pid_file: &Path) {
+    // Never create the file: it is written once the manager is ready.
+    let result = std::fs::OpenOptions::new()
+        .write(true)
+        .open(pid_file)
+        .and_then(|file| file.set_modified(std::time::SystemTime::now()));
+    if let Err(error) = result
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        debug!(path = %pid_file.display(), %error, "failed to refresh manager pid file");
+    }
+}
+
 /// Owns the native manager's published Unix socket and accept loop.
 pub struct NativeApiServer {
     manager: Arc<NativeProcessManager>,
@@ -518,17 +536,22 @@ impl NativeApiServer {
         info!(path = %socket_path.display(), "API server listening");
 
         let accept_manager = Arc::clone(&manager);
+        let pid_file = manager.manager_pid_file();
         let task = tokio::spawn(async move {
+            let mut refresh = tokio::time::interval(PID_FILE_REFRESH_INTERVAL);
             loop {
-                match listener.accept().await {
-                    Ok((stream, _)) => {
-                        let manager = Arc::clone(&accept_manager);
-                        tokio::spawn(NativeProcessManager::handle_api_client(stream, manager));
-                    }
-                    Err(error) => {
-                        warn!(%error, "API accept error");
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                    }
+                tokio::select! {
+                    accepted = listener.accept() => match accepted {
+                        Ok((stream, _)) => {
+                            let manager = Arc::clone(&accept_manager);
+                            tokio::spawn(NativeProcessManager::handle_api_client(stream, manager));
+                        }
+                        Err(error) => {
+                            warn!(%error, "API accept error");
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
+                    },
+                    _ = refresh.tick() => touch_pid_file(&pid_file),
                 }
             }
         });
@@ -784,6 +807,36 @@ mod tests {
             &ProcessCommand::Restart("alpha".to_string()),
             &ProcessCommand::Stop("alpha".to_string()),
         ));
+    }
+
+    #[tokio::test]
+    async fn api_server_refreshes_manager_pid_file_mtime() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = test_manager(&temp_dir, Vec::new(), ManagerResidence::Daemon).await;
+        let pid_file = manager.manager_pid_file();
+        std::fs::write(&pid_file, std::process::id().to_string()).unwrap();
+        let stale = std::time::UNIX_EPOCH + Duration::from_secs(1_577_836_800);
+        std::fs::File::options()
+            .write(true)
+            .open(&pid_file)
+            .unwrap()
+            .set_modified(stale)
+            .unwrap();
+
+        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while std::fs::metadata(&pid_file).unwrap().modified().unwrap() == stale {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "pid file mtime was never refreshed"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(
+            std::fs::read_to_string(&pid_file).unwrap(),
+            std::process::id().to_string()
+        );
     }
 
     #[tokio::test]
