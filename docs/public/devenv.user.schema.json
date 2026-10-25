@@ -649,6 +649,13 @@
                 "$ref": "#/$defs/KeySequence"
               },
               "uniqueItems": true
+            },
+            "quit": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
             }
           },
           "additionalProperties": false,
