@@ -1171,7 +1171,7 @@ pub enum ProcessesCommand {
     },
 
     #[command(
-        about = "Attach to running processes and stream their status and logs until Ctrl-C, leaving them running."
+        about = "Attach to running processes and stream their status and logs until q or Ctrl-C, leaving them running."
     )]
     Attach {},
 

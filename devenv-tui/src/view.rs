@@ -2015,7 +2015,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
 
     if interrupt_prompt_active {
         if interrupt_prompt_attached {
-            // Attached to a running manager: Ctrl-C detaches (leaves processes
+            // Attached to a running manager: q or Ctrl-C detaches (leaves processes
             // running), `s` stops the whole manager, Esc keeps watching.
             let prompt_text = if terminal_width < 60 {
                 "Detach?"
@@ -2034,7 +2034,7 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                     Text(content: prompt_text, color: Color::Yellow, weight: Weight::Bold)
                 }
                 View(flex_direction: FlexDirection::Row, flex_shrink: 1.0, min_width: 0, overflow: Overflow::Hidden, margin_left: 2) {
-                    Text(content: "Ctrl-C", color: COLOR_INTERACTIVE)
+                    Text(content: "q/Ctrl-C", color: COLOR_INTERACTIVE)
                     Text(content: if compact { ":detach " } else { " detach • " })
                     Text(content: "s", color: COLOR_INTERACTIVE)
                     Text(content: if compact { ":stop " } else { " stop manager • " })
