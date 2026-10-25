@@ -1,0 +1,11 @@
+{
+  "name": "javascript-npm-concurrent",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "dep": "file:./dep"
+  },
+  "scripts": {
+    "postinstall": "echo ran >> installs.log && sleep 5"
+  }
+}
