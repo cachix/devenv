@@ -57,10 +57,11 @@ use devenv::{
     tui::{SessionIo, ShellSession},
 };
 use devenv_mailbox::{FrontendCommand, FrontendEvent};
+use devenv_nix_backend::project::{ProjectConfig, ProjectSource, UpdatePolicy, resolve_project};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{
     collections::BTreeMap,
-    env, fs,
+    env,
     io::{self, IsTerminal, Write},
     os, panic,
     path::{Path, PathBuf},
@@ -540,39 +541,18 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
     let nix_options = devenv_core::NixOptions::from(cli.nix_args);
     let refresh_fetchers = matches!(&command, Commands::Update { .. });
 
-    // Keep `path:` sources live. Relative refs resolve against the invocation
-    // directory, and Config::load_with_source reads their complete YAML graph.
-    let from_path = from_source
-        .as_deref()
-        .and_then(|from| from.strip_prefix("path:"))
-        .map(|path_str| {
-            let full_path = devenv_core::paths::resolve_against(
-                Path::new(path_str),
-                &env::current_dir().unwrap_or_default(),
-            );
-            fs::canonicalize(&full_path).unwrap_or(full_path)
-        });
-
     let input_overrides = InputOverrides::from(cli.input_overrides);
-    let mut project = devenv_nix_backend::project::ProjectConfig::new(".");
-    project.source_dir = from_path;
+    let mut project = ProjectConfig::new(".");
     project.input_overrides = input_overrides.override_inputs.clone();
-    if project.source_dir.is_none() {
-        project.source_input = from_source.as_ref().map(|from| devenv_core::config::Input {
-            url: Some(from.clone()),
-            flake: false,
-            ..Default::default()
-        });
-    }
+    project.source = from_source.as_deref().map(|reference| {
+        ProjectSource::from_reference(reference, &env::current_dir().unwrap_or_default())
+    });
     let update = match &command {
-        Commands::Update { name: Some(name) } => {
-            devenv_nix_backend::project::UpdatePolicy::Input(name)
-        }
-        Commands::Update { name: None } => devenv_nix_backend::project::UpdatePolicy::All,
-        _ => devenv_nix_backend::project::UpdatePolicy::Preserve,
+        Commands::Update { name: Some(name) } => UpdatePolicy::Input(name),
+        Commands::Update { name: None } => UpdatePolicy::All,
+        _ => UpdatePolicy::Preserve,
     };
-    let resolved =
-        devenv_nix_backend::project::resolve_project(&project, nix_options.clone(), update)?;
+    let resolved = resolve_project(&project, nix_options.clone(), update)?;
     resolved.config.check_version(crate_version!())?;
     resolved.write_lock()?;
     let config = resolved.config;
@@ -1943,6 +1923,7 @@ fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::fs;
     use std::sync::Mutex;
 
     static PROCESS_STATE_LOCK: Mutex<()> = Mutex::new(());

@@ -1,15 +1,16 @@
 //! Compose project configuration and its lock together, before evaluation.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use devenv_core::config::{Config, Input};
+use devenv_core::config::{Config, ConfigLoader, ConfigSource, Input};
 use devenv_core::{NixOptions, NixSettings, StoreSettings};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix_bindings_fetchers::FetchersSettings;
 use nix_bindings_flake::LockFile;
 
 use crate::anyhow_ext::AnyhowToMiette;
+use crate::source::MaterializedSource;
 
 const MAX_IMPORT_PASSES: usize = 100;
 
@@ -17,20 +18,50 @@ const MAX_IMPORT_PASSES: usize = 100;
 /// inputs and overrides, including inputs discovered in a later pass.
 pub struct ProjectConfig {
     pub root: PathBuf,
-    pub source_dir: Option<PathBuf>,
-    /// A fetched `--from` source, selected before composing its YAML inputs.
-    pub source_input: Option<Input>,
+    pub source: Option<ProjectSource>,
     pub input_overrides: Vec<String>,
     /// Programmatic inputs, such as the test runner's local devenv modules.
     pub extra_inputs: BTreeMap<String, Input>,
+}
+
+/// The source selected by `--from`. Local paths stay live; input references
+/// are locked and materialized before composing their YAML configuration.
+pub enum ProjectSource {
+    Local(PathBuf),
+    Input(Input),
+}
+
+impl ProjectSource {
+    /// Interpret a `--from` reference relative to the invocation directory.
+    /// `path:` references remain live instead of being copied into the store.
+    pub fn from_reference(reference: &str, base_dir: &Path) -> Self {
+        match reference.strip_prefix("path:") {
+            Some(path) => {
+                let path = devenv_core::paths::resolve_against(Path::new(path), base_dir);
+                Self::Local(path.canonicalize().unwrap_or(path))
+            }
+            None => Self::Input(Input {
+                url: Some(reference.into()),
+                flake: false,
+                ..Default::default()
+            }),
+        }
+    }
+}
+
+/// Discovery can encounter overrides for inputs declared by a later import.
+/// Once imports stabilize, every override must refer to a known input.
+#[derive(Clone, Copy)]
+enum LoadPhase {
+    Discover,
+    Validate,
 }
 
 impl ProjectConfig {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self {
             root: root.into(),
-            source_dir: None,
-            source_input: None,
+            source: None,
             input_overrides: Vec::new(),
             extra_inputs: BTreeMap::new(),
         }
@@ -39,23 +70,28 @@ impl ProjectConfig {
     fn load(
         &self,
         sources: &BTreeMap<String, PathBuf>,
-        source: Option<&crate::source::MaterializedSource>,
-        defer_unknown: bool,
+        source: Option<&MaterializedSource>,
+        phase: LoadPhase,
     ) -> Result<Config> {
-        let mut config = Config::load_from_with_source_root_and_input_sources(
-            &self.root,
-            source
-                .map(|source| source.path())
-                .or(self.source_dir.as_deref()),
-            source.map(|source| source.repository_root()),
-            sources,
-        )?;
+        let source = match (source, &self.source) {
+            (Some(source), _) => Some(ConfigSource::Fetched {
+                directory: source.path(),
+                repository_root: source.repository_root(),
+            }),
+            (None, Some(ProjectSource::Local(directory))) => Some(ConfigSource::Local(directory)),
+            _ => None,
+        };
+        let mut loader = ConfigLoader::new(&self.root).with_input_sources(sources);
+        if let Some(source) = source {
+            loader = loader.with_source(source);
+        }
+        let mut config = loader.load()?;
         if !self.input_overrides.len().is_multiple_of(2) {
             bail!("Input overrides must contain name/URL pairs");
         }
         for pair in self.input_overrides.chunks_exact(2) {
             let name = &pair[0];
-            if defer_unknown
+            if matches!(phase, LoadPhase::Discover)
                 && !config.inputs.contains_key(name)
                 && name != "nixpkgs"
                 && name != "devenv"
@@ -71,7 +107,7 @@ impl ProjectConfig {
         config.inputs.extend(self.extra_inputs.clone());
         // Preserve the source reference in the final lock, rather than its
         // materialized store path. Apply overrides before adding this input.
-        if let Some(input) = &self.source_input {
+        if let Some(ProjectSource::Input(input)) = &self.source {
             config.inputs.insert("from".into(), input.clone());
         }
         Ok(config)
@@ -126,13 +162,13 @@ pub fn resolve_project(
             )
         })?;
     let sources = BTreeMap::new();
-    let mut config = project.load(&sources, None, true)?;
-    if project.source_input.is_none()
+    let mut config = project.load(&sources, None, LoadPhase::Discover)?;
+    if !matches!(project.source, Some(ProjectSource::Input(_)))
         && config.input_import_names().is_empty()
         && matches!(update, UpdatePolicy::Preserve)
     {
         return Ok(ResolvedProject {
-            config: project.load(&sources, None, false)?,
+            config: project.load(&sources, None, LoadPhase::Validate)?,
             sources,
             lock: None,
             root: root.clone(),
@@ -148,7 +184,7 @@ pub fn resolve_project(
         .to_miette()
         .wrap_err("Failed to load lock file while composing project")?;
     let mut updated = BTreeSet::new();
-    let source = if let Some(input) = &project.source_input {
+    let source = if let Some(ProjectSource::Input(input)) = &project.source {
         let refresh_source = matches!(update, UpdatePolicy::All | UpdatePolicy::Input("from"));
         // An unrelated input update must not refresh the source's fetcher cache.
         let mut source_eval =
@@ -188,7 +224,7 @@ pub fn resolve_project(
         if refresh_source {
             updated.insert("from".into());
         }
-        config = project.load(&sources, Some(&source), true)?;
+        config = project.load(&sources, Some(&source), LoadPhase::Discover)?;
         Some(source)
     } else {
         None
@@ -244,7 +280,7 @@ pub fn resolve_project(
             .collect();
         let next_sources =
             crate::lock::input_paths_from_lock(&mut eval_state, &root, &import_names, &candidate)?;
-        let next = project.load(&next_sources, source.as_ref(), true)?;
+        let next = project.load(&next_sources, source.as_ref(), LoadPhase::Discover)?;
         let stable = next.inputs == config.inputs && next.imports == config.imports;
         if stable {
             if !pending_follows.is_empty() {
@@ -261,7 +297,7 @@ pub fn resolve_project(
                 bail!("Cannot update unknown input '{name}'");
             }
             return Ok(ResolvedProject {
-                config: project.load(&next_sources, source.as_ref(), false)?,
+                config: project.load(&next_sources, source.as_ref(), LoadPhase::Validate)?,
                 sources: next_sources,
                 lock: Some(candidate),
                 root: root.clone(),
