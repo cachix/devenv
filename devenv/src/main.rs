@@ -1144,6 +1144,7 @@ async fn run_backend(
         let shell = devenv.options().shell_settings.shell.clone();
         let shell_path = devenv.options().shell_settings.shell_path.clone();
         let prompt_prefix = devenv.options().shell_settings.prompt_prefix;
+        let profiles = devenv.options().shell_settings.profiles.clone();
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
         // Load dotenv after enterShell tasks so a task that creates or updates the
@@ -1161,6 +1162,7 @@ async fn run_backend(
             shell,
             shell_path,
             prompt_prefix,
+            profiles,
             dotfile,
             task_exports,
             task_messages,
@@ -1741,6 +1743,7 @@ struct ReloadShellArgs {
     shell: String,
     shell_path: Option<std::path::PathBuf>,
     prompt_prefix: bool,
+    profiles: Vec<String>,
     dotfile: std::path::PathBuf,
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
@@ -1771,6 +1774,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell,
         shell_path,
         prompt_prefix,
+        profiles,
         dotfile,
         task_exports,
         task_messages,
@@ -1796,6 +1800,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell,
         shell_path,
         prompt_prefix,
+        profiles,
         shell_cwd,
         shell_keybindings,
     };

@@ -118,10 +118,10 @@ exit 1
         Self::nu_config_dir().map(|d| d.join("config.nu"))
     }
 
-    fn prompt_prefix(&self) -> &str {
+    fn prompt_prefix(&self, _profiles: &[String]) -> String {
         // Nushell prompt is set via $env.PROMPT_COMMAND; the actual prefix
         // is applied in the generated config.nu via write_init_files.
-        ""
+        String::new()
     }
 
     fn format_task_exports(&self, exports: &BTreeMap<String, String>) -> String {
@@ -339,7 +339,7 @@ $env.PATH = ($env._DEVENV_PATH | split row ":")
 # Save the original prompt command before overriding, then wrap it.
 if {prompt_prefix} {{
     let _devenv_original_prompt = (if "PROMPT_COMMAND" in $env {{ $env.PROMPT_COMMAND }} else {{ {{|| ""}} }})
-    $env.PROMPT_COMMAND = {{|| "(devenv) " + (do $_devenv_original_prompt) }}
+    $env.PROMPT_COMMAND = {{|| "{prompt_label} " + (do $_devenv_original_prompt) }}
 }}
 
 # Hot-reload hook
@@ -347,6 +347,7 @@ if {prompt_prefix} {{
 "#,
             user_config_source = user_config_source,
             prompt_prefix = ctx.prompt_prefix,
+            prompt_label = super::prompt_label(ctx.profiles),
             reload_code = reload_code,
         );
 

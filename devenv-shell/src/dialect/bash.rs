@@ -108,9 +108,9 @@ set -o history
             env_script_path = ctx.env_script_path.to_string_lossy(),
             reload_hook = ctx.reload_hook,
             prompt_prefix = if ctx.prompt_prefix {
-                self.prompt_prefix()
+                self.prompt_prefix(ctx.profiles)
             } else {
-                ""
+                String::new()
             },
         )
     }
@@ -306,8 +306,15 @@ fi
         std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".bashrc"))
     }
 
-    fn prompt_prefix(&self) -> &str {
-        r#"PS1="(devenv) ${PS1:-}""#
+    fn prompt_prefix(&self, profiles: &[String]) -> String {
+        // Strip an existing devenv label (e.g. from an inherited PS1) so the
+        // prefix is never stacked.
+        format!(
+            r#"_devenv_ps1="${{PS1:-}}"
+PS1="{} ${{_devenv_ps1#"(devenv"*") "}}"
+unset _devenv_ps1"#,
+            super::prompt_label(profiles)
+        )
     }
 
     fn format_task_exports(&self, exports: &BTreeMap<String, String>) -> String {

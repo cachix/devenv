@@ -157,8 +157,13 @@ zle -N __devenv_reload_widget
         std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".zshrc"))
     }
 
-    fn prompt_prefix(&self) -> &str {
-        r#"PROMPT="(devenv) ${PROMPT}""#
+    fn prompt_prefix(&self, profiles: &[String]) -> String {
+        // Strip an existing devenv label (e.g. from an inherited PROMPT) so
+        // the prefix is never stacked.
+        format!(
+            r#"PROMPT="{} ${{PROMPT#"(devenv"*") "}}""#,
+            super::prompt_label(profiles)
+        )
     }
 
     fn format_task_exports(&self, exports: &BTreeMap<String, String>) -> String {
@@ -190,9 +195,9 @@ zle -N __devenv_reload_widget
 
         let reload_hook = ctx.reload_hook;
         let prompt_prefix = if ctx.prompt_prefix {
-            self.prompt_prefix()
+            self.prompt_prefix(ctx.profiles)
         } else {
-            ""
+            String::new()
         };
 
         let zshenv_content = r#"# devenv zsh .zshenv - runs before /etc/zshrc.

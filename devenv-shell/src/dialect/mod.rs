@@ -41,8 +41,9 @@ pub trait ShellDialect: Send + Sync {
     /// Path to the user's shell rc file (e.g., ~/.bashrc, ~/.zshrc).
     fn user_rcfile(&self) -> Option<PathBuf>;
 
-    /// Generate a shell-specific PS1/prompt prefix for "(devenv)".
-    fn prompt_prefix(&self) -> &str;
+    /// Generate a shell-specific PS1/prompt prefix for "(devenv)", listing
+    /// any active profiles (see [`prompt_label`]).
+    fn prompt_prefix(&self, profiles: &[String]) -> String;
 
     /// Format task exports as shell export statements.
     ///
@@ -83,6 +84,33 @@ pub fn create_dialect(shell_name: &str) -> Box<dyn ShellDialect> {
             Box::new(BashDialect)
         }
     }
+}
+
+/// Label shown in the shell prompt: `(devenv)`, or `(devenv > a, b)` when
+/// profiles are active.
+///
+/// The label is spliced into shell source and prompt strings, so characters
+/// outside a conservative set are replaced to rule out quoting and
+/// prompt-expansion issues (`$`, `%`, `\`, quotes, ...).
+pub fn prompt_label(profiles: &[String]) -> String {
+    if profiles.is_empty() {
+        return "(devenv)".to_string();
+    }
+    let names: Vec<String> = profiles
+        .iter()
+        .map(|name| {
+            name.chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '+' | '@' | ':' | '/') {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    format!("(devenv > {})", names.join(", "))
 }
 
 /// Return `$XDG_CONFIG_HOME`, falling back to `$HOME/.config`.
@@ -219,6 +247,8 @@ pub struct RcfileContext<'a> {
     pub shell_keybindings: &'a ShellKeybindings,
     /// Whether to add the devenv prompt prefix.
     pub prompt_prefix: bool,
+    /// Active profiles, listed in the prompt prefix.
+    pub profiles: &'a [String],
 }
 
 #[cfg(test)]
@@ -352,6 +382,53 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
     }
 
     #[test]
+    fn prompt_label_lists_profiles() {
+        assert_eq!(prompt_label(&[]), "(devenv)");
+        assert_eq!(prompt_label(&["dev".into()]), "(devenv > dev)");
+        assert_eq!(
+            prompt_label(&["backend".into(), "fast-startup".into()]),
+            "(devenv > backend, fast-startup)"
+        );
+        // Characters with meaning in shell source or prompt strings are replaced.
+        assert_eq!(
+            prompt_label(&["a$(id)`b`%n\\\"'".into()]),
+            "(devenv > a__id__b__n___)"
+        );
+    }
+
+    #[test]
+    fn prompt_prefix_is_not_stacked() {
+        for (shell, var, args) in [("bash", "PS1", "--norc"), ("zsh", "PROMPT", "-f")] {
+            if Command::new(shell).arg("--version").output().is_err() {
+                eprintln!("skipping prompt test: {shell} is unavailable");
+                continue;
+            }
+            let dialect = create_dialect(shell);
+            // Simulate an inherited prompt that already carries a devenv label,
+            // then apply the prefix twice (e.g. a nested or respawned shell).
+            let script = format!(
+                "{var}='(devenv > old) custom> '\n{first}\n{second}\nprintf '%s' \"${var}\"",
+                first = dialect.prompt_prefix(&["a".into(), "b".into()]),
+                second = dialect.prompt_prefix(&["c".into()]),
+            );
+            let output = Command::new(shell)
+                .args([args, "-c", &script])
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{shell}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                "(devenv > c) custom> ",
+                "{shell}"
+            );
+        }
+    }
+
+    #[test]
     fn prompt_setting_preserves_user_prompts() {
         for shell in ["bash", "zsh", "fish", "nu"] {
             if Command::new(shell).arg("--version").output().is_err() {
@@ -364,7 +441,11 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             std::fs::write(tmp.join(".bashrc"), "PS1='custom> '\n").unwrap();
             std::fs::write(tmp.join(".zshrc"), "PROMPT='custom> '\n").unwrap();
 
-            for prompt_prefix in [true, false] {
+            let profile_sets: [&[String]; 2] = [&[], &["backend".into(), "fast".into()]];
+            for (prompt_prefix, profiles) in [true, false]
+                .into_iter()
+                .flat_map(|p| profile_sets.map(|profiles| (p, profiles)))
+            {
                 let ctx = RcfileContext {
                     env_script_path: Path::new("/dev/null"),
                     env_diff_helpers: dialect.env_diff_helpers(),
@@ -373,6 +454,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
                     init_dir: &tmp,
                     shell_keybindings: &shell_keybindings,
                     prompt_prefix,
+                    profiles,
                 };
                 dialect.write_init_files(&ctx).unwrap();
                 let script = match shell {
@@ -431,12 +513,16 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
                     "{shell}: {}",
                     String::from_utf8_lossy(&output.stderr)
                 );
-                let prefix = if prompt_prefix { "(devenv) " } else { "" };
+                let prefix = match (prompt_prefix, profiles.is_empty()) {
+                    (false, _) => "",
+                    (true, true) => "(devenv) ",
+                    (true, false) => "(devenv > backend, fast) ",
+                };
                 let user_prompt = if shell == "fish" { "> " } else { "custom> " };
                 assert_eq!(
                     String::from_utf8_lossy(&output.stdout),
                     format!("{prefix}{user_prompt}"),
-                    "{shell}, prompt_prefix={prompt_prefix}"
+                    "{shell}, prompt_prefix={prompt_prefix}, profiles={profiles:?}"
                 );
             }
             let _ = std::fs::remove_dir_all(tmp);
@@ -458,6 +544,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             init_dir: &tmp,
             shell_keybindings: &shell_keybindings,
             prompt_prefix: false,
+            profiles: &[],
         };
         FishDialect.write_init_files(&ctx).unwrap();
         let script = format!(
@@ -565,6 +652,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             init_dir: &tmp,
             shell_keybindings: &shell_keybindings,
             prompt_prefix: true,
+            profiles: &[],
         };
         NushellDialect.write_init_files(&ctx).unwrap();
         let config = std::fs::read_to_string(tmp.join("nu/config.nu")).unwrap();
@@ -609,6 +697,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             init_dir: &tmp,
             shell_keybindings: &shell_keybindings,
             prompt_prefix: false,
+            profiles: &[],
         };
         NushellDialect.write_init_files(&ctx).unwrap();
         let config_nu = tmp.join("nu/config.nu");
@@ -678,6 +767,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             init_dir: &tmp,
             shell_keybindings: &shell_keybindings,
             prompt_prefix: true,
+            profiles: &[],
         };
         let rcfile_path = tmp.join("rcfile.sh");
         std::fs::write(&rcfile_path, BashDialect.rcfile_content(&ctx)).unwrap();
@@ -743,6 +833,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             init_dir: &init_dir,
             shell_keybindings: &shell_keybindings,
             prompt_prefix: true,
+            profiles: &[],
         };
         ZshDialect.write_init_files(&ctx).unwrap();
         let zsh_dir = init_dir.join("zsh");
@@ -800,6 +891,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             init_dir: &init_dir,
             shell_keybindings: &shell_keybindings,
             prompt_prefix: true,
+            profiles: &[],
         };
         FishDialect.write_init_files(&ctx).unwrap();
         let devenv_fish = init_dir.join("devenv.fish");
@@ -859,6 +951,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
             init_dir: &init_dir,
             shell_keybindings: &shell_keybindings,
             prompt_prefix: true,
+            profiles: &[],
         };
         NushellDialect.write_init_files(&ctx).unwrap();
         let config_nu = init_dir.join("nu").join("config.nu");
@@ -951,6 +1044,7 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
                 init_dir: &tmp,
                 shell_keybindings: &shell_keybindings,
                 prompt_prefix: false,
+                profiles: &[],
             };
 
             NushellDialect.write_init_files(&ctx).unwrap();
