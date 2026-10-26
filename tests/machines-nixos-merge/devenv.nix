@@ -1,3 +1,4 @@
+{ pkgs, ... }:
 {
   imports = [
     {
@@ -15,7 +16,7 @@
   ];
 
   machines.server = {
-    system = "x86_64-linux";
+    system = pkgs.stdenv.hostPlatform.system;
     hardware.facter = null;
     nixos = {
       services.openssh.enable = true;
