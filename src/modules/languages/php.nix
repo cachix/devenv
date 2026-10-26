@@ -340,7 +340,7 @@ in
         ''}
       '';
 
-      packages = with pkgs; [
+      packages = [
         cfg.package
       ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer
       ++ lib.optional cfg.lsp.enable cfg.lsp.package;
