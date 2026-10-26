@@ -19,6 +19,7 @@ use nix_bindings_flake::{EvalStateBuilderExt, FlakeSettings, LockFile};
 use nix_bindings_store::store::Store;
 
 use crate::anyhow_ext::AnyhowToMiette;
+use crate::source::{MaterializedSource, select_source_path};
 
 const LOCK_SOURCES: &str = include_str!("../bootstrap/lock-sources.nix");
 const RESOLVE_INPUT_PATHS: &str = include_str!("../bootstrap/resolve-input-paths.nix");
@@ -125,7 +126,12 @@ pub fn input_paths(
     let lock_json = std::fs::read_to_string(&lock_path)
         .into_diagnostic()
         .wrap_err_with(|| format!("Failed to read {}", lock_path.display()))?;
-    input_paths_from_json(eval_state, root, names, &lock_json)
+    Ok(
+        input_sources_from_json(eval_state, root, names, &lock_json)?
+            .into_iter()
+            .map(|(name, source)| (name, source.path().to_path_buf()))
+            .collect(),
+    )
 }
 
 pub(crate) fn input_paths_from_lock(
@@ -134,19 +140,33 @@ pub(crate) fn input_paths_from_lock(
     names: &BTreeSet<String>,
     lock_file: &LockFile,
 ) -> Result<BTreeMap<String, PathBuf>> {
+    Ok(input_sources_from_lock(eval_state, root, names, lock_file)?
+        .into_iter()
+        .map(|(name, source)| (name, source.path().to_path_buf()))
+        .collect())
+}
+
+/// Materialize inputs through the same source resolver used by Nix evaluation,
+/// retaining repository roots for source-relative YAML imports.
+pub(crate) fn input_sources_from_lock(
+    eval_state: &mut EvalState,
+    root: &Path,
+    names: &BTreeSet<String>,
+    lock_file: &LockFile,
+) -> Result<BTreeMap<String, MaterializedSource>> {
     let lock_json = lock_file
         .to_string()
         .to_miette()
         .wrap_err("Failed to serialize composed lock file")?;
-    input_paths_from_json(eval_state, root, names, &lock_json)
+    input_sources_from_json(eval_state, root, names, &lock_json)
 }
 
-fn input_paths_from_json(
+fn input_sources_from_json(
     eval_state: &mut EvalState,
     root: &Path,
     names: &BTreeSet<String>,
     lock_json: &str,
-) -> Result<BTreeMap<String, PathBuf>> {
+) -> Result<BTreeMap<String, MaterializedSource>> {
     if names.is_empty() {
         return Ok(BTreeMap::new());
     }
@@ -182,20 +202,21 @@ fn input_paths_from_json(
         .to_miette()
         .wrap_err("Failed to read imported input sources")?
         .s;
-    let paths: BTreeMap<String, PathBuf> = serde_json::from_str(&json)
+    #[derive(serde::Deserialize)]
+    struct SourceLocation {
+        repository_root: PathBuf,
+        dir: String,
+    }
+    let locations: BTreeMap<String, SourceLocation> = serde_json::from_str(&json)
         .into_diagnostic()
         .wrap_err("Failed to parse imported input sources")?;
 
-    paths
+    locations
         .into_iter()
-        .map(|(name, path)| {
-            let path = path.canonicalize().into_diagnostic().wrap_err_with(|| {
-                format!(
-                    "Failed to canonicalize source for imported input '{name}': {}",
-                    path.display()
-                )
-            })?;
-            Ok((name, path))
+        .map(|(name, location)| {
+            let source = select_source_path(&location.repository_root, Some(&location.dir))
+                .wrap_err_with(|| format!("Invalid source for imported input '{name}'"))?;
+            Ok((name, source))
         })
         .collect()
 }

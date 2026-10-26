@@ -184,7 +184,7 @@ pub fn lock_source_input(
     fetch_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
     root: &Path,
-    lock_file_path: &Path,
+    old_lock: Option<&LockFile>,
     source_input: &Input,
     refresh: bool,
 ) -> Result<LockFile> {
@@ -197,30 +197,20 @@ pub fn lock_source_input(
     let mut flake_inputs = FlakeInputs::new()?;
     flake_inputs.add("from", source_input)?;
 
-    let old_lock =
-        load_lock_file(fetch_settings, lock_file_path).context("Failed to load lock file")?;
-    let source_path = root.join("devenv.nix");
-    let source_path_str = source_path
-        .to_str()
-        .context("Source path contains invalid UTF-8")?;
-
-    let mut locker = InputsLocker::new(flake_settings)
-        .with_inputs(flake_inputs)
-        .source_path(source_path_str)
-        .mode(LockMode::Virtual)
-        .use_registries(true);
-
-    if let Some(lock) = &old_lock {
-        locker = locker.old_lock_file(lock);
-    }
-    if refresh {
-        locker = locker.update_input("from");
-    }
-
-    let _guard = crate::umask_guard::UmaskGuard::restrictive();
-    locker
-        .lock(fetch_settings, eval_state)
-        .context("Failed to lock source input")
+    let updates = if refresh {
+        vec!["from".into()]
+    } else {
+        Vec::new()
+    };
+    lock_flake_inputs(
+        eval_state,
+        fetch_settings,
+        flake_settings,
+        root,
+        flake_inputs,
+        old_lock,
+        &updates,
+    )
 }
 
 /// Load an existing lock file if it exists
@@ -413,6 +403,28 @@ pub(crate) fn resolve_lock_file(
 ) -> Result<LockFile> {
     let flake_inputs = create_flake_inputs(fetch_settings, flake_settings, inputs)
         .context("Failed to create flake inputs")?;
+    lock_flake_inputs(
+        eval_state,
+        fetch_settings,
+        flake_settings,
+        root,
+        flake_inputs,
+        old_lock,
+        updates,
+    )
+}
+
+/// Lock an explicit set of flake inputs. Default project inputs are supplied
+/// by the caller so source discovery can lock only `from`.
+fn lock_flake_inputs(
+    eval_state: &EvalState,
+    fetch_settings: &FetchersSettings,
+    flake_settings: &FlakeSettings,
+    root: &Path,
+    flake_inputs: FlakeInputs,
+    old_lock: Option<&LockFile>,
+    updates: &[String],
+) -> Result<LockFile> {
     let source_path = root.join("devenv.nix");
     let source_path_str = source_path
         .to_str()

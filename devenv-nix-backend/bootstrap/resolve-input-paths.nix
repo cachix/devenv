@@ -21,7 +21,14 @@ else
       else
         {
           inherit name;
-          value = toString (sources.nodePath (sources.resolveInput rootInputs.${name}));
+          value =
+            let
+              source = sources.nodeSource (sources.resolveInput rootInputs.${name});
+            in
+            {
+              repository_root = toString source.repository_root;
+              inherit (source) dir;
+            };
         }
     ) names
   )

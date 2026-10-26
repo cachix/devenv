@@ -588,3 +588,76 @@ async fn fetched_from_source_preserves_and_updates_the_composed_revision() {
         input_node(&fixture.lock_contents(), "from")
     );
 }
+
+#[nix_test]
+async fn fetched_from_source_rejects_a_file_as_its_directory() {
+    let mut fixture = Fixture::new();
+    fixture.project.source_input = Some(devenv_core::config::Input {
+        url: Some(format!(
+            "{}?dir=devenv.yaml",
+            fixture.daemon.url(fixture.shared.path())
+        )),
+        flake: false,
+        ..Default::default()
+    });
+
+    let error = resolve_project(
+        &fixture.project,
+        NixOptions::default(),
+        UpdatePolicy::Preserve,
+    )
+    .err()
+    .expect("a --from source must select a directory");
+    assert!(error.to_string().contains("not a directory"), "{error:?}");
+    assert!(!fixture.project_dir.path().join("devenv.lock").exists());
+}
+
+#[nix_test]
+async fn fetched_from_source_reuses_cached_source_without_its_remote() {
+    let mut fixture = Fixture::new();
+    fixture.project.source_input = Some(devenv_core::config::Input {
+        url: Some(fixture.daemon.url(fixture.shared.path())),
+        flake: false,
+        ..Default::default()
+    });
+    fixture.write(&fixture.resolve(UpdatePolicy::Preserve));
+    let before = fixture.lock_contents();
+    fixture.daemon.child.kill().unwrap();
+    fixture.daemon.child.wait().unwrap();
+
+    // Expire fetcher caches so source reuse depends on the pinned source
+    // metadata and store contents, rather than a still-fresh remote cache.
+    let options = NixOptions {
+        nix_options: vec!["tarball-ttl".into(), "0".into()],
+        ..Default::default()
+    };
+    let resolved = resolve_project(&fixture.project, options, UpdatePolicy::Preserve)
+        .expect("load the cached source while its Git server is unavailable");
+    assert_eq!(resolved.config.reload, Some(false));
+    fixture.write(&resolved);
+    assert_eq!(fixture.lock_contents(), before);
+}
+
+#[nix_test]
+async fn file_input_imports_remain_supported() {
+    let fixture = Fixture::new();
+    let module = fixture.project_dir.path().join("module.nix");
+    fs::write(&module, "{}\n").unwrap();
+    let yaml = fixture.project_dir.path().join("devenv.yaml");
+    let config = fs::read_to_string(&yaml)
+        .unwrap()
+        .replace(
+            "inputs:\n",
+            "inputs:\n  module:\n    url: path:./module.nix\n    flake: false\n",
+        )
+        .replace("imports:\n", "imports:\n  - module\n");
+    fs::write(yaml, config).unwrap();
+
+    let resolved = fixture.resolve(UpdatePolicy::Preserve);
+    assert!(resolved.sources["module"].is_file());
+    assert_eq!(
+        fs::read_to_string(&resolved.sources["module"]).unwrap(),
+        "{}\n"
+    );
+    assert!(resolved.config.imports.contains(&"module".into()));
+}

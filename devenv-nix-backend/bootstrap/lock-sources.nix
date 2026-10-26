@@ -102,14 +102,22 @@ let
         (resolveInput lockFile.nodes.${nodeName}.inputs.${builtins.head path})
         (builtins.tail path);
 
-in
-{
-  inherit sourceInfo resolveInput;
-  nodePath =
+  nodeSource =
     key:
     let
       node = lockFile.nodes.${key};
-      subdir = if key == lockFile.root then "" else node.locked.dir or "";
     in
-    (sourceInfo key node).outPath + (if subdir == "" then "" else "/${subdir}");
+    {
+      repository_root = (sourceInfo key node).outPath;
+      dir = if key == lockFile.root then "" else node.locked.dir or "";
+    };
+in
+{
+  inherit sourceInfo resolveInput nodeSource;
+  nodePath =
+    key:
+    let
+      source = nodeSource key;
+    in
+    source.repository_root + (if source.dir == "" then "" else "/${source.dir}");
 }

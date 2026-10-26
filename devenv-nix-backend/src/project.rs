@@ -45,7 +45,7 @@ impl ProjectConfig {
         let mut config = Config::load_from_with_source_root_and_input_sources(
             &self.root,
             source
-                .map(|source| source.directory())
+                .map(|source| source.path())
                 .or(self.source_dir.as_deref()),
             source.map(|source| source.repository_root()),
             sources,
@@ -158,13 +158,27 @@ pub fn resolve_project(
             &fetchers_settings,
             &flake_settings,
             &root,
-            &root.join("devenv.lock"),
+            baseline.as_ref(),
             input,
             refresh_source,
         )
         .to_miette()
         .wrap_err("Failed to lock the source input")?;
-        let source = crate::source::materialize_source(&mut source_eval, &root, &source_lock)?;
+        let mut source_paths = crate::lock::input_sources_from_lock(
+            &mut source_eval,
+            &root,
+            &BTreeSet::from(["from".into()]),
+            &source_lock,
+        )?;
+        let source = source_paths
+            .remove("from")
+            .ok_or_else(|| miette::miette!("Resolved source input 'from' is missing"))?;
+        if !source.path().is_dir() {
+            bail!(
+                "The selected source path is not a directory: {}",
+                source.path().display()
+            );
+        }
         baseline = Some(retain_missing_pins(
             &fetchers_settings,
             baseline.as_ref(),
