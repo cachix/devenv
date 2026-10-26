@@ -2,7 +2,9 @@
 set -euo pipefail
 
 fixture=$(mktemp -d)
-trap 'rm -rf "$fixture"' EXIT
+cache_dir="$DEVENV_STATE/locked-input-cache"
+cache_url=${CACHE_URL:?CACHE_URL is not set}
+trap 'rm -rf "$fixture" "$cache_dir"' EXIT
 mkdir "$fixture/source" "$fixture/project"
 cat > "$fixture/source/devenv.nix" <<'EOF'
 {
@@ -13,8 +15,7 @@ EOF
 printf '%s\n' "$fixture" > "$fixture/source/nonce"
 source_path=$(nix --extra-experimental-features nix-command store add-path --name source "$fixture/source")
 nar_hash=$(nix --extra-experimental-features nix-command hash path "$fixture/source")
-cache_url="file://$fixture/cache"
-nix --extra-experimental-features nix-command copy --to "$cache_url" "$source_path"
+nix --extra-experimental-features nix-command copy --to "file://$cache_dir" "$source_path"
 nix-store --delete "$source_path"
 if nix --extra-experimental-features nix-command path-info "$source_path"; then
     echo "Test source unexpectedly remains in the local store" >&2
@@ -53,7 +54,7 @@ devenv --no-eval-cache --nix-option extra-substituters "$cache_url" shell bash -
 nix-store --check-validity "$source_path"
 
 # With the cache removed, a fresh evaluation must reuse the local store copy.
-mv "$fixture/cache" "$fixture/cache-unavailable"
+mv "$cache_dir" "$fixture/cache-unavailable"
 # shellcheck disable=SC2016
 devenv --no-eval-cache shell bash -- -c \
     'test "$CACHED_INPUT" = "from binary cache"'
