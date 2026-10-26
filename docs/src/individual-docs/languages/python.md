@@ -37,9 +37,6 @@ Under the hood, this pulls the Python build from [nixpkgs-python](https://github
 inputs:
   nixpkgs-python:
     url: github:cachix/nixpkgs-python
-    inputs:
-      nixpkgs:
-        follows: nixpkgs
 ```
 
 If you don't need a specific version, you can skip this — devenv uses the default Python 3 from nixpkgs.
