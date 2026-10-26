@@ -11,6 +11,7 @@
 
 ### Bug Fixes
 
+- Fetched `--from` sources now load YAML configuration, local overrides, and YAML imports alongside their Nix modules. Source-local YAML imports are followed, and relative input overrides in the target's `devenv.local.yaml` resolve from the target directory.
 - Locked inputs with complete source metadata now reuse sources from the Nix store or configured binary caches without contacting their original remote, so `devenv shell` works when that remote is unavailable ([#3244](https://github.com/cachix/devenv/pull/3244)).
 - Fixed cold remote YAML imports failing to load fetched sources, and allowed root input follows to reference inputs declared by imported YAML.
 - Fixed remote YAML discovery resolving relative local inputs from the filesystem root instead of the project directory.
@@ -79,10 +80,6 @@
 ### Bug Fixes
 
 - Fixed `devenv shell` intermittently failing with a treefmt error such as `failed to stat <file>: no such file or directory` when `treefmt.enable = true` and the project has files managed by devenv. The tree-wide formatter now runs after devenv has written those files, and a file with `copyMode = "copy"` is replaced atomically, so tools that walk the project never see it missing.
-
-### Bug Fixes
-
-- Fixed fetched `--from` sources loading only `devenv.nix`. They now also load the source's complete YAML configuration and imports.
 
 ## 2.3.0 (2026-09-07)
 

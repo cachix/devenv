@@ -473,3 +473,118 @@ fn unknown_overrides_fail_without_creating_a_lock() {
     assert!(resolve_project(&project, NixOptions::default(), UpdatePolicy::Preserve).is_err());
     assert!(!dir.path().join("devenv.lock").exists());
 }
+
+#[nix_test]
+async fn fetched_from_source_composes_local_and_input_imports() {
+    let mut fixture = Fixture::new();
+    let profile = fixture.shared.path().join("profiles/backend");
+    let extra = profile.join("extra");
+    fs::create_dir_all(&extra).unwrap();
+    fs::write(profile.join("devenv.nix"), "{}\n").unwrap();
+    fs::write(extra.join("devenv.nix"), "{}\n").unwrap();
+    fs::write(extra.join("devenv.yaml"), "strict_ports: false\n").unwrap();
+    fs::write(
+        profile.join("devenv.yaml"),
+        format!(
+            "inputs:\n  remote:\n    url: {}\n    flake: false\nimports:\n  - remote\n",
+            fixture.daemon.url(fixture.replacement.path())
+        ),
+    )
+    .unwrap();
+    fs::write(profile.join("devenv.local.yaml"), "imports:\n  - ./extra\n").unwrap();
+    fs::write(
+        fixture.replacement.path().join("devenv.yaml"),
+        "reload: false\n",
+    )
+    .unwrap();
+    commit(fixture.replacement.path());
+    commit(fixture.shared.path());
+    fixture.project.source_input = Some(devenv_core::config::Input {
+        url: Some(format!(
+            "{}?dir=profiles/backend",
+            fixture.daemon.url(fixture.shared.path())
+        )),
+        flake: false,
+        ..Default::default()
+    });
+    let dependency_url = fixture.daemon.url(fixture.dependency.path());
+    fs::write(
+        fixture.project_dir.path().join("devenv.yaml"),
+        format!(
+            "inputs:\n  nixpkgs:\n    url: {dependency_url}\n  devenv:\n    url: {dependency_url}\n"
+        ),
+    )
+    .unwrap();
+
+    let resolved = fixture.resolve(UpdatePolicy::Preserve);
+    assert_eq!(resolved.config.reload, Some(false));
+    assert_eq!(resolved.config.strict_ports, Some(false));
+    assert!(resolved.sources.contains_key("remote"));
+    assert!(resolved.config.imports.iter().any(|import| {
+        import.starts_with("path:") && import.ends_with("/profiles/backend/extra")
+    }));
+    assert!(!fixture.project_dir.path().join("devenv.lock").exists());
+    fixture.write(&resolved);
+    assert_eq!(
+        input_node(&fixture.lock_contents(), "from")["original"]["dir"],
+        "profiles/backend"
+    );
+}
+
+#[nix_test]
+async fn fetched_from_source_preserves_and_updates_the_composed_revision() {
+    let mut fixture = Fixture::new();
+    let dependency_url = fixture.daemon.url(fixture.dependency.path());
+    fixture.project.source_input = Some(devenv_core::config::Input {
+        url: Some(fixture.daemon.url(fixture.shared.path())),
+        flake: false,
+        ..Default::default()
+    });
+    // Only the source knows the default inputs. Resolve it before locking
+    // the complete configuration, rather than fetching unrelated defaults.
+    fs::write(fixture.project_dir.path().join("devenv.yaml"), "{}\n").unwrap();
+    fixture.set_shared(&format!(
+        "reload: false\ninputs:\n  nixpkgs:\n    url: {dependency_url}\n  devenv:\n    url: {dependency_url}\n  unrelated:\n    url: {dependency_url}\n"
+    ));
+    fixture.write(&fixture.resolve(UpdatePolicy::Preserve));
+    let before = fixture.lock_contents();
+    assert!(input_node(&before, "from")["locked"]["rev"].is_string());
+
+    common::bump_local_flake(fixture.dependency.path(), "updated dependency");
+    fixture.set_shared(&format!(
+        "reload: true\ninputs:\n  nixpkgs:\n    url: {dependency_url}\n  devenv:\n    url: {dependency_url}\n  unrelated:\n    url: {dependency_url}\n  added:\n    url: {}\n",
+        fixture.daemon.url(fixture.replacement.path())
+    ));
+    for policy in [UpdatePolicy::Preserve, UpdatePolicy::Input("unrelated")] {
+        let resolved = fixture.resolve(policy);
+        assert_eq!(resolved.config.reload, Some(false));
+        assert!(!resolved.config.inputs.contains_key("added"));
+        fixture.write(&resolved);
+        assert_eq!(
+            input_node(&before, "from"),
+            input_node(&fixture.lock_contents(), "from")
+        );
+    }
+    let unrelated = input_node(&fixture.lock_contents(), "unrelated");
+    let updated = fixture.resolve(UpdatePolicy::Input("from"));
+    assert_eq!(updated.config.reload, Some(true));
+    assert!(updated.config.inputs.contains_key("added"));
+    fixture.write(&updated);
+    let after = fixture.lock_contents();
+    assert_ne!(input_node(&before, "from"), input_node(&after, "from"));
+    assert_eq!(unrelated, input_node(&after, "unrelated"));
+    fixture.write(&fixture.resolve(UpdatePolicy::Preserve));
+    assert_eq!(fixture.lock_contents(), after);
+
+    fixture.set_shared(&format!(
+        "reload: false\ninputs:\n  nixpkgs:\n    url: {dependency_url}\n  devenv:\n    url: {dependency_url}\n"
+    ));
+    let updated = fixture.resolve(UpdatePolicy::All);
+    assert_eq!(updated.config.reload, Some(false));
+    assert!(!updated.config.inputs.contains_key("added"));
+    fixture.write(&updated);
+    assert_ne!(
+        input_node(&after, "from"),
+        input_node(&fixture.lock_contents(), "from")
+    );
+}

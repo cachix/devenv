@@ -18,6 +18,8 @@ const MAX_IMPORT_PASSES: usize = 100;
 pub struct ProjectConfig {
     pub root: PathBuf,
     pub source_dir: Option<PathBuf>,
+    /// A fetched `--from` source, selected before composing its YAML inputs.
+    pub source_input: Option<Input>,
     pub input_overrides: Vec<String>,
     /// Programmatic inputs, such as the test runner's local devenv modules.
     pub extra_inputs: BTreeMap<String, Input>,
@@ -28,15 +30,24 @@ impl ProjectConfig {
         Self {
             root: root.into(),
             source_dir: None,
+            source_input: None,
             input_overrides: Vec::new(),
             extra_inputs: BTreeMap::new(),
         }
     }
 
-    fn load(&self, sources: &BTreeMap<String, PathBuf>, defer_unknown: bool) -> Result<Config> {
-        let mut config = Config::load_from_with_source_and_input_sources(
+    fn load(
+        &self,
+        sources: &BTreeMap<String, PathBuf>,
+        source: Option<&crate::source::MaterializedSource>,
+        defer_unknown: bool,
+    ) -> Result<Config> {
+        let mut config = Config::load_from_with_source_root_and_input_sources(
             &self.root,
-            self.source_dir.as_deref(),
+            source
+                .map(|source| source.directory())
+                .or(self.source_dir.as_deref()),
+            source.map(|source| source.repository_root()),
             sources,
         )?;
         if !self.input_overrides.len().is_multiple_of(2) {
@@ -58,6 +69,11 @@ impl ProjectConfig {
                 })?;
         }
         config.inputs.extend(self.extra_inputs.clone());
+        // Preserve the source reference in the final lock, rather than its
+        // materialized store path. Apply overrides before adding this input.
+        if let Some(input) = &self.source_input {
+            config.inputs.insert("from".into(), input.clone());
+        }
         Ok(config)
     }
 }
@@ -110,10 +126,13 @@ pub fn resolve_project(
             )
         })?;
     let sources = BTreeMap::new();
-    let mut config = project.load(&sources, true)?;
-    if config.input_import_names().is_empty() && matches!(update, UpdatePolicy::Preserve) {
+    let mut config = project.load(&sources, None, true)?;
+    if project.source_input.is_none()
+        && config.input_import_names().is_empty()
+        && matches!(update, UpdatePolicy::Preserve)
+    {
         return Ok(ResolvedProject {
-            config: project.load(&sources, false)?,
+            config: project.load(&sources, None, false)?,
             sources,
             lock: None,
             root: root.clone(),
@@ -125,12 +144,43 @@ pub fn resolve_project(
     let _gc_registration = crate::backend::init_nix(&settings, &StoreSettings::default())?;
     let store = crate::backend::open_store(&StoreSettings::default())?;
     let (flake_settings, fetchers_settings) = crate::backend::build_settings()?;
-    let mut eval_state =
-        crate::lock::build_eval_state(&store, &root, &flake_settings, settings.refresh_fetchers)?;
     let mut baseline = crate::load_lock_file(&fetchers_settings, &root.join("devenv.lock"))
         .to_miette()
         .wrap_err("Failed to load lock file while composing project")?;
     let mut updated = BTreeSet::new();
+    let source = if let Some(input) = &project.source_input {
+        let refresh_source = matches!(update, UpdatePolicy::All | UpdatePolicy::Input("from"));
+        // An unrelated input update must not refresh the source's fetcher cache.
+        let mut source_eval =
+            crate::lock::build_eval_state(&store, &root, &flake_settings, refresh_source)?;
+        let source_lock = crate::lock_source_input(
+            &source_eval,
+            &fetchers_settings,
+            &flake_settings,
+            &root,
+            &root.join("devenv.lock"),
+            input,
+            refresh_source,
+        )
+        .to_miette()
+        .wrap_err("Failed to lock the source input")?;
+        let source = crate::source::materialize_source(&mut source_eval, &root, &source_lock)?;
+        baseline = Some(retain_missing_pins(
+            &fetchers_settings,
+            baseline.as_ref(),
+            source_lock,
+        )?);
+        // Freeze the selected source revision across subsequent import passes.
+        if refresh_source {
+            updated.insert("from".into());
+        }
+        config = project.load(&sources, Some(&source), true)?;
+        Some(source)
+    } else {
+        None
+    };
+    let mut eval_state =
+        crate::lock::build_eval_state(&store, &root, &flake_settings, settings.refresh_fetchers)?;
 
     for _ in 0..MAX_IMPORT_PASSES {
         let (discovery_inputs, pending_follows) = discovery_inputs(&config.inputs);
@@ -180,7 +230,7 @@ pub fn resolve_project(
             .collect();
         let next_sources =
             crate::lock::input_paths_from_lock(&mut eval_state, &root, &import_names, &candidate)?;
-        let next = project.load(&next_sources, true)?;
+        let next = project.load(&next_sources, source.as_ref(), true)?;
         let stable = next.inputs == config.inputs && next.imports == config.imports;
         if stable {
             if !pending_follows.is_empty() {
@@ -197,7 +247,7 @@ pub fn resolve_project(
                 bail!("Cannot update unknown input '{name}'");
             }
             return Ok(ResolvedProject {
-                config: project.load(&next_sources, false)?,
+                config: project.load(&next_sources, source.as_ref(), false)?,
                 sources: next_sources,
                 lock: Some(candidate),
                 root: root.clone(),

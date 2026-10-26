@@ -1,13 +1,12 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use devenv_core::config::Input;
-use devenv_core::{NixSettings, StoreSettings};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
+use nix_bindings_expr::eval_state::EvalState;
+use nix_bindings_flake::LockFile;
 use serde_json::Value;
 
 use crate::anyhow_ext::AnyhowToMiette;
-use crate::{backend, lock};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct MaterializedSource {
@@ -25,34 +24,12 @@ impl MaterializedSource {
     }
 }
 
-pub fn materialize_source(
-    nix_settings: &NixSettings,
+/// Fetch a source selected by the project resolver without resolving it again.
+pub(crate) fn materialize_source(
+    eval_state: &mut EvalState,
     root: &Path,
-    lock_file_path: &Path,
-    source_input: &Input,
+    source_lock: &LockFile,
 ) -> Result<MaterializedSource> {
-    let store_settings = StoreSettings::default();
-    let _gc_registration = backend::init_nix(nix_settings, &store_settings)
-        .wrap_err("Failed to initialize Nix for source resolution")?;
-    let store = backend::open_store(&store_settings)
-        .wrap_err("Failed to open the Nix store for source resolution")?;
-    let (flake_settings, fetchers_settings) =
-        backend::build_settings().wrap_err("Failed to build Nix source settings")?;
-    let mut eval_state =
-        lock::build_eval_state(&store, root, &flake_settings, nix_settings.refresh_fetchers)
-            .wrap_err("Failed to build the Nix source evaluator")?;
-
-    let source_lock = crate::lock_source_input(
-        &eval_state,
-        &fetchers_settings,
-        &flake_settings,
-        root,
-        lock_file_path,
-        source_input,
-        nix_settings.refresh_fetchers,
-    )
-    .to_miette()
-    .wrap_err("Failed to lock the source input")?;
     let lock_json = source_lock
         .to_string()
         .to_miette()

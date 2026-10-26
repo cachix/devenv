@@ -56,7 +56,7 @@ An out-of-tree source can contain these files and references:
 - YAML imports and inputs
 - Nix modules from the YAML import graph
 
-:::tip[Complete fetched sources in version 2.3.1]
+:::tip[Complete fetched sources in version 2.4.1]
 Fetched sources now load the complete YAML configuration.
 Earlier versions loaded only `devenv.nix` from a fetched source.
 :::
@@ -65,13 +65,15 @@ A local `path:` source stays live.
 devenv reads its changes without another fetch or `allow` command.
 
 A fetched source uses the revision in the target directory's `devenv.lock`.
-Run `devenv update` to fetch a new revision.
+Run `devenv update from` to fetch a new source revision, or `devenv update` to update all inputs.
 Commit the lock file to give all users the same source revision.
 
 ## Add target-specific YAML
 
 The target directory can contain `devenv.yaml` and `devenv.local.yaml` for project-specific settings.
 devenv loads the source YAML first, so the target YAML has higher precedence.
+Relative input URLs in the target YAML resolve from the target directory.
+The source's `devenv.local.yaml` can also import YAML configurations and Nix modules.
 
 An explicit `--from` option does not load the target's `devenv.nix` or `devenv.local.nix`.
 Without an explicit option, a local `devenv.nix` has priority over a saved binding.

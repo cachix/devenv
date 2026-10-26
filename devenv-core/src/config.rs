@@ -582,7 +582,12 @@ impl Config {
     where
         P: AsRef<Path>,
     {
-        Self::load_from_with_source_root_and_input_sources(path, source_dir, source_repository_root, &BTreeMap::new())
+        Self::load_from_with_source_root_and_input_sources(
+            path,
+            source_dir,
+            source_repository_root,
+            &BTreeMap::new(),
+        )
     }
 
     /// Load a source's YAML graph with its repository root and locked input locations.
@@ -651,8 +656,11 @@ impl Config {
             .or(source_dir)
             .and_then(|root| root.canonicalize().ok());
         if let Some(source_dir) = source_dir {
-            let source_yaml = source_dir.join(YAML_CONFIG);
-            if source_yaml.exists() {
+            for source_yaml in [YAML_CONFIG, YAML_LOCAL_CONFIG]
+                .map(|name| source_dir.join(name))
+                .into_iter()
+                .filter(|path| path.exists())
+            {
                 let canonical =
                     source_yaml
                         .canonicalize()
@@ -730,13 +738,6 @@ impl Config {
                 .clone()
                 .unwrap_or_else(|| source_dir.to_path_buf());
             source_module_imports.push(format!("path:{}", canonical.display()));
-
-            // The source's devenv.local.yaml applies as machine-local
-            // overrides of the source, still below the project's own configs.
-            let source_local = source_dir.join(YAML_LOCAL_CONFIG);
-            if source_local.exists() {
-                source_yamls.push(source_local);
-            }
         }
 
         // Recursively collect imported yaml files (loaded first, lowest priority)
@@ -785,8 +786,10 @@ impl Config {
 
             // Record the source directory for each input defined in this config.
             // Later configs take precedence (base overrides imports).
-            for input_name in single_result.config.inputs.keys() {
-                input_source_dirs.insert(input_name.clone(), config_dir.clone());
+            for (input_name, input) in &single_result.config.inputs {
+                if input.url.is_some() {
+                    input_source_dirs.insert(input_name.clone(), config_dir.clone());
+                }
             }
 
             loader
@@ -812,10 +815,10 @@ impl Config {
                     )
                 })?;
             if let Ok(local_result) = local_loader.load().into_diagnostic() {
-                for input_name in local_result.config.inputs.keys() {
-                    input_source_dirs
-                        .entry(input_name.clone())
-                        .or_insert_with(|| base_path.to_path_buf());
+                for (input_name, input) in &local_result.config.inputs {
+                    if input.url.is_some() {
+                        input_source_dirs.insert(input_name.clone(), base_path.to_path_buf());
+                    }
                 }
             }
         }
@@ -2516,6 +2519,57 @@ imports:
             nixpkgs.url,
             Some("github:NixOS/nixpkgs/nixos-25.11".to_string()),
             "Base config's nixpkgs URL should take precedence over imported config's URL"
+        );
+    }
+
+    #[test]
+    fn target_local_yaml_relative_input_overrides_source_input() {
+        let source = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        fs::create_dir(source.path().join("original")).unwrap();
+        fs::create_dir(source.path().join("override")).unwrap();
+        fs::create_dir(target.path().join("override")).unwrap();
+        fs::write(source.path().join("devenv.nix"), "{}").unwrap();
+        fs::write(
+            source.path().join("devenv.yaml"),
+            "inputs:\n  shared:\n    url: path:./original\n    flake: false\n",
+        )
+        .unwrap();
+        fs::write(
+            target.path().join("devenv.local.yaml"),
+            "inputs:\n  shared:\n    url: path:./override\n    flake: false\n",
+        )
+        .unwrap();
+        let config = Config::load_from_with_source(target.path(), Some(source.path())).unwrap();
+        assert_eq!(
+            config.inputs["shared"].url.as_deref(),
+            Some("path:override")
+        );
+    }
+
+    #[test]
+    fn source_local_yaml_imports_are_loaded() {
+        let source = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let extra = source.path().join("extra");
+        fs::create_dir(&extra).unwrap();
+        fs::write(source.path().join("devenv.nix"), "{}").unwrap();
+        fs::write(
+            source.path().join("devenv.local.yaml"),
+            "imports:\n  - ./extra\n",
+        )
+        .unwrap();
+        fs::write(
+            extra.join("devenv.yaml"),
+            "inputs:\n  extra:\n    url: github:example/extra\n",
+        )
+        .unwrap();
+        fs::write(extra.join("devenv.nix"), "{}").unwrap();
+        let config = Config::load_from_with_source(target.path(), Some(source.path())).unwrap();
+        assert!(
+            config.inputs.contains_key("extra"),
+            "local YAML import was dropped: {:?}",
+            config.imports
         );
     }
 
