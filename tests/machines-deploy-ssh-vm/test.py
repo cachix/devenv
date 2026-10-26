@@ -150,7 +150,10 @@ def check_controller_status(outcome):
 
 
 # Connection refusal before submission must never create a checkpoint.
-machine.succeed("systemctl stop sshd.service sshd.socket || true")
+# This VM uses the service, not socket activation. Including the absent socket
+# in the same stop command can prevent systemd from stopping the service.
+machine.succeed("systemctl stop sshd.service")
+machine.wait_for_closed_port(22)
 proc, log = start_cli("apply", str(plan_file))
 finish(proc, log, False)
 machine.succeed("test ! -e /var/lib/devenv-machines/current.json")
