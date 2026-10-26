@@ -6,6 +6,7 @@
 //! Supports mouse-based text selection with OSC 52 clipboard copy.
 
 use crate::TuiConfig;
+use crate::ansi;
 use crate::app::{
     ExitFlag, PauseFlag, ProcessCommandSender, handle_interrupt_prompt_action,
     request_interrupt_prompt,
@@ -37,6 +38,9 @@ const LINE_NUM_SEPARATOR_WIDTH: usize = 3;
 /// Full prefix width, e.g. "NNNNN │ " = 8 columns.
 const LINE_NUM_PREFIX_WIDTH: usize = LINE_NUM_DIGITS + LINE_NUM_SEPARATOR_WIDTH;
 const COPY_NOTICE_DURATION: Duration = Duration::from_secs(2);
+
+/// Colour of log text without its own ANSI colour.
+const COLOR_LOG_TEXT: Color = Color::AnsiValue(250);
 
 /// Collect `s.chars()[start..end]` into a new `String`.
 fn char_slice(s: &str, start: usize, end: usize) -> String {
@@ -586,7 +590,7 @@ fn build_visual_rows(logs: &VecDeque<String>, content_width: usize) -> Vec<Visua
     let width = content_width.max(1);
 
     for (log_idx, line) in logs.iter().enumerate() {
-        let total_chars = line.chars().count();
+        let total_chars = ansi::strip(line).chars().count();
         if total_chars <= width {
             rows.push(VisualRow {
                 log_idx,
@@ -803,13 +807,13 @@ fn find_log_matches(
     logs.iter()
         .enumerate()
         .flat_map(|(log_idx, line)| {
-            case_insensitive_match_ranges(line, query).into_iter().map(
-                move |(char_start, char_end)| LogSearchMatch {
+            case_insensitive_match_ranges(&ansi::strip(line), query)
+                .into_iter()
+                .map(move |(char_start, char_end)| LogSearchMatch {
                     log_line: buffer_start_line + log_idx,
                     char_start,
                     char_end,
-                },
-            )
+                })
         })
         .collect()
 }
@@ -1434,11 +1438,12 @@ fn extract_selected_text(
         let Some(line) = logs.get(absolute_line - buffer_start_line) else {
             continue;
         };
+        let line = ansi::strip(line);
 
         if let Some((start_col, end_col)) =
             selection.line_range(absolute_line, line.chars().count())
         {
-            lines.push(char_slice(line, start_col, end_col));
+            lines.push(char_slice(&line, start_col, end_col));
         }
     }
 
@@ -1452,7 +1457,11 @@ fn text_for_yank(
 ) -> String {
     match selection {
         Some(selection) => extract_selected_text(logs, buffer_start_line, selection),
-        None => logs.iter().cloned().collect::<Vec<_>>().join("\n"),
+        None => logs
+            .iter()
+            .map(|line| ansi::strip(line))
+            .collect::<Vec<_>>()
+            .join("\n"),
     }
 }
 
@@ -1959,8 +1968,9 @@ fn build_line_elements(
         let Some(line) = logs.get(vrow.log_idx) else {
             continue;
         };
-
-        let display_segment = char_slice(line, vrow.char_start, vrow.char_end);
+        let spans = ansi::parse(line);
+        let row = ansi::slice(&spans, vrow.char_start, vrow.char_end);
+        let row_len = vrow.char_end - vrow.char_start;
 
         let absolute_line = buffer_start_line + vrow.log_idx;
         let line_number = if vrow.char_start == 0 {
@@ -1975,132 +1985,76 @@ fn build_line_elements(
             width = LINE_NUM_DIGITS
         );
 
-        // Intersect the per-log-line selection with the [char_start, char_end)
-        // window this row represents, in logical char coordinates.
+        // Highlighted (start, end, foreground, background) ranges within this
+        // row. A selection takes precedence over search matches.
         let sel_range = selection.and_then(|s| {
-            let (start_col, end_col) = s.line_range(absolute_line, line.chars().count())?;
+            let line_len = spans.iter().map(|span| span.text.chars().count()).sum();
+            let (start_col, end_col) = s.line_range(absolute_line, line_len)?;
             let s = start_col.max(vrow.char_start);
             let e = end_col.min(vrow.char_end);
             (e > s).then(|| (s - vrow.char_start, e - vrow.char_start))
         });
-        let search_ranges: Vec<_> = search
-            .into_iter()
-            .flat_map(|search| {
-                search.matches.iter().filter_map(move |search_match| {
-                    if search_match.log_line != absolute_line {
-                        return None;
-                    }
-                    let start = search_match.char_start.max(vrow.char_start);
-                    let end = search_match.char_end.min(vrow.char_end);
-                    (end > start).then(|| {
-                        (
-                            start - vrow.char_start,
-                            end - vrow.char_start,
-                            search.current == Some(search_cursor(*search_match)),
-                        )
+        let highlights: Vec<(usize, usize, Color, Color)> = match sel_range {
+            Some((start, end)) => vec![(start, end, Color::AnsiValue(232), Color::AnsiValue(250))],
+            None => search
+                .into_iter()
+                .flat_map(|search| {
+                    search.matches.iter().filter_map(move |search_match| {
+                        if search_match.log_line != absolute_line {
+                            return None;
+                        }
+                        let start = search_match.char_start.max(vrow.char_start);
+                        let end = search_match.char_end.min(vrow.char_end);
+                        let (foreground, background) =
+                            if search.current == Some(search_cursor(*search_match)) {
+                                (Color::AnsiValue(232), Color::AnsiValue(220))
+                            } else {
+                                (Color::AnsiValue(230), Color::AnsiValue(58))
+                            };
+                        (end > start).then(|| {
+                            (
+                                start - vrow.char_start,
+                                end - vrow.char_start,
+                                foreground,
+                                background,
+                            )
+                        })
                     })
                 })
-            })
-            .collect();
+                .collect(),
+        };
 
-        if let Some((start_col, end_col)) = sel_range {
-            let before = char_slice(&display_segment, 0, start_col);
-            let selected = char_slice(&display_segment, start_col, end_col);
-            let after: String = display_segment.chars().skip(end_col).collect();
-
-            elements.push(
-                element! {
-                    View(height: 1, flex_direction: FlexDirection::Row) {
-                        Text(
-                            content: line_prefix,
-                            color: Color::AnsiValue(250)
-                        )
-                        Text(
-                            content: before,
-                            color: Color::AnsiValue(250)
-                        )
-                        View(background_color: Color::AnsiValue(250)) {
-                            Text(
-                                content: selected,
-                                color: Color::AnsiValue(232)
-                            )
-                        }
-                        Text(
-                            content: after,
-                            color: Color::AnsiValue(250)
-                        )
-                    }
-                }
+        // Unhighlighted text keeps its ANSI colours; highlights use their own.
+        let styled = |start: usize, end: usize| {
+            let contents = ansi::slice(&row, start, end)
+                .iter()
+                .map(|span| span.to_content(COLOR_LOG_TEXT))
+                .collect::<Vec<_>>();
+            element!(MixedText(contents: contents)).into_any()
+        };
+        let mut segments =
+            vec![element!(Text(content: line_prefix, color: COLOR_LOG_TEXT)).into_any()];
+        let mut cursor = 0;
+        for (start, end, foreground, background) in highlights {
+            segments.push(styled(cursor, start));
+            segments.push(
+                element!(View(background_color: background) {
+                    Text(content: ansi::text(&ansi::slice(&row, start, end)), color: foreground)
+                })
                 .into_any(),
             );
-        } else if !search_ranges.is_empty() {
-            let mut cursor = 0;
-            let mut segments = Vec::new();
-            for (start, end, current) in search_ranges {
-                if start > cursor {
-                    segments.push(
-                        element!(Text(
-                            content: char_slice(&display_segment, cursor, start),
-                            color: Color::AnsiValue(250)
-                        ))
-                        .into_any(),
-                    );
-                }
-                let background = if current {
-                    Color::AnsiValue(220)
-                } else {
-                    Color::AnsiValue(58)
-                };
-                let foreground = if current {
-                    Color::AnsiValue(232)
-                } else {
-                    Color::AnsiValue(230)
-                };
-                segments.push(
-                    element!(View(background_color: background) {
-                        Text(
-                            content: char_slice(&display_segment, start, end),
-                            color: foreground
-                        )
-                    })
-                    .into_any(),
-                );
-                cursor = end;
-            }
-            if cursor < display_segment.chars().count() {
-                segments.push(
-                    element!(Text(
-                        content: char_slice(&display_segment, cursor, display_segment.chars().count()),
-                        color: Color::AnsiValue(250)
-                    ))
-                    .into_any(),
-                );
-            }
-            elements.push(
-                element! {
-                    View(height: 1, flex_direction: FlexDirection::Row) {
-                        Text(
-                            content: line_prefix,
-                            color: Color::AnsiValue(250)
-                        )
-                        #(segments)
-                    }
-                }
-                .into_any(),
-            );
-        } else {
-            elements.push(
-                element! {
-                    View(height: 1) {
-                        Text(
-                            content: format!("{}{}", line_prefix, display_segment),
-                            color: Color::AnsiValue(250)
-                        )
-                    }
-                }
-                .into_any(),
-            );
+            cursor = end;
         }
+        segments.push(styled(cursor, row_len));
+
+        elements.push(
+            element! {
+                View(height: 1, flex_direction: FlexDirection::Row) {
+                    #(segments)
+                }
+            }
+            .into_any(),
+        );
     }
 
     elements
@@ -2582,6 +2536,49 @@ mod tests {
         let missing_output = missing.render(Some(100)).to_string();
         assert!(missing_output.contains("Search logs: /missing"));
         assert!(missing_output.contains("no matches"));
+    }
+
+    #[test]
+    fn ansi_colours_render_while_search_and_copy_use_visible_text() {
+        let state = ExpandedViewState {
+            activity_name: "api".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(VecDeque::from(["\x1b[31mERROR\x1b[0m done".to_string()])),
+            buffer_start_line: 0,
+        };
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(80));
+        let matches = find_log_matches(&state.logs, 0, "done");
+        assert_eq!((matches[0].char_start, matches[0].char_end), (6, 10));
+        assert_eq!(text_for_yank(&state.logs, 0, None), "ERROR done");
+
+        let search = LogSearchView {
+            query: "done",
+            matches: &matches,
+            current: Some(search_cursor(matches[0])),
+            editing: false,
+        };
+        for search in [None, Some(search)] {
+            let mut view = render_expanded_view(
+                &state,
+                &visual_rows,
+                80,
+                8,
+                expanded_ui(None, search, None, true, (false, false)),
+            );
+            let canvas = view.render(Some(80));
+            let text = canvas.to_string();
+            assert!(
+                text.contains("ERROR done") && !text.contains("[31m"),
+                "{text}"
+            );
+            let mut ansi = Vec::new();
+            canvas.write_ansi(&mut ansi).unwrap();
+            let ansi = String::from_utf8(ansi).unwrap();
+            assert!(
+                ansi.contains("\x1b[38;5;1mERROR"),
+                "ERROR not red: {ansi:?}"
+            );
+        }
     }
 
     #[test]

@@ -1,5 +1,6 @@
 //! Reusable UI components for the TUI
 
+use crate::ansi;
 use crate::model::{Activity, ActivityVariant, NixActivityState};
 use devenv_activity::ProcessStatus;
 use human_repr::{HumanCount, HumanThroughput};
@@ -956,22 +957,17 @@ impl<'a> ExpandedContentComponent<'a> {
         self.border_indent.unwrap_or(2 + self.depth * 2)
     }
 
-    /// The last `max_lines` logical log lines, preserving chronological order.
-    /// Long unbroken strings are hard-wrapped here because a `Text` child's
-    /// intrinsic width can otherwise expand its parent beyond the terminal.
-    fn visible_lines(&self) -> Vec<String> {
+    /// The last `max_lines` logical log lines as styled rows, preserving
+    /// chronological order. ANSI colour codes become styled spans. Long
+    /// unbroken strings are hard-wrapped here because a text child's intrinsic
+    /// width can otherwise expand its parent beyond the terminal.
+    fn visible_rows(&self) -> Vec<Vec<ansi::Span>> {
         let Some(lines) = self.lines else {
             return Vec::new();
         };
-        let lines: Vec<_> = lines
-            .iter()
-            .rev()
-            .take(self.max_lines)
-            .rev()
-            .cloned()
-            .collect();
+        let lines = lines.iter().rev().take(self.max_lines).rev();
         let Some(terminal_width) = self.terminal_width else {
-            return lines;
+            return lines.map(|line| ansi::parse(line)).collect();
         };
 
         let occupied_width = self.line_prefix.as_ref().map_or_else(
@@ -982,14 +978,20 @@ impl<'a> ExpandedContentComponent<'a> {
             },
         );
         let width = terminal_width.saturating_sub(occupied_width).max(1);
-        lines
+        lines.flat_map(|line| hard_wrap(line, width)).collect()
+    }
+
+    /// Plain text of [`Self::visible_rows`].
+    #[cfg(test)]
+    fn visible_lines(&self) -> Vec<String> {
+        self.visible_rows()
             .into_iter()
-            .flat_map(|line| hard_wrap(&line, width))
+            .map(|row| ansi::text(&row))
             .collect()
     }
 
     pub fn visual_height(&self) -> usize {
-        self.visible_lines()
+        self.visible_rows()
             .len()
             .max(1)
             .min(INLINE_LOG_MAX_VISUAL_ROWS.saturating_sub(1) as usize)
@@ -998,16 +1000,16 @@ impl<'a> ExpandedContentComponent<'a> {
     pub fn render(&self) -> Vec<AnyElement<'static>> {
         let indent = self.border_indent();
 
-        let lines = self.visible_lines();
-        if !lines.is_empty() {
+        let rows = self.visible_rows();
+        if !rows.is_empty() {
             if let Some(prefix) = &self.line_prefix {
-                let line_elements: Vec<AnyElement<'static>> = lines
+                let line_elements: Vec<AnyElement<'static>> = rows
                     .into_iter()
-                    .map(|line| {
+                    .map(|row| {
                         element! {
                             View(flex_direction: FlexDirection::Row, padding_right: 1) {
                                 Text(content: prefix.clone(), color: COLOR_HIERARCHY)
-                                Text(content: format!("  {line}"), color: Color::AnsiValue(245))
+                                MixedText(contents: log_row_contents("  ", &row))
                             }
                         }
                         .into_any()
@@ -1027,11 +1029,11 @@ impl<'a> ExpandedContentComponent<'a> {
                 ];
             }
 
-            let line_elements: Vec<AnyElement<'static>> = lines
+            let line_elements: Vec<AnyElement<'static>> = rows
                 .into_iter()
-                .map(|line| {
+                .map(|row| {
                     element! {
-                        Text(content: format!(" {line}"), color: Color::AnsiValue(245))
+                        MixedText(contents: log_row_contents(" ", &row))
                     }
                     .into_any()
                 })
@@ -1061,7 +1063,9 @@ impl<'a> ExpandedContentComponent<'a> {
             .terminal_width
             .and_then(|width| {
                 let budget = width.saturating_sub(indent + 1).max(1);
-                hard_wrap(self.empty_message, budget).into_iter().next()
+                hard_wrap(self.empty_message, budget)
+                    .first()
+                    .map(|row| ansi::text(row))
             })
             .unwrap_or_else(|| self.empty_message.to_string());
         if let Some(prefix) = &self.line_prefix {
@@ -1087,7 +1091,7 @@ impl<'a> ExpandedContentComponent<'a> {
     /// `Text` wrapping may be larger, so callers that bound the inline view should
     /// rely on a flex `max_height` rather than treating this as an upper bound.
     pub fn calculate_height(&self) -> usize {
-        let count = self.visible_lines().len();
+        let count = self.visible_rows().len();
         if count > 0 { count } else { 1 }
     }
 
@@ -1111,30 +1115,42 @@ impl<'a> ExpandedContentComponent<'a> {
     }
 }
 
-fn hard_wrap(line: &str, max_width: usize) -> Vec<String> {
+/// Default colour of log text without its own ANSI colour.
+const COLOR_LOG_TEXT: Color = Color::AnsiValue(245);
+
+/// iocraft contents for one styled log row, after an unstyled `lead`.
+fn log_row_contents(lead: &str, row: &[ansi::Span]) -> Vec<MixedTextContent> {
+    std::iter::once(MixedTextContent::new(lead).color(COLOR_LOG_TEXT))
+        .chain(row.iter().map(|span| span.to_content(COLOR_LOG_TEXT)))
+        .collect()
+}
+
+/// Split `line` into rows of at most `max_width` columns, keeping each
+/// character's ANSI style. Escape sequences take no width.
+fn hard_wrap(line: &str, max_width: usize) -> Vec<Vec<ansi::Span>> {
     use unicode_width::UnicodeWidthChar;
 
-    let mut wrapped = Vec::new();
-    for logical_line in line.split('\n') {
-        let mut current = String::new();
-        let mut width = 0;
-        for character in logical_line.chars() {
-            let character = if character.is_control() {
-                ' '
-            } else {
-                character
-            };
-            let character_width = character.width().unwrap_or(0);
-            if width > 0 && width + character_width > max_width {
-                wrapped.push(std::mem::take(&mut current));
-                width = 0;
+    line.split('\n')
+        .flat_map(|logical_line| {
+            let spans = ansi::parse(logical_line);
+            let text = ansi::text(&spans);
+            let mut breaks = vec![0];
+            let mut width = 0;
+            for (index, character) in text.chars().enumerate() {
+                let character_width = character.width().unwrap_or(0);
+                if width > 0 && width + character_width > max_width {
+                    breaks.push(index);
+                    width = 0;
+                }
+                width += character_width;
             }
-            current.push(character);
-            width += character_width;
-        }
-        wrapped.push(current);
-    }
-    wrapped
+            breaks.push(text.chars().count());
+            breaks
+                .windows(2)
+                .map(|range| ansi::slice(&spans, range[0], range[1]))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// Backwards-compatible alias
@@ -1466,6 +1482,45 @@ mod tests {
             out.contains("http://127.0.0.1:8000/"),
             "expected URL to appear intact in wrapped output:\n{}",
             out
+        );
+    }
+
+    #[test]
+    fn inline_log_view_renders_ansi_colours() {
+        // A process printing coloured output, e.g. `print("\033[31mERROR\033[0m done")`.
+        let logs = VecDeque::from([
+            "\x1b[31mERROR\x1b[0m done".to_string(),
+            "\x1b[1;38;2;0;200;0mbold green\x1b[22;39m plain".to_string(),
+        ]);
+        let elements = ExpandedContentComponent::new(Some(&logs))
+            .with_depth(1)
+            .with_terminal_width(60)
+            .render();
+        let mut element = element! {
+            View(width: 60u32, flex_direction: FlexDirection::Column) {
+                #(elements)
+            }
+        };
+        let canvas = element.render(Some(60));
+
+        // Escape sequences are interpreted, never shown as literal text.
+        let text = canvas.to_string();
+        assert!(!text.contains("[31m"), "escape codes leaked:\n{text}");
+        assert!(!text.contains("[0m"), "escape codes leaked:\n{text}");
+        assert!(text.contains("ERROR done"), "{text}");
+        assert!(text.contains("bold green plain"), "{text}");
+
+        // And the styled spans are drawn in their colours.
+        let mut ansi = Vec::new();
+        canvas.write_ansi(&mut ansi).unwrap();
+        let ansi = String::from_utf8(ansi).unwrap();
+        assert!(
+            ansi.contains("\x1b[38;5;1mERROR"),
+            "ERROR not red:\n{ansi:?}"
+        );
+        assert!(
+            ansi.contains("\x1b[38;2;0;200;0m") && ansi.contains("bold green"),
+            "truecolor span missing:\n{ansi:?}"
         );
     }
 

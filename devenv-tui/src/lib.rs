@@ -8,6 +8,7 @@ pub mod model_events;
 pub mod tracing_interface;
 
 // UI modules
+mod ansi;
 pub mod app;
 pub mod components;
 pub mod config;
