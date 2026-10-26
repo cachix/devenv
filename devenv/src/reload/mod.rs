@@ -38,8 +38,6 @@ pub struct DevenvShellBuilder {
     pub task_messages: Vec<String>,
     pub shell: String,
     pub prompt_prefix: bool,
-    /// Active profiles, listed in the prompt prefix.
-    pub profiles: Vec<String>,
     /// Absolute path to the shell binary from the login-shell database
     /// (`getpwuid`). When present and the path exists, used directly instead
     /// of `resolve_shell_path` so stripped environments still find the shell.
@@ -126,7 +124,6 @@ impl DevenvShellBuilder {
             init_dir: &self.dotfile,
             shell_keybindings: &self.shell_keybindings,
             prompt_prefix: self.prompt_prefix,
-            profiles: &self.profiles,
         };
 
         dialect

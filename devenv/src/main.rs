@@ -893,6 +893,7 @@ fn backend_thread_main(
 struct ShellSessionOptions {
     keybindings: devenv_shell::keybindings::ShellKeybindings,
     indicators: devenv_shell::indicators::Indicators,
+    profiles: Vec<String>,
 }
 
 fn frontend_thread_main(
@@ -917,6 +918,7 @@ fn frontend_thread_main(
                     .with_status_line(show_status_line)
                     .with_keybindings(shell_session.keybindings)
                     .with_indicators(shell_session.indicators)
+                    .with_profiles(&shell_session.profiles)
                     .with_shutdown_token(shutdown.cancellation_token())
                     .run(frontend_rx, event_tx, SessionIo::default()),
             )
@@ -956,6 +958,7 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
     let shell_session = ShellSessionOptions {
         keybindings: frontend.shell_keybindings.clone(),
         indicators: frontend.tui_preferences.indicators(),
+        profiles: backend_options.devenv.shell_settings.profiles.clone(),
     };
 
     let _tracing_guard = devenv_tracing::init_tracing(frontend.log_level, &frontend.tracing_specs);
@@ -1144,7 +1147,6 @@ async fn run_backend(
         let shell = devenv.options().shell_settings.shell.clone();
         let shell_path = devenv.options().shell_settings.shell_path.clone();
         let prompt_prefix = devenv.options().shell_settings.prompt_prefix;
-        let profiles = devenv.options().shell_settings.profiles.clone();
         let shell_cwd = devenv.shell_cwd().map(Path::to_path_buf);
         let (task_exports, task_messages) = devenv.run_enter_shell_tasks(None, verbosity).await?;
         // Load dotenv after enterShell tasks so a task that creates or updates the
@@ -1162,7 +1164,6 @@ async fn run_backend(
             shell,
             shell_path,
             prompt_prefix,
-            profiles,
             dotfile,
             task_exports,
             task_messages,
@@ -1743,7 +1744,6 @@ struct ReloadShellArgs {
     shell: String,
     shell_path: Option<std::path::PathBuf>,
     prompt_prefix: bool,
-    profiles: Vec<String>,
     dotfile: std::path::PathBuf,
     task_exports: BTreeMap<String, String>,
     task_messages: Vec<String>,
@@ -1774,7 +1774,6 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell,
         shell_path,
         prompt_prefix,
-        profiles,
         dotfile,
         task_exports,
         task_messages,
@@ -1800,7 +1799,6 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         shell,
         shell_path,
         prompt_prefix,
-        profiles,
         shell_cwd,
         shell_keybindings,
     };

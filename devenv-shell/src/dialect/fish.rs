@@ -161,10 +161,10 @@ end
         super::xdg_config_home().map(|p| p.join("fish").join("config.fish"))
     }
 
-    fn prompt_prefix(&self, _profiles: &[String]) -> String {
+    fn prompt_prefix(&self) -> &str {
         // Fish uses functions for prompts. We prepend (devenv) by wrapping
         // fish_prompt in write_init_files, so we return an empty string here.
-        String::new()
+        ""
     }
 
     fn format_task_exports(&self, exports: &BTreeMap<String, String>) -> String {
@@ -252,11 +252,7 @@ end
 "#,
             reload_hook = reload_hook,
             prompt_calls = prompt_calls,
-            prompt_prefix = if ctx.prompt_prefix {
-                format!("{} ", super::prompt_label(ctx.profiles))
-            } else {
-                String::new()
-            },
+            prompt_prefix = if ctx.prompt_prefix { "(devenv) " } else { "" },
         );
 
         std::fs::write(ctx.init_dir.join("devenv.fish"), config_fish_content)?;

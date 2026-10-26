@@ -297,6 +297,8 @@ pub struct StatusLine {
     state: StatusState,
     keybindings: ShellKeybindings,
     indicators: Indicators,
+    /// Leading label: the active profiles (e.g. `backend, fast`), or `devenv`.
+    label: String,
     enabled: bool,
     /// Current spinner frame index (animated manually since we don't use iocraft runtime)
     spinner_frame: usize,
@@ -488,6 +490,7 @@ impl StatusLine {
             state: StatusState::new(),
             keybindings: ShellKeybindings::default(),
             indicators: Indicators::default(),
+            label: "devenv".to_string(),
             enabled: true,
             spinner_frame: 0,
             last_spinner_update: Instant::now(),
@@ -528,6 +531,18 @@ impl StatusLine {
     /// Select the glyphs used for indicators that have an emoji form.
     pub fn set_indicators(&mut self, indicators: Indicators) {
         self.indicators = indicators;
+        self.cached_state = None;
+    }
+
+    /// Show the active profiles, comma-separated, in place of `devenv`.
+    pub fn set_profiles(&mut self, profiles: &[String]) {
+        self.label = if profiles.is_empty() {
+            "devenv".to_string()
+        } else {
+            // Profile names come from the command line; keep control
+            // characters out of the terminal.
+            profiles.join(", ").replace(char::is_control, " ")
+        };
         self.cached_state = None;
     }
 
@@ -629,7 +644,7 @@ impl StatusLine {
                         View(margin_right: 1) {
                             Text(content: spinner, color: COLOR_ACTIVE)
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
+                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
                         Text(content: "building", weight: Weight::Bold, color: COLOR_ACTIVE)
                         #(if let Some((num, unit)) = elapsed {
                             vec![
@@ -663,7 +678,7 @@ impl StatusLine {
                         View(margin_right: 1) {
                             Text(content: CHECKMARK, color: COLOR_COMPLETED)
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
+                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
                         Text(content: "ready", weight: Weight::Bold, color: COLOR_ACTIVE)
                         #(duration)
                         #(watching)
@@ -682,7 +697,7 @@ impl StatusLine {
                         View(margin_right: 1) {
                             Text(content: CHECKMARK, color: COLOR_COMPLETED)
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
+                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
                         Text(content: "reloaded", weight: Weight::Bold, color: COLOR_COMPLETED)
                         #(duration)
                         #(watching)
@@ -709,7 +724,7 @@ impl StatusLine {
                         View(margin_right: 1) {
                             Text(content: XMARK, color: COLOR_FAILED)
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
+                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
                         Text(content: "failed", weight: Weight::Bold, color: COLOR_FAILED)
                         #(duration)
                         #(watching)
@@ -740,7 +755,7 @@ impl StatusLine {
                         View(margin_right: glyph.gap) {
                             Text(content: glyph.text, color: COLOR_SECONDARY)
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
+                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
                         Text(content: "paused", weight: Weight::Bold, color: COLOR_ACTIVE)
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
@@ -770,7 +785,7 @@ impl StatusLine {
                         View(margin_right: glyph.gap) {
                             Text(content: glyph.text, color: COLOR_SECONDARY)
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
+                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
                         Text(content: "watching ", weight: Weight::Bold, color: COLOR_ACTIVE)
                         Text(content: count_str, color: COLOR_COMPLETED)
                         Text(content: " files", color: COLOR_SECONDARY)
@@ -1081,6 +1096,42 @@ mod tests {
             " ◉ devenv watching 11 files",
             "Ctrl+Alt+D pause",
         );
+    }
+
+    #[test]
+    fn label_lists_active_profiles() {
+        let watching = |profiles: &[String]| {
+            let status_line = status_line_with(false, |sl| {
+                sl.set_profiles(profiles);
+                sl.state_mut().set_watched_file_count(11);
+            });
+            plain_text(&uncached_content(&status_line, 80))
+        };
+
+        assert_row(
+            &watching(&[]),
+            " ◉ devenv watching 11 files",
+            "Ctrl+Alt+D pause",
+        );
+        assert_row(
+            &watching(&["backend".into(), "fast".into()]),
+            " ◉ backend, fast watching 11 files",
+            "Ctrl+Alt+D pause",
+        );
+    }
+
+    #[test]
+    fn changing_profiles_invalidates_the_render_cache() {
+        let mut status_line =
+            status_line_with(false, |sl| sl.state_mut().set_watched_file_count(1));
+        let draw = |status_line: &mut StatusLine| {
+            let mut out = Vec::new();
+            status_line.draw(&mut out, 80, 24).unwrap();
+            plain_text(&out)
+        };
+        assert!(!draw(&mut status_line).contains("backend"));
+        status_line.set_profiles(&["backend".into()]);
+        assert!(draw(&mut status_line).contains("◉ backend watching"));
     }
 
     #[test]

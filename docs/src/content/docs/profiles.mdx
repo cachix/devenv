@@ -123,18 +123,19 @@ Here is a simple example where every tier toggles the same option, yet the final
 
 When Alice runs on `dev-server`, the hostname profile enables the database, her user profile disables it again, and a manual `devenv --profile qa shell` flips it back on. Conflicts resolve in priority order without any extra override helpers.
 
-## Shell prompt
+## Status line
 
 <VersionCompatibility version="2.4.1" />
 
-Inside `devenv shell`, the prompt prefix lists the profiles activated with `--profile` or the `profile` setting in `devenv.yaml`, separated by commas:
+Inside `devenv shell`, the status line at the bottom of the terminal shows the profiles activated with `--profile` or the `profile` setting in `devenv.yaml`, separated by commas, in place of `devenv`:
 
 ```shell-session
 $ devenv --profile backend --profile fast-startup shell
-(devenv > backend, fast-startup) $
+...
+ 👁  backend, fast-startup watching 4 files
 ```
 
-Without active profiles, the prefix is just `(devenv)`. Hostname and user profiles are not listed. To hide the prefix entirely, see [Shell prompt](/basics/#shell-prompt).
+Without active profiles, it shows just `devenv`. Hostname and user profiles are not listed.
 
 ## Merging profiles
 

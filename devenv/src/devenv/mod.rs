@@ -1961,7 +1961,6 @@ impl Devenv {
                     init_dir: &self.devenv_dotfile,
                     shell_keybindings: &shell_keybindings,
                     prompt_prefix: self.options.shell_settings.prompt_prefix,
-                    profiles: &self.options.shell_settings.profiles,
                 };
 
                 let rcfile_content = dialect.rcfile_content(&rcfile_ctx);
@@ -1980,9 +1979,7 @@ impl Devenv {
                 push_shell_fragment(&mut script, &dotenv_messages);
                 push_shell_fragment(&mut script, crate::shell_env::CD_INTO_SHELL_CWD);
                 if self.options.shell_settings.prompt_prefix {
-                    script.push_str(
-                        &BashDialect.prompt_prefix(&self.options.shell_settings.profiles),
-                    );
+                    script.push_str(BashDialect.prompt_prefix());
                     script.push('\n');
                 }
                 write_executable_script(&self.devenv_dotfile, &script)
