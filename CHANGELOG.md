@@ -4,7 +4,9 @@
 
 ### Improvements
 
-- The `devenv shell` status line now shows the active profiles in place of `devenv`, for example `backend, fast-startup watching 4 files` after `devenv --profile backend --profile fast-startup shell`.
+- The `devenv shell` status line now shows the active profiles in place of `devenv`, for example `backend, fast-startup watching 4 files` after `devenv --profile backend --profile fast-startup shell`. Long lists are shortened, such as `backend, basic, fast-startup +1`.
+
+- The `devenv shell` status line now shows the active profiles in place of `devenv`, for example `backend, fast-startup watching 4 files` after `devenv --profile backend --profile fast-startup shell`. Long lists are shortened, such as `backend, basic, fast-startup +1`.
 - `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
 - Updating a remote configuration now composes its updated YAML and dependencies before writing `devenv.lock`, so a second invocation is not needed to finish the update.
@@ -18,6 +20,7 @@
 - Manager PID files are now published atomically, preventing concurrent status checks from treating an incomplete PID as stale and deleting discovery state.
 - Fixed `devenv processes` commands reporting that no process manager is running after `devenv up -d` had been running for more than three days on macOS, where the system `/tmp` cleaner deleted the manager's PID file ([#3316](https://github.com/cachix/devenv/issues/3316)).
 - Fetched `--from` sources now load YAML configuration, local overrides, and YAML imports alongside their Nix modules. Source-local YAML imports are followed, and relative input overrides in the target's `devenv.local.yaml` resolve from the target directory.
+- Fixed `devenv shell` crashing when its status line shortened a changed file name containing non-ASCII characters, and fixed status text being squeezed into fragments in narrow terminals.
 - Locked inputs with complete source metadata now reuse sources from the Nix store or configured binary caches without contacting their original remote, so `devenv shell` works when that remote is unavailable ([#3244](https://github.com/cachix/devenv/pull/3244)).
 - Fixed cold remote YAML imports failing to load fetched sources, and allowed root input follows to reference inputs declared by imported YAML.
 - Fixed remote YAML discovery resolving relative local inputs from the filesystem root instead of the project directory.
