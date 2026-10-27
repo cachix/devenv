@@ -6,8 +6,10 @@
     extra-substituters = "https://devenv.cachix.org https://cachix.cachix.org";
   };
 
-  # this needs to be rolling so we're testing what most devs are using
-  inputs.nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
+  # CLI packages must evaluate without builds, including Darwin on Linux.
+  # devenv-nixpkgs applies source patches via IFD; use upstream here and keep
+  # testing its patched package set through devenv.yaml.
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.git-hooks = {
     url = "github:cachix/git-hooks.nix";
     inputs = {
