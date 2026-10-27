@@ -1,7 +1,9 @@
 //! Shared utilities for reading cell text from a libghostty-rs terminal.
 
-use libghostty_vt::screen::{Cell, CellContentTag, CellWide, GridRef};
-use libghostty_vt::terminal::{Point, PointCoordinate, Terminal};
+use libghostty_vt::grid_ref::GridRef;
+use libghostty_vt::point::{Coordinate, Point};
+use libghostty_vt::screen::{Cell, CellContentTag, CellWide};
+use libghostty_vt::terminal::Terminal;
 
 /// Default scrollback storage budget in BYTES (not lines).
 ///
@@ -15,21 +17,22 @@ pub const DEFAULT_MAX_SCROLLBACK: usize = 10_000_000;
 /// Return a copy of `point` with the x coordinate changed.
 pub fn point_with_x(point: Point, x: u16) -> Point {
     match point {
-        Point::Active(c) => Point::Active(PointCoordinate { x, ..c }),
-        Point::Viewport(c) => Point::Viewport(PointCoordinate { x, ..c }),
-        Point::Screen(c) => Point::Screen(PointCoordinate { x, ..c }),
-        Point::History(c) => Point::History(PointCoordinate { x, ..c }),
+        Point::Active(c) => Point::Active(Coordinate { x, ..c }),
+        Point::Viewport(c) => Point::Viewport(Coordinate { x, ..c }),
+        Point::Screen(c) => Point::Screen(Coordinate { x, ..c }),
+        Point::History(c) => Point::History(Coordinate { x, ..c }),
+        _ => point,
     }
 }
 
 /// Construct an Active coordinate point with x=0.
 pub fn active_point(y: u32) -> Point {
-    Point::Active(PointCoordinate { x: 0, y })
+    Point::Active(Coordinate { x: 0, y })
 }
 
 /// Construct a Screen coordinate point with x=0.
 pub fn screen_point(y: u32) -> Point {
-    Point::Screen(PointCoordinate { x: 0, y })
+    Point::Screen(Coordinate { x: 0, y })
 }
 
 /// Get all cells in a row by iterating columns via grid ref.

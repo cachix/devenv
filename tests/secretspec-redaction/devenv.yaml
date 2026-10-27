@@ -1,0 +1,4 @@
+secretspec:
+  enable: true
+  provider: null://
+  profile: default

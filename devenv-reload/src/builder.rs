@@ -51,6 +51,11 @@ pub trait ShellBuilder: Send + Sync {
     /// Returns a CommandBuilder that will be used to spawn the PTY.
     fn build(&self, ctx: &BuildContext) -> Result<CommandBuilder, BuildError>;
 
+    /// Create independent filtering state for the initial shell's output.
+    fn output_filter(&self) -> Option<Box<dyn devenv_mailbox::ShellOutputFilter>> {
+        None
+    }
+
     /// Build environment for hot-reload.
     /// Writes the new environment to $DEVENV_STATE/pending-env.sh
     /// which will be picked up by the shell's PROMPT_COMMAND hook.

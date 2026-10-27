@@ -47,12 +47,24 @@ pub enum FrontendEvent {
     Shell(ShellEvent),
 }
 
+/// Stateful filtering of text from shell output. The frontend identifies
+/// text regions with its terminal parser and applies the filter before
+/// sending text to the virtual or physical terminal.
+pub trait ShellOutputFilter: Send + std::fmt::Debug {
+    fn push(&mut self, input: &[u8], output: &mut Vec<u8>);
+
+    /// Emit the remaining filtered text and reset matching at a terminal
+    /// boundary or EOF. Dropping a filter discards any pending text.
+    fn end_region(&mut self, output: &mut Vec<u8>);
+}
+
 /// Commands sent from coordinator to shell session.
 #[derive(Debug)]
 pub enum ShellCommand {
     /// Spawn the initial shell with this command.
     Spawn {
         command: CommandBuilder,
+        output_filter: Option<Box<dyn ShellOutputFilter>>,
         watch_files: Vec<PathBuf>,
     },
     /// Update the list of watched files after the initial build.
