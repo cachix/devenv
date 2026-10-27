@@ -93,7 +93,12 @@ impl SpanBuilder {
 
 impl Perform for SpanBuilder {
     fn print(&mut self, character: char) {
-        self.push(character);
+        // C1 controls and DEL arrive here; keep them out of the terminal too.
+        self.push(if character.is_control() {
+            ' '
+        } else {
+            character
+        });
     }
 
     fn execute(&mut self, _byte: u8) {
@@ -108,12 +113,9 @@ impl Perform for SpanBuilder {
 }
 
 fn apply_sgr(style: &mut Style, params: &Params) {
-    if params.is_empty() {
-        *style = Style::default();
-    }
-    // Flattening treats `38:2:r:g:b` sub-parameters like `38;2;r;g;b`.
-    let mut codes = params.iter().flatten().copied();
-    while let Some(code) = codes.next() {
+    let mut groups = params.iter();
+    while let Some(group) = groups.next() {
+        let Some(&code) = group.first() else { continue };
         match code {
             0 => *style = Style::default(),
             1 => style.weight = Weight::Bold,
@@ -130,24 +132,47 @@ fn apply_sgr(style: &mut Style, params: &Params) {
             7 | 27 => style.invert = code == 7,
             30..=37 => style.color = Some(Color::AnsiValue((code - 30) as u8)),
             90..=97 => style.color = Some(Color::AnsiValue((code - 90 + 8) as u8)),
-            38 => style.color = extended_color(&mut codes),
+            38 => style.color = extended_color(group, &mut groups),
             39 => style.color = None,
             // Backgrounds are not rendered, but their arguments must be consumed.
-            48 => _ = extended_color(&mut codes),
+            48 => _ = extended_color(group, &mut groups),
             _ => {}
         }
     }
 }
 
-/// The arguments of an extended colour: `5;n` or `2;r;g;b`.
-fn extended_color(codes: &mut impl Iterator<Item = u16>) -> Option<Color> {
-    let mut next = || codes.next().map(|value| value.min(255) as u8);
-    match next()? {
-        5 => Some(Color::AnsiValue(next()?)),
+/// An extended colour: `5;n` or `2;r;g;b`. The colon form carries its
+/// arguments in `group`, optionally with a colour space id (`2::r:g:b`);
+/// the semicolon form takes them from the following groups.
+fn extended_color<'a>(
+    group: &[u16],
+    groups: &mut impl Iterator<Item = &'a [u16]>,
+) -> Option<Color> {
+    let mut args = if group.len() > 1 {
+        group[1..].to_vec()
+    } else {
+        let mode = *groups.next()?.first()?;
+        let count = match mode {
+            5 => 1,
+            2 => 3,
+            _ => 0,
+        };
+        let rest = groups
+            .by_ref()
+            .take(count)
+            .filter_map(|group| group.first().copied());
+        std::iter::once(mode).chain(rest).collect()
+    };
+    if args.len() == 5 && args[0] == 2 {
+        args.remove(1);
+    }
+    let arg = |index: usize| args.get(index).map(|&value| value.min(255) as u8);
+    match args.first()? {
+        5 => Some(Color::AnsiValue(arg(1)?)),
         2 => Some(Color::Rgb {
-            r: next()?,
-            g: next()?,
-            b: next()?,
+            r: arg(1)?,
+            g: arg(2)?,
+            b: arg(3)?,
         }),
         _ => None,
     }
@@ -177,11 +202,12 @@ mod tests {
             ]
         );
         assert_eq!(
-            colors("\x1b[38;5;208ma\x1b[38;2;1;2;3mb\x1b[38:2:4:5:6mc"),
+            colors("\x1b[38;5;208ma\x1b[38;2;1;2;3mb\x1b[38:2:4:5:6mc\x1b[38:2::7:8:9md"),
             [
                 Some(Color::AnsiValue(208)),
                 Some(Color::Rgb { r: 1, g: 2, b: 3 }),
                 Some(Color::Rgb { r: 4, g: 5, b: 6 }),
+                Some(Color::Rgb { r: 7, g: 8, b: 9 }),
             ]
         );
         // `5;1` belongs to the background, so it must not set bold.
@@ -214,7 +240,7 @@ mod tests {
             strip("\x1b]8;;https://devenv.sh\x1b\\link\x1b]8;;\x07!"),
             "link!"
         );
-        assert_eq!(strip("a\tb\x07c"), "a b c");
+        assert_eq!(strip("a\tb\x07c\u{9b}d\x7fe"), "a b c d e");
         assert_eq!(strip("tail\x1b["), "tail");
     }
 
