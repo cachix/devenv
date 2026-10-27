@@ -7,7 +7,9 @@ use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
 use devenv_core::NixOptions;
-use devenv_nix_backend::project::{ProjectConfig, ResolvedProject, UpdatePolicy, resolve_project};
+use devenv_nix_backend::project::{
+    ProjectConfig, ProjectSource, ResolvedProject, UpdatePolicy, resolve_project,
+};
 use devenv_nix_backend_macros::nix_test;
 use serde_json::Value;
 use tempfile::TempDir;
@@ -475,6 +477,47 @@ fn unknown_overrides_fail_without_creating_a_lock() {
 }
 
 #[nix_test]
+async fn local_from_source_composes_input_imports_and_stays_live() {
+    let mut fixture = Fixture::new();
+    let source = tempfile::tempdir().unwrap();
+    fs::write(source.path().join("devenv.nix"), "{}\n").unwrap();
+    fs::write(
+        source.path().join("devenv.yaml"),
+        format!(
+            "imports:\n  - shared\ninputs:\n  shared:\n    url: {}\n    flake: false\n",
+            fixture.daemon.url(fixture.shared.path())
+        ),
+    )
+    .unwrap();
+    // The local source supplies the remote import; the target only supplies defaults.
+    let dependency_url = fixture.daemon.url(fixture.dependency.path());
+    fs::write(
+        fixture.project_dir.path().join("devenv.yaml"),
+        format!(
+            "inputs:\n  nixpkgs:\n    url: {dependency_url}\n  devenv:\n    url: {dependency_url}\n"
+        ),
+    )
+    .unwrap();
+    fixture.project.source = Some(ProjectSource::from_reference("path:.", source.path()));
+    let resolved = fixture.resolve(UpdatePolicy::Preserve);
+    assert_eq!(resolved.config.reload, Some(false));
+    assert!(resolved.sources.contains_key("shared"));
+    assert!(!resolved.config.inputs.contains_key("from"));
+    fixture.write(&resolved);
+    let before = fixture.lock_contents();
+
+    fs::write(
+        source.path().join("devenv.local.yaml"),
+        "strict_ports: false\n",
+    )
+    .unwrap();
+    let resolved = fixture.resolve(UpdatePolicy::Preserve);
+    assert_eq!(resolved.config.strict_ports, Some(false));
+    fixture.write(&resolved);
+    assert_eq!(fixture.lock_contents(), before);
+}
+
+#[nix_test]
 async fn fetched_from_source_composes_local_and_input_imports() {
     let mut fixture = Fixture::new();
     let profile = fixture.shared.path().join("profiles/backend");
@@ -499,14 +542,14 @@ async fn fetched_from_source_composes_local_and_input_imports() {
     .unwrap();
     commit(fixture.replacement.path());
     commit(fixture.shared.path());
-    fixture.project.source_input = Some(devenv_core::config::Input {
+    fixture.project.source = Some(ProjectSource::Input(devenv_core::config::Input {
         url: Some(format!(
             "{}?dir=profiles/backend",
             fixture.daemon.url(fixture.shared.path())
         )),
         flake: false,
         ..Default::default()
-    });
+    }));
     let dependency_url = fixture.daemon.url(fixture.dependency.path());
     fs::write(
         fixture.project_dir.path().join("devenv.yaml"),
@@ -535,11 +578,11 @@ async fn fetched_from_source_composes_local_and_input_imports() {
 async fn fetched_from_source_preserves_and_updates_the_composed_revision() {
     let mut fixture = Fixture::new();
     let dependency_url = fixture.daemon.url(fixture.dependency.path());
-    fixture.project.source_input = Some(devenv_core::config::Input {
+    fixture.project.source = Some(ProjectSource::Input(devenv_core::config::Input {
         url: Some(fixture.daemon.url(fixture.shared.path())),
         flake: false,
         ..Default::default()
-    });
+    }));
     // Only the source knows the default inputs. Resolve it before locking
     // the complete configuration, rather than fetching unrelated defaults.
     fs::write(fixture.project_dir.path().join("devenv.yaml"), "{}\n").unwrap();
@@ -592,14 +635,14 @@ async fn fetched_from_source_preserves_and_updates_the_composed_revision() {
 #[nix_test]
 async fn fetched_from_source_rejects_a_file_as_its_directory() {
     let mut fixture = Fixture::new();
-    fixture.project.source_input = Some(devenv_core::config::Input {
+    fixture.project.source = Some(ProjectSource::Input(devenv_core::config::Input {
         url: Some(format!(
             "{}?dir=devenv.yaml",
             fixture.daemon.url(fixture.shared.path())
         )),
         flake: false,
         ..Default::default()
-    });
+    }));
 
     let error = resolve_project(
         &fixture.project,
@@ -615,11 +658,11 @@ async fn fetched_from_source_rejects_a_file_as_its_directory() {
 #[nix_test]
 async fn fetched_from_source_reuses_cached_source_without_its_remote() {
     let mut fixture = Fixture::new();
-    fixture.project.source_input = Some(devenv_core::config::Input {
+    fixture.project.source = Some(ProjectSource::Input(devenv_core::config::Input {
         url: Some(fixture.daemon.url(fixture.shared.path())),
         flake: false,
         ..Default::default()
-    });
+    }));
     fixture.write(&fixture.resolve(UpdatePolicy::Preserve));
     let before = fixture.lock_contents();
     fixture.daemon.child.kill().unwrap();
