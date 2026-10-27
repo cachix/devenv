@@ -309,20 +309,12 @@ in
 
   # libghostty-vt-sys has a pkg-config feature that finds the pre-built
   # library from the ghostty flake, so just provide pkg-config + the library.
-  #
-  # [tier2] For the static build, also enable the crate's `link-static`
-  # feature. Its build script otherwise defaults to dynamic linking and emits
-  # `-lghostty-vt` (the .so, which our static `.dev` output doesn't ship) →
-  # "cannot find -lghostty-vt". With `link-static` it probes the
-  # `libghostty-vt-static` pkg-config module and links `libghostty-vt.a`.
+  # The bindings default to the static archive on all platforms.
   libghostty-vt-sys =
     attrs:
     {
       nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
       buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
-    }
-    // lib.optionalAttrs stdenv.hostPlatform.isStatic {
-      features = (attrs.features or [ ]) ++ [ "link-static" ];
     };
 
   nix-bindings-util = nixLibsOverride;

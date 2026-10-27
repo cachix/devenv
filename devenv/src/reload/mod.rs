@@ -31,6 +31,7 @@ pub struct DevenvShellBuilder {
     pub cmd: Option<String>,
     pub args: Vec<String>,
     pub initial_env_script: String,
+    pub output_redactor: Option<secretspec::Redactor>,
     pub bash_path: String,
     pub clean: Clean,
     pub dotfile: PathBuf,
@@ -59,6 +60,16 @@ impl ShellBuilder for DevenvShellBuilder {
         Ok(cmd_builder)
     }
 
+    fn output_filter(&self) -> Option<Box<dyn devenv_mailbox::ShellOutputFilter>> {
+        self.output_redactor
+            .as_ref()
+            .filter(|redactor| !redactor.is_empty())
+            .map(|redactor| {
+                Box::new(SecretOutputFilter(redactor.stream()))
+                    as Box<dyn devenv_mailbox::ShellOutputFilter>
+            })
+    }
+
     fn build_reload_env(&self, ctx: &BuildContext) -> Result<(), BuildError> {
         let reload_file = ctx
             .reload_file
@@ -71,6 +82,19 @@ impl ShellBuilder for DevenvShellBuilder {
 
     fn interrupt(&self) {
         devenv_nix_backend::trigger_interrupt();
+    }
+}
+
+#[derive(Debug)]
+struct SecretOutputFilter(secretspec::RedactionStream);
+
+impl devenv_mailbox::ShellOutputFilter for SecretOutputFilter {
+    fn push(&mut self, input: &[u8], output: &mut Vec<u8>) {
+        self.0.push(input, output);
+    }
+
+    fn end_region(&mut self, output: &mut Vec<u8>) {
+        self.0.end_region(output);
     }
 }
 
@@ -198,5 +222,43 @@ fn set_reload_file_env(cmd_builder: &mut CommandBuilder, ctx: &BuildContext) {
             "DEVENV_RELOAD_FILE",
             reload_file.to_string_lossy().into_owned(),
         );
+    }
+}
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::*;
+    use devenv_mailbox::ShellOutputFilter;
+
+    #[test]
+    fn secretspec_filter_masks_matches_across_pty_reads_and_finishes_at_eof() {
+        let redactor =
+            secretspec::Redactor::new([secretspec::SecretBytes::from_utf8("test-token")]).unwrap();
+        let mut filter = SecretOutputFilter(redactor.stream());
+        let mut output = Vec::new();
+        filter.push(b"prefix test-", &mut output);
+        assert_eq!(output, b"prefix ");
+        output.clear();
+        filter.push(b"token suffix test-", &mut output);
+        assert_eq!(output, b"[REDACTED] suffix ");
+        output.clear();
+        filter.end_region(&mut output);
+        assert_eq!(output, b"test-");
+    }
+
+    #[test]
+    fn secretspec_filter_restarts_matching_at_terminal_boundaries() {
+        let redactor =
+            secretspec::Redactor::new([secretspec::SecretBytes::from_utf8("test-token")]).unwrap();
+        let mut filter = SecretOutputFilter(redactor.stream());
+        let mut output = Vec::new();
+        filter.push(b"test-", &mut output);
+        assert!(output.is_empty());
+        filter.end_region(&mut output);
+        assert_eq!(output, b"test-");
+        output.clear();
+        filter.push(b"token test-token", &mut output);
+        filter.end_region(&mut output);
+        assert_eq!(output, b"token [REDACTED]");
     }
 }
