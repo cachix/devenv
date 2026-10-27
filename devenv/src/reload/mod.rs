@@ -31,6 +31,7 @@ pub struct DevenvShellBuilder {
     pub cmd: Option<String>,
     pub args: Vec<String>,
     pub initial_env_script: String,
+    pub output_redactor: Option<secretspec::Redactor>,
     pub bash_path: String,
     pub clean: Clean,
     pub dotfile: PathBuf,
@@ -59,6 +60,16 @@ impl ShellBuilder for DevenvShellBuilder {
         Ok(cmd_builder)
     }
 
+    fn output_filter(&self) -> Option<Box<dyn devenv_mailbox::ShellOutputFilter>> {
+        self.output_redactor
+            .as_ref()
+            .filter(|redactor| !redactor.is_empty())
+            .map(|redactor| {
+                Box::new(SecretOutputFilter(redactor.terminal_stream()))
+                    as Box<dyn devenv_mailbox::ShellOutputFilter>
+            })
+    }
+
     fn build_reload_env(&self, ctx: &BuildContext) -> Result<(), BuildError> {
         let reload_file = ctx
             .reload_file
@@ -71,6 +82,19 @@ impl ShellBuilder for DevenvShellBuilder {
 
     fn interrupt(&self) {
         devenv_nix_backend::trigger_interrupt();
+    }
+}
+
+#[derive(Debug)]
+struct SecretOutputFilter(secretspec::TerminalRedactionStream);
+
+impl devenv_mailbox::ShellOutputFilter for SecretOutputFilter {
+    fn push(&mut self, input: &[u8], output: &mut Vec<u8>) {
+        self.0.push(input, output);
+    }
+
+    fn finish(self: Box<Self>, output: &mut Vec<u8>) {
+        self.0.finish(output);
     }
 }
 
@@ -198,5 +222,73 @@ fn set_reload_file_env(cmd_builder: &mut CommandBuilder, ctx: &BuildContext) {
             "DEVENV_RELOAD_FILE",
             reload_file.to_string_lossy().into_owned(),
         );
+    }
+}
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::*;
+    use devenv_mailbox::ShellOutputFilter;
+
+    #[test]
+    fn secretspec_filter_masks_matches_across_pty_reads_and_finishes_at_eof() {
+        let redactor =
+            secretspec::Redactor::new([secretspec::SecretBytes::from_utf8("test-token")]).unwrap();
+        let mut filter = Box::new(SecretOutputFilter(redactor.terminal_stream()));
+        let mut output = Vec::new();
+        filter.push(b"prefix test-", &mut output);
+        assert_eq!(output, b"prefix ");
+        output.clear();
+        filter.push(b"token suffix test-", &mut output);
+        assert_eq!(output, b"[REDACTED] suffix ");
+        output.clear();
+        filter.finish(&mut output);
+        assert_eq!(output, b"test-");
+    }
+
+    #[test]
+    fn secretspec_filter_preserves_terminal_modes_and_masks_title_payloads() {
+        let redactor = secretspec::Redactor::new(
+            ["0", "2004", "test-token"].map(secretspec::SecretBytes::from_utf8),
+        )
+        .unwrap();
+        let mut filter = Box::new(SecretOutputFilter(redactor.terminal_stream()));
+        let mut output = Vec::new();
+        for chunk in b"\x1b[?2004h\x1b[0m2004 \x1b]0;test-token\x1b\\".chunks(1) {
+            filter.push(chunk, &mut output);
+        }
+        filter.finish(&mut output);
+        assert_eq!(
+            output,
+            b"\x1b[?2004h\x1b[0m[REDACTED] \x1b]0;[REDACTED]\x1b\\"
+        );
+    }
+
+    #[test]
+    fn secretspec_filter_recovers_from_interrupted_and_ignored_controls() {
+        let redactor =
+            secretspec::Redactor::new(["private", "1"].map(secretspec::SecretBytes::from_utf8))
+                .unwrap();
+        for (input, expected) in [
+            (
+                b"\x1b]10;?\x1b[0mprivate".as_slice(),
+                b"\x1b]10;?\x1b[0m[REDACTED]".as_slice(),
+            ),
+            (
+                b"\x1bP$qm\x1b[0mprivate".as_slice(),
+                b"\x1bP$qm\x1b[0m[REDACTED]".as_slice(),
+            ),
+            (b"\x1b[3\x7f1mX".as_slice(), b"\x1b[3\x7f1mX".as_slice()),
+            (b"\x1b\x00[31mX".as_slice(), b"\x1b\x00[31mX".as_slice()),
+        ] {
+            for split in 0..=input.len() {
+                let mut filter = Box::new(SecretOutputFilter(redactor.terminal_stream()));
+                let mut output = Vec::new();
+                filter.push(&input[..split], &mut output);
+                filter.push(&input[split..], &mut output);
+                filter.finish(&mut output);
+                assert_eq!(output, expected);
+            }
+        }
     }
 }

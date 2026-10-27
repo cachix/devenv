@@ -1683,15 +1683,16 @@ impl ShellSession {
             }
             None => command_rx.recv().await,
         };
-        let (initial_cmd, _watch_files) = match initial_command {
+        let (initial_cmd, mut output_filter) = match initial_command {
             Some(FrontendCommand::Shell(ShellCommand::Spawn {
                 command,
                 watch_files,
+                output_filter,
             })) => {
                 self.status_line
                     .state_mut()
                     .set_watched_file_count(watch_files.len());
-                (command, watch_files)
+                (command, output_filter)
             }
             Some(FrontendCommand::Shell(ShellCommand::Shutdown)) | None => {
                 return Ok(None);
@@ -1844,13 +1845,44 @@ impl ShellSession {
         std::thread::Builder::new()
             .name("session-pty".into())
             .spawn(move || {
+                let mut input = if output_filter.is_some() {
+                    vec![0; PTY_READ_BUFFER_BYTES]
+                } else {
+                    Vec::new()
+                };
                 while let Ok(mut buf) = pty_buffer_rx.recv() {
                     // When all buffers are awaiting rendering, wait here
                     // rather than allocating another event payload. Dropping
                     // the renderer's return sender disconnects this receive
                     // during session shutdown.
                     buf.resize(PTY_READ_BUFFER_BYTES, 0);
-                    match pty_reader.read(&mut buf) {
+                    let result = if output_filter.is_some() {
+                        let result = crate::output::read_filtered_output(
+                            |input| pty_reader.read(input),
+                            &mut output_filter,
+                            &mut input,
+                            &mut buf,
+                        );
+                        match result {
+                            Ok(more) => {
+                                if !buf.is_empty()
+                                    && pty_tx
+                                        .send(Event::PtyOutput(std::mem::take(&mut buf)))
+                                        .is_err()
+                                {
+                                    break;
+                                }
+                                if more {
+                                    continue;
+                                }
+                                Ok(0)
+                            }
+                            Err(error) => Err(error),
+                        }
+                    } else {
+                        pty_reader.read(&mut buf)
+                    };
+                    match result {
                         Ok(0) => {
                             let exit_code = pty_reader.wait_for_exit().map(|s| s.exit_code());
                             let _ = pty_tx.send(Event::PtyExit(exit_code));

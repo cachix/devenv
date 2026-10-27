@@ -8,6 +8,7 @@ pub mod escape;
 pub mod escape_state;
 pub mod indicators;
 pub mod keybindings;
+mod output;
 mod protocol;
 mod pty;
 mod session;

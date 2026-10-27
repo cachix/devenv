@@ -665,6 +665,7 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
         shell_cwd,
         is_testing,
         expose_secretspec_values_to_nix,
+        redact_shell_output: use_pty,
         require_project_file,
     };
 
@@ -1170,12 +1171,14 @@ async fn run_backend(
         // file affects this shell entry immediately.
         let initial_env_script = devenv.print_dev_env(false).await?;
 
+        let output_redactor = devenv.secretspec_redactor();
         let (client, owner_handle) = devenv::reload::spawn_owner(devenv, verbosity);
         let result = run_reload_shell(ReloadShellArgs {
             devenv: client,
             cmd: None,
             args,
             initial_env_script,
+            output_redactor,
             bash_path,
             clean,
             shell,
@@ -1756,6 +1759,7 @@ struct ReloadShellArgs {
     cmd: Option<String>,
     args: Vec<String>,
     initial_env_script: String,
+    output_redactor: Option<secretspec::Redactor>,
     bash_path: String,
     clean: devenv_core::config::Clean,
     shell: String,
@@ -1786,6 +1790,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         cmd,
         args,
         initial_env_script,
+        output_redactor,
         bash_path,
         clean,
         shell,
@@ -1808,6 +1813,7 @@ async fn run_reload_shell(args: ReloadShellArgs) -> Result<Option<u32>> {
         cmd,
         args,
         initial_env_script,
+        output_redactor,
         bash_path,
         clean,
         dotfile,

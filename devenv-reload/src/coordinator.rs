@@ -188,6 +188,7 @@ impl ShellCoordinator {
         command_tx
             .send(FrontendCommand::Shell(ShellCommand::Spawn {
                 command: cmd,
+                output_filter: builder.output_filter(),
                 watch_files,
             }))
             .await

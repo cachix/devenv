@@ -8,5 +8,7 @@
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=53ba0ed2962ceb18303f5b2fbca1cd0fb88df135#nix-bindings-flake@0.1.0": "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=53ba0ed2962ceb18303f5b2fbca1cd0fb88df135#nix-bindings-store@0.1.0": "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk",
   "git+https://github.com/cachix/nix-bindings-rust.git?rev=53ba0ed2962ceb18303f5b2fbca1cd0fb88df135#nix-bindings-util@0.1.0": "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk",
-  "git+https://github.com/cachix/nix-bindings-rust.git?rev=53ba0ed2962ceb18303f5b2fbca1cd0fb88df135#nix-cmd@0.1.0": "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk"
+  "git+https://github.com/cachix/nix-bindings-rust.git?rev=53ba0ed2962ceb18303f5b2fbca1cd0fb88df135#nix-cmd@0.1.0": "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk",
+  "git+https://github.com/cachix/secretspec?rev=5d44cba230bedbcf22880e35b417fb826f72b992#secretspec-ipc@0.21.1": "1mzwcbc0v30c4bx56nl1qnmd0ag3namw5zl6frpvrg8iaadqp6rc",
+  "git+https://github.com/cachix/secretspec?rev=5d44cba230bedbcf22880e35b417fb826f72b992#secretspec@0.21.1": "1mzwcbc0v30c4bx56nl1qnmd0ag3namw5zl6frpvrg8iaadqp6rc"
 }
