@@ -184,6 +184,14 @@ Use ` lib.mkForce null ` to use your regular mc configuration from ` $HOME/.mc `
 *Type:*
 null or JSON value
 
+
+
+*Default:*
+
+```nix
+null
+```
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
