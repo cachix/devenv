@@ -220,52 +220,59 @@ fn format_duration_parts(duration: std::time::Duration) -> (String, String) {
 }
 
 /// Format changed files for display, deduplicating and adapting to available space.
-fn format_changed_files(changed_files: &[PathBuf], max_len: usize) -> String {
+/// Join `items` (deduplicated, in order) within `max_len` characters,
+/// e.g. `a, b +2`, falling back to `N <noun>` and then truncating.
+fn format_list(items: impl IntoIterator<Item = String>, max_len: usize, noun: &str) -> String {
     let mut seen = HashSet::new();
-    let files: Vec<_> = changed_files
-        .iter()
-        .filter_map(|p| {
-            let name = p
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            if seen.insert(name.clone()) {
-                Some(name)
-            } else {
-                None
-            }
-        })
+    let items: Vec<String> = items
+        .into_iter()
+        .filter(|item| seen.insert(item.clone()))
         .collect();
 
-    if files.is_empty() {
-        return String::new();
-    }
-
-    // Try showing progressively fewer files until it fits
-    for limit in (1..=3.min(files.len())).rev() {
-        let shown: Vec<_> = files.iter().take(limit).cloned().collect();
-        let remaining = files.len() - limit;
+    // Try showing progressively fewer items until it fits
+    for limit in (1..=3.min(items.len())).rev() {
+        let shown = items[..limit].join(", ");
+        let remaining = items.len() - limit;
         let result = if remaining > 0 {
-            format!("{} +{}", shown.join(", "), remaining)
+            format!("{shown} +{remaining}")
         } else {
-            shown.join(", ")
+            shown
         };
-        if result.len() <= max_len {
+        if result.chars().count() <= max_len {
             return result;
         }
     }
 
-    // Last resort: just show count
-    if files.len() == 1 {
-        let name = &files[0];
-        if name.len() <= max_len {
-            return name.clone();
-        }
-        // Truncate single filename
-        return format!("{}…", &name[..max_len.saturating_sub(1)]);
+    let fallback = match items.as_slice() {
+        [] => return String::new(),
+        [item] => item.clone(),
+        _ => format!("{} {noun}", items.len()),
+    };
+    if fallback.chars().count() <= max_len {
+        return fallback;
     }
-    format!("{} files", files.len())
+    let truncated: String = fallback.chars().take(max_len.saturating_sub(1)).collect();
+    format!("{truncated}…")
+}
+
+fn format_changed_files(changed_files: &[PathBuf], max_len: usize) -> String {
+    let names = changed_files.iter().map(|path| {
+        path.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+    });
+    format_list(names, max_len, "files")
+}
+
+/// The leading label. It shrinks (clipped) before the status text does.
+fn label_element(label: String) -> AnyElement<'static> {
+    element! {
+        View(min_width: 0, overflow: Overflow::Hidden, margin_right: 1) {
+            Text(content: label, wrap: TextWrap::NoWrap, color: COLOR_SECONDARY)
+        }
+    }
+    .into_any()
 }
 
 /// Build "in N.Ns" duration elements, or empty if no duration recorded.
@@ -297,8 +304,8 @@ pub struct StatusLine {
     state: StatusState,
     keybindings: ShellKeybindings,
     indicators: Indicators,
-    /// Leading label: the active profiles (e.g. `backend, fast`), or `devenv`.
-    label: String,
+    /// Active profiles, shown in place of the `devenv` label.
+    profiles: Vec<String>,
     enabled: bool,
     /// Current spinner frame index (animated manually since we don't use iocraft runtime)
     spinner_frame: usize,
@@ -490,7 +497,7 @@ impl StatusLine {
             state: StatusState::new(),
             keybindings: ShellKeybindings::default(),
             indicators: Indicators::default(),
-            label: "devenv".to_string(),
+            profiles: Vec::new(),
             enabled: true,
             spinner_frame: 0,
             last_spinner_update: Instant::now(),
@@ -534,16 +541,24 @@ impl StatusLine {
         self.cached_state = None;
     }
 
-    /// Show the active profiles, comma-separated, in place of `devenv`.
+    /// Show the active profiles in place of the `devenv` label.
     pub fn set_profiles(&mut self, profiles: &[String]) {
-        self.label = if profiles.is_empty() {
-            "devenv".to_string()
-        } else {
-            // Profile names come from the command line; keep control
-            // characters out of the terminal.
-            profiles.join(", ").replace(char::is_control, " ")
-        };
+        // Profile names come from the command line; keep control
+        // characters out of the terminal.
+        self.profiles = profiles
+            .iter()
+            .map(|profile| profile.replace(char::is_control, " "))
+            .collect();
         self.cached_state = None;
+    }
+
+    /// The leading label, summarised to fit `width`.
+    fn label(&self, width: u16) -> String {
+        if self.profiles.is_empty() {
+            return "devenv".to_string();
+        }
+        let max_len = width as usize / 2;
+        format_list(self.profiles.iter().cloned(), max_len, "profiles")
     }
 
     /// Check if the status line is enabled.
@@ -627,6 +642,7 @@ impl StatusLine {
     ) -> AnyElement<'static> {
         // Use short keybind notation for narrow terminals
         let use_short = width < 60;
+        let label = label_element(self.label(width));
 
         if self.state.building {
             // Building state: spinner + elapsed time + changed files
@@ -644,25 +660,27 @@ impl StatusLine {
                         View(margin_right: 1) {
                             Text(content: spinner, color: COLOR_ACTIVE)
                         }
-                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
-                        Text(content: "building", weight: Weight::Bold, color: COLOR_ACTIVE)
-                        #(if let Some((num, unit)) = elapsed {
-                            vec![
-                                element!(Text(content: " for ", color: COLOR_SECONDARY)).into_any(),
-                                element!(Text(content: num, color: COLOR_COMPLETED)).into_any(),
-                                element!(Text(content: unit, color: COLOR_SECONDARY)).into_any(),
-                            ]
-                        } else {
-                            vec![]
-                        })
-                        #(if has_changed_files {
-                            vec![
-                                element!(Text(content: ", changed ", color: COLOR_SECONDARY)).into_any(),
-                                element!(Text(content: files_str, color: COLOR_COMPLETED)).into_any(),
-                            ]
-                        } else {
-                            vec![]
-                        })
+                        #([label])
+                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                            Text(content: "building", weight: Weight::Bold, color: COLOR_ACTIVE)
+                            #(if let Some((num, unit)) = elapsed {
+                                vec![
+                                    element!(Text(content: " for ", color: COLOR_SECONDARY)).into_any(),
+                                    element!(Text(content: num, color: COLOR_COMPLETED)).into_any(),
+                                    element!(Text(content: unit, color: COLOR_SECONDARY)).into_any(),
+                                ]
+                            } else {
+                                vec![]
+                            })
+                            #(if has_changed_files {
+                                vec![
+                                    element!(Text(content: ", changed ", color: COLOR_SECONDARY)).into_any(),
+                                    element!(Text(content: files_str, color: COLOR_COMPLETED)).into_any(),
+                                ]
+                            } else {
+                                vec![]
+                            })
+                        }
                     }
                 }
             }
@@ -678,10 +696,12 @@ impl StatusLine {
                         View(margin_right: 1) {
                             Text(content: CHECKMARK, color: COLOR_COMPLETED)
                         }
-                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
-                        Text(content: "ready", weight: Weight::Bold, color: COLOR_ACTIVE)
-                        #(duration)
-                        #(watching)
+                        #([label])
+                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                            Text(content: "ready", weight: Weight::Bold, color: COLOR_ACTIVE)
+                            #(duration)
+                            #(watching)
+                        }
                     }
                 }
             }
@@ -697,10 +717,12 @@ impl StatusLine {
                         View(margin_right: 1) {
                             Text(content: CHECKMARK, color: COLOR_COMPLETED)
                         }
-                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
-                        Text(content: "reloaded", weight: Weight::Bold, color: COLOR_COMPLETED)
-                        #(duration)
-                        #(watching)
+                        #([label])
+                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                            Text(content: "reloaded", weight: Weight::Bold, color: COLOR_COMPLETED)
+                            #(duration)
+                            #(watching)
+                        }
                     }
                 }
             }
@@ -724,10 +746,12 @@ impl StatusLine {
                         View(margin_right: 1) {
                             Text(content: XMARK, color: COLOR_FAILED)
                         }
-                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
-                        Text(content: "failed", weight: Weight::Bold, color: COLOR_FAILED)
-                        #(duration)
-                        #(watching)
+                        #([label])
+                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                            Text(content: "failed", weight: Weight::Bold, color: COLOR_FAILED)
+                            #(duration)
+                            #(watching)
+                        }
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                         #(if let Some(keybind) = keybind {
@@ -755,8 +779,10 @@ impl StatusLine {
                         View(margin_right: glyph.gap) {
                             Text(content: glyph.text, color: COLOR_SECONDARY)
                         }
-                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
-                        Text(content: "paused", weight: Weight::Bold, color: COLOR_ACTIVE)
+                        #([label])
+                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                            Text(content: "paused", weight: Weight::Bold, color: COLOR_ACTIVE)
+                        }
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                         #(if let Some(keybind) = keybind {
@@ -785,10 +811,12 @@ impl StatusLine {
                         View(margin_right: glyph.gap) {
                             Text(content: glyph.text, color: COLOR_SECONDARY)
                         }
-                        Text(content: format!("{} ", self.label), color: COLOR_SECONDARY)
-                        Text(content: "watching ", weight: Weight::Bold, color: COLOR_ACTIVE)
-                        Text(content: count_str, color: COLOR_COMPLETED)
-                        Text(content: " files", color: COLOR_SECONDARY)
+                        #([label])
+                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                            Text(content: "watching ", weight: Weight::Bold, color: COLOR_ACTIVE)
+                            Text(content: count_str, color: COLOR_COMPLETED)
+                            Text(content: " files", color: COLOR_SECONDARY)
+                        }
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                         #(if let Some(keybind) = keybind {
@@ -1114,10 +1142,22 @@ mod tests {
             "Ctrl+Alt+D pause",
         );
         assert_row(
-            &watching(&["backend".into(), "fast".into()]),
+            &watching(&["backend".into(), "fast".into(), "backend".into()]),
             " ◉ backend, fast watching 11 files",
             "Ctrl+Alt+D pause",
         );
+        // Long labels are shortened rather than squeezing the status text.
+        assert_row(
+            &watching(&["a".repeat(50), "backend".into()]),
+            " ◉ 2 profiles watching 11 files",
+            "Ctrl+Alt+D pause",
+        );
+        // A label too long for the row is clipped; the status stays intact.
+        let row = watching(&["ü".repeat(70)]);
+        assert!(row.starts_with(" ◉ üüü"), "{row:?}");
+        assert!(row.contains("ü watching 11 files "), "{row:?}");
+        assert!(row.ends_with("Ctrl+Alt+D pause"), "{row:?}");
+        assert_eq!(row.chars().count(), 79, "{row:?}");
     }
 
     #[test]
