@@ -47,12 +47,21 @@ pub enum FrontendEvent {
     Shell(ShellEvent),
 }
 
+/// Stateful filtering applied before shell output reaches the frontend.
+/// Implementations must retain partial matches across chunks. Finishing emits
+/// a filtered suffix at EOF; dropping a filter discards that suffix.
+pub trait ShellOutputFilter: Send + std::fmt::Debug {
+    fn push(&mut self, input: &[u8], output: &mut Vec<u8>);
+    fn finish(self: Box<Self>, output: &mut Vec<u8>);
+}
+
 /// Commands sent from coordinator to shell session.
 #[derive(Debug)]
 pub enum ShellCommand {
     /// Spawn the initial shell with this command.
     Spawn {
         command: CommandBuilder,
+        output_filter: Option<Box<dyn ShellOutputFilter>>,
         watch_files: Vec<PathBuf>,
     },
     /// Update the list of watched files after the initial build.

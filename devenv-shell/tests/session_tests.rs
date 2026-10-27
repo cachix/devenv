@@ -46,6 +46,7 @@ fn spawn_cmd(shell_line: &str) -> FrontendCommand {
     cmd.arg(shell_line);
     FrontendCommand::Shell(ShellCommand::Spawn {
         command: cmd,
+        output_filter: None,
         watch_files: vec![],
     })
 }
@@ -81,6 +82,48 @@ fn read_until(stream: &mut UnixStream, needle: &[u8], deadline: Duration) -> Vec
         }
     }
     collected
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_output_filter_runs_before_terminal_rendering_and_flushes_at_eof() {
+    #[derive(Debug, Default)]
+    struct BufferedFilter(Vec<u8>);
+
+    impl devenv_mailbox::ShellOutputFilter for BufferedFilter {
+        fn push(&mut self, input: &[u8], _: &mut Vec<u8>) {
+            self.0.extend_from_slice(input);
+        }
+
+        fn finish(self: Box<Self>, output: &mut Vec<u8>) {
+            assert_eq!(self.0, b"private-fixture");
+            output.extend_from_slice(b"FILTERED-DONE");
+        }
+    }
+
+    let (io, _stdin_ours, mut stdout_ours) = test_io();
+    let (cmd_tx, cmd_rx) = mpsc::channel(10);
+    let (event_tx, _event_rx) = mpsc::channel(10);
+    let session = test_session();
+    let handle = tokio::spawn(async move { session.run(cmd_rx, event_tx, io).await });
+    let mut command = spawn_cmd("printf private-fixture; exit 7");
+    if let FrontendCommand::Shell(ShellCommand::Spawn { output_filter, .. }) = &mut command {
+        *output_filter = Some(Box::<BufferedFilter>::default());
+    }
+    cmd_tx.send(command).await.unwrap();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), handle)
+            .await
+            .expect("filtered shell did not exit")
+            .unwrap()
+            .unwrap(),
+        Some(7)
+    );
+    // The session has dropped its writer, so EOF is guaranteed. On Darwin,
+    // setting SO_RCVTIMEO after the peer closes can fail with EINVAL.
+    let mut output = Vec::new();
+    stdout_ours.read_to_end(&mut output).unwrap();
+    assert!(output.windows(13).any(|bytes| bytes == b"FILTERED-DONE"));
+    assert!(!output.windows(15).any(|bytes| bytes == b"private-fixture"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

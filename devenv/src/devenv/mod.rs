@@ -180,6 +180,8 @@ pub struct DevenvOptions {
     /// evaluation. Machine installs disable this so bootstrap credentials stay
     /// on the CLI side of the Nix/Rust boundary.
     pub expose_secretspec_values_to_nix: bool,
+    /// Prepare output filtering only for shells supervised through a PTY.
+    pub redact_shell_output: bool,
     /// Whether a `devenv.nix` project file is required. Commands that operate
     /// outside of a project (e.g. `gc`) set this to `false` so they can run
     /// from any directory.
@@ -241,6 +243,7 @@ impl Default for DevenvOptions {
             shell_cwd: None,
             is_testing: false,
             expose_secretspec_values_to_nix: true,
+            redact_shell_output: false,
             require_project_file: true,
         }
     }
@@ -477,6 +480,7 @@ pub struct Devenv {
 
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
+    secretspec_redactor: Option<secretspec::Redactor>,
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
@@ -672,6 +676,7 @@ impl Devenv {
 
         let mut secretspec_cell: OnceCell<ResolvedSecrets> = OnceCell::new();
         let mut secretspec_as_paths = HashSet::new();
+        let mut secretspec_redactor = None;
         if !expose_secretspec_values_to_nix {
             disable_core_dumps_for_secret_operation()?;
         }
@@ -686,6 +691,9 @@ impl Devenv {
                 &secret_settings,
                 &mut secretspec_cell,
                 &mut secretspec_as_paths,
+                options
+                    .redact_shell_output
+                    .then_some(&mut secretspec_redactor),
             )?;
         }
         let secretspec_provider_override = secret_settings
@@ -893,6 +901,7 @@ impl Devenv {
             eval_cache_pool,
             eval_inputs,
             secretspec: secretspec_cell,
+            secretspec_redactor,
             port_allocator,
             native_api_server: OnceCell::new(),
             shutdown,
@@ -3720,6 +3729,10 @@ impl Devenv {
         }
     }
 
+    pub fn secretspec_redactor(&self) -> Option<secretspec::Redactor> {
+        self.secretspec_redactor.clone()
+    }
+
     pub fn secretspec(&self) -> Option<&ResolvedSecrets> {
         self.secretspec.get()
     }
@@ -4325,6 +4338,7 @@ fn resolve_secretspec_into(
     secret_settings: &SecretSettings,
     cell: &mut OnceCell<ResolvedSecrets>,
     as_paths: &mut HashSet<String>,
+    redactor: Option<&mut Option<secretspec::Redactor>>,
 ) -> Result<()> {
     let secretspec_path = devenv_root.join("secretspec.toml");
     if !secretspec_path.exists() {
@@ -4391,6 +4405,10 @@ fn resolve_secretspec_into(
             .into());
         }
     };
+
+    if let Some(redactor) = redactor {
+        *redactor = Some(validated_secrets.redactor().into_diagnostic()?);
+    }
 
     as_paths.extend(
         validated_secrets
@@ -4823,6 +4841,47 @@ mod tests {
     }
 
     #[test]
+    fn secretspec_large_values_only_limit_shell_output_redaction() {
+        let root = tempfile::tempdir().unwrap();
+        let value = "x".repeat(64 * 1024 + 1);
+        std::fs::write(
+            root.path().join("secretspec.toml"),
+            format!(
+                r#"[project]
+name = "large-secret-test"
+revision = "1.0"
+require_reason = false
+[profiles.default]
+VALUE = {{ description = "large value", default = {value:?} }}
+"#
+            ),
+        )
+        .unwrap();
+        let settings = SecretSettings {
+            secretspec: Some(devenv_core::config::SecretspecConfig {
+                enable: true,
+                provider: Some("null://".into()),
+                ..Default::default()
+            }),
+        };
+        let mut cell = OnceCell::new();
+        let mut as_paths = HashSet::new();
+        resolve_secretspec_into(root.path(), &settings, &mut cell, &mut as_paths, None)
+            .expect("ordinary resolution must not impose a redaction limit");
+        assert_eq!(cell.get().unwrap().secrets["VALUE"], value);
+
+        let error = resolve_secretspec_into(
+            root.path(),
+            &settings,
+            &mut OnceCell::new(),
+            &mut as_paths,
+            Some(&mut None),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("64 KiB"));
+    }
+
+    #[test]
     fn project_secretspec_records_and_retains_as_path_values() {
         let root = tempfile::tempdir().expect("create project root");
         std::fs::write(
@@ -4849,8 +4908,16 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         let mut cell = OnceCell::new();
         let mut as_paths = HashSet::new();
 
-        resolve_secretspec_into(root.path(), &settings, &mut cell, &mut as_paths)
-            .expect("resolve project SecretSpec");
+        let mut redactor = None;
+        resolve_secretspec_into(
+            root.path(),
+            &settings,
+            &mut cell,
+            &mut as_paths,
+            Some(&mut redactor),
+        )
+        .expect("resolve project SecretSpec");
+        assert_eq!(redactor.unwrap().redact(b"secret-contents"), b"[REDACTED]");
 
         assert!(as_paths.contains("BOOTSTRAP_KEY"));
         let path = PathBuf::from(&cell.get().unwrap().secrets["BOOTSTRAP_KEY"]);
