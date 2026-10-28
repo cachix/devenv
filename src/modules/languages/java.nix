@@ -1,4 +1,8 @@
-{ pkgs, config, lib, ... }:
+{ pkgs
+, config
+, lib
+, ...
+}:
 
 let
   cfg = config.languages.java;
@@ -9,7 +13,15 @@ let
       pkgs.maven.override { jdk = cfg.jdk.package; }
     else
       pkgs.maven.override { jdk_headless = cfg.jdk.package; };
-  inherit (lib) types mkEnableOption mkOption mkDefault mkIf optional literalExpression;
+  inherit (lib)
+    types
+    mkEnableOption
+    mkOption
+    mkDefault
+    mkIf
+    optional
+    literalExpression
+    ;
 in
 {
   options.languages.java = {
@@ -47,13 +59,16 @@ in
       };
     };
     lsp = {
-      enable = mkEnableOption "Java Language Server" // { default = true; };
+      enable = mkEnableOption "Java Language Server" // {
+        default = true;
+      };
       package = mkOption {
         type = types.package;
-        defaultText = literalExpression "pkgs.jdt-language-server.override { jdk = cfg.jdk.package; }";
+        defaultText = literalExpression "pkgs.jdt-language-server";
         description = ''
           The Java language server package to use.
-          The Java language server package by default inherits the JDK from `languages.java.jdk.package`.
+          The language server runs on the JDK packaged with it, not on `languages.java.jdk.package`.
+          Configure the project JDK in your editor; see the [Java guide](https://devenv.sh/languages/java/).
         '';
       };
     };
@@ -62,8 +77,27 @@ in
   config = mkIf cfg.enable {
     languages.java.maven.package = mkDefault mavenPackage;
     languages.java.gradle.package = mkDefault (pkgs.gradle.override { java = cfg.jdk.package; });
-    languages.java.lsp.package = mkDefault (pkgs.jdt-language-server.override { jdk = cfg.jdk.package; });
-    packages = (optional cfg.enable cfg.jdk.package)
+    # Avoid overriding the JDK here.
+    # JDT has stricter version requirements, which is reflected in the versioned jdk parameter the derivation accepts.
+    # Prefer teaching users how to configure the JDK runtimes in their editor.
+    languages.java.lsp.package = mkDefault pkgs.jdt-language-server;
+
+    changelogs = [
+      {
+        date = "2026-10-25";
+        title = "Java language server uses its packaged runtime";
+        when = cfg.lsp.enable;
+        description = ''
+          The Java language server now uses the runtime selected by nixpkgs.
+          Recent nixpkgs versions require JDK 25 to run the server and no longer accept the old `jdk` override.
+          The project JDK still controls `JAVA_HOME`, Maven, and Gradle.
+          Configure your editor to use it for project analysis and Gradle imports; see the [Java guide](https://devenv.sh/languages/java/).
+        '';
+      }
+    ];
+
+    packages =
+      (optional cfg.enable cfg.jdk.package)
       ++ (optional cfg.maven.enable cfg.maven.package)
       ++ (optional cfg.gradle.enable cfg.gradle.package)
       ++ (optional cfg.lsp.enable cfg.lsp.package);

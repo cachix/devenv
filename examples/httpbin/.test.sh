@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-for port in 8080 8081; do
+: "${HTTPBIN_PORTS:?HTTPBIN_PORTS is not set}"
+
+for port in $HTTPBIN_PORTS; do
   wait_for_port "$port"
   curl -vf "http://127.0.0.1:$port/headers"
 done

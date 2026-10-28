@@ -172,6 +172,14 @@ Initial configuration for the connector
 *Type:*
 attribute set
 
+
+
+*Default:*
+
+```nix
+{ }
+```
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
 

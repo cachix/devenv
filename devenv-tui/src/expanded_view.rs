@@ -1661,7 +1661,7 @@ fn render_expanded_view_custom(
         let mut action_children = Vec::new();
         if interrupt_prompt_attached && compact {
             action_children.push(expanded_footer_piece("Detach? ", Color::AnsiValue(245)));
-            action_children.push(expanded_footer_piece("^C", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece("q/^C", COLOR_INTERACTIVE));
             action_children.push(expanded_footer_piece(":detach ", Color::AnsiValue(245)));
             action_children.push(expanded_footer_piece("s", COLOR_INTERACTIVE));
             action_children.push(expanded_footer_piece(":stop ", Color::AnsiValue(245)));
@@ -1672,7 +1672,7 @@ fn render_expanded_view_custom(
                 "Detach or stop the process manager?  ",
                 Color::AnsiValue(245),
             ));
-            action_children.push(expanded_footer_piece("Ctrl-C", COLOR_INTERACTIVE));
+            action_children.push(expanded_footer_piece("q/Ctrl-C", COLOR_INTERACTIVE));
             action_children.push(expanded_footer_piece(":detach  ", Color::AnsiValue(245)));
             action_children.push(expanded_footer_piece("s", COLOR_INTERACTIVE));
             action_children.push(expanded_footer_piece(
@@ -2401,9 +2401,9 @@ mod tests {
                 "c:keep running  q:quit  Ctrl-C:quit"
             };
             let detach_actions = if width < 120 {
-                "^C:detach s:stop Esc:watch"
+                "q/^C:detach s:stop Esc:watch"
             } else {
-                "Ctrl-C:detach  s:stop manager  Esc:keep watching"
+                "q/Ctrl-C:detach  s:stop manager  Esc:keep watching"
             };
 
             for (name, ui, expected) in [

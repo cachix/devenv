@@ -238,6 +238,13 @@ in
   # openssl-sys needs openssl
   openssl-sys = opensslOverride;
 
+  # Cargo enables bundled SQLite. Keep it for both target crates and host
+  # proc-macros: nixpkgs otherwise forces pkg-config, which can select the
+  # target's static SQLite for host crates and omit its zlib link dependency.
+  libsqlite3-sys = attrs: {
+    LIBSQLITE3_SYS_USE_PKG_CONFIG = "0";
+  };
+
   # Pingora enables flate2's bundled zlib-ng backend.
   libz-ng-sys = attrs: {
     nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ cmake ];

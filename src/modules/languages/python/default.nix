@@ -28,7 +28,6 @@ let
     name = "nixpkgs-python";
     url = "github:cachix/nixpkgs-python";
     attribute = "languages.python.version";
-    follows = [ "nixpkgs" ];
   };
 
   uv2nix = config.lib.getInput {

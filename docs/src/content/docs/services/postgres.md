@@ -117,6 +117,7 @@ The available extensions are:
  - ip4r
  - jsonb_deep_sum
  - lantern
+ - ogr_fdw
  - omnigres
  - periods
  - pg-gvm
@@ -127,6 +128,7 @@ The available extensions are:
  - pg_byteamagic
  - pg_cron
  - pg_csv
+ - pg_duckdb
  - pg_ed25519
  - pg_embedding
  - pg_graphql
@@ -144,12 +146,16 @@ The available extensions are:
  - pg_search
  - pg_similarity
  - pg_squeeze
+ - pg_textsearch
  - pg_tle
  - pg_topn
  - pg_uuidv7
+ - pg_when
+ - pgactive
  - pgaudit
  - pgddl
  - pgjwt
+ - pglite_fusion
  - pgmq
  - pgroonga
  - pgrouting

@@ -11,7 +11,7 @@ in
 
   languages.php = {
     enable = true;
-    version = "8.2";
+    version = "8.5";
 
     extensions = [
       "mysqli"

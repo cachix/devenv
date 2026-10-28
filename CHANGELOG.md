@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
 - Updating a remote configuration now composes its updated YAML and dependencies before writing `devenv.lock`, so a second invocation is not needed to finish the update.
 - `devenv.yaml` can now compose configuration from remote input imports using the existing `inputs` and `imports` syntax. Remote YAML imports and their transitive inputs are pinned in the importing project's `devenv.lock`; the root project's input declarations retain precedence, allowing shared configurations to reuse a single `nixpkgs` input ([#2205](https://github.com/cachix/devenv/issues/2205)).
@@ -11,6 +12,7 @@
 ### Bug Fixes
 
 - Fixed `devenv processes` commands reporting that no process manager is running after `devenv up -d` had been running for more than three days on macOS, where the system `/tmp` cleaner deleted the manager's PID file ([#3316](https://github.com/cachix/devenv/issues/3316)).
+- Fetched `--from` sources now load YAML configuration, local overrides, and YAML imports alongside their Nix modules. Source-local YAML imports are followed, and relative input overrides in the target's `devenv.local.yaml` resolve from the target directory.
 - Locked inputs with complete source metadata now reuse sources from the Nix store or configured binary caches without contacting their original remote, so `devenv shell` works when that remote is unavailable ([#3244](https://github.com/cachix/devenv/pull/3244)).
 - Fixed cold remote YAML imports failing to load fetched sources, and allowed root input follows to reference inputs declared by imported YAML.
 - Fixed remote YAML discovery resolving relative local inputs from the filesystem root instead of the project directory.
@@ -40,6 +42,7 @@
 - `enterShell` now runs from the project root when `devenv shell` starts in a subdirectory, before the shell moves to that subdirectory. Previously it ran in the subdirectory, so commands with relative paths, such as the JavaScript package install, looked in the wrong place.
 - Fixed auto-activation waiting for the next prompt when you `cd` from one devenv project directly into another, so you had to press Enter before the second project's shell started. It now starts right away ([#3129](https://github.com/cachix/devenv/issues/3129)).
 - `devenv up` and `devenv test` no longer run the prerequisites of a process with `start.enable = false`. They now run when that process is started, or when an enabled process depends on it ([#3272](https://github.com/cachix/devenv/issues/3272)).
+- Fixed `languages.javascript.npm.install.enable` corrupting `node_modules` when several shells start at once. Concurrent shells now wait for one npm install to finish instead of running their own.
 
 ## 2.4.0 (2026-09-24)
 

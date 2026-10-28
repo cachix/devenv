@@ -189,7 +189,6 @@
                     nixComponents = final.nix.libs;
                   in
                   nixdPkgs.nixd.override {
-                    llvmStatic = true;
                     inherit nixComponents;
                     nixf = nixdPkgs.nixf.override { inherit (nixComponents) nix-expr; };
                     # Shared libnixt would embed a second copy of the static Nix

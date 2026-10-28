@@ -1,7 +1,7 @@
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use pathdiff;
 use schemars::JsonSchema;
-use schematic::ConfigLoader;
+use schematic::ConfigLoader as SchematicLoader;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -489,42 +489,77 @@ impl From<PathBuf> for Config {
     }
 }
 
+/// An out-of-tree configuration merged below the project's configuration.
+#[derive(Clone, Copy, Debug)]
+pub enum ConfigSource<'a> {
+    /// A live directory. Its Git root is detected from the filesystem.
+    Local(&'a Path),
+    /// A fetched directory, with an explicit repository root because store
+    /// trees do not retain Git metadata.
+    Fetched {
+        directory: &'a Path,
+        repository_root: &'a Path,
+    },
+}
+
+/// Loads a project's YAML graph without fetching inputs or accessing a Nix store.
+///
+/// Source configuration merges below the project's configuration. Relative
+/// source inputs and imports resolve from the source directory, and its
+/// `devenv.nix` module is included even when it has no YAML configuration.
+/// Locked input locations let the loader discover YAML from input-style imports.
+///
+/// ```no_run
+/// use std::path::Path;
+/// use devenv_core::config::{ConfigLoader, ConfigSource};
+///
+/// let config = ConfigLoader::new(Path::new("."))
+///     .with_source(ConfigSource::Local(Path::new("../shared")))
+///     .load()?;
+/// # Ok::<(), miette::Report>(())
+/// ```
+pub struct ConfigLoader<'a> {
+    root: &'a Path,
+    source: Option<ConfigSource<'a>>,
+    input_sources: Option<&'a BTreeMap<String, PathBuf>>,
+}
+
+impl<'a> ConfigLoader<'a> {
+    pub fn new(root: &'a Path) -> Self {
+        Self {
+            root,
+            source: None,
+            input_sources: None,
+        }
+    }
+
+    pub fn with_source(mut self, source: ConfigSource<'a>) -> Self {
+        self.source = Some(source);
+        self
+    }
+
+    /// Supply selected input roots, already including any flake `dir` parameter.
+    pub fn with_input_sources(mut self, sources: &'a BTreeMap<String, PathBuf>) -> Self {
+        self.input_sources = Some(sources);
+        self
+    }
+
+    pub fn load(self) -> Result<Config> {
+        Config::load_sources(self)
+    }
+}
+
 impl Config {
     pub fn load() -> Result<Self> {
         Self::load_from("./")
-    }
-
-    /// Like [`Config::load`], but additionally merges the configuration of an
-    /// out-of-tree source directory (a `path:` `--from` source).
-    ///
-    /// The source's `devenv.yaml` import graph merges at the lowest precedence
-    /// (the project's own configuration wins), and the source's inputs and
-    /// imports are rewritten to absolute `path:` form so they resolve from the
-    /// live source directory regardless of the project root. The source's
-    /// module (`devenv.nix`) is appended to `imports` as an absolute `path:`
-    /// import, so it must exist even when the source has no `devenv.yaml`.
-    pub fn load_with_source(source_dir: Option<&Path>) -> Result<Self> {
-        Self::load_from_with_source("./", source_dir)
-    }
-
-    /// Like [`Config::load_with_source`], with locked filesystem locations for
-    /// input-style imports such as `shared-config/profiles/backend`.
-    ///
-    /// Input sources are resolved by the backend from `devenv.lock`. Keeping
-    /// fetching out of this crate lets the local-only loader remain usable
-    /// without a Nix store.
-    pub fn load_with_source_and_input_sources(
-        source_dir: Option<&Path>,
-        input_sources: &BTreeMap<String, PathBuf>,
-    ) -> Result<Self> {
-        Self::load_from_with_source_and_input_sources("./", source_dir, input_sources)
     }
 
     /// Loads configuration from a directory path, including all imported configurations.
     ///
     /// This method recursively loads the base `devenv.yaml` file and all configurations
     /// referenced in the `imports` field. Configurations are merged according to their
-    /// field-specific merge strategies.
+    /// field-specific merge strategies. Use [`ConfigLoader`] to also include an
+    /// out-of-tree source or locked input locations.
     ///
     /// # Arguments
     /// * `path` - The directory containing the base `devenv.yaml` file
@@ -542,30 +577,21 @@ impl Config {
     where
         P: AsRef<Path>,
     {
-        Self::load_from_with_source(path, None)
+        ConfigLoader::new(path.as_ref()).load()
     }
 
-    /// [`Config::load_from`] with an optional out-of-tree source directory;
-    /// see [`Config::load_with_source`] for the source merge semantics.
-    pub fn load_from_with_source<P>(path: P, source_dir: Option<&Path>) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
-        Self::load_from_with_source_and_input_sources(path, source_dir, &BTreeMap::new())
-    }
-
-    /// [`Config::load_from_with_source`] with locked sources for input-style
-    /// imports. The source paths must point at the selected input root (and
-    /// therefore already include a flake reference's `dir` parameter).
-    pub fn load_from_with_source_and_input_sources<P>(
-        path: P,
-        source_dir: Option<&Path>,
-        input_sources: &BTreeMap<String, PathBuf>,
-    ) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
-        let base_path = path.as_ref();
+    fn load_sources(context: ConfigLoader<'_>) -> Result<Self> {
+        let base_path = context.root;
+        let (source_dir, source_repository_root) = match context.source {
+            None => (None, None),
+            Some(ConfigSource::Local(directory)) => (Some(directory), None),
+            Some(ConfigSource::Fetched {
+                directory,
+                repository_root,
+            }) => (Some(directory), Some(repository_root)),
+        };
+        let empty_sources = BTreeMap::new();
+        let input_sources = context.input_sources.unwrap_or(&empty_sources);
         let base_yaml = base_path.join(YAML_CONFIG);
 
         // Collect imported yaml files only (not the base). These are merged
@@ -587,7 +613,7 @@ impl Config {
         }
 
         // Load the base config first to get the imports
-        let mut temp_loader = ConfigLoader::<Config>::new();
+        let mut temp_loader = SchematicLoader::<Config>::new();
         temp_loader
             .file_optional(&base_yaml)
             .into_diagnostic()
@@ -611,14 +637,21 @@ impl Config {
         let mut source_yamls = Vec::new();
         let mut source_dir_only_imports = Vec::new();
         let mut source_module_imports = Vec::new();
-        // Canonical root of the out-of-tree source (`None` if it doesn't
-        // resolve). Reused to import the source module and to classify which
-        // inputs were defined by source-side configs.
-        let source_root_canon = source_dir.and_then(|d| d.canonicalize().ok());
+        let source_dir_canon = source_dir.and_then(|dir| dir.canonicalize().ok());
+        let detected_source_repository_root = source_dir
+            .filter(|_| source_repository_root.is_none())
+            .and_then(Self::detect_git_root);
+        let source_repository_root =
+            source_repository_root.or(detected_source_repository_root.as_deref());
+        let source_containment_root = source_repository_root
+            .or(source_dir)
+            .and_then(|root| root.canonicalize().ok());
         if let Some(source_dir) = source_dir {
-            let source_git_root = Self::detect_git_root(source_dir);
-            let source_yaml = source_dir.join(YAML_CONFIG);
-            if source_yaml.exists() {
+            for source_yaml in [YAML_CONFIG, YAML_LOCAL_CONFIG]
+                .map(|name| source_dir.join(name))
+                .into_iter()
+                .filter(|path| path.exists())
+            {
                 let canonical =
                     source_yaml
                         .canonicalize()
@@ -631,7 +664,7 @@ impl Config {
                         })?;
                 visited.insert(canonical);
 
-                let mut source_loader = ConfigLoader::<Config>::new();
+                let mut source_loader = SchematicLoader::<Config>::new();
                 source_loader
                     .file_optional(&source_yaml)
                     .into_diagnostic()
@@ -653,7 +686,7 @@ impl Config {
                     &source_result.config.imports,
                     source_dir,
                     ImportRoots {
-                        git_root: source_git_root.as_deref(),
+                        git_root: source_repository_root,
                         input_sources,
                     },
                     &mut source_yamls,
@@ -680,7 +713,7 @@ impl Config {
                         let resolved = Self::resolve_import_path(
                             import,
                             source_dir,
-                            source_git_root.as_deref(),
+                            source_repository_root,
                             input_sources,
                         )?
                         .expect("file imports always resolve");
@@ -692,17 +725,10 @@ impl Config {
 
             // The source module itself (devenv.nix plus devenv.local.nix at
             // eval time), imported live even when the source has no yaml.
-            let canonical = source_root_canon
+            let canonical = source_dir_canon
                 .clone()
                 .unwrap_or_else(|| source_dir.to_path_buf());
             source_module_imports.push(format!("path:{}", canonical.display()));
-
-            // The source's devenv.local.yaml applies as machine-local
-            // overrides of the source, still below the project's own configs.
-            let source_local = source_dir.join(YAML_LOCAL_CONFIG);
-            if source_local.exists() {
-                source_yamls.push(source_local);
-            }
         }
 
         // Recursively collect imported yaml files (loaded first, lowest priority)
@@ -728,14 +754,14 @@ impl Config {
 
         // Load all configs and track which inputs come from which config file.
         // This is needed to correctly normalize relative URLs.
-        let mut loader = ConfigLoader::<Config>::new();
+        let mut loader = SchematicLoader::<Config>::new();
         let mut input_source_dirs: HashMap<String, PathBuf> = HashMap::new();
 
         for yaml_file in load_order {
             let config_dir = yaml_file.parent().unwrap_or(Path::new(".")).to_path_buf();
 
             // Load this config file to see what inputs it defines
-            let mut single_loader = ConfigLoader::<Config>::new();
+            let mut single_loader = SchematicLoader::<Config>::new();
             single_loader
                 .file_optional(yaml_file)
                 .into_diagnostic()
@@ -751,8 +777,10 @@ impl Config {
 
             // Record the source directory for each input defined in this config.
             // Later configs take precedence (base overrides imports).
-            for input_name in single_result.config.inputs.keys() {
-                input_source_dirs.insert(input_name.clone(), config_dir.clone());
+            for (input_name, input) in &single_result.config.inputs {
+                if input.url.is_some() {
+                    input_source_dirs.insert(input_name.clone(), config_dir.clone());
+                }
             }
 
             loader
@@ -767,7 +795,7 @@ impl Config {
         let local_yaml = base_path.join(YAML_LOCAL_CONFIG);
         if local_yaml.exists() {
             // Track inputs from local yaml too
-            let mut local_loader = ConfigLoader::<Config>::new();
+            let mut local_loader = SchematicLoader::<Config>::new();
             local_loader
                 .file_optional(&local_yaml)
                 .into_diagnostic()
@@ -778,10 +806,10 @@ impl Config {
                     )
                 })?;
             if let Ok(local_result) = local_loader.load().into_diagnostic() {
-                for input_name in local_result.config.inputs.keys() {
-                    input_source_dirs
-                        .entry(input_name.clone())
-                        .or_insert_with(|| base_path.to_path_buf());
+                for (input_name, input) in &local_result.config.inputs {
+                    if input.url.is_some() {
+                        input_source_dirs.insert(input_name.clone(), base_path.to_path_buf());
+                    }
                 }
             }
         }
@@ -850,7 +878,7 @@ impl Config {
                 // from the project root (relative escapes also break under
                 // lazy-trees).
                 let from_source_side =
-                    source_root_canon.as_ref().is_some_and(|root| {
+                    source_containment_root.as_ref().is_some_and(|root| {
                         input_dir
                             .canonicalize()
                             .is_ok_and(|dir| dir.starts_with(root))
@@ -1432,7 +1460,7 @@ impl Config {
                     yaml_files.push(yaml_path.clone());
 
                     // Load this config to get its imports
-                    let mut temp_loader = ConfigLoader::<Config>::new();
+                    let mut temp_loader = SchematicLoader::<Config>::new();
                     temp_loader
                         .file_optional(&yaml_path)
                         .into_diagnostic()
@@ -1670,7 +1698,7 @@ impl Config {
     ///
     /// Merging uses schematic's `#[setting(merge)]` strategies declared on
     /// `NixpkgsConfig` — same policy as the import-time merge in
-    /// `ConfigLoader`. `Vec` fields accumulate via `append_vec`, scalars use
+    /// `SchematicLoader`. `Vec` fields accumulate via `append_vec`, scalars use
     /// `replace`. No special platform-only semantics.
     pub fn nixpkgs_config(&self, system: &str) -> NixpkgsConfig {
         use schematic::{Config as _, PartialConfig as _};
@@ -2186,9 +2214,10 @@ reload: false
             .canonicalize()
             .expect("Failed to canonicalize input source");
         let input_sources = BTreeMap::from([("shared".to_string(), shared)]);
-        let config =
-            Config::load_from_with_source_and_input_sources(&project, None, &input_sources)
-                .expect("Failed to compose locked input config");
+        let config = ConfigLoader::new(&project)
+            .with_input_sources(&input_sources)
+            .load()
+            .expect("Failed to compose locked input config");
 
         assert!(config.inputs.contains_key("tool"));
         assert!(config.inputs.contains_key("nested-tool"));
@@ -2252,7 +2281,9 @@ reload: false
                 .canonicalize()
                 .expect("Failed to canonicalize input source"),
         )]);
-        let error = Config::load_from_with_source_and_input_sources(&project, None, &input_sources)
+        let error = ConfigLoader::new(&project)
+            .with_input_sources(&input_sources)
+            .load()
             .expect_err("an imported config must not escape its locked source");
         assert!(
             error.to_string().contains("resolves outside"),
@@ -2486,6 +2517,63 @@ imports:
     }
 
     #[test]
+    fn target_local_yaml_relative_input_overrides_source_input() {
+        let source = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        fs::create_dir(source.path().join("original")).unwrap();
+        fs::create_dir(source.path().join("override")).unwrap();
+        fs::create_dir(target.path().join("override")).unwrap();
+        fs::write(source.path().join("devenv.nix"), "{}").unwrap();
+        fs::write(
+            source.path().join("devenv.yaml"),
+            "inputs:\n  shared:\n    url: path:./original\n    flake: false\n",
+        )
+        .unwrap();
+        fs::write(
+            target.path().join("devenv.local.yaml"),
+            "inputs:\n  shared:\n    url: path:./override\n    flake: false\n",
+        )
+        .unwrap();
+        let config = ConfigLoader::new(target.path())
+            .with_source(ConfigSource::Local(source.path()))
+            .load()
+            .unwrap();
+        assert_eq!(
+            config.inputs["shared"].url.as_deref(),
+            Some("path:override")
+        );
+    }
+
+    #[test]
+    fn source_local_yaml_imports_are_loaded() {
+        let source = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let extra = source.path().join("extra");
+        fs::create_dir(&extra).unwrap();
+        fs::write(source.path().join("devenv.nix"), "{}").unwrap();
+        fs::write(
+            source.path().join("devenv.local.yaml"),
+            "imports:\n  - ./extra\n",
+        )
+        .unwrap();
+        fs::write(
+            extra.join("devenv.yaml"),
+            "inputs:\n  extra:\n    url: github:example/extra\n",
+        )
+        .unwrap();
+        fs::write(extra.join("devenv.nix"), "{}").unwrap();
+        let config = ConfigLoader::new(target.path())
+            .with_source(ConfigSource::Local(source.path()))
+            .load()
+            .unwrap();
+        assert!(
+            config.inputs.contains_key("extra"),
+            "local YAML import was dropped: {:?}",
+            config.imports
+        );
+    }
+
+    #[test]
     fn source_dir_config_merges_below_project() {
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
         let root = temp_dir.path();
@@ -2518,7 +2606,9 @@ inputs:
         )
         .expect("Failed to write project config");
 
-        let config = Config::load_from_with_source(&project, Some(source.as_path()))
+        let config = ConfigLoader::new(&project)
+            .with_source(ConfigSource::Local(source.as_path()))
+            .load()
             .expect("Failed to load config");
 
         assert_eq!(
@@ -2575,7 +2665,9 @@ inputs:
         // The bound project lives elsewhere entirely and has no config.
         let project_dir = tempfile::tempdir().expect("Failed to create project dir");
 
-        let config = Config::load_from_with_source(project_dir.path(), Some(profile.as_path()))
+        let config = ConfigLoader::new(project_dir.path())
+            .with_source(ConfigSource::Local(profile.as_path()))
+            .load()
             .expect("Failed to load config");
 
         assert!(
@@ -2597,6 +2689,51 @@ inputs:
     }
 
     #[test]
+    fn explicit_source_root_allows_imports_without_git_metadata() {
+        let repository = tempfile::tempdir().expect("Failed to create repository");
+        let common = repository.path().join("profiles").join("common");
+        let dependency = common.join("dependency");
+        let rooted = repository.path().join("rooted");
+        let profile = repository.path().join("profiles").join("rails");
+        fs::create_dir_all(&dependency).expect("Failed to create common dependency");
+        fs::create_dir(&rooted).expect("Failed to create rooted module");
+        fs::create_dir_all(&profile).expect("Failed to create profile");
+        fs::write(
+            common.join("devenv.yaml"),
+            "inputs:\n  shared-input:\n    url: path:./dependency\n",
+        )
+        .expect("Failed to write common config");
+        fs::write(rooted.join("devenv.nix"), "{ }\n").expect("Failed to write rooted module");
+        fs::write(
+            profile.join("devenv.yaml"),
+            "imports:\n  - ../common\n  - /rooted\n",
+        )
+        .expect("Failed to write profile config");
+
+        let project = tempfile::tempdir().expect("Failed to create project");
+        let config = ConfigLoader::new(project.path())
+            .with_source(ConfigSource::Fetched {
+                directory: &profile,
+                repository_root: repository.path(),
+            })
+            .load()
+            .expect("Failed to load config");
+
+        let expected_url = format!("path:{}", dependency.canonicalize().unwrap().display());
+        assert_eq!(
+            config
+                .inputs
+                .get("shared-input")
+                .and_then(|input| input.url.as_deref()),
+            Some(expected_url.as_str())
+        );
+        for imported in [&common, &rooted] {
+            let import = format!("path:{}", imported.canonicalize().unwrap().display());
+            assert!(config.imports.contains(&import), "missing import {import}");
+        }
+    }
+
+    #[test]
     fn source_relative_input_becomes_absolute() {
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
         let source = temp_dir.path().join("source");
@@ -2609,7 +2746,9 @@ inputs:
         .expect("Failed to write source config");
 
         let project_dir = tempfile::tempdir().expect("Failed to create project dir");
-        let config = Config::load_from_with_source(project_dir.path(), Some(source.as_path()))
+        let config = ConfigLoader::new(project_dir.path())
+            .with_source(ConfigSource::Local(source.as_path()))
+            .load()
             .expect("Failed to load config");
 
         assert_eq!(
@@ -2626,7 +2765,9 @@ inputs:
         fs::create_dir(&source).expect("Failed to create source dir");
 
         let project_dir = tempfile::tempdir().expect("Failed to create project dir");
-        let config = Config::load_from_with_source(project_dir.path(), Some(source.as_path()))
+        let config = ConfigLoader::new(project_dir.path())
+            .with_source(ConfigSource::Local(source.as_path()))
+            .load()
             .expect("Failed to load config");
 
         let source_import = format!("path:{}", source.canonicalize().unwrap().display());
