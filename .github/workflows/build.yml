@@ -139,12 +139,12 @@ jobs:
               -E 'test(command_guard_restores_terminal_after_killed_task)'
 
       # devenv-tasks is outside Cargo's default workspace members. Run its
-      # process scheduling regressions explicitly on Linux and macOS.
-      - name: Check process scheduling and dependency errors
+      # process scheduling and manager lifecycle regressions on Linux and macOS.
+      - name: Check process scheduling, lifecycle, and dependency errors
         run: |
           ${{ steps.build-devenv.outputs.path }}/bin/devenv --system ${{ inputs.system }} shell -- \
             cargo nextest run -p devenv-tasks -p devenv -j 2 --retries 0 \
-              -E 'test(concurrent_dynamic_starts_share_never_started_process_prerequisite) | test(concurrent_start_stop_keeps_explicitly_stopped_dependencies_off) | test(failed_prerequisite_is_visible_under_each_process_with_stopped_filter) | test(disabled_process_root_does_not_select_its_prerequisites) | test(disabled_process_needed_by_a_root_selects_its_prerequisites)'
+              -E 'test(concurrent_dynamic_starts_share_never_started_process_prerequisite) | test(concurrent_start_stop_keeps_explicitly_stopped_dependencies_off) | test(failed_prerequisite_is_visible_under_each_process_with_stopped_filter) | test(disabled_process_root_does_not_select_its_prerequisites) | test(disabled_process_needed_by_a_root_selects_its_prerequisites) | test(api_server_refresh)'
 
       # Exercise the actual terminal boundary on every platform: PTY resize,
       # crossterm key decoding, rendering, and reactive process commands.
