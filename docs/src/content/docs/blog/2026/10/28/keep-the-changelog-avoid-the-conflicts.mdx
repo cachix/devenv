@@ -1,0 +1,145 @@
+---
+title: "Keep the Changelog, Avoid the Conflicts"
+date: 2026-10-28
+draft: false
+authors:
+  - name: "Domen Kožar"
+    picture: "https://github.com/domenkozar.png"
+    url: "https://github.com/domenkozar"
+---
+
+More code is flowing through projects, with people and agents working on changes
+in parallel. That means more pull requests updating the same changelog, often
+at the same time.
+
+Two pull requests add unrelated features. Both add a line at the top of
+`CHANGELOG.md`. The code merges cleanly, but the changelog conflicts:
+
+```markdown
+## [Unreleased]
+
+### Added
+
+<<<<<<< HEAD
+- Added S3 support.
+=======
+- Added SSH support.
+>>>>>>> ssh-support
+- Initial feature.
+```
+
+Both entries belong in the changelog. The conflict is straightforward to resolve,
+but it keeps coming back as more changes land.
+
+A shared changelog puts everyone's changes in one file, often under the same
+heading. Git sees competing edits to the same lines, even when the entries
+describe independent work.
+
+We built [changelog-merge](https://github.com/cachix/changelog-merge) to handle
+this for files that follow [Keep a Changelog](https://keepachangelog.com/).
+It understands releases, categories, and entries. In this example, it keeps
+both additions:
+
+```markdown
+## [Unreleased]
+
+### Added
+
+- Added S3 support.
+- Added SSH support.
+- Initial feature.
+```
+
+## Use it with devenv
+
+Enable the integration in your project's `devenv.nix`:
+
+```nix title="devenv.nix"
+{
+  changelog-merge.enable = true;
+}
+```
+
+Enter the environment and merge as usual:
+
+```sh
+devenv shell
+git merge ssh-support
+```
+
+devenv configures Git to use the changelog-merge binary to resolve conflicts in
+`CHANGELOG.md`.
+
+:::note
+If your project's nixpkgs pin predates the package, update it with
+`devenv update nixpkgs`.
+:::
+
+For a changelog with a different name, add its path:
+
+```nix title="devenv.nix"
+{
+  changelog-merge.enable = true;
+  git.attributes = [ "docs/CHANGES.md merge=changelog-merge" ];
+}
+```
+
+Commit your devenv configuration so other contributors get the same setup when
+they enter the environment. See the [integration documentation](/integrations/changelog-merge/)
+for more options.
+
+## Use it with plain Git
+
+You can use changelog-merge without devenv or Nix. With Rust 1.88 or newer
+installed, run:
+
+```sh
+cargo install changelog-merge --version 0.1.0 --locked
+```
+
+Make sure `changelog-merge` is on your `PATH`, then check your existing changelog:
+
+```sh
+changelog-merge check CHANGELOG.md
+```
+
+Add this line to your repository's `.gitattributes`:
+
+```gitattributes title=".gitattributes"
+CHANGELOG.md merge=changelog-merge
+```
+
+Register the merge driver from inside the repository:
+
+```sh
+git config --local merge.changelog-merge.name 'Keep a Changelog semantic merger'
+git config --local merge.changelog-merge.driver 'changelog-merge merge %O %A %B --marker-size %L --path %P'
+git config --local merge.changelog-merge.recursive binary
+```
+
+Commit `.gitattributes`. Each contributor needs to install the executable and
+run the three configuration commands in their clone. The attribute travels with
+the repository; local Git configuration does not.
+
+Now `git merge`, `git rebase`, and `git cherry-pick` can use changelog-merge
+automatically. You can check the setup with:
+
+```sh
+git check-attr merge -- CHANGELOG.md
+git config --get merge.changelog-merge.driver
+```
+
+The first command should report `CHANGELOG.md: merge: changelog-merge`, and the
+second should print the driver command you configured.
+
+## When a conflict still needs you
+
+If both branches rewrite the same entry incompatibly, changelog-merge leaves
+conflict markers for you to resolve. It also preserves conflicts when it cannot
+confidently match changes. Independent additions can merge automatically;
+competing changes still need a decision.
+
+Try it on your next pair of changelog updates. The
+[source and documentation](https://github.com/cachix/changelog-merge) cover merge
+behavior and limitations, and we'd like to hear how it works on your project's
+changelog.
