@@ -42,12 +42,12 @@ jobs:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Evaluate Darwin package without import-from-derivation
-        if: inputs.system == 'x86_64-linux'
+      # Rolling nixpkgs applies source patches through IFD using target tools.
+      - name: Evaluate Darwin package
+        if: inputs.system == 'aarch64-darwin'
         run: |
           nix eval --raw .#packages.aarch64-darwin.devenv.drvPath \
-            --option allow-import-from-derivation false \
-            --option builders "" --option max-jobs 0 --option substitute false
+            --option allow-import-from-derivation true
 
       # Build and cache the devenv-tasks binary used by the module system
       - name: Build devenv-tasks-${{ inputs.system }}
