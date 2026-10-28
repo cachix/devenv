@@ -539,6 +539,7 @@ impl NativeApiServer {
         let pid_file = manager.manager_pid_file();
         let task = tokio::spawn(async move {
             let mut refresh = tokio::time::interval(PID_FILE_REFRESH_INTERVAL);
+            refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 tokio::select! {
                     accepted = listener.accept() => match accepted {
@@ -809,34 +810,86 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
-    async fn api_server_refreshes_manager_pid_file_mtime() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let manager = test_manager(&temp_dir, Vec::new(), ManagerResidence::Daemon).await;
-        let pid_file = manager.manager_pid_file();
-        std::fs::write(&pid_file, std::process::id().to_string()).unwrap();
+    fn age_pid_file(pid_file: &Path) -> std::time::SystemTime {
         let stale = std::time::UNIX_EPOCH + Duration::from_secs(1_577_836_800);
         std::fs::File::options()
             .write(true)
-            .open(&pid_file)
+            .open(pid_file)
             .unwrap()
             .set_modified(stale)
             .unwrap();
+        stale
+    }
 
-        let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
+    async fn wait_for_pid_file_refresh(pid_file: &Path, stale: std::time::SystemTime) {
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while std::fs::metadata(pid_file).unwrap().modified().unwrap() == stale {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("manager PID file was not refreshed");
+    }
 
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-        while std::fs::metadata(&pid_file).unwrap().modified().unwrap() == stale {
-            assert!(
-                tokio::time::Instant::now() < deadline,
-                "pid file mtime was never refreshed"
-            );
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
+    #[tokio::test]
+    async fn api_server_refreshes_manager_pid_file_hourly() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = test_manager(&temp_dir, Vec::new(), ManagerResidence::Daemon).await;
+        let pid_file = manager.manager_pid_file();
+        let contents = format!("{}\n", std::process::id());
+        std::fs::write(&pid_file, &contents).unwrap();
+        let stale = age_pid_file(&pid_file);
+        tokio::time::pause();
+
+        let _server = NativeApiServer::start(manager).unwrap();
+        wait_for_pid_file_refresh(&pid_file, stale).await;
+        assert_eq!(std::fs::read_to_string(&pid_file).unwrap(), contents);
+
+        age_pid_file(&pid_file);
+        tokio::time::advance(Duration::from_secs(60 * 60 - 1)).await;
         assert_eq!(
-            std::fs::read_to_string(&pid_file).unwrap(),
-            std::process::id().to_string()
+            std::fs::metadata(&pid_file).unwrap().modified().unwrap(),
+            stale
         );
+        tokio::time::advance(Duration::from_secs(1)).await;
+        wait_for_pid_file_refresh(&pid_file, stale).await;
+        assert_eq!(std::fs::read_to_string(&pid_file).unwrap(), contents);
+    }
+
+    #[tokio::test]
+    async fn api_server_refresh_respects_pid_publication_and_shutdown() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = test_manager(&temp_dir, Vec::new(), ManagerResidence::InProcess).await;
+        let pid_file = manager.manager_pid_file();
+        tokio::time::pause();
+
+        let server = NativeApiServer::start(manager).unwrap();
+        // The API server starts before its host publishes the PID file.
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        assert!(!pid_file.exists());
+
+        std::fs::write(&pid_file, std::process::id().to_string()).unwrap();
+        let stale = age_pid_file(&pid_file);
+        tokio::time::advance(Duration::from_secs(60 * 60)).await;
+        wait_for_pid_file_refresh(&pid_file, stale).await;
+
+        // Shutdown removes the PID file before dropping the API server.
+        std::fs::remove_file(&pid_file).unwrap();
+        tokio::time::advance(Duration::from_secs(60 * 60)).await;
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        assert!(!pid_file.exists());
+
+        drop(server);
+        // A later manager's PID file must not be touched by the old server.
+        std::fs::write(&pid_file, "replacement").unwrap();
+        age_pid_file(&pid_file);
+        tokio::time::advance(Duration::from_secs(2 * 60 * 60)).await;
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        assert_eq!(
+            std::fs::metadata(&pid_file).unwrap().modified().unwrap(),
+            stale
+        );
+        assert_eq!(std::fs::read_to_string(&pid_file).unwrap(), "replacement");
     }
 
     #[tokio::test]
