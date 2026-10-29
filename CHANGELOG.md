@@ -43,7 +43,7 @@
 - Fixed auto-activation waiting for the next prompt when you `cd` from one devenv project directly into another, so you had to press Enter before the second project's shell started. It now starts right away ([#3129](https://github.com/cachix/devenv/issues/3129)).
 - `devenv up` and `devenv test` no longer run the prerequisites of a process with `start.enable = false`. They now run when that process is started, or when an enabled process depends on it ([#3272](https://github.com/cachix/devenv/issues/3272)).
 - Fixed `languages.javascript.npm.install.enable` corrupting `node_modules` when several shells start at once. Concurrent shells now wait for one npm install to finish instead of running their own.
-- Project SecretSpec `as_path` values now use process-owned anonymous memory-backed files on Linux, released when the consumer exits, including after `SIGKILL`. Shells and commands manage their leases automatically. direnv and `print-dev-env` require the consuming shell's PID through `DEVENV_SECRETS_OWNER_PID` or `--secret-owner-pid`. Unsupported platforms fail explicitly instead of creating named secret files.
+- Project SecretSpec `as_path` values now use process-owned anonymous memory-backed files on Linux, released when the consumer exits, including after `SIGKILL`. Shells, commands, direnv and `print-dev-env` manage their leases automatically without additional configuration. Unsupported platforms fail explicitly instead of creating named secret files.
 
 ## 2.4.0 (2026-09-24)
 

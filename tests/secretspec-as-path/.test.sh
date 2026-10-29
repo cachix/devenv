@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This is the consuming shell, not the short-lived direnv/devenv exporter.
-export DEVENV_SECRETS_OWNER_PID=$$
 daemon_started=0
 cleanup() {
   if (( daemon_started )); then
@@ -15,12 +13,6 @@ load_key_path() {
   devenv "$@" print-dev-env > env.sh
   sed -n "s/^TLS_KEY_PATH='\(.*\)'$/\1/p" env.sh
 }
-
-if env -u DEVENV_SECRETS_OWNER_PID devenv print-dev-env > unowned-env.sh 2> unowned-error; then
-  echo "as_path export unexpectedly succeeded without an owner" >&2
-  exit 1
-fi
-grep -q 'secret-owner-pid' unowned-error
 
 path=$(load_key_path)
 case "$path" in /proc/*/fd/*) ;; *) echo "not an anonymous file: $path" >&2; exit 1 ;; esac
@@ -54,6 +46,19 @@ test "$(cat "$(cat daemon-key-path)")" = "production-key"
 devenv processes down
 daemon_started=0
 
+# Exercise the real direnv export path using the ordinary .envrc integration.
+test_shells=$(devenv build outputs.test-shells | jq -er '."outputs.test-shells"')
+export PATH="$test_shells/bin:$PATH"
+# Zsh's system startup files may replace PATH even with user startup disabled.
+# Pin the binaries under test before starting any consuming shell.
+export DEVENV_BIN="$(command -v devenv)"
+export TEST_DIRENV_BIN="$(command -v direnv)"
+cat > .envrc <<'ENVRC'
+eval "$("$DEVENV_BIN" direnvrc)"
+use devenv
+ENVRC
+direnv allow
+
 # Both exporters must tie their leases to the actual consumer, even when it
 # exits without running shell traps. The keeper must not retain stdout pipes.
 python3 - <<'PY'
@@ -73,23 +78,66 @@ for path_file in ["exec-key-path", "daemon-key-path"]:
     with open(path_file) as source:
         wait_for_revocation(source.read().strip())
 
-for command in ["print-dev-env", "direnv-export"]:
-    script = r'''
+scripts = [
+    r"""
 set -euo pipefail
-devenv "$1" --secret-owner-pid "$$" > child-env.sh
+load_env() { devenv "$1"; }
+env_output=$(load_env "$1")
+printf '%s\n' "$env_output" > child-env.sh
 sed -n "s/^TLS_KEY_PATH='\(.*\)'$/\1/p" child-env.sh
+printf '%s\n' "$$"
 read -r _
-'''
-    owner = subprocess.Popen(["bash", "-c", script, "lease-owner", command],
-                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+""",
+    r"""
+set -euo pipefail
+# Keep the command substitution alive after direnv exits, exercising a Bash
+# fork between direnv and the shell whose prompt consumes the environment.
+load_env() { "$TEST_DIRENV_BIN" export bash; :; }
+eval "$(load_env)"
+printf '%s\n' "$TLS_KEY_PATH" "$$"
+read -r _
+""",
+]
+
+for shell, option, script, command in [
+        ("bash", "--norc", scripts[0], "print-dev-env"),
+        ("bash", "--norc", scripts[0], "direnv-export"),
+        ("bash", "--norc", scripts[1], "direnv"),
+        ("zsh", "-f", r'''
+set -eu
+eval "$("$TEST_DIRENV_BIN" export zsh)"
+printf '%s\n' "$TLS_KEY_PATH" "$$"
+read -r _
+''', "direnv"),
+        ("fish", "--no-config", r'''
+"$TEST_DIRENV_BIN" export fish | source
+printf '%s\n' "$TLS_KEY_PATH" "$fish_pid"
+read -l answer
+''', "direnv"),
+        ("bash", "--norc", r'''
+set -euo pipefail
+"$TEST_DIRENV_BIN" exec . bash -c '
+  printf "%s\n" "$TLS_KEY_PATH" "$$"
+  read -r _
+'
+read -r _
+''', "direnv-exec")]:
+    # A new exec'd shell must own the lease, even with a live outer shell.
+    outer = r' "$3" "$4" -c "$1" lease-owner "$2"; read -r _ '
+    owner = subprocess.Popen(["bash", "-c", outer, "outer-shell", script, command, shell, option],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                             start_new_session=True)
     try:
         path = owner.stdout.readline().strip()
+        shell_pid = int(owner.stdout.readline().strip())
         assert path.startswith("/proc/"), path
         with open(path) as secret:
             assert secret.read() == "production-key"
+        os.kill(shell_pid, 9)
+        wait_for_revocation(path)
+        assert owner.poll() is None, "outer shell should still be alive"
     finally:
-        owner.kill()
+        os.killpg(owner.pid, 9)
         owner.wait()
-    wait_for_revocation(path)
 PY
 echo "✓ anonymous SecretSpec files follow their consuming processes"

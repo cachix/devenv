@@ -620,10 +620,7 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
     let require_version_match = config.requires_version_match();
     let shutdown = Shutdown::new();
     let secretspec_file_owner = match &command {
-        Commands::PrintDevEnv {
-            secret_owner_pid, ..
-        }
-        | Commands::DirenvExport { secret_owner_pid } => *secret_owner_pid,
+        Commands::PrintDevEnv { .. } | Commands::DirenvExport => None,
         _ => Some(process::id()),
     };
     let expose_secretspec_values_to_nix = !matches!(
@@ -1692,7 +1689,7 @@ async fn dispatch_command(
             devenv.handoff_secret_files()?;
             Ok(CommandResult::Print(output))
         }
-        Commands::DirenvExport { .. } => {
+        Commands::DirenvExport => {
             // Discard messages: direnv captures stdout as env var definitions,
             // so echo statements would corrupt the output.
             let task_exports = match devenv.run_enter_shell_tasks(None, verbosity).await {

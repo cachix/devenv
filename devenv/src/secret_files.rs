@@ -1,4 +1,4 @@
-//! Anonymous SecretSpec files whose lifetime is bounded by an explicit process.
+//! Anonymous SecretSpec files whose lifetime is bounded by the consuming process.
 
 use miette::{IntoDiagnostic, Result};
 use std::path::PathBuf;
@@ -23,11 +23,17 @@ impl SecretFiles {
         secrets.set_as_path_materializer(move |bytes, suffix| {
             if suffix.is_some_and(|suffix| !suffix.is_empty()) {
                 return Err(std::io::Error::other(
-                    "SecretSpec file suffixes are unsupported for anonymous files"));
+                    "SecretSpec file suffixes are unsupported for anonymous files",
+                ));
             }
-            let owner = files.owner.ok_or_else(|| std::io::Error::other(
-                "SecretSpec as_path exports require --secret-owner-pid or DEVENV_SECRETS_OWNER_PID; configure a shell-lifetime lease"))?;
-            let mut keeper = files.keeper.lock().map_err(|_| std::io::Error::other("Secret keeper lock poisoned"))?;
+            let owner = match files.owner {
+                Some(owner) => owner,
+                None => platform::export_owner_pid()?,
+            };
+            let mut keeper = files
+                .keeper
+                .lock()
+                .map_err(|_| std::io::Error::other("Secret keeper lock poisoned"))?;
             if keeper.is_none() {
                 *keeper = Some(Arc::new(platform::Keeper::spawn(owner)?));
             }
@@ -96,6 +102,90 @@ mod platform {
         }
         // The syscall returned a new descriptor owned by this caller.
         Ok(unsafe { OwnedFd::from_raw_fd(result as i32) })
+    }
+
+    /// Find the consumer beyond direnv's .envrc evaluator and forked command
+    /// substitutions. Linux's PF_FORKNOEXEC distinguishes a subshell from a new
+    /// shell started with exec, including nested shells with identical arguments.
+    pub(crate) fn export_owner_pid() -> io::Result<u32> {
+        let mut owner = Process::read(nix::unistd::getppid().as_raw() as u32)?;
+        if std::env::var_os("DIRENV_IN_ENVRC").is_some() {
+            let mut found = false;
+            for _ in 0..128 {
+                if owner
+                    .executable
+                    .file_name()
+                    .is_some_and(|name| name == "direnv")
+                {
+                    match owner.arguments.split(|byte| *byte == 0).nth(1) {
+                        Some(b"export") => owner = Process::read(owner.parent)?,
+                        // direnv replaces itself with the requested command.
+                        Some(b"exec") => return Ok(owner.pid),
+                        _ => return Err(io::Error::other("Unsupported direnv secret consumer")),
+                    }
+                    found = true;
+                    break;
+                }
+                if owner.parent <= 1 {
+                    return Err(io::Error::other("Cannot find the consuming direnv shell"));
+                }
+                owner = Process::read(owner.parent)?;
+            }
+            if !found {
+                return Err(io::Error::other("Cannot find the consuming direnv shell"));
+            }
+        }
+        // include/linux/sched.h: forked but did not exec. This flag is exposed
+        // as field 9 in /proc/<pid>/stat and cleared by exec.
+        const PF_FORKNOEXEC: u64 = 0x40;
+        for _ in 0..128 {
+            if owner.flags & PF_FORKNOEXEC == 0 {
+                break;
+            }
+            let parent = Process::read(owner.parent)?;
+            if owner.group != parent.group || owner.executable != parent.executable {
+                break;
+            }
+            owner = parent;
+        }
+        Ok(owner.pid)
+    }
+
+    struct Process {
+        pid: u32,
+        parent: u32,
+        group: u32,
+        flags: u64,
+        executable: PathBuf,
+        arguments: Vec<u8>,
+    }
+
+    impl Process {
+        fn read(pid: u32) -> io::Result<Self> {
+            let root = PathBuf::from(format!("/proc/{pid}"));
+            let stat = std::fs::read_to_string(root.join("stat"))?;
+            // comm may itself contain spaces and parentheses.
+            let fields: Vec<_> = stat
+                .rsplit_once(')')
+                .ok_or_else(|| io::Error::other("Invalid process status"))?
+                .1
+                .split_whitespace()
+                .collect();
+            let field = |index: usize| -> io::Result<u64> {
+                fields
+                    .get(index)
+                    .and_then(|value| value.parse().ok())
+                    .ok_or_else(|| io::Error::other("Invalid process status field"))
+            };
+            Ok(Self {
+                pid,
+                parent: field(1)?.try_into().map_err(io::Error::other)?,
+                group: field(2)?.try_into().map_err(io::Error::other)?,
+                flags: field(6)?,
+                executable: std::fs::read_link(root.join("exe"))?,
+                arguments: std::fs::read(root.join("cmdline"))?,
+            })
+        }
     }
 
     impl Keeper {
@@ -446,6 +536,12 @@ mod platform {
 #[cfg(not(target_os = "linux"))]
 mod platform {
     use super::*;
+    pub(crate) fn export_owner_pid() -> std::io::Result<u32> {
+        Err(std::io::Error::other(
+            "Anonymous SecretSpec as_path files currently require Linux",
+        ))
+    }
+
     pub(crate) struct Keeper;
     impl Keeper {
         pub(crate) fn spawn(_: u32) -> std::io::Result<Self> {
@@ -583,7 +679,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "linux")))]
 mod export_tests {
     use super::*;
 
@@ -610,11 +706,6 @@ KEY = { description = "key", as_path = true }
             .err()
             .expect("unsupported export must fail closed")
             .to_string()
-    }
-
-    #[test]
-    fn exports_without_an_owner_fail_closed() {
-        assert!(resolve(None).contains("secret-owner-pid"));
     }
 
     #[cfg(not(target_os = "linux"))]

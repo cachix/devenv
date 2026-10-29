@@ -180,8 +180,8 @@ pub struct DevenvOptions {
     /// evaluation. Machine installs disable this so bootstrap credentials stay
     /// on the CLI side of the Nix/Rust boundary.
     pub expose_secretspec_values_to_nix: bool,
-    /// Process whose exit revokes anonymous `as_path` files. Exports require
-    /// an explicit owner; commands that supervise or exec a child use this PID.
+    /// Process whose exit revokes anonymous `as_path` files. `None` discovers
+    /// the consuming shell automatically for environment exports.
     pub secretspec_file_owner: Option<u32>,
     /// Whether a `devenv.nix` project file is required. Commands that operate
     /// outside of a project (e.g. `gc`) set this to `false` so they can run
@@ -988,13 +988,13 @@ impl Devenv {
         self.shell_cwd.as_deref()
     }
 
-    /// The options this instance was built from.
     /// Keep anonymous files alive after exporting their paths or exec'ing a
-    /// command, until the explicitly selected owner process exits.
+    /// command, until the consuming process exits.
     pub fn handoff_secret_files(&self) -> Result<()> {
         self.secret_files.handoff()
     }
 
+    /// The options this instance was built from.
     pub fn options(&self) -> &DevenvOptions {
         &self.options
     }
