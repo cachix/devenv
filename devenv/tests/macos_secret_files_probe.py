@@ -6,6 +6,7 @@ allocate. This is a feasibility probe, not the production SecretSpec backend.
 """
 
 import concurrent.futures
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -104,7 +105,7 @@ class Volume:
 
 
 def supervise(owner, mount, device):
-    with select.kqueue() as queue:
+    with closing(select.kqueue()) as queue:
         event = select.kevent(owner, filter=select.KQ_FILTER_PROC,
                              flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
                              fflags=select.KQ_NOTE_EXIT)
