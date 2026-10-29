@@ -4351,6 +4351,7 @@ fn resolve_secretspec_into(
 ) -> Result<()> {
     let secretspec_path = devenv_root.join("secretspec.toml");
     if !secretspec_path.exists() {
+        clear_as_path_secrets(as_path_dir)?;
         return Ok(());
     }
 
@@ -4362,6 +4363,7 @@ fn resolve_secretspec_into(
         .unwrap_or(false);
 
     if !secretspec_enabled {
+        clear_as_path_secrets(as_path_dir)?;
         if !secretspec_config_exists {
             message(
                 ActivityLevel::Info,
@@ -4430,7 +4432,12 @@ fn resolve_secretspec_into(
         .map(|(key, value)| Ok((key.clone(), secretspec_text(key, value.expose_secret())?)))
         .collect::<Result<HashMap<_, _>>>()?;
     if let Some(dir) = as_path_dir {
-        persist_as_path_secrets(dir, &as_path_names, &mut resolved_secrets)?;
+        let context_dir = as_path_context_dir(
+            dir,
+            &validated_secrets.resolved.profile,
+            &validated_secrets.resolved.provider,
+        );
+        persist_as_path_secrets(&context_dir, &as_path_names, &mut resolved_secrets)?;
     }
     let resolved = validated_secrets.into_resolved(resolved_secrets);
 
@@ -4480,6 +4487,36 @@ fn resolve_builtin_cachix_auth_token(
 /// Runtime subdirectory holding the `as_path` files of
 /// [`SecretspecAsPathFiles::Runtime`].
 const SECRETSPEC_AS_PATH_DIR: &str = "secretspec";
+
+/// Keep profiles and provider stores independent while retaining stable paths
+/// across reloads of the same context. Hash the context so provider URIs and
+/// profile names cannot introduce path components or expose store coordinates.
+fn as_path_context_dir(dir: &Path, profile: &str, provider: &str) -> PathBuf {
+    let context = format!("{}:{profile}{provider}", profile.len());
+    dir.join(compute_string_hash(&context))
+}
+
+/// Disabling the integration or removing its manifest revokes all persisted
+/// contexts. Owned temporary files are unaffected.
+fn clear_as_path_secrets(dir: Option<&Path>) -> Result<()> {
+    let Some(dir) = dir else {
+        return Ok(());
+    };
+    match std::fs::symlink_metadata(dir) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        result => result.into_diagnostic()?,
+    };
+    // Apply the same ownership and symlink checks used when writing secrets
+    // before removing anything from an existing runtime directory.
+    devenv_core::paths::create_runtime_dir(dir)?;
+    match std::fs::remove_dir_all(dir) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to remove {}", dir.display())),
+    }
+}
 
 /// Copy each `as_path` secret from its temporary file to `dir/<NAME>` and
 /// point `secrets` at the copy.
@@ -4997,20 +5034,25 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         let resolved = resolve_into_runtime(root.path(), &settings, &dir);
         let path = PathBuf::from(&resolved.secrets["TLS_KEY"]);
         let plain = resolved.secrets["PLAIN"].clone();
+        let context_dir = as_path_context_dir(&dir, &resolved.profile, &resolved.provider);
         drop(resolved);
 
-        assert_eq!(path, dir.join("TLS_KEY"));
+        assert_eq!(path, context_dir.join("TLS_KEY"));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "key-contents");
         assert_eq!(
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
         );
         assert_eq!(
-            std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            std::fs::metadata(&context_dir)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
             0o700
         );
         assert_eq!(plain, "plain-value");
-        assert!(!dir.join("PLAIN").exists());
+        assert!(!context_dir.join("PLAIN").exists());
     }
 
     #[test]
@@ -5021,16 +5063,18 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         let both = "TLS_KEY = { description = \"key\", as_path = true }\nCERT = { description = \"cert\", as_path = true, required = false }\n";
 
         let settings = as_path_project(root.path(), both, "TLS_KEY=first\nCERT=cert\n");
-        drop(resolve_into_runtime(root.path(), &settings, &dir));
+        let resolved = resolve_into_runtime(root.path(), &settings, &dir);
+        let context_dir = as_path_context_dir(&dir, &resolved.profile, &resolved.provider);
+        drop(resolved);
 
         // A changed value replaces the file in place.
         let settings = as_path_project(root.path(), both, "TLS_KEY=second\nCERT=cert\n");
         drop(resolve_into_runtime(root.path(), &settings, &dir));
         assert_eq!(
-            std::fs::read_to_string(dir.join("TLS_KEY")).unwrap(),
+            std::fs::read_to_string(context_dir.join("TLS_KEY")).unwrap(),
             "second"
         );
-        assert!(dir.join("CERT").exists());
+        assert!(context_dir.join("CERT").exists());
 
         // An optional secret that lost its value and a secret that is no
         // longer `as_path` both leave no file behind.
@@ -5041,8 +5085,132 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         );
         let resolved = resolve_into_runtime(root.path(), &settings, &dir);
         assert_eq!(resolved.secrets["TLS_KEY"], "inline");
-        assert!(!dir.join("TLS_KEY").exists());
-        assert!(!dir.join("CERT").exists());
+        assert!(!context_dir.join("TLS_KEY").exists());
+        assert!(!context_dir.join("CERT").exists());
+    }
+
+    #[test]
+    fn runtime_as_path_files_are_isolated_between_profiles() {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = tempfile::tempdir().unwrap();
+        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
+        let mut settings = as_path_project(
+            root.path(),
+            "TLS_KEY = { description = \"key\", as_path = true }\nCERT = { description = \"cert\", as_path = true, required = false }\n\n[profiles.production]\nTLS_KEY = { description = \"key\", as_path = true }\n",
+            "TLS_KEY=development-key\nCERT=development-cert\n",
+        );
+        let development = resolve_into_runtime(root.path(), &settings, &dir);
+        let development_key = PathBuf::from(&development.secrets["TLS_KEY"]);
+        let development_cert = PathBuf::from(&development.secrets["CERT"]);
+        drop(development);
+
+        settings.secretspec.as_mut().unwrap().profile = Some("production".into());
+        std::fs::write(root.path().join(".env"), "TLS_KEY=production-key\n").unwrap();
+        let production = resolve_into_runtime(root.path(), &settings, &dir);
+        let production_key = PathBuf::from(&production.secrets["TLS_KEY"]);
+        drop(production);
+
+        assert_ne!(development_key, production_key);
+        assert_eq!(
+            std::fs::read_to_string(&development_key).unwrap(),
+            "development-key"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&development_cert).unwrap(),
+            "development-cert"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&production_key).unwrap(),
+            "production-key"
+        );
+    }
+
+    #[test]
+    fn runtime_as_path_files_are_isolated_between_provider_stores() {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = tempfile::tempdir().unwrap();
+        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
+        let mut settings = as_path_project(
+            root.path(),
+            "TLS_KEY = { description = \"key\", as_path = true }\n",
+            "TLS_KEY=first-store\n",
+        );
+        let first = resolve_into_runtime(root.path(), &settings, &dir);
+        let first_path = PathBuf::from(&first.secrets["TLS_KEY"]);
+        drop(first);
+
+        std::fs::write(root.path().join(".env.other"), "TLS_KEY=second-store\n").unwrap();
+        settings.secretspec.as_mut().unwrap().provider = Some("dotenv:.env.other".into());
+        let second = resolve_into_runtime(root.path(), &settings, &dir);
+        let second_path = PathBuf::from(&second.secrets["TLS_KEY"]);
+        drop(second);
+
+        assert_ne!(first_path, second_path);
+        assert_eq!(std::fs::read_to_string(first_path).unwrap(), "first-store");
+        assert_eq!(
+            std::fs::read_to_string(second_path).unwrap(),
+            "second-store"
+        );
+    }
+
+    #[test]
+    fn runtime_as_path_files_are_removed_when_integration_is_disabled() {
+        for remove_manifest in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let runtime = tempfile::tempdir().unwrap();
+            let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
+            let mut settings = as_path_project(
+                root.path(),
+                "TLS_KEY = { description = \"key\", as_path = true }\n",
+                "TLS_KEY=key-contents\n",
+            );
+            let resolved = resolve_into_runtime(root.path(), &settings, &dir);
+            let path = PathBuf::from(&resolved.secrets["TLS_KEY"]);
+            drop(resolved);
+            assert!(path.exists());
+
+            if remove_manifest {
+                std::fs::remove_file(root.path().join("secretspec.toml")).unwrap();
+            } else {
+                settings.secretspec.as_mut().unwrap().enable = false;
+            }
+            let mut cell = OnceCell::new();
+            resolve_secretspec_into(
+                root.path(),
+                &settings,
+                &mut cell,
+                &mut HashSet::new(),
+                Some(&dir),
+            )
+            .unwrap();
+            assert!(cell.get().is_none());
+            assert!(!path.exists());
+            assert!(!dir.exists());
+
+            // Repeated disabled loads must not recreate an empty secret directory.
+            resolve_secretspec_into(
+                root.path(),
+                &settings,
+                &mut cell,
+                &mut HashSet::new(),
+                Some(&dir),
+            )
+            .unwrap();
+            assert!(!dir.exists());
+        }
+    }
+
+    #[test]
+    fn runtime_as_path_cleanup_rejects_symlinks() {
+        let runtime = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let key = elsewhere.path().join("TLS_KEY");
+        std::fs::write(&key, "must-remain").unwrap();
+        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
+        std::os::unix::fs::symlink(elsewhere.path(), &dir).unwrap();
+
+        assert!(clear_as_path_secrets(Some(&dir)).is_err());
+        assert_eq!(std::fs::read_to_string(key).unwrap(), "must-remain");
     }
 
     #[test]
