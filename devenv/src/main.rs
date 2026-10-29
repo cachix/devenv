@@ -616,6 +616,10 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
     let shutdown = Shutdown::new();
+    let secretspec_file_owner = match &command {
+        Commands::PrintDevEnv { .. } | Commands::DirenvExport => None,
+        _ => Some(process::id()),
+    };
     let expose_secretspec_values_to_nix = !matches!(
         &command,
         Commands::Machines {
@@ -645,6 +649,7 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
         shell_cwd,
         is_testing,
         expose_secretspec_values_to_nix,
+        secretspec_file_owner,
         require_project_file,
     };
 
@@ -1220,6 +1225,9 @@ async fn run_backend(
     // terminal before the debugger takes it.
     let _ = frontend_tx.send(FrontendCommand::ExitRenderer).await;
 
+    if matches!(&result, Ok(CommandResult::Exec(_))) {
+        devenv.handoff_secret_files()?;
+    }
     debugger_or_err(result, nix_debugger, devenv)
 }
 
@@ -1673,8 +1681,9 @@ async fn dispatch_command(
             let _ = devenv.backend();
             Ok(CommandResult::Done)
         }
-        Commands::PrintDevEnv { json } => {
+        Commands::PrintDevEnv { json, .. } => {
             let output = devenv.print_dev_env(json).await?;
+            devenv.handoff_secret_files()?;
             Ok(CommandResult::Print(output))
         }
         Commands::DirenvExport => {
@@ -1691,6 +1700,7 @@ async fn dispatch_command(
             // same direnv activation.
             let mut output = devenv.print_dev_env(false).await?;
             devenv::push_shell_fragment(&mut output, &devenv::format_shell_exports(&task_exports));
+            devenv.handoff_secret_files()?;
             Ok(CommandResult::Print(output))
         }
         Commands::PrintPaths => {
