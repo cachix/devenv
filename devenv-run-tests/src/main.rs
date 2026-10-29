@@ -725,6 +725,10 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 }
 
 fn main() -> Result<ExitCode> {
+    if let Some(code) = devenv::secret_files::maybe_run_keeper() {
+        std::process::exit(code);
+    }
+
     // Dispatch before the Nix/GC runtime and the DEVENV_RUN_TESTS re-exec.
     if let Commands::Pty(pty_args) = Args::parse().command {
         let code = pty::run(

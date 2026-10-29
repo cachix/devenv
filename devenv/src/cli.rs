@@ -976,10 +976,16 @@ pub enum Commands {
     PrintDevEnv {
         #[arg(long)]
         json: bool,
+        /// Process whose exit revokes exported SecretSpec file paths.
+        #[arg(long, env = "DEVENV_SECRETS_OWNER_PID")]
+        secret_owner_pid: Option<u32>,
     },
 
     #[clap(hide = true)]
-    DirenvExport,
+    DirenvExport {
+        #[arg(long, env = "DEVENV_SECRETS_OWNER_PID")]
+        secret_owner_pid: Option<u32>,
+    },
 
     /// Print computed paths (dotfile, gc, etc.) for shell integration
     #[clap(hide = true)]
@@ -1058,7 +1064,7 @@ impl Commands {
             Self::Changelogs {} => "changelogs",
             Self::Assemble => "assemble",
             Self::PrintDevEnv { .. } => "print-dev-env",
-            Self::DirenvExport => "direnv-export",
+            Self::DirenvExport { .. } => "direnv-export",
             Self::PrintPaths => "print-paths",
             Self::Mcp { .. } => "mcp",
             Self::Lsp { .. } => "lsp",

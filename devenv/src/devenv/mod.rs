@@ -154,19 +154,6 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
         .unwrap_or(0)
 });
 
-/// Where `as_path` SecretSpec values are written.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SecretspecAsPathFiles {
-    /// Temporary files owned by this `Devenv`, removed when it is dropped.
-    /// Right when devenv outlives every reader of the path.
-    #[default]
-    Owned,
-    /// Stable per-project files in the runtime directory that outlive this
-    /// process. `print-dev-env` needs them: direnv loads its output into a
-    /// shell that devenv neither starts nor sees exit.
-    Runtime,
-}
-
 #[derive(Clone, Debug)]
 pub struct DevenvOptions {
     pub inputs: BTreeMap<String, Input>,
@@ -193,8 +180,9 @@ pub struct DevenvOptions {
     /// evaluation. Machine installs disable this so bootstrap credentials stay
     /// on the CLI side of the Nix/Rust boundary.
     pub expose_secretspec_values_to_nix: bool,
-    /// Where `as_path` SecretSpec values are written.
-    pub secretspec_as_path_files: SecretspecAsPathFiles,
+    /// Process whose exit revokes anonymous `as_path` files. Exports require
+    /// an explicit owner; commands that supervise or exec a child use this PID.
+    pub secretspec_file_owner: Option<u32>,
     /// Whether a `devenv.nix` project file is required. Commands that operate
     /// outside of a project (e.g. `gc`) set this to `false` so they can run
     /// from any directory.
@@ -256,7 +244,7 @@ impl Default for DevenvOptions {
             shell_cwd: None,
             is_testing: false,
             expose_secretspec_values_to_nix: true,
-            secretspec_as_path_files: SecretspecAsPathFiles::Owned,
+            secretspec_file_owner: Some(std::process::id()),
             require_project_file: true,
         }
     }
@@ -493,6 +481,7 @@ pub struct Devenv {
 
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
+    secret_files: crate::secret_files::SecretFiles,
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
@@ -586,7 +575,7 @@ impl Devenv {
         let cache_settings = options.cache_settings;
         let secret_settings = options.secret_settings;
         let expose_secretspec_values_to_nix = options.expose_secretspec_values_to_nix;
-        let secretspec_as_path_files = options.secretspec_as_path_files;
+        let secret_files = crate::secret_files::SecretFiles::new(options.secretspec_file_owner);
         let devenv_dot_gc = devenv_dotfile.join("gc");
 
         // TMPDIR for build artifacts - should NOT use XDG_RUNTIME_DIR as that's
@@ -698,16 +687,12 @@ impl Devenv {
         // installs resolve on demand there; target-only installs never expose
         // provider credentials or values to this process.
         if expose_secretspec_values_to_nix {
-            let as_path_dir = match secretspec_as_path_files {
-                SecretspecAsPathFiles::Owned => None,
-                SecretspecAsPathFiles::Runtime => Some(devenv_runtime.join(SECRETSPEC_AS_PATH_DIR)),
-            };
             resolve_secretspec_into(
                 &devenv_root,
                 &secret_settings,
                 &mut secretspec_cell,
                 &mut secretspec_as_paths,
-                as_path_dir.as_deref(),
+                &secret_files,
             )?;
         }
         let secretspec_provider_override = secret_settings
@@ -915,6 +900,7 @@ impl Devenv {
             eval_cache_pool,
             eval_inputs,
             secretspec: secretspec_cell,
+            secret_files,
             port_allocator,
             native_api_server: OnceCell::new(),
             shutdown,
@@ -1003,6 +989,12 @@ impl Devenv {
     }
 
     /// The options this instance was built from.
+    /// Keep anonymous files alive after exporting their paths or exec'ing a
+    /// command, until the explicitly selected owner process exits.
+    pub fn handoff_secret_files(&self) -> Result<()> {
+        self.secret_files.handoff()
+    }
+
     pub fn options(&self) -> &DevenvOptions {
         &self.options
     }
@@ -3340,6 +3332,7 @@ impl Devenv {
             std::time::Duration::from_secs(120),
         )
         .await?;
+        self.secret_files.handoff_to(Some(child.id()))?;
 
         let pid = std::fs::read_to_string(&pid_file)
             .map(|s| s.trim().to_string())
@@ -3827,6 +3820,10 @@ impl Devenv {
         )
         .await?;
 
+        // Reload swaps the Devenv instance while already-running commands can
+        // still hold paths from its old environment. Successful environments
+        // retain those files until the owning process exits.
+        self.secret_files.retain_for_current_process()?;
         Ok(DevEnv {
             output: env.bash_env,
         })
@@ -4347,11 +4344,10 @@ fn resolve_secretspec_into(
     secret_settings: &SecretSettings,
     cell: &mut OnceCell<ResolvedSecrets>,
     as_paths: &mut HashSet<String>,
-    as_path_dir: Option<&Path>,
+    secret_files: &crate::secret_files::SecretFiles,
 ) -> Result<()> {
     let secretspec_path = devenv_root.join("secretspec.toml");
     if !secretspec_path.exists() {
-        clear_as_path_secrets(as_path_dir)?;
         return Ok(());
     }
 
@@ -4363,7 +4359,6 @@ fn resolve_secretspec_into(
         .unwrap_or(false);
 
     if !secretspec_enabled {
-        clear_as_path_secrets(as_path_dir)?;
         if !secretspec_config_exists {
             message(
                 ActivityLevel::Info,
@@ -4396,6 +4391,7 @@ fn resolve_secretspec_into(
 
     let mut secrets = secretspec::Secrets::load_from(&secretspec_path)
         .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
+    secret_files.configure(&mut secrets);
 
     if let Some(ref provider_str) = provider {
         secrets.set_provider(provider_str);
@@ -4425,20 +4421,12 @@ fn resolve_secretspec_into(
         .collect();
     as_paths.extend(as_path_names.iter().cloned());
 
-    let mut resolved_secrets = validated_secrets
+    let resolved_secrets = validated_secrets
         .resolved
         .secrets
         .iter()
         .map(|(key, value)| Ok((key.clone(), secretspec_text(key, value.expose_secret())?)))
         .collect::<Result<HashMap<_, _>>>()?;
-    if let Some(dir) = as_path_dir {
-        let context_dir = as_path_context_dir(
-            dir,
-            &validated_secrets.resolved.profile,
-            &validated_secrets.resolved.provider,
-        );
-        persist_as_path_secrets(&context_dir, &as_path_names, &mut resolved_secrets)?;
-    }
     let resolved = validated_secrets.into_resolved(resolved_secrets);
 
     cell.set(resolved)
@@ -4482,108 +4470,6 @@ fn resolve_builtin_cachix_auth_token(
         .get(secret_name)
         .map(|secret| secretspec_text(secret_name, secret.expose_secret()))
         .transpose()?)
-}
-
-/// Runtime subdirectory holding the `as_path` files of
-/// [`SecretspecAsPathFiles::Runtime`].
-const SECRETSPEC_AS_PATH_DIR: &str = "secretspec";
-
-/// Keep profiles and provider stores independent while retaining stable paths
-/// across reloads of the same context. Hash the context so provider URIs and
-/// profile names cannot introduce path components or expose store coordinates.
-fn as_path_context_dir(dir: &Path, profile: &str, provider: &str) -> PathBuf {
-    let context = format!("{}:{profile}{provider}", profile.len());
-    dir.join(compute_string_hash(&context))
-}
-
-/// Disabling the integration or removing its manifest revokes all persisted
-/// contexts. Owned temporary files are unaffected.
-fn clear_as_path_secrets(dir: Option<&Path>) -> Result<()> {
-    let Some(dir) = dir else {
-        return Ok(());
-    };
-    match std::fs::symlink_metadata(dir) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        result => result.into_diagnostic()?,
-    };
-    // Apply the same ownership and symlink checks used when writing secrets
-    // before removing anything from an existing runtime directory.
-    devenv_core::paths::create_runtime_dir(dir)?;
-    match std::fs::remove_dir_all(dir) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to remove {}", dir.display())),
-    }
-}
-
-/// Copy each `as_path` secret from its temporary file to `dir/<NAME>` and
-/// point `secrets` at the copy.
-///
-/// Each load replaces the copies atomically, so readers never see a partial
-/// file, and removes copies of secrets that are no longer `as_path` or no
-/// longer resolved. `dir` lives in the runtime directory, which ends with the
-/// login session.
-fn persist_as_path_secrets(
-    dir: &Path,
-    as_path_names: &HashSet<String>,
-    secrets: &mut HashMap<String, String>,
-) -> Result<()> {
-    devenv_core::paths::create_runtime_dir(dir)?;
-
-    for name in as_path_names {
-        // An optional secret without a value has no file to copy.
-        let Some(path) = secrets.get_mut(name) else {
-            continue;
-        };
-        // SecretSpec only loads identifier names, so `name` cannot leave
-        // `dir` or collide with a dot-prefixed staging file.
-        let target = dir.join(name);
-        let mut source = std::fs::File::open(&*path)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to read SecretSpec secret '{name}'"))?;
-        // NamedTempFile creates the file with mode 0600.
-        let mut staged = tempfile::Builder::new()
-            .prefix(".")
-            .tempfile_in(dir)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to stage SecretSpec secret '{name}'"))?;
-        std::io::copy(&mut source, staged.as_file_mut())
-            .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to write SecretSpec secret '{name}'"))?;
-        staged
-            .persist(&target)
-            .map_err(|error| error.error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to write {}", target.display()))?;
-        *path = target.to_string_lossy().into_owned();
-    }
-
-    let entries = std::fs::read_dir(dir)
-        .into_diagnostic()
-        .wrap_err_with(|| format!("Failed to list {}", dir.display()))?;
-    for entry in entries {
-        let entry = entry.into_diagnostic()?;
-        let file_name = entry.file_name();
-        let Some(name) = file_name.to_str() else {
-            continue;
-        };
-        // Dot files are staging files of a concurrent load.
-        if name.starts_with('.') || (as_path_names.contains(name) && secrets.contains_key(name)) {
-            continue;
-        }
-        match std::fs::remove_file(entry.path()) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(error)
-                    .into_diagnostic()
-                    .wrap_err_with(|| format!("Failed to remove {}", entry.path().display()));
-            }
-        }
-    }
-    Ok(())
 }
 
 fn secretspec_text(name: &str, value: &[u8]) -> Result<String> {
@@ -4957,6 +4843,7 @@ mod tests {
         assert_eq!(token.as_deref(), Some("test-token"));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn project_secretspec_records_and_retains_as_path_values() {
         let root = tempfile::tempdir().expect("create project root");
@@ -4984,8 +4871,14 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         let mut cell = OnceCell::new();
         let mut as_paths = HashSet::new();
 
-        resolve_secretspec_into(root.path(), &settings, &mut cell, &mut as_paths, None)
-            .expect("resolve project SecretSpec");
+        resolve_secretspec_into(
+            root.path(),
+            &settings,
+            &mut cell,
+            &mut as_paths,
+            &crate::secret_files::SecretFiles::new(Some(std::process::id())),
+        )
+        .expect("resolve project SecretSpec");
 
         assert!(as_paths.contains("BOOTSTRAP_KEY"));
         let path = PathBuf::from(&cell.get().unwrap().secrets["BOOTSTRAP_KEY"]);
@@ -4993,249 +4886,6 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
             std::fs::read_to_string(path).expect("as_path file remains alive"),
             "secret-contents"
         );
-    }
-
-    fn as_path_project(dir: &Path, manifest_secrets: &str, dotenv: &str) -> SecretSettings {
-        std::fs::write(
-            dir.join("secretspec.toml"),
-            format!(
-                "[project]\nname = \"as-path-test\"\nrevision = \"1.0\"\nrequire_reason = false\n\n[profiles.default]\n{manifest_secrets}"
-            ),
-        )
-        .expect("write SecretSpec manifest");
-        std::fs::write(dir.join(".env"), dotenv).expect("write dotenv provider");
-        SecretSettings {
-            secretspec: Some(devenv_core::config::SecretspecConfig {
-                enable: true,
-                provider: Some("dotenv:.env".to_string()),
-                ..Default::default()
-            }),
-        }
-    }
-
-    fn resolve_into_runtime(root: &Path, settings: &SecretSettings, dir: &Path) -> ResolvedSecrets {
-        let mut cell = OnceCell::new();
-        resolve_secretspec_into(root, settings, &mut cell, &mut HashSet::new(), Some(dir))
-            .expect("resolve project SecretSpec");
-        cell.into_inner().expect("resolved secrets")
-    }
-
-    #[test]
-    fn runtime_as_path_files_outlive_the_resolution() {
-        let root = tempfile::tempdir().expect("create project root");
-        let runtime = tempfile::tempdir().expect("create runtime dir");
-        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
-        let settings = as_path_project(
-            root.path(),
-            "TLS_KEY = { description = \"key\", as_path = true }\nPLAIN = { description = \"plain\" }\n",
-            "TLS_KEY=key-contents\nPLAIN=plain-value\n",
-        );
-
-        let resolved = resolve_into_runtime(root.path(), &settings, &dir);
-        let path = PathBuf::from(&resolved.secrets["TLS_KEY"]);
-        let plain = resolved.secrets["PLAIN"].clone();
-        let context_dir = as_path_context_dir(&dir, &resolved.profile, &resolved.provider);
-        drop(resolved);
-
-        assert_eq!(path, context_dir.join("TLS_KEY"));
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "key-contents");
-        assert_eq!(
-            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-        assert_eq!(
-            std::fs::metadata(&context_dir)
-                .unwrap()
-                .permissions()
-                .mode()
-                & 0o777,
-            0o700
-        );
-        assert_eq!(plain, "plain-value");
-        assert!(!context_dir.join("PLAIN").exists());
-    }
-
-    #[test]
-    fn runtime_as_path_files_follow_later_loads() {
-        let root = tempfile::tempdir().expect("create project root");
-        let runtime = tempfile::tempdir().expect("create runtime dir");
-        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
-        let both = "TLS_KEY = { description = \"key\", as_path = true }\nCERT = { description = \"cert\", as_path = true, required = false }\n";
-
-        let settings = as_path_project(root.path(), both, "TLS_KEY=first\nCERT=cert\n");
-        let resolved = resolve_into_runtime(root.path(), &settings, &dir);
-        let context_dir = as_path_context_dir(&dir, &resolved.profile, &resolved.provider);
-        drop(resolved);
-
-        // A changed value replaces the file in place.
-        let settings = as_path_project(root.path(), both, "TLS_KEY=second\nCERT=cert\n");
-        drop(resolve_into_runtime(root.path(), &settings, &dir));
-        assert_eq!(
-            std::fs::read_to_string(context_dir.join("TLS_KEY")).unwrap(),
-            "second"
-        );
-        assert!(context_dir.join("CERT").exists());
-
-        // An optional secret that lost its value and a secret that is no
-        // longer `as_path` both leave no file behind.
-        let settings = as_path_project(
-            root.path(),
-            "TLS_KEY = { description = \"key\" }\nCERT = { description = \"cert\", as_path = true, required = false }\n",
-            "TLS_KEY=inline\n",
-        );
-        let resolved = resolve_into_runtime(root.path(), &settings, &dir);
-        assert_eq!(resolved.secrets["TLS_KEY"], "inline");
-        assert!(!context_dir.join("TLS_KEY").exists());
-        assert!(!context_dir.join("CERT").exists());
-    }
-
-    #[test]
-    fn runtime_as_path_files_are_isolated_between_profiles() {
-        let root = tempfile::tempdir().unwrap();
-        let runtime = tempfile::tempdir().unwrap();
-        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
-        let mut settings = as_path_project(
-            root.path(),
-            "TLS_KEY = { description = \"key\", as_path = true }\nCERT = { description = \"cert\", as_path = true, required = false }\n\n[profiles.production]\nTLS_KEY = { description = \"key\", as_path = true }\n",
-            "TLS_KEY=development-key\nCERT=development-cert\n",
-        );
-        let development = resolve_into_runtime(root.path(), &settings, &dir);
-        let development_key = PathBuf::from(&development.secrets["TLS_KEY"]);
-        let development_cert = PathBuf::from(&development.secrets["CERT"]);
-        drop(development);
-
-        settings.secretspec.as_mut().unwrap().profile = Some("production".into());
-        std::fs::write(root.path().join(".env"), "TLS_KEY=production-key\n").unwrap();
-        let production = resolve_into_runtime(root.path(), &settings, &dir);
-        let production_key = PathBuf::from(&production.secrets["TLS_KEY"]);
-        drop(production);
-
-        assert_ne!(development_key, production_key);
-        assert_eq!(
-            std::fs::read_to_string(&development_key).unwrap(),
-            "development-key"
-        );
-        assert_eq!(
-            std::fs::read_to_string(&development_cert).unwrap(),
-            "development-cert"
-        );
-        assert_eq!(
-            std::fs::read_to_string(&production_key).unwrap(),
-            "production-key"
-        );
-    }
-
-    #[test]
-    fn runtime_as_path_files_are_isolated_between_provider_stores() {
-        let root = tempfile::tempdir().unwrap();
-        let runtime = tempfile::tempdir().unwrap();
-        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
-        let mut settings = as_path_project(
-            root.path(),
-            "TLS_KEY = { description = \"key\", as_path = true }\n",
-            "TLS_KEY=first-store\n",
-        );
-        let first = resolve_into_runtime(root.path(), &settings, &dir);
-        let first_path = PathBuf::from(&first.secrets["TLS_KEY"]);
-        drop(first);
-
-        std::fs::write(root.path().join(".env.other"), "TLS_KEY=second-store\n").unwrap();
-        settings.secretspec.as_mut().unwrap().provider = Some("dotenv:.env.other".into());
-        let second = resolve_into_runtime(root.path(), &settings, &dir);
-        let second_path = PathBuf::from(&second.secrets["TLS_KEY"]);
-        drop(second);
-
-        assert_ne!(first_path, second_path);
-        assert_eq!(std::fs::read_to_string(first_path).unwrap(), "first-store");
-        assert_eq!(
-            std::fs::read_to_string(second_path).unwrap(),
-            "second-store"
-        );
-    }
-
-    #[test]
-    fn runtime_as_path_files_are_removed_when_integration_is_disabled() {
-        for remove_manifest in [false, true] {
-            let root = tempfile::tempdir().unwrap();
-            let runtime = tempfile::tempdir().unwrap();
-            let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
-            let mut settings = as_path_project(
-                root.path(),
-                "TLS_KEY = { description = \"key\", as_path = true }\n",
-                "TLS_KEY=key-contents\n",
-            );
-            let resolved = resolve_into_runtime(root.path(), &settings, &dir);
-            let path = PathBuf::from(&resolved.secrets["TLS_KEY"]);
-            drop(resolved);
-            assert!(path.exists());
-
-            if remove_manifest {
-                std::fs::remove_file(root.path().join("secretspec.toml")).unwrap();
-            } else {
-                settings.secretspec.as_mut().unwrap().enable = false;
-            }
-            let mut cell = OnceCell::new();
-            resolve_secretspec_into(
-                root.path(),
-                &settings,
-                &mut cell,
-                &mut HashSet::new(),
-                Some(&dir),
-            )
-            .unwrap();
-            assert!(cell.get().is_none());
-            assert!(!path.exists());
-            assert!(!dir.exists());
-
-            // Repeated disabled loads must not recreate an empty secret directory.
-            resolve_secretspec_into(
-                root.path(),
-                &settings,
-                &mut cell,
-                &mut HashSet::new(),
-                Some(&dir),
-            )
-            .unwrap();
-            assert!(!dir.exists());
-        }
-    }
-
-    #[test]
-    fn runtime_as_path_cleanup_rejects_symlinks() {
-        let runtime = tempfile::tempdir().unwrap();
-        let elsewhere = tempfile::tempdir().unwrap();
-        let key = elsewhere.path().join("TLS_KEY");
-        std::fs::write(&key, "must-remain").unwrap();
-        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
-        std::os::unix::fs::symlink(elsewhere.path(), &dir).unwrap();
-
-        assert!(clear_as_path_secrets(Some(&dir)).is_err());
-        assert_eq!(std::fs::read_to_string(key).unwrap(), "must-remain");
-    }
-
-    #[test]
-    fn runtime_as_path_files_never_see_path_like_names() {
-        let root = tempfile::tempdir().expect("create project root");
-        let runtime = tempfile::tempdir().expect("create runtime dir");
-        let dir = runtime.path().join(SECRETSPEC_AS_PATH_DIR);
-        let settings = as_path_project(
-            root.path(),
-            "\"../ESCAPE\" = { description = \"key\", as_path = true }\n",
-            "../ESCAPE=contents\n",
-        );
-
-        let mut cell = OnceCell::new();
-        let error = resolve_secretspec_into(
-            root.path(),
-            &settings,
-            &mut cell,
-            &mut HashSet::new(),
-            Some(&dir),
-        )
-        .expect_err("a path-like secret name must be rejected");
-
-        assert!(error.to_string().contains("Invalid secret name"), "{error}");
-        assert!(!runtime.path().join("ESCAPE").exists());
     }
 
     #[test]

@@ -79,6 +79,9 @@ const DEVENV_SHELL_HINT: &str = "_DEVENV_SHELL_HINT";
 const DEVENV_HOOK_DIR: &str = "_DEVENV_HOOK_DIR";
 
 fn main() {
+    if let Some(code) = devenv::secret_files::maybe_run_keeper() {
+        process::exit(code);
+    }
     if let Some(code) = devenv_processes::maybe_run_process_guardian() {
         process::exit(code);
     }
@@ -616,10 +619,12 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
     let shutdown = Shutdown::new();
-    let secretspec_as_path_files = if matches!(&command, Commands::PrintDevEnv { .. }) {
-        devenv::SecretspecAsPathFiles::Runtime
-    } else {
-        devenv::SecretspecAsPathFiles::Owned
+    let secretspec_file_owner = match &command {
+        Commands::PrintDevEnv {
+            secret_owner_pid, ..
+        }
+        | Commands::DirenvExport { secret_owner_pid } => *secret_owner_pid,
+        _ => Some(process::id()),
     };
     let expose_secretspec_values_to_nix = !matches!(
         &command,
@@ -650,7 +655,7 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
         shell_cwd,
         is_testing,
         expose_secretspec_values_to_nix,
-        secretspec_as_path_files,
+        secretspec_file_owner,
         require_project_file,
     };
 
@@ -1226,6 +1231,9 @@ async fn run_backend(
     // terminal before the debugger takes it.
     let _ = frontend_tx.send(FrontendCommand::ExitRenderer).await;
 
+    if matches!(&result, Ok(CommandResult::Exec(_))) {
+        devenv.handoff_secret_files()?;
+    }
     debugger_or_err(result, nix_debugger, devenv)
 }
 
@@ -1679,11 +1687,12 @@ async fn dispatch_command(
             let _ = devenv.backend();
             Ok(CommandResult::Done)
         }
-        Commands::PrintDevEnv { json } => {
+        Commands::PrintDevEnv { json, .. } => {
             let output = devenv.print_dev_env(json).await?;
+            devenv.handoff_secret_files()?;
             Ok(CommandResult::Print(output))
         }
-        Commands::DirenvExport => {
+        Commands::DirenvExport { .. } => {
             // Discard messages: direnv captures stdout as env var definitions,
             // so echo statements would corrupt the output.
             let task_exports = match devenv.run_enter_shell_tasks(None, verbosity).await {
@@ -1697,6 +1706,7 @@ async fn dispatch_command(
             // same direnv activation.
             let mut output = devenv.print_dev_env(false).await?;
             devenv::push_shell_fragment(&mut output, &devenv::format_shell_exports(&task_exports));
+            devenv.handoff_secret_files()?;
             Ok(CommandResult::Print(output))
         }
         Commands::PrintPaths => {
