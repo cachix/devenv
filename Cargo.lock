@@ -8831,7 +8831,7 @@ dependencies = [
 [[package]]
 name = "secretspec"
 version = "0.21.1"
-source = "git+https://github.com/cachix/secretspec?rev=0b582276590eb709c333efc3242123213b5cee96#0b582276590eb709c333efc3242123213b5cee96"
+source = "git+https://github.com/cachix/secretspec?rev=a110459943605a8960d87e384e70ea28c87d6129#a110459943605a8960d87e384e70ea28c87d6129"
 dependencies = [
  "age",
  "async-trait",
@@ -8911,7 +8911,7 @@ dependencies = [
 [[package]]
 name = "secretspec-ipc"
 version = "0.21.1"
-source = "git+https://github.com/cachix/secretspec?rev=0b582276590eb709c333efc3242123213b5cee96#0b582276590eb709c333efc3242123213b5cee96"
+source = "git+https://github.com/cachix/secretspec?rev=a110459943605a8960d87e384e70ea28c87d6129#a110459943605a8960d87e384e70ea28c87d6129"
 dependencies = [
  "async-trait",
  "serde",

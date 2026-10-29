@@ -79,9 +79,6 @@ const DEVENV_SHELL_HINT: &str = "_DEVENV_SHELL_HINT";
 const DEVENV_HOOK_DIR: &str = "_DEVENV_HOOK_DIR";
 
 fn main() {
-    if let Some(code) = devenv::secret_files::maybe_run_keeper() {
-        process::exit(code);
-    }
     if let Some(code) = devenv_processes::maybe_run_process_guardian() {
         process::exit(code);
     }

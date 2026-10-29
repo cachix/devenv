@@ -30052,8 +30052,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "0b582276590eb709c333efc3242123213b5cee96";
-          sha256 = "1vhn13xx66874lav1ha5p0p8vd2s5lsrg0s7q1ff65fvydahrp5g";
+          rev = "a110459943605a8960d87e384e70ea28c87d6129";
+          sha256 = "1bypmkz91x6y4x7plsv0ljkd2qfz513h0vha5il291jjhf9kqbb0";
         };
         dependencies = [
           {
@@ -30455,8 +30455,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "0b582276590eb709c333efc3242123213b5cee96";
-          sha256 = "1vhn13xx66874lav1ha5p0p8vd2s5lsrg0s7q1ff65fvydahrp5g";
+          rev = "a110459943605a8960d87e384e70ea28c87d6129";
+          sha256 = "1bypmkz91x6y4x7plsv0ljkd2qfz513h0vha5il291jjhf9kqbb0";
         };
         libName = "secretspec_ipc";
         dependencies = [

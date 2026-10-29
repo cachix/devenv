@@ -4843,7 +4843,7 @@ mod tests {
         assert_eq!(token.as_deref(), Some("test-token"));
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn project_secretspec_records_and_retains_as_path_values() {
         let root = tempfile::tempdir().expect("create project root");

@@ -15,7 +15,10 @@ load_key_path() {
 }
 
 path=$(load_key_path)
-case "$path" in /proc/*/fd/*) ;; *) echo "not an anonymous file: $path" >&2; exit 1 ;; esac
+case "$(uname -s):$path" in
+  Linux:/proc/*/fd/*|Darwin:*/secretspec/file-leases/lease-*/memory/secret-*) ;;
+  *) echo "not a process-owned memory file: $path" >&2; exit 1 ;;
+esac
 test "$(cat "$path")" = "test-key"
 
 # Every resolution is independent, including reloads of the same profile.
@@ -130,7 +133,7 @@ read -r _
     try:
         path = owner.stdout.readline().strip()
         shell_pid = int(owner.stdout.readline().strip())
-        assert path.startswith("/proc/"), path
+        assert path.startswith("/proc/") or "/memory/secret-" in path, path
         with open(path) as secret:
             assert secret.read() == "production-key"
         os.kill(shell_pid, 9)
@@ -140,4 +143,4 @@ read -r _
         os.killpg(owner.pid, 9)
         owner.wait()
 PY
-echo "✓ anonymous SecretSpec files follow their consuming processes"
+echo "✓ memory-backed SecretSpec files follow their consuming processes"
