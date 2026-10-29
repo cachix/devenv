@@ -31,8 +31,11 @@ def run(*args):
     return result.stdout
 
 
-def detach(device):
+def detach(device, mount):
     assert re.fullmatch(r"/dev/disk[0-9]+", device), device
+    mount = Path(mount)
+    if mount.stat().st_dev != mount.parent.stat().st_dev:
+        run("/sbin/umount", "-f", str(mount))
     for attempt in range(3):
         try:
             run("/usr/bin/hdiutil", "detach", "-force", device)
@@ -67,11 +70,15 @@ class Volume:
         # Refuse to write even fixture contents until the private directory has
         # actually become a separate mounted filesystem with ownership enabled.
         assert self.mount.stat().st_dev != self.mount.parent.stat().st_dev
-        info = plistlib.loads(run("/usr/sbin/diskutil", "info", "-plist", str(self.mount)))
-        print("mounted volume:", json.dumps(info, default=str), flush=True)
-        assert info["DeviceIdentifier"] == self.device.removeprefix("/dev/")
-        assert Path(info["MountPoint"]).resolve() == self.mount.resolve()
-        assert info["GlobalPermissionsEnabled"] is True, info
+        # Disk Arbitration's diskutil view can be stale for manual mounts.
+        # Read the live VFS mount table instead.
+        mounts = run("/sbin/mount").decode().splitlines()
+        prefix = f"{self.device} on {self.mount} ("
+        matches = [line for line in mounts if line.startswith(prefix)]
+        assert len(matches) == 1, mounts
+        print("mounted volume:", matches[0], flush=True)
+        options = matches[0][len(prefix):].removesuffix(")").split(", ")
+        assert "hfs" in options and "noowners" not in options, options
         assert self.mount.stat().st_uid == os.geteuid()
         assert self.mount.stat().st_mode & 0o777 == 0o700
         fd = os.open(self.file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -90,7 +97,7 @@ class Volume:
                     and any(entry.get("dev-entry") == self.device
                             for entry in image.get("system-entities", []))]
             if ours:
-                detach(self.device)
+                detach(self.device, self.mount)
             else:
                 assert self.mount.stat().st_dev == self.mount.parent.stat().st_dev
         self.mount.rmdir()
@@ -107,7 +114,7 @@ def supervise(owner, mount, device):
         assert events and events[0].fflags & select.KQ_NOTE_EXIT
         # Unlink before detaching, so a busy volume never retains a pathname.
         (Path(mount) / "key").unlink()
-        detach(device)
+        detach(device, mount)
         print("cleaned", flush=True)
 
 
@@ -140,7 +147,7 @@ def probe():
     run("/usr/bin/id")
     volumes, owners, supervisors = [], [], []
     with tempfile.TemporaryDirectory(prefix="devenv-secret-probe-") as directory:
-        root = Path(directory)
+        root = Path(directory).resolve()
         try:
             for index in range(2):
                 volume = Volume(root, f"consumer-{index}")
