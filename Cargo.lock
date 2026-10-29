@@ -8831,7 +8831,7 @@ dependencies = [
 [[package]]
 name = "secretspec"
 version = "0.21.1"
-source = "git+https://github.com/cachix/secretspec?rev=4ef49ee50adb0a8639e4f98a9b7c93812565aabd#4ef49ee50adb0a8639e4f98a9b7c93812565aabd"
+source = "git+https://github.com/cachix/secretspec?rev=6a79a446ebf86e37cc5c5c1935ac1dfd09de8c61#6a79a446ebf86e37cc5c5c1935ac1dfd09de8c61"
 dependencies = [
  "age",
  "async-trait",
@@ -8849,6 +8849,7 @@ dependencies = [
  "clap_complete",
  "clap_complete_nushell",
  "colored",
+ "core-foundation 0.10.1",
  "data-encoding",
  "detect-coding-agent",
  "dotenv-ng",
@@ -8911,7 +8912,7 @@ dependencies = [
 [[package]]
 name = "secretspec-ipc"
 version = "0.21.1"
-source = "git+https://github.com/cachix/secretspec?rev=4ef49ee50adb0a8639e4f98a9b7c93812565aabd#4ef49ee50adb0a8639e4f98a9b7c93812565aabd"
+source = "git+https://github.com/cachix/secretspec?rev=6a79a446ebf86e37cc5c5c1935ac1dfd09de8c61#6a79a446ebf86e37cc5c5c1935ac1dfd09de8c61"
 dependencies = [
  "async-trait",
  "serde",

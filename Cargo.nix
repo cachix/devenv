@@ -30052,8 +30052,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "4ef49ee50adb0a8639e4f98a9b7c93812565aabd";
-          sha256 = "0sq2ahyk3lq18khqmif89lcfrlwmjl2xrsh19qblj71q4ly9d906";
+          rev = "6a79a446ebf86e37cc5c5c1935ac1dfd09de8c61";
+          sha256 = "1mqqfgb6nsb3s7y910p8s6398872sz6pbzbsrpp6mq7qgmbxwd2k";
         };
         dependencies = [
           {
@@ -30136,6 +30136,11 @@ rec {
           {
             name = "colored";
             packageId = "colored";
+          }
+          {
+            name = "core-foundation";
+            packageId = "core-foundation 0.10.1";
+            target = { target, features }: ("macos" == target."os" or null);
           }
           {
             name = "data-encoding";
@@ -30455,8 +30460,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/secretspec";
-          rev = "4ef49ee50adb0a8639e4f98a9b7c93812565aabd";
-          sha256 = "0sq2ahyk3lq18khqmif89lcfrlwmjl2xrsh19qblj71q4ly9d906";
+          rev = "6a79a446ebf86e37cc5c5c1935ac1dfd09de8c61";
+          sha256 = "1mqqfgb6nsb3s7y910p8s6398872sz6pbzbsrpp6mq7qgmbxwd2k";
         };
         libName = "secretspec_ipc";
         dependencies = [
