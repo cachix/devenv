@@ -11,6 +11,7 @@
 
 ### Bug Fixes
 
+- Fixed a foreground `devenv up` staying invisible to other `devenv up` calls until all of its processes were ready. In that window a second `devenv up` failed with `Process tasks failed`, and `devenv up -d` started a daemon that could not claim the processes and could not be stopped with `devenv processes down`. The foreground manager is now published once its processes are scheduled, as the `devenv up -d` daemon already is.
 - Fixed `devenv processes` commands reporting that no process manager is running after `devenv up -d` had been running for more than three days on macOS, where the system `/tmp` cleaner deleted the manager's PID file ([#3316](https://github.com/cachix/devenv/issues/3316)).
 - Fetched `--from` sources now load YAML configuration, local overrides, and YAML imports alongside their Nix modules. Source-local YAML imports are followed, and relative input overrides in the target's `devenv.local.yaml` resolve from the target directory.
 - Locked inputs with complete source metadata now reuse sources from the Nix store or configured binary caches without contacting their original remote, so `devenv shell` works when that remote is unavailable ([#3244](https://github.com/cachix/devenv/pull/3244)).

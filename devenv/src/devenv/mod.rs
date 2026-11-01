@@ -3047,26 +3047,52 @@ impl Devenv {
             // Run process tasks under the Phase 4 activity.
             // Auto start off processes (start.enable = false) are handled by the
             // process manager: they appear in the TUI as stopped.
-            trace!("devenv.up: running process tasks (run_with_parent_activity)");
-            let _outputs = tasks_runner
-                .run_with_parent_activity(Arc::new(phase4))
-                .await;
+            trace!("devenv.up: running process tasks");
+            let (scheduled_tx, scheduled_rx) = tokio::sync::oneshot::channel();
+            let initial_tasks = {
+                let tasks_runner = Arc::clone(&tasks_runner);
+                tokio::spawn(async move {
+                    tasks_runner
+                        .run_with_parent_activity_and_signal_scheduled(
+                            Arc::new(phase4),
+                            scheduled_tx,
+                        )
+                        .await
+                })
+            };
+
+            // Publish the manager once the process graph is scheduled, as the
+            // daemon does, so that another `devenv up` sees it while processes
+            // are still starting instead of starting a second manager.
+            let published = async {
+                scheduled_rx.await.into_diagnostic().wrap_err(
+                    "Initial process scheduling stopped before the manager was available",
+                )?;
+                let api_server = tasks::NativeApiServer::start(manager)?;
+                processes::write_pid(&api_server.manager().manager_pid_file(), std::process::id())
+                    .await
+                    .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
+                Ok::<_, miette::Report>(api_server)
+            }
+            .await;
+            if published.is_err() {
+                let _ = tasks_runner.process_runner().stop_all().await;
+            }
+
+            let _outputs = initial_tasks.await;
             let task_status = tasks_runner.get_completion_status().await;
             trace!("devenv.up: process tasks completed");
+
+            let api_server = published?;
+            let pid_file = api_server.manager().manager_pid_file();
 
             if task_status.has_failures() {
                 // A caller such as `devenv test` must not leave successfully
                 // started process siblings behind when another task fails.
                 let _ = tasks_runner.process_runner().stop_all().await;
+                let _ = tokio::fs::remove_file(&pid_file).await;
                 bail!("Process tasks failed");
             }
-
-            let api_server = tasks::NativeApiServer::start(manager)?;
-
-            let pid_file = api_server.manager().manager_pid_file();
-            processes::write_pid(&pid_file, std::process::id())
-                .await
-                .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
 
             if options.mode == ClientRunMode::Follow {
                 trace!(
