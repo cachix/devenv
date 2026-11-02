@@ -101,6 +101,30 @@ def start(**kwargs):
     return output, status
 
 
+def prepare_ca(project=ROOT, name="proxy-listen-test"):
+    # Generate a local CA without ever invoking mkcert -install.
+    ca = project / ".devenv" / "state" / "mkcert"
+    ca.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["mkcert", "-cert-file", str(ca / "seed.pem"), "-key-file", str(ca / "seed-key.pem"),
+         f"web.{name}.localhost"],
+        env=dict(ENV, CAROOT=str(ca)), cwd=project, check=True, timeout=30,
+    )
+    assert (ca / "rootCA.pem").is_file()
+    return ca / "rootCA.pem"
+
+
+def https_request(port, ca, name="proxy-listen-test", env=None):
+    result = subprocess.run(
+        ["curl", "--silent", "--show-error", "--fail", "--noproxy", "*",
+         "--connect-timeout", "2", "--max-time", "3", "--cacert", str(ca),
+         "--resolve", f"web.{name}.localhost:{port}:127.0.0.1",
+         f"https://web.{name}.localhost:{port}/marker"],
+        env=env or ENV, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5,
+    )
+    return result.returncode == 0 and result.stdout == name
+
+
 try:
     for host in ("127.0.0.1", "::1"):
         try:
@@ -118,5 +142,19 @@ try:
         assert f"http://web.proxy-listen-test.localhost:{port}" in output, output
         wait_for(lambda: request(host, port))
         stop()
+
+    http_port = free_port()
+    https_port = free_port()
+    while https_port == http_port:
+        https_port = free_port()
+    settings(http=f"127.0.0.1:{http_port}", https=f"127.0.0.1:{https_port}", tls=True)
+    ca = prepare_ca()
+    output, status = start()
+    assert status["listen"] == f"127.0.0.1:{http_port}", status
+    assert status["https_listen"] == f"127.0.0.1:{https_port}", status
+    assert f"https://web.proxy-listen-test.localhost:{https_port}" in output, output
+    wait_for(lambda: request("127.0.0.1", http_port))
+    wait_for(lambda: https_request(https_port, ca))
+    stop()
 finally:
     stop()
