@@ -7,6 +7,7 @@ in
   packages = [
     pkgs.python3
     pkgs.curl
+    pkgs.mkcert
   ];
   process.manager.implementation = "native";
   process.proxy = {
@@ -17,5 +18,6 @@ in
   processes.web = {
     exec = "${pkgs.python3}/bin/python3 -m http.server ${toString config.processes.web.ports.http.value} --bind 127.0.0.1";
     ports.http.allocate = 18130;
+    proxy.https.enable = listeners.tls or false;
   };
 }
