@@ -1029,6 +1029,17 @@ impl Devenv {
             return Ok(());
         }
 
+        if !task_configs.iter().any(|task| {
+            task.name.starts_with(devenv_tasks::PROCESS_TASK_PREFIX)
+                && task
+                    .process
+                    .as_ref()
+                    .is_some_and(|process| !process.ports.is_empty())
+        }) {
+            crate::proxy::clear(&self.proxy_owner());
+            return Ok(());
+        }
+
         let https = task_configs.iter().any(|task| {
             task.process
                 .as_ref()
