@@ -267,6 +267,42 @@ async fn test_process_proxy_defaults_and_opt_in() {
 }
 
 #[nix_test]
+async fn test_process_proxy_listener_options() {
+    for (nix, http, https) in [
+        ("{}", "127.0.0.1:80", "127.0.0.1:443"),
+        (
+            r#"{ process.proxy.listen = "[::1]:1080"; process.proxy.https.listen = "[::1]:1443"; }"#,
+            "[::1]:1080",
+            "[::1]:1443",
+        ),
+    ] {
+        let env = TestEnv::builder().nix(nix).build().await;
+        let value = env
+            .backend
+            .eval(&[
+                "config.process.proxy.listen",
+                "config.process.proxy.https.listen",
+            ])
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&value).unwrap(),
+            serde_json::json!([http, https])
+        );
+    }
+    for option in ["listen", "https.listen"] {
+        let env = TestEnv::builder()
+            .nix(&format!("{{ process.proxy.{option} = 1080; }}"))
+            .build()
+            .await;
+        env.backend
+            .eval(&[&format!("config.process.proxy.{option}")])
+            .await
+            .expect_err("listeners must be strings");
+    }
+}
+
+#[nix_test]
 async fn test_process_proxy_with_legacy_modules() {
     let env = TestEnv::builder()
         .nix(
