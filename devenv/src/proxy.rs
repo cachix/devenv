@@ -17,6 +17,65 @@ use std::{
 const START_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_PROJECT_NAME: &str = "devenv-shell";
 
+/// Project settings before CLI-process environment overrides are applied.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ProxyConfig {
+    pub listen: String,
+    pub https: HttpsConfig,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct HttpsConfig {
+    pub listen: String,
+}
+
+impl Default for ProxyConfig {
+    fn default() -> Self {
+        Self {
+            listen: "127.0.0.1:80".to_owned(),
+            https: HttpsConfig {
+                listen: "127.0.0.1:443".to_owned(),
+            },
+        }
+    }
+}
+
+impl ProxyConfig {
+    fn http_address(&self) -> Result<SocketAddr> {
+        listener_address(
+            &self.listen,
+            "process.proxy.listen",
+            "DEVENV_PROXY_LISTEN",
+            std::env::var("DEVENV_PROXY_LISTEN").ok(),
+        )
+    }
+
+    fn https_address(&self) -> Result<SocketAddr> {
+        listener_address(
+            &self.https.listen,
+            "process.proxy.https.listen",
+            "DEVENV_PROXY_HTTPS_LISTEN",
+            std::env::var("DEVENV_PROXY_HTTPS_LISTEN").ok(),
+        )
+    }
+}
+
+fn listener_address(
+    configured: &str,
+    option: &str,
+    variable: &str,
+    override_value: Option<String>,
+) -> Result<SocketAddr> {
+    let (value, source) = match override_value.as_deref() {
+        Some(value) => (value, variable),
+        None => (configured, option),
+    };
+    value
+        .parse()
+        .into_diagnostic()
+        .wrap_err_with(|| format!("{source} is not a valid socket address: {value:?}"))
+}
+
 pub(crate) async fn prepare_https(
     routes: &mut [Route],
     task_configs: &mut [tasks::TaskConfig],
@@ -625,17 +684,11 @@ fn proxy_data_plane_ready(address: SocketAddr) -> bool {
 }
 
 fn proxy_listen_address() -> Option<SocketAddr> {
-    std::env::var("DEVENV_PROXY_LISTEN")
-        .unwrap_or_else(|_| "127.0.0.1:80".to_owned())
-        .parse()
-        .ok()
+    ProxyConfig::default().http_address().ok()
 }
 
 fn proxy_https_listen_address() -> Option<SocketAddr> {
-    std::env::var("DEVENV_PROXY_HTTPS_LISTEN")
-        .unwrap_or_else(|_| "127.0.0.1:443".to_owned())
-        .parse()
-        .ok()
+    ProxyConfig::default().https_address().ok()
 }
 
 fn proxy_executable() -> Result<PathBuf> {
@@ -670,6 +723,43 @@ fn proxy_log_path(socket: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use devenv_processes::{ProcessConfig, ProcessProxyConfig};
+
+    #[test]
+    fn listener_configuration_defaults_and_overrides() {
+        let config = ProxyConfig::default();
+        assert_eq!(config.listen, "127.0.0.1:80");
+        assert_eq!(config.https.listen, "127.0.0.1:443");
+        for (configured, override_value, expected) in [
+            ("[::1]:1080", None, "[::1]:1080"),
+            ("[::1]:1080", Some("127.0.0.1:2080"), "127.0.0.1:2080"),
+            ("invalid", Some("[::1]:2080"), "[::1]:2080"),
+        ] {
+            assert_eq!(
+                listener_address(
+                    configured,
+                    "option",
+                    "VARIABLE",
+                    override_value.map(str::to_owned)
+                )
+                .unwrap(),
+                expected.parse::<SocketAddr>().unwrap(),
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_listener_names_its_source() {
+        for (override_value, source) in [(None, "option"), (Some(""), "VARIABLE")] {
+            let error = listener_address(
+                "invalid",
+                "option",
+                "VARIABLE",
+                override_value.map(str::to_owned),
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains(source), "{error:?}");
+        }
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
