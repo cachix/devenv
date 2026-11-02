@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ config, lib, ... }:
 {
   options.process.proxy = {
     enable = lib.mkEnableOption ''
@@ -33,4 +33,24 @@
       '';
     };
   };
+
+  config.changelogs = [
+    {
+      date = "2026-11-02";
+      title = "Configure shared proxy listen addresses in devenv.nix";
+      when = config.process.proxy.enable;
+      description = ''
+        Set `process.proxy.listen` and `process.proxy.https.listen` in `devenv.nix`
+        to share proxy addresses across the team without per-developer shell variables.
+        For example, `[::1]:1080` for HTTP and `[::1]:1443` for HTTPS avoid Linux
+        low-port sudo prompts and support clients that resolve `.localhost` to IPv6.
+        These addresses bind IPv6 only; use `127.0.0.1` for IPv4 clients.
+        The defaults are unchanged, and `DEVENV_PROXY_LISTEN` and
+        `DEVENV_PROXY_HTTPS_LISTEN` in the CLI environment still take precedence.
+        If a running shared proxy uses different addresses or is too old to report
+        its HTTP address, stop it using the PID shown in the error and run `devenv up`
+        again. Stopping the shared proxy interrupts proxy access for other projects.
+      '';
+    }
+  ];
 }
