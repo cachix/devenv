@@ -3,12 +3,17 @@ set -euo pipefail
 
 mkdir -p mock-bin
 export INSTALL_LOG="$PWD/install.log"
+export INSTALL_PAYLOAD="$PWD/install.payload"
+export SHARED_TOKEN=install-token
 export REAL_NIX
 REAL_NIX=$(command -v nix)
 cat >mock-bin/ssh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'ssh %s\n' "${!#}" >>"$INSTALL_LOG"
+if [[ "${!#}" == *" values" ]]; then
+  cat >>"$INSTALL_PAYLOAD"
+fi
 EOF
 cat >mock-bin/nix <<'EOF'
 #!/usr/bin/env bash
@@ -44,6 +49,16 @@ system=$(jq -er '."machines.working.build.nixos"' built.json)
 devenv machines install working --phases disko,install
 grep -Fxq "copy $system" "$INSTALL_LOG"
 grep -Fxq "ssh nixos-install --system $system --no-root-password --no-channel-copy" "$INSTALL_LOG"
+
+: >"$INSTALL_LOG"
+devenv build machines.secrets.build.nixos >secrets.json
+system=$(jq -er '."machines.secrets.build.nixos"' secrets.json)
+devenv machines install secrets --phases install
+[[ $(grep -c ' values$' "$INSTALL_LOG") == 2 ]]
+[[ $(grep -c ' commit$' "$INSTALL_LOG") == 2 ]]
+jq -r '.secrets | keys[]' "$system/etc/devenv/secrets.json" "$system/etc/devenv/bootstrap-secrets.json" \
+  | while read -r name; do printf '%s\n13\ninstall-token' "$name"; done >expected.payload
+cmp expected.payload "$INSTALL_PAYLOAD"
 
 # An explicitly disk-only operation must not build an unselected system.
 : >"$INSTALL_LOG"

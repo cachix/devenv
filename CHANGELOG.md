@@ -5,6 +5,8 @@
 ### Improvements
 
 - `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).
+- Machines can declare `devenv.secrets` in their NixOS module. `devenv machines install` and `devenv machines deploy` deliver the SecretSpec values on every run. Values stay encrypted on the machine, are decrypted into `/run/devenv-secrets` on activation and boot, restart the listed units when they change, and roll back with the system ([#3232](https://github.com/cachix/devenv/issues/3232)).
+- `machines.<name>.install.secretspec` is now `machines.<name>.secretspec`, because it also applies to `devenv.secrets`. The old name still works.
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
 - Updating a remote configuration now composes its updated YAML and dependencies before writing `devenv.lock`, so a second invocation is not needed to finish the update.
 - `devenv.yaml` can now compose configuration from remote input imports using the existing `inputs` and `imports` syntax. Remote YAML imports and their transitive inputs are pinned in the importing project's `devenv.lock`; the root project's input declarations retain precedence, allowing shared configurations to reuse a single `nixpkgs` input ([#2205](https://github.com/cachix/devenv/issues/2205)).

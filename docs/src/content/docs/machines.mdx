@@ -2,6 +2,8 @@
 title: "Machines"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 :::caution[Experimental]
 
 Machines are new in devenv 2.4. The interface may change before it is declared stable.
@@ -23,7 +25,7 @@ A machine is a NixOS, nix-darwin, or home-manager configuration defined in `deve
 
 ## Define a machine
 
-A machine needs a name and at least one role. NixOS machines require the disko input, even when you only deploy to an existing host:
+A machine needs a name and at least one role. When devenv evaluates a NixOS module for you, add the disko input:
 
 ```sh
 devenv inputs add disko github:nix-community/disko --follows nixpkgs
@@ -43,6 +45,25 @@ This example updates a host whose NixOS module already includes its hardware con
 ```
 
 The imported file is a normal NixOS module. Give it the services, users, bootloader, and hardware configuration that the host needs. You can also define the module inline.
+
+### Use an existing configuration
+
+You can pass an evaluated configuration from another input directly:
+
+```nix title="devenv.nix"
+{ inputs, ... }: {
+  machines.server = {
+    target.host = "root@server.example.com";
+    nixos = inputs.infrastructure.nixosConfigurations.server;
+  };
+}
+```
+
+The same interface accepts `darwinConfigurations.<name>` under `nix-darwin` and `homeConfigurations.<name>` under `home-manager`. Add the input containing those configurations to `devenv.yaml`. Devenv infers the machine architecture from the configuration.
+
+For NixOS, devenv extends the original module graph with its recovery, access-check, and secret-delivery modules. It preserves the configuration's Nixpkgs, overlays, and module arguments. The resulting system can differ from the original output. Existing configurations own their disk layout and hardware configuration: devenv does not add disko or wire in a facter report for them. Deployment does not require disko, but `machines install` requires disko in the supplied configuration.
+
+If you also build the configuration outside devenv, import `inputs.devenv.nixosModules.machines` in its NixOS modules to make `devenv.secrets` available there. Compatible module interface versions can come from different devenv revisions. If the interfaces are incompatible, use the same devenv input for the configuration and deployment.
 
 `target.host` is the SSH destination: `user@host`, `user@host:port`, or `ssh://user@host:port`. NixOS deployment and installation require root SSH. A nix-darwin deployment can use an administrator with passwordless `sudo`. A home-manager-only machine can omit `target.host` to activate locally. Setting it to `localhost` still uses SSH.
 
@@ -297,9 +318,55 @@ The flag also works with `install`, but a fresh target cannot build its own syst
 
 Remote builders cannot use `target.sshOpts`. Put builder authentication and routing in an SSH host alias instead, configured for the user running the nix-daemon. The target must accept the copied paths: make the invoking user trusted with `nix.settings.trusted-users`, or sign the paths with a key the target trusts. Otherwise the copy can fail with a missing trusted signature. Devenv enables substituters for these builders.
 
+## Secrets
+
+<VersionCompatibility version="2.4.1" />
+
+`devenv.secrets` delivers SecretSpec values to a NixOS machine on every `install` and `deploy`. Values never enter the Nix store.
+
+Declare the secret in `secretspec.toml`:
+
+```toml title="secretspec.toml"
+[profiles.production]
+DATABASE_PASSWORD = { description = "Password for the app database" }
+```
+
+Then declare it in the machine's NixOS module and point the service at its path:
+
+```nix title="nixos/server.nix"
+{ config, ... }: {
+  devenv.secrets.DATABASE_PASSWORD = {
+    owner = "app";
+    restartUnits = [ "app.service" ];
+  };
+
+  services.app.passwordFile = config.devenv.secrets.DATABASE_PASSWORD.path;
+}
+```
+
+The file appears at `/run/devenv-secrets/DATABASE_PASSWORD`, owned by `app` with mode `0400`. Set `secret` when the SecretSpec name differs from the attribute name. Set `group` and `mode` to change permissions.
+
+- Local resolution fetches values on the workstation before deployment copies or activates outputs. Target resolution fetches them on the machine after the outputs have been copied. Devenv encrypts the values on the machine with `systemd-creds` and switches them together with the system. With a TPM2 chip, decryption also requires that chip.
+- Activation decrypts the current values into memory under `/run`, also on every boot. The machine does not need SecretSpec or your workstation to boot.
+- When a value is first delivered or changes, devenv restarts the units in `restartUnits` and reloads the units in `reloadUnits`. Unchanged values do not schedule secret-triggered restarts or reloads. Other system changes may still restart services.
+- When a deployment rolls back, the previous files come back with the previous system. This cannot restore a password or token that its provider has revoked.
+- devenv only sends secrets to a machine whose SSH host key is already known. See [SSH settings](#ssh-settings).
+
+By default, devenv resolves the values on your workstation with the provider configured in `devenv.yaml`. To resolve them on the machine instead, set `machines.<name>.secretspec.execution = "target"`. The machine then needs its own access to the provider, as described in [Bootstrapping from SecretSpec](#bootstrapping-from-secretspec).
+
+A saved plan records the configured secret execution mode, provider, and profile. Changing these settings requires a new plan. Values are resolved during apply, so approving a plan does not freeze secret contents. Unspecified provider and profile settings still use SecretSpec's defaults on the machine where resolution runs.
+
+All declared files must decrypt successfully and receive their configured ownership and permissions before activation replaces the active secret directory. A failure leaves the previous files in place and fails activation.
+
+Keep `/var/lib/devenv-machines/secrets` and `/var/lib/systemd/credential.secret` on persistent storage. Without a TPM2 chip, the host key protects the encrypted files, but a copy of both the files and the key can be decrypted elsewhere.
+
+With userborn or systemd-sysusers, set both `owner` and `group` to numeric IDs.
+
+Runtime secret paths are read-only and stay under `/run/devenv-secrets`. Use `install.secrets` for persistent bootstrap files. Bootstrap files are written only during installation and are left untouched by `deploy` and `rollback`.
+
 ## Bootstrap files and secrets for NixOS installs
 
-Use sops-nix or agenix in your NixOS or home-manager modules for ongoing secret management. Never put a secret literal in a Nix module: it would be copied into the readable Nix store. `install` can place the initial credentials needed on first boot.
+Use [`devenv.secrets`](#secrets), sops-nix, or agenix for secrets that change after installation. Never put a secret literal in a Nix module: it would be copied into the readable Nix store. `install` can place the initial credentials needed on first boot.
 
 | Option | When it runs | Purpose |
 | --- | --- | --- |
@@ -335,18 +402,18 @@ Then add this mapping to your existing machine declaration:
 }
 ```
 
-In the NixOS module, configure sops-nix and set `sops.age.keyFile = "/var/lib/sops-nix/key.txt";`. By default, `execution = "local"`: devenv resolves the value on your workstation and streams it over SSH. Enable SecretSpec in `devenv.yaml`, then configure its provider and profile there or with `--secretspec-provider` and `--secretspec-profile`. The value is not put in the Nix store. Bootstrap files are written only by `install`, not refreshed by `deploy`.
+In the NixOS module, configure sops-nix and set `sops.age.keyFile = "/var/lib/sops-nix/key.txt";`. By default, `execution = "local"`: devenv resolves the value on your workstation and streams it over SSH. Enable SecretSpec in `devenv.yaml`, then configure its provider and profile there or with `--secretspec-provider` and `--secretspec-profile`. The value is not put in the Nix store. Bootstrap files are written only by `install`, not refreshed by `deploy`. Use [`devenv.secrets`](#secrets) for values that `deploy` should keep up to date.
 
 To resolve the secret in the temporary installer instead, set:
 
 ```nix
-machines.server.install.secretspec = {
+machines.server.secretspec = {
   execution = "target";
   profile = "production";
 };
 ```
 
-This sends the committed SecretSpec declaration without fetching the value on the workstation. The installer must already have access to the provider, for example through instance identity. Target execution does not require `secretspec.enable` in `devenv.yaml`; global SecretSpec CLI flags apply only to local execution. You can add provider helper programs with `install.secretspec.extraPackages = pkgs: [ pkgs.sops ];`. Target execution keeps provider credentials off the workstation, but the workstation still controls the system it installs, so review that configuration before trusting it with secrets.
+This sends the committed SecretSpec declaration without fetching the value on the workstation. The installer must already have access to the provider, for example through instance identity. Target execution does not require `secretspec.enable` in `devenv.yaml`; global SecretSpec CLI flags apply only to local execution. You can add provider helper programs with `secretspec.extraPackages = pkgs: [ pkgs.sops ];`. Target execution keeps provider credentials off the workstation, but the workstation still controls the system it installs, so review that configuration before trusting it with secrets.
 
 For other bootstrap files, use `install.extraFiles` with a string source path. For disk encryption, point disko's `passwordFile` or `settings.keyFile` at an installer path and map it to a local string path with `install.encryptionKeys`. `install.copyHostKeys = true` preserves SSH identity across first boot.
 

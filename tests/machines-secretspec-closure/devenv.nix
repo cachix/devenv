@@ -27,6 +27,18 @@
       users.users.root.openssh.authorizedKeys.keys = [
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKmachinesSecretspecClosureTestOnly"
       ];
+      devenv.secrets.RESOLVER_TOKEN = { };
+    };
+  };
+
+  machines.fresh = {
+    system = pkgs.stdenv.hostPlatform.system;
+    target.host = "root@fresh.example.com";
+    secretspec.execution = "target";
+    nixos = {
+      system.stateVersion = "24.11";
+      networking.hostName = "fresh-test";
+      devenv.secrets.FRESH_TOKEN = { };
     };
   };
 

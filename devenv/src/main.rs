@@ -616,12 +616,7 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
     let strict_ports = config.strict_ports.unwrap_or(false);
     let require_version_match = config.requires_version_match();
     let shutdown = Shutdown::new();
-    let expose_secretspec_values_to_nix = !matches!(
-        &command,
-        Commands::Machines {
-            command: MachinesCommand::Install { .. }
-        }
-    );
+    let expose_secretspec_values_to_nix = !matches!(&command, Commands::Machines { .. });
 
     let devenv_options = devenv::DevenvOptions {
         inputs: config.inputs,

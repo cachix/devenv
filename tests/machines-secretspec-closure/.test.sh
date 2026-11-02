@@ -44,6 +44,18 @@ if [[ -e ssh-called ]]; then
   exit 1
 fi
 
+if env SSH_CALLED="$PWD/ssh-called" PATH="$PWD/mock-bin:$PATH" \
+  devenv machines install --phases kexec,install fresh 2>fresh.err; then
+  echo "expected the mocked preflight to fail"
+  exit 1
+fi
+if ! grep -q "Preflight probe failed on machines.fresh" fresh.err || [[ ! -e ssh-called ]]; then
+  echo "fresh install did not reach preflight after reading devenv.secrets without a hardware report"
+  cat fresh.err
+  exit 1
+fi
+rm ssh-called
+
 build_json=$(devenv build machines.resolver.build.nixos)
 toplevel=$(jq -er '."machines.resolver.build.nixos"' <<<"$build_json")
 launcher="$toplevel/sw/bin/devenv-machines-secretspec"
@@ -68,5 +80,21 @@ if [[ "$actual_version" != "$expected_version" ]]; then
   echo "actual:   $actual_version"
   exit 1
 fi
+
+manifest="$toplevel/etc/devenv/secrets.json"
+if ! jq -e '.version == 1 and .secrets == {"RESOLVER_TOKEN": "RESOLVER_TOKEN"}' "$manifest" >/dev/null; then
+  echo "target NixOS closure has an unexpected secrets manifest"
+  cat "$manifest"
+  exit 1
+fi
+stager=$(jq -er '.stager' "$manifest")
+if [[ ! -x "$stager" ]]; then
+  echo "target NixOS closure does not contain the secrets stager: $stager"
+  exit 1
+fi
+
+manifest="$toplevel/etc/devenv/bootstrap-secrets.json"
+jq -e '.version == 1 and [.secrets[]] == ["BOOTSTRAP_TOKEN"]' "$manifest" >/dev/null
+test -x "$(jq -er '.stager' "$manifest")"
 
 echo "built $toplevel with $actual_version"

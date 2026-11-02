@@ -675,11 +675,6 @@ impl Devenv {
         if !expose_secretspec_values_to_nix {
             disable_core_dumps_for_secret_operation()?;
         }
-        // Machine installs may choose target-side SecretSpec resolution. Do
-        // not contact the workstation's provider until machines_install has
-        // inspected the evaluated per-machine execution mode. Local-mode
-        // installs resolve on demand there; target-only installs never expose
-        // provider credentials or values to this process.
         if expose_secretspec_values_to_nix {
             resolve_secretspec_into(
                 &devenv_root,

@@ -44,6 +44,8 @@ let
   };
 in
 {
+  key = "devenv-machines-facts";
+
   options.devenvMachineFacts = lib.mkOption {
     type = lib.types.attrs;
     internal = true;
