@@ -1,4 +1,9 @@
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   listeners = import ./listeners.nix;
 in
@@ -16,8 +21,12 @@ in
     https.listen = listeners.https or "127.0.0.1:443";
   };
   processes.web = {
-    exec = "${pkgs.python3}/bin/python3 -m http.server ${toString config.processes.web.ports.http.value} --bind 127.0.0.1";
-    ports.http.allocate = 18130;
+    exec = "${pkgs.python3}/bin/python3 -m http.server ${
+      toString (config.processes.web.ports.http.value or 0)
+    } --bind 127.0.0.1";
+    ports = lib.optionalAttrs (listeners.ports or true) {
+      http.allocate = 18130;
+    };
     proxy.https.enable = listeners.tls or false;
   };
 }
