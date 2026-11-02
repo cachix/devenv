@@ -64,6 +64,7 @@ shell-escape.workspace = true
 rmcp.workspace = true
 axum.workspace = true
 reqwest.workspace = true
+file-lease.workspace = true
 secretspec.workspace = true
 secrecy.workspace = true
 url.workspace = true
