@@ -272,6 +272,7 @@ pub fn run_with_https(
     control_socket: &Path,
 ) -> Result<()> {
     let mut routes = RouteTable::default();
+    routes.listen = Some(listen);
     routes.https_listen = https_listen;
     let _control = serve_control(control_socket, routes.clone())?;
 
