@@ -327,6 +327,62 @@ async fn test_process_proxy_with_legacy_modules() {
 }
 
 #[nix_test]
+async fn test_process_proxy_listener_export_with_legacy_options() {
+    for nix in [
+        "{}",
+        r#"{ inputs, ... }: {
+          disabledModules = [
+            (inputs.devenv + "/integrations/process-proxy.nix")
+            (inputs.devenv + "/integrations/mkcert.nix")
+          ];
+        }"#,
+        r#"{ inputs, lib, ... }: {
+          disabledModules = [ (inputs.devenv + "/integrations/process-proxy.nix") ];
+          options.process.proxy.enable = lib.mkOption { type = lib.types.bool; default = true; };
+        }"#,
+    ] {
+        let env = TestEnv::builder().nix(nix).build().await;
+        let value = env.backend.eval(&["processProxyConfig"]).await.unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&value).unwrap(),
+            serde_json::json!({"listen": "127.0.0.1:80", "https": {"listen": "127.0.0.1:443"}})
+        );
+    }
+    let env = TestEnv::builder()
+        .nix(
+            r#"{
+        process.proxy.listen = "[::1]:1080";
+        process.proxy.https.listen = "[::1]:1443";
+    }"#,
+        )
+        .build()
+        .await;
+    let value = env.backend.eval(&["processProxyConfig"]).await.unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&value).unwrap(),
+        serde_json::json!({"listen": "[::1]:1080", "https": {"listen": "[::1]:1443"}})
+    );
+}
+
+#[nix_test]
+async fn test_process_proxy_listener_export_preserves_errors() {
+    for option in ["listen", "https.listen"] {
+        let env = TestEnv::builder()
+            .nix(&format!(
+                r#"{{ process.proxy.{option} = throw "listener configuration error"; }}"#
+            ))
+            .build()
+            .await;
+        let error = env
+            .backend
+            .eval(&["processProxyConfig"])
+            .await
+            .expect_err("broken listeners must not silently use defaults");
+        assert!(error.to_string().contains("listener configuration error"));
+    }
+}
+
+#[nix_test]
 async fn test_process_proxy_preserves_evaluation_errors() {
     let env = TestEnv::builder()
         .nix(r#"{ process.proxy.enable = throw "proxy configuration error"; }"#)
