@@ -57,6 +57,7 @@ impl RegisteredRoute {
 pub struct RouteTable {
     routes: Arc<ArcSwap<BTreeMap<String, RegisteredRoute>>>,
     updates: Arc<Mutex<()>>,
+    pub(crate) listen: Option<SocketAddr>,
     pub(crate) https_listen: Option<SocketAddr>,
 }
 
