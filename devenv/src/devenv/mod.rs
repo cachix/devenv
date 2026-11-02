@@ -1029,6 +1029,13 @@ impl Devenv {
             return Ok(());
         }
 
+        let https = task_configs.iter().any(|task| {
+            task.process
+                .as_ref()
+                .is_some_and(|process| process.proxy.https.enable && !process.ports.is_empty())
+        });
+        let listeners = crate::proxy::ProxyConfig::default().resolve(https)?;
+
         let configured_name = self
             .backend
             .eval_devenv(&["devenv.config.name"])
@@ -1039,9 +1046,10 @@ impl Devenv {
             .wrap_err("project name is not a string")?;
         let project_name = crate::proxy::project_name(project_name, &self.devenv_root)?;
         let owner = self.proxy_owner();
-        let mut routes = crate::proxy::project_routes(&project_name, &owner, task_configs)?;
-        crate::proxy::prepare_https(&mut routes, task_configs, envs, frontend).await?;
-        crate::proxy::reconcile(&owner, routes, frontend).await
+        let mut routes =
+            crate::proxy::project_routes(&listeners, &project_name, &owner, task_configs)?;
+        crate::proxy::prepare_https(&listeners, &mut routes, task_configs, envs, frontend).await?;
+        crate::proxy::reconcile(&listeners, &owner, routes, frontend).await
     }
 
     /// Build a `tasks::Config` with common fields filled in.

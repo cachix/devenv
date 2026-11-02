@@ -40,7 +40,20 @@ impl Default for ProxyConfig {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Listeners {
+    http: SocketAddr,
+    https: Option<SocketAddr>,
+}
+
 impl ProxyConfig {
+    pub(crate) fn resolve(&self, https: bool) -> Result<Listeners> {
+        Ok(Listeners {
+            http: self.http_address()?,
+            https: https.then(|| self.https_address()).transpose()?,
+        })
+    }
+
     fn http_address(&self) -> Result<SocketAddr> {
         listener_address(
             &self.listen,
@@ -77,12 +90,13 @@ fn listener_address(
 }
 
 pub(crate) async fn prepare_https(
+    listeners: &Listeners,
     routes: &mut [Route],
     task_configs: &mut [tasks::TaskConfig],
     envs: &HashMap<String, String>,
     frontend: Option<&tokio::sync::mpsc::Sender<FrontendCommand>>,
 ) -> Result<()> {
-    let tls_routes = https_routes(routes, task_configs);
+    let tls_routes = https_routes(listeners, routes, task_configs);
     if tls_routes.is_empty() {
         return Ok(());
     }
@@ -169,18 +183,22 @@ pub(crate) async fn prepare_https(
     for route in tls_routes {
         route.tls = Some(tls.clone());
     }
-    update_proxy_urls(routes, task_configs);
+    update_proxy_urls(listeners, routes, task_configs);
     Ok(())
 }
 
-fn update_proxy_urls(routes: &[Route], task_configs: &mut [tasks::TaskConfig]) {
+fn update_proxy_urls(
+    listeners: &Listeners,
+    routes: &[Route],
+    task_configs: &mut [tasks::TaskConfig],
+) {
     // Keep displayed URLs derived from the actual registered routes.
     let urls: HashMap<_, _> = routes
         .iter()
         .map(|route| {
             let mut http = route.clone();
             http.tls = None;
-            (route_url(&http), route_url(route))
+            (route_url(listeners, &http), route_url(listeners, route))
         })
         .collect();
     for task in task_configs {
@@ -195,6 +213,7 @@ fn update_proxy_urls(routes: &[Route], task_configs: &mut [tasks::TaskConfig]) {
 }
 
 fn https_routes<'a>(
+    listeners: &Listeners,
     routes: &'a mut [Route],
     task_configs: &[tasks::TaskConfig],
 ) -> Vec<&'a mut Route> {
@@ -206,7 +225,7 @@ fn https_routes<'a>(
         .collect();
     routes
         .iter_mut()
-        .filter(|route| urls.contains(route_url(route).as_str()))
+        .filter(|route| urls.contains(route_url(listeners, route).as_str()))
         .collect()
 }
 
@@ -256,6 +275,7 @@ pub(crate) fn project_name(configured: Option<String>, root: &Path) -> Result<St
 }
 
 pub(crate) fn project_routes(
+    listeners: &Listeners,
     project_name: &str,
     owner: &str,
     task_configs: &mut [tasks::TaskConfig],
@@ -328,7 +348,10 @@ pub(crate) fn project_routes(
         }
         task_urls.push((
             task_index,
-            routes[first_route..].iter().map(route_url).collect(),
+            routes[first_route..]
+                .iter()
+                .map(|route| route_url(listeners, route))
+                .collect(),
         ));
     }
 
@@ -341,11 +364,11 @@ pub(crate) fn project_routes(
     Ok(routes)
 }
 
-fn route_url(route: &Route) -> String {
+fn route_url(listeners: &Listeners, route: &Route) -> String {
     let (scheme, default_port, listen) = if route.tls.is_some() {
-        ("https", 443, proxy_https_listen_address())
+        ("https", 443, listeners.https)
     } else {
-        ("http", 80, proxy_listen_address())
+        ("http", 80, Some(listeners.http))
     };
     let port = listen.map(|address| address.port()).unwrap_or(default_port);
     if port == default_port {
@@ -417,6 +440,7 @@ fn hostname_label(value: &str) -> Result<String> {
 }
 
 pub(crate) async fn reconcile(
+    listeners: &Listeners,
     owner: &str,
     routes: Vec<Route>,
     frontend: Option<&tokio::sync::mpsc::Sender<FrontendCommand>>,
@@ -433,7 +457,11 @@ pub(crate) async fn reconcile(
     for route in routes {
         devenv_activity::message(
             devenv_activity::ActivityLevel::Info,
-            format!("{} -> http://{}", route_url(&route), route.upstream),
+            format!(
+                "{} -> http://{}",
+                route_url(listeners, &route),
+                route.upstream
+            ),
         );
     }
     Ok(())
@@ -724,6 +752,41 @@ mod tests {
     use super::*;
     use devenv_processes::{ProcessConfig, ProcessProxyConfig};
 
+    fn listeners() -> Listeners {
+        Listeners {
+            http: "127.0.0.1:80".parse().unwrap(),
+            https: Some("127.0.0.1:443".parse().unwrap()),
+        }
+    }
+
+    #[test]
+    fn custom_listener_ports_reach_http_and_https_task_urls() {
+        let listeners = Listeners {
+            http: "[::1]:1080".parse().unwrap(),
+            https: Some("[::1]:1443".parse().unwrap()),
+        };
+        let mut tasks = vec![process_task("web", &[("http", 8080)])];
+        tasks[0].process.as_mut().unwrap().proxy.https.enable = true;
+        let mut routes = project_routes(&listeners, "demo", "test", &mut tasks).unwrap();
+        assert_eq!(
+            tasks[0].process.as_ref().unwrap().proxy.urls,
+            ["http://web.demo.localhost:1080"]
+        );
+        let selected = https_routes(&listeners, &mut routes, &tasks);
+        assert_eq!(selected.len(), 1);
+        for route in selected {
+            route.tls = Some(TlsConfig {
+                certificate: "/cert.pem".into(),
+                key: "/key.pem".into(),
+            });
+        }
+        update_proxy_urls(&listeners, &routes, &mut tasks);
+        assert_eq!(
+            tasks[0].process.as_ref().unwrap().proxy.urls,
+            ["https://web.demo.localhost:1443"]
+        );
+    }
+
     #[test]
     fn listener_configuration_defaults_and_overrides() {
         let config = ProxyConfig::default();
@@ -806,28 +869,28 @@ mod tests {
         };
         let decoded: Route = serde_json::from_str(&serde_json::to_string(&route).unwrap()).unwrap();
         assert_eq!(route, decoded);
-        let port = proxy_https_listen_address().unwrap().port();
+        let port = listeners().https.unwrap().port();
         let expected = if port == 443 {
             "https://docs.demo.localhost".to_owned()
         } else {
             format!("https://docs.demo.localhost:{port}")
         };
-        assert_eq!(route_url(&decoded), expected);
+        assert_eq!(route_url(&listeners(), &decoded), expected);
     }
 
     #[tokio::test]
     async fn http_processes_do_not_require_certificate_setup() {
         let mut tasks = vec![process_task("web", &[("http", 8080)])];
-        let mut routes = project_routes("demo", "test", &mut tasks).unwrap();
-        prepare_https(&mut routes, &mut tasks, &HashMap::new(), None)
+        let mut routes = project_routes(&listeners(), "demo", "test", &mut tasks).unwrap();
+        prepare_https(&listeners(), &mut routes, &mut tasks, &HashMap::new(), None)
             .await
             .unwrap();
         assert!(routes.iter().all(|route| route.tls.is_none()));
         assert_eq!(
             tasks[0].process.as_ref().unwrap().proxy.urls,
-            [route_url(&routes[0])]
+            [route_url(&listeners(), &routes[0])]
         );
-        assert!(route_url(&routes[0]).starts_with("http://"));
+        assert!(route_url(&listeners(), &routes[0]).starts_with("http://"));
     }
 
     #[tokio::test]
@@ -864,8 +927,8 @@ mod tests {
         ]);
         let mut tasks = vec![process_task("web", &[("http", 8080)])];
         tasks[0].process.as_mut().unwrap().proxy.https.enable = true;
-        let mut routes = project_routes("demo", "test", &mut tasks).unwrap();
-        let error = prepare_https(&mut routes, &mut tasks, &envs, None)
+        let mut routes = project_routes(&listeners(), "demo", "test", &mut tasks).unwrap();
+        let error = prepare_https(&listeners(), &mut routes, &mut tasks, &envs, None)
             .await
             .unwrap_err();
         assert!(
@@ -888,20 +951,21 @@ mod tests {
         ];
         tasks[1].process.as_mut().unwrap().proxy.https.enable = true;
         tasks[2].process.as_mut().unwrap().proxy.https.enable = true;
-        let mut routes = project_routes("demo", "test", &mut tasks).unwrap();
+        let mut routes = project_routes(&listeners(), "demo", "test", &mut tasks).unwrap();
         // The flag must survive the task configuration passed to the manager.
         let mut tasks: Vec<tasks::TaskConfig> =
             serde_json::from_str(&serde_json::to_string(&tasks).unwrap()).unwrap();
-        let selected: std::collections::BTreeSet<_> = https_routes(&mut routes, &tasks)
-            .into_iter()
-            .map(|route| {
-                route.tls = Some(TlsConfig {
-                    certificate: "/work/cert.pem".into(),
-                    key: "/work/key.pem".into(),
-                });
-                route.hostname.clone()
-            })
-            .collect();
+        let selected: std::collections::BTreeSet<_> =
+            https_routes(&listeners(), &mut routes, &tasks)
+                .into_iter()
+                .map(|route| {
+                    route.tls = Some(TlsConfig {
+                        certificate: "/work/cert.pem".into(),
+                        key: "/work/key.pem".into(),
+                    });
+                    route.hostname.clone()
+                })
+                .collect();
         assert_eq!(
             selected,
             ["api.localhost", "http.api.localhost", "control.localhost"]
@@ -915,7 +979,7 @@ mod tests {
                 .iter()
                 .any(|route| route.hostname == "web.demo.localhost")
         );
-        update_proxy_urls(&routes, &mut tasks);
+        update_proxy_urls(&listeners(), &routes, &mut tasks);
         let tasks: Vec<tasks::TaskConfig> =
             serde_json::from_str(&serde_json::to_string(&tasks).unwrap()).unwrap();
         let web = &tasks[0].process.as_ref().unwrap().proxy.urls;
@@ -995,6 +1059,7 @@ mod tests {
                 .unwrap();
             let error = runtime
                 .block_on(reconcile(
+                    &listeners(),
                     "test",
                     vec![Route {
                         hostname: "test.localhost".to_owned(),
@@ -1082,6 +1147,7 @@ mod tests {
     #[test]
     fn one_port_uses_process_and_project_names() {
         let routes = project_routes(
+            &listeners(),
             "my_project",
             "/work/my-project",
             &mut [process_task("web_app", &[("server", 8080)])],
@@ -1105,7 +1171,7 @@ mod tests {
             process_task("worker", &[]),
         ];
         let name = project_name(None, Path::new("/work/devenv8")).unwrap();
-        let routes = project_routes(&name, "test", &mut tasks).unwrap();
+        let routes = project_routes(&listeners(), &name, "test", &mut tasks).unwrap();
         assert_eq!(routes[0].hostname, "docs.devenv8.localhost");
 
         // Daemon startup serializes task configs before the process manager
@@ -1114,11 +1180,14 @@ mod tests {
         let tasks: Vec<tasks::TaskConfig> = serde_json::from_str(&json).unwrap();
         assert_eq!(
             tasks[0].process.as_ref().unwrap().proxy.urls,
-            [route_url(&routes[0])]
+            [route_url(&listeners(), &routes[0])]
         );
         assert_eq!(
             tasks[1].process.as_ref().unwrap().proxy.urls,
-            routes[1..].iter().map(route_url).collect::<Vec<_>>()
+            routes[1..]
+                .iter()
+                .map(|route| route_url(&listeners(), route))
+                .collect::<Vec<_>>()
         );
         assert!(tasks[2].process.as_ref().unwrap().proxy.urls.is_empty());
     }
@@ -1142,6 +1211,7 @@ mod tests {
     #[test]
     fn multiple_ports_use_http_as_default_and_expose_named_urls() {
         let routes = project_routes(
+            &listeners(),
             "demo",
             "/work/demo",
             &mut [process_task("web", &[("http", 8080), ("admin", 9000)])],
@@ -1159,6 +1229,7 @@ mod tests {
     #[test]
     fn multiple_ports_without_http_have_only_named_urls() {
         let routes = project_routes(
+            &listeners(),
             "demo",
             "/work/demo",
             &mut [process_task("web", &[("public", 8080), ("admin", 9000)])],
@@ -1175,6 +1246,7 @@ mod tests {
     #[test]
     fn process_hostname_overrides_generated_hostname() {
         let routes = project_routes(
+            &listeners(),
             "demo",
             "/work/demo",
             &mut [process_task_with_hostname(
@@ -1196,6 +1268,7 @@ mod tests {
     #[test]
     fn process_hostname_override_must_be_localhost() {
         let error = project_routes(
+            &listeners(),
             "demo",
             "/work/demo",
             &mut [process_task_with_hostname(
@@ -1215,6 +1288,7 @@ mod tests {
     #[test]
     fn port_hostname_overrides_process_and_generated_hostnames() {
         let routes = project_routes(
+            &listeners(),
             "demo",
             "/work/demo",
             &mut [process_task_with_hostnames(
@@ -1238,6 +1312,7 @@ mod tests {
     #[test]
     fn port_hostname_override_must_be_localhost() {
         let error = project_routes(
+            &listeners(),
             "demo",
             "/work/demo",
             &mut [process_task_with_hostnames(
@@ -1262,7 +1337,7 @@ mod tests {
         tasks[0].process.as_mut().unwrap().proxy.urls =
             vec!["http://existing.localhost".to_owned()];
 
-        let error = project_routes("demo", "/work/demo", &mut tasks).unwrap_err();
+        let error = project_routes(&listeners(), "demo", "/work/demo", &mut tasks).unwrap_err();
 
         assert!(error.to_string().contains("port admin of process web"));
         assert_eq!(
