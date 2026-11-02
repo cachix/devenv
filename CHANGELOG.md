@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Added `process.proxy.listen` and `process.proxy.https.listen` to configure shared localhost proxy addresses in `devenv.nix`, including unprivileged ports and IPv6 loopback. CLI environment overrides still take precedence. Listener conflicts now report the running and requested addresses; shared proxies started by older versions need a one-time restart.
 - `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
 - Updating a remote configuration now composes its updated YAML and dependencies before writing `devenv.lock`, so a second invocation is not needed to finish the update.
