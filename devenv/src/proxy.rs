@@ -452,7 +452,7 @@ pub(crate) async fn reconcile(
         return Ok(());
     }
 
-    ensure_running(frontend, routes.iter().any(|route| route.tls.is_some())).await?;
+    ensure_running(listeners, frontend).await?;
     replace_owner(owner, routes.clone())?;
     for route in routes {
         devenv_activity::message(
@@ -487,21 +487,15 @@ fn replace_owner(owner: &str, routes: Vec<Route>) -> Result<()> {
 }
 
 async fn ensure_running(
+    listeners: &Listeners,
     frontend: Option<&tokio::sync::mpsc::Sender<FrontendCommand>>,
-    https: bool,
 ) -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     let _ = frontend;
 
     let socket = devenv_proxy::default_control_socket();
-    let listen = proxy_listen_address()
-        .ok_or_else(|| miette!("DEVENV_PROXY_LISTEN is not a valid socket address"))?;
-    let https_listen = https
-        .then(|| {
-            proxy_https_listen_address()
-                .ok_or_else(|| miette!("DEVENV_PROXY_HTTPS_LISTEN is not a valid socket address"))
-        })
-        .transpose()?;
+    let listen = listeners.http;
+    let https_listen = listeners.https;
     if wait_for_existing_proxy(&socket, listen).await? {
         if let Some(expected) = https_listen {
             match devenv_proxy::request(&socket, &ControlRequest::Status) {
@@ -568,7 +562,14 @@ async fn ensure_running(
                 frontend,
                 program,
                 &args,
-                &std::env::vars().collect::<HashMap<_, _>>(),
+                &std::env::vars()
+                    .filter(|(name, _)| {
+                        !matches!(
+                            name.as_str(),
+                            "DEVENV_PROXY_LISTEN" | "DEVENV_PROXY_HTTPS_LISTEN"
+                        )
+                    })
+                    .collect::<HashMap<_, _>>(),
                 &cwd,
                 &log_path,
             )
@@ -592,6 +593,9 @@ async fn ensure_running(
         let mut command = Command::new(&executable);
         command
             .args(&args)
+            // Listener flags are authoritative, including HTTP-only startup.
+            .env_remove("DEVENV_PROXY_LISTEN")
+            .env_remove("DEVENV_PROXY_HTTPS_LISTEN")
             .stdin(Stdio::null())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(stderr));
@@ -611,7 +615,7 @@ async fn ensure_running(
     };
     let started = Instant::now();
     while started.elapsed() < START_TIMEOUT {
-        if proxy_ready(&socket) {
+        if proxy_ready(&socket, listen) {
             return Ok(());
         }
         if let Some(status) = child
@@ -654,8 +658,8 @@ fn linux_process_running(pid: u32) -> bool {
     })
 }
 
-fn proxy_ready(socket: &Path) -> bool {
-    proxy_control_ready(socket) && proxy_listen_address().is_some_and(proxy_data_plane_ready)
+fn proxy_ready(socket: &Path, listen: SocketAddr) -> bool {
+    proxy_control_ready(socket) && proxy_data_plane_ready(listen)
 }
 
 fn proxy_control_ready(socket: &Path) -> bool {
@@ -709,14 +713,6 @@ fn proxy_data_plane_ready(address: SocketAddr) -> bool {
     stream
         .read(&mut response)
         .is_ok_and(|length| response[..length].starts_with(b"HTTP/1.1 204"))
-}
-
-fn proxy_listen_address() -> Option<SocketAddr> {
-    ProxyConfig::default().http_address().ok()
-}
-
-fn proxy_https_listen_address() -> Option<SocketAddr> {
-    ProxyConfig::default().https_address().ok()
 }
 
 fn proxy_executable() -> Result<PathBuf> {
@@ -808,6 +804,17 @@ mod tests {
                 expected.parse::<SocketAddr>().unwrap(),
             );
         }
+    }
+
+    #[test]
+    fn http_only_does_not_resolve_https_settings() {
+        let config = ProxyConfig {
+            https: HttpsConfig {
+                listen: "invalid".to_owned(),
+            },
+            ..Default::default()
+        };
+        assert!(config.resolve(false).unwrap().https.is_none());
     }
 
     #[test]
