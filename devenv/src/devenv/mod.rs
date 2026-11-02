@@ -1045,7 +1045,15 @@ impl Devenv {
                 .as_ref()
                 .is_some_and(|process| process.proxy.https.enable && !process.ports.is_empty())
         });
-        let listeners = crate::proxy::ProxyConfig::default().resolve(https)?;
+        let proxy_config = self
+            .backend
+            .eval_devenv(&["processProxyConfig"])
+            .await
+            .wrap_err("failed to evaluate localhost proxy listener configuration")?;
+        let proxy_config: crate::proxy::ProxyConfig = serde_json::from_str(&proxy_config)
+            .into_diagnostic()
+            .wrap_err("localhost proxy listener configuration is invalid")?;
+        let listeners = proxy_config.resolve(https)?;
 
         let configured_name = self
             .backend
