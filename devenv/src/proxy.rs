@@ -784,6 +784,23 @@ mod tests {
     }
 
     #[test]
+    fn project_listener_configuration_decodes_bootstrap_export() {
+        let config: ProxyConfig = serde_json::from_value(serde_json::json!({
+            "listen": "[::1]:1080",
+            "https": {"listen": "[::1]:1443"}
+        }))
+        .unwrap();
+        assert_eq!(config.listen, "[::1]:1080");
+        assert_eq!(config.https.listen, "[::1]:1443");
+        assert!(
+            serde_json::from_value::<ProxyConfig>(serde_json::json!({
+                "listen": 1080, "https": {"listen": "[::1]:1443"}
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn listener_configuration_defaults_and_overrides() {
         let config = ProxyConfig::default();
         assert_eq!(config.listen, "127.0.0.1:80");
