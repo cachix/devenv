@@ -577,6 +577,11 @@ rec {
       shell = config.shell;
       # Older pinned modules predate the optional localhost proxy.
       processProxyEnabled = config.process.proxy.enable or false;
+      # Listener options were introduced after the proxy enable option.
+      processProxyConfig = {
+        listen = config.process.proxy.listen or "127.0.0.1:80";
+        https.listen = config.process.proxy.https.listen or "127.0.0.1:443";
+      };
       optionsJSON = options.optionsJSON;
       info = config.info;
       ci = config.ciDerivation;
