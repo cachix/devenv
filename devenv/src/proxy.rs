@@ -496,18 +496,7 @@ async fn ensure_running(
     let socket = devenv_proxy::default_control_socket();
     let listen = listeners.http;
     let https_listen = listeners.https;
-    if wait_for_existing_proxy(&socket, listen).await? {
-        if let Some(expected) = https_listen {
-            match devenv_proxy::request(&socket, &ControlRequest::Status) {
-                Ok(ControlResponse::Info {
-                    https_listen: Some(actual),
-                    ..
-                }) if actual == expected => {}
-                _ => bail!(
-                    "the running devenv-proxy has no HTTPS listener at {expected}; restart the shared proxy and run `devenv up` again"
-                ),
-            }
-        }
+    if wait_for_existing_proxy(&socket, listeners).await? {
         return Ok(());
     }
 
@@ -615,7 +604,7 @@ async fn ensure_running(
     };
     let started = Instant::now();
     while started.elapsed() < START_TIMEOUT {
-        if proxy_ready(&socket, listen) {
+        if proxy_ready(&socket, listeners) {
             return Ok(());
         }
         if let Some(status) = child
@@ -658,8 +647,51 @@ fn linux_process_running(pid: u32) -> bool {
     })
 }
 
-fn proxy_ready(socket: &Path, listen: SocketAddr) -> bool {
-    proxy_control_ready(socket) && proxy_data_plane_ready(listen)
+fn proxy_ready(socket: &Path, listeners: &Listeners) -> bool {
+    devenv_proxy::request(socket, &ControlRequest::Status)
+        .is_ok_and(|status| validate_listeners(listeners, &status).is_ok())
+        && proxy_data_plane_ready(listeners.http)
+}
+
+fn validate_listeners(expected: &Listeners, status: &ControlResponse) -> Result<()> {
+    let ControlResponse::Info {
+        pid,
+        listen,
+        https_listen,
+    } = status
+    else {
+        bail!("unexpected devenv-proxy status; restart the shared proxy and run `devenv up` again");
+    };
+    let restart = format!(
+        "stop the shared proxy with `kill {pid}` and run `devenv up` again (this affects other projects)"
+    );
+    let Some(actual) = listen else {
+        bail!(
+            "the running devenv-proxy (PID {pid}) is too old to report its HTTP listen address; {restart}"
+        );
+    };
+    if *actual != expected.http {
+        bail!(
+            "the running devenv-proxy (PID {pid}) listens on HTTP {actual}, but this project requests {}; {restart}",
+            expected.http
+        );
+    }
+    if let Some(expected) = expected.https {
+        match https_listen {
+            Some(actual) if *actual == expected => {}
+            Some(actual) => {
+                bail!(
+                    "the running devenv-proxy (PID {pid}) listens on HTTPS {actual}, but this project requests {expected}; {restart}"
+                );
+            }
+            None => {
+                bail!(
+                    "the running devenv-proxy (PID {pid}) has no HTTPS listener, but this project requests {expected}; {restart}"
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn proxy_control_ready(socket: &Path) -> bool {
@@ -668,19 +700,23 @@ fn proxy_control_ready(socket: &Path) -> bool {
         .is_ok()
 }
 
-async fn wait_for_existing_proxy(socket: &Path, listen: SocketAddr) -> Result<bool> {
+async fn wait_for_existing_proxy(socket: &Path, listeners: &Listeners) -> Result<bool> {
     let started = Instant::now();
     // During startup and shutdown the control socket can outlive the HTTP
     // listener. Wait for that daemon to become ready or release its socket
     // before asking for capabilities and attempting to launch another one.
     while proxy_control_ready(socket) {
-        if proxy_data_plane_ready(listen) {
-            return Ok(true);
+        if let Ok(status) = devenv_proxy::request(socket, &ControlRequest::Status) {
+            validate_listeners(listeners, &status)?;
+            if proxy_data_plane_ready(listeners.http) {
+                return Ok(true);
+            }
         }
         if started.elapsed() >= START_TIMEOUT {
             bail!(
-                "the existing devenv-proxy still owns {} but its HTTP listener at {listen} is unavailable; see {}",
+                "the existing devenv-proxy still owns {} but its HTTP listener at {} is unavailable; stop the shared proxy and run `devenv up` again; see {}",
                 socket.display(),
+                listeners.http,
                 proxy_log_path(socket).display(),
             );
         }
@@ -781,6 +817,52 @@ mod tests {
             tasks[0].process.as_ref().unwrap().proxy.urls,
             ["https://web.demo.localhost:1443"]
         );
+    }
+
+    #[test]
+    fn shared_listeners_must_match_and_legacy_daemons_require_restart() {
+        let expected = listeners();
+        let status = |listen, https_listen| ControlResponse::Info {
+            pid: 123,
+            listen,
+            https_listen,
+        };
+        assert!(
+            validate_listeners(&expected, &status(Some(expected.http), expected.https)).is_ok()
+        );
+        // HTTP-only projects may reuse a daemon that also serves HTTPS.
+        assert!(
+            validate_listeners(
+                &Listeners {
+                    https: None,
+                    ..expected
+                },
+                &status(Some(expected.http), Some("[::1]:1443".parse().unwrap()))
+            )
+            .is_ok()
+        );
+        for (response, fragments) in [
+            (status(None, expected.https), vec!["too old", "kill 123"]),
+            (
+                status(Some("[::1]:1080".parse().unwrap()), expected.https),
+                vec!["HTTP [::1]:1080", "127.0.0.1:80", "kill 123"],
+            ),
+            (
+                status(Some(expected.http), Some("[::1]:1443".parse().unwrap())),
+                vec!["HTTPS [::1]:1443", "127.0.0.1:443", "kill 123"],
+            ),
+            (
+                status(Some(expected.http), None),
+                vec!["no HTTPS listener", "127.0.0.1:443", "kill 123"],
+            ),
+        ] {
+            let error = validate_listeners(&expected, &response)
+                .unwrap_err()
+                .to_string();
+            for fragment in fragments {
+                assert!(error.contains(fragment), "missing {fragment:?}: {error}");
+            }
+        }
     }
 
     #[test]
@@ -1045,9 +1127,20 @@ mod tests {
                         stream.set_read_timeout(Some(START_TIMEOUT)).unwrap();
                         let mut line = String::new();
                         BufReader::new(&stream).read_line(&mut line).unwrap();
-                        stream
-                            .write_all(b"{\"status\":\"ok\",\"routes\":[]}\n")
-                            .unwrap();
+                        let request: ControlRequest = serde_json::from_str(&line).unwrap();
+                        let response = match request {
+                            ControlRequest::Status => ControlResponse::Info {
+                                pid: 123,
+                                listen: Some(listen),
+                                https_listen: None,
+                            },
+                            _ => ControlResponse::Ok {
+                                routes: Some(Vec::new()),
+                                removed: None,
+                            },
+                        };
+                        serde_json::to_writer(&mut stream, &response).unwrap();
+                        stream.write_all(b"\n").unwrap();
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(10));
@@ -1059,7 +1152,17 @@ mod tests {
             drop(http);
         });
 
-        assert!(!wait_for_existing_proxy(&socket, listen).await.unwrap());
+        assert!(
+            !wait_for_existing_proxy(
+                &socket,
+                &Listeners {
+                    http: listen,
+                    https: None
+                }
+            )
+            .await
+            .unwrap()
+        );
         assert!(started.elapsed() >= shutdown_delay);
         old_daemon.join().unwrap();
     }
