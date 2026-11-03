@@ -1668,6 +1668,21 @@ mod tests {
     }
 
     #[test]
+    fn export_commands_support_tui() {
+        for command in [
+            vec!["direnv-export"],
+            vec!["print-dev-env"],
+            vec!["print-dev-env", "--json"],
+        ] {
+            for flags in [vec![], vec!["--tui", "true"]] {
+                let cli =
+                    Cli::parse_from(["devenv"].into_iter().chain(flags).chain(command.clone()));
+                assert!(cli.command.supports_tui(), "{command:?}");
+            }
+        }
+    }
+
+    #[test]
     fn trace_output_spec_bare_destination_defaults_to_json() {
         let spec: TraceOutputSpec = "stderr".parse().unwrap();
         assert_eq!(

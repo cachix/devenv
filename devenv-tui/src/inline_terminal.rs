@@ -137,7 +137,6 @@ pub struct InlineTerminal {
     stderr: io::Stderr,
     viewport: Viewport,
     previous: Option<Canvas>,
-    keyboard_enhancement: bool,
     keyboard_enhancement_active: bool,
     raw_mode_active: bool,
     cursor_hidden: bool,
@@ -147,7 +146,6 @@ pub struct InlineTerminal {
 impl InlineTerminal {
     pub fn new(placement: ViewportPlacement) -> io::Result<Self> {
         let screen = terminal::size()?;
-        let keyboard_enhancement = terminal::supports_keyboard_enhancement().unwrap_or(false);
         let mut terminal = Self {
             stderr: io::stderr(),
             viewport: Viewport {
@@ -159,7 +157,6 @@ impl InlineTerminal {
                 claimed: false,
             },
             previous: None,
-            keyboard_enhancement,
             keyboard_enhancement_active: false,
             raw_mode_active: false,
             cursor_hidden: false,
@@ -388,25 +385,24 @@ impl InlineTerminal {
     }
 
     pub fn resume(&mut self) -> io::Result<()> {
-        if self.raw_mode_active
-            && self.cursor_hidden
-            && (!self.keyboard_enhancement || self.keyboard_enhancement_active)
-        {
+        if self.raw_mode_active && self.cursor_hidden && self.keyboard_enhancement_active {
             return Ok(());
         }
         self.suspend()?;
 
-        if self.keyboard_enhancement {
-            self.keyboard_enhancement_active = true;
-            if let Err(error) = execute!(
-                self.stderr,
-                event::PushKeyboardEnhancementFlags(
-                    event::KeyboardEnhancementFlags::REPORT_EVENT_TYPES,
-                )
-            ) {
-                let _ = self.suspend();
-                return Err(error);
-            }
+        // Request the optional Kitty keyboard mode without a capability query.
+        // Unsupported terminals ignore it; Crossterm also accepts legacy keys.
+        // A query can otherwise stall startup for two seconds without a reply.
+        // Pair every push with a pop in suspend(), including error cleanup.
+        self.keyboard_enhancement_active = true;
+        if let Err(error) = execute!(
+            self.stderr,
+            event::PushKeyboardEnhancementFlags(
+                event::KeyboardEnhancementFlags::REPORT_EVENT_TYPES,
+            )
+        ) {
+            let _ = self.suspend();
+            return Err(error);
         }
         if let Err(error) = terminal::enable_raw_mode() {
             let _ = self.suspend();
@@ -863,6 +859,129 @@ mod tests {
     // terminal and Crossterm's process-global state are never affected.
     #[cfg(unix)]
     #[test]
+    fn startup_with_captured_stdout_does_not_probe_keyboard_support() {
+        use nix::poll::{PollFd, PollFlags, poll};
+        use nix::pty::{Winsize, openpty};
+        use nix::sys::termios::tcgetattr;
+        use std::fs::File;
+        use std::io::Read;
+        use std::os::fd::AsFd;
+        use std::process::{Command, Stdio};
+
+        const CHILD: &str = "DEVENV_TEST_TERMINAL_STARTUP";
+        if let Ok(mode) = std::env::var(CHILD) {
+            // Do not let Crossterm open the test runner's controlling terminal.
+            nix::unistd::setsid().unwrap();
+            let cooked = tcgetattr(io::stdin()).unwrap().local_flags;
+            let mut terminal = InlineTerminal::new(ViewportPlacement::Inline).unwrap();
+            terminal.resume().unwrap();
+            io::stderr().write_all(b"ready for keys").unwrap();
+            let first = event::read().unwrap();
+            assert!(
+                matches!(first, Event::Key(key) if key.code == event::KeyCode::Char('j')
+                && key.kind == event::KeyEventKind::Press)
+            );
+            if mode == "kitty" {
+                for kind in [event::KeyEventKind::Repeat, event::KeyEventKind::Release] {
+                    let key = event::read().unwrap();
+                    assert!(
+                        matches!(key, Event::Key(key) if key.code == event::KeyCode::Char('k')
+                        && key.kind == kind)
+                    );
+                }
+            }
+            let canvas = element!(View { Text(content: "building") }).render(Some(80));
+            terminal.draw_with_size(&canvas, (80, 24), None).unwrap();
+            terminal.suspend().unwrap();
+            terminal.suspend().unwrap();
+            drop(terminal);
+            assert_eq!(tcgetattr(io::stdin()).unwrap().local_flags, cooked);
+            println!("export data");
+            return;
+        }
+
+        for mode in ["legacy", "kitty"] {
+            let pty = openpty(
+                Some(&Winsize {
+                    ws_row: 24,
+                    ws_col: 80,
+                    ws_xpixel: 0,
+                    ws_ypixel: 0,
+                }),
+                None,
+            )
+            .unwrap();
+            let mut master = File::from(pty.master);
+            let slave = File::from(pty.slave);
+            let mut child = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "inline_terminal::tests::startup_with_captured_stdout_does_not_probe_keyboard_support",
+                    "--nocapture",
+                ])
+                .env(CHILD, mode)
+                .stdin(Stdio::from(slave.try_clone().unwrap()))
+                .stdout(Stdio::piped())
+                .stderr(Stdio::from(slave))
+                .spawn()
+                .unwrap();
+            let mut output = Vec::new();
+            let mut cursor_answered = false;
+            let mut keys_sent = false;
+            loop {
+                let ready = {
+                    let mut descriptors = [PollFd::new(master.as_fd(), PollFlags::POLLIN)];
+                    poll(&mut descriptors, 5_000u16).unwrap()
+                };
+                if ready == 0 {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    panic!("PTY timed out: {}", String::from_utf8_lossy(&output));
+                }
+                let mut buffer = [0; 4096];
+                match master.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(count) => output.extend_from_slice(&buffer[..count]),
+                    Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
+                    Err(error) => panic!("PTY read: {error}"),
+                }
+                // Answer cursor queries, but never answer keyboard or DA queries.
+                if !cursor_answered && output.windows(4).any(|bytes| bytes == b"\x1b[6n") {
+                    master.write_all(b"\x1b[1;1R").unwrap();
+                    cursor_answered = true;
+                }
+                if !keys_sent && output.windows(14).any(|bytes| bytes == b"ready for keys") {
+                    master
+                        .write_all(if mode == "kitty" {
+                            b"j\x1b[107;1:2u\x1b[107;1:3u"
+                        } else {
+                            b"j"
+                        })
+                        .unwrap();
+                    keys_sent = true;
+                }
+            }
+            let child = child.wait_with_output().unwrap();
+            assert!(
+                child.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output)
+            );
+            let stdout = String::from_utf8_lossy(&child.stdout);
+            let stderr = String::from_utf8_lossy(&output);
+            assert!(cursor_answered && keys_sent);
+            assert!(stdout.contains("export data"));
+            assert!(!stdout.contains('\x1b'), "{stdout}");
+            assert!(!stderr.contains("\x1b[?u"), "{stderr}");
+            assert!(!stderr.contains("\x1b[c"), "{stderr}");
+            assert!(stderr.contains("\x1b[?2026h"), "TUI did not render");
+            assert_eq!(stderr.matches("\x1b[>2u").count(), 1);
+            assert_eq!(stderr.matches("\x1b[<1u").count(), 1);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn terminal_handoff_round_trip() {
         use std::fs::File;
         use std::io::Read;
@@ -887,7 +1006,6 @@ mod tests {
                     claimed: false,
                 },
                 previous: None,
-                keyboard_enhancement: true,
                 keyboard_enhancement_active: false,
                 raw_mode_active: false,
                 cursor_hidden: false,
