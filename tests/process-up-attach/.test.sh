@@ -52,7 +52,7 @@ reset_port_files() {
 
 # Poll until the running manager's pid file exists and it reports ready.
 # `devenv processes wait` fails fast while the pid file is absent (the
-# foreground session writes it only once its cold start completes), so retry
+# foreground session writes it once its processes are scheduled), so retry
 # it; once the pid file exists it blocks until ready. Event-driven with a
 # bounded number of attempts.
 wait_for_manager() {

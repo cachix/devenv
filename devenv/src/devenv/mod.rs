@@ -283,12 +283,20 @@ fn should_attach_to_running_manager(
     mode == ClientRunMode::Follow && interactivity == ClientInteractivity::Interactive
 }
 
-fn should_clear_proxy_routes(
-    manager_was_running: bool,
-    owns_foreground_manager: bool,
-    start_failed: bool,
-) -> bool {
-    owns_foreground_manager || (!manager_was_running && start_failed)
+#[derive(Clone, Copy)]
+enum ProcessStartOwnership {
+    Unclaimed,
+    Existing,
+    Foreground,
+    Detached,
+}
+
+fn should_clear_proxy_routes(ownership: ProcessStartOwnership, start_failed: bool) -> bool {
+    match ownership {
+        ProcessStartOwnership::Foreground => true,
+        ProcessStartOwnership::Detached => start_failed,
+        ProcessStartOwnership::Unclaimed | ProcessStartOwnership::Existing => false,
+    }
 }
 
 /// Keep the startup lock and proxy routes while a slow daemon is still alive.
@@ -2584,8 +2592,15 @@ impl Devenv {
                 mode: ClientRunMode::ReturnAfterStart,
                 ..Default::default()
             };
-            self.start_processes(vec![], devenv_tasks::RunMode::All, envs, options, None)
-                .await?;
+            self.start_processes(
+                vec![],
+                devenv_tasks::RunMode::All,
+                envs,
+                options,
+                None,
+                &mut ProcessStartOwnership::Unclaimed,
+            )
+            .await?;
         }
 
         // ── Phase 5: Running tests ──────────────────────────────────
@@ -2777,18 +2792,18 @@ impl Devenv {
         .await?;
 
         // ── Phase 3: Running processes ──────────────────────────────
-        let manager_was_running =
-            self.native_manager_running().await || self.external_process_manager_state_exists();
-        let owns_foreground_manager =
-            options.mode == ClientRunMode::Follow && !options.daemon && !manager_was_running;
+        let mut ownership = ProcessStartOwnership::Unclaimed;
         let result = self
-            .start_processes(processes, task_mode, envs, options, Some(task_configs))
+            .start_processes(
+                processes,
+                task_mode,
+                envs,
+                options,
+                Some(task_configs),
+                &mut ownership,
+            )
             .await;
-        if should_clear_proxy_routes(
-            manager_was_running,
-            owns_foreground_manager,
-            result.is_err(),
-        ) {
+        if should_clear_proxy_routes(ownership, result.is_err()) {
             crate::proxy::clear(&self.proxy_owner());
         }
         result
@@ -2802,6 +2817,7 @@ impl Devenv {
         envs: HashMap<String, String>,
         mut options: ProcessOptions,
         preloaded_tasks: Option<Vec<tasks::TaskConfig>>,
+        ownership: &mut ProcessStartOwnership,
     ) -> Result<ProcessStartOutcome> {
         // Release port reservations so processes can bind their allocated ports.
         // The port allocator holds TcpListeners during Nix evaluation to prevent
@@ -2941,12 +2957,27 @@ impl Devenv {
                 .make_task_config(roots, task_configs, task_mode, envs)
                 .await?;
 
+            // Serialize discovery and publication across foreground and detached
+            // cold starts. Release before following a manager or waiting for readiness.
+            let startup_lock = self.lock_native_startup().await?;
+            let pid_file = self.native_manager_pid_file();
+            let pid_status = processes::check_pid_file(&pid_file).await;
+            let manager_running = matches!(&pid_status, Ok(processes::PidStatus::Running(_)));
+            *ownership = if manager_running {
+                ProcessStartOwnership::Existing
+            } else if options.mode == ClientRunMode::Follow && !options.daemon {
+                ProcessStartOwnership::Foreground
+            } else {
+                ProcessStartOwnership::Detached
+            };
+
             if options.daemon {
                 // Spawn a separate daemon process via re-exec to avoid
                 // fork-safety issues in this multithreaded process.
                 return self
                     .spawn_daemon_processes(
                         config,
+                        manager_running,
                         &launch_names,
                         &capability_requests,
                         capabilities_required_now,
@@ -2959,10 +2990,8 @@ impl Devenv {
             // attach to it over the control socket and start the up-enabled
             // processes instead of starting a second manager (which would
             // clobber the daemon's PID file/socket and orphan it).
-            let pid_file = self.native_manager_pid_file();
-            if let Ok(processes::PidStatus::Running(pid)) =
-                processes::check_pid_file(&pid_file).await
-            {
+            if let Ok(processes::PidStatus::Running(pid)) = pid_status {
+                drop(startup_lock);
                 // Detached callers must not take ownership of another manager,
                 // and unattended callers must not enter a long-running attach.
                 let interactivity = if std::env::var_os("CI").is_none()
@@ -3047,26 +3076,63 @@ impl Devenv {
             // Run process tasks under the Phase 4 activity.
             // Auto start off processes (start.enable = false) are handled by the
             // process manager: they appear in the TUI as stopped.
-            trace!("devenv.up: running process tasks (run_with_parent_activity)");
-            let _outputs = tasks_runner
-                .run_with_parent_activity(Arc::new(phase4))
-                .await;
+            trace!("devenv.up: running process tasks");
+            let (scheduled_tx, scheduled_rx) = tokio::sync::oneshot::channel();
+            let initial_tasks = {
+                let tasks_runner = Arc::clone(&tasks_runner);
+                tokio::spawn(async move {
+                    tasks_runner
+                        .run_with_parent_activity_and_signal_scheduled(
+                            Arc::new(phase4),
+                            scheduled_tx,
+                        )
+                        .await
+                })
+            };
+
+            // Publish the manager once the process graph is scheduled, as the
+            // daemon does, so that another `devenv up` sees it while processes
+            // are still starting instead of starting a second manager.
+            let published = async {
+                scheduled_rx.await.into_diagnostic().wrap_err(
+                    "Initial process scheduling stopped before the manager was available",
+                )?;
+                let api_server = tasks::NativeApiServer::start(manager)?;
+                processes::write_pid(&api_server.manager().manager_pid_file(), std::process::id())
+                    .await
+                    .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
+                Ok::<_, miette::Report>(api_server)
+            }
+            .await;
+            let api_server = match published {
+                Ok(server) => {
+                    drop(startup_lock);
+                    server
+                }
+                Err(error) => {
+                    // Setup tasks and dependency waiters use the command's shutdown
+                    // token, separately from the process supervisors stopped below.
+                    self.shutdown.shutdown();
+                    let _ = tasks_runner.process_runner().stop_all().await;
+                    // Keep the lock until failed startup has finished cleaning up.
+                    let _ = initial_tasks.await;
+                    return Err(error);
+                }
+            };
+
+            let _outputs = initial_tasks.await;
             let task_status = tasks_runner.get_completion_status().await;
             trace!("devenv.up: process tasks completed");
+
+            let pid_file = api_server.manager().manager_pid_file();
 
             if task_status.has_failures() {
                 // A caller such as `devenv test` must not leave successfully
                 // started process siblings behind when another task fails.
                 let _ = tasks_runner.process_runner().stop_all().await;
+                let _ = tokio::fs::remove_file(&pid_file).await;
                 bail!("Process tasks failed");
             }
-
-            let api_server = tasks::NativeApiServer::start(manager)?;
-
-            let pid_file = api_server.manager().manager_pid_file();
-            processes::write_pid(&pid_file, std::process::id())
-                .await
-                .map_err(|e| miette!("Failed to write manager PID: {}", e))?;
 
             if options.mode == ClientRunMode::Follow {
                 trace!(
@@ -3096,7 +3162,15 @@ impl Devenv {
             return Ok(ProcessStartOutcome::Completed);
         }
 
-        // External manager selected by the Nix configuration.
+        // External managers retain their existing lifecycle. Native ownership
+        // is assigned only after taking the startup lock and checking discovery.
+        *ownership = if self.external_process_manager_state_exists() {
+            ProcessStartOwnership::Existing
+        } else if options.mode == ClientRunMode::Follow && !options.daemon {
+            ProcessStartOwnership::Foreground
+        } else {
+            ProcessStartOwnership::Detached
+        };
         let launcher_script = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
             let paths = self
@@ -3177,15 +3251,64 @@ impl Devenv {
         }
     }
 
+    /// Reserve native manager discovery until startup publishes or finishes cleanup.
+    async fn lock_native_startup(&self) -> Result<nix::fcntl::Flock<std::fs::File>> {
+        use nix::fcntl::{Flock, FlockArg};
+
+        let runtime_dir = self.process_runtime_dir()?;
+        std::fs::create_dir_all(runtime_dir)
+            .into_diagnostic()
+            .wrap_err("Failed to create process runtime directory")?;
+        let lock_path = runtime_dir.join("native-start.lock");
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to open startup lock {}", lock_path.display()))?;
+        let mut waiting = false;
+        let cancel = self.shutdown.cancellation_token();
+        loop {
+            if self.shutdown.is_cancelled() {
+                bail!("Process manager startup cancelled");
+            }
+            match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+                Ok(lock) => return Ok(lock),
+                Err((returned_file, nix::errno::Errno::EWOULDBLOCK)) => {
+                    file = returned_file;
+                    if !waiting {
+                        debug!(path = %lock_path.display(), "Waiting for native process manager startup lock");
+                        waiting = true;
+                    }
+                }
+                Err((_, error)) => {
+                    bail!(
+                        "Failed to acquire startup lock {}: {}",
+                        lock_path.display(),
+                        error
+                    );
+                }
+            }
+            tokio::select! {
+                _ = cancel.cancelled() => bail!("Process manager startup cancelled"),
+                _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+            }
+        }
+    }
+
     /// Spawn a daemon process that runs the native process manager.
     ///
     /// Instead of fork (which is unsafe in multithreaded programs), this
     /// re-execs the current binary with a hidden `daemon-processes` subcommand.
     /// Standard input/output are disconnected and the daemon is placed in its
-    /// own process group. This does not create a new Unix session.
+    /// own process group. This does not create a new Unix session. The caller
+    /// holds the startup lock until the daemon publishes its PID.
     async fn spawn_daemon_processes(
         &self,
         mut config: tasks::Config,
+        manager_running: bool,
         launch_names: &[String],
         capability_requests: &[processes::CapabilityRequest],
         capabilities_required_now: bool,
@@ -3193,48 +3316,9 @@ impl Devenv {
     ) -> Result<ProcessStartOutcome> {
         let pid_file = self.native_manager_pid_file();
 
-        // Serialize the check-and-spawn sequence across concurrent CLI
-        // processes. Without this lock, two cold `up -d` callers can both see
-        // no PID file, spawn daemons, and race to own the same socket/PID
-        // paths, orphaning the loser and its children. The lock is held until
-        // the winning daemon publishes its PID; the next caller then follows
-        // the normal attach path below.
-        #[cfg(unix)]
-        let _startup_lock = {
-            use nix::fcntl::{Flock, FlockArg};
-
-            let runtime_dir = self.process_runtime_dir()?;
-            std::fs::create_dir_all(runtime_dir)
-                .into_diagnostic()
-                .wrap_err("Failed to create process runtime directory")?;
-            let lock_path = runtime_dir.join("native-start.lock");
-            let lock_file = std::fs::OpenOptions::new()
-                .create(true)
-                // The file is only ever flocked, never written; keep whatever
-                // a previous run left in it.
-                .truncate(false)
-                .read(true)
-                .write(true)
-                .open(&lock_path)
-                .into_diagnostic()
-                .wrap_err_with(|| {
-                    format!("Failed to open daemon startup lock {}", lock_path.display())
-                })?;
-            Flock::lock(lock_file, FlockArg::LockExclusive).map_err(|(_, e)| {
-                miette!(
-                    "Failed to acquire daemon startup lock {}: {}",
-                    lock_path.display(),
-                    e
-                )
-            })?
-        };
-
         // If a manager is already running, attach to it and start the requested
         // processes rather than spawning a second daemon.
-        if matches!(
-            processes::check_pid_file(&pid_file).await,
-            Ok(processes::PidStatus::Running(_))
-        ) {
+        if manager_running {
             // A foreground `devenv up` invocation in another terminal owns its
             // processes: scheduling into it from here would silently mutate a
             // view the user is watching, and its exit would tear the
@@ -4911,9 +4995,25 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
 
     #[test]
     fn attached_manager_routes_survive_failed_invocations() {
-        assert!(!should_clear_proxy_routes(true, false, true));
-        assert!(should_clear_proxy_routes(false, false, true));
-        assert!(should_clear_proxy_routes(false, true, false));
+        for ownership in [
+            ProcessStartOwnership::Unclaimed,
+            ProcessStartOwnership::Existing,
+        ] {
+            assert!(!should_clear_proxy_routes(ownership, true));
+            assert!(!should_clear_proxy_routes(ownership, false));
+        }
+        assert!(should_clear_proxy_routes(
+            ProcessStartOwnership::Detached,
+            true
+        ));
+        assert!(!should_clear_proxy_routes(
+            ProcessStartOwnership::Detached,
+            false
+        ));
+        assert!(should_clear_proxy_routes(
+            ProcessStartOwnership::Foreground,
+            false
+        ));
     }
 
     #[tokio::test]
