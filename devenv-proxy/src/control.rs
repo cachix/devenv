@@ -170,7 +170,7 @@ fn dispatch(request: ControlRequest, routes: &RouteTable) -> Result<ControlRespo
     match request {
         ControlRequest::Status => Ok(ControlResponse::Info {
             pid: std::process::id(),
-            listen: routes.listen,
+            listen: routes.http_listen,
             https_listen: routes.https_listen,
         }),
         ControlRequest::Register { route } => {
