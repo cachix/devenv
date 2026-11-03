@@ -1080,11 +1080,6 @@ impl Commands {
                 | Self::Mcp { http: None }
                 | Self::Lsp { .. }
                 | Self::PrintPaths
-                // Shell exports are captured by callers such as direnv while
-                // stdin and stderr can still be attached to a terminal. Avoid
-                // entering raw mode or probing terminal capabilities there.
-                | Self::DirenvExport
-                | Self::PrintDevEnv { .. }
                 | Self::Machines {
                     command: MachinesCommand::Deploy { .. }
                         | MachinesCommand::Plan { .. }
@@ -1673,7 +1668,7 @@ mod tests {
     }
 
     #[test]
-    fn export_commands_do_not_support_tui() {
+    fn export_commands_support_tui() {
         for command in [
             vec!["direnv-export"],
             vec!["print-dev-env"],
@@ -1682,7 +1677,7 @@ mod tests {
             for flags in [vec![], vec!["--tui", "true"]] {
                 let cli =
                     Cli::parse_from(["devenv"].into_iter().chain(flags).chain(command.clone()));
-                assert!(!cli.command.supports_tui(), "{command:?}");
+                assert!(cli.command.supports_tui(), "{command:?}");
             }
         }
     }
