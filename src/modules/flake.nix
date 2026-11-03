@@ -3,6 +3,7 @@
     { ... }:
     {
       modules = ./.;
+      nixosModules.machines = ./machines/nixos.nix;
 
       # Legacy feature-detection flags
       # These are used by older devenv CLIs to detect certain module features that require template inputs.

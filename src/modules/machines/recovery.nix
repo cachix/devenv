@@ -1,5 +1,7 @@
 { pkgs, ... }:
 {
+  key = "devenv-machines-recovery";
+
   # The rooted executor belongs to the recorded transaction, even if the
   # newly booted configuration was built by a different devenv version.
   systemd.services.devenv-machines-recover = {

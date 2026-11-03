@@ -113,6 +113,110 @@ let
     if lib.hasPrefix "/" value then value
     else "${outerConfig.devenv.root}/${value}";
 
+  isConfiguration = value: value._type or null == "configuration";
+
+  configurationType = class: lib.mkOptionType {
+    name = "${class}Configuration";
+    description = "evaluated ${class} configuration";
+    descriptionClass = "noun";
+    check = isConfiguration;
+    merge = loc: defs:
+      let
+        value = lib.options.mergeOneOption loc defs;
+      in
+      if value ? class && value.class != class then
+        throw "The option `${lib.showOption loc}' expects a ${class} configuration, but it is a ${value.class} configuration."
+      else
+        value;
+  };
+
+  roleType = class: lib.types.nullOr (lib.types.either (configurationType class) lib.types.deferredModule);
+
+  bootstrapSecrets = machine: lib.mapAttrs'
+    (path: secret:
+      assert lib.assertMsg
+        (builtins.match "/[^/]+(/[^/]+)*" path != null
+          && builtins.match ".*[[:cntrl:]].*" path == null
+          && lib.all (part: part != "." && part != "..") (lib.splitString "/" path)
+          && path != "/nix" && !(lib.hasPrefix "/nix/" path)
+          && path != "/run/devenv-secrets" && !(lib.hasPrefix "/run/devenv-secrets/" path))
+        "machines.${machine._module.args.name}.install.secrets: invalid destination ${path}. Use an absolute file path outside /nix and /run/devenv-secrets, without empty, '.' or '..' components.";
+      lib.nameValuePair "bootstrap-${builtins.hashString "sha256" path}" {
+        inherit path;
+        inherit (secret) secret mode;
+        owner = lib.head (lib.splitString ":" secret.owner);
+        group = lib.last (lib.splitString ":" secret.owner);
+      })
+    machine.install.secrets;
+
+  extendNixos = machine: modules:
+    let
+      version = machine.nixos.config.devenv.machinesVersion or null;
+    in
+    if (version == null && !((machine.nixos.config.devenv or { }) ? machinesIdentity))
+      || version == import ./machines/interface-version.nix then
+      machine.nixos.extendModules { inherit modules; }
+    else
+      throw "machines.${machine._module.args.name}: the NixOS configuration uses an incompatible devenv machine module interface. Use the same devenv input for the configuration and deployment.";
+
+  devenvNixosModules = machine:
+    lib.optional
+      (!(isConfiguration machine.nixos) || !((machine.nixos.config.devenv or { }) ? machinesVersion))
+      ./machines/nixos.nix
+    ++ [
+      ({ config, pkgs, ... }:
+        let
+          destinations = bootstrapSecrets machine;
+          secrets = lib.mapAttrs (_: secret: secret.secret) destinations;
+          stager = import ./machines/secret-stager.nix {
+            inherit lib pkgs secrets destinations;
+            systemd = config.systemd.package;
+          };
+        in
+        {
+          environment.etc."devenv/bootstrap-secrets.json" = lib.mkIf (destinations != { }) {
+            text = builtins.toJSON {
+              version = 1;
+              stager = "${stager}/bin/devenv-machines-secrets";
+              inherit secrets;
+            };
+          };
+        })
+      ({ config, pkgs, ... }:
+        let
+          targetDevenv = devenvPackageFor machine.system;
+          # Copy only the bundled resolver out of the target-architecture
+          # devenv package. The installed system therefore does not retain
+          # devenv's larger runtime closure just to run SecretSpec once.
+          targetSecretspec = pkgs.runCommand "devenv-bundled-secretspec" { } ''
+            install -Dm755 ${targetDevenv}/bin/secretspec $out/bin/secretspec
+          '';
+          targetSecretspecPackages = machine.secretspec.extraPackages pkgs;
+          targetSecretspecRuntime = pkgs.buildEnv {
+            name = "devenv-machines-secretspec-runtime";
+            paths = [ targetSecretspec ] ++ targetSecretspecPackages;
+            pathsToLink = [ "/bin" ];
+            ignoreCollisions = true;
+          };
+          targetSecretspecLauncher = pkgs.writeShellScriptBin "devenv-machines-secretspec" ''
+            export PATH=${targetSecretspecRuntime}/bin:$PATH
+            exec ${targetSecretspec}/bin/secretspec "$@"
+          '';
+        in
+        lib.mkIf
+          ((machine.install.secrets != { } || config.devenv.secrets != { })
+          && machine.secretspec.execution == "target")
+          {
+            # Target-side resolution runs after nixos-install and before
+            # each deployment. The private launcher calls devenv's bundled
+            # resolver by exact store path and exposes helpers through its
+            # own PATH. Only that launcher enters the system profile:
+            # another package cannot replace the resolver, and helpers do
+            # not pollute the installed machine's global command namespace.
+            environment.systemPackages = [ targetSecretspecLauncher ];
+          })
+    ];
+
   # Build the NixOS toplevel closure for a machine's `nixos` module.
   #
   # Requires `inputs.disko` (always, because disko is the declarative
@@ -124,7 +228,9 @@ let
   # `.config.system.build.diskoScript` (and any future outputs) without
   # evaluating twice — Nix's lazy evaluation handles deduplication.
   nixosEval = machine:
-    if disko == null then
+    if isConfiguration machine.nixos then
+      extendNixos machine (devenvNixosModules machine)
+    else if disko == null then
       throw (outerConfig.lib._mkInputError diskoInputArgs)
     else
       let
@@ -143,47 +249,33 @@ let
         modules = [
           { nixpkgs.hostPlatform = machine.system; }
           disko.nixosModules.disko
-          ./machines/recovery.nix
-          ./machines/facts.nix
           machine.nixos
-          ({ pkgs, ... }:
-            let
-              targetDevenv = devenvPackageFor machine.system;
-              # Copy only the bundled resolver out of the target-architecture
-              # devenv package. The installed system therefore does not retain
-              # devenv's larger runtime closure just to run SecretSpec once.
-              targetSecretspec = pkgs.runCommand "devenv-bundled-secretspec" { } ''
-                install -Dm755 ${targetDevenv}/bin/secretspec $out/bin/secretspec
-              '';
-              targetSecretspecPackages = machine.install.secretspec.extraPackages pkgs;
-              targetSecretspecRuntime = pkgs.buildEnv {
-                name = "devenv-machines-secretspec-runtime";
-                paths = [ targetSecretspec ] ++ targetSecretspecPackages;
-                pathsToLink = [ "/bin" ];
-                ignoreCollisions = true;
-              };
-              targetSecretspecLauncher = pkgs.writeShellScriptBin "devenv-machines-secretspec" ''
-                export PATH=${targetSecretspecRuntime}/bin:$PATH
-                exec ${targetSecretspec}/bin/secretspec "$@"
-              '';
-            in
-            lib.mkIf
-              (machine.install.secrets != { } && machine.install.secretspec.execution == "target")
-              {
-                # Target-side bootstrap resolution runs after nixos-install but
-                # before reboot. The private launcher calls devenv's bundled
-                # resolver by exact store path and exposes helpers through its
-                # own PATH. Only that launcher enters the system profile:
-                # another package cannot replace the resolver, and helpers do
-                # not pollute the installed machine's global command namespace.
-                environment.systemPackages = [ targetSecretspecLauncher ];
-              })
-        ] ++ facterModules;
+        ] ++ devenvNixosModules machine ++ facterModules;
       };
+
+  nixosSecrets = machine:
+    let
+      unchecked = { _module.check = false; };
+      evaluated =
+        if isConfiguration machine.nixos then
+          extendNixos machine (devenvNixosModules machine ++ [ unchecked ])
+        else
+          (nixosSystemFor machine.system) {
+            specialArgs = { inherit inputs self; };
+            modules = [
+              { nixpkgs.hostPlatform = machine.system; }
+              unchecked
+              machine.nixos
+            ] ++ devenvNixosModules machine;
+          };
+    in
+    evaluated.config.devenv.secrets;
 
   # Build the nix-darwin toplevel closure for a machine's `nix-darwin` module.
   buildNixDarwinToplevel = machine:
-    if nixDarwin == null then
+    if isConfiguration machine.nix-darwin then
+      machine.nix-darwin.config.system.build.toplevel
+    else if nixDarwin == null then
       throw (outerConfig.lib._mkInputError nixDarwinInputArgs)
     else
       (nixDarwin.lib.darwinSystem {
@@ -192,65 +284,70 @@ let
         modules = [ machine.nix-darwin ];
       }).config.system.build.toplevel;
 
+  homeManagerEval = machine:
+    if isConfiguration machine.home-manager then
+      machine.home-manager
+    else if homeManager == null then
+      throw (outerConfig.lib._mkInputError homeManagerInputArgs)
+    else
+      homeManager.lib.homeManagerConfiguration {
+        # devenv's default nixpkgs input is the devenv-nixpkgs flake, whose
+        # root is not itself importable as a nixpkgs package set. Both it and
+        # a regular nixpkgs flake expose the package set through
+        # legacyPackages.
+        pkgs = inputs.nixpkgs.legacyPackages.${machine.system};
+        extraSpecialArgs = { inherit inputs self; };
+        modules = [ machine.home-manager ];
+      };
+
   # Build the home-manager activation package for a machine's `home-manager`
   # module. A machine has one shared SSH target, which is commonly root for a
   # combined NixOS + home-manager deployment. Wrap the upstream activation so
   # it always runs as the configured home-manager user with the matching HOME.
   buildHomeManagerToplevel = machine:
-    if homeManager == null then
-      throw (outerConfig.lib._mkInputError homeManagerInputArgs)
-    else
-      let
-        # devenv's default nixpkgs input is the devenv-nixpkgs flake, whose
-        # root is not itself importable as a nixpkgs package set. Both it and
-        # a regular nixpkgs flake expose the package set through
-        # legacyPackages.
-        machinePkgs = inputs.nixpkgs.legacyPackages.${machine.system};
-        evaluated = homeManager.lib.homeManagerConfiguration {
-          pkgs = machinePkgs;
-          extraSpecialArgs = { inherit inputs self; };
-          modules = [ machine.home-manager ];
-        };
-        activationPackage = evaluated.activationPackage;
-        homeUser = evaluated.config.home.username;
-        homeDirectory = toString evaluated.config.home.homeDirectory;
-        activationDriver = machinePkgs.writeShellScript "devenv-home-manager-activate" ''
-          set -eu
+    let
+      evaluated = homeManagerEval machine;
+      machinePkgs = evaluated.pkgs;
+      activationPackage = evaluated.activationPackage;
+      homeUser = evaluated.config.home.username;
+      homeDirectory = toString evaluated.config.home.homeDirectory;
+      activationDriver = machinePkgs.writeShellScript "devenv-home-manager-activate" ''
+        set -eu
 
-          user=${lib.escapeShellArg homeUser}
-          home=${lib.escapeShellArg homeDirectory}
-          activate=${lib.escapeShellArg "${activationPackage}/activate"}
+        user=${lib.escapeShellArg homeUser}
+        home=${lib.escapeShellArg homeDirectory}
+        activate=${lib.escapeShellArg "${activationPackage}/activate"}
 
-          if [ "$(id -un)" = "$user" ]; then
-            exec env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
-          fi
+        if [ "$(id -un)" = "$user" ]; then
+          exec env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+        fi
 
-          if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
-            exec runuser -u "$user" -- \
-              env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
-          fi
+        if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
+          exec runuser -u "$user" -- \
+            env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+        fi
 
-          if command -v sudo >/dev/null 2>&1; then
-            exec sudo -H -u "$user" -- \
-              env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
-          fi
+        if command -v sudo >/dev/null 2>&1; then
+          exec sudo -H -u "$user" -- \
+            env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+        fi
 
-          echo "home-manager activation must run as $user, but the current user is $(id -un) and neither runuser nor sudo is available" >&2
-          exit 1
-        '';
-      in
-      machinePkgs.symlinkJoin {
-        name = "devenv-home-manager-generation";
-        paths = [ activationPackage ];
-        postBuild = ''
-          rm -f "$out/activate"
-          ln -s ${activationDriver} "$out/activate"
-          if [ -d "$out/bin" ]; then
-            rm -f "$out/bin/home-manager-generation"
-            ln -s ${activationDriver} "$out/bin/home-manager-generation"
-          fi
-        '';
-      };
+        echo "home-manager activation must run as $user, but the current user is $(id -un) and neither runuser nor sudo is available" >&2
+        exit 1
+      '';
+    in
+    machinePkgs.symlinkJoin {
+      name = "devenv-home-manager-generation";
+      paths = [ activationPackage ];
+      postBuild = ''
+        rm -f "$out/activate"
+        ln -s ${activationDriver} "$out/activate"
+        if [ -d "$out/bin" ]; then
+          rm -f "$out/bin/home-manager-generation"
+          ln -s ${activationDriver} "$out/bin/home-manager-generation"
+        fi
+      '';
+    };
 
   targetOptions = lib.types.submodule {
     options = {
@@ -282,13 +379,81 @@ let
     };
   };
 
+  secretspecOptions = lib.types.submodule {
+    options = {
+      execution = lib.mkOption {
+        type = lib.types.enum [ "local" "target" ];
+        default = "local";
+        description = ''
+          Where SecretSpec resolves values for `install.secrets` and
+          `devenv.secrets`. `local` resolves on the workstation and streams
+          values over SSH. `target` sends only a self-contained SecretSpec
+          manifest and resolves through the provider on the target: the
+          installer during `install`, the running system during `deploy`.
+        '';
+      };
+      provider = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          Explicit target-side provider override. When unset, devenv
+          does not pass `--provider`; SecretSpec selects providers
+          from the manifest, target environment, and target-global
+          configuration. The workstation provider is never inherited.
+          Provider credentials must be available independently on the
+          target and are never forwarded by devenv. This option is
+          non-secret metadata and must not contain credentials; use a
+          provider alias or target-global configuration instead.
+        '';
+      };
+      profile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          Explicit target-side profile override. When unset, devenv
+          does not pass `--profile`; SecretSpec selects the profile
+          from the target environment or target-global configuration,
+          falling back to `default`. The workstation profile is never
+          inherited.
+        '';
+      };
+      extraPackages = lib.mkOption {
+        type = lib.types.functionTo (lib.types.listOf lib.types.package);
+        default = _targetPkgs: [ ];
+        defaultText = lib.literalExpression "_targetPkgs: [ ]";
+        example = lib.literalExpression "targetPkgs: [ targetPkgs.sops targetPkgs.pass ]";
+        description = ''
+          Function selecting additional target-architecture packages
+          required by the chosen SecretSpec providers, such as `sops`
+          or `pass`. These packages are included in a private resolver
+          runtime for target execution, not the system-wide command
+          namespace.
+        '';
+      };
+    };
+  };
+
   machineOptions = lib.types.submodule ({ name, config, ... }: {
     options = {
       system = lib.mkOption {
         type = lib.types.str;
+        apply = system:
+          assert lib.assertMsg
+            (lib.all
+              (role: !(isConfiguration role) || role.pkgs.stdenv.hostPlatform.system == system)
+              [ config.nixos config.nix-darwin config.home-manager ])
+            "machines.${name}.system must match every supplied configuration's architecture.";
+          system;
         description = "System architecture for the machine.";
-        default = pkgs.stdenv.system;
-        defaultText = lib.literalExpression "pkgs.stdenv.system";
+        default =
+          let
+            configuration = lib.findFirst
+              isConfiguration
+              null
+              [ config.nixos config.nix-darwin config.home-manager ];
+          in
+          if configuration != null then configuration.pkgs.stdenv.hostPlatform.system else pkgs.stdenv.system;
+        defaultText = lib.literalExpression "configuration.pkgs.stdenv.hostPlatform.system or pkgs.stdenv.system";
         example = "x86_64-linux";
       };
 
@@ -298,8 +463,15 @@ let
         description = "SSH destination for install and deploy. See the `target.host` and `target.sshOpts` suboptions.";
       };
 
+      secretspec = lib.mkOption {
+        type = secretspecOptions;
+        default = config.install.secretspec;
+        defaultText = lib.literalExpression "{ }";
+        description = "How SecretSpec values are resolved for this machine.";
+      };
+
       nixos = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
+        type = roleType "nixos";
         description = "NixOS configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
@@ -416,60 +588,10 @@ let
             };
 
             secretspec = lib.mkOption {
-              type = lib.types.submodule {
-                options = {
-                  execution = lib.mkOption {
-                    type = lib.types.enum [ "local" "target" ];
-                    default = "local";
-                    description = ''
-                      Where SecretSpec resolves bootstrap values. `local`
-                      resolves on the workstation and streams values over SSH.
-                      `target` sends only a self-contained SecretSpec manifest and
-                      resolves through the provider on the installer machine.
-                    '';
-                  };
-                  provider = lib.mkOption {
-                    type = lib.types.nullOr lib.types.str;
-                    default = null;
-                    description = ''
-                      Explicit target-side provider override. When unset, devenv
-                      does not pass `--provider`; SecretSpec selects providers
-                      from the manifest, target environment, and target-global
-                      configuration. The workstation provider is never inherited.
-                      Provider credentials must be available independently on the
-                      installer and are never forwarded by devenv. This option is
-                      non-secret metadata and must not contain credentials; use a
-                      provider alias or target-global configuration instead.
-                    '';
-                  };
-                  profile = lib.mkOption {
-                    type = lib.types.nullOr lib.types.str;
-                    default = null;
-                    description = ''
-                      Explicit target-side profile override. When unset, devenv
-                      does not pass `--profile`; SecretSpec selects the profile
-                      from the target environment or target-global configuration,
-                      falling back to `default`. The workstation profile is never
-                      inherited.
-                    '';
-                  };
-                  extraPackages = lib.mkOption {
-                    type = lib.types.functionTo (lib.types.listOf lib.types.package);
-                    default = _targetPkgs: [ ];
-                    defaultText = lib.literalExpression "_targetPkgs: [ ]";
-                    example = lib.literalExpression "targetPkgs: [ targetPkgs.sops targetPkgs.pass ]";
-                    description = ''
-                      Function selecting additional target-architecture packages
-                      required by the chosen SecretSpec providers, such as `sops`
-                      or `pass`. These packages are included in a private resolver
-                      runtime for target execution, not the system-wide command
-                      namespace.
-                    '';
-                  };
-                };
-              };
+              type = secretspecOptions;
               default = { };
-              description = "How install-time SecretSpec bootstrap values are resolved.";
+              visible = false;
+              description = "Renamed to `machines.<name>.secretspec`.";
             };
 
             secrets = lib.mkOption {
@@ -480,18 +602,18 @@ let
                     description = ''
                       Name of the secret in the active SecretSpec profile. The
                       value is resolved at install time according to
-                      `install.secretspec.execution` and is never included in
+                      `secretspec.execution` and is never included in
                       machine metadata or a Nix store path.
                     '';
                     example = "WEB1_AGE_KEY";
                   };
                   owner = lib.mkOption {
-                    type = lib.types.str;
+                    type = lib.types.strMatching "[0-9]+:[0-9]+";
                     default = "0:0";
                     description = "Numeric owner in `uid:gid` format applied via chown on the target.";
                   };
                   mode = lib.mkOption {
-                    type = lib.types.str;
+                    type = lib.types.strMatching "0?[0246][04]0";
                     default = "0600";
                     description = ''
                       File mode applied via chmod on the target. Special and
@@ -518,7 +640,7 @@ let
                 `--secretspec-profile` flags to select its source. Target
                 execution only requires `secretspec.toml` and leaves provider
                 and profile selection to the target unless explicitly overridden
-                by `install.secretspec`.
+                by `secretspec`.
               '';
               example = lib.literalExpression ''
                 {
@@ -566,7 +688,7 @@ let
       };
 
       home-manager = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
+        type = roleType "homeManager";
         description = "Home Manager configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
@@ -579,7 +701,7 @@ let
       };
 
       nix-darwin = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
+        type = roleType "darwin";
         description = "nix-darwin configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
@@ -620,6 +742,13 @@ let
         internal = true;
         readOnly = true;
         description = "Evaluated NixOS access facts; reading these does not build the system.";
+      };
+
+      deploy.secrets = lib.mkOption {
+        type = lib.types.attrsOf lib.types.str;
+        internal = true;
+        readOnly = true;
+        description = "Evaluated `devenv.secrets` names mapped to their SecretSpec names. Reading these does not build the system.";
       };
 
       deploy.healthCheck = lib.mkOption {
@@ -698,6 +827,11 @@ let
               default = false;
               description = "Whether the evaluated NixOS root account has a password or authorized SSH key.";
             };
+            hasDisko = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Whether the evaluated NixOS configuration includes disko.";
+            };
           };
         };
         internal = true;
@@ -710,24 +844,33 @@ let
     # consumer guards access behind `lib.mkIf (config.nixos != null) …`.
     config._nixosEval = lib.mkIf (config.nixos != null) (nixosEval config);
     config.deploy.facts = if config.nixos != null then config._nixosEval.config.devenvMachineFacts else { };
+    config.deploy.secrets =
+      if config.nixos != null then lib.mapAttrs (_: secret: secret.secret) (nixosSecrets config) else { };
 
-    config.build = {
-      deployer = lib.mkIf (config.nixos != null) (import ./machines/deploy.nix {
-        pkgs = config._nixosEval.pkgs;
-        inherit (config.deploy) healthCheck rollbackTimeout;
-      });
-      nixos = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.toplevel;
-      diskoScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.diskoScript;
-      diskoFormatScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.formatScript;
-      diskoMountScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.mountScript;
-      nix-darwin = lib.mkIf (config.nix-darwin != null) (lib.mkDefault (buildNixDarwinToplevel config));
-      home-manager = lib.mkIf (config.home-manager != null) (lib.mkDefault (buildHomeManagerToplevel config));
-    };
+    config.build =
+      let
+        diskoOutput = output:
+          config._nixosEval.config.system.build.${output}
+            or (throw "machines.${name}: `devenv machines install` needs disko in the NixOS configuration");
+      in
+      {
+        deployer = lib.mkIf (config.nixos != null) (lib.mkDefault (import ./machines/deploy.nix {
+          pkgs = config._nixosEval.pkgs;
+          inherit (config.deploy) healthCheck rollbackTimeout;
+        }));
+        nixos = lib.mkIf (config.nixos != null) (lib.mkDefault config._nixosEval.config.system.build.toplevel);
+        diskoScript = lib.mkIf (config.nixos != null) (lib.mkDefault (diskoOutput "diskoScript"));
+        diskoFormatScript = lib.mkIf (config.nixos != null) (lib.mkDefault (diskoOutput "formatScript"));
+        diskoMountScript = lib.mkIf (config.nixos != null) (lib.mkDefault (diskoOutput "mountScript"));
+        nix-darwin = lib.mkIf (config.nix-darwin != null) (lib.mkDefault (buildNixDarwinToplevel config));
+        home-manager = lib.mkIf (config.home-manager != null) (lib.mkDefault (buildHomeManagerToplevel config));
+      };
 
     # Lazy: only forced when the CLI reads `installCheck.hasRootAuth`
     # (i.e. during `devenv machines install`), never during `info`/`deploy`.
     # For home-manager-only machines the default `hasRootAuth = false` stays.
     config.installCheck = lib.mkIf (config.nixos != null) {
+      hasDisko = config._nixosEval.options ? disko;
       hasRootAuth =
         let
           root = config._nixosEval.config.users.users.root or { };
@@ -813,12 +956,12 @@ in
             description = "Whether install should preserve SSH host keys.";
           };
           secretspec = lib.mkOption {
-            description = "SecretSpec bootstrap execution metadata.";
+            description = "SecretSpec execution metadata.";
             type = lib.types.submodule {
               options = {
                 execution = lib.mkOption {
                   type = lib.types.enum [ "local" "target" ];
-                  description = "Where bootstrap values are resolved.";
+                  description = "Where secret values are resolved.";
                 };
                 provider = lib.mkOption {
                   type = lib.types.nullOr lib.types.str;
@@ -831,11 +974,8 @@ in
               };
             };
           };
-          # Only SecretSpec names and target metadata cross the Nix/Rust
-          # boundary. Values stay either in the CLI's resolved state or on
-          # the installer, according to the selected execution mode.
-          secrets = lib.mkOption {
-            type = lib.types.listOf lib.types.attrs;
+          bootstrapSecrets = lib.mkOption {
+            type = lib.types.attrsOf lib.types.str;
             description = "Normalized SecretSpec bootstrap references for CLI consumption.";
           };
           # extraFiles.source and encryptionKeys values are resolved to
@@ -868,22 +1008,20 @@ in
       kexecImage = m.install.kexec.image;
       kexecPostSshPort = m.install.kexec.postSshPort;
       copyHostKeys = m.install.copyHostKeys;
+      bootstrapSecrets = lib.mapAttrs (_: secret: secret.secret) (bootstrapSecrets m);
       secretspec = {
-        inherit (m.install.secretspec) execution;
+        inherit (m.secretspec) execution;
         provider =
-          if m.install.secretspec.execution == "target" then
-            m.install.secretspec.provider
+          if m.secretspec.execution == "target" then
+            m.secretspec.provider
           else
             outerConfig.secretspec.provider;
         profile =
-          if m.install.secretspec.execution == "target" then
-            m.install.secretspec.profile
+          if m.secretspec.execution == "target" then
+            m.secretspec.profile
           else
             outerConfig.secretspec.profile;
       };
-      secrets = lib.mapAttrsToList
-        (target: secret: secret // { inherit target; })
-        m.install.secrets;
       extraFiles = lib.mapAttrs
         (_path: f: {
           source = resolveInstallPath f.source;

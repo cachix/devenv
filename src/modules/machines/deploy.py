@@ -12,6 +12,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,7 @@ import time
 TERMINAL = {"succeeded", "failed", "rolled-back", "rollback-failed"}
 STORE_PATH = re.compile(r"/nix/store/[0-9a-z]{32}-[^/\s]+")
 REQUEST_ID = re.compile(r"[A-Za-z0-9-]{1,100}")
+SECRETS_MANIFEST = "etc/devenv/secrets.json"
 
 
 def sync_directory(path):
@@ -67,6 +69,7 @@ class Executor:
         self.health_check = health_check
         self.rollback_timeout = rollback_timeout
         self.state_file = directory / "current.json"
+        self.secrets = directory / "secrets"
 
     @contextlib.contextmanager
     def lock(self, wait=False):
@@ -119,6 +122,12 @@ class Executor:
                     or state["operation"] != "deploy"
                 )
                 for key in ("expectedSystem", "expectedProfile")
+            )
+            or any(
+                key in state
+                and state[key] is not None
+                and (not isinstance(state[key], str) or not REQUEST_ID.fullmatch(state[key]))
+                for key in ("previousSecrets", "requestedSecrets")
             )
             or (
                 "recoveryBootId" in state
@@ -232,6 +241,55 @@ class Executor:
             raise RuntimeError("expected an existing NixOS system store path")
         return str(path)
 
+    def declared_secrets(self, system):
+        try:
+            manifest = json.loads((Path(system) / SECRETS_MANIFEST).read_text())
+        except FileNotFoundError:
+            return set()
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("version") != 1
+            or not isinstance(manifest.get("secrets"), dict)
+        ):
+            raise RuntimeError("requested system has an invalid secrets manifest")
+        return set(manifest["secrets"])
+
+    def current_secrets(self):
+        try:
+            current = os.readlink(self.secrets / "current")
+        except FileNotFoundError:
+            return None
+        if not REQUEST_ID.fullmatch(current):
+            raise RuntimeError("invalid current secret set")
+        return current
+
+    def point_secrets(self, set_id):
+        link = self.secrets / "current"
+        if set_id is None:
+            if link.is_symlink():
+                link.unlink()
+                sync_directory(self.secrets)
+            return
+        if not (self.secrets / set_id).is_dir():
+            raise RuntimeError("secret set " + set_id + " is unavailable")
+        temporary = self.secrets / (".current-" + set_id)
+        temporary.unlink(missing_ok=True)
+        temporary.symlink_to(set_id)
+        os.replace(temporary, link)
+        sync_directory(self.secrets)
+
+    def prune_secrets(self, keep):
+        if not self.secrets.is_dir():
+            return
+        for entry in self.secrets.iterdir():
+            if entry.name == "current" or entry.name in keep:
+                continue
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+        sync_directory(self.secrets)
+
     def retain(self, request_id, previous, requested, executable):
         # Retain every operation's recovery closures. No implicit GC of rollback
         # history: roots may be removed by an operator after recovery is complete.
@@ -261,6 +319,7 @@ class Executor:
         rollback=False,
         expected_system=None,
         expected_profile=None,
+        secrets=None,
     ):
         if not REQUEST_ID.fullmatch(request_id):
             raise RuntimeError("invalid deployment ID")
@@ -268,6 +327,8 @@ class Executor:
             rollback and expected_system is not None
         ):
             raise RuntimeError("both generation preconditions are required for deploy")
+        if secrets is not None and (rollback or not REQUEST_ID.fullmatch(secrets)):
+            raise RuntimeError("invalid secret set")
         with self.lock():
             prior = self.read()
             operation = "rollback" if rollback else "deploy"
@@ -278,6 +339,10 @@ class Executor:
                         prior["requestedSystem"] != requested
                         or prior.get("expectedSystem") != expected_system
                         or prior.get("expectedProfile") != expected_profile
+                        or (
+                            secrets is not None
+                            and prior.get("requestedSecrets") != secrets
+                        )
                     )
                 ):
                     raise RuntimeError(
@@ -302,6 +367,22 @@ class Executor:
                 or str(self.profile.resolve(strict=True)) != expected_profile
             ):
                 raise RuntimeError("stale deployment plan: target generations changed")
+            previous_secrets = self.current_secrets()
+            if rollback:
+                requested_secrets = prior.get("previousSecrets", previous_secrets)
+            elif secrets is not None:
+                staged = self.secrets / secrets
+                if not staged.is_dir() or any(
+                    not (staged / (name + ".cred")).is_file()
+                    for name in self.declared_secrets(requested)
+                ):
+                    raise RuntimeError("staged secret set is incomplete")
+                requested_secrets = secrets
+            elif self.declared_secrets(requested):
+                raise RuntimeError("requested system declares secrets that were not staged")
+            else:
+                requested_secrets = previous_secrets
+            self.prune_secrets({previous_secrets, requested_secrets})
             self.retain(request_id, previous, requested, executable)
             state = {
                 "version": 1,
@@ -310,6 +391,8 @@ class Executor:
                 "phase": "queued",
                 "previousSystem": previous,
                 "requestedSystem": requested,
+                "previousSecrets": previous_secrets,
+                "requestedSecrets": requested_secrets,
                 "bootId": self.boot.read_text().strip(),
             }
             if not rollback:
@@ -401,6 +484,8 @@ class Executor:
             state["phase"] = "switching"
             atomic_json(self.state_file, state)
             try:
+                if "requestedSecrets" in state:
+                    self.point_secrets(state["requestedSecrets"])
                 self.run(
                     ["nix-env", "--profile", str(self.profile), "--set", requested],
                     check=True,
@@ -542,6 +627,8 @@ class Executor:
         state["phase"] = "rolling-back"
         atomic_json(self.state_file, state)
         try:
+            if "previousSecrets" in state:
+                self.point_secrets(state["previousSecrets"])
             previous = self.validate_system(state["previousSystem"])
             self.run(
                 ["nix-env", "--profile", str(self.profile), "--set", previous],
@@ -570,6 +657,7 @@ def main():
     start.add_argument("system")
     start.add_argument("--expected-system")
     start.add_argument("--expected-profile")
+    start.add_argument("--secrets")
     rollback = commands.add_parser("rollback")
     rollback.add_argument("id")
     worker = commands.add_parser("worker")
@@ -613,6 +701,7 @@ def main():
                 rollback=args.command == "rollback",
                 expected_system=getattr(args, "expected_system", None),
                 expected_profile=getattr(args, "expected_profile", None),
+                secrets=getattr(args, "secrets", None),
             )
         print(json.dumps(result))
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:

@@ -259,6 +259,8 @@
 
       modules = ./src/modules;
 
+      nixosModules.machines = ./src/modules/machines/nixos.nix;
+
       templates =
         let
 

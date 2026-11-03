@@ -249,17 +249,10 @@ if devenv machines install --use-machines-as-builders nohost 2>err.log; then
 fi
 grep -q "does not have .target.host. set" err.log
 
-# 26. SecretSpec bootstrap metadata exposes only its reference and file
-#     metadata, never the secret value itself.
-devenv eval 'machinesMeta.secretful.secrets' \
-  | jq -e '.["machinesMeta.secretful.secrets"] == [
-      {
-        "mode": "0644",
-        "owner": "0:0",
-        "secret": "SECRET_MACHINE_AGE_KEY",
-        "target": "/var/lib/sops-nix/key.txt"
-      }
-    ]'
+devenv eval 'machines.secretful.deploy.secrets' \
+  | jq -e '.["machines.secretful.deploy.secrets"] == {}'
+devenv eval 'machinesMeta.secretful.bootstrapSecrets' \
+  | jq -e '[.["machinesMeta.secretful.bootstrapSecrets"][]] == ["SECRET_MACHINE_AGE_KEY"]'
 
 # 27. A machine install withholds resolved values from Nix (the fixture's mode
 #     therefore becomes the valid 0600 instead of its normal-eval 0644), and
@@ -296,7 +289,7 @@ if devenv machines install --phases install missing-secret 2>err.log; then
   echo "expected unresolved SecretSpec reference to fail"
   exit 1
 fi
-grep -q "SecretSpec did not resolve 1 bootstrap secret reference" err.log
+grep -q "SecretSpec did not resolve 1 machine secret reference" err.log
 if grep -q "devenv inputs add disko" err.log; then
   echo "unresolved bootstrap reference was checked after the build"
   cat err.log

@@ -1,4 +1,4 @@
-{ pkgs, lib, ... }:
+{ pkgs, lib, config, ... }:
 let
   machine = system: {
     target.host = "root@install-order.invalid";
@@ -34,5 +34,18 @@ in
       ''
     );
     working = machine (pkgs.runCommand "replacement-system" { } "mkdir -p $out");
+    secrets = lib.recursiveUpdate
+      (machine (pkgs.runCommand "replacement-system-with-secrets" { } ''
+        mkdir -p $out/etc/devenv
+        cp ${pkgs.writeText "runtime-secrets.json" config.machines.secrets._nixosEval.config.environment.etc."devenv/secrets.json".text} $out/etc/devenv/secrets.json
+        cp ${pkgs.writeText "bootstrap-secrets.json" config.machines.secrets._nixosEval.config.environment.etc."devenv/bootstrap-secrets.json".text} $out/etc/devenv/bootstrap-secrets.json
+      ''))
+      {
+        nixos.devenv.secrets.RUNTIME_TOKEN.secret = "SHARED_TOKEN";
+        install.secrets = {
+          "/var/lib/first/key".secret = "SHARED_TOKEN";
+          "/var/lib/second/key".secret = "SHARED_TOKEN";
+        };
+      };
   };
 }

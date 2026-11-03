@@ -4,7 +4,9 @@ Nix/systemd effects are fake here. The separate VM test covers actual switching.
 """
 
 import importlib.util
+import json
 import multiprocessing
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -512,6 +514,104 @@ class ExecutorTests(unittest.TestCase):
         self.assertEqual(state["outcome"], "rollback-failed")
         self.assertIn("error", state)
         self.assertIn("rollbackError", state)
+
+    def declare(self, system, *names):
+        manifest = Path(system) / deploy.SECRETS_MANIFEST
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            json.dumps({"version": 1, "secrets": {name: name for name in names}})
+        )
+
+    def stage(self, set_id, *names):
+        staged = self.executor.secrets / set_id
+        staged.mkdir(parents=True)
+        for name in names:
+            (staged / (name + ".cred")).write_text("sealed")
+
+    def current_secrets(self):
+        return os.readlink(self.executor.secrets / "current")
+
+    def start_with_secrets(self, request_id, set_id):
+        return self.executor.start(
+            request_id, self.new, self.executable, secrets=set_id
+        )
+
+    def test_secrets_switch_with_deployment_and_explicit_rollback(self):
+        self.declare(self.new, "DB_PASSWORD")
+        self.stage("old", "DB_PASSWORD")
+        self.executor.point_secrets("old")
+        self.stage("new", "DB_PASSWORD")
+        self.start_with_secrets("first", "new")
+        self.assertEqual(self.current_secrets(), "old")
+        self.finish()
+        self.assertEqual(self.current_secrets(), "new")
+        self.start("second", rollback=True)
+        self.finish("second")
+        self.assertEqual(self.current_secrets(), "old")
+        self.assertEqual(str(self.running.resolve()), self.old)
+
+    def test_unconfirmed_deployment_restores_previous_secrets(self):
+        self.declare(self.new, "DB_PASSWORD")
+        self.stage("new", "DB_PASSWORD")
+        self.start_with_secrets("first", "new")
+        self.finish(confirm=False)
+        self.assertEqual(self.current_secrets(), "new")
+        self.expire()
+        self.assertEqual(self.executor.status()["outcome"], "rolled-back")
+        self.assertFalse((self.executor.secrets / "current").is_symlink())
+
+    def test_reboot_recovery_restores_previous_secrets(self):
+        self.declare(self.new, "DB_PASSWORD")
+        self.stage("old", "DB_PASSWORD")
+        self.executor.point_secrets("old")
+        self.stage("new", "DB_PASSWORD")
+        self.start_with_secrets("first", "new")
+        self.finish(confirm=False)
+        self.boot.write_text("boot-two")
+        self.executor.recover(self.executable)
+        self.executor.boot_worker("first")
+        self.assertEqual(self.current_secrets(), "old")
+
+    def test_declared_secrets_require_a_complete_staged_set(self):
+        self.declare(self.new, "DB_PASSWORD", "API_TOKEN")
+        with self.assertRaisesRegex(RuntimeError, "not staged"):
+            self.start()
+        self.stage("partial", "DB_PASSWORD")
+        with self.assertRaisesRegex(RuntimeError, "incomplete"):
+            self.start_with_secrets("first", "partial")
+        with self.assertRaisesRegex(RuntimeError, "invalid secret set"):
+            self.start_with_secrets("first", "../escape")
+        self.assertIsNone(self.executor.read())
+        self.assertEqual(self.calls, [])
+
+    def test_deployment_without_secrets_keeps_current_set(self):
+        self.stage("old", "DB_PASSWORD")
+        self.executor.point_secrets("old")
+        self.start()
+        self.finish()
+        self.assertEqual(self.current_secrets(), "old")
+
+    def test_start_prunes_sets_outside_the_transaction(self):
+        self.declare(self.new, "DB_PASSWORD")
+        for set_id in ("older", "old", "abandoned", "new"):
+            self.stage(set_id, "DB_PASSWORD")
+        (self.executor.secrets / ".staging-interrupted").mkdir()
+        self.executor.point_secrets("old")
+        self.start_with_secrets("first", "new")
+        self.assertEqual(
+            sorted(entry.name for entry in self.executor.secrets.iterdir()),
+            ["current", "new", "old"],
+        )
+        self.assertEqual(self.executor.read()["previousSecrets"], "old")
+        self.assertEqual(self.executor.read()["requestedSecrets"], "new")
+
+    def test_redelivery_with_another_secret_set_is_rejected(self):
+        self.declare(self.new, "DB_PASSWORD")
+        self.stage("one", "DB_PASSWORD")
+        self.start_with_secrets("first", "one")
+        self.stage("two", "DB_PASSWORD")
+        with self.assertRaisesRegex(RuntimeError, "different request"):
+            self.start_with_secrets("first", "two")
 
 
 if __name__ == "__main__":
