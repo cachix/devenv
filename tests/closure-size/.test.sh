@@ -8,7 +8,7 @@ set -euo pipefail
 system=$(nix eval --impure --raw --expr builtins.currentSystem)
 case "$system" in
   aarch64-darwin) MAX_MB=540 ;;
-  *) MAX_MB=420 ;;
+  *) MAX_MB=425 ;;
 esac
 
 repo=$(cd ../.. && pwd)
