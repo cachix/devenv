@@ -29,7 +29,7 @@ _nix_direnv_preflight () {
     mkdir -p "$layout_dir"
   fi
 
-  export DEVENV_DIRENVRC_VERSION=2
+  export DEVENV_DIRENVRC_VERSION=3
   export DEVENV_DIRENVRC_ROLLING_UPGRADE=0
 }
 
@@ -116,7 +116,7 @@ use_devenv() {
 
   # Watch default files even if build fails (so fixes trigger reload)
   watch_file ".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc"
-  watch_file "devenv.nix" "devenv.lock" "devenv.yaml" "devenv.local.nix" "devenv.local.yaml"
+  watch_file "devenv.nix" "devenv.lock" "devenv.yaml" "devenv.local.nix" "devenv.local.yaml" "secretspec.toml"
 
   # Keep watching the previous dependency set so edits can recover from failed evals.
   # DEVENV_DOTFILE is available from the previously-loaded environment.

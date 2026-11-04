@@ -180,6 +180,9 @@ pub struct DevenvOptions {
     /// evaluation. Machine installs disable this so bootstrap credentials stay
     /// on the CLI side of the Nix/Rust boundary.
     pub expose_secretspec_values_to_nix: bool,
+    /// Process whose exit revokes anonymous `as_path` files. `None` discovers
+    /// the consuming shell automatically for environment exports.
+    pub secretspec_file_owner: Option<u32>,
     /// Whether a `devenv.nix` project file is required. Commands that operate
     /// outside of a project (e.g. `gc`) set this to `false` so they can run
     /// from any directory.
@@ -241,6 +244,7 @@ impl Default for DevenvOptions {
             shell_cwd: None,
             is_testing: false,
             expose_secretspec_values_to_nix: true,
+            secretspec_file_owner: Some(std::process::id()),
             require_project_file: true,
         }
     }
@@ -485,6 +489,7 @@ pub struct Devenv {
 
     // Secretspec resolved data to pass to Nix
     secretspec: OnceCell<ResolvedSecrets>,
+    secret_files: crate::secret_files::SecretFiles,
     // Port allocator shared with the backend for holding port reservations.
     port_allocator: Arc<PortAllocator>,
 
@@ -578,6 +583,7 @@ impl Devenv {
         let cache_settings = options.cache_settings;
         let secret_settings = options.secret_settings;
         let expose_secretspec_values_to_nix = options.expose_secretspec_values_to_nix;
+        let secret_files = crate::secret_files::SecretFiles::new(options.secretspec_file_owner);
         let devenv_dot_gc = devenv_dotfile.join("gc");
 
         // TMPDIR for build artifacts - should NOT use XDG_RUNTIME_DIR as that's
@@ -694,6 +700,7 @@ impl Devenv {
                 &secret_settings,
                 &mut secretspec_cell,
                 &mut secretspec_as_paths,
+                &secret_files,
             )?;
         }
         let secretspec_provider_override = secret_settings
@@ -901,6 +908,7 @@ impl Devenv {
             eval_cache_pool,
             eval_inputs,
             secretspec: secretspec_cell,
+            secret_files,
             port_allocator,
             native_api_server: OnceCell::new(),
             shutdown,
@@ -986,6 +994,12 @@ impl Devenv {
     /// project root was discovered in a parent directory.
     pub fn shell_cwd(&self) -> Option<&Path> {
         self.shell_cwd.as_deref()
+    }
+
+    /// Keep anonymous files alive after exporting their paths or exec'ing a
+    /// command, until the consuming process exits.
+    pub fn handoff_secret_files(&self) -> Result<()> {
+        self.secret_files.handoff()
     }
 
     /// The options this instance was built from.
@@ -3402,6 +3416,7 @@ impl Devenv {
             std::time::Duration::from_secs(120),
         )
         .await?;
+        self.secret_files.handoff_to(Some(child.id()))?;
 
         let pid = std::fs::read_to_string(&pid_file)
             .map(|s| s.trim().to_string())
@@ -3889,6 +3904,10 @@ impl Devenv {
         )
         .await?;
 
+        // Reload swaps the Devenv instance while already-running commands can
+        // still hold paths from its old environment. Successful environments
+        // retain those files until the owning process exits.
+        self.secret_files.retain_for_current_process()?;
         Ok(DevEnv {
             output: env.bash_env,
         })
@@ -4409,6 +4428,7 @@ fn resolve_secretspec_into(
     secret_settings: &SecretSettings,
     cell: &mut OnceCell<ResolvedSecrets>,
     as_paths: &mut HashSet<String>,
+    secret_files: &crate::secret_files::SecretFiles,
 ) -> Result<()> {
     let secretspec_path = devenv_root.join("secretspec.toml");
     if !secretspec_path.exists() {
@@ -4455,6 +4475,7 @@ fn resolve_secretspec_into(
 
     let mut secrets = secretspec::Secrets::load_from(&secretspec_path)
         .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
+    secret_files.configure(&mut secrets);
 
     if let Some(ref provider_str) = provider {
         secrets.set_provider(provider_str);
@@ -4476,20 +4497,20 @@ fn resolve_secretspec_into(
         }
     };
 
-    as_paths.extend(
-        validated_secrets
-            .resolution
-            .iter()
-            .filter(|resolution| resolution.as_path)
-            .map(|resolution| resolution.name.clone()),
-    );
+    let as_path_names: HashSet<String> = validated_secrets
+        .resolution
+        .iter()
+        .filter(|resolution| resolution.as_path)
+        .map(|resolution| resolution.name.clone())
+        .collect();
+    as_paths.extend(as_path_names.iter().cloned());
 
     let resolved_secrets = validated_secrets
         .resolved
         .secrets
         .iter()
         .map(|(key, value)| Ok((key.clone(), secretspec_text(key, value.expose_secret())?)))
-        .collect::<Result<_>>()?;
+        .collect::<Result<HashMap<_, _>>>()?;
     let resolved = validated_secrets.into_resolved(resolved_secrets);
 
     cell.set(resolved)
@@ -4906,6 +4927,7 @@ mod tests {
         assert_eq!(token.as_deref(), Some("test-token"));
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn project_secretspec_records_and_retains_as_path_values() {
         let root = tempfile::tempdir().expect("create project root");
@@ -4933,8 +4955,14 @@ BOOTSTRAP_KEY = { description = "bootstrap key", as_path = true }
         let mut cell = OnceCell::new();
         let mut as_paths = HashSet::new();
 
-        resolve_secretspec_into(root.path(), &settings, &mut cell, &mut as_paths)
-            .expect("resolve project SecretSpec");
+        resolve_secretspec_into(
+            root.path(),
+            &settings,
+            &mut cell,
+            &mut as_paths,
+            &crate::secret_files::SecretFiles::new(Some(std::process::id())),
+        )
+        .expect("resolve project SecretSpec");
 
         assert!(as_paths.contains("BOOTSTRAP_KEY"));
         let path = PathBuf::from(&cell.get().unwrap().secrets["BOOTSTRAP_KEY"]);

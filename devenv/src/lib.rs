@@ -17,6 +17,7 @@ pub mod terminal;
 pub mod tracing;
 pub mod user_config;
 pub use devenv_processes as processes;
+mod secret_files;
 mod util;
 
 pub use devenv::{
