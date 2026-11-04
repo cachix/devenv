@@ -168,6 +168,21 @@ fn respond_for(listener: &TcpListener, hostname: &str, scheme: &str) {
 }
 
 #[test]
+fn status_reports_configured_listeners() {
+    for https in [false, true] {
+        let proxy = Proxy::start_with_https(https);
+        let response = request(
+            &proxy.directory.path().join("proxy.sock"),
+            &ControlRequest::Status,
+        )
+        .unwrap();
+        assert!(matches!(response, devenv_proxy::ControlResponse::Info {
+            pid, listen: Some(http), https_listen
+        } if pid == proxy.child.id() && http == proxy.address && https_listen == proxy.https_address));
+    }
+}
+
+#[test]
 fn proxies_to_either_loopback_family_and_prefers_the_registered_address() {
     let proxy = Proxy::start();
     for (register_ipv6, listen_ipv4, listen_ipv6) in [
