@@ -194,7 +194,7 @@ let
     set -euo pipefail
     mkdir -p ${q runtimeDir}
     ${setupScript}/bin/setup-postgres
-    exec ${postgresPkg}/bin/postgres
+    exec ${postgresPkg}/bin/postgres "$@"
   '';
 in
 {
