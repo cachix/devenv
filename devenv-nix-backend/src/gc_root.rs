@@ -52,14 +52,18 @@ pub(crate) fn ensure_gc_root(
         Err(error) => return Err(miette!("Failed to inspect existing GC root: {}", error)),
         Ok(metadata) if !metadata.file_type().is_symlink() => GcRootOutcome::Invalid,
         Ok(_) => {
-            let target = std::fs::read_link(gc_root)
-                .map_err(|e| miette!("Failed to read existing GC root: {}", e))?;
-            if target == Path::new(&logical_path) {
-                GcRootOutcome::Unchanged
-            } else if is_in_store(&target, &storedir) {
-                GcRootOutcome::Replaced
-            } else {
-                GcRootOutcome::Invalid
+            match std::fs::read_link(gc_root) {
+                Ok(target) if target == Path::new(&logical_path) => GcRootOutcome::Unchanged,
+                Ok(target) if is_in_store(&target, &storedir) => GcRootOutcome::Replaced,
+                Ok(_) => GcRootOutcome::Invalid,
+                // Concurrent creator/remover won the race between inspect and
+                // read; treat already-gone as a fresh create (#3133).
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    GcRootOutcome::Created
+                }
+                Err(error) => {
+                    return Err(miette!("Failed to read existing GC root: {}", error));
+                }
             }
         }
     };
@@ -68,8 +72,12 @@ pub(crate) fn ensure_gc_root(
     if outcome == GcRootOutcome::Invalid {
         match std::fs::remove_file(gc_root) {
             Ok(()) => {}
+            // Concurrent `devenv` processes can both observe an invalid entry
+            // and race on `remove_file`; treat `NotFound` as success (#3133).
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(miette!("Failed to remove existing GC root: {}", error)),
+            Err(error) => {
+                return Err(miette!("Failed to remove existing GC root: {}", error));
+            }
         }
     }
     store
