@@ -6,10 +6,13 @@
 let
   cfg = config.languages.vhdl;
   compilerPackages = {
-    ghdl-gcc = pkgs.ghdl-gcc;
-    ghdl-llvm = pkgs.ghdl-llvm;
-    ghdl-mcode = pkgs.ghdl-mcode;
-    nvc = pkgs.nvc;
+    inherit
+      (pkgs)
+      ghdl-gcc
+      ghdl-llvm
+      ghdl-mcode
+      nvc
+      ;
   };
   defaultPackageText =
     if pkgs.stdenv.isDarwin
@@ -18,7 +21,7 @@ let
 in
 {
   options.languages.vhdl = {
-    enable = lib.mkEnableOption "tools for VHDL Development";
+    enable = lib.mkEnableOption "tools for VHDL Development.";
     compiler = lib.mkOption {
       type = lib.types.enum (builtins.attrNames compilerPackages);
       default =
@@ -27,10 +30,6 @@ in
         else "ghdl-gcc";
       description = ''
         The VHDL compiler to use.
-        - ghdl-gcc: GHDL with GCC backend
-        - ghdl-llvm: GHDL with LLVM backend
-        - ghdl-mcode: GHDL with built-in mcode backend
-        - nvc: VHDL compiler and simulator
       '';
     };
     package = lib.mkOption {
@@ -41,12 +40,9 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "VHDL Language Server" // { default = true; };
-      package = lib.mkOption {
-        type = lib.types.package;
-        default = pkgs.vhdl-ls;
-        defaultText = lib.literalExpression "pkgs.vhdl-ls";
-        description = ''
+      enable = lib.mkEnableOption "VHDL Language Server." // { default = cfg.enable; };
+      package = lib.mkPackageOption pkgs "vhdl-ls" {
+        extraDescription = ''
           The VHDL language server package to use.
 
           You can see this example of [vhdl-ls configuration](https://github.com/VHDL-LS/rust_hdl#example-vhdl_lstoml--quickstart) to start.
