@@ -1,7 +1,7 @@
 { pkgs, lib, config, ... }:
 
 let
-  cfg = config.integrations.gitnr;
+  cfg = config.gitnr;
 
   ignoreFileSubmodule = { ... }: {
     options = {
@@ -92,7 +92,7 @@ let
   fileExecs = lib.filter (s: s != "") (lib.mapAttrsToList mkFileExec cfg);
 in
 {
-  options.integrations.gitnr = lib.mkOption {
+  options.gitnr = lib.mkOption {
     type = lib.types.attrsOf (lib.types.submodule ignoreFileSubmodule);
     default = { };
     example = lib.literalExpression ''
