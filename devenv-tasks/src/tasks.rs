@@ -1,5 +1,6 @@
 use crate::config::{Config, RunMode, parse_dependency};
 use crate::error::Error;
+use crate::process_owner::ProcessOwner;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
@@ -28,6 +29,7 @@ pub struct TasksBuilder {
     db_path: Option<PathBuf>,
     shutdown: Arc<tokio_shutdown::Shutdown>,
     refresh_task_cache: bool,
+    process_owner: Option<Arc<ProcessOwner>>,
 }
 
 impl TasksBuilder {
@@ -43,6 +45,7 @@ impl TasksBuilder {
             db_path: None,
             shutdown,
             refresh_task_cache: false,
+            process_owner: None,
         }
     }
 
@@ -55,6 +58,16 @@ impl TasksBuilder {
     /// Force a refresh of the task cache, skipping cache reads
     pub fn with_refresh_task_cache(mut self, refresh_task_cache: bool) -> Self {
         self.refresh_task_cache = refresh_task_cache;
+        self
+    }
+
+    /// Hand process tasks to an already-running native manager instead of
+    /// launching them in this runner. Process nodes stay in the schedule and
+    /// keep their typed dependency edges; the owner starts them, and edges on
+    /// them are judged against the owner's live dependency state. Nothing the
+    /// owner runs is registered with, or stopped by, this runner.
+    pub fn with_process_owner(mut self, owner: Arc<ProcessOwner>) -> Self {
+        self.process_owner = Some(owner);
         self
     }
 
@@ -91,6 +104,15 @@ impl TasksBuilder {
         let notify_finished = Arc::new(Notify::new());
         pm.set_task_notify(Arc::clone(&notify_finished));
         let process_runner = Arc::new(pm);
+
+        // External managers launch every process themselves, one wrapper per
+        // process, so there is nothing to hand to an owner.
+        let process_owner = self
+            .process_owner
+            .filter(|_| supervisor == SupervisionMode::Native);
+        if let Some(owner) = &process_owner {
+            owner.watch(Arc::clone(&notify_finished));
+        }
 
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
@@ -144,6 +166,7 @@ impl TasksBuilder {
             outputs: Arc::new(Mutex::new(Outputs::new())),
             exit_on_idle,
             supervisor,
+            process_owner,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -206,6 +229,27 @@ pub struct Tasks {
     pub(crate) exit_on_idle: bool,
     /// Selects native or external lifecycle policy for registered processes.
     pub(crate) supervisor: devenv_processes::SupervisionMode,
+    /// Running manager that owns process tasks for this run, if any.
+    pub(crate) process_owner: Option<Arc<ProcessOwner>>,
+}
+
+/// Where dependency edges on process tasks are evaluated: the runner that
+/// launched them, or the running manager that owns them.
+#[derive(Clone)]
+pub(crate) struct ProcessStates {
+    runner: Arc<ProcessRunner>,
+    owner: Option<Arc<ProcessOwner>>,
+}
+
+#[cfg(test)]
+impl ProcessStates {
+    /// Edges judged against a runner that launched its own processes.
+    fn local(runner: &Arc<ProcessRunner>) -> Self {
+        Self {
+            runner: Arc::clone(runner),
+            owner: None,
+        }
+    }
 }
 
 /// Shared dependency evaluation for waiting and parked-state checks.
@@ -242,6 +286,13 @@ impl Tasks {
         &self.process_runner
     }
 
+    fn process_states(&self) -> ProcessStates {
+        ProcessStates {
+            runner: Arc::clone(&self.process_runner),
+            owner: self.process_owner.clone(),
+        }
+    }
+
     /// Connect a capability broker before the task runner is shared or run.
     /// This lets callers validate the task graph before prompting for sudo.
     pub fn set_capability_broker(&mut self, path: &Path) -> miette::Result<()> {
@@ -271,14 +322,22 @@ impl Tasks {
                 // always wins below: it is the graph-owned launch outcome.
                 TaskStatus::Pending if task_state.task.r#type == TaskType::Process => {
                     let pname = crate::types::process_name(&task_state.task.name);
-                    match self.process_runner.get_phase(pname).await {
+                    let (phase, exit_status) = match &self.process_owner {
+                        Some(owner) => match owner.state(pname).await {
+                            Some(info) => (info.phase, info.exit_status),
+                            None => (None, None),
+                        },
+                        None => (
+                            self.process_runner.get_phase(pname).await,
+                            self.process_runner.get_exit_status(pname).await,
+                        ),
+                    };
+                    match phase {
                         Some(ProcessPhase::NotStarted | ProcessPhase::Stopped) => {
                             status.skipped += 1
                         }
                         Some(ProcessPhase::Exited) => {
-                            if self.process_runner.get_exit_status(pname).await
-                                == Some(ExitStatus::Failure)
-                            {
+                            if exit_status == Some(ExitStatus::Failure) {
                                 status.failed += 1;
                                 if self.is_soft_failure(index, &scheduled) {
                                     status.soft_failed += 1;
@@ -815,14 +874,13 @@ impl Tasks {
             let task_state = Arc::clone(&self.graph[index]);
             let notify_finished = Arc::clone(&self.notify_finished);
             let process_runner = Arc::clone(&self.process_runner);
+            let states = self.process_states();
             let shutdown = Arc::clone(&self.shutdown);
             let process_name = name.clone();
 
             // Detached waiters keep unsatisfied starts visible without blocking replies.
             tokio::spawn(async move {
-                match Self::wait_for_task_deps(&deps, &process_runner, &notify_finished, &shutdown)
-                    .await
-                {
+                match Self::wait_for_task_deps(&deps, &states, &notify_finished, &shutdown).await {
                     DependencyWaitOutcome::Ready => {}
                     outcome => {
                         process_runner.cancel_waiting(&process_name).await;
@@ -1078,7 +1136,7 @@ impl Tasks {
             let notify_ui = Arc::clone(&self.notify_ui);
             let cache = Arc::new(self.cache.clone());
             let shutdown = Arc::clone(&self.shutdown);
-            let process_runner = Arc::clone(&self.process_runner);
+            let states = self.process_states();
             let refresh_task_cache = self.refresh_task_cache;
             let shell_env = self.env.clone();
             let task_activity_id = next_id();
@@ -1092,7 +1150,7 @@ impl Tasks {
                     notify_ui,
                     cache,
                     shutdown,
-                    process_runner,
+                    states,
                     task_activity_id,
                     refresh_task_cache,
                     shell_env,
@@ -1111,12 +1169,12 @@ impl Tasks {
         notify_ui: Arc<Notify>,
         cache: Arc<TaskCache>,
         shutdown: Arc<tokio_shutdown::Shutdown>,
-        process_runner: Arc<ProcessRunner>,
+        states: ProcessStates,
         task_activity_id: u64,
         refresh_task_cache: bool,
         shell_env: HashMap<String, String>,
     ) {
-        match Self::wait_for_task_deps(&deps, &process_runner, &notify_finished, &shutdown).await {
+        match Self::wait_for_task_deps(&deps, &states, &notify_finished, &shutdown).await {
             DependencyWaitOutcome::Ready => {}
             outcome => {
                 let task_name = task_state.read().await.task.name.clone();
@@ -1241,7 +1299,7 @@ impl Tasks {
     async fn eval_dep(
         dep_state: &Arc<RwLock<TaskState>>,
         dep_kind: &DependencyKind,
-        process_runner: &Arc<ProcessRunner>,
+        states: &ProcessStates,
     ) -> DepEval {
         let dep_guard = dep_state.read().await;
         tracing::trace!(
@@ -1250,10 +1308,15 @@ impl Tasks {
             dep_guard.status,
             dep_kind
         );
+        if dep_guard.task.r#type == TaskType::Process
+            && let Some(owner) = &states.owner
+        {
+            return Self::eval_owned_dep(&dep_guard, dep_kind, owner).await;
+        }
         if dep_guard.task.r#type == TaskType::Process {
             let pname = crate::types::process_name(&dep_guard.task.name);
             // Preserve terminal history hidden by an explicit stop.
-            let live_phase = process_runner.get_dependency_phase(pname).await;
+            let live_phase = states.runner.get_dependency_phase(pname).await;
             let sat = match live_phase {
                 // Live phases outrank stale terminal graph state.
                 Some(
@@ -1293,6 +1356,53 @@ impl Tasks {
         }
     }
 
+    /// Evaluate an edge on a process owned by a running manager, using the
+    /// same typed rules as a local process against the owner's dependency
+    /// phase, which preserves a terminal result across an explicit stop.
+    async fn eval_owned_dep(
+        dep_guard: &TaskState,
+        dep_kind: &DependencyKind,
+        owner: &ProcessOwner,
+    ) -> DepEval {
+        let task_name = dep_guard.task.name.clone();
+        // Local outcomes (unknown to the owner, failed start, unmet or
+        // cancelled prerequisites) are conclusive: the owner never ran it.
+        if let TaskStatus::Completed(_) = &dep_guard.status {
+            return DepEval {
+                task_name,
+                sat: crate::types::is_dep_satisfied(&dep_guard.status, dep_kind),
+                live_phase: None,
+                dep_in_flight: false,
+            };
+        }
+        let pname = crate::types::process_name(&dep_guard.task.name);
+        let (sat, live_phase) = match owner.state(pname).await {
+            // Not handed to the owner yet: its own prerequisites are still
+            // pending in this run, exactly like a locally `Waiting` process.
+            None => (DepSatisfaction::NotYet, Some(ProcessPhase::Waiting)),
+            Some(info) => match info.phase {
+                Some(phase) => (
+                    crate::types::is_process_dep_satisfied(phase, dep_kind),
+                    Some(phase),
+                ),
+                // The owner dropped the process; nothing will start it.
+                None => (DepSatisfaction::NeverSatisfiable, None),
+            },
+        };
+        // A manager that went away cannot make further progress.
+        let sat = if sat == DepSatisfaction::NotYet && owner.is_lost() {
+            DepSatisfaction::NeverSatisfiable
+        } else {
+            sat
+        };
+        DepEval {
+            task_name,
+            sat,
+            live_phase,
+            dep_in_flight: false,
+        }
+    }
+
     /// Whether every unsatisfied dependency needs external action.
     /// Running and unknown dependencies are conservatively treated as progressing.
     pub async fn dependency_parked(&self, process_name: &str) -> bool {
@@ -1310,8 +1420,9 @@ impl Tasks {
                 return false;
             };
             let mut any_blocker = false;
+            let states = self.process_states();
             for (dep_state, dep_kind) in self.collect_deps(index) {
-                let eval = Self::eval_dep(&dep_state, &dep_kind, &self.process_runner).await;
+                let eval = Self::eval_dep(&dep_state, &dep_kind, &states).await;
                 // Terminal failures settle the waiter; only unresolved edges can park it.
                 if eval.sat != DepSatisfaction::NotYet {
                     continue;
@@ -1337,7 +1448,7 @@ impl Tasks {
     /// Wait for dependencies; concurrent shutdown takes precedence over failure.
     async fn wait_for_task_deps(
         deps: &[(Arc<RwLock<TaskState>>, DependencyKind)],
-        process_runner: &Arc<ProcessRunner>,
+        states: &ProcessStates,
         notify_finished: &Notify,
         shutdown: &tokio_shutdown::Shutdown,
     ) -> DependencyWaitOutcome {
@@ -1358,9 +1469,7 @@ impl Tasks {
             let mut all_satisfied = true;
 
             for (dep_state, dep_kind) in deps {
-                let satisfaction = Self::eval_dep(dep_state, dep_kind, process_runner)
-                    .await
-                    .sat;
+                let satisfaction = Self::eval_dep(dep_state, dep_kind, states).await.sat;
                 // eval_dep awaits task and manager locks. Shutdown may have
                 // arrived while those were contended; preserve cancellation
                 // precedence before interpreting the dependency result.
@@ -1393,6 +1502,136 @@ impl Tasks {
         }
     }
 
+    /// Drive a process node owned by a running manager. After this run's
+    /// prerequisites of the node are met, the owner is asked to start it,
+    /// unless its live or terminal state is what dependents should be judged
+    /// against; from then on dependents read the owner's state. Returns the
+    /// node's local outcome when it never reached the owner.
+    #[allow(clippy::too_many_arguments)]
+    async fn run_owned_process(
+        task_state: &Arc<RwLock<TaskState>>,
+        deps: &[(Arc<RwLock<TaskState>>, DependencyKind)],
+        owner: &ProcessOwner,
+        explicit: bool,
+        wanted: bool,
+        states: &ProcessStates,
+        notify_finished: &Notify,
+        shutdown: &tokio_shutdown::Shutdown,
+        task_activity_id: u64,
+    ) -> Option<TaskCompleted> {
+        let (task_name, requires_ready_wait) = {
+            let ts = task_state.read().await;
+            (ts.task.name.clone(), process_has_ready_config(&ts.task))
+        };
+        let pname = crate::types::process_name(&task_name).to_string();
+
+        let dep_outcome = Self::wait_for_task_deps(deps, states, notify_finished, shutdown).await;
+        let activity = devenv_activity::start!(Activity::task(&task_name).id(task_activity_id));
+        match dep_outcome {
+            DependencyWaitOutcome::Ready => {}
+            DependencyWaitOutcome::Cancelled => {
+                activity.cancel();
+                return Some(TaskCompleted::Cancelled(None));
+            }
+            DependencyWaitOutcome::DependencyFailed => {
+                activity.dependency_failed();
+                return Some(TaskCompleted::DependencyFailed);
+            }
+        }
+
+        let failed = |error: String| {
+            error!(task = %task_name, %error, "process owned by the running manager failed");
+            activity.fail();
+            Some(TaskCompleted::Failed(
+                std::time::Duration::ZERO,
+                TaskFailure {
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    error,
+                },
+            ))
+        };
+
+        let current = match owner.query(std::slice::from_ref(&pname)).await {
+            Ok(infos) => infos.into_iter().next().and_then(|info| info.phase),
+            Err(e) => return failed(format!("Failed to query the running process manager: {e}")),
+        };
+        // An explicitly requested process is (re)started like `devenv
+        // processes start`. A dependency is started only when the owner has
+        // neither a live process nor a terminal result for it: an exited
+        // worker's completion satisfies `@completed` instead of re-running it.
+        let start = explicit
+            || (wanted
+                && matches!(
+                    current,
+                    None | Some(ProcessPhase::NotStarted | ProcessPhase::Stopped)
+                ));
+        if start {
+            let outcome = tokio::select! {
+                biased;
+                // Dropping the request leaves the owner's work running.
+                _ = shutdown.wait_for_shutdown() => {
+                    activity.cancel();
+                    return Some(TaskCompleted::Cancelled(None));
+                }
+                outcome = owner.start(&pname) => outcome,
+            };
+            match outcome {
+                Err(e) => {
+                    return failed(format!(
+                        "Failed to start process on the running process manager: {e}"
+                    ));
+                }
+                Ok(outcome) if outcome.unknown.contains(&pname) => {
+                    return failed(format!(
+                        "Process '{pname}' is not known to the running process manager (it was \
+                         started with a different configuration). Restart it with \
+                         `devenv processes down` and `devenv up -d` to pick up configuration changes"
+                    ));
+                }
+                Ok(outcome) if outcome.failed.contains(&pname) => {
+                    return failed(format!(
+                        "The running process manager failed to schedule process '{pname}'"
+                    ));
+                }
+                Ok(outcome) if outcome.scheduled.contains(&pname) => {
+                    activity.log("started by the running process manager");
+                }
+                Ok(_) => activity.log("already running in the process manager"),
+            }
+        } else if let Some(phase) = current {
+            activity.log(format!("using the running process manager ({phase})"));
+        }
+
+        if let Err(e) = owner.arm(&pname, notify_finished).await {
+            return failed(format!("Failed to query the running process manager: {e}"));
+        }
+
+        // Like a local launch, a readiness-gated process settles its node
+        // once it is ready or can no longer become ready.
+        if requires_ready_wait {
+            loop {
+                let notified = notify_finished.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                let phase = owner.state(&pname).await.and_then(|info| info.phase);
+                match phase {
+                    Some(ProcessPhase::Waiting | ProcessPhase::Starting) if !owner.is_lost() => {}
+                    Some(ProcessPhase::GaveUp) => {
+                        activity.fail();
+                        break;
+                    }
+                    _ => break,
+                }
+                tokio::select! {
+                    _ = notified => {}
+                    _ = shutdown.wait_for_shutdown() => break,
+                }
+            }
+        }
+        None
+    }
+
     async fn run_internal(
         &self,
         orchestration_activity: Arc<Activity>,
@@ -1415,7 +1654,11 @@ impl Tasks {
         // Long-lived runners register the full graph for later dynamic starts.
         // Transient task runners expose only their cold schedule.
         let mut process_configs: HashMap<NodeIndex, ProcessConfig> = HashMap::new();
-        let process_indices: Vec<_> = if register_unscheduled_processes {
+        let process_indices: Vec<_> = if self.process_owner.is_some() {
+            // The owner launches and supervises them; this runner must
+            // neither start a second copy nor stop them when it finishes.
+            Vec::new()
+        } else if register_unscheduled_processes {
             self.graph.node_indices().collect()
         } else {
             self.tasks_order.clone()
@@ -1493,7 +1736,8 @@ impl Tasks {
         let mut task_infos = Vec::new();
         for &index in &self.tasks_order {
             let state = self.graph[index].read().await;
-            let is_process = state.task.r#type == TaskType::Process;
+            // Owned processes are shown as the task handing them to the owner.
+            let is_process = state.task.r#type == TaskType::Process && self.process_owner.is_none();
             let id = if is_process {
                 let name = crate::types::process_name(&state.task.name);
                 let Some(id) = self.process_runner.activity_id(name).await else {
@@ -1551,6 +1795,64 @@ impl Tasks {
 
             // Run the task
 
+            if is_process_task && let Some(owner) = &self.process_owner {
+                let deps = self.collect_scheduled_deps(*index, &scheduled);
+                let explicit = self.roots.contains(index);
+                // Mirror the local launch policy: a process pulled in only as
+                // a downstream of an After/All root keeps `start.enable`;
+                // one a scheduled task depends on is started regardless.
+                let wanted = self
+                    .graph
+                    .edges(*index)
+                    .any(|edge| scheduled.contains(&edge.target()))
+                    || task_state
+                        .read()
+                        .await
+                        .task
+                        .process
+                        .as_ref()
+                        .is_none_or(|process| process.start.enable);
+                let task_state_clone = Arc::clone(task_state);
+                let owner = Arc::clone(owner);
+                let states = self.process_states();
+                let notify_finished_clone = Arc::clone(&self.notify_finished);
+                let notify_ui_clone = Arc::clone(&self.notify_ui);
+                let shutdown_clone = Arc::clone(&self.shutdown);
+                let orchestration_activity_clone = Arc::clone(&orchestration_activity);
+                let completed_tasks_clone = Arc::clone(&completed_tasks);
+
+                running_tasks.spawn(move || {
+                    let orchestration_activity_inner = Arc::clone(&orchestration_activity_clone);
+                    async move {
+                        let local_outcome = Self::run_owned_process(
+                            &task_state_clone,
+                            &deps,
+                            &owner,
+                            explicit,
+                            wanted,
+                            &states,
+                            &notify_finished_clone,
+                            &shutdown_clone,
+                            task_activity_id,
+                        )
+                        .await;
+                        if let Some(completed) = local_outcome {
+                            task_state_clone.write().await.status =
+                                TaskStatus::Completed(completed);
+                        }
+                        Self::signal_task_done(
+                            &completed_tasks_clone,
+                            total_tasks,
+                            &orchestration_activity_inner,
+                            &notify_finished_clone,
+                            &notify_ui_clone,
+                        );
+                    }
+                    .in_activity(&orchestration_activity_clone)
+                });
+                continue;
+            }
+
             if is_process_task {
                 // Process task: spawn into background with dependency checking.
                 // All process tasks were pre-registered with the process manager,
@@ -1576,6 +1878,7 @@ impl Tasks {
                 let notify_finished_clone = Arc::clone(&self.notify_finished);
                 let notify_ui_clone = Arc::clone(&self.notify_ui);
                 let process_runner_clone = self.process_runner.clone();
+                let states = self.process_states();
                 let orchestration_activity_clone = Arc::clone(&orchestration_activity);
                 let completed_tasks_clone = Arc::clone(&completed_tasks);
                 let shutdown_clone = Arc::clone(&self.shutdown);
@@ -1592,7 +1895,7 @@ impl Tasks {
                         );
                         let dep_outcome = Self::wait_for_task_deps(
                             &deps,
-                            &process_runner_clone,
+                            &states,
                             &notify_finished_clone,
                             &shutdown_clone,
                         )
@@ -1704,7 +2007,7 @@ impl Tasks {
             // TODO: remove this clone
             let cache = Arc::new(self.cache.clone());
             let shutdown_clone = Arc::clone(&self.shutdown);
-            let process_runner_clone = Arc::clone(&self.process_runner);
+            let states = self.process_states();
             let orchestration_activity_clone = Arc::clone(&orchestration_activity);
             let completed_tasks_clone = Arc::clone(&completed_tasks);
             let refresh_task_cache = self.refresh_task_cache;
@@ -1723,7 +2026,7 @@ impl Tasks {
                         notify_ui_clone.clone(),
                         cache,
                         shutdown_clone,
-                        process_runner_clone,
+                        states,
                         task_activity_id,
                         refresh_task_cache,
                         shell_env,
@@ -1779,6 +2082,17 @@ impl Tasks {
                     let mut task_state = self.graph[index].write().await;
                     task_state.status =
                         TaskStatus::Completed(TaskCompleted::Cancelled(Some(elapsed)));
+                } else if is_process && let Some(owner) = &self.process_owner {
+                    // A process already handed to its owner keeps running
+                    // there; only one this run never handed over is cancelled.
+                    if owner
+                        .state(crate::types::process_name(&task_name))
+                        .await
+                        .is_none()
+                    {
+                        let mut task_state = self.graph[index].write().await;
+                        task_state.status = TaskStatus::Completed(TaskCompleted::Cancelled(None));
+                    }
                 } else if is_process {
                     // A process never launched (no manager entry) or still live
                     // is cancelled; terminal phases stay Pending and are counted
@@ -4106,7 +4420,13 @@ mod schedule_tests {
         let shutdown = tokio_shutdown::Shutdown::new();
 
         assert_eq!(
-            Tasks::wait_for_task_deps(&deps, &manager, &Notify::new(), &shutdown).await,
+            Tasks::wait_for_task_deps(
+                &deps,
+                &ProcessStates::local(&manager),
+                &Notify::new(),
+                &shutdown
+            )
+            .await,
             DependencyWaitOutcome::DependencyFailed
         );
     }
@@ -4126,7 +4446,13 @@ mod schedule_tests {
         shutdown.shutdown();
 
         assert_eq!(
-            Tasks::wait_for_task_deps(&deps, &manager, &Notify::new(), &shutdown).await,
+            Tasks::wait_for_task_deps(
+                &deps,
+                &ProcessStates::local(&manager),
+                &Notify::new(),
+                &shutdown
+            )
+            .await,
             DependencyWaitOutcome::Cancelled
         );
     }
