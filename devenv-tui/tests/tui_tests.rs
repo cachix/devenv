@@ -1614,6 +1614,221 @@ fn test_process_preview_preserves_required_tree_continuation() {
 }
 
 #[test]
+fn test_activity_theme_colors_names_details_and_logs() {
+    let (mut model, mut ui_state) = new_test_model();
+    model.apply_activity_event(operation_start(10, "Zeta stage"));
+    model.apply_activity_event(process_start_with(
+        1,
+        "Quark",
+        Some(10),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_start_with(
+        2,
+        "Mango",
+        Some(10),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_log(2, "wombat", false));
+    model.apply_activity_event(build_start_with(3, "Xylem", Some(10)));
+    model.apply_activity_event(build_start_with(4, "Yarrow", Some(10)));
+    model.apply_activity_event(build_complete(4, ActivityOutcome::Failed));
+
+    let config = devenv_tui::UserConfig::from_yaml(
+        "config.yaml",
+        r##"version: 1
+tui:
+  theme:
+    styles:
+      activity.name: { foreground: "#101010" }
+      activity.name.process: { foreground: "#202020" }
+      activity.name.nested: { foreground: "#303030" }
+      activity.secondary: { foreground: "#404040" }
+      activity.elapsed: { foreground: "#505050" }
+      activity.log: { foreground: "#606060" }
+      activity.failed: { foreground: "#707070" }
+      activity.selection: { foreground: default, background: "#242a2f" }
+      activity.selection.secondary: { foreground: "#8b949e" }
+"##
+        .into(),
+    )
+    .unwrap();
+    ui_state.set_preferences(config.tui).unwrap();
+    ui_state.selected_activity = Some(2);
+    ui_state.toggle_inline_logs();
+
+    let render = |ui_state: &UiState| {
+        let mut element = view(&model, ui_state, RenderContext::Normal, None, false).into();
+        element.render(Some(TEST_WIDTH as usize))
+    };
+    let color_of = |canvas: &Canvas, row_text: &str, glyph: &str| {
+        let row = (0..canvas.height())
+            .find(|row| {
+                canvas
+                    .get_text(0, *row, canvas.width(), 1)
+                    .contains(row_text)
+            })
+            .unwrap_or_else(|| panic!("{row_text:?} not rendered"));
+        let cell = (0..canvas.width())
+            .filter_map(|column| canvas.cell(column, row))
+            .find(|cell| cell.text() == Some(glyph))
+            .unwrap_or_else(|| panic!("{glyph:?} not on the {row_text:?} row"));
+        (
+            cell.text_style().and_then(|style| style.color),
+            cell.background_color,
+        )
+    };
+    let rgb = |value: u8| {
+        Some(Color::Rgb {
+            r: value,
+            g: value,
+            b: value,
+        })
+    };
+
+    let canvas = render(&ui_state);
+    assert_eq!(color_of(&canvas, "Zeta stage", "Z").0, rgb(0x10));
+    assert_eq!(color_of(&canvas, "Quark", "Q").0, rgb(0x20));
+    assert_eq!(color_of(&canvas, "Xylem", "X").0, rgb(0x30));
+    assert_eq!(color_of(&canvas, "Xylem", "r").0, rgb(0x40));
+    assert_eq!(color_of(&canvas, "Xylem", "[").0, rgb(0x50));
+    assert_eq!(color_of(&canvas, "wombat", "w").0, rgb(0x60));
+    assert_eq!(color_of(&canvas, "Yarrow", "✗").0, rgb(0x70));
+
+    ui_state.selected_activity = Some(3);
+    let canvas = render(&ui_state);
+    let background = Some(Color::Rgb {
+        r: 0x24,
+        g: 0x2a,
+        b: 0x2f,
+    });
+    assert_eq!(
+        color_of(&canvas, "Xylem", "X"),
+        (Some(Color::Reset), background)
+    );
+    assert_eq!(
+        color_of(&canvas, "Xylem", "r"),
+        (
+            Some(Color::Rgb {
+                r: 0x8b,
+                g: 0x94,
+                b: 0x9e
+            }),
+            background
+        )
+    );
+
+    // Only a background: every part keeps its own color on the selected row.
+    let keep = devenv_tui::UserConfig::from_yaml(
+        "config.yaml",
+        r##"version: 1
+tui:
+  theme:
+    styles:
+      activity.name.nested: { foreground: "#303030" }
+      activity.secondary: { foreground: "#404040" }
+      activity.elapsed: { foreground: "#505050" }
+      activity.selection: { background: "#242a2f" }
+"##
+        .into(),
+    )
+    .unwrap();
+    ui_state.set_preferences(keep.tui).unwrap();
+    let canvas = render(&ui_state);
+    assert_eq!(color_of(&canvas, "Xylem", "X"), (rgb(0x30), background));
+    assert_eq!(color_of(&canvas, "Xylem", "r"), (rgb(0x40), background));
+    assert_eq!(color_of(&canvas, "Xylem", "["), (rgb(0x50), background));
+}
+
+#[test]
+fn test_activity_tree_color_applies_to_inline_log_border() {
+    let (mut model, mut ui_state) = new_test_model();
+    model.apply_activity_event(task_hierarchy(
+        vec![TaskInfo {
+            id: 1,
+            name: "Quokka".into(),
+            show_output: false,
+            is_process: false,
+        }],
+        vec![],
+    ));
+    model.apply_activity_event(task_start(1));
+    model.apply_activity_event(task_log(1, "wombat", false));
+    let config = devenv_tui::UserConfig::from_yaml(
+        "config.yaml",
+        "version: 1\ntui:\n  theme:\n    styles:\n      activity.tree:\n        foreground: \"#2d333b\"\n".into(),
+    )
+    .unwrap();
+    ui_state.set_preferences(config.tui).unwrap();
+    ui_state.selected_activity = Some(1);
+    ui_state.toggle_inline_logs();
+
+    let mut element = view(&model, &ui_state, RenderContext::Normal, None, false).into();
+    let canvas = element.render(Some(TEST_WIDTH as usize));
+    let row = (0..canvas.height())
+        .find(|row| {
+            let text = canvas.get_text(0, *row, canvas.width(), 1);
+            text.contains("wombat") && !text.contains("Quokka")
+        })
+        .expect("log line rendered");
+    let border = (0..canvas.width())
+        .filter_map(|column| canvas.cell(column, row))
+        .find(|cell| cell.text() == Some("│"))
+        .expect("border beside the log line");
+    assert_eq!(
+        border.text_style().and_then(|style| style.color),
+        Some(Color::Rgb {
+            r: 0x2d,
+            g: 0x33,
+            b: 0x3b
+        })
+    );
+}
+
+#[test]
+fn test_activity_theme_colors_tree_lines_and_selected_row() {
+    let (mut model, mut ui_state) = new_test_model();
+    model.apply_activity_event(operation_start(10, "Running processes"));
+    model.apply_activity_event(process_start_with(1, "api", Some(10), ActivityLevel::Info));
+    model.apply_activity_event(process_log(1, "listening", false));
+    model.apply_activity_event(process_start_with(
+        2,
+        "worker",
+        Some(10),
+        ActivityLevel::Info,
+    ));
+
+    let config = devenv_tui::UserConfig::from_yaml(
+        "config.yaml",
+        "version: 1\ntui:\n  theme:\n    styles:\n      activity.tree:\n        foreground: \"#2d333b\"\n      activity.selection:\n        foreground: \"#adbac7\"\n        background: \"#373e47\"\n".into(),
+    )
+    .unwrap();
+    ui_state.set_preferences(config.tui).unwrap();
+    ui_state.selected_activity = Some(1);
+    ui_state.toggle_inline_logs();
+
+    let mut element = view(&model, &ui_state, RenderContext::Normal, None, false).into();
+    let canvas = element.render(Some(TEST_WIDTH as usize));
+    let find = |text: &str| {
+        (0..canvas.height())
+            .flat_map(|row| (0..canvas.width()).map(move |column| (column, row)))
+            .find(|(column, row)| {
+                canvas.cell(*column, *row).and_then(|cell| cell.text()) == Some(text)
+            })
+            .and_then(|(column, row)| canvas.cell(column, row))
+            .unwrap_or_else(|| panic!("{text:?} not rendered"))
+    };
+    let rgb = |r, g, b| Some(Color::Rgb { r, g, b });
+    let color = |cell: &iocraft::CanvasCell| cell.text_style().and_then(|style| style.color);
+
+    assert_eq!(color(find("└")), rgb(0x2d, 0x33, 0x3b));
+    assert_eq!(color(find("│")), rgb(0x2d, 0x33, 0x3b));
+    let selected_name = find("a");
+    assert_eq!(selected_name.background_color, rgb(0x37, 0x3e, 0x47));
+    assert_eq!(color(selected_name), rgb(0xad, 0xba, 0xc7));
+}
+
+#[test]
 fn test_completed_shell_tree_collapses_into_expandable_summary() {
     let (mut model, mut ui_state) = new_test_model();
 

@@ -197,7 +197,7 @@ Set `tui.statusline.enabled: false` to hide ordinary TUI statusline content and 
 
 ## Colors and styles
 
-The `devenv` preset retains the built-in palette. `terminal` uses terminal-native colors where possible, and `none` removes preset statusline colors. Explicit styles work with every preset. Theme customization currently applies to the statusline. Activity rows, process states, and log content retain their built-in semantic colors.
+The `devenv` preset retains the built-in palette. `terminal` uses terminal-native colors where possible, and `none` removes preset statusline colors. Explicit styles work with every preset. Presets apply to the statusline only. Activity rows keep their built-in semantic colors, except for the tree lines and the selected row described below.
 
 Colors accept named terminal colors such as `yellow`, `dark_grey`, and `default`, indexed colors as `ansi:0` through `ansi:255`, RGB colors as `#RRGGBB`, or a name from `tui.theme.palette`.
 
@@ -218,6 +218,42 @@ tui:
 ```
 
 Component-local `style` settings take precedence over theme scopes. Supported modifiers are `bold`, `dim`, `italic`, `underline`, and `reverse`.
+
+### Activity rows
+
+Colors for the activity list. Added in devenv 2.4.1.
+
+| Scope                          | Styles                                                         | Fields                     | Default                  |
+| ------------------------------ | -------------------------------------------------------------- | -------------------------- | ------------------------ |
+| `activity.name`                | names of top-level activities                                  | `foreground`               | terminal default         |
+| `activity.name.process`        | process names                                                  | `foreground`               | terminal default         |
+| `activity.name.nested`         | names of nested activities                                     | `foreground`               | `dark_grey`              |
+| `activity.secondary`           | details next to a name, such as `pending` or `3 lines`         | `foreground`               | `ansi:242`               |
+| `activity.elapsed`             | elapsed time                                                   | `foreground`               | `ansi:242`               |
+| `activity.log`                 | inline log preview text                                        | `foreground`               | `ansi:245`               |
+| `activity.failed`              | the `✗` mark, failed process dots, and error messages          | `foreground`               | `ansi:160`               |
+| `activity.tree`                | the `│`, `├`, and `└` tree lines, and the line beside inline logs | `foreground`            | `ansi:242`               |
+| `activity.selection`           | the selected row                                               | `foreground`, `background` | `ansi:232` on `ansi:250` |
+| `activity.selection.secondary` | details and elapsed time on the selected row                   | `foreground`               | `ansi:238`               |
+
+Without any `activity.selection` style, the selected row is dark text on a light background. Once you set one, an unset `foreground` keeps each part's normal color on the selected row and only the background changes. The same applies to `activity.selection.secondary`. Set `foreground: default` instead to use the terminal's own text color.
+
+```yaml
+tui:
+  theme:
+    palette:
+      indent: "#2d333b"
+    styles:
+      activity.tree:
+        foreground: indent
+      activity.selection:
+        foreground: default
+        background: "#373e47"
+      activity.selection.secondary:
+        foreground: dark_grey
+```
+
+Other fields, such as `modifiers`, are rejected for these scopes. Activity styles do not change the statusline.
 
 ## Keybindings
 

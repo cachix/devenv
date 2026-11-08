@@ -259,6 +259,7 @@ pub fn view(
 
     // Create owned activity elements, including hidden children indicators
     let mut activity_elements: Vec<AnyElement<'static>> = Vec::new();
+    let theme = ActivityTheme::from_config(&ui_state.preferences.theme);
 
     for (display_activity, tree_position) in activities_to_show.iter().zip(tree_positions) {
         let activity = &display_activity.activity;
@@ -334,6 +335,7 @@ pub fn view(
                     disclosure,
                     is_selected,
                     is_dimmed,
+                    theme,
                     show_inline_logs,
                     logs: activity_logs,
                     log_line_count: model.get_log_line_count(activity.id),
@@ -509,6 +511,7 @@ struct ActivityRenderContext {
     disclosure: Option<ActivityDisclosure>,
     is_selected: bool,
     is_dimmed: bool,
+    theme: ActivityTheme,
     show_inline_logs: bool,
     logs: Option<Arc<VecDeque<String>>>,
     /// Total log line count (not affected by buffer rotation)
@@ -569,17 +572,19 @@ fn build_activity_prefix(
     tree_position: &TreePosition,
     completed: Option<bool>,
     show_spinner: bool,
+    theme: ActivityTheme,
 ) -> Vec<AnyElement<'static>> {
     let mut prefix = HierarchyPrefixComponent::new(
         depth,
         &tree_position.ancestor_continuations,
         tree_position.is_last_sibling,
+        theme.tree,
     )
     .render();
 
     prefix.push(
         element!(View(margin_right: 1) {
-            StatusIndicator(completed: completed, show_spinner: show_spinner)
+            StatusIndicator(completed: completed, show_spinner: show_spinner, failed_color: Some(theme.failed))
         })
         .into_any(),
     );
@@ -595,11 +600,13 @@ fn build_process_prefix(
     glyph: &'static str,
     color: Color,
     pulse: bool,
+    tree_color: Color,
 ) -> Vec<AnyElement<'static>> {
     let mut prefix = HierarchyPrefixComponent::new(
         depth,
         &tree_position.ancestor_continuations,
         tree_position.is_last_sibling,
+        tree_color,
     )
     .render();
 
@@ -650,6 +657,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         disclosure,
         is_selected,
         is_dimmed,
+        theme,
         show_inline_logs,
         logs,
         log_line_count,
@@ -691,7 +699,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
 
             if *show_inline_logs {
-                let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+                let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
                 let main_line = ActivityTextComponent::new(
                     "building".to_string(),
@@ -701,10 +709,12 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 )
                 .with_suffix(phase_suffix.clone())
                 .with_completed(is_completed)
-                .with_selection(*is_selected)
+                .with_selection(*is_selected, *theme)
                 .render(terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
+                    .with_text_color(theme.log)
+                    .with_tree_color(theme.tree)
                     .with_terminal_width(terminal_width)
                     .with_max_lines(*log_preview_lines)
                     .with_empty_message("  → no build logs yet (press Ctrl-E to expand)")
@@ -712,7 +722,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
 
             // Non-selected build activities use normal rendering
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             return ActivityTextComponent::new(
                 "building".to_string(),
@@ -722,7 +732,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             )
             .with_suffix(phase_suffix)
             .with_completed(is_completed)
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Task(task_data) => {
@@ -763,7 +773,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     base_status
                 };
 
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             let main_line = ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -772,7 +782,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             )
             .with_suffix(status_text)
             .with_completed(completed.is_some())
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
 
             // Show logs inline for tasks with show_output=true or failed tasks
@@ -786,6 +796,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     "  → waiting for output..."
                 };
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_text_color(theme.log)
+                    .with_tree_color(theme.tree)
                     .with_terminal_width(terminal_width)
                     .with_max_lines(*log_preview_lines)
                     .with_empty_message(empty_message);
@@ -804,7 +816,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             if let (Some(_current), Some(_total)) =
                 (download_data.size_current, download_data.size_total)
             {
-                return DownloadActivityComponent::new(activity, *depth, *is_selected)
+                return DownloadActivityComponent::new(activity, *depth, *is_selected, *theme)
                     .with_hierarchy(
                         &tree_position.ancestor_continuations,
                         tree_position.is_last_sibling,
@@ -815,7 +827,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             } else if let Some(progress) = &activity.progress {
                 // Use generic progress if available
                 if progress.total.unwrap_or(0) > 0 {
-                    return DownloadActivityComponent::new(activity, *depth, *is_selected)
+                    return DownloadActivityComponent::new(activity, *depth, *is_selected, *theme)
                         .with_hierarchy(
                             &tree_position.ancestor_continuations,
                             tree_position.is_last_sibling,
@@ -832,7 +844,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             progress.current.unwrap_or(0).human_count_bytes()
                         )
                     });
-                    let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+                    let prefix =
+                        build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
                     return ActivityTextComponent::new(
                         "downloading".to_string(),
@@ -842,7 +855,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     )
                     .with_suffix(from_suffix)
                     .with_completed(completed.is_some())
-                    .with_selection(*is_selected)
+                    .with_selection(*is_selected, *theme)
                     .render(terminal_width, *depth, prefix);
                 }
             } else {
@@ -851,7 +864,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .substituter
                     .as_ref()
                     .map(|s| format!("from {}", s));
-                let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+                let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
                 return ActivityTextComponent::new(
                     "downloading".to_string(),
@@ -861,12 +874,12 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 )
                 .with_suffix(from_suffix)
                 .with_completed(completed.is_some())
-                .with_selection(*is_selected)
+                .with_selection(*is_selected, *theme)
                 .render(terminal_width, *depth, prefix);
             }
         }
         ActivityVariant::Copy => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             return ActivityTextComponent::new(
                 "copying".to_string(),
@@ -876,7 +889,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             )
             .with_suffix(Some("to the store".to_string()))
             .with_completed(completed.is_some())
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Query(query_data) => {
@@ -884,7 +897,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .substituter
                 .as_ref()
                 .map(|s| format!("from {}", s));
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             return ActivityTextComponent::new(
                 "querying".to_string(),
@@ -894,11 +907,11 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             )
             .with_suffix(suffix)
             .with_completed(completed.is_some())
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::FetchTree => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             return ActivityTextComponent::new(
                 "fetching".to_string(),
@@ -907,7 +920,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_completed(completed.is_some())
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Evaluating(eval_data) => {
@@ -921,7 +934,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
             let suffix = disclosed_suffix(suffix, disclosure.as_ref());
 
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             let main_line = ActivityTextComponent::name_only(
                 disclosed_name(activity, disclosure.as_ref()),
@@ -930,12 +943,14 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             )
             .with_suffix(suffix)
             .with_completed(completed.is_some())
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
 
             let failed = *completed == Some(false);
             if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_text_color(theme.log)
+                    .with_tree_color(theme.tree)
                     .with_terminal_width(terminal_width)
                     .with_max_lines(*log_preview_lines)
                     .with_empty_message("  → no files read yet (press Ctrl-E to expand)");
@@ -948,7 +963,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             return main_line;
         }
         ActivityVariant::UserOperation => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             return ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -956,11 +971,11 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_completed(completed.is_some())
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
         }
         ActivityVariant::Devenv => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             // Show line count as suffix when active or failed with logs
             let base_suffix = if *completed == Some(true) {
@@ -1007,12 +1022,14 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             )
             .with_suffix(suffix)
             .with_completed(completed.is_some())
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
 
             let failed = *completed == Some(false);
             if *show_inline_logs || failed && logs.is_some() {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_text_color(theme.log)
+                    .with_tree_color(theme.tree)
                     .with_terminal_width(terminal_width)
                     .with_max_lines(*log_preview_lines)
                     .with_empty_message("  → no output yet");
@@ -1075,11 +1092,19 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 process_status_dot(&process_data.status, *completed, *shutting_down);
             let dot_color = if *is_dimmed {
                 COLOR_HIERARCHY
+            } else if dot_glyph == XMARK {
+                theme.failed
             } else {
                 dot_color
             };
-            let prefix =
-                build_process_prefix(*depth, tree_position, dot_glyph, dot_color, dot_pulse);
+            let prefix = build_process_prefix(
+                *depth,
+                tree_position,
+                dot_glyph,
+                dot_color,
+                dot_pulse,
+                theme.tree,
+            );
 
             // Hide elapsed time for not-started/stopped processes
             let process_elapsed = if matches!(process_data.status, ProcessStatus::NotStarted)
@@ -1097,7 +1122,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_suffix(status_text)
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .with_dimmed(*is_dimmed)
             .render(terminal_width, *depth, prefix);
 
@@ -1106,6 +1131,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 || (process_failed && *render_context == RenderContext::Final && logs.is_some())
             {
                 let mut component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_text_color(theme.log)
+                    .with_tree_color(theme.tree)
                     .with_terminal_width(terminal_width)
                     .with_border_indent(*depth * 2)
                     .with_line_prefix(process_preview_prefix(*depth, tree_position))
@@ -1137,7 +1164,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             // Determine icon and color based on message level
             // Following CLI conventions: errors get ✗, others get • (dot)
             let (icon, icon_color, text_color) = match msg_data.level {
-                ActivityLevel::Error => ("✗", COLOR_FAILED, COLOR_FAILED),
+                ActivityLevel::Error => ("✗", theme.failed, theme.failed),
                 ActivityLevel::Warn => ("•", Color::AnsiValue(214), Color::AnsiValue(214)), // Yellow
                 ActivityLevel::Info => ("•", COLOR_INFO, Color::Reset), // Blue dot
                 _ => ("•", COLOR_HIERARCHY, Color::Reset),              // Gray dot for debug/trace
@@ -1145,7 +1172,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // Colors for selected vs unselected rows
             let (selected_text_color, bg_color) = if *is_selected {
-                (Color::AnsiValue(232), Some(Color::AnsiValue(250))) // Near-black on light gray
+                (
+                    theme.selection_foreground.unwrap_or(text_color),
+                    Some(theme.selection_background),
+                )
             } else {
                 (text_color, None)
             };
@@ -1276,7 +1306,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             }
         }
         ActivityVariant::Unknown => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(*depth, tree_position, *completed, true, *theme);
 
             return ActivityTextComponent::new(
                 "unknown".to_string(),
@@ -1285,7 +1315,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_completed(completed.is_some())
-            .with_selection(*is_selected)
+            .with_selection(*is_selected, *theme)
             .render(terminal_width, *depth, prefix);
         }
     }
