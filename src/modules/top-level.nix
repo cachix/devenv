@@ -462,6 +462,46 @@ in
               right = [ ];
               wrong = orderedPackages;
             };
+
+        # stdenv's setup and the setup hooks of packages run after `env` is
+        # applied, and some of them replace its values, such as `CC`
+        # everywhere and `SDKROOT` on macOS. `postHook` runs after all of
+        # them and puts back each value that was replaced. A value that was
+        # only extended, such as `PKG_CONFIG_PATH`, stays as the hooks left it.
+        # Values are converted as a derivation converts them: lists are joined
+        # with spaces, `true` becomes "1", and paths are copied to the store.
+        # `PATH` is left out: stdenv's setup builds it from the packages of the
+        # shell, and the build of the shell needs it.
+        toEnvString =
+          value:
+          if builtins.isList value then
+            lib.concatMapStringsSep " " toEnvString value
+          else if builtins.isPath value then
+            "${value}"
+          else
+            toString value;
+        envToRestore = lib.filterAttrs
+          (
+            name: value:
+              name != "PATH" && value != null && builtins.match "[A-Za-z_][A-Za-z0-9_]*" name != null
+          )
+          config.env;
+        restoreEnv = ''
+          _devenvRestoreEnv() {
+            # Keep the current value if it still holds the configured one as
+            # whole entries, separated by spaces or colons.
+            case " ''${!1//:/ } " in
+              *" ''${2//:/ } "*) ;;
+              *) export "$1=$2" ;;
+            esac
+          }
+          ${lib.concatStrings (
+            lib.mapAttrsToList (
+              name: value: "_devenvRestoreEnv ${name} ${lib.escapeShellArg (toEnvString value)}\n"
+            ) envToRestore
+          )}
+          unset -f _devenvRestoreEnv
+        '';
       in
       performAssertions (
         (pkgs.mkShell.override { stdenv = config.stdenv; }) (
@@ -469,6 +509,15 @@ in
             inherit (config) hardeningDisable inputsFrom name;
             buildInputs = partitioned.right;
             nativeBuildInputs = partitioned.wrong;
+            # Nix passes the script as a file, so the values in `env` count
+            # only once towards the limits on the size of the environment.
+            devenvRestoreEnv = restoreEnv;
+            passAsFile = [ "devenvRestoreEnv" ];
+            # Leave nothing behind in the shell, or in a nix-shell started from it.
+            postHook = ''
+              source "$devenvRestoreEnvPath"
+              unset devenvRestoreEnvPath passAsFile postHook
+            '';
             shellHook = ''
               ${lib.optionalString config.devenv.debug "set -x"}
               ${config.enterShell}
