@@ -1,0 +1,4 @@
+# Pinned for asdf and mise
+erlang 26.2.5
+elixir 1.17.3-otp-26
+nodejs 22.11.0
