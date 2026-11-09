@@ -108,11 +108,15 @@ in
       example = "./directory";
     };
 
-    mix.deps.enable = lib.mkEnableOption ''
-      fetching Mix dependencies with `mix deps.get` when entering the shell.
-      It only runs again when `mix.exs`, `mix.lock` or the Elixir package changes, or when the `deps` directory is missing.
-      Hex and Rebar are installed into `MIX_HOME` first if they are missing
-    '';
+    mix.deps.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Whether to fetch Mix dependencies with `mix deps.get` when entering the shell.
+        It only runs again when `mix.exs`, `mix.lock` or the Elixir package changes, or when the `deps` directory is missing.
+        Hex and Rebar are installed into `MIX_HOME` first if they are missing.
+      '';
+    };
 
     erlang.package = lib.mkOption {
       type = lib.types.package;
