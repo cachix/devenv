@@ -41,20 +41,22 @@ let
     else "${config.devenv.root}/${cfg.directory}";
 
   mix = lib.getExe' cfg.package "mix";
-  coreutils = pkgs.coreutils;
-  mixDepsChecksumFile = "${config.devenv.state}/elixir/mix-deps.checksum";
+  flock = lib.getExe pkgs.flock;
+  projectDirArg = lib.escapeShellArg projectDir;
+  checksumFileArg = lib.escapeShellArg "${config.devenv.state}/elixir/mix-deps.checksum";
 
-  # Prints a checksum of everything that decides what `mix deps.get` fetches.
+  # Prints a checksum of everything that decides what `mix deps.get` fetches
+  # and where Hex and Rebar live. A missing mix.lock is left out of the output.
   # Runs from the project directory.
-  mixDepsChecksum = pkgs.writeShellScript "elixir-mix-deps-checksum" ''
-    for file in mix.exs mix.lock; do
-      if [ -f "$file" ]; then
-        ${coreutils}/bin/cksum < "$file" | ${coreutils}/bin/cut -d ' ' -f 1
-      else
-        echo "no-$file"
-      fi
-    done
-    echo ${lib.escapeShellArg "${cfg.package}:${projectDir}"}
+  mixDepsChecksum = "{ ${pkgs.coreutils}/bin/cksum mix.exs mix.lock 2>/dev/null; echo ${lib.escapeShellArg "${cfg.package}:${projectDir}"} \"$MIX_HOME\"; }";
+
+  # Succeeds when the dependencies were fetched for the current mix.exs, mix.lock,
+  # Elixir package and MIX_HOME, and Hex is still installed. Runs from the project directory.
+  mixDepsUpToDate = pkgs.writeShellScript "elixir-mix-deps-up-to-date" ''
+    [ -f mix.exs ] && [ -d deps ] && [ -f ${checksumFileArg} ] || exit 1
+    # An unmatched glob stays as the literal pattern, which doesn't exist.
+    set -- "$MIX_HOME"/archives/hex-*
+    [ -e "$1" ] && [ "$(${mixDepsChecksum})" = "$(< ${checksumFileArg})" ]
   '';
 in
 {
@@ -113,7 +115,7 @@ in
       default = false;
       description = ''
         Whether to fetch Mix dependencies with `mix deps.get` when entering the shell.
-        It only runs again when `mix.exs`, `mix.lock` or the Elixir package changes, or when the `deps` directory is missing.
+        It only runs again when `mix.exs`, `mix.lock`, the Elixir package or `MIX_HOME` changes, or when the `deps` directory or Hex is missing.
         Hex and Rebar are installed into `MIX_HOME` first if they are missing.
       '';
     };
@@ -137,16 +139,9 @@ in
 
       package = lib.mkOption {
         type = lib.types.package;
-        default =
-          if elixirVersion != null
-          # Build the language server with the selected Elixir so it matches the project.
-          then pkgs.beamPackages.elixir-ls.override { elixir = cfg.package; }
-          else pkgs.beamPackages.elixir-ls;
-        defaultText = lib.literalExpression ''
-          if languages.elixir.version != null || languages.elixir.versionFile != null
-          then pkgs.beamPackages.elixir-ls.override { elixir = languages.elixir.package; }
-          else pkgs.beamPackages.elixir-ls
-        '';
+        # Build the language server with the selected Elixir so it matches the project.
+        default = pkgs.beamPackages.elixir-ls.override { elixir = cfg.package; };
+        defaultText = lib.literalExpression "pkgs.beamPackages.elixir-ls.override { elixir = languages.elixir.package; }";
         description = "The Elixir language server package to use.";
       };
     };
@@ -212,33 +207,31 @@ in
 
       tasks."devenv:elixir:deps" = lib.mkIf cfg.mix.deps.enable {
         description = "Fetch Mix dependencies";
-        cwd = projectDir;
-        # Skip when nothing changed and the deps directory is still there.
+        # Not `cwd`: the task runner fails the task when that directory is missing,
+        # and a fresh checkout may not have the project directory yet.
         status = ''
-          [ -f mix.exs ] && [ -d deps ] && [ -f ${lib.escapeShellArg mixDepsChecksumFile} ] \
-            && [ "$(${mixDepsChecksum})" = "$(${coreutils}/bin/cat ${lib.escapeShellArg mixDepsChecksumFile})" ]
+          cd ${projectDirArg} 2>/dev/null && ${mixDepsUpToDate}
         '';
         exec = ''
-          if [ ! -f mix.exs ]; then
+          if ! { cd ${projectDirArg} 2>/dev/null && [ -f mix.exs ]; }; then
             echo "No mix.exs found in ${projectDir}. Run 'mix new .' there to create a project." >&2
             exit 0
           fi
 
-          ${coreutils}/bin/mkdir -p "$(${coreutils}/bin/dirname ${lib.escapeShellArg mixDepsChecksumFile})"
+          ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg "${config.devenv.state}/elixir"}
           {
-            if ! ${lib.getExe pkgs.flock} -n 9; then
-              echo "Waiting for another shell to finish fetching Mix dependencies..." >&2
-              ${lib.getExe pkgs.flock} 9
-            fi
+            ${flock} -n 9 || { echo "Waiting for another shell to finish fetching Mix dependencies..." >&2; ${flock} 9; }
+            # Another shell may have fetched everything while this one waited.
+            ${mixDepsUpToDate} && exit 0
 
             if ${mix} local.hex --force --if-missing \
               && ${mix} local.rebar --force --if-missing \
               && ${mix} deps.get; then
-              ${mixDepsChecksum} > ${lib.escapeShellArg mixDepsChecksumFile}
+              ${mixDepsChecksum} > ${checksumFileArg}
             else
               echo "Fetching Mix dependencies failed. Run 'mix deps.get' manually." >&2
             fi
-          } 9>${lib.escapeShellArg "${mixDepsChecksumFile}.lock"}
+          } 9>${checksumFileArg}.lock
         '';
         before = [ "devenv:enterShell" ];
       };

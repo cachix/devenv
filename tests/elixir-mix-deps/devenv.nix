@@ -31,6 +31,11 @@
     test -d app/deps/jason
     test "$(modified)" != "$before"
 
+    # A missing Hex makes it run again and reinstall Hex.
+    rm -rf "$MIX_HOME"/archives/hex-*
+    devenv tasks run devenv:elixir:deps
+    ls "$MIX_HOME"/archives/hex-*
+
     # Escripts installed with Mix are on PATH.
     case ":$PATH:" in
       *":$MIX_HOME/escripts:"*) ;;

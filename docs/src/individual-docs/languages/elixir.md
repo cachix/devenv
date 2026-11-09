@@ -53,7 +53,7 @@ Since devenv 2.4.1, devenv can run `mix deps.get` for you when you enter the she
 languages.elixir.mix.deps.enable = true;
 ```
 
-It installs Hex and Rebar first if they are missing. After that, it only runs again when `mix.exs`, `mix.lock` or the Elixir package changes, or when the `deps` directory is gone.
+It installs Hex and Rebar first if they are missing. After that, it only runs again when `mix.exs`, `mix.lock`, the Elixir package or `MIX_HOME` changes, or when the `deps` directory or Hex is gone.
 
 If your `mix.exs` is not at the root of the devenv project, set `languages.elixir.directory`:
 
