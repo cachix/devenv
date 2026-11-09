@@ -2,6 +2,17 @@
 
 let
   cfg = config.languages.elixir;
+
+  beam-overlay = config.lib.getInput {
+    name = "beam-overlay";
+    url = "github:zeeetech/beam-overlay";
+    attribute = "languages.elixir.version";
+    follows = [ "nixpkgs" ];
+  };
+
+  # Apply the overlay to devenv's own pkgs instead of instantiating nixpkgs again.
+  # Each version comes with the newest Erlang/OTP it supports, exposed as `.erlang`.
+  elixirVersions = (beam-overlay.overlays.default pkgs pkgs).beam-overlay.elixir;
 in
 {
   options.languages.elixir = {
@@ -12,6 +23,18 @@ in
       description = "Which Elixir package to use.";
       default = pkgs.beamPackages.elixir;
       defaultText = lib.literalExpression "pkgs.beamPackages.elixir";
+    };
+
+    version = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        The Elixir version to use.
+        This automatically sets `languages.elixir.package` using [beam-overlay](https://github.com/zeeetech/beam-overlay),
+        together with the newest Erlang/OTP runtime that the version supports.
+        Elixir 1.15.0 and newer are available, including release candidates.
+      '';
+      example = "1.17.3";
     };
 
     erlang.package = lib.mkOption {
@@ -33,8 +56,16 @@ in
 
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.beamPackages.elixir-ls;
-        defaultText = lib.literalExpression "pkgs.beamPackages.elixir-ls";
+        default =
+          if cfg.version != null
+          # Build the language server with the selected Elixir so it matches the project.
+          then pkgs.beamPackages.elixir-ls.override { elixir = cfg.package; }
+          else pkgs.beamPackages.elixir-ls;
+        defaultText = lib.literalExpression ''
+          if languages.elixir.version != null
+          then pkgs.beamPackages.elixir-ls.override { elixir = languages.elixir.package; }
+          else pkgs.beamPackages.elixir-ls
+        '';
         description = "The Elixir language server package to use.";
       };
     };
@@ -65,6 +96,11 @@ in
       ];
     }
     (lib.mkIf cfg.enable {
+      languages.elixir.package = lib.mkIf (cfg.version != null) (
+        elixirVersions.${cfg.version}
+          or (throw "Unsupported Elixir version '${cfg.version}', see https://github.com/zeeetech/beam-overlay for supported versions")
+      );
+
       git-hooks.hooks = {
         credo.package = cfg.package;
         dialyzer.package = cfg.package;
