@@ -54,12 +54,13 @@ impl Indicators {
     /// The glyph for `indicator`.
     pub const fn glyph(self, indicator: Indicator) -> Glyph {
         match (self.emoji, indicator) {
-            // The historical glyphs and spacing.
+            // The historical glyphs. Unicode gives them one cell, so one
+            // column of space lines the label up with the other statuses.
             (true, Indicator::Paused) => Glyph {
-                text: "⏸", gap: 2
+                text: "⏸", gap: 1
             },
             (true, Indicator::Watching) => Glyph {
-                text: "👁", gap: 2
+                text: "👁", gap: 1
             },
             // The status dots used for process states: alive while watching,
             // an idle ring while paused. They are single-cell symbols, so the
@@ -112,6 +113,19 @@ mod tests {
                 "{indicator:?} must be one character"
             );
             assert_eq!(glyph.gap, 1);
+        }
+    }
+
+    #[test]
+    fn every_glyph_is_followed_by_one_column() {
+        for emoji in [true, false] {
+            for indicator in Indicator::ALL {
+                assert_eq!(
+                    Indicators::new(emoji).glyph(indicator).gap,
+                    1,
+                    "{indicator:?} emoji={emoji}"
+                );
+            }
         }
     }
 
