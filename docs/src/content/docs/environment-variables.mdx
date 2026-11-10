@@ -31,6 +31,19 @@ The configured pkg-config path comes before the paths supplied by Nix.
 The custom compiler flag follows the flags supplied by Nix.
 Plain values keep their existing behavior; adopting helpers is optional.
 
+For example, append a JDBC driver JAR to Java's `CLASSPATH`:
+
+```nix
+{ config, ... }:
+{
+  env.CLASSPATH = config.lib.env.append ":" [ "/path/to/driver.jar" ];
+}
+```
+
+This preserves any `CLASSPATH` configured through devenv or produced by setup,
+then adds the driver. Helpers do not append to values inherited from the caller's
+shell.
+
 ## Helpers
 
 | Helper | Behavior |
