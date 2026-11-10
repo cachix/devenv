@@ -59,10 +59,10 @@ import DefaultSearch from '@astrojs/starlight/components/Search.astro';
   site-search .pagefind-ui__result { border: 0; }
   site-search .pagefind-ui__result-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   site-search .pagefind-ui__drawer:not(.search-docs-expanded) .pagefind-ui__result:nth-child(n+4),
-  site-search .pagefind-ui__drawer:not(.search-docs-expanded) .pagefind-ui__result-nested,
+  site-search .pagefind-ui__drawer:not(.search-docs-expanded) .pagefind-ui__result-nested:not(:has(a[href^="/reference/options"])),
   site-search .pagefind-ui__drawer:not(.search-docs-expanded) .pagefind-ui__button { display: none; }
   site-search .search-more-docs { display: none; }
-  site-search .search-container:has(.pagefind-ui__drawer:not(.search-docs-expanded):not(.pagefind-ui__hidden) :is(.pagefind-ui__result:nth-child(4), .pagefind-ui__result-nested)) .search-more-docs { display: block; }
+  site-search .search-container:has(.pagefind-ui__drawer:not(.search-docs-expanded):not(.pagefind-ui__hidden) :is(.pagefind-ui__result:nth-child(4), .pagefind-ui__result-nested:not(:has(a[href^="/reference/options"])))) .search-more-docs { display: block; }
   @media (max-width: 30rem) {
     #devenv-search-results .pagefind-ui__result-title { gap: .25rem .5rem; }
   }
