@@ -15,6 +15,7 @@ in
       {
         date = "2026-11-10";
         title = "TypeScript supports JavaScript runtimes and package managers directly";
+        when = cfg.enable;
         description = ''
           Configure `nodejs`, `bun`, `deno`, `npm`, `pnpm`, `yarn`, and `corepack` under `languages.typescript` without enabling `languages.javascript`.
           TypeScript still provides its compiler and language server by default. Node.js is enabled by default only when npm, pnpm, Yarn, or Corepack is enabled.
