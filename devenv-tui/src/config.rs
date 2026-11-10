@@ -44,6 +44,17 @@ pub(crate) const ACTIVITY_SCOPES: &[&str] = &[
     "activity.dimmed",
 ];
 
+pub(crate) const LOG_SCOPES: &[&str] = &[
+    "logs",
+    "logs.title",
+    "logs.line_number",
+    "logs.filler",
+    "logs.selection",
+    "logs.search",
+    "logs.search.match",
+    "logs.search.current",
+];
+
 #[derive(Debug, Error, Diagnostic)]
 pub enum UserConfigError {
     #[error("failed to read user configuration at {path}")]
@@ -335,7 +346,10 @@ impl ThemeConfig {
                 })?;
         }
         for (scope, style) in &self.styles {
-            if !statusline_scope(scope) && !ACTIVITY_SCOPES.contains(&scope.as_str()) {
+            if !statusline_scope(scope)
+                && !ACTIVITY_SCOPES.contains(&scope.as_str())
+                && !LOG_SCOPES.contains(&scope.as_str())
+            {
                 return validation(format!(
                     "tui.theme.styles.{scope} is not a supported style scope"
                 ));
@@ -2573,8 +2587,14 @@ tui:
     }
 
     #[test]
-    fn unknown_activity_scopes_are_rejected() {
-        for scope in ["activity.unknown", "activity.name.process", "activities"] {
+    fn unknown_style_scopes_are_rejected() {
+        for scope in [
+            "activity.unknown",
+            "activity.name.process",
+            "activities",
+            "logs.unknown",
+            "log",
+        ] {
             let error = UserConfig::from_yaml(
                 "config.yaml",
                 format!("version: 1\ntui:\n  theme:\n    styles:\n      {scope}:\n        foreground: red\n"),

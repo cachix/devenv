@@ -26,6 +26,21 @@ impl Style {
         }
     }
 
+    fn colors(foreground: Color, background: Color) -> Self {
+        Self {
+            foreground: Some(foreground),
+            background: Some(background),
+            ..Self::default()
+        }
+    }
+
+    fn or_reversed(self) -> Self {
+        Self {
+            reverse: self.reverse || self.foreground.is_none() && self.background.is_none(),
+            ..self
+        }
+    }
+
     pub fn emphasized(self) -> Self {
         Self {
             bold: self.bold || !self.dim,
@@ -274,13 +289,56 @@ impl ActivityTheme {
     }
 
     pub fn reverses_row(&self, highlight: Highlight) -> bool {
-        highlight == Highlight::Selected
-            && (self.selection.reverse
-                || self.selection.foreground.is_none() && self.selection.background.is_none())
+        highlight == Highlight::Selected && self.selection.or_reversed().reverse
     }
 }
 
 impl Default for ActivityTheme {
+    fn default() -> Self {
+        Self::new(&ThemeConfig::default())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LogTheme {
+    pub text: Style,
+    pub title: Style,
+    pub line_number: Style,
+    pub filler: Style,
+    pub selection: Style,
+    pub search_match: Style,
+    pub current_match: Style,
+}
+
+impl LogTheme {
+    pub fn new(theme: &ThemeConfig) -> Self {
+        let style = |scopes: &[&str]| theme.style(&[&["logs"], scopes].concat());
+        let text = style(&[]);
+        let marked = |mark: Style, style: Style| Style {
+            reverse: text.reverse != mark.or_reversed().reverse,
+            ..style
+        };
+        let selection = if theme.styles.contains_key("logs.selection") {
+            theme.user_style(&["logs.selection"])
+        } else {
+            theme.style(&["logs.selection"])
+        };
+        Self {
+            text,
+            title: style(&["logs.title"]),
+            line_number: style(&["logs.line_number"]),
+            filler: style(&["logs.filler"]),
+            selection: marked(selection, text.layered(selection)),
+            search_match: style(&["logs.search", "logs.search.match"]),
+            current_match: marked(
+                theme.style(&["logs.search", "logs.search.current"]),
+                style(&["logs.search", "logs.search.current"]),
+            ),
+        }
+    }
+}
+
+impl Default for LogTheme {
     fn default() -> Self {
         Self::new(&ThemeConfig::default())
     }
@@ -322,14 +380,20 @@ fn devenv_style(scope: &str) -> Style {
             Style::foreground(COLOR_TRANSIENT)
         }
         "activity.status.info" => Style::foreground(COLOR_INFO),
-        "activity.selection" => Style {
-            foreground: Some(Color::AnsiValue(232)),
-            background: Some(Color::AnsiValue(250)),
-            ..Style::default()
-        },
+        "activity.selection" | "logs.selection" => {
+            Style::colors(Color::AnsiValue(232), Color::AnsiValue(250))
+        }
         "activity.selection.detail" | "activity.selection.elapsed" => {
             Style::foreground(Color::AnsiValue(238))
         }
+        "logs" => Style::foreground(Color::AnsiValue(250)),
+        "logs.title" => Style {
+            bold: true,
+            ..Style::foreground(Color::Cyan)
+        },
+        "logs.filler" => Style::foreground(Color::AnsiValue(238)),
+        "logs.search.match" => Style::colors(Color::AnsiValue(230), Color::AnsiValue(58)),
+        "logs.search.current" => Style::colors(Color::AnsiValue(232), Color::AnsiValue(220)),
         _ => Style::default(),
     }
 }
@@ -357,19 +421,35 @@ fn terminal_style(scope: &str) -> Style {
         "activity.status.failure" => Style::foreground(Color::Red),
         "activity.status.warning" | "activity.status.starting" => Style::foreground(Color::Yellow),
         "activity.status.info" => Style::foreground(Color::Blue),
-        "activity.selection" => Style {
-            foreground: Some(Color::Black),
-            background: Some(Color::White),
-            ..Style::default()
+        "activity.selection" | "logs.selection" => Style::colors(Color::Black, Color::White),
+        "logs" => Style::foreground(Color::Reset),
+        "logs.title" => Style {
+            bold: true,
+            ..Style::foreground(Color::Cyan)
         },
+        "logs.line_number" | "logs.filler" => Style::foreground(Color::DarkGrey),
+        "logs.search.match" => Style::colors(Color::Black, Color::DarkYellow),
+        "logs.search.current" => Style::colors(Color::Black, Color::Yellow),
         _ => Style::default(),
     }
 }
 
 fn none_style(scope: &str) -> Style {
     match scope {
-        "activity.progress.track" | "activity.status.inactive" | "activity.dimmed" => Style {
+        "activity.progress.track"
+        | "activity.status.inactive"
+        | "activity.dimmed"
+        | "logs.line_number"
+        | "logs.filler" => Style {
             dim: true,
+            ..Style::default()
+        },
+        "logs.title" => Style {
+            bold: true,
+            ..Style::default()
+        },
+        "logs.search.match" => Style {
+            underline: true,
             ..Style::default()
         },
         _ => Style::default(),
@@ -379,7 +459,7 @@ fn none_style(scope: &str) -> Style {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ACTIVITY_SCOPES, ColorSpec};
+    use crate::config::{ACTIVITY_SCOPES, ColorSpec, LOG_SCOPES};
 
     fn theme(preset: ThemePreset, styles: &[(&str, StyleConfig)]) -> ThemeConfig {
         ThemeConfig {
@@ -634,5 +714,123 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn every_log_scope_is_resolved() {
+        for preset in [
+            ThemePreset::Devenv,
+            ThemePreset::Terminal,
+            ThemePreset::None,
+        ] {
+            for scope in LOG_SCOPES {
+                let marked = LogTheme::new(&theme(
+                    preset,
+                    &[(
+                        scope,
+                        StyleConfig {
+                            modifiers: vec![TextModifier::Italic],
+                            ..StyleConfig::default()
+                        },
+                    )],
+                ));
+                assert_ne!(
+                    marked,
+                    LogTheme::new(&theme(preset, &[])),
+                    "{preset:?} {scope}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn devenv_preset_keeps_the_built_in_log_colors() {
+        let theme = LogTheme::default();
+        let text = Style::foreground(Color::AnsiValue(250));
+
+        assert_eq!(theme.text, text);
+        assert_eq!(theme.line_number, text);
+        assert_eq!(
+            theme.title,
+            Style {
+                bold: true,
+                ..Style::foreground(Color::Cyan)
+            }
+        );
+        assert_eq!(theme.filler, Style::foreground(Color::AnsiValue(238)));
+        assert_eq!(
+            theme.selection,
+            Style::colors(Color::AnsiValue(232), Color::AnsiValue(250))
+        );
+        assert_eq!(
+            theme.search_match,
+            Style::colors(Color::AnsiValue(230), Color::AnsiValue(58))
+        );
+        assert_eq!(
+            theme.current_match,
+            Style::colors(Color::AnsiValue(232), Color::AnsiValue(220))
+        );
+    }
+
+    #[test]
+    fn configured_log_selection_replaces_preset_selection() {
+        let theme = LogTheme::new(&theme(
+            ThemePreset::Devenv,
+            &[(
+                "logs.selection",
+                StyleConfig {
+                    background: Some(ColorSpec("#373e47".to_string())),
+                    ..StyleConfig::default()
+                },
+            )],
+        ));
+
+        assert_eq!(
+            theme.selection,
+            Style {
+                background: Some(Color::Rgb {
+                    r: 0x37,
+                    g: 0x3e,
+                    b: 0x47,
+                }),
+                ..theme.text
+            }
+        );
+    }
+
+    #[test]
+    fn log_highlights_flip_reversed_text() {
+        let theme = LogTheme::new(&theme(
+            ThemePreset::None,
+            &[(
+                "logs",
+                StyleConfig {
+                    modifiers: vec![TextModifier::Reverse],
+                    ..StyleConfig::default()
+                },
+            )],
+        ));
+
+        assert!(theme.text.reverse);
+        assert!(!theme.selection.reverse);
+        assert!(!theme.current_match.reverse);
+    }
+
+    #[test]
+    fn none_preset_marks_log_highlights_without_colors() {
+        let plain = LogTheme::new(&theme(ThemePreset::None, &[]));
+
+        assert_eq!(plain.text, Style::default());
+        assert!(plain.line_number.dim);
+        assert!(plain.selection.reverse);
+        assert!(plain.current_match.reverse);
+        assert!(plain.search_match.underline);
+        assert!(!plain.search_match.reverse);
+
+        let colored = LogTheme::new(&theme(
+            ThemePreset::None,
+            &[("logs.selection", foreground_config("blue"))],
+        ));
+        assert!(!colored.selection.reverse);
     }
 }

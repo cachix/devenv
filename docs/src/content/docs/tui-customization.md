@@ -260,6 +260,23 @@ tui:
         background: highlight
 ```
 
+### Log viewer
+
+The fullscreen log viewer has its own scopes. `logs` is the base for every part of the viewer. Added in devenv 2.4.1.
+
+| Scope | Styles |
+| --- | --- |
+| `logs` | Log lines |
+| `logs.title` | The title above the logs |
+| `logs.line_number` | Line numbers |
+| `logs.filler` | The `~` lines below the end of the logs |
+| `logs.selection` | Text selected with the mouse |
+| `logs.search` | Every search match |
+| `logs.search.match` | Search matches other than the current one |
+| `logs.search.current` | The current search match |
+
+Setting `logs.selection` replaces the preset's selection colors, like `activity.selection`. A selection or current match without colors swaps the reverse of the log text, as in the `none` preset, which also underlines the other matches. The footer of the log viewer uses the statusline scopes.
+
 ## Keybindings
 
 Keybindings are grouped by interaction context. Assigning an empty array disables an action's defaults.
