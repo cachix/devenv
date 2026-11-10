@@ -1,0 +1,5 @@
+{
+  "name": "local-tool",
+  "version": "1.0.0",
+  "bin": { "local-tool": "cli.js" }
+}

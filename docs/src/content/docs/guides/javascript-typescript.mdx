@@ -1,0 +1,99 @@
+---
+title: "JavaScript and TypeScript environments"
+---
+
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
+<VersionCompatibility version="2.4.1" />
+
+JavaScript and TypeScript share runtime and package-manager integrations.
+Configure the tools under the language you use, without enabling another language module.
+
+## TypeScript with Bun
+
+```nix
+{
+  languages.typescript = {
+    enable = true;
+    bun.enable = true;
+    bun.install.enable = true;
+  };
+}
+```
+
+This provides the TypeScript compiler, the TypeScript language server, and Bun.
+`bun.install.enable` runs the existing lockfile-aware dependency installation when entering the shell.
+Leave it disabled if you prefer to install dependencies yourself.
+
+TypeScript does not enable the Node.js runtime by default for Bun or Deno.
+This does not guarantee a Node.js-free Nix closure: the compiler or language server package may depend on Node.js.
+Language-server installation does not configure your editor or select the runtime used by your application.
+
+## Node.js and package managers
+
+`npm`, `pnpm`, `yarn`, and `corepack` enable Node.js by default in a TypeScript environment.
+An explicit `nodejs.enable = false` is rejected when one of those tools is enabled.
+
+```nix
+{ pkgs, ... }: {
+  languages.typescript = {
+    enable = true;
+    nodejs.package = pkgs.nodejs_24;
+    pnpm.enable = true;
+    pnpm.install.enable = true;
+    directory = "frontend";
+  };
+}
+```
+
+The selected Node.js package is also used for the default npm, pnpm, and Yarn packages.
+The project's `node_modules/.bin` is added to `PATH` as an absolute path.
+
+For JavaScript projects, use the same options under `languages.javascript`.
+JavaScript keeps its existing defaults: Node.js and the language server are enabled.
+`languages.javascript.package` remains an alias for `languages.javascript.nodejs.package`.
+
+## Deno
+
+```nix
+{
+  languages.typescript = {
+    enable = true;
+    deno.enable = true;
+  };
+}
+```
+
+Deno's installed executables and cache stay under `$DEVENV_STATE/deno`, as with the standalone Deno module.
+No dependency-install hook is added for Deno; use Deno commands or explicit tasks for dependency management.
+
+Deno includes its own type checker and language server.
+If your editor uses `deno lsp`, you can disable the additional server with `languages.typescript.lsp.enable = false`.
+The TypeScript module still provides its compiler.
+The existing `languages.deno.enable` and `languages.deno.package` options remain supported without migration warnings.
+Multiple enabled Deno integrations must select the same package.
+
+## Mixed-language projects
+
+For a Tauri application with a TypeScript frontend, enable Rust alongside TypeScript and Bun:
+
+```nix
+{
+  languages.rust.enable = true;
+  languages.typescript = {
+    enable = true;
+    bun.enable = true;
+    bun.install.enable = true;
+  };
+}
+```
+
+Add Tauri's platform-specific libraries separately.
+
+If both JavaScript and TypeScript enable the same package manager for the same directory,
+devenv installs dependencies once, even when both enable its install hook.
+The package-manager packages must match for that directory; conflicting selections produce an assertion error.
+Different directories can have separate dependency installations.
+
+The existing JavaScript-plus-Bun setup continues to provide both Node.js and Bun.
+Enabling Bun is additive, not an exclusive runtime selection.
