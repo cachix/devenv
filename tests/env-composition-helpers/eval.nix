@@ -5,7 +5,7 @@
 let
   lib = import (nixpkgs + "/lib");
   env = import envLibrary { inherit lib; };
-  evaluate =
+  evaluateModule =
     modules:
     (lib.evalModules {
       modules = [
@@ -14,13 +14,21 @@ let
             type = lib.types.submodule {
               freeformType = lib.types.lazyAttrsOf env.type;
             };
+            apply = env.values;
             default = { };
           };
         }
       ]
       ++ modules;
-    }).config.env;
-  resolve = modules: env.resolve (evaluate modules);
+    });
+  evaluate = modules: (evaluateModule modules).config.env;
+  definitions =
+    modules:
+    let
+      option = (evaluateModule modules).options.env;
+    in
+    option.type.merge [ "env" ] option.definitionsWithLocations;
+  resolve = modules: env.resolve (definitions modules);
   expectFailure = value: !(builtins.tryEval (builtins.deepSeq value true)).success;
   merged = resolve [
     {
@@ -49,6 +57,37 @@ in
 {
   checks = {
     legacyUnchanged = (evaluate [ { env.X = "legacy"; } ]).X == "legacy";
+    plainEnvironmentAvoidsWrapper =
+      env.wrapShell {
+        pkgs = { };
+        environment.X = "plain";
+        shell = "unchanged";
+      } == "unchanged";
+    configuredSetIsPlain = (evaluate [ { env.X = env.set "plain"; } ]).X == "plain";
+    configuredExtensionsArePlain =
+      (evaluate [
+        {
+          env.X = env.combine [
+            (env.set "base")
+            (env.prepend ":" [ "prefix" ])
+          ];
+        }
+      ]).X == "prefix:base";
+    configuredValuesCanBeReferenced =
+      (evaluate [
+        ({ config, ... }: {
+          env.ROOT = env.set "/configured";
+          env.CHILD = config.env.ROOT + "/child";
+        })
+      ]).CHILD == "/configured/child";
+    configuredValuesCanBeSerialized =
+      (builtins.fromJSON (
+        builtins.toJSON (evaluate [
+          {
+            env.X = env.append ":" [ "suffix" ];
+          }
+        ])
+      )).X == "suffix";
     legacyListsConflict = expectFailure (evaluate [
       { env.X = [ "a" ]; }
       { env.X = [ "b" ]; }
@@ -103,6 +142,15 @@ in
         { env.X = env.set "base"; }
       ]).final.X.replacement.value == "base";
     emptyExtensionIsNoop = (resolve [ { env.X = env.prepend ":" [ ]; } ]).final == { };
+    emptyExtensionsDoNotConflict =
+      (resolve [
+        {
+          env.X = env.combine [
+            (env.prepend ":" [ ])
+            (env.append " " [ "value" ])
+          ];
+        }
+      ]).final.X.separator == " ";
     legacyInvalidNameUnchanged =
       (resolve [ { env."legacy.name" = "value"; } ]).initial."legacy.name" == "value";
     nullSetFails = expectFailure (resolve [ { env.X = env.set null; } ]);

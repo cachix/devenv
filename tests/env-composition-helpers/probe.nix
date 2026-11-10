@@ -70,6 +70,7 @@ let
           TYPED_FALSE = env.set false;
           TYPED_PATH = env.set ./probe.nix;
           TYPED_PACKAGE = env.set pkgs.zlib;
+          FINAL_ONLY_PACKAGE = env.set (pkgs.writeText "env-only-dependency" "retained");
           LEGACY_LIST = [
             "one"
             "two"
@@ -81,6 +82,9 @@ let
         // lib.optionalAttrs (scenario == "large") {
           LARGE_ONE = env.set (lib.concatStrings (lib.replicate 70000 "a"));
           LARGE_TWO = env.set (lib.concatStrings (lib.replicate 70000 "b"));
+        }
+        // lib.optionalAttrs (scenario == "path") {
+          PATH = env.set "/configured/bin";
         };
       }
       { env.SEQUENCE = env.prepend ":" [ "second" ]; }
@@ -92,6 +96,7 @@ let
   base = pkgs.mkShell (
     {
       name = "devenv-env-helpers-${scenario}";
+      __structuredAttrs = scenario == "structured";
       packages = [
         pkgs.pkg-config
         pkgs.zlib
@@ -108,18 +113,18 @@ let
     }
     // resolved.initial
   );
-  # Prototype integration point: wrap setup so final operations run after
-  # postHook, postHooks, and userHook. The wrapper is independent of env values.
-  # A production implementation must also preserve stdenv's broader interface.
-  wrapper = pkgs.writeTextDir "setup" ''
-    source ${pkgs.stdenv}/setup
-    source "$devenvEnvFinalPath"
-    unset devenvEnvFinalPath
-  '';
 in
-lib.overrideDerivation base (_: {
-  stdenv = wrapper;
-  devenvEnvFinal = resolved.finalScript;
-  passAsFile = (base.drvAttrs.passAsFile or [ ]) ++ [ "devenvEnvFinal" ];
-  userHook = "export CC=late-user-cc";
-})
+lib.overrideDerivation
+  (
+    (env.wrapShell {
+      inherit pkgs;
+      environment = evaluated.config.env;
+      shell = base;
+    }).overrideAttrs
+      (_: {
+        TEST_OVERRIDE = "retained";
+      })
+  )
+  (_: {
+    userHook = "export CC=late-user-cc";
+  })

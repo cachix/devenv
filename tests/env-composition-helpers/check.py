@@ -1,4 +1,4 @@
-"""Executable checks for the standalone environment-helper prototype.
+"""Executable checks for environment composition helpers.
 
 Run with Python 3 and --nixpkgs /path/to/nixpkgs. Nix needs access to its daemon.
 Artifacts and build outputs are kept in a temporary directory.
@@ -88,6 +88,7 @@ expected = {
 for name, wanted in expected.items():
     assert value(normal, name) == wanted, (name, value(normal, name), wanted)
 assert "LEGACY_NULL" not in normal
+assert value(normal, "TEST_OVERRIDE") == "retained"
 assert value(normal, "TYPED_PATH").startswith("/nix/store/")
 assert pathlib.Path(value(normal, "TYPED_PATH")).read_bytes() == (SOURCES / "probe.nix").read_bytes()
 assert value(normal, "TYPED_PACKAGE").startswith("/nix/store/")
@@ -95,9 +96,9 @@ assert value(normal, "PKG_CONFIG_PATH").startswith("/custom/lib/pkgconfig:")
 assert value(normal, "NIX_CFLAGS_COMPILE").endswith(" -DCUSTOM")
 assert "-isystem /nix/store/" in value(normal, "NIX_CFLAGS_COMPILE")
 assert value(normal, "NIX_LDFLAGS").endswith(" -L/custom/lib")
-assert not any(name.startswith("_devenv_env_") for name in normal)
+assert not any(name.startswith("_devenv_env_") and name != "_devenv_env_final_values" for name in normal)
 assert "devenvEnvFinalPath" not in normal
-assert "_devenvFinalizeEnv" not in json.loads((ROOT / "normal.json").read_text())["bashFunctions"]
+assert not any(name.startswith("_devenv_env_") for name in json.loads((ROOT / "normal.json").read_text())["bashFunctions"])
 print("PASS: setup timing, final precedence, ordering, fallback, coercion, quoting and cleanup", flush=True)
 
 environment = {name: entry["value"] for name, entry in normal.items() if entry["type"] == "exported"}
@@ -124,3 +125,32 @@ large = capture("large")
 assert value(large, "LARGE_ONE") == "a" * 70000
 assert value(large, "LARGE_TWO") == "b" * 70000
 print("PASS: two 70 KB values avoid the single-environment-string size limit", flush=True)
+
+structured = capture("structured")
+for name, wanted in expected.items():
+    if name not in {"LEGACY_LIST", "LEGACY_BOOL"}:
+        assert value(structured, name) == wanted, (name, structured.get(name), wanted)
+print("PASS: explicit operations and initial values work with structured derivation attributes", flush=True)
+
+path = capture("path")
+assert value(path, "PATH") == "/configured/bin"
+path_activation = checked(
+    NIX + ["print-dev-env", "--file", str(SOURCES / "probe.nix"),
+           "--argstr", "scenario", "path", *LIBRARY_ARGS, *PACKAGE_ARGS],
+    output="path-activation.sh",
+)
+actual_path = checked([
+    "bash", "--noprofile", "--norc", "-c",
+    'source "$1"; printf "%s" "$PATH"', "bash", str(ROOT / "path-activation.sh"),
+])
+assert actual_path == b"/configured/bin"
+build = json.loads(checked(
+    NIX + ["build", "--no-link", "--json", "--file", str(SOURCES / "probe.nix"),
+           "--argstr", "scenario", "path", *LIBRARY_ARGS, *PACKAGE_ARGS],
+))
+output = build[0]["outputs"]["out"]
+references = checked(["nix-store", "--query", "--references", output]).decode().splitlines()
+assert value(path, "FINAL_ONLY_PACKAGE") in references, references
+stdenv = pathlib.Path(value(normal, "stdenv"))
+assert (stdenv / "nix-support").is_dir()
+print("PASS: final PATH survives activation, shell builds succeed, and helper-only dependencies are retained", flush=True)
