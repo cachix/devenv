@@ -1,0 +1,4 @@
+# Test-generated files
+app/deps/
+app/_build/
+app/mix.lock
