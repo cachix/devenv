@@ -18,7 +18,8 @@ in
         when = cfg.enable;
         description = ''
           Configure `nodejs`, `bun`, `deno`, `npm`, `pnpm`, `yarn`, and `corepack` under `languages.typescript` without enabling `languages.javascript`.
-          TypeScript still provides its compiler and language server by default. Node.js is enabled by default only when npm, pnpm, Yarn, or Corepack is enabled.
+          TypeScript now enables Node.js by default alongside its compiler and language server, matching JavaScript. Package managers remain disabled by default.
+          Set `languages.typescript.nodejs.enable = false` to keep a tooling-only environment or use Bun or Deno without the project Node.js runtime.
         '';
       }
     ];

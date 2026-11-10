@@ -1,6 +1,6 @@
 # TypeScript
 
-The TypeScript module provides the TypeScript compiler and, by default, the TypeScript language server.
+The TypeScript module provides the TypeScript compiler, Node.js, and the TypeScript language server by default.
 Configure Node.js, Bun, Deno, npm, pnpm, Yarn, or Corepack directly under `languages.typescript`;
 you do not need to enable `languages.javascript`.
 
@@ -14,7 +14,8 @@ you do not need to enable `languages.javascript`.
 }
 ```
 
-Node.js is enabled by default when npm, pnpm, Yarn, or Corepack is enabled, but not for Bun or Deno.
+Package managers are disabled by default. Enabling Bun or Deno adds them alongside Node.js.
+Set `languages.typescript.nodejs.enable = false` if you do not want the project Node.js runtime.
 The compiler and language server keep their own package dependencies, independent of the project's runtime.
 
 See [JavaScript and TypeScript environments](/guides/javascript-typescript/) for version availability,

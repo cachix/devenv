@@ -76,12 +76,29 @@ let
 
   javascript = evaluate [ { languages.javascript.enable = true; } ];
   typescript = evaluate [ { languages.typescript.enable = true; } ];
+  toolingOnly = evaluate [
+    {
+      languages.typescript = {
+        enable = true;
+        nodejs.enable = false;
+      };
+    }
+  ];
   bun = evaluate [
     {
       languages.typescript = {
         enable = true;
         bun.enable = true;
         bun.install.enable = true;
+      };
+    }
+  ];
+  bunOnly = evaluate [
+    {
+      languages.typescript = {
+        enable = true;
+        nodejs.enable = false;
+        bun.enable = true;
       };
     }
   ];
@@ -248,6 +265,15 @@ let
       };
     }
   ];
+  denoOnly = evaluate [
+    {
+      languages.typescript = {
+        enable = true;
+        nodejs.enable = false;
+        deno.enable = true;
+      };
+    }
+  ];
   legacyDeno = evaluate [ { languages.deno.enable = true; } ];
   allDeno = evaluate [
     {
@@ -394,13 +420,41 @@ assert pathCount javascript == 1;
 assert valid typescript;
 assert hasPackage typescript pkgs.typescript;
 assert hasPackage typescript pkgs.typescript-language-server;
-assert !hasPackage typescript pkgs.nodejs-slim;
-assert typescript.enterShell == "";
+assert hasPackage typescript pkgs.nodejs-slim;
+assert typescript.languages.typescript.nodejs.enable;
+assert !typescript.languages.javascript.enable;
+assert pathCount typescript == 1;
+assert scripts typescript == [ ];
+assert lib.all (name: !typescript.languages.typescript.${name}.enable) [
+  "npm"
+  "pnpm"
+  "yarn"
+  "corepack"
+  "bun"
+  "deno"
+];
+assert lib.all (name: !javascript.languages.javascript.${name}.enable) [
+  "npm"
+  "pnpm"
+  "yarn"
+  "corepack"
+  "bun"
+  "deno"
+];
+assert valid toolingOnly;
+assert !hasPackage toolingOnly pkgs.nodejs-slim;
+assert hasPackage toolingOnly pkgs.typescript;
+assert hasPackage toolingOnly pkgs.typescript-language-server;
+assert toolingOnly.enterShell == "";
 assert valid bun;
 assert !bun.languages.javascript.enable;
-assert !bun.languages.typescript.nodejs.enable;
-assert !hasPackage bun pkgs.nodejs-slim;
+assert bun.languages.typescript.nodejs.enable;
+assert hasPackage bun pkgs.nodejs-slim;
 assert hasPackage bun testPkgs.bun;
+assert valid bunOnly;
+assert !hasPackage bunOnly pkgs.nodejs-slim;
+assert hasPackage bunOnly testPkgs.bun;
+assert hasPackage bunOnly pkgs.typescript-language-server;
 assert lib.hasInfix "/project/node_modules/.bin" bun.enterShell;
 assert lib.hasInfix "--save-text-lockfile" (builtins.head (scripts bun));
 assert lib.hasSuffix "_devenv-bun-install\nfi\n" (builtins.head (scripts bun));
@@ -453,9 +507,13 @@ assert !hasPackage noLsp pkgs.typescript-language-server;
 assert valid deno;
 assert !deno.languages.javascript.enable;
 assert !deno.languages.deno.enable;
-assert !deno.languages.typescript.nodejs.enable;
+assert deno.languages.typescript.nodejs.enable;
 assert hasPackage deno pkgs.deno;
-assert !hasPackage deno pkgs.nodejs-slim;
+assert hasPackage deno pkgs.nodejs-slim;
+assert valid denoOnly;
+assert !hasPackage denoOnly pkgs.nodejs-slim;
+assert hasPackage denoOnly pkgs.deno;
+assert hasPackage denoOnly pkgs.typescript-language-server;
 assert deno.env.DENO_INSTALL_ROOT == "/project/.devenv/state/deno";
 assert deno.env.DENO_DIR == "/project/.devenv/state/deno/cache";
 assert valid legacyDeno;

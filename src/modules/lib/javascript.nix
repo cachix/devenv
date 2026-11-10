@@ -337,11 +337,7 @@ let
 
       nodejs = {
         enable = lib.mkEnableOption "Node.js runtime" // {
-          default = name == "javascript"
-            || cfg.corepack.enable
-            || lib.any (manager: cfg.${manager}.enable) nodeManagers;
-          defaultText = if name == "javascript" then lib.literalExpression "true" else
-          lib.literalExpression "npm.enable || pnpm.enable || yarn.enable || corepack.enable";
+          default = true;
         };
         package = lib.mkOption {
           type = lib.types.package;

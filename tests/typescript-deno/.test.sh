@@ -2,6 +2,7 @@
 set -euo pipefail
 
 deno --version
+node --version
 tsc --version
 typescript-language-server --version
 test "$DENO_INSTALL_ROOT" = "$DEVENV_STATE/deno"
