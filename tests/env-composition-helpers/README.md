@@ -42,5 +42,10 @@ The standalone checks cover:
 - Exact final PATH replacement without breaking normal shell builds.
 - Retention of a dependency referenced only by a final helper value.
 
-The reusable test workflow runs this fixture in its own job on Linux and macOS,
+The PR test workflow runs this fixture in its own job on Linux and macOS,
 so an unrelated failure in the full suite cannot prevent these checks from running.
+This job uses read-only repository permissions and has no cache upload credentials.
+It is separate from the reusable release test workflow.
+
+The standalone probe sources exclude live `.devenv` state. Compiler subprocesses
+use a live temporary directory instead of temporary paths from Nix's raw capture.

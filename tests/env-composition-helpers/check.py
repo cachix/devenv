@@ -102,6 +102,9 @@ assert not any(name.startswith("_devenv_env_") for name in json.loads((ROOT / "n
 print("PASS: setup timing, final precedence, ordering, fallback, coercion, quoting and cleanup", flush=True)
 
 environment = {name: entry["value"] for name, entry in normal.items() if entry["type"] == "exported"}
+# Raw captures include temporary paths belonging to Nix's now-finished sandbox.
+# Keep the captured toolchain and flags, but give subprocesses live temp paths.
+environment.update({name: str(ROOT) for name in ("TMPDIR", "TMP", "TEMP", "TEMPDIR")})
 checked(["pkg-config", "--exists", "zlib"], env=environment)
 source = b"#ifndef CUSTOM\n#error missing custom flag\n#endif\n#include <zlib.h>\nint main(void) { return zlibVersion() == 0; }\n"
 checked([value(normal, "PROBE_COMPILER"), "-x", "c", "-", "-o", str(ROOT / "zlib-probe"), "-lz"], input=source, env=environment)

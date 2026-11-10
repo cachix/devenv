@@ -6,6 +6,19 @@
 }:
 let
   env = config.lib.env;
+  # The fixture directory also contains live .devenv task state by the time
+  # enterTest is evaluated. Copy only the standalone probe's source files.
+  probeSources = builtins.path {
+    path = ./.;
+    name = "env-composition-probes";
+    filter =
+      path: _:
+      builtins.elem (baseNameOf path) [
+        "check.py"
+        "eval.nix"
+        "probe.nix"
+      ];
+  };
   lateHook = pkgs.writeTextDir "nix-support/setup-hook" ''
     export ENV_SETUP_OBSERVED="$ENV_SETUP_INPUT"
     envTestLateHook() { export CC=package-cc; }
@@ -83,7 +96,7 @@ in
     test "$ENV_DEFAULT_EMPTY" = ""
     case "$PKG_CONFIG_PATH" in /configured/pkgconfig:*) ;; *) exit 1;; esac
     pkg-config --exists zlib
-    python3 ${./.}/check.py \
+    python3 ${probeSources}/check.py \
       --nixpkgs ${pkgs.path} \
       --library ${inputs.devenv.modules}/lib/env.nix
   '';
