@@ -11,7 +11,7 @@ For custom packages that do not expose their Erlang dependency, set `languages.e
 
 ## Choosing an Elixir version
 
-Since devenv 2.4.1, you can pin an exact Elixir version, including release candidates, starting from 1.15.0:
+You can pin an exact Elixir version, including release candidates, starting from 1.15.0:
 
 ```nix
 languages.elixir.version = "1.17.3";
@@ -35,7 +35,7 @@ The `-otp-27` part is ignored. devenv always picks the newest Erlang/OTP that th
 
 ## Mix home directory
 
-Since devenv 2.4.1, `MIX_HOME` is set to `.devenv/state/mix`. Each project gets its own Hex, Rebar, archives (like `phx_new`) and escripts.
+devenv sets `MIX_HOME` to `.devenv/state/mix`. Each project gets its own Hex, Rebar, archives (like `phx_new`) and escripts.
 These are built for one Elixir and Erlang/OTP version, so a shared `~/.mix` can break when projects use different versions.
 Escripts installed with `mix escript.install` are on `PATH`.
 
@@ -47,7 +47,7 @@ env.MIX_HOME = "/home/alice/.mix";
 
 ## Fetching dependencies
 
-Since devenv 2.4.1, devenv can run `mix deps.get` for you when you enter the shell:
+devenv can run `mix deps.get` for you when you enter the shell:
 
 ```nix
 languages.elixir.mix.deps.enable = true;
