@@ -1,0 +1,6 @@
+inputs:
+  beam-overlay:
+    url: github:zeeetech/beam-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
