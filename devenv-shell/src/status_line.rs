@@ -1095,10 +1095,10 @@ mod tests {
     }
 
     #[test]
-    fn emoji_is_the_default() {
+    fn non_emoji_is_the_default() {
         let mut default = StatusLine::new();
         default.state_mut().set_watched_file_count(2);
-        let explicit = status_line_with(true, |sl| sl.state_mut().set_watched_file_count(2));
+        let explicit = status_line_with(false, |sl| sl.state_mut().set_watched_file_count(2));
         assert_eq!(
             uncached_content(&default, 80),
             uncached_content(&explicit, 80)
@@ -1159,17 +1159,17 @@ mod tests {
         let mut status_line = StatusLine::new();
         status_line.state_mut().set_watched_file_count(2);
         assert_draw_matches_fresh_render(&mut status_line, 80);
-        let emoji = status_line.cached_content.clone();
-        assert!(String::from_utf8_lossy(&emoji).contains('👁'));
-
-        status_line.set_indicators(Indicators::new(false));
-        assert_draw_matches_fresh_render(&mut status_line, 80);
-        assert_ne!(status_line.cached_content, emoji);
-        assert!(!String::from_utf8_lossy(&status_line.cached_content).contains('👁'));
+        let plain = status_line.cached_content.clone();
+        assert!(!String::from_utf8_lossy(&plain).contains('👁'));
 
         status_line.set_indicators(Indicators::new(true));
         assert_draw_matches_fresh_render(&mut status_line, 80);
-        assert_eq!(status_line.cached_content, emoji);
+        assert_ne!(status_line.cached_content, plain);
+        assert!(String::from_utf8_lossy(&status_line.cached_content).contains('👁'));
+
+        status_line.set_indicators(Indicators::new(false));
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        assert_eq!(status_line.cached_content, plain);
     }
 
     #[test]

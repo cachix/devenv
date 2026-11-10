@@ -45,7 +45,7 @@ This example keeps the TUI at the command's terminal position, adds profiles and
 
 version: 1
 tui:
-  emoji: true
+  emoji: false
   viewport: inline
   theme:
     preset: devenv
@@ -101,12 +101,12 @@ tui:
 
 ## Emoji and glyphs
 
-`tui.emoji` selects between emoji and non-emoji Unicode glyphs for display indicators. It defaults to `true`, which keeps the existing output. Added in devenv 2.4.1.
+`tui.emoji` selects between emoji and non-emoji Unicode glyphs for display indicators. It defaults to `false`, which uses plain glyphs that line up in every terminal. Added in devenv 2.4.1.
 
 ```yaml
 version: 1
 tui:
-  emoji: false
+  emoji: true
 ```
 
 It applies to the persistent status line in an interactive `devenv shell`. The TUI's activity views currently use no emoji, so the setting changes nothing there:

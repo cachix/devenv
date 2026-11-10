@@ -79,9 +79,9 @@ impl Indicators {
 }
 
 impl Default for Indicators {
-    /// Emoji glyphs, preserving the existing output.
+    /// Non-emoji glyphs, which every terminal draws one cell wide.
     fn default() -> Self {
-        Self::new(true)
+        Self::new(false)
     }
 }
 
@@ -90,9 +90,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_to_emoji() {
-        assert_eq!(Indicators::default(), Indicators::new(true));
-        assert!(Indicators::default().emoji());
+    fn defaults_to_non_emoji() {
+        assert_eq!(Indicators::default(), Indicators::new(false));
+        assert!(!Indicators::default().emoji());
     }
 
     #[test]

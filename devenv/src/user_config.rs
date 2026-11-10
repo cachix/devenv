@@ -54,19 +54,19 @@ mod tests {
     }
 
     #[test]
-    fn emoji_setting_is_loaded_and_defaults_to_true() {
+    fn emoji_setting_is_loaded_and_defaults_to_false() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.yaml");
 
         std::fs::write(&path, "version: 1\n").unwrap();
         let config = load(Some(&path)).unwrap();
-        assert!(config.tui.emoji);
-        assert!(config.tui.indicators().emoji());
-
-        std::fs::write(&path, "version: 1\ntui:\n  emoji: false\n").unwrap();
-        let config = load(Some(&path)).unwrap();
         assert!(!config.tui.emoji);
         assert!(!config.tui.indicators().emoji());
+
+        std::fs::write(&path, "version: 1\ntui:\n  emoji: true\n").unwrap();
+        let config = load(Some(&path)).unwrap();
+        assert!(config.tui.emoji);
+        assert!(config.tui.indicators().emoji());
     }
 
     #[test]

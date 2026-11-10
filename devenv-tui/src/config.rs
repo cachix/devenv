@@ -210,30 +210,17 @@ impl TuiRunContext {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct TuiPreferences {
     /// Use emoji for display indicators, such as the eye in the shell status line.
-    /// Set to `false` to use non-emoji Unicode glyphs instead.
+    /// Defaults to `false`, which uses non-emoji Unicode glyphs.
     pub emoji: bool,
     pub viewport: ViewportPlacement,
     pub theme: ThemeConfig,
     pub statusline: StatuslineConfig,
     pub keybindings: KeybindingsConfig,
     pub behavior: BehaviorConfig,
-}
-
-impl Default for TuiPreferences {
-    fn default() -> Self {
-        Self {
-            emoji: true,
-            viewport: ViewportPlacement::default(),
-            theme: ThemeConfig::default(),
-            statusline: StatuslineConfig::default(),
-            keybindings: KeybindingsConfig::default(),
-            behavior: BehaviorConfig::default(),
-        }
-    }
 }
 
 impl TuiPreferences {
@@ -1820,18 +1807,18 @@ mod tests {
     }
 
     #[test]
-    fn tui_emoji_defaults_to_true() {
-        assert!(TuiPreferences::default().emoji);
-        assert!(UserConfig::default().tui.emoji);
-        assert!(TuiPreferences::default().indicators().emoji());
+    fn tui_emoji_defaults_to_false() {
+        assert!(!TuiPreferences::default().emoji);
+        assert!(!UserConfig::default().tui.emoji);
+        assert!(!TuiPreferences::default().indicators().emoji());
         for yaml in [
             "version: 1\n",
             "version: 1\ntui: {}\n",
             "version: 1\ntui:\n  viewport: top\n  statusline:\n    enabled: false\n",
         ] {
             let config = UserConfig::from_yaml("config.yaml", yaml.into()).unwrap();
-            assert!(config.tui.emoji, "{yaml}");
-            assert_eq!(config.tui.indicators(), Indicators::new(true), "{yaml}");
+            assert!(!config.tui.emoji, "{yaml}");
+            assert_eq!(config.tui.indicators(), Indicators::new(false), "{yaml}");
         }
     }
 
@@ -1917,7 +1904,7 @@ mod tests {
         );
         assert_eq!(
             schema.pointer("/$defs/TuiPreferences/properties/emoji/default"),
-            Some(&true.into())
+            Some(&false.into())
         );
         assert_eq!(
             schema.pointer("/properties/version/minimum"),
