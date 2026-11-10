@@ -893,6 +893,7 @@ fn backend_thread_main(
 struct ShellSessionOptions {
     keybindings: devenv_shell::keybindings::ShellKeybindings,
     indicators: devenv_shell::indicators::Indicators,
+    theme: devenv_shell::ShellTheme,
 }
 
 fn frontend_thread_main(
@@ -917,6 +918,7 @@ fn frontend_thread_main(
                     .with_status_line(show_status_line)
                     .with_keybindings(shell_session.keybindings)
                     .with_indicators(shell_session.indicators)
+                    .with_theme(shell_session.theme)
                     .with_shutdown_token(shutdown.cancellation_token())
                     .run(frontend_rx, event_tx, SessionIo::default()),
             )
@@ -956,6 +958,7 @@ fn run(prepared: PreparedCommand, caller: Caller) -> Result<CommandResult> {
     let shell_session = ShellSessionOptions {
         keybindings: frontend.shell_keybindings.clone(),
         indicators: frontend.tui_preferences.indicators(),
+        theme: frontend.tui_preferences.shell_theme(),
     };
 
     let _tracing_guard = devenv_tracing::init_tracing(frontend.log_level, &frontend.tracing_specs);

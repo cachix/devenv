@@ -197,7 +197,7 @@ Set `tui.statusline.enabled: false` to hide ordinary TUI statusline content and 
 
 ## Colors and styles
 
-The `devenv` preset retains the built-in palette. `terminal` uses terminal-native colors where possible, and `none` removes preset colors. Explicit styles work with every preset and take precedence over its colors. Themes apply to the statusline and the activity list.
+The `devenv` preset retains the built-in palette. `terminal` uses terminal-native colors where possible, and `none` removes preset colors. Explicit styles work with every preset and take precedence over its colors. Themes apply to the statusline, the activity list, the fullscreen log viewer, the status line inside `devenv shell`, and the errors printed after the TUI closes.
 
 Colors accept named terminal colors such as `yellow`, `dark_grey`, and `default`, indexed colors as `ansi:0` through `ansi:255`, RGB colors as `#RRGGBB`, or a name from `tui.theme.palette`.
 
@@ -237,7 +237,7 @@ Activity scopes are styled the same way. A dotted scope builds on the scopes bef
 | `activity.status` | Status marks, and the text of error and warning messages |
 | `activity.status.active` | The spinner of running activities |
 | `activity.status.success` | `✓`, and running or ready processes |
-| `activity.status.failure` | `✗`, failed processes, and error messages |
+| `activity.status.failure` | `✗`, failed processes, error messages, and the errors printed after the TUI closes |
 | `activity.status.warning` | Warning messages |
 | `activity.status.info` | The mark of info messages |
 | `activity.status.starting` | Waiting, starting, and restarting processes |
@@ -276,6 +276,22 @@ The fullscreen log viewer has its own scopes. `logs` is the base for every part 
 | `logs.search.current` | The current search match |
 
 Setting `logs.selection` replaces the preset's selection colors, like `activity.selection`. A selection or current match without colors swaps the reverse of the log text, as in the `none` preset, which also underlines the other matches. The footer of the log viewer uses the statusline scopes.
+
+### Shell status line
+
+The status line inside `devenv shell`, such as `devenv watching 11 files`, uses the `shell` scopes. Added in devenv 2.4.1.
+
+| Scope | Styles |
+| --- | --- |
+| `shell` | Every part of the status line, and the action next to a key |
+| `shell.label` | `devenv`, connecting words such as `in` and `files`, and the watching and paused marks |
+| `shell.value` | Durations, file counts, and changed files |
+| `shell.key` | Keys for pausing, resuming, and showing errors |
+| `shell.state` | The state, such as `building` or `watching` |
+| `shell.status` | Status marks, and the `reloaded` and `failed` states |
+| `shell.status.active` | The spinner while building |
+| `shell.status.success` | `✓` and `reloaded` |
+| `shell.status.failure` | `✗` and `failed` |
 
 ## Keybindings
 

@@ -55,6 +55,18 @@ pub(crate) const LOG_SCOPES: &[&str] = &[
     "logs.search.current",
 ];
 
+pub(crate) const SHELL_SCOPES: &[&str] = &[
+    "shell",
+    "shell.label",
+    "shell.value",
+    "shell.key",
+    "shell.state",
+    "shell.status",
+    "shell.status.active",
+    "shell.status.success",
+    "shell.status.failure",
+];
+
 #[derive(Debug, Error, Diagnostic)]
 pub enum UserConfigError {
     #[error("failed to read user configuration at {path}")]
@@ -278,6 +290,10 @@ impl TuiPreferences {
         Indicators::new(self.emoji)
     }
 
+    pub fn shell_theme(&self) -> devenv_shell::ShellTheme {
+        crate::theme::shell_theme(&self.theme)
+    }
+
     pub fn validate(&self) -> Result<(), UserConfigError> {
         self.theme.validate()?;
         self.statusline.validate(&self.theme.palette)?;
@@ -349,6 +365,7 @@ impl ThemeConfig {
             if !statusline_scope(scope)
                 && !ACTIVITY_SCOPES.contains(&scope.as_str())
                 && !LOG_SCOPES.contains(&scope.as_str())
+                && !SHELL_SCOPES.contains(&scope.as_str())
             {
                 return validation(format!(
                     "tui.theme.styles.{scope} is not a supported style scope"
@@ -2594,6 +2611,7 @@ tui:
             "activities",
             "logs.unknown",
             "log",
+            "shell.unknown",
         ] {
             let error = UserConfig::from_yaml(
                 "config.yaml",

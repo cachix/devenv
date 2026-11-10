@@ -17,6 +17,7 @@ use crate::terminal::RawModeGuard;
 use crate::terminal_commands::{
     InBandResizeNotification, ORIGIN_MODE, ResetDecMode, ResetScrollRegion, SetScrollRegion,
 };
+use crate::theme::ShellTheme;
 use crate::vt_utils::{
     CursorState, DEFAULT_MAX_SCROLLBACK, active_point, point_with_x, screen_point,
 };
@@ -1646,6 +1647,11 @@ impl ShellSession {
     /// Select the glyphs used for status-line indicators.
     pub fn with_indicators(mut self, indicators: Indicators) -> Self {
         self.status_line.set_indicators(indicators);
+        self
+    }
+
+    pub fn with_theme(mut self, theme: ShellTheme) -> Self {
+        self.status_line.set_theme(theme);
         self
     }
 

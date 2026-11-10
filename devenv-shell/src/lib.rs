@@ -14,6 +14,7 @@ mod session;
 mod status_line;
 mod terminal;
 pub mod terminal_commands;
+mod theme;
 pub mod vt_utils;
 
 // Protocol types
@@ -27,6 +28,7 @@ pub use terminal::{RawModeGuard, is_tty};
 
 // Status line
 pub use status_line::{StatusLine, StatusState};
+pub use theme::{ShellTheme, Style};
 
 // Shared UI constants (used by devenv-tui)
 pub use status_line::{

@@ -7,80 +7,7 @@ use crate::{
 };
 use iocraft::prelude::*;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Style {
-    pub foreground: Option<Color>,
-    pub background: Option<Color>,
-    pub bold: bool,
-    pub dim: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub reverse: bool,
-}
-
-impl Style {
-    fn foreground(color: Color) -> Self {
-        Self {
-            foreground: Some(color),
-            ..Self::default()
-        }
-    }
-
-    fn colors(foreground: Color, background: Color) -> Self {
-        Self {
-            foreground: Some(foreground),
-            background: Some(background),
-            ..Self::default()
-        }
-    }
-
-    fn or_reversed(self) -> Self {
-        Self {
-            reverse: self.reverse || self.foreground.is_none() && self.background.is_none(),
-            ..self
-        }
-    }
-
-    pub fn emphasized(self) -> Self {
-        Self {
-            bold: self.bold || !self.dim,
-            ..self
-        }
-    }
-
-    pub fn layered(self, over: Style) -> Style {
-        Style {
-            foreground: over.foreground.or(self.foreground),
-            background: over.background.or(self.background),
-            bold: over.bold || self.bold && !over.dim,
-            dim: over.dim || self.dim && !over.bold,
-            italic: self.italic || over.italic,
-            underline: self.underline || over.underline,
-            reverse: self.reverse || over.reverse,
-        }
-    }
-
-    pub fn text(&self, content: impl Into<String>) -> Element<'static, Text> {
-        element!(Text(
-            content: content.into(),
-            color: self.foreground,
-            weight: if self.bold { Weight::Bold } else if self.dim { Weight::Light } else { Weight::Normal },
-            decoration: if self.underline { TextDecoration::Underline } else { TextDecoration::None },
-            italic: self.italic,
-            invert: self.reverse,
-        ))
-    }
-
-    pub fn span(&self, content: impl Into<String>) -> AnyElement<'static> {
-        match self.background {
-            Some(background) => element!(View(background_color: background) {
-                #(self.text(content))
-            })
-            .into_any(),
-            None => self.text(content).into_any(),
-        }
-    }
-}
+pub use devenv_shell::{ShellTheme, Style};
 
 impl ThemeConfig {
     pub fn style(&self, scopes: &[&str]) -> Style {
@@ -344,6 +271,24 @@ impl Default for LogTheme {
     }
 }
 
+pub fn shell_theme(theme: &ThemeConfig) -> ShellTheme {
+    let style = |scopes: &[&str]| theme.style(&[&["shell"], scopes].concat());
+    let status = |scope| style(&["shell.status", scope]);
+    let state = |scope| style(&["shell.state", "shell.status", scope]);
+    ShellTheme {
+        text: style(&[]),
+        label: style(&["shell.label"]),
+        value: style(&["shell.value"]),
+        key: style(&["shell.key"]),
+        active: status("shell.status.active"),
+        success: status("shell.status.success"),
+        failure: status("shell.status.failure"),
+        state: style(&["shell.state"]),
+        state_success: state("shell.status.success"),
+        state_failure: state("shell.status.failure"),
+    }
+}
+
 fn preset_style(preset: ThemePreset, scope: &str) -> Style {
     match preset {
         ThemePreset::Devenv => devenv_style(scope),
@@ -354,6 +299,15 @@ fn preset_style(preset: ThemePreset, scope: &str) -> Style {
 
 fn devenv_style(scope: &str) -> Style {
     match scope {
+        "shell.label" => Style::foreground(COLOR_SECONDARY),
+        "shell.value" | "shell.status.success" => Style::foreground(COLOR_COMPLETED),
+        "shell.key" => Style::foreground(COLOR_INTERACTIVE),
+        "shell.state" => Style {
+            bold: true,
+            ..Style::foreground(COLOR_ACTIVE)
+        },
+        "shell.status.active" => Style::foreground(COLOR_ACTIVE),
+        "shell.status.failure" => Style::foreground(COLOR_FAILED),
         "statusline" => Style::foreground(Color::Reset),
         "statusline.separator" => Style::foreground(COLOR_HIERARCHY),
         "statusline.key_hints" | "statusline.pending_key" => Style::foreground(COLOR_INTERACTIVE),
@@ -400,6 +354,15 @@ fn devenv_style(scope: &str) -> Style {
 
 fn terminal_style(scope: &str) -> Style {
     match scope {
+        "shell.label" => Style::foreground(Color::DarkGrey),
+        "shell.value" | "shell.status.success" => Style::foreground(Color::Green),
+        "shell.key" => Style::foreground(Color::Yellow),
+        "shell.state" => Style {
+            bold: true,
+            ..Style::foreground(Color::Reset)
+        },
+        "shell.status.active" => Style::foreground(Color::Reset),
+        "shell.status.failure" => Style::foreground(Color::Red),
         "statusline" => Style::foreground(Color::Reset),
         "statusline.separator" => Style::foreground(Color::DarkGrey),
         "statusline.key_hints" | "statusline.pending_key" => Style::foreground(Color::Yellow),
@@ -436,6 +399,10 @@ fn terminal_style(scope: &str) -> Style {
 
 fn none_style(scope: &str) -> Style {
     match scope {
+        "shell.state" => Style {
+            bold: true,
+            ..Style::default()
+        },
         "activity.progress.track"
         | "activity.status.inactive"
         | "activity.dimmed"
@@ -459,7 +426,7 @@ fn none_style(scope: &str) -> Style {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ACTIVITY_SCOPES, ColorSpec, LOG_SCOPES};
+    use crate::config::{ACTIVITY_SCOPES, ColorSpec, LOG_SCOPES, SHELL_SCOPES};
 
     fn theme(preset: ThemePreset, styles: &[(&str, StyleConfig)]) -> ThemeConfig {
         ThemeConfig {
@@ -741,6 +708,69 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn devenv_preset_keeps_the_built_in_shell_colors() {
+        assert_eq!(shell_theme(&ThemeConfig::default()), ShellTheme::default());
+    }
+
+    #[test]
+    fn every_shell_scope_is_resolved() {
+        for preset in [
+            ThemePreset::Devenv,
+            ThemePreset::Terminal,
+            ThemePreset::None,
+        ] {
+            for scope in SHELL_SCOPES {
+                let marked = shell_theme(&theme(
+                    preset,
+                    &[(
+                        scope,
+                        StyleConfig {
+                            modifiers: vec![TextModifier::Italic],
+                            ..StyleConfig::default()
+                        },
+                    )],
+                ));
+                assert_ne!(
+                    marked,
+                    shell_theme(&theme(preset, &[])),
+                    "{preset:?} {scope}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn configured_dim_replaces_preset_bold() {
+        let dim = StyleConfig {
+            modifiers: vec![TextModifier::Dim],
+            ..StyleConfig::default()
+        };
+        let theme = theme(
+            ThemePreset::Devenv,
+            &[("shell.state", dim.clone()), ("logs.title", dim)],
+        );
+
+        for style in [shell_theme(&theme).state, LogTheme::new(&theme).title] {
+            assert!(style.dim);
+            assert!(!style.bold);
+        }
+    }
+
+    #[test]
+    fn none_preset_keeps_shell_states_bold_without_colors() {
+        let plain = shell_theme(&theme(ThemePreset::None, &[]));
+
+        assert_eq!(plain.label, Style::default());
+        assert_eq!(
+            plain.state_failure,
+            Style {
+                bold: true,
+                ..Style::default()
+            }
+        );
     }
 
     #[test]
