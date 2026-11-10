@@ -369,6 +369,12 @@ This is particularly useful for:
     and is satisfied straight away by one that has already exited.
     Use [`devenv up`](/processes/) when you want to start a process and leave it running.
 
+<VersionCompatibility version="2.4.1" kind="changed">
+When using a running native manager, setup tasks selected by `devenv tasks run`
+execute in that task run. Starting their dependent processes does not execute
+those setup tasks again in the manager.
+</VersionCompatibility>
+
 You can also run tasks after a process finishes by depending on its `@completed` state (see [Dependency states](#dependency-states)). The default suffix for a process dependency is `@ready`, which fires as soon as the process is healthy, so use `@completed` to wait for it to exit instead:
 
 ```nix title="devenv.nix"

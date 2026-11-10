@@ -272,6 +272,14 @@ impl NativeProcessManager {
             Ok(ApiRequest::Start { names }) => ApiResponse::Start {
                 outcome: manager.tasks.start_with_deps(names).await,
             },
+            Ok(ApiRequest::EnsureStarted { name, restart }) => {
+                match manager.tasks.ensure_started(&name, restart).await {
+                    Ok(()) => ApiResponse::Ok,
+                    Err(error) => ApiResponse::Error {
+                        message: error.to_string(),
+                    },
+                }
+            }
             Ok(ApiRequest::DependencyStatus { names }) => {
                 let runner = manager.process_runner();
                 let mut processes = Vec::with_capacity(names.len());

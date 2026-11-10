@@ -1,91 +1,114 @@
-//! Process dependencies owned by an already-running native manager.
+//! Processes supervised by an existing native manager.
 //!
-//! `devenv tasks run` keeps process tasks in its own schedule, so task
-//! selection (`after`, `before`, `wantedBy`, run modes) and the typed
-//! dependency edges are exactly those of the scheduler. When a manager started
-//! by `devenv up` is running, though, that manager owns the process lifetimes:
-//! launching a second copy crash-loops services such as PostgreSQL (#3137),
-//! and stopping them when the task run ends would tear down the user's
-//! environment. [`ProcessOwner`] lets the task runner hand process nodes to the
-//! owner and judge edges on them against the owner's live dependency state.
+//! The task runner orders dependencies; the manager only launches processes
+//! whose prerequisites this run has already satisfied. Status is queried while
+//! waiting, so there is no replica of the manager's lifecycle state to maintain.
 
-use devenv_processes::{
-    ApiRequest, ApiResponse, AttachEvent, DependencyInfo, NativeManagerClient, StartOutcome,
-};
+use devenv_processes::{ApiRequest, ApiResponse, AttachEvent, DependencyInfo, NativeManagerClient};
 use miette::{Result, bail, miette};
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Notify, RwLock};
+use tokio::sync::{Notify, RwLock, watch};
 use tokio::task::JoinHandle;
 
-/// Bound on connecting to the manager and on replies that do no user work.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-/// Refresh interval while the manager offers no attach stream to wake on.
-const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-/// A running native process manager that owns process lifetimes for a task
-/// run. Construct it with [`ProcessOwner::connect`] and hand it to
-/// [`crate::TasksBuilder::with_process_owner`].
+/// A manager that owns process lifetimes, while this task run owns ordering.
+#[derive(Debug)]
 pub struct ProcessOwner {
     socket_path: PathBuf,
-    /// Last observed dependency state, keyed by short process name. A name is
-    /// present once the local runner has handed its node to the owner
-    /// (started it, or found it already running or settled); until then
-    /// dependents keep waiting, as they would on a locally `Waiting` process.
-    armed: RwLock<HashMap<String, DependencyInfo>>,
-    /// The manager went away mid-run; nothing it owned can change any more.
-    lost: AtomicBool,
-    watcher: std::sync::Mutex<Option<JoinHandle<()>>>,
-}
-
-impl std::fmt::Debug for ProcessOwner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ProcessOwner")
-            .field("socket_path", &self.socket_path)
-            .finish_non_exhaustive()
-    }
+    /// Until a node's prerequisites are satisfied in this run, dependents must
+    /// wait even if its process is already running in the manager.
+    handed_over: RwLock<HashSet<String>>,
+    /// Events are invalidations only. Each waiter has its own watch cursor, so
+    /// a change during a status query remains pending until that waiter sees it.
+    /// False means the subscription was lost, even if status queries still work.
+    changes: watch::Receiver<bool>,
+    watcher: JoinHandle<()>,
 }
 
 impl Drop for ProcessOwner {
     fn drop(&mut self) {
-        if let Ok(mut watcher) = self.watcher.lock()
-            && let Some(handle) = watcher.take()
-        {
-            handle.abort();
-        }
+        self.watcher.abort();
     }
 }
 
 impl ProcessOwner {
-    /// Connect to the manager listening on `socket_path` and check that it
-    /// understands dependency status requests. An older daemon answers with
-    /// an "unknown variant" error, which is returned as is so the caller can
-    /// turn it into restart guidance.
+    /// Establish the subscription before reading status. Receiving its initial
+    /// snapshot confirms that subsequent transitions will be delivered.
     pub async fn connect(socket_path: &Path) -> Result<Arc<Self>> {
+        let mut stream = tokio::time::timeout(
+            REQUEST_TIMEOUT,
+            NativeManagerClient::attach_stream(socket_path),
+        )
+        .await
+        .map_err(|_| miette!("process manager did not respond in time"))??;
+        match tokio::time::timeout(REQUEST_TIMEOUT, stream.next())
+            .await
+            .map_err(|_| miette!("process manager did not respond in time"))?
+        {
+            Some(Ok(AttachEvent::Snapshot { .. })) => {}
+            Some(Err(error)) => return Err(error),
+            other => bail!("Expected a process manager subscription snapshot, received {other:?}"),
+        }
+        let (events, changes) = watch::channel(true);
+        let watcher = tokio::spawn(async move {
+            while let Some(event) = stream.next().await {
+                match event {
+                    Ok(AttachEvent::Snapshot { .. } | AttachEvent::Status { .. }) => {
+                        events.send_replace(true);
+                    }
+                    Ok(AttachEvent::Log { .. }) => {}
+                    Err(error) => {
+                        tracing::debug!(%error, "process manager subscription failed");
+                        break;
+                    }
+                }
+            }
+            events.send_replace(false);
+        });
         let owner = Arc::new(Self {
             socket_path: socket_path.to_path_buf(),
-            armed: RwLock::new(HashMap::new()),
-            lost: AtomicBool::new(false),
-            watcher: std::sync::Mutex::new(None),
+            handed_over: RwLock::new(HashSet::new()),
+            changes,
+            watcher,
         });
         owner.query(&[]).await?;
         Ok(owner)
     }
 
-    /// The owner's dependency state for every name, in request order.
+    pub(crate) fn subscribe(&self) -> watch::Receiver<bool> {
+        let mut changes = self.changes.clone();
+        changes.borrow_and_update();
+        changes
+    }
+
+    fn check_subscription(&self) -> Result<()> {
+        if !*self.changes.borrow() || self.changes.has_changed().is_err() {
+            bail!("Lost the running process manager subscription; retry the task run");
+        }
+        Ok(())
+    }
+
     pub(crate) async fn query(&self, names: &[String]) -> Result<Vec<DependencyInfo>> {
+        self.check_subscription()?;
         let request = ApiRequest::DependencyStatus {
             names: names.to_vec(),
         };
-        let response = tokio::time::timeout(
-            REQUEST_TIMEOUT,
-            NativeManagerClient::api_request(&self.socket_path, &request),
-        )
-        .await
-        .map_err(|_| miette!("process manager did not respond in time"))??;
+        let mut subscription = self.changes.clone();
+        let response = tokio::select! {
+            biased;
+            _ = subscription.wait_for(|connected| !*connected) => {
+                bail!("Lost the running process manager subscription; retry the task run");
+            }
+            response = tokio::time::timeout(
+                REQUEST_TIMEOUT,
+                NativeManagerClient::api_request(&self.socket_path, &request),
+            ) => response.map_err(|_| miette!("process manager did not respond in time"))??,
+        };
+        self.check_subscription()?;
         match response {
             ApiResponse::DependencyStatus { processes } => Ok(processes),
             ApiResponse::Error { message } => bail!("{message}"),
@@ -93,129 +116,52 @@ impl ProcessOwner {
         }
     }
 
-    /// Ask the owner to start one process through its own scheduler, which
-    /// resolves the process's prerequisites against the owner's live graph
-    /// and skips a process that is already running or pending.
-    pub(crate) async fn start(&self, name: &str) -> Result<StartOutcome> {
-        let request = ApiRequest::Start {
-            names: vec![name.to_string()],
+    /// Launch without resolving dependencies a second time. The daemon decides
+    /// atomically whether the process is already live or has a terminal result.
+    pub(crate) async fn start(&self, name: &str, restart: bool) -> Result<()> {
+        self.check_subscription()?;
+        let request = ApiRequest::EnsureStarted {
+            name: name.to_string(),
+            restart,
         };
-        match NativeManagerClient::api_request_bounded_connect(
-            &self.socket_path,
-            &request,
-            REQUEST_TIMEOUT,
-        )
-        .await?
-        {
-            ApiResponse::Start { outcome } => Ok(outcome),
+        let mut subscription = self.changes.clone();
+        let response = tokio::select! {
+            biased;
+            _ = subscription.wait_for(|connected| !*connected) => {
+                bail!("Lost the running process manager subscription; retry the task run");
+            }
+            response = NativeManagerClient::api_request_bounded_connect(
+                &self.socket_path, &request, REQUEST_TIMEOUT,
+            ) => response?,
+        };
+        match response {
+            ApiResponse::Ok => Ok(()),
             ApiResponse::Error { message } => bail!("{message}"),
-            other => bail!("Unexpected response to start request: {other:?}"),
+            other => bail!("Unexpected response to ensure-started request: {other:?}"),
         }
     }
 
-    /// Hand a process node to the owner: from now on dependents are judged
-    /// against the owner's state for `name`.
-    pub(crate) async fn arm(&self, name: &str, notify: &Notify) -> Result<()> {
-        let info = self
-            .query(&[name.to_string()])
+    pub(crate) async fn arm(&self, name: &str, notify: &Notify) {
+        self.handed_over.write().await.insert(name.to_string());
+        notify.notify_waiters();
+    }
+
+    pub(crate) async fn is_handed_over(&self, name: &str) -> bool {
+        self.handed_over.read().await.contains(name)
+    }
+
+    /// Read authoritative state; lifecycle events only wake its readers.
+    pub(crate) async fn state(&self, name: &str) -> Result<Option<DependencyInfo>> {
+        self.check_subscription()?;
+        if !self.is_handed_over(name).await {
+            return Ok(None);
+        }
+        self.query(&[name.to_string()])
             .await?
             .into_iter()
             .next()
-            .ok_or_else(|| miette!("process manager returned no status for '{name}'"))?;
-        self.armed.write().await.insert(name.to_string(), info);
-        notify.notify_waiters();
-        Ok(())
-    }
-
-    /// Last observed state for an armed process; `None` while the local
-    /// runner has not handed the process to the owner yet.
-    pub(crate) async fn state(&self, name: &str) -> Option<DependencyInfo> {
-        self.armed.read().await.get(name).cloned()
-    }
-
-    /// Whether the manager disappeared after the run attached to it.
-    pub(crate) fn is_lost(&self) -> bool {
-        self.lost.load(Ordering::Acquire)
-    }
-
-    /// Re-read every armed process and wake dependents when anything changed.
-    async fn refresh(&self, notify: &Notify) -> Result<()> {
-        let names: Vec<String> = self.armed.read().await.keys().cloned().collect();
-        if names.is_empty() {
-            return Ok(());
-        }
-        let infos = self.query(&names).await?;
-        let mut changed = false;
-        {
-            let mut armed = self.armed.write().await;
-            for info in infos {
-                if let Some(previous) = armed.get_mut(&info.name)
-                    && *previous != info
-                {
-                    *previous = info;
-                    changed = true;
-                }
-            }
-        }
-        if changed {
-            notify.notify_waiters();
-        }
-        Ok(())
-    }
-
-    /// Follow the owner's lifecycle transitions and keep the armed state
-    /// current, waking `notify` (the task runner's dependency loop) on every
-    /// change. Transitions arrive over the attach stream; without one the
-    /// state is polled.
-    pub(crate) fn watch(self: &Arc<Self>, notify: Arc<Notify>) {
-        let weak = Arc::downgrade(self);
-        let socket_path = self.socket_path.clone();
-        let handle = tokio::spawn(async move {
-            match NativeManagerClient::attach_stream(&socket_path).await {
-                Ok(mut stream) => loop {
-                    match stream.next().await {
-                        Some(Ok(AttachEvent::Snapshot { .. } | AttachEvent::Status { .. })) => {
-                            if !Self::refresh_or_mark_lost(&weak, &notify).await {
-                                return;
-                            }
-                        }
-                        Some(Ok(AttachEvent::Log { .. })) => {}
-                        // The stream closes when the manager shuts down, and
-                        // errors when it predates attach; tell the two apart
-                        // by asking it directly.
-                        Some(Err(_)) | None => break,
-                    }
-                },
-                Err(error) => {
-                    tracing::debug!(%error, "process manager attach stream unavailable");
-                }
-            }
-            loop {
-                if !Self::refresh_or_mark_lost(&weak, &notify).await {
-                    return;
-                }
-                tokio::time::sleep(POLL_INTERVAL).await;
-            }
-        });
-        if let Ok(mut watcher) = self.watcher.lock() {
-            *watcher = Some(handle);
-        }
-    }
-
-    /// Returns whether watching should continue.
-    async fn refresh_or_mark_lost(weak: &Weak<Self>, notify: &Notify) -> bool {
-        let Some(owner) = weak.upgrade() else {
-            return false;
-        };
-        match owner.refresh(notify).await {
-            Ok(()) => true,
-            Err(error) => {
-                tracing::warn!(%error, "lost the running process manager");
-                owner.lost.store(true, Ordering::Release);
-                notify.notify_waiters();
-                false
-            }
-        }
+            .map(Some)
+            .ok_or_else(|| miette!("process manager returned no status for '{name}'"))
     }
 }
 
@@ -236,6 +182,7 @@ mod tests {
         ManagerResidence, ProcessConfig, ProcessPhase, ReadyConfig, RestartConfig, RestartPolicy,
         SupervisionMode,
     };
+    use std::collections::HashMap;
 
     const BOUND: Duration = Duration::from_secs(30);
 
@@ -677,5 +624,441 @@ mod tests {
         assert!(!ran.exists());
         assert_eq!(launches(&starts), 0);
         assert!(attached.get_completion_status().await.has_failures());
+    }
+    #[tokio::test]
+    async fn owned_start_runs_prerequisites_only_in_the_requesting_scheduler() {
+        let dir = tempfile::tempdir().unwrap();
+        let starts = dir.path().join("web-starts");
+        let prep_marker = dir.path().join("prep-count");
+        let ran = dir.path().join("root-ran");
+        let prep = || {
+            let t = oneshot("test:prepare", &[], &prep_marker);
+            std::fs::write(
+                t.command.as_ref().unwrap(),
+                format!("#!/bin/sh\necho prepared >> '{}'\n", prep_marker.display()),
+            )
+            .unwrap();
+            t
+        };
+        let web = || TaskConfig {
+            after: vec!["test:prepare".to_string()],
+            ..process("web", &starts, "exec tail -f /dev/null", true)
+        };
+        let daemon = Daemon::start(dir.path(), vec![prep(), web()], &[]).await;
+        let attached = daemon
+            .attached(
+                dir.path(),
+                vec![prep(), web(), oneshot("test:root", &[dep("web", "")], &ran)],
+                &["test:root"],
+                tokio_shutdown::Shutdown::new(),
+            )
+            .await;
+        run_attached(&attached).await;
+        daemon.manager.stop_all().await.unwrap();
+        assert!(ran.exists());
+        assert_eq!(launches(&prep_marker), 1, "prerequisite ran twice");
+    }
+
+    /// A small API peer that keeps status authoritative and sends only wakeups
+    /// over attach. `race` publishes Ready before replying with an old Starting
+    /// sample, reproducing the original lost-event window.
+    struct NotificationServer {
+        socket: PathBuf,
+        sampled: Arc<Notify>,
+        disconnect: Option<tokio::sync::oneshot::Sender<()>>,
+        task: JoinHandle<()>,
+    }
+
+    impl NotificationServer {
+        async fn start(dir: &Path, race: bool, settled: ProcessPhase, stall: bool) -> Self {
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            let socket = dir.join("api.sock");
+            let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+            let (disconnect, mut disconnect_rx) = tokio::sync::oneshot::channel();
+            let sampled = Arc::new(Notify::new());
+            let signal = Arc::clone(&sampled);
+            let task = tokio::spawn(async move {
+                let mut attach: Option<tokio::net::unix::OwnedWriteHalf> = None;
+                let mut named_queries = 0;
+                loop {
+                    let (stream, _) = tokio::select! {
+                        _ = &mut disconnect_rx, if attach.is_some() => {
+                            attach.take();
+                            continue;
+                        }
+                        accepted = listener.accept() => accepted.unwrap(),
+                    };
+                    let (read, mut write) = stream.into_split();
+                    let mut line = String::new();
+                    BufReader::new(read).read_line(&mut line).await.unwrap();
+                    let request = serde_json::from_str::<ApiRequest>(&line).unwrap();
+                    if stall
+                        && (matches!(&request, ApiRequest::EnsureStarted { .. })
+                            || matches!(&request, ApiRequest::DependencyStatus { names } if !names.is_empty()))
+                    {
+                        signal.notify_one();
+                        let _ = (&mut disconnect_rx).await;
+                        attach.take();
+                        // Keep the API reply open after the stream closes.
+                        std::future::pending::<()>().await;
+                    }
+                    let mut has_sample = false;
+                    let response = match request {
+                        ApiRequest::Attach => {
+                            let snapshot = AttachEvent::Snapshot {
+                                processes: Vec::new(),
+                            };
+                            write
+                                .write_all(
+                                    (serde_json::to_string(&snapshot).unwrap() + "\n").as_bytes(),
+                                )
+                                .await
+                                .unwrap();
+                            attach = Some(write);
+                            continue;
+                        }
+                        ApiRequest::EnsureStarted { .. } => ApiResponse::Ok,
+                        ApiRequest::DependencyStatus { names } => {
+                            let processes = if names.is_empty() {
+                                Vec::new()
+                            } else {
+                                has_sample = true;
+                                named_queries += 1;
+                                let phase = if race && named_queries == 1 {
+                                    let event = AttachEvent::Status {
+                                        info: devenv_processes::ProcessInfo {
+                                            name: "web".to_string(),
+                                            phase: settled,
+                                            restart_count: 0,
+                                            ports: Vec::new(),
+                                        },
+                                    };
+                                    attach
+                                        .as_mut()
+                                        .unwrap()
+                                        .write_all(
+                                            (serde_json::to_string(&event).unwrap() + "\n")
+                                                .as_bytes(),
+                                        )
+                                        .await
+                                        .unwrap();
+                                    tokio::time::sleep(Duration::from_millis(50)).await;
+                                    ProcessPhase::Starting
+                                } else if race {
+                                    settled
+                                } else {
+                                    ProcessPhase::Starting
+                                };
+                                names
+                                    .into_iter()
+                                    .map(|name| DependencyInfo {
+                                        name,
+                                        phase: Some(phase),
+                                        exit_status: None,
+                                    })
+                                    .collect()
+                            };
+                            ApiResponse::DependencyStatus { processes }
+                        }
+                        request => panic!("unexpected request: {request:?}"),
+                    };
+                    write
+                        .write_all((serde_json::to_string(&response).unwrap() + "\n").as_bytes())
+                        .await
+                        .unwrap();
+                    if has_sample {
+                        signal.notify_one();
+                    }
+                }
+            });
+            Self {
+                socket,
+                sampled,
+                disconnect: Some(disconnect),
+                task,
+            }
+        }
+    }
+
+    impl Drop for NotificationServer {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    #[tokio::test]
+    async fn events_during_status_queries_are_retained_by_readiness_and_dependency_waiters() {
+        // Exercise both the process's own readiness wait and its dependent's
+        // typed-edge wait. Neither may miss an event while querying status.
+        for ready_config in [true, false] {
+            let dir = tempfile::tempdir().unwrap();
+            let settled = if ready_config {
+                ProcessPhase::Ready
+            } else {
+                ProcessPhase::Exited
+            };
+            let suffix = if ready_config { "" } else { "@completed" };
+            let server = NotificationServer::start(dir.path(), true, settled, false).await;
+            let ran = dir.path().join("root-ran");
+            let owner = ProcessOwner::connect(&server.socket).await.unwrap();
+            let tasks = Tasks::builder(
+                config(
+                    dir.path(),
+                    "client",
+                    vec![
+                        process("web", &dir.path().join("starts"), "unused", ready_config),
+                        oneshot("test:root", &[dep("web", suffix)], &ran),
+                    ],
+                    vec!["test:root".to_string()],
+                ),
+                VerbosityLevel::Normal,
+                tokio_shutdown::Shutdown::new(),
+            )
+            .with_process_owner(owner)
+            .build()
+            .await
+            .unwrap();
+            run_attached(&tasks).await;
+            assert!(ran.exists(), "the stale Starting sample stranded a waiter");
+            assert!(!tasks.get_completion_status().await.has_failures());
+        }
+    }
+
+    #[tokio::test]
+    async fn stream_closure_fails_waiters_even_when_status_requests_still_work() {
+        for ready_config in [true, false] {
+            let dir = tempfile::tempdir().unwrap();
+            let suffix = if ready_config { "" } else { "@completed" };
+            let mut server =
+                NotificationServer::start(dir.path(), false, ProcessPhase::Ready, false).await;
+            let ran = dir.path().join("never-ran");
+            let owner = ProcessOwner::connect(&server.socket).await.unwrap();
+            let tasks = Arc::new(
+                Tasks::builder(
+                    config(
+                        dir.path(),
+                        "client",
+                        vec![
+                            process("web", &dir.path().join("starts"), "unused", ready_config),
+                            oneshot("test:root", &[dep("web", suffix)], &ran),
+                        ],
+                        vec!["test:root".to_string()],
+                    ),
+                    VerbosityLevel::Normal,
+                    tokio_shutdown::Shutdown::new(),
+                )
+                .with_process_owner(owner)
+                .build()
+                .await
+                .unwrap(),
+            );
+            let run = tokio::spawn({
+                let tasks = Arc::clone(&tasks);
+                async move { run_attached(&tasks).await }
+            });
+            tokio::time::timeout(BOUND, server.sampled.notified())
+                .await
+                .unwrap();
+            server.disconnect.take().unwrap().send(()).unwrap();
+            run.await.unwrap();
+            assert!(!ran.exists());
+            assert!(tasks.get_completion_status().await.has_failures());
+            // Only the subscription closed; the peer still answers status.
+            assert!(matches!(
+                NativeManagerClient::api_request(
+                    &server.socket,
+                    &ApiRequest::DependencyStatus {
+                        names: vec!["web".to_string()]
+                    }
+                )
+                .await
+                .unwrap(),
+                ApiResponse::DependencyStatus { .. }
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn stream_closure_interrupts_in_flight_status_and_start_requests() {
+        for start_request in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut server =
+                NotificationServer::start(dir.path(), false, ProcessPhase::Ready, true).await;
+            let owner = ProcessOwner::connect(&server.socket).await.unwrap();
+            let request = tokio::spawn(async move {
+                if start_request {
+                    owner.start("web", false).await
+                } else {
+                    owner.query(&["web".to_string()]).await.map(|_| ())
+                }
+            });
+            tokio::time::timeout(BOUND, server.sampled.notified())
+                .await
+                .unwrap();
+            server.disconnect.take().unwrap().send(()).unwrap();
+            let error = tokio::time::timeout(Duration::from_secs(2), request)
+                .await
+                .expect("stream closure did not interrupt the in-flight request")
+                .unwrap()
+                .unwrap_err();
+            assert!(error.to_string().contains("subscription"));
+        }
+    }
+
+    #[tokio::test]
+    async fn concurrent_ensure_requests_launch_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let starts = dir.path().join("web-starts");
+        let web = process("web", &starts, "exec tail -f /dev/null", false);
+        let daemon = Daemon::start(dir.path(), vec![web], &[]).await;
+        let owner = ProcessOwner::connect(&daemon.manager.api_socket_path())
+            .await
+            .unwrap();
+        let (first, second) = tokio::join!(owner.start("web", false), owner.start("web", false));
+        first.unwrap();
+        second.unwrap();
+        daemon.wait_for("web", ProcessPhase::Ready).await;
+        // The shell can publish its phase before executing the first command.
+        tokio::time::timeout(BOUND, async {
+            while launches(&starts) == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        daemon.manager.stop_all().await.unwrap();
+        assert_eq!(launches(&starts), 1);
+    }
+
+    #[tokio::test]
+    async fn explicitly_requested_exited_process_is_restarted() {
+        let dir = tempfile::tempdir().unwrap();
+        let starts = dir.path().join("worker-starts");
+        let worker = || process("worker", &starts, "exit 0", false);
+        let daemon = Daemon::start(dir.path(), vec![worker()], &["worker"]).await;
+        daemon.wait_for("worker", ProcessPhase::Exited).await;
+        let attached = daemon
+            .attached(
+                dir.path(),
+                vec![worker()],
+                &["devenv:processes:worker"],
+                tokio_shutdown::Shutdown::new(),
+            )
+            .await;
+        run_attached(&attached).await;
+        daemon.wait_for("worker", ProcessPhase::Exited).await;
+        assert_eq!(launches(&starts), 2);
+        daemon.manager.stop_all().await.unwrap();
+    }
+    #[tokio::test]
+    async fn ensure_preserves_an_existing_dependency_waiter() {
+        let dir = tempfile::tempdir().unwrap();
+        let starts = dir.path().join("web-starts");
+        let gate = dir.path().join("prepare-gate");
+        let marker = dir.path().join("prepare-ran");
+        let prepare = oneshot("test:prepare", &[], &marker);
+        std::fs::write(
+            prepare.command.as_ref().unwrap(),
+            format!(
+                "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.05; done\ntouch '{}'\n",
+                gate.display(),
+                marker.display(),
+            ),
+        )
+        .unwrap();
+        let web = TaskConfig {
+            after: vec!["test:prepare".to_string()],
+            ..process("web", &starts, "exec tail -f /dev/null", true)
+        };
+        let daemon = Daemon::start(dir.path(), vec![prepare, web], &[]).await;
+        daemon.manager.tasks().start_with_deps(["web"]).await;
+        let owner = ProcessOwner::connect(&daemon.manager.api_socket_path())
+            .await
+            .unwrap();
+        owner.start("web", false).await.unwrap();
+        assert_eq!(daemon.phase("web").await, Some(ProcessPhase::Waiting));
+        assert_eq!(launches(&starts), 0, "ensure bypassed the existing waiter");
+        std::fs::write(gate, "").unwrap();
+        daemon.wait_for("web", ProcessPhase::Ready).await;
+        daemon.manager.stop_all().await.unwrap();
+        assert!(marker.exists());
+        assert_eq!(launches(&starts), 1);
+    }
+
+    #[tokio::test]
+    async fn ensure_preserves_terminal_results_after_explicit_stop() {
+        let dir = tempfile::tempdir().unwrap();
+        let starts = dir.path().join("worker-starts");
+        let daemon = Daemon::start(
+            dir.path(),
+            vec![process("worker", &starts, "exit 0", false)],
+            &["worker"],
+        )
+        .await;
+        daemon.wait_for("worker", ProcessPhase::Exited).await;
+        daemon
+            .manager
+            .process_runner()
+            .stop_and_keep("worker")
+            .await
+            .unwrap();
+        let owner = ProcessOwner::connect(&daemon.manager.api_socket_path())
+            .await
+            .unwrap();
+        owner.start("worker", false).await.unwrap();
+        assert_eq!(daemon.phase("worker").await, Some(ProcessPhase::Stopped));
+        assert_eq!(
+            owner.query(&["worker".to_string()]).await.unwrap()[0].phase,
+            Some(ProcessPhase::Exited)
+        );
+        assert_eq!(launches(&starts), 1);
+        daemon.manager.stop_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn losing_the_manager_fails_waiting_dependents() {
+        let dir = tempfile::tempdir().unwrap();
+        let starts = dir.path().join("web-starts");
+        let marker = dir.path().join("never-ran");
+        let web = || process("web", &starts, "exec tail -f /dev/null", false);
+        let daemon = Daemon::start(dir.path(), vec![web()], &["web"]).await;
+        let attached = daemon
+            .attached(
+                dir.path(),
+                vec![
+                    web(),
+                    oneshot("test:root", &[dep("web", "@completed")], &marker),
+                ],
+                &["test:root"],
+                tokio_shutdown::Shutdown::new(),
+            )
+            .await;
+        let run = tokio::spawn({
+            let attached = Arc::clone(&attached);
+            async move { run_attached(&attached).await }
+        });
+        tokio::time::timeout(BOUND, async {
+            while !attached
+                .process_owner
+                .as_ref()
+                .unwrap()
+                .is_handed_over("web")
+                .await
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let Daemon { manager, _server } = daemon;
+        drop(_server);
+        manager.stop_all().await.unwrap();
+        run.await.unwrap();
+        assert!(matches!(
+            status(&attached, "test:root").await,
+            TaskStatus::Completed(TaskCompleted::DependencyFailed)
+        ));
+        assert!(!marker.exists());
+        manager.stop_all().await.unwrap();
     }
 }

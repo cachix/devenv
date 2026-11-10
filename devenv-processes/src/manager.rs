@@ -44,6 +44,10 @@ pub enum ApiRequest {
     /// manager (the client resolves the up-enabled default set before
     /// sending) and by `devenv processes start`.
     Start { names: Vec<String> },
+    /// Launch a process whose prerequisites the requesting task run has already
+    /// satisfied. Reuse live and scheduled processes, and preserve terminal
+    /// results unless `restart` is true. Does not traverse task dependencies.
+    EnsureStarted { name: String, restart: bool },
     /// Report the state that dependents of the named processes are judged
     /// against: the dependency phase (which, unlike the display phase,
     /// preserves a terminal result across an explicit stop) and the exit
