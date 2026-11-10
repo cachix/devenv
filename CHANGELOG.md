@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Added the `tui.symbols` user setting to choose the marks in the `devenv shell` status line, such as `watching: "👁"`.
 - `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).
 - The interactive shell status line now shows plain `◉` and `○` marks instead of the `👁` and `⏸` emoji, since terminals disagree on how wide emoji are. Set the new `tui.emoji` user setting to `true` to keep the emoji.
 - Updating a remote configuration now composes its updated YAML and dependencies before writing `devenv.lock`, so a second invocation is not needed to finish the update.

@@ -1,7 +1,7 @@
-//! Display indicators that have an emoji and a non-emoji form.
+//! Status marks shown before the label in the shell status line.
 //!
 //! Renderers ask [`Indicators`] for a glyph instead of hard-coding one, so the
-//! `tui.emoji` user setting is applied in exactly one place.
+//! `tui.emoji` and `tui.symbols` user settings are applied in exactly one place.
 //!
 //! Emoji glyphs are not width-stable: terminals disagree on whether they occupy
 //! one or two cells, and Unicode width tables report one. The non-emoji glyphs
@@ -9,11 +9,17 @@
 //! already used by the status line, so the label that follows lines up with
 //! every other status.
 
-use crate::status_line::{DOT_RING, DOT_RUNNING};
+use std::collections::HashMap;
 
-/// A display indicator with an emoji and a non-emoji form.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use crate::status_line::{CHECKMARK, DOT_RING, DOT_RUNNING, XMARK};
+
+/// A status mark in the shell status line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Indicator {
+    /// The last reload succeeded.
+    Success,
+    /// The last reload failed.
+    Failure,
     /// File watching is paused.
     Paused,
     /// Files are being watched for changes.
@@ -22,66 +28,60 @@ pub enum Indicator {
 
 impl Indicator {
     /// Every indicator.
-    pub const ALL: [Indicator; 2] = [Indicator::Paused, Indicator::Watching];
-}
-
-/// A glyph and the space that separates it from the label that follows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Glyph {
-    /// The text to draw.
-    pub text: &'static str,
-    /// Columns between the glyph and its label.
-    pub gap: u32,
+    pub const ALL: [Indicator; 4] = [
+        Indicator::Success,
+        Indicator::Failure,
+        Indicator::Paused,
+        Indicator::Watching,
+    ];
 }
 
 /// Selects the glyph used for each [`Indicator`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Indicators {
     emoji: bool,
+    symbols: HashMap<Indicator, String>,
 }
 
 impl Indicators {
     /// Select emoji glyphs when `emoji` is true and non-emoji glyphs otherwise.
-    pub const fn new(emoji: bool) -> Self {
-        Self { emoji }
+    pub fn new(emoji: bool) -> Self {
+        Self {
+            emoji,
+            symbols: HashMap::new(),
+        }
+    }
+
+    /// Draw `symbol` for `indicator` instead of its built-in glyph.
+    pub fn with_symbol(mut self, indicator: Indicator, symbol: impl Into<String>) -> Self {
+        self.symbols.insert(indicator, symbol.into());
+        self
     }
 
     /// Whether emoji glyphs are selected.
-    pub const fn emoji(self) -> bool {
+    pub const fn emoji(&self) -> bool {
         self.emoji
     }
 
     /// The glyph for `indicator`.
-    pub const fn glyph(self, indicator: Indicator) -> Glyph {
-        match (self.emoji, indicator) {
-            // The historical glyphs. Unicode gives them one cell, so one
-            // column of space lines the label up with the other statuses.
-            (true, Indicator::Paused) => Glyph {
-                text: "⏸", gap: 1
-            },
-            (true, Indicator::Watching) => Glyph {
-                text: "👁", gap: 1
-            },
-            // The status dots used for process states: alive while watching,
-            // an idle ring while paused. They are single-cell symbols, so the
-            // label starts in the same column as after the checkmark, cross,
-            // and spinner.
-            (false, Indicator::Paused) => Glyph {
-                text: DOT_RING,
-                gap: 1,
-            },
-            (false, Indicator::Watching) => Glyph {
-                text: DOT_RUNNING,
-                gap: 1,
-            },
-        }
+    pub fn glyph(&self, indicator: Indicator) -> &str {
+        self.symbols
+            .get(&indicator)
+            .map_or_else(|| self.built_in(indicator), String::as_str)
     }
-}
 
-impl Default for Indicators {
-    /// Non-emoji glyphs, which every terminal draws one cell wide.
-    fn default() -> Self {
-        Self::new(false)
+    const fn built_in(&self, indicator: Indicator) -> &'static str {
+        match (self.emoji, indicator) {
+            (_, Indicator::Success) => CHECKMARK,
+            (_, Indicator::Failure) => XMARK,
+            // The historical glyphs.
+            (true, Indicator::Paused) => "⏸",
+            (true, Indicator::Watching) => "👁",
+            // The status dots used for process states: alive while watching,
+            // an idle ring while paused.
+            (false, Indicator::Paused) => DOT_RING,
+            (false, Indicator::Watching) => DOT_RUNNING,
+        }
     }
 }
 
@@ -98,43 +98,45 @@ mod tests {
     #[test]
     fn emoji_glyphs_are_the_historical_ones() {
         let indicators = Indicators::new(true);
-        assert_eq!(indicators.glyph(Indicator::Paused).text, "⏸");
-        assert_eq!(indicators.glyph(Indicator::Watching).text, "👁");
+        assert_eq!(indicators.glyph(Indicator::Paused), "⏸");
+        assert_eq!(indicators.glyph(Indicator::Watching), "👁");
     }
 
     #[test]
-    fn non_emoji_glyphs_are_single_non_emoji_characters() {
+    fn non_emoji_glyphs_are_single_characters() {
         for indicator in Indicator::ALL {
-            let glyph = Indicators::new(false).glyph(indicator);
-            let mut chars = glyph.text.chars();
-            assert!(chars.next().is_some());
-            assert!(
-                chars.next().is_none(),
+            assert_eq!(
+                Indicators::new(false).glyph(indicator).chars().count(),
+                1,
                 "{indicator:?} must be one character"
             );
-            assert_eq!(glyph.gap, 1);
         }
     }
 
     #[test]
-    fn every_glyph_is_followed_by_one_column() {
-        for emoji in [true, false] {
-            for indicator in Indicator::ALL {
-                assert_eq!(
-                    Indicators::new(emoji).glyph(indicator).gap,
-                    1,
-                    "{indicator:?} emoji={emoji}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn glyphs_differ_between_modes() {
+    fn only_watching_and_paused_differ_between_modes() {
         for indicator in Indicator::ALL {
-            assert_ne!(
-                Indicators::new(true).glyph(indicator),
-                Indicators::new(false).glyph(indicator)
+            assert_eq!(
+                Indicators::new(true).glyph(indicator) == Indicators::new(false).glyph(indicator),
+                matches!(indicator, Indicator::Success | Indicator::Failure),
+                "{indicator:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn symbols_replace_built_in_glyphs() {
+        for emoji in [true, false] {
+            let indicators = Indicators::new(emoji)
+                .with_symbol(Indicator::Success, "ok")
+                .with_symbol(Indicator::Watching, "*");
+
+            assert_eq!(indicators.glyph(Indicator::Success), "ok");
+            assert_eq!(indicators.glyph(Indicator::Watching), "*");
+            assert_eq!(indicators.glyph(Indicator::Failure), XMARK);
+            assert_eq!(
+                indicators.glyph(Indicator::Paused),
+                Indicators::new(emoji).glyph(Indicator::Paused)
             );
         }
     }

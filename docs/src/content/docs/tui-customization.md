@@ -118,6 +118,29 @@ It applies to the persistent status line in an interactive `devenv shell`. The T
 
 Terminals disagree on how wide emoji are, so the non-emoji glyphs are the plain single-column status dots that devenv also uses for process states. Other symbols, such as the braille spinner and the checkmark, are not emoji and do not change. The setting does not hide the status line (see `tui.statusline.enabled`), disable file watching, or change automatic reloads, text, colors, or keybindings. Changes take effect when you start a new shell.
 
+### Symbols
+
+`tui.symbols` replaces each mark in the shell status line with your own text, up to 8 characters. A symbol you set wins over the glyph that `tui.emoji` selects. Added in devenv 2.4.1.
+
+```yaml
+version: 1
+tui:
+  symbols:
+    success: "✔"
+    failure: "✘"
+    watching: "👁"
+    paused: "⏸"
+```
+
+| Symbol | Shown for | Default |
+| --- | --- | --- |
+| `success` | `devenv reloaded` and `devenv ready` | `✓` |
+| `failure` | `devenv failed` | `✗` |
+| `watching` | `devenv watching 11 files` | `◉`, or `👁` with `emoji: true` |
+| `paused` | `devenv paused` | `○`, or `⏸` with `emoji: true` |
+
+One space always follows the symbol. Symbols wider than one column push the text after them to the right.
+
 ## Statusline layouts
 
 `tui.statusline.position` accepts `inline` (the default), `top`, or `bottom`. `inline` keeps devenv's normal terminal behavior by placing the statusline directly after the current activity output without reserving the terminal height. `top` and `bottom` are sticky modes that pin the statusline to the chosen terminal edge as activities expand or collapse. Fullscreen logs always fill the terminal. In fullscreen logs, `inline` uses the conventional bottom footer.
