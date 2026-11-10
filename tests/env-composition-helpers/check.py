@@ -132,6 +132,13 @@ for name, wanted in expected.items():
         assert value(structured, name) == wanted, (name, structured.get(name), wanted)
 print("PASS: explicit operations and initial values work with structured derivation attributes", flush=True)
 
+overrides = capture("overrides")
+for name, wanted in expected.items():
+    assert value(overrides, name) == wanted, (name, overrides.get(name), wanted)
+assert value(overrides, "TEST_MKSHELL_OVERRIDE") == "retained"
+assert value(overrides, "TEST_OVERRIDE") == "chained"
+print("PASS: chained override, overrideAttrs and overrideDerivation preserve final operations", flush=True)
+
 path = capture("path")
 assert value(path, "PATH") == "/configured/bin"
 path_activation = checked(

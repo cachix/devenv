@@ -18,6 +18,10 @@ in
     pkgs.python3
     pkgs.bash
     pkgs.zlib
+    pkgs.direnv
+    pkgs.zsh
+    pkgs.fish
+    pkgs.nushell
     lateHook
   ];
 
@@ -33,10 +37,39 @@ in
     ENV_ROOT = env.set "/configured";
     ENV_CHILD = config.env.ENV_ROOT + "/child";
     ENV_EMPTY = env.set "";
+    ENV_TEST_CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    ENV_SEARCH_PATH = env.combine [
+      (env.beforeSetup "setup")
+      (env.prepend ":" [ "first" ])
+      (env.append ":" [ "last" ])
+    ];
+    ENV_ENTER_WIN = env.set "helper";
+    ENV_TASK_WIN = env.set "helper";
     ENV_DEFAULT_EMPTY = env.combine [
       (env.beforeSetup "")
       (env.default "fallback")
     ];
+  };
+
+  enterShell = ''
+    test "$ENV_ENTER_WIN" = helper
+    export ENV_ENTER_WIN=enterShell
+  '';
+  tasks."devenv:enterShell".exports = [ "ENV_ENTER_WIN" ];
+  tasks."test:override-helper" = {
+    exec = ''
+      test "$ENV_TASK_WIN" = helper
+      export ENV_TASK_WIN=task
+    '';
+    exports = [ "ENV_TASK_WIN" ];
+    before = [ "devenv:enterShell" ];
+  };
+
+  # Capture and activate explicit SDK overrides without changing the compiler
+  # environment used by the zlib probe or building a custom Xcode installation.
+  profiles.sdk.module.env = {
+    DEVELOPER_DIR = env.set "/Applications/DevenvTestXcode.app/Contents/Developer";
+    SDKROOT = env.set "/configured/MacOSX.sdk";
   };
 
   enterTest = ''

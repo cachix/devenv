@@ -11,6 +11,13 @@ devenv-run-tests run tests --only env-composition-helpers
 
 The fixture checks dotenv precedence, setup inputs, late package hooks, explicit empty values,
 configured-value references between modules, `devenv info`, captured JSON, and sourceable CLI activation.
+It enters Bash, zsh, fish, and Nushell through a pseudo-terminal and checks helper values,
+composition, metadata cleanup, and precedence of `enterShell` and task exports.
+It also loads and unloads the environment through direnv, checking restoration of existing
+values and removal of variables that were previously unset.
+On macOS, a separate profile checks explicit `DEVELOPER_DIR` and `SDKROOT` values in both
+captured JSON and an activated CLI shell. These are test paths, not a real Xcode installation;
+the test verifies override precedence rather than compatibility with a particular SDK.
 It also runs the standalone checks below.
 
 ```sh
@@ -30,9 +37,10 @@ The standalone checks cover:
 - JSON and Bash consistency, including values normally filtered by activation.
 - Two 70 KB values without a single oversized environment string.
 - Structured derivation attributes and `overrideAttrs` compatibility.
+- Chained `override`, `overrideAttrs`, and `overrideDerivation` calls.
 - Header discovery, a custom compiler flag, linking, and execution against zlib.
 - Exact final PATH replacement without breaking normal shell builds.
 - Retention of a dependency referenced only by a final helper value.
 
-The real capture and compiler checks have been run on Linux. macOS uses its stdenv-selected compiler;
-SDK-specific behavior still needs validation on a macOS host.
+The reusable test workflow runs this fixture in its own job on Linux and macOS,
+so an unrelated failure in the full suite cannot prevent these checks from running.

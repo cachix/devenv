@@ -86,6 +86,44 @@ jobs:
           devenv-run-tests run tests ${{ steps.override-args.outputs.args }} "${args[@]}"
 
 
+  env-composition:
+    name: environment helpers (${{ inputs.system }})
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Cachix
+        uses: cachix/cachix-action@v17
+        with:
+          name: devenv
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build devenv
+        run: |
+          path=$(nix build -L --print-out-paths)
+          echo "$path/bin" >> "$GITHUB_PATH"
+
+      - name: Test environment helpers independently of the full suite
+        env:
+          NIXPKGS_INPUT: ${{ inputs.nixpkgs-input }}
+        run: |
+          args=()
+          if [ -n "$NIXPKGS_INPUT" ]; then
+            args+=(--override-input nixpkgs "$NIXPKGS_INPUT")
+          fi
+          devenv-run-tests run tests --only env-composition-helpers "${args[@]}"
+
+
   direnv:
     name: direnv (${{ inputs.system }})
     runs-on: ${{ fromJSON(inputs.runs-on) }}

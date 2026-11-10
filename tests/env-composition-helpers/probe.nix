@@ -113,18 +113,43 @@ let
     }
     // resolved.initial
   );
+  wrapped = env.wrapShell {
+    inherit pkgs;
+    environment = evaluated.config.env;
+    # mkShell results expose overrideAttrs; a parameterized shell factory also
+    # exposes override and overrideDerivation through makeOverridable.
+    shell =
+      if scenario == "overrides" then
+        lib.makeOverridable (
+          {
+            testOverride ? "initial",
+          }:
+          base.overrideAttrs (_: {
+            TEST_MKSHELL_OVERRIDE = testOverride;
+          })
+        ) { }
+      else
+        base;
+  };
 in
-lib.overrideDerivation
+if scenario == "overrides" then
   (
-    (env.wrapShell {
-      inherit pkgs;
-      environment = evaluated.config.env;
-      shell = base;
+    (wrapped.override {
+      testOverride = "retained";
     }).overrideAttrs
       (_: {
-        TEST_OVERRIDE = "retained";
+        TEST_OVERRIDE = "first";
       })
-  )
-  (_: {
-    userHook = "export CC=late-user-cc";
-  })
+  ).overrideDerivation
+    (_: {
+      TEST_OVERRIDE = "chained";
+      userHook = "export CC=override-user-cc";
+    })
+else
+  lib.overrideDerivation
+    (wrapped.overrideAttrs (_: {
+      TEST_OVERRIDE = "retained";
+    }))
+    (_: {
+      userHook = "export CC=late-user-cc";
+    })

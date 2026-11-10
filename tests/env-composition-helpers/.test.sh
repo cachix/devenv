@@ -21,3 +21,5 @@ bash --noprofile --norc -c '
 devenv info > info.txt
 grep -F 'CC: zig cc' info.txt
 grep -F 'ENV_CHILD: /configured/child' info.txt
+
+python3 ./activation.py
