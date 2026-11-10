@@ -334,10 +334,10 @@ directory, including scripts, assets, and references, to `.claude/skills/<name>`
 }
 ```
 
-Each directory must contain `SKILL.md`. Directory-backed and structured skills
-can be declared together; their names must be distinct. A directory-backed
-skill cannot share its destination with a `files` entry beneath the same skill
-path.
+Each directory must contain a regular `SKILL.md` file. Directory-backed and
+structured skills can be declared together; their names must be distinct. A
+directory-backed skill cannot share its destination with a `files` entry at or
+beneath the same skill path.
 
 ```nix
 {

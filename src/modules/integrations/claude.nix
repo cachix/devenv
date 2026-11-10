@@ -1,6 +1,7 @@
 { pkgs
 , lib
 , config
+, options
 , ...
 }:
 
@@ -982,12 +983,18 @@ in
           if skill.directory != null then
             let
               destination = ".claude/skills/${name}";
+              # The generated source is one definition at this path. A second
+              # definition is a user files entry for the same destination.
+              exactCollision = lib.count
+                (definition: builtins.hasAttr destination definition.value)
+                options.files.definitionsWithLocations > 1;
               collisions = lib.filter
                 (path: path != destination && (
                   path == ".claude" || path == ".claude/skills"
                   || lib.hasPrefix "${destination}/" path
                 ))
-                (lib.attrNames config.files);
+                (lib.attrNames config.files)
+                ++ lib.optional exactCollision destination;
             in
             [
               {
@@ -996,8 +1003,9 @@ in
                 message = "claude.code.skills.${name}: skill names must use lowercase letters, digits, and single hyphens (at most 64 characters), and cannot be `synced`.";
               }
               {
-                assertion = lib.pathIsDirectory skill.directory && builtins.pathExists (skill.directory + "/SKILL.md");
-                message = "claude.code.skills.${name}: directory-backed skills must be directories containing SKILL.md: ${toString skill.directory}";
+                assertion = lib.pathIsDirectory skill.directory
+                  && (((builtins.readDir skill.directory)."SKILL.md" or null) == "regular");
+                message = "claude.code.skills.${name}: directory-backed skills must be directories containing a regular SKILL.md file: ${toString skill.directory}";
               }
               {
                 assertion = collisions == [ ];
