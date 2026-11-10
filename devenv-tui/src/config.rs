@@ -19,6 +19,31 @@ const KEY_CHORD_PATTERN: &str = r"(?:(?:ctrl|alt|shift)\+)*(?:enter|esc|escape|b
 const RESERVED_CTRL_C_PATTERN: &str =
     r"(?:^|[\t\n\r ])(?:(?:ctrl|shift)\+)*ctrl\+(?:(?:ctrl|shift)\+)*c(?:$|[\t\n\r ])";
 
+pub(crate) const ACTIVITY_SCOPES: &[&str] = &[
+    "activity",
+    "activity.name",
+    "activity.name.nested",
+    "activity.detail",
+    "activity.elapsed",
+    "activity.tree",
+    "activity.log",
+    "activity.progress",
+    "activity.progress.track",
+    "activity.status",
+    "activity.status.active",
+    "activity.status.success",
+    "activity.status.failure",
+    "activity.status.warning",
+    "activity.status.info",
+    "activity.status.starting",
+    "activity.status.inactive",
+    "activity.selection",
+    "activity.selection.name",
+    "activity.selection.detail",
+    "activity.selection.elapsed",
+    "activity.dimmed",
+];
+
 #[derive(Debug, Error, Diagnostic)]
 pub enum UserConfigError {
     #[error("failed to read user configuration at {path}")]
@@ -263,8 +288,11 @@ impl TuiPreferences {
     pub fn uses_default_statusline(&self) -> bool {
         self.statusline.uses_default_layouts()
             && self.theme.preset == ThemePreset::Devenv
-            && self.theme.palette.is_empty()
-            && self.theme.styles.is_empty()
+            && !self
+                .theme
+                .styles
+                .keys()
+                .any(|scope| statusline_scope(scope))
             && self.keybindings.is_default()
     }
 }
@@ -307,12 +335,7 @@ impl ThemeConfig {
                 })?;
         }
         for (scope, style) in &self.styles {
-            let supported = scope == "statusline"
-                || scope == "statusline.separator"
-                || scope
-                    .strip_prefix("statusline.")
-                    .is_some_and(|name| valid_name(name, false));
-            if !supported {
+            if !statusline_scope(scope) && !ACTIVITY_SCOPES.contains(&scope.as_str()) {
                 return validation(format!(
                     "tui.theme.styles.{scope} is not a supported style scope"
                 ));
@@ -712,6 +735,13 @@ impl StatusComponentConfig {
         self.style
             .validate(palette, &format!("tui.statusline.components.{name}.style"))
     }
+}
+
+fn statusline_scope(scope: &str) -> bool {
+    scope == "statusline"
+        || scope
+            .strip_prefix("statusline.")
+            .is_some_and(|name| valid_name(name, false))
 }
 
 fn builtin_component(name: &str) -> bool {
@@ -2498,5 +2528,62 @@ tui:
             .to_string(),
         );
         assert!(config.is_ok());
+    }
+
+    #[test]
+    fn activity_styles_keep_the_default_statusline() {
+        let config = UserConfig::from_yaml(
+            "config.yaml",
+            r##"
+version: 1
+tui:
+  theme:
+    palette:
+      surface: "#373e47"
+    styles:
+      activity.tree:
+        foreground: dark_grey
+      activity.selection:
+        foreground: default
+        background: surface
+        modifiers: [bold]
+"##
+            .to_string(),
+        )
+        .unwrap();
+        assert!(config.tui.uses_default_statusline());
+
+        let statusline = UserConfig::from_yaml(
+            "config.yaml",
+            "version: 1\ntui:\n  theme:\n    styles:\n      statusline:\n        foreground: red\n"
+                .into(),
+        )
+        .unwrap();
+        assert!(!statusline.tui.uses_default_statusline());
+    }
+
+    #[test]
+    fn palette_alone_keeps_the_default_statusline() {
+        let palette = UserConfig::from_yaml(
+            "config.yaml",
+            "version: 1\ntui:\n  theme:\n    palette:\n      accent: red\n".into(),
+        )
+        .unwrap();
+        assert!(palette.tui.uses_default_statusline());
+    }
+
+    #[test]
+    fn unknown_activity_scopes_are_rejected() {
+        for scope in ["activity.unknown", "activity.name.process", "activities"] {
+            let error = UserConfig::from_yaml(
+                "config.yaml",
+                format!("version: 1\ntui:\n  theme:\n    styles:\n      {scope}:\n        foreground: red\n"),
+            )
+            .unwrap_err();
+            assert!(
+                matches!(error, UserConfigError::Validation { .. }),
+                "{scope}"
+            );
+        }
     }
 }

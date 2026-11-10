@@ -160,6 +160,7 @@ pub struct Activity {
 pub struct UiState {
     pub preferences: Arc<crate::config::TuiPreferences>,
     keymap: Arc<crate::config::Keymap>,
+    activity_theme: Arc<crate::theme::ActivityTheme>,
     pub run_context: Arc<crate::config::TuiRunContext>,
     pub pending_key: Option<String>,
     pub viewport: ViewportConfig,
@@ -188,9 +189,11 @@ impl UiState {
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
         let preferences = crate::config::TuiPreferences::default();
         let keymap = preferences.keybindings.resolve().unwrap();
+        let activity_theme = crate::theme::ActivityTheme::new(&preferences.theme);
         Self {
             preferences: Arc::new(preferences),
             keymap: Arc::new(keymap),
+            activity_theme: Arc::new(activity_theme),
             run_context: Arc::new(crate::config::TuiRunContext::default()),
             pending_key: None,
             viewport: ViewportConfig {
@@ -229,6 +232,7 @@ impl UiState {
         preferences: crate::config::TuiPreferences,
     ) -> Result<(), crate::config::UserConfigError> {
         let keymap = preferences.keybindings.resolve()?;
+        self.activity_theme = Arc::new(crate::theme::ActivityTheme::new(&preferences.theme));
         self.preferences = Arc::new(preferences);
         self.keymap = Arc::new(keymap);
         Ok(())
@@ -236,6 +240,10 @@ impl UiState {
 
     pub fn keymap(&self) -> &Arc<crate::config::Keymap> {
         &self.keymap
+    }
+
+    pub fn activity_theme(&self) -> &Arc<crate::theme::ActivityTheme> {
+        &self.activity_theme
     }
 
     pub fn show_interrupt_prompt(&mut self, attached: bool) {

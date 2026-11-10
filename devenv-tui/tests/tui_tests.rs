@@ -1789,3 +1789,288 @@ fn test_cachix_push_alongside_build() {
     let output = render_to_string(&model, &ui_state);
     insta::assert_snapshot!(output);
 }
+
+fn cell_at<'a>(canvas: &'a Canvas, text: &str) -> &'a CanvasCell {
+    (0..canvas.height())
+        .flat_map(|y| (0..canvas.width()).map(move |x| (x, y)))
+        .find(|&(x, y)| {
+            text.chars().enumerate().all(|(offset, character)| {
+                canvas.cell(x + offset, y).and_then(CanvasCell::text)
+                    == Some(character.to_string().as_str())
+            })
+        })
+        .and_then(|(x, y)| canvas.cell(x, y))
+        .unwrap_or_else(|| panic!("{text:?} is not rendered"))
+}
+
+fn text_style(cell: &CanvasCell) -> CanvasTextStyle {
+    *cell.text_style().unwrap()
+}
+
+/// Test that theme styles color the activity list.
+#[test]
+fn test_activity_theme_styles_rows() {
+    let (mut model, mut ui_state) = new_test_model();
+    let config = devenv_tui::UserConfig::from_yaml(
+        "config.yaml",
+        r##"
+version: 1
+tui:
+  theme:
+    styles:
+      activity.tree:
+        foreground: blue
+      activity.name.nested:
+        foreground: green
+        modifiers: [italic]
+      activity.status.failure:
+        foreground: magenta
+      activity.status.success:
+        foreground: cyan
+      activity.status.warning:
+        foreground: yellow
+        modifiers: [underline]
+      activity.selection:
+        background: "#373e47"
+"##
+        .to_string(),
+    )
+    .unwrap();
+    ui_state.set_preferences(config.tui).unwrap();
+
+    model.apply_activity_event(operation_start_with(
+        1,
+        "Building shell",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(build_start_with(2, "hello", Some(1)));
+    model.apply_activity_event(build_start_with(3, "broken", Some(1)));
+    model.apply_activity_event(build_complete(3, ActivityOutcome::Failed));
+    model.apply_activity_event(process_start_with(4, "api", Some(1), ActivityLevel::Info));
+    model.apply_activity_event(process_status(4, devenv_activity::ProcessStatus::Running));
+    model.apply_activity_event(message_with(5, ActivityLevel::Warn, "careful", Some(1)));
+    ui_state.selected_activity = Some(2);
+
+    let mut element = view(&model, &ui_state, RenderContext::Normal, None, false).into();
+    let canvas = element.render(Some(TEST_WIDTH as usize));
+    let selection = Some(Color::Rgb {
+        r: 0x37,
+        g: 0x3e,
+        b: 0x47,
+    });
+
+    assert_eq!(text_style(cell_at(&canvas, "├")).color, Some(Color::Blue));
+    assert_eq!(
+        text_style(cell_at(&canvas, "✗")).color,
+        Some(Color::Magenta)
+    );
+    assert_eq!(text_style(cell_at(&canvas, "◉")).color, Some(Color::Cyan));
+
+    let warning = text_style(cell_at(&canvas, "careful"));
+    assert_eq!(warning.color, Some(Color::Yellow));
+    assert!(warning.underline);
+
+    let unselected = cell_at(&canvas, "broken");
+    assert_eq!(text_style(unselected).color, Some(Color::Green));
+    assert!(text_style(unselected).italic);
+    assert_eq!(unselected.background_color, None);
+
+    let selected = cell_at(&canvas, "hello");
+    assert_eq!(text_style(selected).color, Some(Color::Green));
+    assert!(text_style(selected).italic);
+    assert_eq!(selected.background_color, selection);
+    assert_eq!(cell_at(&canvas, "├").background_color, selection);
+}
+
+/// Test that the `none` preset marks rows without colors.
+#[test]
+fn test_none_theme_marks_rows_without_colors() {
+    let (mut model, mut ui_state) = new_test_model();
+    let mut preferences = devenv_tui::TuiPreferences::default();
+    preferences.theme.preset = devenv_tui::config::ThemePreset::None;
+    ui_state.set_preferences(preferences).unwrap();
+
+    model.apply_activity_event(operation_start_with(
+        100,
+        "Running processes",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_start_with(1, "api", Some(100), ActivityLevel::Info));
+    model.apply_activity_event(process_start_with(
+        2,
+        "worker",
+        Some(100),
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(fetch_start_with(
+        3,
+        FetchKind::Download,
+        "nixpkgs-src",
+        None,
+        None,
+    ));
+    model.apply_activity_event(fetch_progress(3, 5000, Some(10000)));
+    ui_state.selected_activity = Some(1);
+    ui_state.process_search = Some(devenv_tui::model::ProcessSearch {
+        query: "api".to_string(),
+        original_selection: None,
+    });
+
+    let mut element = view(&model, &ui_state, RenderContext::Normal, None, false).into();
+    let canvas = element.render(Some(TEST_WIDTH as usize));
+
+    let selected = cell_at(&canvas, "api");
+    assert!(text_style(selected).invert);
+    assert_eq!(text_style(selected).color, None);
+    assert_eq!(selected.background_color, None);
+    let row = (0..canvas.height())
+        .find(|&y| canvas.get_text(0, y, canvas.width(), 1).contains("api"))
+        .unwrap();
+    assert!((0..canvas.width()).all(|x| {
+        canvas
+            .cell(x, row)
+            .and_then(CanvasCell::text_style)
+            .is_some_and(|style| style.invert)
+    }));
+
+    let unmatched = text_style(cell_at(&canvas, "worker"));
+    assert_eq!(unmatched.weight, Weight::Light);
+    assert_eq!(unmatched.color, None);
+
+    let canvas = &canvas;
+    let bar: Vec<Weight> = (0..canvas.height())
+        .flat_map(|y| (0..canvas.width()).filter_map(move |x| canvas.cell(x, y)))
+        .filter(|cell| cell.text() == Some("─"))
+        .map(|cell| text_style(cell).weight)
+        .collect();
+    assert!(bar.contains(&Weight::Normal), "{bar:?}");
+    assert!(bar.contains(&Weight::Light), "{bar:?}");
+}
+
+/// Test that a reversed selection stands out from reversed text.
+#[test]
+fn test_reversed_selection_flips_reversed_text() {
+    let (mut model, mut ui_state) = new_test_model();
+    let config = devenv_tui::UserConfig::from_yaml(
+        "config.yaml",
+        r##"
+version: 1
+tui:
+  theme:
+    preset: none
+    styles:
+      activity:
+        modifiers: [reverse]
+"##
+        .to_string(),
+    )
+    .unwrap();
+    ui_state.set_preferences(config.tui).unwrap();
+
+    model.apply_activity_event(operation_start_with(
+        100,
+        "Running processes",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(process_start_with(1, "api", Some(100), ActivityLevel::Info));
+    model.apply_activity_event(process_start_with(
+        2,
+        "worker",
+        Some(100),
+        ActivityLevel::Info,
+    ));
+    ui_state.selected_activity = Some(1);
+
+    let mut element = view(&model, &ui_state, RenderContext::Normal, None, false).into();
+    let canvas = element.render(Some(TEST_WIDTH as usize));
+
+    assert!(!text_style(cell_at(&canvas, "api")).invert);
+    assert!(text_style(cell_at(&canvas, "worker")).invert);
+}
+
+/// Test that a selection with `reverse` reverses every part of the row once.
+#[test]
+fn test_reverse_selection_reverses_whole_row_once() {
+    let (mut model, mut ui_state) = new_test_model();
+    let config = devenv_tui::UserConfig::from_yaml(
+        "config.yaml",
+        r##"
+version: 1
+tui:
+  theme:
+    styles:
+      activity.selection:
+        modifiers: [reverse]
+"##
+        .to_string(),
+    )
+    .unwrap();
+    ui_state.set_preferences(config.tui).unwrap();
+
+    model.apply_activity_event(operation_start_with(
+        100,
+        "Building shell",
+        None,
+        None,
+        ActivityLevel::Info,
+    ));
+    model.apply_activity_event(operation_start_with(
+        1,
+        "Evaluating",
+        Some(100),
+        Some("nix eval .#devenv.config"),
+        ActivityLevel::Info,
+    ));
+    ui_state.selected_activity = Some(1);
+
+    let mut element = view(&model, &ui_state, RenderContext::Normal, None, false).into();
+    let canvas = element.render(Some(TEST_WIDTH as usize));
+    let row = (0..canvas.height())
+        .find(|&y| {
+            canvas
+                .get_text(0, y, canvas.width(), 1)
+                .contains("Evaluating")
+        })
+        .unwrap();
+
+    for x in 0..canvas.width() {
+        assert!(
+            text_style(canvas.cell(x, row).unwrap()).invert,
+            "{:?} at {x} is not reversed",
+            canvas.get_text(0, row, canvas.width(), 1)
+        );
+    }
+    assert!(!text_style(cell_at(&canvas, "Building shell")).invert);
+}
+
+/// Test that a selected download row uses the selection colors for its action.
+#[test]
+fn test_selected_download_uses_selection_colors() {
+    let (mut model, mut ui_state) = new_test_model();
+    model.apply_activity_event(fetch_start(1, FetchKind::Download, "nixpkgs-src"));
+    model.apply_activity_event(fetch_progress(1, 5000, Some(10000)));
+
+    let mut element = view(&model, &ui_state, RenderContext::Normal, None, false).into();
+    let canvas = element.render(Some(TEST_WIDTH as usize));
+    let unselected = cell_at(&canvas, "Downloading");
+    assert_eq!(
+        text_style(unselected).color,
+        Some(devenv_tui::components::COLOR_ACTIVE_NESTED)
+    );
+    assert_eq!(text_style(unselected).weight, Weight::Bold);
+    assert_eq!(unselected.background_color, None);
+
+    ui_state.selected_activity = Some(1);
+    let mut element = view(&model, &ui_state, RenderContext::Normal, None, false).into();
+    let canvas = element.render(Some(TEST_WIDTH as usize));
+    let selected = cell_at(&canvas, "Downloading");
+    assert_eq!(text_style(selected).color, Some(Color::AnsiValue(232)));
+    assert_eq!(text_style(selected).weight, Weight::Bold);
+    assert_eq!(selected.background_color, Some(Color::AnsiValue(250)));
+}

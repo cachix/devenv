@@ -9,6 +9,7 @@ use crate::{
         RenderedSegment, StatuslineData, StatuslineMode, action_key_hints,
         interrupt_prompt_key_hints, render_statusline, separator_style,
     },
+    theme::{ActivityTheme, Highlight, Part, Status},
 };
 use devenv_activity::{ActivityLevel, ProcessStatus};
 use human_repr::{HumanCount, HumanDuration};
@@ -334,6 +335,7 @@ pub fn view(
                     disclosure,
                     is_selected,
                     is_dimmed,
+                    theme: ui_state.activity_theme().clone(),
                     show_inline_logs,
                     logs: activity_logs,
                     log_line_count: model.get_log_line_count(activity.id),
@@ -509,6 +511,7 @@ struct ActivityRenderContext {
     disclosure: Option<ActivityDisclosure>,
     is_selected: bool,
     is_dimmed: bool,
+    theme: Arc<ActivityTheme>,
     show_inline_logs: bool,
     logs: Option<Arc<VecDeque<String>>>,
     /// Total log line count (not affected by buffer rotation)
@@ -565,6 +568,7 @@ fn disclosed_suffix(
 /// - Top-level (depth == 0): [StatusIndicator]
 /// - Nested (depth > 0): [HierarchyPrefix][StatusIndicator]
 fn build_activity_prefix(
+    theme: &ActivityTheme,
     depth: usize,
     tree_position: &TreePosition,
     completed: Option<bool>,
@@ -575,11 +579,15 @@ fn build_activity_prefix(
         &tree_position.ancestor_continuations,
         tree_position.is_last_sibling,
     )
-    .render();
+    .render(theme);
 
     prefix.push(
         element!(View(margin_right: 1) {
-            StatusIndicator(completed: completed, show_spinner: show_spinner)
+            StatusIndicator(
+                completed: completed,
+                show_spinner: show_spinner,
+                style: theme.status(Status::of_completion(completed)),
+            )
         })
         .into_any(),
     );
@@ -590,22 +598,30 @@ fn build_activity_prefix(
 /// Like `build_activity_prefix`, but renders a process status dot whose shape
 /// encodes the lifecycle state (see `process_status_dot`) instead of a spinner.
 fn build_process_prefix(
+    theme: &ActivityTheme,
     depth: usize,
     tree_position: &TreePosition,
     glyph: &'static str,
-    color: Color,
+    status: Status,
     pulse: bool,
+    is_dimmed: bool,
 ) -> Vec<AnyElement<'static>> {
+    let (style, pulse_style) = theme.process_dot(status, is_dimmed);
     let mut prefix = HierarchyPrefixComponent::new(
         depth,
         &tree_position.ancestor_continuations,
         tree_position.is_last_sibling,
     )
-    .render();
+    .render(theme);
 
     prefix.push(
         element!(View(margin_right: 1) {
-            StatusDot(glyph: glyph.to_string(), color: Some(color), pulse: pulse)
+            StatusDot(
+                glyph: glyph.to_string(),
+                style: style,
+                pulse: pulse,
+                pulse_style: pulse_style,
+            )
         })
         .into_any(),
     );
@@ -650,6 +666,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         disclosure,
         is_selected,
         is_dimmed,
+        theme,
         show_inline_logs,
         logs,
         log_line_count,
@@ -691,7 +708,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
 
             if *show_inline_logs {
-                let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+                let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
                 let main_line = ActivityTextComponent::new(
                     "building".to_string(),
@@ -700,19 +717,18 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     activity.variant.clone(),
                 )
                 .with_suffix(phase_suffix.clone())
-                .with_completed(is_completed)
                 .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
+                .render(theme, terminal_width, *depth, prefix);
 
                 return ExpandedContentComponent::new(logs.as_deref())
                     .with_terminal_width(terminal_width)
                     .with_max_lines(*log_preview_lines)
                     .with_empty_message("  → no build logs yet (press Ctrl-E to expand)")
-                    .render_with_main_line(main_line);
+                    .render_with_main_line(theme, main_line);
             }
 
             // Non-selected build activities use normal rendering
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "building".to_string(),
@@ -721,9 +737,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_suffix(phase_suffix)
-            .with_completed(is_completed)
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
         }
         ActivityVariant::Task(task_data) => {
             // Base status without log line (used as fallback or when no log)
@@ -763,7 +778,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     base_status
                 };
 
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             let main_line = ActivityTextComponent::name_only(
                 activity.name.clone(),
@@ -771,9 +786,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_suffix(status_text)
-            .with_completed(completed.is_some())
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
 
             // Show logs inline for tasks with show_output=true or failed tasks
             let task_failed = *completed == Some(false);
@@ -794,7 +808,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 } else if task_data.show_output && !show_inline_logs {
                     component = component.with_max_lines(LOG_VIEWPORT_SHOW_OUTPUT);
                 }
-                return component.render_with_main_line(main_line);
+                return component.render_with_main_line(theme, main_line);
             }
 
             return main_line;
@@ -811,7 +825,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     )
                     .with_completed(*completed)
                     .with_cached(*cached)
-                    .render(terminal_width);
+                    .render(theme, terminal_width);
             } else if let Some(progress) = &activity.progress {
                 // Use generic progress if available
                 if progress.total.unwrap_or(0) > 0 {
@@ -822,7 +836,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         )
                         .with_completed(*completed)
                         .with_cached(*cached)
-                        .render(terminal_width);
+                        .render(theme, terminal_width);
                 } else {
                     // Show generic progress without percentage
                     let from_suffix = download_data.substituter.as_ref().map(|s| {
@@ -832,7 +846,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             progress.current.unwrap_or(0).human_count_bytes()
                         )
                     });
-                    let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+                    let prefix =
+                        build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
                     return ActivityTextComponent::new(
                         "downloading".to_string(),
@@ -841,9 +856,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         activity.variant.clone(),
                     )
                     .with_suffix(from_suffix)
-                    .with_completed(completed.is_some())
                     .with_selection(*is_selected)
-                    .render(terminal_width, *depth, prefix);
+                    .render(theme, terminal_width, *depth, prefix);
                 }
             } else {
                 // No progress data available
@@ -851,7 +865,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     .substituter
                     .as_ref()
                     .map(|s| format!("from {}", s));
-                let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+                let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
                 return ActivityTextComponent::new(
                     "downloading".to_string(),
@@ -860,13 +874,12 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     activity.variant.clone(),
                 )
                 .with_suffix(from_suffix)
-                .with_completed(completed.is_some())
                 .with_selection(*is_selected)
-                .render(terminal_width, *depth, prefix);
+                .render(theme, terminal_width, *depth, prefix);
             }
         }
         ActivityVariant::Copy => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "copying".to_string(),
@@ -875,16 +888,15 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_suffix(Some("to the store".to_string()))
-            .with_completed(completed.is_some())
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
         }
         ActivityVariant::Query(query_data) => {
             let suffix = query_data
                 .substituter
                 .as_ref()
                 .map(|s| format!("from {}", s));
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "querying".to_string(),
@@ -893,12 +905,11 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_suffix(suffix)
-            .with_completed(completed.is_some())
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
         }
         ActivityVariant::FetchTree => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "fetching".to_string(),
@@ -906,9 +917,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 elapsed_str,
                 activity.variant.clone(),
             )
-            .with_completed(completed.is_some())
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
         }
         ActivityVariant::Evaluating(eval_data) => {
             // Show cached status or file count as suffix
@@ -921,7 +931,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             };
             let suffix = disclosed_suffix(suffix, disclosure.as_ref());
 
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             let main_line = ActivityTextComponent::name_only(
                 disclosed_name(activity, disclosure.as_ref()),
@@ -929,9 +939,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_suffix(suffix)
-            .with_completed(completed.is_some())
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
 
             let failed = *completed == Some(false);
             if *show_inline_logs || failed && logs.is_some() {
@@ -942,25 +951,24 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
                 }
-                return component.render_with_main_line(main_line);
+                return component.render_with_main_line(theme, main_line);
             }
 
             return main_line;
         }
         ActivityVariant::UserOperation => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             return ActivityTextComponent::name_only(
                 activity.name.clone(),
                 elapsed_str,
                 activity.variant.clone(),
             )
-            .with_completed(completed.is_some())
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
         }
         ActivityVariant::Devenv => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             // Show line count as suffix when active or failed with logs
             let base_suffix = if *completed == Some(true) {
@@ -1006,9 +1014,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 activity.variant.clone(),
             )
             .with_suffix(suffix)
-            .with_completed(completed.is_some())
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
 
             let failed = *completed == Some(false);
             if *show_inline_logs || failed && logs.is_some() {
@@ -1019,7 +1026,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 if failed {
                     component = component.with_max_lines(LOG_VIEWPORT_FAILED);
                 }
-                return component.render_with_main_line(main_line);
+                return component.render_with_main_line(theme, main_line);
             }
 
             return main_line;
@@ -1071,15 +1078,17 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             // Process prefix: a status dot whose shape encodes the lifecycle
             // state; transient states pulse instead of animating a spinner.
-            let (dot_glyph, dot_color, dot_pulse) =
+            let (dot_glyph, dot_status, dot_pulse) =
                 process_status_dot(&process_data.status, *completed, *shutting_down);
-            let dot_color = if *is_dimmed {
-                COLOR_HIERARCHY
-            } else {
-                dot_color
-            };
-            let prefix =
-                build_process_prefix(*depth, tree_position, dot_glyph, dot_color, dot_pulse);
+            let prefix = build_process_prefix(
+                theme,
+                *depth,
+                tree_position,
+                dot_glyph,
+                dot_status,
+                dot_pulse,
+                *is_dimmed,
+            );
 
             // Hide elapsed time for not-started/stopped processes
             let process_elapsed = if matches!(process_data.status, ProcessStatus::NotStarted)
@@ -1099,7 +1108,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             .with_suffix(status_text)
             .with_selection(*is_selected)
             .with_dimmed(*is_dimmed)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
 
             let process_failed = *completed == Some(false) || process_data.status.is_failed();
             if *show_inline_logs
@@ -1116,7 +1125,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 }
 
                 let mut elements = vec![main_line];
-                let log_elements = component.render();
+                let log_elements = component.render(theme);
                 elements.extend(log_elements);
 
                 return element! {
@@ -1134,20 +1143,21 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             return main_line;
         }
         ActivityVariant::Message(msg_data) => {
-            // Determine icon and color based on message level
+            // Determine icon and style based on message level
             // Following CLI conventions: errors get ✗, others get • (dot)
-            let (icon, icon_color, text_color) = match msg_data.level {
-                ActivityLevel::Error => ("✗", COLOR_FAILED, COLOR_FAILED),
-                ActivityLevel::Warn => ("•", Color::AnsiValue(214), Color::AnsiValue(214)), // Yellow
-                ActivityLevel::Info => ("•", COLOR_INFO, Color::Reset), // Blue dot
-                _ => ("•", COLOR_HIERARCHY, Color::Reset),              // Gray dot for debug/trace
+            let (icon, status) = match msg_data.level {
+                ActivityLevel::Error => ("✗", Status::Failure),
+                ActivityLevel::Warn => ("•", Status::Warning),
+                ActivityLevel::Info => ("•", Status::Info),
+                _ => ("•", Status::Inactive),
             };
-
-            // Colors for selected vs unselected rows
-            let (selected_text_color, bg_color) = if *is_selected {
-                (Color::AnsiValue(232), Some(Color::AnsiValue(250))) // Near-black on light gray
-            } else {
-                (text_color, None)
+            let icon_style = theme.status(status);
+            let highlight = Highlight::new(*is_selected, false);
+            let text_style = match msg_data.level {
+                ActivityLevel::Error | ActivityLevel::Warn => {
+                    theme.highlighted(icon_style, Part::Message, highlight)
+                }
+                _ => theme.part(Part::Message, highlight),
             };
 
             // Build prefix string for indentation
@@ -1158,6 +1168,22 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             } else {
                 String::new()
             };
+
+            let message_line = element! {
+                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: theme.row_background(highlight)) {
+                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                        Text(content: prefix_str.clone())
+                        View(margin_right: 1) {
+                            #(icon_style.span(icon))
+                        }
+                    }
+                    View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
+                        #(text_style.span(activity.name.clone()))
+                    }
+                    #(selection_overlay(theme, highlight))
+                }
+            }
+            .into_any();
 
             // For errors, always show full message including details
             // Show trace first, then the error summary at the bottom
@@ -1187,7 +1213,7 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                         }
                                     }
                                     View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                                        Text(content: line.clone(), color: COLOR_HIERARCHY)
+                                        #(theme.detail.span(line.clone()))
                                     }
                                 }
                             }
@@ -1196,42 +1222,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                     }
                 }
 
-                // Last line: icon + error summary (with inverse highlight if selected)
-                if let Some(bg) = bg_color {
-                    all_lines.push(
-                        element! {
-                            View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
-                                View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                                    Text(content: prefix_str.clone())
-                                    View(margin_right: 1) {
-                                        Text(content: icon, color: icon_color)
-                                    }
-                                }
-                                View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                                    Text(content: activity.name.clone(), color: selected_text_color)
-                                }
-                            }
-                        }
-                        .into_any(),
-                    );
-                } else {
-                    all_lines.push(
-                        element! {
-                            View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
-                                View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                                    Text(content: prefix_str.clone())
-                                    View(margin_right: 1) {
-                                        Text(content: icon, color: icon_color)
-                                    }
-                                }
-                                View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                                    Text(content: activity.name.clone(), color: selected_text_color)
-                                }
-                            }
-                        }
-                        .into_any(),
-                    );
-                }
+                // Last line: icon + error summary
+                all_lines.push(message_line);
 
                 let total_height = all_lines.len() as u32;
                 return element! {
@@ -1242,41 +1234,10 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 .into_any();
             }
 
-            // Simple single-line message (no details)
-            if let Some(bg) = bg_color {
-                return element! {
-                    View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
-                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                            Text(content: prefix_str)
-                            View(margin_right: 1) {
-                                Text(content: icon, color: icon_color)
-                            }
-                        }
-                        View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                            Text(content: activity.name.clone(), color: selected_text_color)
-                        }
-                    }
-                }
-                .into_any();
-            } else {
-                return element! {
-                    View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
-                        View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                            Text(content: prefix_str)
-                            View(margin_right: 1) {
-                                Text(content: icon, color: icon_color)
-                            }
-                        }
-                        View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                            Text(content: activity.name.clone(), color: selected_text_color)
-                        }
-                    }
-                }
-                .into_any();
-            }
+            return message_line;
         }
         ActivityVariant::Unknown => {
-            let prefix = build_activity_prefix(*depth, tree_position, *completed, true);
+            let prefix = build_activity_prefix(theme, *depth, tree_position, *completed, true);
 
             return ActivityTextComponent::new(
                 "unknown".to_string(),
@@ -1284,9 +1245,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                 elapsed_str,
                 activity.variant.clone(),
             )
-            .with_completed(completed.is_some())
             .with_selection(*is_selected)
-            .render(terminal_width, *depth, prefix);
+            .render(theme, terminal_width, *depth, prefix);
         }
     }
 }
@@ -2176,14 +2136,7 @@ pub(crate) fn build_configured_statusline(
             if index > 0 {
                 children.push(
                     element!(View(background_color: separator_style.background, flex_shrink: 0.0) {
-                        Text(
-                            content: separator.clone(),
-                            color: separator_style.foreground,
-                            weight: if separator_style.bold { Weight::Bold } else if separator_style.dim { Weight::Light } else { Weight::Normal },
-                            decoration: if separator_style.underline { TextDecoration::Underline } else { TextDecoration::None },
-                            italic: separator_style.italic,
-                            invert: separator_style.reverse,
-                        )
+                        #(separator_style.text(separator.clone()))
                     })
                     .into_any(),
                 );
@@ -2191,14 +2144,7 @@ pub(crate) fn build_configured_statusline(
             let style = segment.style;
             children.push(
                 element!(View(background_color: style.background, flex_shrink: 0.0) {
-                    Text(
-                        content: segment.content,
-                        color: style.foreground,
-                        weight: if style.bold { Weight::Bold } else if style.dim { Weight::Light } else { Weight::Normal },
-                        decoration: if style.underline { TextDecoration::Underline } else { TextDecoration::None },
-                        italic: style.italic,
-                        invert: style.reverse,
-                    )
+                    #(style.text(segment.content))
                 })
                 .into_any(),
             );
@@ -2506,9 +2452,9 @@ mod tests {
         let segment = |name: &str| RenderedSegment {
             name: name.to_string(),
             content: name.to_string(),
-            style: crate::statusline::SegmentStyle {
+            style: crate::theme::Style {
                 background: Some(background),
-                ..crate::statusline::SegmentStyle::default()
+                ..crate::theme::Style::default()
             },
         };
         let statusline = crate::statusline::RenderedStatusline {
@@ -2541,7 +2487,7 @@ mod tests {
         let segment = |name: &str| RenderedSegment {
             name: name.to_string(),
             content: name.to_string(),
-            style: crate::statusline::SegmentStyle::default(),
+            style: crate::theme::Style::default(),
         };
         let statusline = crate::statusline::RenderedStatusline {
             left: vec![segment("L")],
