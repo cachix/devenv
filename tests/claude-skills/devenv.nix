@@ -33,6 +33,9 @@
         content = "Body.";
       };
 
+      directory-one = ./directory-one;
+      directory-two = ./directory-two;
+
       # Every field the module knows how to render, to prove each one lands in
       # the frontmatter and that a value containing a comma survives the list.
       everything = {

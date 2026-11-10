@@ -2,6 +2,8 @@
 title: "Claude Code"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 [Claude Code](https://github.com/anthropics/claude-code) is Anthropic's official CLI for interacting with Claude AI. The devenv integration provides automatic setup of hooks and commands to enhance your development workflow.
 
 ## Global Configuration
@@ -318,6 +320,25 @@ That makes them the right place for knowledge that is important when it is relev
 
 Skills are written to `.claude/skills/<name>/SKILL.md`.
 
+<VersionCompatibility version="2.4.1" />
+
+An existing skill directory can be used directly. Devenv links the complete
+directory, including scripts, assets, and references, to `.claude/skills/<name>`:
+
+```nix
+{
+  claude.code.skills = {
+    review = ./skills/review;
+    migrations = ./skills/migrations;
+  };
+}
+```
+
+Each directory must contain `SKILL.md`. Directory-backed and structured skills
+can be declared together; their names must be distinct. A directory-backed
+skill cannot share its destination with a `files` entry beneath the same skill
+path.
+
 ```nix
 {
   claude.code.skills = {
@@ -337,7 +358,7 @@ Skills are written to `.claude/skills/<name>/SKILL.md`.
 
 ### Properties
 
-- **description**: What the skill covers and when to use it. This is the only part Claude sees before loading the skill, so it decides whether the skill ever triggers.
+- **description**: What the skill covers and when to use it. This is the only part Claude sees before loading the skill, so it decides whether the skill ever triggers. Required for structured skills; directory-backed skills provide it in their own `SKILL.md`.
   Keep it one line and name the situations that should pull it in.
 - **content**: The body of `SKILL.md`.
 - **allowedTools**: Tools Claude can use without asking permission during the turn that invokes the skill; the grant clears when you send your next message.

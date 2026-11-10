@@ -9,6 +9,14 @@ skill=.claude/skills/package-scoping/SKILL.md
 test -f "$skill" || { echo "missing $skill"; exit 1; }
 test -f .claude/skills/minimal/SKILL.md || { echo "missing minimal skill"; exit 1; }
 
+# Directory-backed skills retain their complete trees alongside structured skills.
+test -L .claude/skills/directory-one
+grep -qF DIRECTORY-REFERENCE .claude/skills/directory-one/references/guide.md
+grep -qF DIRECTORY-ASSET .claude/skills/directory-one/assets/data.txt
+test -x .claude/skills/directory-one/scripts/check.sh
+test "$(.claude/skills/directory-one/scripts/check.sh)" = DIRECTORY-SCRIPT
+grep -qF SECOND-DIRECTORY-SKILL .claude/skills/directory-two/SKILL.md
+
 grep -qF -- 'name: package-scoping' "$skill" \
   || { echo "expected name in frontmatter:"; cat "$skill"; exit 1; }
 
@@ -80,5 +88,10 @@ background: false
 EOF
 
 # Skills are reported by `devenv info`.
-devenv info | grep -qF -- "- Skills: everything, minimal, package-scoping" \
+devenv info | grep -qF -- "- Skills: directory-one, directory-two, everything, minimal, package-scoping" \
   || { echo "expected skills in devenv info output:"; devenv info; exit 1; }
+
+# A second evaluation retains the same directory-backed source and resources.
+first=$(readlink .claude/skills/directory-one)
+devenv shell -- true
+test "$(readlink .claude/skills/directory-one)" = "$first"

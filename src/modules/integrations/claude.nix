@@ -470,8 +470,16 @@ in
 
     skills = lib.mkOption {
       type = lib.types.attrsOf (
-        lib.types.submodule ({ name, config, ... }: {
+        lib.types.coercedTo lib.types.path
+          (directory: { inherit directory; description = ""; content = ""; })
+          (lib.types.submodule ({ name, config, ... }: {
           options = {
+            directory = lib.mkOption {
+              type = lib.types.nullOr lib.types.path;
+              default = null;
+              internal = true;
+              description = "Complete skill directory supplied as a path.";
+            };
             description = lib.mkOption {
               type = lib.types.str;
               description = ''
@@ -666,11 +674,13 @@ in
               '';
             }
           ];
-        })
+        }))
       );
       default = { };
       description = ''
-        Custom Claude Code skills to create in the project.
+        Custom Claude Code skills to create in the project. Each value can be
+        a directory containing SKILL.md and its resources, or a structured
+        declaration with generated frontmatter and optional resources.
         A skill is a folder of instructions Claude loads on demand when its
         description matches the task, keeping specialised knowledge out of the
         always-on context.
@@ -968,8 +978,35 @@ in
 
     {
       assertions = lib.flatten (lib.mapAttrsToList (_: agent: agent.assertions) cfg.agents)
-        ++ lib.flatten (lib.mapAttrsToList (_: skill: skill.assertions) cfg.skills);
-      warnings = lib.flatten (lib.mapAttrsToList (_: skill: skill.warnings) cfg.skills);
+        ++ lib.flatten (lib.mapAttrsToList (name: skill:
+          if skill.directory != null then
+            let
+              destination = ".claude/skills/${name}";
+              collisions = lib.filter
+                (path: path != destination && (
+                  path == ".claude" || path == ".claude/skills"
+                  || lib.hasPrefix "${destination}/" path
+                ))
+                (lib.attrNames config.files);
+            in
+            [
+              {
+                assertion = builtins.match "[a-z0-9]+(-[a-z0-9]+)*" name != null
+                  && builtins.stringLength name <= 64 && name != "synced";
+                message = "claude.code.skills.${name}: skill names must use lowercase letters, digits, and single hyphens (at most 64 characters), and cannot be `synced`.";
+              }
+              {
+                assertion = lib.pathIsDirectory skill.directory && builtins.pathExists (skill.directory + "/SKILL.md");
+                message = "claude.code.skills.${name}: directory-backed skills must be directories containing SKILL.md: ${toString skill.directory}";
+              }
+              {
+                assertion = collisions == [ ];
+                message = "claude.code.skills.${name}: directory destination ${destination} collides with files: ${lib.concatStringsSep ", " collisions}";
+              }
+            ]
+          else skill.assertions) cfg.skills);
+      warnings = lib.flatten (lib.mapAttrsToList (_: skill:
+        if skill.directory != null then [ ] else skill.warnings) cfg.skills);
     }
 
     (lib.mkIf cfg.enable {
@@ -1014,58 +1051,62 @@ in
 
         # Skill files
         (lib.mapAttrs'
-          (name: skill: {
-            name = ".claude/skills/${name}/SKILL.md";
-            value = {
-              inherit (skill) copyMode;
-              text =
-                let
-                  # toJSON keeps colons and quotes valid; a list renders as a JSON
-                  # array, sidestepping the comma/space separator rules these fields
-                  # disagree on.
-                  scalar = key: value: "${key}: ${builtins.toJSON value}";
-                  optionalScalar = key: value: lib.optional (value != null) (scalar key value);
-                  optionalList = key: value: lib.optional (value != [ ]) (scalar key value);
-                  optionalFlag = key: value: default: lib.optional (value != default) "${key}: ${lib.boolToString value}";
+          (name: skill:
+            if skill.directory != null then
+              lib.nameValuePair ".claude/skills/${name}" { source = skill.directory; }
+            else {
+              name = ".claude/skills/${name}/SKILL.md";
+              value = {
+                inherit (skill) copyMode;
+                text =
+                  let
+                    # toJSON keeps colons and quotes valid; a list renders as a JSON
+                    # array, sidestepping the comma/space separator rules these fields
+                    # disagree on.
+                    scalar = key: value: "${key}: ${builtins.toJSON value}";
+                    optionalScalar = key: value: lib.optional (value != null) (scalar key value);
+                    optionalList = key: value: lib.optional (value != [ ]) (scalar key value);
+                    optionalFlag = key: value: default: lib.optional (value != default) "${key}: ${lib.boolToString value}";
 
-                  # Built as a list so an unset field leaves no blank line behind.
-                  frontmatter = [
-                    "name: ${name}"
-                    (scalar "description" skill.description)
-                  ]
-                  ++ optionalScalar "when_to_use" skill.whenToUse
-                  ++ optionalList "allowed-tools" skill.allowedTools
-                  ++ optionalList "disallowed-tools" skill.disallowedTools
-                  ++ optionalFlag "disable-model-invocation" skill.disableModelInvocation false
-                  ++ optionalFlag "user-invocable" skill.userInvocable true
-                  ++ optionalScalar "argument-hint" skill.argumentHint
-                  ++ optionalList "arguments" skill.arguments
-                  ++ optionalScalar "model" skill.model
-                  ++ optionalScalar "effort" skill.effort
-                  ++ optionalScalar "context" skill.context
-                  ++ optionalScalar "agent" skill.agent
-                  ++ lib.optional (skill.background != null)
-                    "background: ${lib.boolToString skill.background}";
-                in
-                ''
-                  ---
-                  ${lib.concatStringsSep "\n" frontmatter}
-                  ---
+                    # Built as a list so an unset field leaves no blank line behind.
+                    frontmatter = [
+                      "name: ${name}"
+                      (scalar "description" skill.description)
+                    ]
+                    ++ optionalScalar "when_to_use" skill.whenToUse
+                    ++ optionalList "allowed-tools" skill.allowedTools
+                    ++ optionalList "disallowed-tools" skill.disallowedTools
+                    ++ optionalFlag "disable-model-invocation" skill.disableModelInvocation false
+                    ++ optionalFlag "user-invocable" skill.userInvocable true
+                    ++ optionalScalar "argument-hint" skill.argumentHint
+                    ++ optionalList "arguments" skill.arguments
+                    ++ optionalScalar "model" skill.model
+                    ++ optionalScalar "effort" skill.effort
+                    ++ optionalScalar "context" skill.context
+                    ++ optionalScalar "agent" skill.agent
+                    ++ lib.optional (skill.background != null)
+                      "background: ${lib.boolToString skill.background}";
+                  in
+                  ''
+                    ---
+                    ${lib.concatStringsSep "\n" frontmatter}
+                    ---
 
-                  ${skill.content}
-                '';
-            };
-          })
+                    ${skill.content}
+                  '';
+              };
+            })
           cfg.skills)
 
         # Files bundled alongside a skill (references, scripts, assets)
         (lib.listToAttrs (lib.concatLists (lib.mapAttrsToList
-          (name: skill: lib.mapAttrsToList
-            (path: resource: lib.nameValuePair ".claude/skills/${name}/${path}" {
-              source = resource.file;
-              inherit (skill) copyMode;
-            })
-            skill.resources)
+          (name: skill:
+            if skill.directory != null then [ ] else lib.mapAttrsToList
+              (path: resource: lib.nameValuePair ".claude/skills/${name}/${path}" {
+                source = resource.file;
+                inherit (skill) copyMode;
+              })
+              skill.resources)
           cfg.skills)))
       ];
 
