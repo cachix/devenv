@@ -46,6 +46,7 @@ pub mod config;
 pub mod external_manager;
 pub mod force_exit_registry;
 pub mod log_tailer;
+pub mod logs;
 pub mod manager;
 pub mod manager_capabilities;
 pub mod pid;
