@@ -232,16 +232,10 @@ impl NativeProcessManager {
                 if manager.process_runner().get_phase(&name).await.is_none() {
                     Self::process_not_found(&name)
                 } else {
-                    let (stdout_path, stderr_path) = devenv_processes::command::log_paths(
-                        manager.process_runner().state_dir(),
-                        &name,
-                    );
+                    let logs = manager.process_runner().process_logs(&name);
                     let (stdout, stderr) = tokio::task::spawn_blocking(move || {
-                        let stdout =
-                            devenv_processes::log_tailer::read_tail(&stdout_path, max_lines);
-                        let stderr =
-                            devenv_processes::log_tailer::read_tail(&stderr_path, max_lines);
-                        (stdout, stderr)
+                        logs.map(|logs| (logs.stdout.tail(max_lines), logs.stderr.tail(max_lines)))
+                            .unwrap_or_default()
                     })
                     .await
                     .unwrap_or_default();
@@ -414,7 +408,7 @@ impl NativeProcessManager {
             .collect();
         for name in previous.keys() {
             Self::spawn_attach_tailers(
-                manager.process_runner().state_dir(),
+                manager.process_runner(),
                 name,
                 &tx,
                 &connection,
@@ -446,7 +440,7 @@ impl NativeProcessManager {
                 }
                 if is_new {
                     Self::spawn_attach_tailers(
-                        manager.process_runner().state_dir(),
+                        manager.process_runner(),
                         name,
                         &tx,
                         &connection,
@@ -471,19 +465,20 @@ impl NativeProcessManager {
     }
 
     fn spawn_attach_tailers(
-        state_dir: &Path,
+        runner: &ProcessRunner,
         name: &str,
         tx: &mpsc::Sender<AttachEvent>,
         connection: &CancellationToken,
         tailers: &mut AttachTailers,
     ) {
-        let (stdout_path, stderr_path) = devenv_processes::command::log_paths(state_dir, name);
-        for (path, stream) in [
-            (stdout_path, LogStream::Stdout),
-            (stderr_path, LogStream::Stderr),
+        let Some(logs) = runner.process_logs(name) else {
+            return;
+        };
+        for (output, stream) in [
+            (&logs.stdout, LogStream::Stdout),
+            (&logs.stderr, LogStream::Stderr),
         ] {
-            let (backlog, offset) =
-                devenv_processes::log_tailer::read_backlog(&path, ATTACH_BACKLOG_LINES);
+            let (backlog, mut live) = output.subscribe(ATTACH_BACKLOG_LINES);
             for line in backlog {
                 if !Self::try_send_attach_log(
                     tx,
@@ -498,22 +493,24 @@ impl NativeProcessManager {
             }
             let tx = tx.clone();
             let name = name.to_string();
-            tailers.push(devenv_processes::log_tailer::spawn_tail_to(
-                path,
-                offset,
-                true,
-                connection.clone(),
-                move |line| {
-                    Self::try_send_attach_log(
-                        &tx,
-                        AttachEvent::Log {
-                            name: name.clone(),
-                            stream,
-                            line,
+            let connection = connection.clone();
+            tailers.push(tokio::spawn(async move {
+                loop {
+                    tokio::select! {
+                        line = live.recv() => match line {
+                            Ok(line) => {
+                                if !Self::try_send_attach_log(&tx, AttachEvent::Log { name: name.clone(), stream, line }) {
+                                    return;
+                                }
+                            }
+                            // A slow client can lose output, never stall capture.
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
                         },
-                    )
-                },
-            ));
+                        _ = connection.cancelled() => return,
+                    }
+                }
+            }));
         }
     }
 }
@@ -678,6 +675,20 @@ mod tests {
             },
             ..Default::default()
         }
+    }
+
+    // Write to a child's input file, not its captured logs: the manager is
+    // now the sole log writer, and live subscriptions observe child output.
+    fn output_feed_config(name: &str, dir: &Path) -> ProcessConfig {
+        let feed = dir.join(format!("output-feed-{name}"));
+        std::fs::write(&feed, "").unwrap();
+        let mut config = long_running_config(name);
+        config.exec = format!("exec tail -n +1 -f '{}'", feed.display());
+        config.logs = devenv_processes::LogRetentionConfig {
+            max_file_size: 1024,
+            max_files: 2,
+        };
+        config
     }
 
     fn auto_start_off_config(name: &str) -> ProcessConfig {
@@ -1299,7 +1310,7 @@ mod tests {
         let manager = test_manager(&temp_dir, Vec::new(), ManagerResidence::InProcess).await;
         manager
             .process_runner()
-            .start_command(&long_running_config("shared"), None)
+            .start_command(&output_feed_config("shared", temp_dir.path()), None)
             .await
             .unwrap();
         let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
@@ -1314,8 +1325,7 @@ mod tests {
         expect_snapshot(&mut second).await;
         drop(first);
 
-        let (stdout_path, _) =
-            devenv_processes::command::log_paths(manager.process_runner().state_dir(), "shared");
+        let stdout_path = temp_dir.path().join("output-feed-shared");
         {
             use std::io::Write;
             let mut stdout = std::fs::OpenOptions::new()
@@ -1364,12 +1374,11 @@ mod tests {
         let manager = test_manager(&temp_dir, Vec::new(), ManagerResidence::InProcess).await;
         manager
             .process_runner()
-            .start_command(&long_running_config("stable"), None)
+            .start_command(&output_feed_config("stable", temp_dir.path()), None)
             .await
             .unwrap();
         let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
-        let (stdout_path, _) =
-            devenv_processes::command::log_paths(manager.process_runner().state_dir(), "stable");
+        let stdout_path = temp_dir.path().join("output-feed-stable");
 
         for cycle in 0..CYCLES {
             let marker = format!("attach-cycle-{cycle}");
@@ -1441,7 +1450,7 @@ mod tests {
         let manager = test_manager(&temp_dir, Vec::new(), ManagerResidence::InProcess).await;
         manager
             .process_runner()
-            .start_command(&long_running_config("noisy"), None)
+            .start_command(&output_feed_config("noisy", temp_dir.path()), None)
             .await
             .unwrap();
         let _server = NativeApiServer::start(Arc::clone(&manager)).unwrap();
@@ -1451,8 +1460,7 @@ mod tests {
             .unwrap();
         slow.write_all(b"{\"command\":\"attach\"}\n").await.unwrap();
 
-        let (stdout_path, _) =
-            devenv_processes::command::log_paths(manager.process_runner().state_dir(), "noisy");
+        let stdout_path = temp_dir.path().join("output-feed-noisy");
         {
             use std::io::{BufWriter, Write};
             let stdout = std::fs::OpenOptions::new()
@@ -1548,7 +1556,10 @@ mod tests {
             .start_command(
                 &ProcessConfig {
                     name: "attach-proc".to_string(),
-                    exec: "echo attach-line; exec tail -f /dev/null".to_string(),
+                    exec: format!(
+                        "echo attach-line; {}",
+                        output_feed_config("attach-proc", temp_dir.path()).exec
+                    ),
                     restart: RestartConfig {
                         on: RestartPolicy::Never,
                         max: Some(0),
@@ -1593,10 +1604,7 @@ mod tests {
             }
         }
 
-        let (stdout_log, _) = devenv_processes::command::log_paths(
-            manager.process_runner().state_dir(),
-            "attach-proc",
-        );
+        let stdout_log = temp_dir.path().join("output-feed-attach-proc");
         {
             use std::io::Write;
             let mut stdout = std::fs::OpenOptions::new()
