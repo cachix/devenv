@@ -4,8 +4,13 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+use devenv_activity::ActivityRef;
+use nix::fcntl::{FcntlArg, OFlag, fcntl};
+use tokio::io::unix::AsyncFd;
 use tokio::sync::broadcast;
+use tokio::task::JoinHandle;
 
 use crate::config::LogRetentionConfig;
 
@@ -231,6 +236,17 @@ impl LogStreamStore {
         let receiver = state.live.subscribe();
         (state.history(lines, true), receiver)
     }
+
+    fn capture(&self, bytes: &[u8], eof: bool, activity: &ActivityRef, stderr: bool) {
+        let lines = self.state.lock().unwrap().capture(bytes, eof);
+        for line in lines {
+            if stderr {
+                activity.error(&line);
+            } else {
+                activity.log(&line);
+            }
+        }
+    }
 }
 
 pub struct ProcessLogs {
@@ -250,6 +266,115 @@ impl ProcessLogs {
     pub fn reset(&self, config: LogRetentionConfig) {
         self.stdout.reset(config);
         self.stderr.reset(config);
+    }
+
+    /// Readers start before the child so even startup bursts can be drained.
+    /// The spawn hook retains the writers across automatic restarts; deleting
+    /// the job closes those writers and lets the readers finish at EOF.
+    pub fn capture(
+        &self,
+        activity: ActivityRef,
+    ) -> io::Result<(OutputCapture, std::io::PipeWriter, std::io::PipeWriter)> {
+        let (out_read, out_write) = std::io::pipe()?;
+        let (err_read, err_write) = std::io::pipe()?;
+        let out_read = pipe_reader(out_read)?;
+        let err_read = pipe_reader(err_read)?;
+        let tasks = OutputCapture(vec![
+            spawn_reader(out_read, Arc::clone(&self.stdout), activity.clone(), false),
+            spawn_reader(err_read, Arc::clone(&self.stderr), activity, true),
+        ]);
+        Ok((tasks, out_write, err_write))
+    }
+}
+
+fn pipe_reader(reader: std::io::PipeReader) -> io::Result<AsyncFd<File>> {
+    fcntl(&reader, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
+    let fd: std::os::fd::OwnedFd = reader.into();
+    AsyncFd::new(File::from(fd))
+}
+
+fn spawn_reader(
+    reader: AsyncFd<File>,
+    stream: Arc<LogStreamStore>,
+    activity: ActivityRef,
+    stderr: bool,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut bytes = [0; 8192];
+        loop {
+            let mut ready = match reader.readable().await {
+                Ok(ready) => ready,
+                Err(error) => {
+                    tracing::warn!(%error, "Process output pipe failed");
+                    break;
+                }
+            };
+            match ready.try_io(|inner| inner.get_ref().read(&mut bytes)) {
+                Ok(Ok(0)) => break,
+                Ok(Ok(count)) => stream.capture(&bytes[..count], false, &activity, stderr),
+                Ok(Err(error)) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Ok(Err(error)) => {
+                    tracing::warn!(%error, "Process output capture failed");
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+        stream.capture(&[], true, &activity, stderr);
+    })
+}
+
+/// Abort on failed launches/drop; explicitly drain after child scope teardown.
+pub struct OutputCapture(Vec<JoinHandle<()>>);
+
+impl OutputCapture {
+    pub async fn finish(mut self) {
+        for task in &mut self.0 {
+            if tokio::time::timeout(Duration::from_secs(2), &mut *task)
+                .await
+                .is_err()
+            {
+                task.abort();
+                tracing::warn!("Timed out draining process output");
+            }
+        }
+    }
+}
+
+impl Drop for OutputCapture {
+    fn drop(&mut self) {
+        for task in &self.0 {
+            task.abort();
+        }
+    }
+}
+
+/// Duplicate capture writers in the fallible spawn phase, so descriptor
+/// exhaustion is reported as a spawn failure rather than panicking a job.
+#[derive(Clone, Debug)]
+pub(crate) struct CaptureStdioWrapper {
+    stdout: Arc<std::io::PipeWriter>,
+    stderr: Arc<std::io::PipeWriter>,
+}
+
+impl CaptureStdioWrapper {
+    pub(crate) fn new(stdout: std::io::PipeWriter, stderr: std::io::PipeWriter) -> Self {
+        Self {
+            stdout: Arc::new(stdout),
+            stderr: Arc::new(stderr),
+        }
+    }
+}
+
+impl process_wrap::tokio::CommandWrapper for CaptureStdioWrapper {
+    fn pre_spawn(
+        &mut self,
+        command: &mut tokio::process::Command,
+        _: &process_wrap::tokio::CommandWrap,
+    ) -> io::Result<()> {
+        command.stdout(std::process::Stdio::from(self.stdout.try_clone()?));
+        command.stderr(std::process::Stdio::from(self.stderr.try_clone()?));
+        Ok(())
     }
 }
 
@@ -369,6 +494,22 @@ mod tests {
         assert_eq!(live.try_recv().unwrap(), "first");
         assert_eq!(live.try_recv().unwrap(), "second");
         assert_eq!(live.try_recv().unwrap(), "last");
+    }
+
+    #[tokio::test]
+    async fn capture_drains_both_streams_and_unterminated_output_at_eof() {
+        let (_dir, logs) = fixture(8, 3);
+        let activity = devenv_activity::start!(devenv_activity::Activity::process("capture"));
+        let (capture, mut out, mut err) = logs.capture(activity.ref_handle()).unwrap();
+        out.write_all(b"one\ntwo\nlast").unwrap();
+        err.write_all(b"error\nfinal").unwrap();
+        drop(out);
+        drop(err);
+        capture.finish().await;
+        assert_eq!(logs.stdout.tail(3), "one\ntwo\nlast");
+        assert_eq!(logs.stderr.tail(2), "error\nfinal");
+        retained(&logs.stdout);
+        retained(&logs.stderr);
     }
 
     #[test]
