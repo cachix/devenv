@@ -5,6 +5,14 @@ let
 in
 {
   options.process.managers.native = {
+    logs = lib.mkOption {
+      type = lib.types.submodule {
+        options = import ../lib/process-logs.nix { inherit lib; };
+      };
+      default = { };
+      description = "Default stdout/stderr log retention for native-managed processes.";
+    };
+
     enable = lib.mkEnableOption "native Rust process manager" // {
       internal = true;
     };

@@ -54,6 +54,8 @@ let
 
   parseProcessDep = import ./lib/parse-process-dep.nix { inherit lib; };
 
+  logDefaults = config.process.managers.native.logs;
+
   processType = types.submodule ({ config, name, ... }: {
     options = {
       start = lib.mkOption {
@@ -147,6 +149,14 @@ let
 
           Requires devenv 2.0+.
         '';
+      };
+
+      logs = lib.mkOption {
+        type = types.submodule {
+          options = import ./lib/process-logs.nix { inherit lib; defaults = logDefaults; };
+        };
+        default = { };
+        description = "Stdout/stderr log retention, inheriting native-manager defaults per field.";
       };
 
       restart = lib.mkOption {
@@ -638,6 +648,7 @@ in
                 start.enable = process.start.enable;
                 ready = process.ready;
                 restart = process.restart;
+                logs = process.logs;
                 listen = process.listen;
                 ports = lib.mapAttrs (_: portCfg: portCfg.value) process.ports;
                 proxy = process.proxy // {

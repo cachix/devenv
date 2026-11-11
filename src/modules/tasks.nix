@@ -3,6 +3,7 @@ let
   types = lib.types;
   listenType = import ./lib/listen.nix { inherit lib; };
   readyType = import ./lib/ready.nix { inherit lib; };
+  logDefaults = config.process.managers.native.logs;
 
   devenv-tasks = import ./tasks/package.nix { inherit pkgs lib; };
   supportsWantedBy = config.devenv.cli.version == null
@@ -231,6 +232,14 @@ let
                   type = types.nullOr readyType;
                   default = null;
                   description = "How to determine if this process task is ready to serve.";
+                };
+
+                logs = lib.mkOption {
+                  type = types.submodule {
+                    options = import ./lib/process-logs.nix { inherit lib; defaults = logDefaults; };
+                  };
+                  default = { };
+                  description = "Stdout/stderr log retention, inheriting native-manager defaults per field.";
                 };
 
                 restart = lib.mkOption {
