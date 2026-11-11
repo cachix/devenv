@@ -263,7 +263,7 @@ pub struct JobHandle {
     /// Channel to send lifecycle commands (restart/stop) into the supervisor loop.
     pub cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
     /// Output reader tasks (stdout, stderr)
-    pub output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
+    pub output_capture: Option<crate::logs::OutputCapture>,
     /// Forwards supervisor status transitions to the task system; exits when
     /// the status channel closes. Aborted together with the supervisor.
     pub notify_forwarder: JoinHandle<()>,
@@ -339,13 +339,6 @@ fn initial_phase(config: &ProcessConfig) -> crate::supervisor_state::SupervisorP
     }
 }
 
-/// Prevent a registered process from exposing logs from an earlier manager.
-fn clear_stale_logs(state_dir: &Path, name: &str) {
-    let (stdout_path, stderr_path) = crate::command::log_paths(state_dir, name);
-    let _ = std::fs::write(&stdout_path, "");
-    let _ = std::fs::write(&stderr_path, "");
-}
-
 /// Preserve terminal phases reached before teardown.
 fn terminal_phase_of(phase: crate::supervisor_state::SupervisorPhase) -> Option<ProcessPhase> {
     match ProcessPhase::from(phase) {
@@ -375,7 +368,7 @@ struct StopParts {
     cmd_tx: mpsc::Sender<crate::supervisor::SupervisorCommand>,
     supervisor_task: JoinHandle<()>,
     notify_forwarder: JoinHandle<()>,
-    output_readers: Option<(JoinHandle<()>, JoinHandle<()>)>,
+    output_capture: Option<crate::logs::OutputCapture>,
     ports: Vec<u16>,
     shutdown: ShutdownConfig,
     scopes: Arc<crate::process_guardian::ProcessScopeRegistry>,
@@ -401,7 +394,7 @@ fn take_active_for_stop(
         supervisor_task,
         job_task,
         notify_forwarder,
-        output_readers,
+        output_capture,
         ..
     } = handle;
     let ProcessResources {
@@ -431,7 +424,7 @@ fn take_active_for_stop(
         cmd_tx,
         supervisor_task,
         notify_forwarder,
-        output_readers,
+        output_capture,
         ports,
         shutdown,
         scopes,
@@ -553,6 +546,7 @@ pub struct ProcessRunner {
     /// Wakes a foreground run when a process reaches a terminal phase.
     completion: Arc<Notify>,
     capability_broker: Option<crate::capabilities::CapabilityBrokerClient>,
+    logs: Arc<std::sync::Mutex<HashMap<String, Arc<crate::logs::ProcessLogs>>>>,
 }
 
 /// Path-only control client for an already-running native manager.
@@ -814,24 +808,22 @@ struct LaunchSetup {
     status_tx: tokio::sync::watch::Sender<crate::supervisor_state::JobStatus>,
     status_rx: tokio::sync::watch::Receiver<crate::supervisor_state::JobStatus>,
     notify_socket: Option<Arc<NotifySocket>>,
-    stdout_tailer: JoinHandle<()>,
-    stderr_tailer: JoinHandle<()>,
+    output_capture: crate::logs::OutputCapture,
     stderr_log: PathBuf,
     shutdown: ShutdownConfig,
     scopes: Arc<crate::process_guardian::ProcessScopeRegistry>,
 }
 
 impl LaunchSetup {
-    /// Tear down a launch that never settled to `Active`: abort the output
-    /// tailers and stop the spawned child with the configured grace period.
+    /// Tear down a launch that never settled to `Active`: stop the spawned
+    /// child with the configured grace period, then drain its captured output.
     /// Used when shutdown raced the launch or the entry changed underneath it.
     async fn abort_and_stop(self) {
-        self.stdout_tailer.abort();
-        self.stderr_tailer.abort();
         crate::process_guardian::stop_job(&self.job, &self.scopes, &self.shutdown).await;
         self.job.unset_spawn_child_fn().await;
         self.job.delete().await;
         let _ = self.job_task.await;
+        self.output_capture.finish().await;
     }
 }
 
@@ -877,7 +869,29 @@ impl ProcessRunner {
             live: Arc::new(AtomicUsize::new(0)),
             completion: Arc::new(Notify::new()),
             capability_broker: None,
+            logs: Arc::new(std::sync::Mutex::new(HashMap::new())),
         })
+    }
+
+    /// Shared output store, including retained logs for stopped processes.
+    pub fn process_logs(&self, name: &str) -> Option<Arc<crate::logs::ProcessLogs>> {
+        self.logs.lock().unwrap().get(name).cloned()
+    }
+
+    fn reset_logs(&self, config: &ProcessConfig) {
+        let mut logs = self.logs.lock().unwrap();
+        if let Some(logs) = logs.get(&config.name) {
+            logs.reset(config.logs);
+        } else {
+            logs.insert(
+                config.name.clone(),
+                Arc::new(crate::logs::ProcessLogs::new(
+                    &self.state_dir,
+                    &config.name,
+                    config.logs,
+                )),
+            );
+        }
     }
 
     pub fn set_capability_broker(&mut self, path: &Path) -> Result<()> {
@@ -1117,7 +1131,7 @@ impl ProcessRunner {
         let activity = self.create_process_activity(&config, parent_id);
         activity.set_status(ProcessStatus::Waiting);
         let name = config.name.clone();
-        clear_stale_logs(&self.state_dir, &name);
+        self.reset_logs(&config);
         self.processes
             .write()
             .await
@@ -1165,7 +1179,7 @@ impl ProcessRunner {
         };
         activity.reset();
         activity.set_status(ProcessStatus::Waiting);
-        clear_stale_logs(&self.state_dir, &name);
+        self.reset_logs(&config);
         processes.insert(name.clone(), ProcessEntry::Waiting { config, activity });
         info!("Re-armed waiting process: {}", name);
         drop(processes);
@@ -1292,7 +1306,7 @@ impl ProcessRunner {
             }
             activity.set_status(ProcessStatus::NotStarted);
             info!("Registered auto start off process: {}", config.name);
-            clear_stale_logs(&self.state_dir, &config.name);
+            self.reset_logs(&config);
             processes.insert(
                 config.name.clone(),
                 ProcessEntry::NotStarted { config, activity },
@@ -1311,6 +1325,7 @@ impl ProcessRunner {
                 bail!("process manager is shutting down");
             }
             activity.set_status(ProcessStatus::Running);
+            self.reset_logs(&config);
             processes.insert(name.clone(), ProcessEntry::Launching { config, activity });
             // No await between the Launching insert and the settle spawn: the
             // settle task always completes even if this caller is aborted.
@@ -1343,6 +1358,7 @@ impl ProcessRunner {
         let live = Arc::clone(&self.live);
         let completion = Arc::clone(&self.completion);
         let capability_broker = self.capability_broker.clone();
+        let logs = Arc::clone(&self.logs);
         tokio::spawn(async move {
             let (config, activity_ref) = {
                 let procs = processes.read().await;
@@ -1354,8 +1370,26 @@ impl ProcessRunner {
                 }
             };
 
-            let setup =
-                Self::launch_setup(&state_dir, &config, &activity_ref, capability_broker).await;
+            let output = logs
+                .lock()
+                .unwrap()
+                .entry(name.clone())
+                .or_insert_with(|| {
+                    Arc::new(crate::logs::ProcessLogs::new(
+                        &state_dir,
+                        &name,
+                        config.logs,
+                    ))
+                })
+                .clone();
+            let setup = Self::launch_setup(
+                &state_dir,
+                &config,
+                &activity_ref,
+                capability_broker,
+                output,
+            )
+            .await;
 
             let mut procs = processes.write().await;
             match procs.remove(&name) {
@@ -1444,7 +1478,7 @@ impl ProcessRunner {
                                 cmd_tx,
                                 supervisor_task,
                                 job_task: setup.job_task,
-                                output_readers: Some((setup.stdout_tailer, setup.stderr_tailer)),
+                                output_capture: Some(setup.output_capture),
                                 notify_forwarder,
                             }),
                         );
@@ -1472,12 +1506,13 @@ impl ProcessRunner {
     }
 
     /// Set up everything a launch produces before the entry settles to
-    /// `Active`: probes, sockets, command, job start, and log tailers.
+    /// `Active`: probes, sockets, command, job start, and bounded output capture.
     async fn launch_setup(
         state_dir: &Path,
         config: &ProcessConfig,
         activity: &devenv_activity::ActivityRef,
         capability_broker: Option<crate::capabilities::CapabilityBrokerClient>,
+        logs: Arc<crate::logs::ProcessLogs>,
     ) -> Result<LaunchSetup> {
         // A previous manager may have left this process's scope behind.
         let claim =
@@ -1516,7 +1551,7 @@ impl ProcessRunner {
             );
         }
 
-        // Build the command (creates log directory and wrapper script)
+        // Build the shell command and resolve its output paths.
         let proc_cmd = crate::command::build_command(
             state_dir,
             config,
@@ -1524,28 +1559,11 @@ impl ProcessRunner {
             watchdog_usec,
         )?;
 
-        // Truncate log files if they exist
-        let _ = std::fs::write(&proc_cmd.stdout_log, "");
-        let _ = std::fs::write(&proc_cmd.stderr_log, "");
-
-        let (job, job_task) = start_job(proc_cmd.command);
-        let job = Arc::new(job);
-        let scopes = Arc::new(crate::process_guardian::ProcessScopeRegistry::default());
-
-        // watchexec-supervisor reports spawn failures only through its error
-        // handler. Without one, the start ticket completes successfully even
-        // when no child was created.
-        let (start_error_tx, mut start_error_rx) = mpsc::unbounded_channel();
-        let process_name = config.name.clone();
-        job.set_error_handler(move |error| {
-            let message = error
-                .get()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| "unknown supervisor error".to_string());
-            warn!("Process '{}' supervisor error: {}", process_name, message);
-            let _ = start_error_tx.send(message);
-        })
-        .await;
+        config
+            .logs
+            .validate()
+            .map_err(|error| miette::miette!("{error}"))?;
+        logs.reset(config.logs);
 
         // Capability-bearing commands are delegated to the privileged broker.
         // Socket activation remains a normal pre-exec wrapper.
@@ -1570,8 +1588,34 @@ impl ProcessRunner {
         // avoids hitting the kernel ARG_MAX limit with large environments.
         let spawn_env = proc_cmd.env;
         let spawn_cwd = proc_cmd.cwd;
-        let spawn_stdout = proc_cmd.stdout_log.clone();
-        let spawn_stderr = proc_cmd.stderr_log.clone();
+        // Reject missing privilege setup before starting capture tasks.
+        if !capabilities.is_empty() && capability_broker.is_none() {
+            bail!(
+                "process '{}' requires Linux capabilities but no privileged broker is available; start the process manager from a terminal, or after `sudo -v`, to authenticate",
+                config.name
+            );
+        }
+        let (capture, spawn_stdout, spawn_stderr) =
+            logs.capture(activity.clone()).into_diagnostic()?;
+        let (job, job_task) = start_job(proc_cmd.command);
+        let job = Arc::new(job);
+        let scopes = Arc::new(crate::process_guardian::ProcessScopeRegistry::default());
+
+        // watchexec-supervisor reports spawn failures only through its error
+        // handler. Without one, the start ticket completes successfully even
+        // when no child was created.
+        let (start_error_tx, mut start_error_rx) = mpsc::unbounded_channel();
+        let process_name = config.name.clone();
+        job.set_error_handler(move |error| {
+            let message = error
+                .get()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "unknown supervisor error".to_string());
+            warn!("Process '{}' supervisor error: {}", process_name, message);
+            let _ = start_error_tx.send(message);
+        })
+        .await;
+
         let registration = crate::process_guardian::ProcessScopeRegistrationWrapper {
             state_dir: state_dir.to_path_buf(),
             process_name: config.name.clone(),
@@ -1583,6 +1627,7 @@ impl ProcessRunner {
         };
 
         if capabilities.is_empty() {
+            let output = crate::logs::CaptureStdioWrapper::new(spawn_stdout, spawn_stderr);
             job.set_spawn_hook(move |command_wrap, _ctx| {
                 let cmd = command_wrap.command_mut();
                 cmd.envs(&spawn_env);
@@ -1590,34 +1635,21 @@ impl ProcessRunner {
                     cmd.current_dir(cwd);
                 }
                 cmd.stdin(std::process::Stdio::null());
-                cmd.stdout(
-                    crate::command::open_log_file(&spawn_stdout)
-                        .map(std::process::Stdio::from)
-                        .unwrap_or_else(std::process::Stdio::null),
-                );
-                cmd.stderr(
-                    crate::command::open_log_file(&spawn_stderr)
-                        .map(std::process::Stdio::from)
-                        .unwrap_or_else(std::process::Stdio::null),
-                );
 
                 // Inject OTEL trace context so instrumented subprocesses join the trace.
                 devenv_activity::inject_trace_propagation_env(|key, value| {
                     cmd.env(key, value);
                 });
 
+                command_wrap.wrap(output.clone());
                 command_wrap.wrap(registration.clone());
                 if let Some(ref fds) = process_setup {
                     command_wrap.wrap(ProcessSetupWrapper::socket_activation(fds.clone()));
                 }
             });
         } else {
-            let broker = capability_broker.ok_or_else(|| {
-                miette::miette!(
-                    "process '{}' requires Linux capabilities but no privileged broker is available; start the process manager from a terminal, or after `sudo -v`, to authenticate",
-                    config.name
-                )
-            })?;
+            let broker =
+                capability_broker.expect("checked capability broker before starting capture");
             let process_name = config.name.clone();
             let capabilities = capabilities.to_vec();
             let program = config.bash.clone();
@@ -1651,12 +1683,7 @@ impl ProcessRunner {
             let _ = job_task.await;
             bail!("Failed to spawn process '{}': {}", config.name, error);
         }
-        // Spawn file tailers to emit output to activity
-        let stderr_log = proc_cmd.stderr_log.clone();
-        let stdout_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stdout_log, activity.clone(), false);
-        let stderr_tailer =
-            crate::log_tailer::spawn_file_tailer(proc_cmd.stderr_log, activity.clone(), true);
+        let stderr_log = proc_cmd.stderr_log;
 
         // Create status channel for supervisor state observation.
         // Processes with no readiness mechanism are reported Ready right away.
@@ -1673,8 +1700,7 @@ impl ProcessRunner {
             status_tx,
             status_rx,
             notify_socket,
-            stdout_tailer,
-            stderr_tailer,
+            output_capture: capture,
             stderr_log,
             shutdown: config.shutdown.clone(),
             scopes,
@@ -1683,8 +1709,8 @@ impl ProcessRunner {
 
     /// Shared teardown for [`Self::stop`] and [`Self::stop_and_keep`] once the
     /// `Active` handle has been extracted and a `Stopped` placeholder inserted
-    /// under the write lock: abort the supervisor, forwarder, and output
-    /// readers, signal the child with the grace period, wait for declared ports
+    /// under the write lock: stop supervision, signal the child with the grace
+    /// period, drain captured output, wait for declared ports
     /// to be released, then mark the activity `Stopped`.
     async fn finish_stop(&self, name: &str, parts: StopParts) {
         let StopParts {
@@ -1693,7 +1719,7 @@ impl ProcessRunner {
             cmd_tx,
             supervisor_task,
             notify_forwarder,
-            output_readers,
+            output_capture,
             ports,
             shutdown,
             scopes,
@@ -1702,11 +1728,6 @@ impl ProcessRunner {
         stop_via_supervisor(&cmd_tx, supervisor_task).await;
         notify_forwarder.abort();
 
-        if let Some((stdout_reader, stderr_reader)) = output_readers {
-            stdout_reader.abort();
-            stderr_reader.abort();
-        }
-
         crate::process_guardian::stop_job(&job, &scopes, &shutdown).await;
         // The controller's spawn hook owns the process claim. Dropping the
         // last job handle only queues its exit, so a rapid restart can race
@@ -1714,6 +1735,9 @@ impl ProcessRunner {
         job.unset_spawn_child_fn().await;
         job.delete().await;
         let _ = job_task.await;
+        if let Some(capture) = output_capture {
+            capture.finish().await;
+        }
 
         if !ports.is_empty() {
             let release_status =
@@ -1960,27 +1984,9 @@ impl ProcessRunner {
             .activity
             .set_status(ProcessStatus::Restarting);
 
-        // Truncate log files and restart output tailers
-        let (stdout_log, stderr_log) = crate::command::log_paths(&self.state_dir, name);
-        let _ = std::fs::write(&stdout_log, "");
-        let _ = std::fs::write(&stderr_log, "");
-
-        if let Some((stdout_reader, stderr_reader)) = handle.output_readers.take() {
-            stdout_reader.abort();
-            stderr_reader.abort();
-        }
-        handle.output_readers = Some((
-            crate::log_tailer::spawn_file_tailer(
-                stdout_log,
-                handle.resources.activity.ref_handle(),
-                false,
-            ),
-            crate::log_tailer::spawn_file_tailer(
-                stderr_log,
-                handle.resources.activity.ref_handle(),
-                true,
-            ),
-        ));
+        // Capture pipes survive automatic and explicit restarts. Keep live
+        // subscribers attached while resetting only retained output.
+        self.reset_logs(&handle.resources.config);
 
         // Let a live supervisor serialize the restart with exit handling.
         let driven_by_existing = if handle.supervisor_task.is_finished() {

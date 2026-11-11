@@ -310,8 +310,19 @@ struct LaunchRequest {
     args: Vec<String>,
     env: HashMap<String, String>,
     cwd: PathBuf,
-    stdout: PathBuf,
-    stderr: PathBuf,
+    output: LaunchOutput,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum LaunchOutput {
+    Files { stdout: PathBuf, stderr: PathBuf },
+    Capture,
+}
+
+#[cfg(target_os = "linux")]
+enum ChildOutput {
+    Files { stdout: PathBuf, stderr: PathBuf },
+    Capture([std::os::fd::OwnedFd; 2]),
 }
 
 /// A separate one-byte frame carries exactly two descriptors after a capture
@@ -501,8 +512,8 @@ impl CapabilityBrokerClient {
         args: &[String],
         env: &HashMap<String, String>,
         cwd: &Path,
-        stdout: &Path,
-        stderr: &Path,
+        stdout: &std::io::PipeWriter,
+        stderr: &std::io::PipeWriter,
     ) -> std::io::Result<Box<dyn process_wrap::tokio::ChildWrapper>> {
         let request = Request::Launch(Box::new(LaunchRequest {
             process: process.to_string(),
@@ -511,12 +522,12 @@ impl CapabilityBrokerClient {
             args: args.to_vec(),
             env: env.clone(),
             cwd: cwd.to_path_buf(),
-            stdout: stdout.to_path_buf(),
-            stderr: stderr.to_path_buf(),
+            output: LaunchOutput::Capture,
         }));
         let (sender, receiver) = oneshot::channel();
         let mut stream = self.stream.lock().unwrap_or_else(|e| e.into_inner());
         write_message(&mut stream, &request)?;
+        send_capture_fds(&stream, stdout, stderr)?;
         match read_message::<Response>(&mut stream)? {
             Response::Launched { pid } => {
                 self.exits
@@ -555,8 +566,10 @@ impl CapabilityBrokerClient {
             args: args.to_vec(),
             env: env.clone(),
             cwd: cwd.to_path_buf(),
-            stdout: stdout.to_path_buf(),
-            stderr: stderr.to_path_buf(),
+            output: LaunchOutput::Files {
+                stdout: stdout.to_path_buf(),
+                stderr: stderr.to_path_buf(),
+            },
         }));
         let mut stream = self.stream.lock().unwrap_or_else(|e| e.into_inner());
         write_message(&mut stream, &request)?;
@@ -854,9 +867,14 @@ fn serve_manager(
             args,
             env,
             cwd,
-            stdout,
-            stderr,
+            output,
         } = *request;
+        let output = match output {
+            LaunchOutput::Capture => {
+                ChildOutput::Capture(receive_capture_fds(stream).into_diagnostic()?)
+            }
+            LaunchOutput::Files { stdout, stderr } => ChildOutput::Files { stdout, stderr },
+        };
         let requested = capabilities
             .iter()
             .map(|name| parse_capability(name))
@@ -883,8 +901,7 @@ fn serve_manager(
                 &args,
                 &env,
                 &cwd,
-                &stdout,
-                &stderr,
+                &output,
             ) {
                 Ok(pid) => {
                     if !detached {
@@ -952,8 +969,7 @@ fn launch_child(
     args: &[String],
     env: &HashMap<String, String>,
     cwd: &Path,
-    stdout: &Path,
-    stderr: &Path,
+    output: &ChildOutput,
 ) -> Result<u32> {
     let requested = names
         .iter()
@@ -964,9 +980,7 @@ fn launch_child(
         return Err(std::io::Error::last_os_error()).into_diagnostic();
     }
     if pid == 0 {
-        let Err(error) = child_exec(
-            uid, gid, user, &requested, program, args, env, cwd, stdout, stderr,
-        );
+        let Err(error) = child_exec(uid, gid, user, &requested, program, args, env, cwd, output);
         // Never panic in the forked child: stderr may be a closed terminal.
         let _ = writeln!(std::io::stderr(), "capability child: {error:?}");
         unsafe { libc::_exit(126) };
@@ -985,8 +999,7 @@ fn child_exec(
     args: &[String],
     env: &HashMap<String, String>,
     cwd: &Path,
-    stdout: &Path,
-    stderr: &Path,
+    output: &ChildOutput,
 ) -> Result<std::convert::Infallible> {
     // The broker ignores terminal signals so it can survive a detached
     // manager. Ignored dispositions survive exec, so restore them before the
@@ -1034,16 +1047,24 @@ fn child_exec(
         return Err(std::io::Error::last_os_error()).into_diagnostic();
     }
     set_caps(requested)?;
-    let out = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(stdout)
-        .into_diagnostic()?;
-    let err = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(stderr)
-        .into_diagnostic()?;
+    let (out, err) = match output {
+        ChildOutput::Files { stdout, stderr } => (
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(stdout)
+                .into_diagnostic()?,
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(stderr)
+                .into_diagnostic()?,
+        ),
+        ChildOutput::Capture([stdout, stderr]) => (
+            std::fs::File::from(stdout.try_clone().into_diagnostic()?),
+            std::fs::File::from(stderr.try_clone().into_diagnostic()?),
+        ),
+    };
     let error = Command::new(program)
         .args(args)
         .env_clear()
