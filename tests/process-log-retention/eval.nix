@@ -54,6 +54,9 @@ let
     maxFiles = 4;
   } { logs.maxFileSize = 99; };
 in
+assert lib.any (
+  entry: entry.when && entry.title == "Native process logs now have bounded retention"
+) standard.changelogs;
 assert
   sizeOnly.processes.test.logs == {
     maxFileSize = 99;

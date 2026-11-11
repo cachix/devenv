@@ -60,6 +60,18 @@ in
   config = lib.mkIf cfg.enable {
     changelogs = [
       {
+        date = "2026-11-11";
+        title = "Native process logs now have bounded retention";
+        when = cfg.enable;
+        description = ''
+          Native process stdout/stderr logs now rotate instead of growing without limit in the runtime directory.
+          By default, each stream retains two files of at most 1 MiB each, limiting retained log contents to 4 MiB per process.
+
+          Configure `process.managers.native.logs.maxFileSize` (bytes per file) and `maxFiles` (including the active file),
+          or override either field under `processes.<name>.logs`. Restart the process manager to apply changed settings.
+        '';
+      }
+      {
         date = "2026-03-12";
         title = "Native TUI no longer exits on the first Ctrl-C";
         when = cfg.enable;
