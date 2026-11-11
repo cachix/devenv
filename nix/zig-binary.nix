@@ -1,6 +1,8 @@
 {
-  stdenv,
+  lib,
+  stdenvNoCC,
   fetchurl,
+  coreutils,
   binutils,
   zig_0_16,
 }:
@@ -21,31 +23,32 @@ let
       sha256 = "4e34e279a9f856358de420490b531974c3d37f8f3707eef9f0342e92c14c301f";
     };
   };
-  binary = binaries.${stdenv.hostPlatform.system};
+  binary = binaries.${stdenvNoCC.hostPlatform.system};
 in
 # The source-built Linux compiler in the pinned nixpkgs emits undefined local
 # section symbols in compiler-rt. Use the verified upstream release for Ghostty.
 # Retain nixpkgs' setup hook and stdlib patch for building in Nix sandboxes.
-if !stdenv.hostPlatform.isLinux then
+if !stdenvNoCC.hostPlatform.isLinux then
   zig_0_16
 else
-  zig_0_16.overrideAttrs {
+  stdenvNoCC.mkDerivation {
     pname = "zig-official";
     inherit version;
     src = fetchurl {
       url = "https://ziglang.org/download/${version}/zig-${binary.target}-${version}.tar.xz";
       inherit (binary) sha256;
     };
-    outputs = [ "out" ];
-    nativeBuildInputs = [ ];
-    buildInputs = [ ];
-    phases = [
-      "unpackPhase"
-      "patchPhase"
-      "installPhase"
-      "fixupPhase"
-      "installCheckPhase"
-    ];
+    strictDeps = true;
+    dontConfigure = true;
+    dontBuild = true;
+
+    inherit (zig_0_16) setupHook env meta;
+
+    # Zig probes this executable to discover the sandbox's dynamic linker.
+    postPatch = ''
+      substituteInPlace lib/std/zig/system.zig \
+        --replace-fail "/usr/bin/env" "${lib.getExe' coreutils "env"}"
+    '';
     installPhase = ''
       runHook preInstall
       install -Dm755 zig "$out/bin/zig"
@@ -53,7 +56,6 @@ else
       cp -r lib "$out/lib/zig"
       runHook postInstall
     '';
-    postInstall = "";
     dontStrip = true;
     nativeInstallCheckInputs = [ binutils ];
     doInstallCheck = true;
