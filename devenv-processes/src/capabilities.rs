@@ -314,6 +314,74 @@ struct LaunchRequest {
     stderr: PathBuf,
 }
 
+/// A separate one-byte frame carries exactly two descriptors after a capture
+/// launch request. The client holds the connection lock across both frames.
+fn send_capture_fds(
+    stream: &UnixStream,
+    stdout: &std::io::PipeWriter,
+    stderr: &std::io::PipeWriter,
+) -> std::io::Result<()> {
+    use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg};
+    use std::io::IoSlice;
+    use std::os::fd::AsRawFd;
+    let fds = [stdout.as_raw_fd(), stderr.as_raw_fd()];
+    loop {
+        match sendmsg::<()>(
+            stream.as_raw_fd(),
+            &[IoSlice::new(&[0])],
+            &[ControlMessage::ScmRights(&fds)],
+            MsgFlags::empty(),
+            None,
+        ) {
+            Ok(1) => return Ok(()),
+            Ok(_) => return Err(std::io::Error::other("failed to send output descriptors")),
+            Err(nix::errno::Errno::EINTR) => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn receive_capture_fds(stream: &UnixStream) -> std::io::Result<[std::os::fd::OwnedFd; 2]> {
+    use nix::sys::socket::{ControlMessageOwned, MsgFlags, recvmsg};
+    use std::io::IoSliceMut;
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    let mut byte = [0];
+    // Linux accepts at most 253 SCM_RIGHTS descriptors per message. Receive
+    // all of them so malformed requests with extras can still close every FD.
+    let mut control = nix::cmsg_space!([std::os::fd::RawFd; 253]);
+    let mut slices = [IoSliceMut::new(&mut byte)];
+    let message = loop {
+        match recvmsg::<()>(
+            stream.as_raw_fd(),
+            &mut slices,
+            Some(&mut control),
+            MsgFlags::MSG_CMSG_CLOEXEC,
+        ) {
+            Err(nix::errno::Errno::EINTR) => continue,
+            result => break result?,
+        }
+    };
+    let mut fds = Vec::new();
+    for message in message.cmsgs()? {
+        if let ControlMessageOwned::ScmRights(raw) = message {
+            // recvmsg transferred ownership; close all descriptors on every
+            // validation failure as well as after the broker forks the child.
+            fds.extend(
+                raw.into_iter()
+                    .map(|fd| unsafe { OwnedFd::from_raw_fd(fd) }),
+            );
+        }
+    }
+    if message.bytes != 1 || message.flags.contains(MsgFlags::MSG_CTRUNC) || fds.len() != 2 {
+        return Err(std::io::Error::other(
+            "expected two process output descriptors",
+        ));
+    }
+    fds.try_into()
+        .map_err(|_| std::io::Error::other("invalid output descriptor count"))
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 enum Response {
     Launched { pid: u32 },
@@ -1050,6 +1118,75 @@ fn kill_all(known: &HashSet<u32>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn capture_descriptor_frames_preserve_streams_and_close_at_eof() {
+        let (mut client, mut broker) = UnixStream::pair().unwrap();
+        let (mut out_read, out_write) = std::io::pipe().unwrap();
+        let (mut err_read, err_write) = std::io::pipe().unwrap();
+        write_message(&mut client, &Request::Poll).unwrap();
+        send_capture_fds(&client, &out_write, &err_write).unwrap();
+        write_message(&mut client, &Request::Poll).unwrap();
+        assert!(matches!(
+            read_message::<Request>(&mut broker).unwrap(),
+            Request::Poll
+        ));
+        let [stdout, stderr] = receive_capture_fds(&broker).unwrap();
+        assert!(matches!(
+            read_message::<Request>(&mut broker).unwrap(),
+            Request::Poll
+        ));
+        let mut stdout = std::fs::File::from(stdout);
+        let mut stderr = std::fs::File::from(stderr);
+        stdout.write_all(b"output").unwrap();
+        stderr.write_all(b"error").unwrap();
+        drop((stdout, stderr, out_write, err_write));
+        let mut output = String::new();
+        out_read.read_to_string(&mut output).unwrap();
+        assert_eq!(output, "output");
+        output.clear();
+        err_read.read_to_string(&mut output).unwrap();
+        assert_eq!(output, "error");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn capture_rejects_extra_descriptors_without_retaining_pipe_writers() {
+        use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg};
+        use std::io::IoSlice;
+        use std::os::fd::AsRawFd;
+        let (client, broker) = UnixStream::pair().unwrap();
+        let (mut read, write) = std::io::pipe().unwrap();
+        let fds = [write.as_raw_fd(); 3];
+        sendmsg::<()>(
+            client.as_raw_fd(),
+            &[IoSlice::new(&[0])],
+            &[ControlMessage::ScmRights(&fds)],
+            MsgFlags::empty(),
+            None,
+        )
+        .unwrap();
+        assert!(receive_capture_fds(&broker).is_err());
+        drop(write);
+        // A leaked received writer would keep this read from reaching EOF.
+        let mut byte = [0];
+        nix::fcntl::fcntl(
+            &read,
+            nix::fcntl::FcntlArg::F_SETFL(nix::fcntl::OFlag::O_NONBLOCK),
+        )
+        .unwrap();
+        assert_eq!(read.read(&mut byte).unwrap(), 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn capture_rejects_missing_descriptors() {
+        let (mut client, broker) = UnixStream::pair().unwrap();
+        client.write_all(&[0]).unwrap();
+        assert!(receive_capture_fds(&broker).is_err());
+    }
+
     #[test]
     #[cfg(target_os = "linux")]
     fn capability_names() {
