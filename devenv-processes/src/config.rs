@@ -284,6 +284,67 @@ pub enum SupervisionMode {
     External,
 }
 
+/// Bounded stdout/stderr file retention for a native-managed process.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", try_from = "RawLogRetentionConfig")]
+pub struct LogRetentionConfig {
+    /// Maximum bytes in each retained file, separately for stdout and stderr.
+    pub max_file_size: u64,
+    /// Retained files per stream, including the active file.
+    pub max_files: usize,
+}
+
+impl Default for LogRetentionConfig {
+    fn default() -> Self {
+        Self {
+            max_file_size: 1024 * 1024,
+            max_files: 2,
+        }
+    }
+}
+
+impl LogRetentionConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.max_file_size == 0 || self.max_files == 0 {
+            return Err("logs.maxFileSize and logs.maxFiles must be positive integers".into());
+        }
+        self.max_file_size
+            .checked_mul(self.max_files as u64)
+            .and_then(|size| size.checked_mul(2))
+            .ok_or("process log retention size is too large")?;
+        Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct RawLogRetentionConfig {
+    max_file_size: u64,
+    max_files: usize,
+}
+
+impl Default for RawLogRetentionConfig {
+    fn default() -> Self {
+        let config = LogRetentionConfig::default();
+        Self {
+            max_file_size: config.max_file_size,
+            max_files: config.max_files,
+        }
+    }
+}
+
+impl TryFrom<RawLogRetentionConfig> for LogRetentionConfig {
+    type Error = String;
+    fn try_from(raw: RawLogRetentionConfig) -> Result<Self, Self::Error> {
+        let config = Self {
+            max_file_size: raw.max_file_size,
+            max_files: raw.max_files,
+        };
+        config.validate()?;
+        Ok(config)
+    }
+}
+
 /// Process configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessConfig {
@@ -304,6 +365,8 @@ pub struct ProcessConfig {
     pub cwd: Option<PathBuf>,
     #[serde(default)]
     pub env: HashMap<String, String>,
+    #[serde(default)]
+    pub logs: LogRetentionConfig,
     #[serde(default)]
     pub listen: Vec<ListenSpec>,
     /// Allocated ports for display (e.g., {"http": 8080, "admin": 9000})
@@ -357,6 +420,7 @@ impl Default for ProcessConfig {
             args: Vec::new(),
             cwd: None,
             env: HashMap::new(),
+            logs: LogRetentionConfig::default(),
             listen: Vec::new(),
             ports: HashMap::new(),
             proxy: ProcessProxyConfig::default(),
@@ -367,6 +431,56 @@ impl Default for ProcessConfig {
             shutdown: ShutdownConfig::default(),
             linux: LinuxConfig::default(),
             supervisor: SupervisionMode::default(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod log_config_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn omitted_and_partial_log_config_use_defaults() {
+        let process: ProcessConfig = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(process.logs, LogRetentionConfig::default());
+        let size: LogRetentionConfig = serde_json::from_value(json!({"maxFileSize": 123})).unwrap();
+        assert_eq!(
+            size,
+            LogRetentionConfig {
+                max_file_size: 123,
+                max_files: 2
+            }
+        );
+        let count: LogRetentionConfig = serde_json::from_value(json!({"maxFiles": 1})).unwrap();
+        assert_eq!(
+            count,
+            LogRetentionConfig {
+                max_file_size: 1024 * 1024,
+                max_files: 1
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(size).unwrap(),
+            json!({"maxFileSize":123, "maxFiles":2})
+        );
+    }
+
+    #[test]
+    fn invalid_and_overflowing_retention_is_rejected() {
+        for value in [
+            json!({"maxFileSize": 0}),
+            json!({"maxFiles": 0}),
+            json!({"maxFileSize": -1}),
+            json!({"maxFiles": -1}),
+            json!({"maxFileSize": null}),
+            json!({"maxFiles": 1.5}),
+            json!({"maxFileSize": u64::MAX, "maxFiles": 2}),
+        ] {
+            assert!(
+                serde_json::from_value::<LogRetentionConfig>(value.clone()).is_err(),
+                "{value}"
+            );
         }
     }
 }
