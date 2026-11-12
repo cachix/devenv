@@ -725,8 +725,36 @@ in 12.4s`} />
     return document.documentElement.dataset.theme === 'dark' ? technology.darkColor : technology.color;
   }
 
+  var hlPromise: Promise<HighlighterCore> | null = null;
+  function getHighlighter(): Promise<HighlighterCore> {
+    if (!hlPromise) {
+      hlPromise = Promise.all([
+        import('@shikijs/core'),
+        import('@shikijs/engine-oniguruma'),
+        import('@shikijs/langs/nix'),
+        import('@shikijs/langs/yaml'),
+      ]).then(function (m) {
+        var core = m[0], onig = m[1], nix = m[2], yaml = m[3];
+        return core.createHighlighterCore({
+          themes: codeThemes,
+          langs: [nix.default, yaml.default],
+          engine: onig.createOnigurumaEngine(fetch(`${import.meta.env.BASE_URL}shiki/onig.wasm`)),
+        });
+      });
+    }
+    return hlPromise;
+  }
+
+  let cleanup: Array<() => void> = [];
+  document.addEventListener('astro:before-swap', () => {
+    cleanup.forEach((dispose) => dispose());
+    cleanup = [];
+  });
+
+  document.addEventListener('astro:page-load', initializeLanding);
+
   // ── Live preview generator ──
-  (function () {
+  function initializeEnvironment() {
     const input = requiredElement(document.querySelector<HTMLInputElement>('#prompt-input'));
     const output = requiredElement(document.querySelector<HTMLElement>('#preview-code'));
     const form = requiredElement(document.querySelector<HTMLFormElement>('#generate'));
@@ -792,26 +820,6 @@ in 12.4s`} />
         fragment.appendChild(element);
       });
       yamlCode.replaceChildren(fragment);
-    }
-
-    var hlPromise: Promise<HighlighterCore> | null = null;
-    function getHighlighter(): Promise<HighlighterCore> {
-      if (!hlPromise) {
-        hlPromise = Promise.all([
-          import('@shikijs/core'),
-          import('@shikijs/engine-oniguruma'),
-          import('@shikijs/langs/nix'),
-          import('@shikijs/langs/yaml'),
-        ]).then(function (m) {
-          var core = m[0], onig = m[1], nix = m[2], yaml = m[3];
-          return core.createHighlighterCore({
-            themes: codeThemes,
-            langs: [nix.default, yaml.default],
-            engine: onig.createOnigurumaEngine(fetch(`${import.meta.env.BASE_URL}shiki/onig.wasm`)),
-          });
-        });
-      }
-      return hlPromise;
     }
 
     function setNodeContent(node: HTMLElement, entry: Pick<EnvironmentEntry, 'id'>, meta: EntryMeta) {
@@ -1237,6 +1245,7 @@ in 12.4s`} />
     }
 
     async function animateFlight(flight: Flight) {
+      if (!output.isConnected) return;
       var inlineNode = output.querySelector<HTMLElement>('.landing-line-node[data-entry-id="' + CSS.escape(flight.id) + '"]');
       var from = flight.fromRect;
       var inlineTarget = flight.direction === 'in' ? inlineDestination(inlineNode) : null;
@@ -1803,7 +1812,7 @@ in 12.4s`} />
     showYaml(initialYaml, false);
     setComposeState('ready', renderedInitialEnvironment.entries.length + ' declarations ready to explore');
 
-    new MutationObserver(function () {
+    var themeObserver = new MutationObserver(function () {
       syncMinimap(renderedEnvironment);
       syncNodes(renderedEnvironment.entries);
       pantryList.querySelectorAll<HTMLButtonElement>('[data-pantry-entry]').forEach(function (button) {
@@ -1814,11 +1823,22 @@ in 12.4s`} />
       });
       syncPantry(renderedEnvironment.entries);
       if (highlightedEntryIds.length) highlightEntries(highlightedEntryIds, true);
-    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  })();
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    cleanup.push(() => {
+      themeObserver.disconnect();
+      compositionRun += 1;
+      renderVersion += 1;
+      yamlRenderVersion += 1;
+      activeGeneration?.abort();
+      if (livePreviewTimer) clearTimeout(livePreviewTimer);
+      if (yamlHideTimer) clearTimeout(yamlHideTimer);
+      aiLoader.close();
+    });
+  }
 
   // ── Speed bars animate on view ──
-  (function () {
+  function initializeSpeedBars() {
     var container = document.getElementById('speed-bars');
     if (!container) return;
     var fills = container.querySelectorAll<HTMLElement>('.landing-bar-fill');
@@ -1833,10 +1853,11 @@ in 12.4s`} />
       });
     }, { threshold: 0.3 });
     observer.observe(container);
-  })();
+    cleanup.push(() => observer.disconnect());
+  }
 
   // ── Secret provider switcher ──
-  (function () {
+  function initializeSecretProviders() {
     var tabs = document.querySelectorAll<HTMLButtonElement>('#secret-tabs .landing-provider-tab');
     var name = document.getElementById('secret-provider-name');
     if (!tabs.length || !name) return;
@@ -1856,9 +1877,15 @@ in 12.4s`} />
         providerName.textContent = labels[key] || key;
       });
     });
-  })();
+  }
 
-  initializeTerminalCopyButtons();
+  function initializeLanding() {
+    if (!document.getElementById('prompt-input')) return;
+    initializeEnvironment();
+    initializeSpeedBars();
+    initializeSecretProviders();
+    initializeTerminalCopyButtons();
+  }
 </script>
 
 </StarlightPage>

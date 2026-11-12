@@ -68,12 +68,15 @@ export function createAiCompositionLoader(loader: HTMLElement, catalog: Ingredie
 
   let stageTimer: ReturnType<typeof setInterval> | null = null;
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
+  let resolvePendingClose: (() => void) | null = null;
 
   function clearTimers() {
     if (stageTimer) clearInterval(stageTimer);
     if (closeTimer) clearTimeout(closeTimer);
     stageTimer = null;
     closeTimer = null;
+    resolvePendingClose?.();
+    resolvePendingClose = null;
   }
 
   function render(selectedIds: string[]) {
@@ -118,15 +121,17 @@ export function createAiCompositionLoader(loader: HTMLElement, catalog: Ingredie
     loader.hidden = true;
   }
 
-  function dismiss() {
+  function closeAfter(delay: number) {
+    clearTimers();
     return new Promise<void>((resolve) => {
-      clearTimers();
-      loader.classList.add('is-leaving');
-      closeTimer = setTimeout(() => {
-        close();
-        resolve();
-      }, 180);
+      resolvePendingClose = resolve;
+      closeTimer = setTimeout(close, delay);
     });
+  }
+
+  function dismiss() {
+    loader.classList.add('is-leaving');
+    return closeAfter(180);
   }
 
   return {
@@ -154,16 +159,9 @@ export function createAiCompositionLoader(loader: HTMLElement, catalog: Ingredie
       stage.textContent = message;
     },
     finish() {
-      if (stageTimer) clearInterval(stageTimer);
-      stageTimer = null;
       stage.textContent = 'Your composition is ready';
       loader.classList.add('is-complete');
-      return new Promise<void>((resolve) => {
-        closeTimer = setTimeout(() => {
-          close();
-          resolve();
-        }, 620);
-      });
+      return closeAfter(620);
     },
     dismiss,
     close,

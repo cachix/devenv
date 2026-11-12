@@ -62,6 +62,12 @@ export default defineConfig({
       '/blog/2026/09/07/devenv-23-portless-and-tui-configuration/',
   },
   vite: {
+    build: {
+      // vtbot inserts the sidebar before Astro's script deduplication, so returning
+      // from the homepage can rerun its inline script and register starlight-menu-button twice.
+      // External JS modules execute once per URL; keep other assets' default inlining.
+      assetsInlineLimit: (filePath) => filePath.endsWith('.js') ? false : undefined,
+    },
     plugins: [tailwindcss(), catalogSearchApi()],
     server: {
       watch: {
@@ -105,6 +111,7 @@ export default defineConfig({
         themes: codeThemes,
       },
       components: {
+        Head: './src/overrides/Head.astro',
         Search: './src/overrides/Search.astro',
         SocialIcons: './src/overrides/SocialIcons.astro',
       },

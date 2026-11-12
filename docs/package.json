@@ -42,6 +42,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "astro-vtbot": "3.1.0",
     "simple-icons": "^16.28.0",
     "typescript": "6.0.3"
   }
