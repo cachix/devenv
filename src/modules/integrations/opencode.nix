@@ -24,7 +24,7 @@ in
     settings = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
       default = { };
-      description = "Attributes written to opencode.jsonc.";
+      description = "Attributes written to .opencode/opencode.jsonc.";
       example = lib.literalExpression ''
         {
           editor = "nvim";
@@ -41,7 +41,7 @@ in
       type = lib.types.attrsOf lib.types.anything;
       default = { };
       description = ''
-        MCP servers written to `opencode.jsonc` under `mcp`.
+        MCP servers written to `.opencode/opencode.jsonc` under `mcp`.
 
         This option mirrors OpenCode's MCP configuration shape directly
         (`local`/`remote`, `command`, `environment`, `url`, `headers`,
@@ -240,7 +240,7 @@ in
 
     files = lib.mkMerge [
       {
-        "opencode.jsonc".json = {
+        ".opencode/opencode.jsonc".json = {
           "$schema" = "https://opencode.ai/config.json";
         }
         // settingsWithMcp;
@@ -352,7 +352,7 @@ in
     };
 
     infoSections."OpenCode" = [
-      "Settings: opencode.jsonc"
+      "Settings: .opencode/opencode.jsonc"
     ]
     ++ lib.optional (cfg.commands != { }) (
       if builtins.isAttrs cfg.commands then
