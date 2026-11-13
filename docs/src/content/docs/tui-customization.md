@@ -45,7 +45,7 @@ This example keeps the TUI at the command's terminal position, adds profiles and
 
 version: 1
 tui:
-  emoji: true
+  emoji: false
   viewport: inline
   theme:
     preset: devenv
@@ -101,12 +101,12 @@ tui:
 
 ## Emoji and glyphs
 
-`tui.emoji` selects between emoji and non-emoji Unicode glyphs for display indicators. It defaults to `true`, which keeps the existing output. Added in devenv 2.4.1.
+`tui.emoji` selects between emoji and non-emoji Unicode glyphs for display indicators. It defaults to `false`, which uses plain glyphs that line up in every terminal. Added in devenv 2.4.1.
 
 ```yaml
 version: 1
 tui:
-  emoji: false
+  emoji: true
 ```
 
 It applies to the persistent status line in an interactive `devenv shell`. The TUI's activity views currently use no emoji, so the setting changes nothing there:
@@ -117,6 +117,29 @@ It applies to the persistent status line in an interactive `devenv shell`. The T
 | File watching paused (`devenv paused`) | `⏸` | `○` |
 
 Terminals disagree on how wide emoji are, so the non-emoji glyphs are the plain single-column status dots that devenv also uses for process states. Other symbols, such as the braille spinner and the checkmark, are not emoji and do not change. The setting does not hide the status line (see `tui.statusline.enabled`), disable file watching, or change automatic reloads, text, colors, or keybindings. Changes take effect when you start a new shell.
+
+### Symbols
+
+`tui.symbols` replaces each mark in the shell status line with your own text, up to 8 characters. A symbol you set wins over the glyph that `tui.emoji` selects. Added in devenv 2.4.1.
+
+```yaml
+version: 1
+tui:
+  symbols:
+    success: "✔"
+    failure: "✘"
+    watching: "👁"
+    paused: "⏸"
+```
+
+| Symbol | Shown for | Default |
+| --- | --- | --- |
+| `success` | `devenv reloaded` and `devenv ready` | `✓` |
+| `failure` | `devenv failed` | `✗` |
+| `watching` | `devenv watching 11 files` | `◉`, or `👁` with `emoji: true` |
+| `paused` | `devenv paused` | `○`, or `⏸` with `emoji: true` |
+
+One space always follows the symbol. Symbols wider than one column push the text after them to the right.
 
 ## Statusline layouts
 

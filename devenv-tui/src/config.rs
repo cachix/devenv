@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crossterm::style::Color;
-use devenv_shell::indicators::Indicators;
+use devenv_shell::indicators::{Indicator, Indicators};
 use devenv_shell::keybindings::{ShellAction, ShellKeyChord, ShellKeyCode, ShellKeybindings};
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -210,12 +210,15 @@ impl TuiRunContext {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct TuiPreferences {
     /// Use emoji for display indicators, such as the eye in the shell status line.
-    /// Set to `false` to use non-emoji Unicode glyphs instead.
+    /// Defaults to `false`, which uses non-emoji Unicode glyphs.
     pub emoji: bool,
+    /// Symbols for the marks in the shell status line. Each one replaces the
+    /// glyph that `emoji` selects.
+    pub symbols: SymbolsConfig,
     pub viewport: ViewportPlacement,
     pub theme: ThemeConfig,
     pub statusline: StatuslineConfig,
@@ -223,27 +226,21 @@ pub struct TuiPreferences {
     pub behavior: BehaviorConfig,
 }
 
-impl Default for TuiPreferences {
-    fn default() -> Self {
-        Self {
-            emoji: true,
-            viewport: ViewportPlacement::default(),
-            theme: ThemeConfig::default(),
-            statusline: StatuslineConfig::default(),
-            keybindings: KeybindingsConfig::default(),
-            behavior: BehaviorConfig::default(),
-        }
-    }
-}
-
 impl TuiPreferences {
-    /// The glyphs for display indicators that have an emoji form.
+    /// The glyphs for the marks in the shell status line.
     pub fn indicators(&self) -> Indicators {
-        Indicators::new(self.emoji)
+        self.symbols.entries().into_iter().fold(
+            Indicators::new(self.emoji),
+            |indicators, (indicator, _, symbol)| match symbol {
+                Some(symbol) => indicators.with_symbol(indicator, symbol),
+                None => indicators,
+            },
+        )
     }
 
     pub fn validate(&self) -> Result<(), UserConfigError> {
         self.theme.validate()?;
+        self.symbols.validate()?;
         self.statusline.validate(&self.theme.palette)?;
         for scope in self.theme.styles.keys() {
             if let Some(component) = scope.strip_prefix("statusline.")
@@ -266,6 +263,41 @@ impl TuiPreferences {
             && self.theme.palette.is_empty()
             && self.theme.styles.is_empty()
             && self.keybindings.is_default()
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct SymbolsConfig {
+    /// Shown after a reload succeeds. Defaults to `✓`.
+    pub success: Option<String>,
+    /// Shown after a reload fails. Defaults to `✗`.
+    pub failure: Option<String>,
+    /// Shown while files are watched. Defaults to `◉`, or `👁` with `emoji`.
+    pub watching: Option<String>,
+    /// Shown while file watching is paused. Defaults to `○`, or `⏸` with `emoji`.
+    pub paused: Option<String>,
+}
+
+impl SymbolsConfig {
+    fn entries(&self) -> [(Indicator, &'static str, Option<&str>); 4] {
+        [
+            (Indicator::Success, "success", self.success.as_deref()),
+            (Indicator::Failure, "failure", self.failure.as_deref()),
+            (Indicator::Watching, "watching", self.watching.as_deref()),
+            (Indicator::Paused, "paused", self.paused.as_deref()),
+        ]
+    }
+
+    fn validate(&self) -> Result<(), UserConfigError> {
+        for (_, name, symbol) in self.entries() {
+            let Some(symbol) = symbol else { continue };
+            if symbol.is_empty() {
+                return validation(format!("tui.symbols.{name} cannot be empty"));
+            }
+            validate_single_line(symbol, 8, &format!("tui.symbols.{name}"))?;
+        }
+        Ok(())
     }
 }
 
@@ -1820,18 +1852,18 @@ mod tests {
     }
 
     #[test]
-    fn tui_emoji_defaults_to_true() {
-        assert!(TuiPreferences::default().emoji);
-        assert!(UserConfig::default().tui.emoji);
-        assert!(TuiPreferences::default().indicators().emoji());
+    fn tui_emoji_defaults_to_false() {
+        assert!(!TuiPreferences::default().emoji);
+        assert!(!UserConfig::default().tui.emoji);
+        assert!(!TuiPreferences::default().indicators().emoji());
         for yaml in [
             "version: 1\n",
             "version: 1\ntui: {}\n",
             "version: 1\ntui:\n  viewport: top\n  statusline:\n    enabled: false\n",
         ] {
             let config = UserConfig::from_yaml("config.yaml", yaml.into()).unwrap();
-            assert!(config.tui.emoji, "{yaml}");
-            assert_eq!(config.tui.indicators(), Indicators::new(true), "{yaml}");
+            assert!(!config.tui.emoji, "{yaml}");
+            assert_eq!(config.tui.indicators(), Indicators::new(false), "{yaml}");
         }
     }
 
@@ -1866,6 +1898,54 @@ mod tests {
     }
 
     #[test]
+    fn tui_symbols_replace_status_marks() {
+        let config = UserConfig::from_yaml(
+            "config.yaml",
+            "version: 1\ntui:\n  emoji: true\n  symbols:\n    success: ok\n    watching: \"*\"\n"
+                .into(),
+        )
+        .unwrap();
+        let indicators = config.tui.indicators();
+
+        assert_eq!(indicators.glyph(Indicator::Success), "ok");
+        assert_eq!(indicators.glyph(Indicator::Watching), "*");
+        assert_eq!(indicators.glyph(Indicator::Paused), "⏸");
+        assert_eq!(
+            TuiPreferences::default().indicators(),
+            Indicators::new(false)
+        );
+    }
+
+    #[test]
+    fn tui_symbols_must_be_short_single_line_text() {
+        for (value, message) in [
+            ("\"\"", "tui.symbols.paused cannot be empty"),
+            (
+                "\"a\\nb\"",
+                "tui.symbols.paused must be a single-line value",
+            ),
+            ("abcdefghi", "tui.symbols.paused cannot exceed 8 characters"),
+        ] {
+            let error = UserConfig::from_yaml(
+                "config.yaml",
+                format!("version: 1\ntui:\n  symbols:\n    paused: {value}\n"),
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!("invalid user configuration: {message}"),
+                "{value}"
+            );
+        }
+        let error = UserConfig::from_yaml(
+            "config.yaml",
+            "version: 1\ntui:\n  symbols:\n    building: x\n".into(),
+        )
+        .unwrap_err();
+        assert!(matches!(error, UserConfigError::Parse { .. }));
+    }
+
+    #[test]
     fn tui_emoji_round_trips() {
         for emoji in [true, false] {
             let mut config = UserConfig::default();
@@ -1885,9 +1965,7 @@ mod tests {
         }
         .indicators();
         for indicator in devenv_shell::indicators::Indicator::ALL {
-            let glyph = indicators.glyph(indicator);
-            assert_eq!(glyph.text.width(), 1, "{indicator:?}");
-            assert_eq!(glyph.gap, 1, "{indicator:?}");
+            assert_eq!(indicators.glyph(indicator).width(), 1, "{indicator:?}");
         }
     }
 
@@ -1917,7 +1995,7 @@ mod tests {
         );
         assert_eq!(
             schema.pointer("/$defs/TuiPreferences/properties/emoji/default"),
-            Some(&true.into())
+            Some(&false.into())
         );
         assert_eq!(
             schema.pointer("/properties/version/minimum"),

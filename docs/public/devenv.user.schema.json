@@ -12,7 +12,13 @@
     "tui": {
       "$ref": "#/$defs/TuiPreferences",
       "default": {
-        "emoji": true,
+        "emoji": false,
+        "symbols": {
+          "success": null,
+          "failure": null,
+          "watching": null,
+          "paused": null
+        },
         "viewport": "inline",
         "theme": {
           "preset": "devenv",
@@ -98,9 +104,19 @@
       "type": "object",
       "properties": {
         "emoji": {
-          "description": "Use emoji for display indicators, such as the eye in the shell status line.\nSet to `false` to use non-emoji Unicode glyphs instead.",
+          "description": "Use emoji for display indicators, such as the eye in the shell status line.\nDefaults to `false`, which uses non-emoji Unicode glyphs.",
           "type": "boolean",
-          "default": true
+          "default": false
+        },
+        "symbols": {
+          "description": "Symbols for the marks in the shell status line. Each one replaces the\nglyph that `emoji` selects.",
+          "$ref": "#/$defs/SymbolsConfig",
+          "default": {
+            "success": null,
+            "failure": null,
+            "watching": null,
+            "paused": null
+          }
         },
         "viewport": {
           "$ref": "#/$defs/ViewportPlacement",
@@ -182,6 +198,44 @@
             "log_preview_lines": 10,
             "log_history_lines": 1000
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SymbolsConfig": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "description": "Shown after a reload succeeds. Defaults to `✓`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "failure": {
+          "description": "Shown after a reload fails. Defaults to `✗`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "watching": {
+          "description": "Shown while files are watched. Defaults to `◉`, or `👁` with `emoji`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "paused": {
+          "description": "Shown while file watching is paused. Defaults to `○`, or `⏸` with `emoji`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false

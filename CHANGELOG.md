@@ -4,13 +4,15 @@
 
 ### Improvements
 
+- Added the `tui.symbols` user setting to choose the marks in the `devenv shell` status line, such as `watching: "👁"`.
 - `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).
-- Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
+- The interactive shell status line now shows plain `◉` and `○` marks instead of the `👁` and `⏸` emoji, since terminals disagree on how wide emoji are. Set the new `tui.emoji` user setting to `true` to keep the emoji.
 - Updating a remote configuration now composes its updated YAML and dependencies before writing `devenv.lock`, so a second invocation is not needed to finish the update.
 - `devenv.yaml` can now compose configuration from remote input imports using the existing `inputs` and `imports` syntax. Remote YAML imports and their transitive inputs are pinned in the importing project's `devenv.lock`; the root project's input declarations retain precedence, allowing shared configurations to reuse a single `nixpkgs` input ([#2205](https://github.com/cachix/devenv/issues/2205)).
 
 ### Bug Fixes
 
+- Fixed the text after the `👁` and `⏸` marks in the `devenv shell` status line starting one column further right than after `✓` and `✗`.
 - Fixed a two-second TUI startup delay on terminals that do not answer keyboard capability queries, including during direnv shell activation. Interactive progress remains available for `direnv-export` and `print-dev-env` ([#3169](https://github.com/cachix/devenv/issues/3169)).
 - Foreground `devenv up` now publishes its manager before service readiness, so other `devenv up` calls can detect it during startup. Failed publication cancels setup tasks before cleaning up.
 - Foreground and detached native process startup now share a lock, preventing simultaneous cold starts from overwriting each other's manager socket and PID file. Waiting for the lock can be cancelled, and competing callers preserve the winning manager's proxy routes.

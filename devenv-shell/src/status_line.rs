@@ -661,7 +661,7 @@ impl StatusLine {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
-                            Text(content: CHECKMARK, color: COLOR_COMPLETED)
+                            Text(content: self.indicators.glyph(Indicator::Success), color: COLOR_COMPLETED)
                         }
                         Text(content: "devenv ", color: COLOR_SECONDARY)
                         Text(content: "ready", weight: Weight::Bold, color: COLOR_ACTIVE)
@@ -680,7 +680,7 @@ impl StatusLine {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
-                            Text(content: CHECKMARK, color: COLOR_COMPLETED)
+                            Text(content: self.indicators.glyph(Indicator::Success), color: COLOR_COMPLETED)
                         }
                         Text(content: "devenv ", color: COLOR_SECONDARY)
                         Text(content: "reloaded", weight: Weight::Bold, color: COLOR_COMPLETED)
@@ -707,7 +707,7 @@ impl StatusLine {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
-                            Text(content: XMARK, color: COLOR_FAILED)
+                            Text(content: self.indicators.glyph(Indicator::Failure), color: COLOR_FAILED)
                         }
                         Text(content: "devenv ", color: COLOR_SECONDARY)
                         Text(content: "failed", weight: Weight::Bold, color: COLOR_FAILED)
@@ -737,8 +737,8 @@ impl StatusLine {
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                        View(margin_right: glyph.gap) {
-                            Text(content: glyph.text, color: COLOR_SECONDARY)
+                        View(margin_right: 1) {
+                            Text(content: glyph, color: COLOR_SECONDARY)
                         }
                         Text(content: "devenv ", color: COLOR_SECONDARY)
                         Text(content: "paused", weight: Weight::Bold, color: COLOR_ACTIVE)
@@ -767,8 +767,8 @@ impl StatusLine {
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
-                        View(margin_right: glyph.gap) {
-                            Text(content: glyph.text, color: COLOR_SECONDARY)
+                        View(margin_right: 1) {
+                            Text(content: glyph, color: COLOR_SECONDARY)
                         }
                         Text(content: "devenv ", color: COLOR_SECONDARY)
                         Text(content: "watching ", weight: Weight::Bold, color: COLOR_ACTIVE)
@@ -1073,7 +1073,7 @@ mod tests {
 
         assert_row(
             &watching(true),
-            " 👁  devenv watching 11 files",
+            " 👁 devenv watching 11 files",
             "Ctrl+Alt+D pause",
         );
         assert_row(
@@ -1090,15 +1090,15 @@ mod tests {
             plain_text(&uncached_content(&status_line, 80))
         };
 
-        assert_row(&paused(true), " ⏸  devenv paused", "Ctrl+Alt+D resume");
+        assert_row(&paused(true), " ⏸ devenv paused", "Ctrl+Alt+D resume");
         assert_row(&paused(false), " ○ devenv paused", "Ctrl+Alt+D resume");
     }
 
     #[test]
-    fn emoji_is_the_default() {
+    fn non_emoji_is_the_default() {
         let mut default = StatusLine::new();
         default.state_mut().set_watched_file_count(2);
-        let explicit = status_line_with(true, |sl| sl.state_mut().set_watched_file_count(2));
+        let explicit = status_line_with(false, |sl| sl.state_mut().set_watched_file_count(2));
         assert_eq!(
             uncached_content(&default, 80),
             uncached_content(&explicit, 80)
@@ -1121,6 +1121,27 @@ mod tests {
         let expected = column(&uncached_content(&ready, 80));
         assert_eq!(column(&uncached_content(&watching, 80)), expected);
         assert_eq!(column(&uncached_content(&paused, 80)), expected);
+    }
+
+    #[test]
+    fn symbols_replace_status_marks() {
+        let render = |configure: fn(&mut StatusState)| {
+            let mut status_line = StatusLine::new();
+            status_line.set_indicators(
+                Indicators::default()
+                    .with_symbol(Indicator::Success, "ok")
+                    .with_symbol(Indicator::Paused, "||"),
+            );
+            configure(status_line.state_mut());
+            plain_text(&uncached_content(&status_line, 80))
+        };
+
+        assert_row(
+            &render(|state| state.set_paused(true)),
+            " || devenv paused",
+            "Ctrl+Alt+D resume",
+        );
+        assert!(render(StatusState::set_reloaded).starts_with(" ok devenv reloaded"));
     }
 
     #[test]
@@ -1159,17 +1180,17 @@ mod tests {
         let mut status_line = StatusLine::new();
         status_line.state_mut().set_watched_file_count(2);
         assert_draw_matches_fresh_render(&mut status_line, 80);
-        let emoji = status_line.cached_content.clone();
-        assert!(String::from_utf8_lossy(&emoji).contains('👁'));
-
-        status_line.set_indicators(Indicators::new(false));
-        assert_draw_matches_fresh_render(&mut status_line, 80);
-        assert_ne!(status_line.cached_content, emoji);
-        assert!(!String::from_utf8_lossy(&status_line.cached_content).contains('👁'));
+        let plain = status_line.cached_content.clone();
+        assert!(!String::from_utf8_lossy(&plain).contains('👁'));
 
         status_line.set_indicators(Indicators::new(true));
         assert_draw_matches_fresh_render(&mut status_line, 80);
-        assert_eq!(status_line.cached_content, emoji);
+        assert_ne!(status_line.cached_content, plain);
+        assert!(String::from_utf8_lossy(&status_line.cached_content).contains('👁'));
+
+        status_line.set_indicators(Indicators::new(false));
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        assert_eq!(status_line.cached_content, plain);
     }
 
     #[test]

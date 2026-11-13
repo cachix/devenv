@@ -886,10 +886,9 @@ async fn test_watching_paused_status_line() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_watching_paused_status_line_without_emoji() {
-    let session = status_line_session().with_indicators(Indicators::new(false));
-    assert_watching_paused_status_line(session, "paused_without_emoji", "resumed_without_emoji")
-        .await;
+async fn test_watching_paused_status_line_with_emoji() {
+    let session = status_line_session().with_indicators(Indicators::new(true));
+    assert_watching_paused_status_line(session, "paused_with_emoji", "resumed_with_emoji").await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
