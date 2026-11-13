@@ -70,9 +70,9 @@ pub use devenv_mailbox::ProcessCommand;
 pub use external_manager::ExternalManager;
 pub use force_exit_registry::{kill_process_scopes, track_process_scope, tracked_process_scopes};
 pub use manager::{
-    ApiRequest, ApiResponse, AttachEvent, AttachStream, JobHandle, LogStream, ManagerResidence,
-    NativeManagerClient, OnIdle, PortInfo, ProcessInfo, ProcessPhase, ProcessResources,
-    ProcessRunner, ProcessState, StartOutcome,
+    ApiRequest, ApiResponse, AttachEvent, AttachStream, DependencyInfo, JobHandle, LogStream,
+    ManagerResidence, NativeManagerClient, OnIdle, PortInfo, ProcessInfo, ProcessPhase,
+    ProcessResources, ProcessRunner, ProcessState, StartOutcome,
 };
 pub use manager_capabilities::{
     DeclarationSource, ManagerAdapter, ManagerCapabilities, ManagerClient, ManagerDescriptor,

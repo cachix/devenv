@@ -44,6 +44,16 @@ pub enum ApiRequest {
     /// manager (the client resolves the up-enabled default set before
     /// sending) and by `devenv processes start`.
     Start { names: Vec<String> },
+    /// Launch a process whose prerequisites the requesting task run has already
+    /// satisfied. Reuse live and scheduled processes, and preserve terminal
+    /// results unless `restart` is true. Does not traverse task dependencies.
+    EnsureStarted { name: String, restart: bool },
+    /// Report the state that dependents of the named processes are judged
+    /// against: the dependency phase (which, unlike the display phase,
+    /// preserves a terminal result across an explicit stop) and the exit
+    /// result. Used by `devenv tasks run` to evaluate typed process
+    /// dependency edges against a manager it does not own.
+    DependencyStatus { names: Vec<String> },
     /// Stop a running process.
     Stop { name: String },
     /// Query all port allocations from running processes.
@@ -113,12 +123,27 @@ pub enum ApiResponse {
     PortAllocations { ports: Vec<PortInfo> },
     /// Result of a `Start` request: how each requested name was classified.
     Start { outcome: StartOutcome },
+    /// Dependency state for each name of a `DependencyStatus` request, in
+    /// request order.
+    DependencyStatus { processes: Vec<DependencyInfo> },
     /// Where the running manager resides.
     #[serde(rename = "mode")]
     Residence {
         #[serde(rename = "mode")]
         residence: ManagerResidence,
     },
+}
+
+/// The state a dependent is judged against for one managed process.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DependencyInfo {
+    pub name: String,
+    /// [`ProcessRunner::get_dependency_phase`]; `None` when the manager has
+    /// no entry for the name.
+    pub phase: Option<ProcessPhase>,
+    /// [`ProcessRunner::get_exit_status`] for a terminal child exit.
+    #[serde(default)]
+    pub exit_status: Option<crate::supervisor_state::ExitStatus>,
 }
 
 /// Outcome of starting a set of processes via the owning scheduler.

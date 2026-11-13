@@ -1337,6 +1337,28 @@ impl Devenv {
         Ok(())
     }
 
+    /// The running native manager that owns process tasks for `devenv tasks
+    /// run`, if any.
+    ///
+    /// Without it the task runner starts `devenv:processes:*` dependencies
+    /// itself, which crash-loops services that `devenv up` already supervises
+    /// (#3137). With it, process tasks stay in the schedule with their typed
+    /// edges, the owner starts the ones that are not running, and dependents
+    /// are judged against the owner's live state. The task run never stops
+    /// the owner's processes.
+    async fn task_run_process_owner(&self) -> Result<Option<Arc<tasks::ProcessOwner>>> {
+        if !self.native_manager_running().await {
+            return Ok(None);
+        }
+        match tasks::ProcessOwner::connect(&self.native_socket_path()).await {
+            Ok(owner) => Ok(Some(owner)),
+            Err(error) => {
+                Self::bail_if_stale_daemon(&error.to_string())?;
+                Err(error.wrap_err("Failed to attach to the running process manager"))
+            }
+        }
+    }
+
     /// Race a potentially long Start reply against client interruption. The
     /// response future owns only the client socket: dropping it disconnects
     /// the caller, while the daemon's per-connection task and scheduler-owned
@@ -2255,14 +2277,18 @@ impl Devenv {
             "Loaded task config"
         );
 
-        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
-            .with_refresh_task_cache(self.options.cache_settings.refresh_task_cache)
-            .build()
-            .await?;
+        let mut builder = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
+            .with_refresh_task_cache(self.options.cache_settings.refresh_task_cache);
+        if let Some(owner) = self.task_run_process_owner().await? {
+            builder = builder.with_process_owner(owner);
+        }
+        let tasks = builder.build().await?;
 
         // Stop processes started as task dependencies. Without this they are
         // orphaned: devenv spawns every process into its own session, so they
-        // survive the CLI's exit and are reparented to init.
+        // survive the CLI's exit and are reparented to init. Processes owned
+        // by a running manager are never registered with this runner, so the
+        // stop leaves them running.
         let (status, outputs) = run_tasks(tasks, true).await?;
 
         if status.has_failures() {
