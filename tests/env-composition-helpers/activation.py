@@ -8,6 +8,7 @@ import pathlib
 import pty
 import select
 import shlex
+import shutil
 import signal
 import subprocess
 import struct
@@ -52,13 +53,26 @@ with tempfile.TemporaryDirectory(prefix="devenv-helper-activation-") as director
     environment["XDG_CONFIG_HOME"] = str(temporary / "config")
     environment["ZDOTDIR"] = str(temporary / "zsh")
     environment["TERM"] = "xterm-256color"
+    # ZDOTDIR isolates user configuration, but system zshrc can still run
+    # compinit and consume test input at its interactive security prompt.
+    # -d skips global rc files while preserving devenv's local startup files.
+    zsh = shutil.which("zsh")
+    bash = shutil.which("bash")
+    assert zsh and bash, "The fixture must provide zsh and Bash"
+    zsh_launcher = temporary / "bin" / "zsh"
+    zsh_launcher.parent.mkdir()
+    zsh_launcher.write_text(f'#!{bash}\nexec {shlex.quote(zsh)} -d "$@"\n')
+    zsh_launcher.chmod(0o755)
     for shell in ("bash", "zsh", "fish", "nu"):
+        shell_environment = environment.copy()
+        if shell == "zsh":
+            shell_environment["SHELL"] = str(zsh_launcher)
         pid, terminal = pty.fork()
         if pid == 0:
             os.execvpe(
                 "devenv",
                 ["devenv", "--no-tui", "--no-reload", "--shell", shell, "shell"],
-                environment,
+                shell_environment,
             )
         output = bytearray()
         status = None
@@ -67,6 +81,8 @@ with tempfile.TemporaryDirectory(prefix="devenv-helper-activation-") as director
         try:
             fcntl.ioctl(terminal, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 120, 0, 0))
             command = f"python3 {shlex.quote(str(assertion))}; exit\n".encode()
+            if shell == "zsh":
+                command = b"[[ ! -o globalrcs && -o rcs ]] || exit 1; " + command
             if shell != "nu":
                 os.write(terminal, command)
                 sent_command = True

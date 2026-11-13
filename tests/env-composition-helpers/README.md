@@ -13,6 +13,8 @@ The fixture checks dotenv precedence, setup inputs, late package hooks, explicit
 configured-value references between modules, `devenv info`, captured JSON, and sourceable CLI activation.
 It enters Bash, zsh, fish, and Nushell through a pseudo-terminal and checks helper values,
 composition, metadata cleanup, and precedence of `enterShell` and task exports.
+The zsh probe disables global rc files with `-d`, keeping devenv's local startup
+files enabled, so runner-specific completion prompts cannot consume test input.
 It also loads and unloads the environment through direnv, checking restoration of existing
 values and removal of variables that were previously unset.
 On macOS, a separate profile checks explicit `DEVELOPER_DIR` and `SDKROOT` values in both
