@@ -156,6 +156,7 @@ export default defineConfig({
             { label: 'Packages', slug: 'packages' },
             { label: 'Scripts', slug: 'scripts' },
             { label: 'Files & Variables', slug: 'files-and-variables' },
+            { label: 'Environment Variables', slug: 'environment-variables' },
             { label: 'Creating Files', slug: 'creating-files' },
             { label: 'SecretSpec', slug: 'integrations/secretspec' },
             { label: 'Tasks', slug: 'tasks' },

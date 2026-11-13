@@ -1,0 +1,128 @@
+---
+title: Environment variables
+---
+
+Plain `env` values are available before stdenv and package setup hooks run:
+
+```nix
+{
+  env.GREETING = "hello";
+}
+```
+
+Hooks can replace these values or extend them with paths and compiler flags.
+For example, a compiler hook can replace `CC`, while pkg-config adds library paths to `PKG_CONFIG_PATH`.
+Use `config.lib.env` to specify how a variable should behave after setup.
+
+```nix
+{ config, ... }:
+let
+  env = config.lib.env;
+in
+{
+  env.CC = env.set "zig cc";
+  env.PKG_CONFIG_PATH = env.prepend ":" [ "/custom/lib/pkgconfig" ];
+  env.NIX_CFLAGS_COMPILE = env.append " " [ "-DCUSTOM" ];
+  env.CUSTOM_TOOL = env.default "my-tool";
+}
+```
+
+The configured pkg-config path comes before the paths supplied by Nix.
+The custom compiler flag follows the flags supplied by Nix.
+Plain values keep their existing behavior; adopting helpers is optional.
+
+For example, append a JDBC driver JAR to Java's `CLASSPATH`:
+
+```nix
+{ config, ... }:
+{
+  env.CLASSPATH = config.lib.env.append ":" [ "/path/to/driver.jar" ];
+}
+```
+
+This preserves any `CLASSPATH` configured through devenv or produced by setup,
+then adds the driver. Helpers do not append to values inherited from the caller's
+shell.
+
+## Helpers
+
+| Helper | Behavior |
+| --- | --- |
+| `set value` | Replace the value after setup. An empty string is an explicit replacement. |
+| `prepend separator values` | Put the list of values before the completed setup value. |
+| `append separator values` | Put the list of values after the completed setup value. |
+| `default value` | Use the value only if setup leaves the variable unset. An existing empty value stays empty. |
+| `beforeSetup value` | Supply an initial value that setup hooks can read or modify, like a plain `env` definition. |
+| `combine helpers` | Combine several operations in one definition. |
+
+Separators are explicit: use `":"` for search paths, `" "` for flags, or `""` for direct concatenation.
+An empty or unset base does not introduce an extra separator. An empty list of contributions does nothing.
+Repeated entries are kept; the helpers do not infer whether duplicates are meaningful.
+
+Lists used as replacement or initial values are joined with spaces, booleans become `"1"` or `""`,
+and path values are copied to the Nix store. Packages become their store paths.
+Plain `null` values omit the setup input. `set null` and `default null` are rejected;
+use an empty string if you want an explicitly empty value.
+
+## Values needed during setup
+
+Some values control the setup hooks themselves and must be available before setup:
+
+```nix
+{ config, ... }:
+{
+  env.dontAddPythonPath = config.lib.env.beforeSetup "1";
+}
+```
+
+You can supply an initial value and a final operation together:
+
+```nix
+{ config, ... }:
+let env = config.lib.env;
+in {
+  env.EXAMPLE = env.combine [
+    (env.beforeSetup "initial")
+    (env.set "final-base")
+    (env.prepend ":" [ "prefix" ])
+    (env.append ":" [ "suffix" ])
+  ];
+}
+```
+
+Setup sees `initial`. The resulting value is `prefix:final-base:suffix`.
+
+## Combining modules
+
+The final base is the `set` value, if provided, or the value produced by setup.
+A `default` supplies a base only when neither is set. All prepend contributions are collected before that base,
+and all append contributions follow it, in Nix module definition order.
+Use `lib.mkBefore` and `lib.mkAfter` to order contributions between modules.
+The position of a `set` definition does not discard extension contributions.
+
+Different `set` values, different `default` values, or incompatible separators for one variable produce evaluation errors.
+Matching replacements are accepted. Initial definitions use the same merge rules as plain `env` values.
+
+Nix priorities apply to the whole variable. For example, `lib.mkForce (env.set "value")`
+discards lower-priority prepend and append contributions too. A helper supplied by a module can use
+`lib.mkDefault` to let a project's definition take precedence.
+Explicit Nix definitions retain precedence over dotenv values.
+
+## Capture and activation
+
+Final operations run after stdenv, package hooks, registered `postHooks`, and the global `userHook`.
+The results are included in `devenv print-dev-env --json` and restored during shell activation before `enterShell` runs.
+This preserves explicitly configured variables such as `TZ` and `SSL_CERT_FILE`, which activation normally filters.
+The same mechanism works with direnv and flake shells using `nix develop`.
+
+Helpers operate on the environment produced by Nix setup. Explicit final `PATH` operations therefore use Nix's paths,
+not paths inherited from the caller. `set` can deliberately replace `PATH` entirely.
+Your `enterShell` code and explicit task or process environment settings still run afterward and can change values.
+
+Inside Nix, `config.env` contains ordinary configured values, not helper metadata.
+For a composed variable it represents the configured contributions, excluding additions made by setup hooks.
+`devenv info` shows this configured view; use `devenv print-dev-env --json` for the computed environment.
+For example, other modules can still refer to `config.env.ROOT` when it uses `env.set "/project"`.
+
+Helper variable names must be valid shell identifiers. Names starting with `_devenv_env_` are reserved internally.
+The helper metadata is removed before `enterShell` and is not exported to child processes.

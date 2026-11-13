@@ -8,6 +8,9 @@
   };
 
   config.lib = {
+    env = let helpers = import ./lib/env.nix { inherit lib; }; in {
+      inherit (helpers) beforeSetup set default prepend append combine;
+    };
     # Priority 500: between mkDefault (1000) and actual default (100)
     mkOverrideDefault = lib.mkOverride 500;
     # Internal function to format input requirement messages.

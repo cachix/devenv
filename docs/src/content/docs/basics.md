@@ -27,6 +27,17 @@ Given a hello world example, click on the end of each line to get an explanation
 
 ``enterShell`` allows you to execute bash code once the shell activates, while ``env`` allows you to set environment variables.
 
+Setup hooks can replace or extend plain `env` values. Use the
+[environment helpers](/environment-variables/) when you need explicit replacement,
+prepend, append, or fallback behavior after setup:
+
+```nix
+{ config, ... }:
+{
+  env.CC = config.lib.env.set "zig cc";
+}
+```
+
 :::tip[Consider using tasks instead]
 For more complex setup operations, consider using [tasks](/tasks/#entershell--entertest) instead of `enterShell`. Tasks provide better control over execution order, dependencies, and can run in parallel:
 :::

@@ -43,3 +43,45 @@ jobs:
       runs-on: ${{ matrix.runs-on }}
       ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
       only: ${{ inputs.only }}
+
+  env-composition:
+    name: environment helpers (${{ matrix.system }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: aarch64-linux
+            runs-on: '["self-hosted", "linux", "ARM64"]'
+          - system: x86_64-linux
+            runs-on: '["self-hosted", "linux", "X64"]'
+          - system: aarch64-darwin
+            runs-on: '["self-hosted", "macOS", "ARM64"]'
+    runs-on: ${{ fromJSON(matrix.runs-on) }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      # PR code can read caches but receives no cache upload credentials.
+      - name: Configure Cachix
+        uses: cachix/cachix-action@v17
+        with:
+          name: devenv
+
+      - name: Build devenv
+        run: |
+          path=$(nix build -L --print-out-paths)
+          echo "$path/bin" >> "$GITHUB_PATH"
+
+      - name: Test environment helpers independently of the full suite
+        run: devenv-run-tests run tests --only env-composition-helpers

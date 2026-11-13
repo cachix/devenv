@@ -3,10 +3,16 @@
 , pkgs
 , lib
 , bootstrapPkgs ? null
+, options
 , ...
 }:
 let
   types = lib.types;
+  envHelpers = import ./lib/env.nix { inherit lib; };
+  # Keep the original definitions for shell construction, while config.env
+  # exposes ordinary configured values to other modules.
+  envDefinitions = options.env.type.merge [ "env" ] options.env.definitionsWithLocations;
+  resolvedEnv = envHelpers.resolve envDefinitions;
   # Returns a list of all the entries in a folder
   listEntries = path: map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
@@ -81,9 +87,14 @@ in
   options = {
     env = lib.mkOption {
       type = types.submodule {
-        freeformType = types.lazyAttrsOf types.anything;
+        freeformType = types.lazyAttrsOf envHelpers.type;
       };
-      description = "Environment variables to be exposed inside the developer environment.";
+      apply = envHelpers.values;
+      description = ''
+        Environment variables exposed inside the developer environment.
+        Plain values are supplied before stdenv setup. Use `config.lib.env`
+        helpers to replace, prepend, append, or default values after setup.
+      '';
       default = { };
     };
 
@@ -464,18 +475,22 @@ in
             };
       in
       performAssertions (
-        (pkgs.mkShell.override { stdenv = config.stdenv; }) (
-          {
-            inherit (config) hardeningDisable inputsFrom name;
-            buildInputs = partitioned.right;
-            nativeBuildInputs = partitioned.wrong;
-            shellHook = ''
-              ${lib.optionalString config.devenv.debug "set -x"}
-              ${config.enterShell}
-            '';
-          }
-          // config.env
-        )
+        envHelpers.wrapShell {
+          inherit pkgs;
+          environment = envDefinitions;
+          shell = (pkgs.mkShell.override { stdenv = config.stdenv; }) (
+            {
+              inherit (config) hardeningDisable inputsFrom name;
+              buildInputs = partitioned.right;
+              nativeBuildInputs = partitioned.wrong;
+              shellHook = ''
+                ${lib.optionalString config.devenv.debug "set -x"}
+                ${config.enterShell}
+              '';
+            }
+            // resolvedEnv.initial
+          );
+        }
       );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
