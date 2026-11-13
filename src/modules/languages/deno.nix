@@ -2,6 +2,12 @@
 
 let
   cfg = config.languages.deno;
+  configurations = lib.optional cfg.enable cfg ++ lib.concatMap
+    (name:
+      let language = lib.attrByPath [ "languages" name ] { } config; in
+      lib.optional ((language.enable or false) && language.deno.enable) language.deno
+    ) [ "javascript" "typescript" ];
+  package = (builtins.head configurations).package;
 in
 {
   options.languages.deno = {
@@ -14,9 +20,16 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf (configurations != [ ]) {
     packages = [
-      cfg.package
+      package
+    ];
+
+    assertions = [
+      {
+        assertion = lib.all (configuration: toString configuration.package == toString package) configurations;
+        message = "All enabled Deno integrations must use the same package; check languages.deno.package, languages.javascript.deno.package, and languages.typescript.deno.package.";
+      }
     ];
 
     env.DENO_INSTALL_ROOT = config.env.DEVENV_STATE + "/deno";

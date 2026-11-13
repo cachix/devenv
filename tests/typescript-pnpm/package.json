@@ -1,0 +1,7 @@
+{
+  "name": "devenv-typescript-pnpm-test",
+  "private": true,
+  "dependencies": {
+    "local-dependency": "file:./dependency"
+  }
+}

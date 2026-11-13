@@ -236,6 +236,7 @@ export default defineConfig({
             { label: 'Out-of-tree devenvs', slug: 'guides/out-of-tree-devenvs' },
             { label: 'Examples', slug: 'examples' },
             { label: 'Cloud', slug: 'cloud' },
+            { label: 'JavaScript and TypeScript', slug: 'guides/javascript-typescript' },
             { label: 'Migrating to 2.0', slug: 'guides/migrating-to-20' },
             { label: 'Monorepo', slug: 'guides/monorepo' },
             { label: 'Polyrepo', slug: 'guides/polyrepo' },
