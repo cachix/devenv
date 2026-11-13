@@ -33,15 +33,17 @@ const darkIconUrl = technology.icon && darkColor !== technology.color
 </span>
 
 <script>
-  document.querySelectorAll<HTMLImageElement>('.technology-icon img').forEach((image) => {
-    const showFallback = () => {
-      const icon = image.closest<HTMLElement>('.technology-icon');
-      icon?.querySelectorAll<HTMLImageElement>('img').forEach((candidate) => { candidate.hidden = true; });
-      const fallback = icon?.querySelector('[data-icon-fallback]');
-      if (fallback instanceof HTMLElement) fallback.hidden = false;
-    };
-    if (image.complete && image.naturalWidth === 0) showFallback();
-    else image.addEventListener('error', showFallback, { once: true });
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLImageElement>('.technology-icon img').forEach((image) => {
+      const showFallback = () => {
+        const icon = image.closest<HTMLElement>('.technology-icon');
+        icon?.querySelectorAll<HTMLImageElement>('img').forEach((candidate) => { candidate.hidden = true; });
+        const fallback = icon?.querySelector('[data-icon-fallback]');
+        if (fallback instanceof HTMLElement) fallback.hidden = false;
+      };
+      if (image.complete && image.naturalWidth === 0) showFallback();
+      else image.addEventListener('error', showFallback, { once: true });
+    });
   });
 </script>
 

@@ -1,0 +1,16 @@
+---
+import DefaultHead from '@astrojs/starlight/components/Head.astro';
+import VtbotStarlight from 'astro-vtbot/components/starlight/Base.astro';
+---
+
+<VtbotStarlight viewTransitionsFallback="swap">
+  <DefaultHead {...Astro.props} />
+</VtbotStarlight>
+
+<style is:global>
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+</style>

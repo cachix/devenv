@@ -114,3 +114,36 @@ pkgs.csharp-ls
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
+
+
+
+### languages.dotnet.version
+
+
+
+The .NET SDK version to use, as ` MAJOR.MINOR `.
+This automatically sets the ` languages.dotnet.package ` from nixpkgs’ ` dotnetCorePackages `.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+"9.0"
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)

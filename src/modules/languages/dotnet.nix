@@ -14,6 +14,16 @@ in
       description = "The .NET SDK package to use.";
     };
 
+    version = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        The .NET SDK version to use, as `MAJOR.MINOR`.
+        This automatically sets the `languages.dotnet.package` from nixpkgs' `dotnetCorePackages`.
+      '';
+      example = "9.0";
+    };
+
     lsp = {
       enable = lib.mkEnableOption ".NET Language Server" // {
         # csharp-ls crashes on aarch64-darwin due to missing code signatures
@@ -31,6 +41,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    languages.dotnet.package = lib.mkIf (cfg.version != null) (
+      pkgs.dotnetCorePackages."sdk_${lib.replaceStrings [ "." ] [ "_" ] cfg.version}"
+        or (throw "Unsupported .NET SDK version '${cfg.version}', see nixpkgs' dotnetCorePackages for supported versions")
+    );
+
     packages = [
       cfg.package
     ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
