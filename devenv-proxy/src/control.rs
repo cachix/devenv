@@ -37,6 +37,8 @@ pub enum ControlRequest {
 pub enum ControlResponse {
     Info {
         pid: u32,
+        #[serde(default)]
+        listen: Option<std::net::SocketAddr>,
         https_listen: Option<std::net::SocketAddr>,
     },
     Ok {
@@ -168,6 +170,7 @@ fn dispatch(request: ControlRequest, routes: &RouteTable) -> Result<ControlRespo
     match request {
         ControlRequest::Status => Ok(ControlResponse::Info {
             pid: std::process::id(),
+            listen: routes.http_listen,
             https_listen: routes.https_listen,
         }),
         ControlRequest::Register { route } => {
@@ -251,5 +254,42 @@ mod tests {
         fs::write(&socket, "keep me").unwrap();
         assert!(serve_control(&socket, RouteTable::default()).is_err());
         assert_eq!(fs::read_to_string(socket).unwrap(), "keep me");
+    }
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    #[test]
+    fn status_decodes_legacy_responses_without_http_listener() {
+        let response: ControlResponse =
+            serde_json::from_str(r#"{"status":"info","pid":123,"https_listen":null}"#).unwrap();
+        assert!(matches!(
+            response,
+            ControlResponse::Info {
+                pid: 123,
+                listen: None,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn status_round_trips_both_listeners() {
+        let listen = "[::1]:1080".parse().unwrap();
+        let https_listen = "[::1]:1443".parse().unwrap();
+        let response = ControlResponse::Info {
+            pid: 123,
+            listen: Some(listen),
+            https_listen: Some(https_listen),
+        };
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["listen"], "[::1]:1080");
+        assert_eq!(json["https_listen"], "[::1]:1443");
+        let decoded: ControlResponse = serde_json::from_value(json).unwrap();
+        assert!(matches!(decoded, ControlResponse::Info {
+            listen: Some(http), https_listen: Some(https), ..
+        } if http == listen && https == https_listen));
     }
 }
