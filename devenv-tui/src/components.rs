@@ -19,6 +19,84 @@ pub use devenv_shell::{
     XMARK,
 };
 
+/// Activity row colors, resolved from the user's `tui.theme.styles.activity.*` scopes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActivityTheme {
+    pub tree: Color,
+    pub selection_background: Color,
+    /// `None` keeps each part's normal color on the selected row.
+    pub selection_foreground: Option<Color>,
+    pub selection_secondary: Option<Color>,
+    pub name: Color,
+    pub name_process: Color,
+    pub name_nested: Color,
+    pub secondary: Color,
+    pub elapsed: Color,
+    pub log: Color,
+    pub failed: Color,
+}
+
+impl Default for ActivityTheme {
+    fn default() -> Self {
+        Self {
+            tree: COLOR_HIERARCHY,
+            selection_background: Color::AnsiValue(250),
+            selection_foreground: Some(Color::AnsiValue(232)),
+            selection_secondary: Some(Color::AnsiValue(238)),
+            name: COLOR_ACTIVE,
+            name_process: COLOR_ACTIVE,
+            name_nested: COLOR_ACTIVE_NESTED,
+            secondary: COLOR_SECONDARY,
+            elapsed: COLOR_HIERARCHY,
+            log: Color::AnsiValue(245),
+            failed: COLOR_FAILED,
+        }
+    }
+}
+
+impl ActivityTheme {
+    pub fn from_config(theme: &crate::config::ThemeConfig) -> Self {
+        let default = Self::default();
+        let color = |scope: &str, background: bool| {
+            theme
+                .styles
+                .get(scope)
+                .and_then(|style| {
+                    if background {
+                        style.background.as_ref()
+                    } else {
+                        style.foreground.as_ref()
+                    }
+                })
+                .and_then(|value| theme.resolve_color(value).ok())
+        };
+        // Without any `activity.selection` style the selected row keeps its
+        // inverted default. Once one is set, an unset foreground leaves each
+        // part's normal color in place and only the background changes.
+        let selection_foreground = if theme.styles.contains_key("activity.selection") {
+            color("activity.selection", false)
+        } else {
+            default.selection_foreground
+        };
+        let selection_secondary = color("activity.selection.secondary", false)
+            .or(selection_foreground.and(default.selection_secondary));
+        Self {
+            tree: color("activity.tree", false).unwrap_or(default.tree),
+            selection_background: color("activity.selection", true)
+                .unwrap_or(default.selection_background),
+            selection_foreground,
+            selection_secondary,
+            name: color("activity.name", false).unwrap_or(default.name),
+            name_process: color("activity.name.process", false).unwrap_or(default.name_process),
+            name_nested: color("activity.name.nested", false).unwrap_or(default.name_nested),
+            secondary: color("activity.secondary", false).unwrap_or(default.secondary),
+            elapsed: color("activity.elapsed", false).unwrap_or(default.elapsed),
+            log: color("activity.log", false).unwrap_or(default.log),
+            failed: color("activity.failed", false).unwrap_or(default.failed),
+        }
+    }
+}
+
 /// Self-animating spinner component.
 /// Manages its own animation state and only re-renders itself.
 #[derive(Default, Props)]
@@ -65,6 +143,8 @@ pub struct StatusIndicatorProps {
     pub completed: Option<bool>,
     /// Whether to show a spinner when active (None). If false, shows a space.
     pub show_spinner: bool,
+    /// Color of the failure mark. Defaults to `COLOR_FAILED`.
+    pub failed_color: Option<Color>,
 }
 
 #[component]
@@ -74,7 +154,11 @@ pub fn StatusIndicator(
 ) -> impl Into<AnyElement<'static>> {
     match props.completed {
         Some(true) => element!(Text(content: CHECKMARK, color: COLOR_COMPLETED)).into_any(),
-        Some(false) => element!(Text(content: XMARK, color: COLOR_FAILED)).into_any(),
+        Some(false) => element!(Text(
+            content: XMARK,
+            color: props.failed_color.unwrap_or(COLOR_FAILED)
+        ))
+        .into_any(),
         None => {
             if props.show_spinner {
                 element!(Spinner(color: COLOR_ACTIVE)).into_any()
@@ -255,14 +339,21 @@ pub struct HierarchyPrefixComponent {
     pub depth: usize,
     pub ancestor_continuations: Vec<bool>,
     pub is_last_sibling: bool,
+    pub color: Color,
 }
 
 impl HierarchyPrefixComponent {
-    pub fn new(depth: usize, ancestor_continuations: &[bool], is_last_sibling: bool) -> Self {
+    pub fn new(
+        depth: usize,
+        ancestor_continuations: &[bool],
+        is_last_sibling: bool,
+        color: Color,
+    ) -> Self {
         Self {
             depth,
             ancestor_continuations: ancestor_continuations.to_vec(),
             is_last_sibling,
+            color,
         }
     }
 
@@ -280,9 +371,9 @@ impl HierarchyPrefixComponent {
         let branch = if self.is_last_sibling { "└" } else { "├" };
 
         vec![
-            element!(Text(content: total_indent, color: COLOR_HIERARCHY)).into_any(),
+            element!(Text(content: total_indent, color: self.color)).into_any(),
             element!(View(margin_right: 1) {
-                Text(content: branch, color: COLOR_HIERARCHY)
+                Text(content: branch, color: self.color)
             })
             .into_any(),
         ]
@@ -296,6 +387,7 @@ pub struct ActivityTextComponent {
     pub suffix: Option<String>,
     pub is_selected: bool,
     pub is_dimmed: bool,
+    pub theme: ActivityTheme,
     pub elapsed: String,
     pub is_completed: bool,
     pub variant: ActivityVariant,
@@ -309,6 +401,7 @@ impl ActivityTextComponent {
             suffix: None,
             is_selected: false,
             is_dimmed: false,
+            theme: ActivityTheme::default(),
             elapsed,
             is_completed: false,
             variant,
@@ -326,8 +419,9 @@ impl ActivityTextComponent {
         self
     }
 
-    pub fn with_selection(mut self, is_selected: bool) -> Self {
+    pub fn with_selection(mut self, is_selected: bool, theme: ActivityTheme) -> Self {
         self.is_selected = is_selected;
+        self.theme = theme;
         self
     }
 
@@ -342,24 +436,34 @@ impl ActivityTextComponent {
     }
 
     fn colors(&self, depth: usize) -> (Color, Color, Color, Option<Color>) {
-        if self.is_selected {
-            (
-                Color::AnsiValue(232),
-                Color::AnsiValue(238),
-                Color::AnsiValue(238),
-                Some(Color::AnsiValue(250)),
-            )
-        } else if self.is_dimmed {
-            (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY, None)
-        } else if self.is_completed && depth == 0 {
-            (Color::Reset, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if self.is_completed {
-            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if depth == 0 || matches!(self.variant, ActivityVariant::Process(_)) {
-            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+        let theme = &self.theme;
+        let (mut name, mut secondary, mut elapsed) = if self.is_dimmed {
+            (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY)
         } else {
-            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
+            let name = if self.is_completed && depth == 0 {
+                theme.name
+            } else if self.is_completed {
+                theme.name_nested
+            } else if matches!(self.variant, ActivityVariant::Process(_)) {
+                theme.name_process
+            } else if depth == 0 {
+                theme.name
+            } else {
+                theme.name_nested
+            };
+            (name, theme.secondary, theme.elapsed)
+        };
+        if !self.is_selected {
+            return (name, secondary, elapsed, None);
         }
+        if let Some(color) = theme.selection_foreground {
+            name = color;
+        }
+        if let Some(color) = theme.selection_secondary {
+            secondary = color;
+            elapsed = color;
+        }
+        (name, secondary, elapsed, Some(theme.selection_background))
     }
 
     pub fn render(
@@ -574,10 +678,16 @@ pub struct DownloadActivityComponent<'a> {
     pub cached: bool,
     pub ancestor_continuations: Vec<bool>,
     pub is_last_sibling: bool,
+    pub theme: ActivityTheme,
 }
 
 impl<'a> DownloadActivityComponent<'a> {
-    pub fn new(activity: &'a Activity, depth: usize, is_selected: bool) -> Self {
+    pub fn new(
+        activity: &'a Activity,
+        depth: usize,
+        is_selected: bool,
+        theme: ActivityTheme,
+    ) -> Self {
         Self {
             activity,
             depth,
@@ -586,6 +696,7 @@ impl<'a> DownloadActivityComponent<'a> {
             cached: false,
             ancestor_continuations: Vec::new(),
             is_last_sibling: true,
+            theme,
         }
     }
 
@@ -627,11 +738,12 @@ impl<'a> DownloadActivityComponent<'a> {
             self.depth,
             &self.ancestor_continuations,
             self.is_last_sibling,
+            self.theme.tree,
         )
         .render();
         prefix.push(
             element!(View(margin_right: 1) {
-                StatusIndicator(completed: self.completed, show_spinner: true)
+                StatusIndicator(completed: self.completed, show_spinner: true, failed_color: Some(self.theme.failed))
             })
             .into_any(),
         );
@@ -656,19 +768,20 @@ impl<'a> DownloadActivityComponent<'a> {
         // Colors for selected vs unselected rows - invert all text when selected
         let (action_color, name_color, substituter_color, elapsed_color, bg_color) =
             if self.is_selected {
+                let theme = &self.theme;
                 (
-                    COLOR_ACTIVE,
-                    Color::AnsiValue(232),       // Near-black text
-                    Color::AnsiValue(238),       // Dark gray for substituter
-                    Color::AnsiValue(238),       // Dark gray for elapsed
-                    Some(Color::AnsiValue(250)), // Light gray background
+                    theme.selection_foreground.unwrap_or(COLOR_ACTIVE_NESTED),
+                    theme.selection_foreground.unwrap_or(theme.name),
+                    theme.selection_secondary.unwrap_or(theme.secondary),
+                    theme.selection_secondary.unwrap_or(theme.elapsed),
+                    Some(theme.selection_background),
                 )
             } else {
                 (
                     COLOR_ACTIVE_NESTED,
-                    Color::Reset,
-                    COLOR_SECONDARY,
-                    COLOR_HIERARCHY,
+                    self.theme.name,
+                    self.theme.secondary,
+                    self.theme.elapsed,
                     None,
                 )
             };
@@ -907,6 +1020,8 @@ pub struct ExpandedContentComponent<'a> {
     pub terminal_width: Option<usize>,
     border_indent: Option<usize>,
     line_prefix: Option<String>,
+    line_prefix_color: Color,
+    text_color: Color,
 }
 
 impl<'a> ExpandedContentComponent<'a> {
@@ -919,6 +1034,8 @@ impl<'a> ExpandedContentComponent<'a> {
             terminal_width: None,
             border_indent: None,
             line_prefix: None,
+            line_prefix_color: COLOR_HIERARCHY,
+            text_color: Color::AnsiValue(245),
         }
     }
 
@@ -949,6 +1066,17 @@ impl<'a> ExpandedContentComponent<'a> {
 
     pub fn with_line_prefix(mut self, prefix: String) -> Self {
         self.line_prefix = Some(prefix);
+        self
+    }
+
+    pub fn with_text_color(mut self, color: Color) -> Self {
+        self.text_color = color;
+        self
+    }
+
+    /// Color of the `│` beside the log lines, drawn as a border or a line prefix.
+    pub fn with_tree_color(mut self, color: Color) -> Self {
+        self.line_prefix_color = color;
         self
     }
 
@@ -1006,8 +1134,8 @@ impl<'a> ExpandedContentComponent<'a> {
                     .map(|line| {
                         element! {
                             View(flex_direction: FlexDirection::Row, padding_right: 1) {
-                                Text(content: prefix.clone(), color: COLOR_HIERARCHY)
-                                Text(content: format!("  {line}"), color: Color::AnsiValue(245))
+                                Text(content: prefix.clone(), color: self.line_prefix_color)
+                                Text(content: format!("  {line}"), color: self.text_color)
                             }
                         }
                         .into_any()
@@ -1031,7 +1159,7 @@ impl<'a> ExpandedContentComponent<'a> {
                 .into_iter()
                 .map(|line| {
                     element! {
-                        Text(content: format!(" {line}"), color: Color::AnsiValue(245))
+                        Text(content: format!(" {line}"), color: self.text_color)
                     }
                     .into_any()
                 })
@@ -1046,7 +1174,7 @@ impl<'a> ExpandedContentComponent<'a> {
                         margin_right: 1,
                         border_style: BorderStyle::Single,
                         border_edges: Edges::Left,
-                        border_color: COLOR_HIERARCHY,
+                        border_color: self.line_prefix_color,
                     ) {
                         #(line_elements)
                     }
@@ -1068,8 +1196,8 @@ impl<'a> ExpandedContentComponent<'a> {
             return vec![
                 element! {
                     View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
-                        Text(content: prefix.clone(), color: COLOR_HIERARCHY)
-                        Text(content: format!("  {empty_message}"), color: Color::AnsiValue(245))
+                        Text(content: prefix.clone(), color: self.line_prefix_color)
+                        Text(content: format!("  {empty_message}"), color: self.text_color)
                     }
                 }
                 .into_any(),
@@ -1077,7 +1205,7 @@ impl<'a> ExpandedContentComponent<'a> {
         }
         vec![element! {
             View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
-                Text(content: empty_message, color: Color::AnsiValue(245))
+                Text(content: empty_message, color: self.text_color)
             }
         }
         .into_any()]
@@ -1163,7 +1291,9 @@ mod tests {
             (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY, None)
         );
         assert_eq!(
-            component.with_selection(true).colors(1),
+            component
+                .with_selection(true, ActivityTheme::default())
+                .colors(1),
             (
                 Color::AnsiValue(232),
                 Color::AnsiValue(238),

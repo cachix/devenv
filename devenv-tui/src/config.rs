@@ -264,7 +264,11 @@ impl TuiPreferences {
         self.statusline.uses_default_layouts()
             && self.theme.preset == ThemePreset::Devenv
             && self.theme.palette.is_empty()
-            && self.theme.styles.is_empty()
+            && self
+                .theme
+                .styles
+                .keys()
+                .all(|scope| activity_style_fields(scope).is_some())
             && self.keybindings.is_default()
     }
 }
@@ -307,6 +311,20 @@ impl ThemeConfig {
                 })?;
         }
         for (scope, style) in &self.styles {
+            if let Some(fields) = activity_style_fields(scope) {
+                for (field, set) in [
+                    ("background", style.background.is_some()),
+                    ("modifiers", !style.modifiers.is_empty()),
+                ] {
+                    if set && !fields.contains(&field) {
+                        return validation(format!(
+                            "tui.theme.styles.{scope}.{field} is not supported"
+                        ));
+                    }
+                }
+                style.validate(&self.palette, &format!("tui.theme.styles.{scope}"))?;
+                continue;
+            }
             let supported = scope == "statusline"
                 || scope == "statusline.separator"
                 || scope
@@ -1774,6 +1792,23 @@ impl KeyCodeSpec {
     }
 }
 
+/// Activity row style scopes and the style fields each supports besides `foreground`.
+fn activity_style_fields(scope: &str) -> Option<&'static [&'static str]> {
+    match scope {
+        "activity.tree"
+        | "activity.selection.secondary"
+        | "activity.name"
+        | "activity.name.process"
+        | "activity.name.nested"
+        | "activity.secondary"
+        | "activity.elapsed"
+        | "activity.log"
+        | "activity.failed" => Some(&[]),
+        "activity.selection" => Some(&["background"]),
+        _ => None,
+    }
+}
+
 fn valid_name(value: &str, allow_dot: bool) -> bool {
     !value.is_empty()
         && value.bytes().all(|byte| {
@@ -1804,6 +1839,43 @@ fn validation<T>(message: impl Into<String>) -> Result<T, UserConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn activity_styles_validate_their_fields_and_keep_the_default_statusline() {
+        let config = UserConfig::from_yaml(
+            "config.yaml",
+            "version: 1\ntui:\n  theme:\n    palette:\n      indent: \"#2d333b\"\n    styles:\n      activity.tree:\n        foreground: indent\n      activity.selection:\n        foreground: default\n        background: ansi:237\n      activity.selection.secondary:\n        foreground: dark_grey\n      activity.name:\n        foreground: white\n      activity.name.process:\n        foreground: cyan\n      activity.name.nested:\n        foreground: grey\n      activity.secondary:\n        foreground: dark_grey\n      activity.elapsed:\n        foreground: dark_grey\n      activity.log:\n        foreground: ansi:245\n      activity.failed:\n        foreground: red\n".into(),
+        )
+        .unwrap();
+        assert_eq!(config.tui.theme.styles.len(), 10);
+
+        let styles_only = UserConfig::from_yaml(
+            "config.yaml",
+            "version: 1\ntui:\n  theme:\n    styles:\n      activity.tree:\n        foreground: blue\n".into(),
+        )
+        .unwrap();
+        assert!(styles_only.tui.uses_default_statusline());
+
+        for (scope, style) in [
+            ("activity.tree", "background: blue"),
+            ("activity.tree", "modifiers: [bold]"),
+            ("activity.selection", "modifiers: [bold]"),
+            ("activity.selection.secondary", "background: blue"),
+            ("activity.unknown", "foreground: blue"),
+        ] {
+            let error = UserConfig::from_yaml(
+                "config.yaml",
+                format!(
+                    "version: 1\ntui:\n  theme:\n    styles:\n      {scope}:\n        {style}\n"
+                ),
+            )
+            .unwrap_err();
+            assert!(
+                matches!(error, UserConfigError::Validation { .. }),
+                "{scope}: {style}"
+            );
+        }
+    }
 
     #[test]
     fn shell_prompt_prefix_defaults_to_true_and_can_be_disabled() {
