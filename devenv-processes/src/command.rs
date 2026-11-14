@@ -74,6 +74,11 @@ pub fn build_command(
     if let Some(usec) = watchdog_usec {
         env.insert("WATCHDOG_USEC".to_string(), usec.to_string());
     }
+    // Output goes to log files rather than a terminal, so Python would
+    // block-buffer stdout and `print` output would not show up until the
+    // buffer fills. Respect an explicit setting.
+    env.entry("PYTHONUNBUFFERED".to_string())
+        .or_insert_with(|| "1".to_string());
 
     // Devenv owns the shell invocation semantics here. In particular, process
     // commands may use shell builtins such as `exit` or start with an explicit
@@ -100,4 +105,33 @@ pub fn build_command(
         env,
         cwd: config.cwd.clone(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn python_output_is_unbuffered_unless_configured() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = ProcessConfig {
+            name: "py".to_string(),
+            ..Default::default()
+        };
+        let built = build_command(dir.path(), &config, None, None).unwrap();
+        assert_eq!(
+            built.env.get("PYTHONUNBUFFERED").map(String::as_str),
+            Some("1")
+        );
+
+        let mut config = config;
+        config
+            .env
+            .insert("PYTHONUNBUFFERED".to_string(), String::new());
+        let built = build_command(dir.path(), &config, None, None).unwrap();
+        assert_eq!(
+            built.env.get("PYTHONUNBUFFERED").map(String::as_str),
+            Some("")
+        );
+    }
 }

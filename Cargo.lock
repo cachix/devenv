@@ -2931,6 +2931,7 @@ dependencies = [
 name = "devenv-tui"
 version = "2.4.1"
 dependencies = [
+ "anstyle-parse",
  "anyhow",
  "base64",
  "chrono",

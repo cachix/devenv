@@ -39,6 +39,7 @@ homepage = "https://devenv.sh/"
 repository = "https://github.com/cachix/devenv/"
 
 [workspace.dependencies]
+anstyle-parse = "1.0.0"
 arc-swap = "1.9.2"
 devenv = { path = "devenv" }
 devenv-activity = { path = "devenv-activity" }
