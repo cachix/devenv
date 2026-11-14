@@ -4,6 +4,7 @@ use crate::{
     expanded_view::ExpandedLogView,
     inline_terminal::InlineTerminal,
     model::{ActivityModel, RenderContext, UiState, ViewMode},
+    theme::Status,
     view::{
         ActivityHeights, ScrollState, activity_shows_inline_logs, available_activity_height,
         process_previews_fit, view,
@@ -11,7 +12,7 @@ use crate::{
 };
 use crossterm::{
     cursor, event, execute,
-    style::{Color, ResetColor, SetForegroundColor},
+    style::{ResetColor, SetStyle},
     terminal,
 };
 use devenv_activity::{ActivityEvent, ActivityLevel};
@@ -499,17 +500,19 @@ impl TuiApp {
                     inline_terminal.commit(&canvas)?;
                     inline_terminal.suspend()?;
 
-                    // Print full error messages in red (not truncated by TUI width)
+                    // Print full error messages in the failure style (not truncated by TUI width)
                     let has_errors = !standalone_errors.is_empty()
                         || !activity_errors.is_empty()
                         || !failed_build_errors.is_empty();
                     if has_errors {
                         let mut stderr = io::stderr();
+                        let error_style =
+                            ui.activity_theme().status(Status::Failure).content_style();
                         eprintln!();
 
                         // Print standalone error messages (no parent activity)
                         for (text, details) in standalone_errors {
-                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
+                            let _ = execute!(stderr, SetStyle(error_style));
                             eprintln!("{}", text);
                             if let Some(details) = details {
                                 eprintln!("{}", details);
@@ -519,7 +522,7 @@ impl TuiApp {
 
                         // Print error messages from Activity::Message variants
                         for (text, details) in activity_errors {
-                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
+                            let _ = execute!(stderr, SetStyle(error_style));
                             eprintln!("{}", text);
                             if let Some(details) = details {
                                 eprintln!("{}", details);
@@ -529,7 +532,7 @@ impl TuiApp {
 
                         // Print build stderr (from failed or incomplete builds)
                         for (name, lines) in failed_build_errors {
-                            let _ = execute!(stderr, SetForegroundColor(Color::AnsiValue(160)));
+                            let _ = execute!(stderr, SetStyle(error_style));
                             eprintln!("Build error: {}", name);
                             for line in lines {
                                 eprintln!("  {}", line);

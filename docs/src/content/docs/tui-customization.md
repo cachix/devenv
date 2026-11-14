@@ -197,7 +197,7 @@ Set `tui.statusline.enabled: false` to hide ordinary TUI statusline content and 
 
 ## Colors and styles
 
-The `devenv` preset retains the built-in palette. `terminal` uses terminal-native colors where possible, and `none` removes preset statusline colors. Explicit styles work with every preset. Theme customization currently applies to the statusline. Activity rows, process states, and log content retain their built-in semantic colors.
+The `devenv` preset retains the built-in palette. `terminal` uses terminal-native colors where possible, and `none` removes preset colors. Explicit styles work with every preset and take precedence over its colors. Themes apply to the statusline, the activity list, the fullscreen log viewer, the status line inside `devenv shell`, and the errors printed after the TUI closes.
 
 Colors accept named terminal colors such as `yellow`, `dark_grey`, and `default`, indexed colors as `ansi:0` through `ansi:255`, RGB colors as `#RRGGBB`, or a name from `tui.theme.palette`.
 
@@ -217,7 +217,81 @@ tui:
         modifiers: [bold, underline]
 ```
 
-Component-local `style` settings take precedence over theme scopes. Supported modifiers are `bold`, `dim`, `italic`, `underline`, and `reverse`.
+Component-local `style` settings take precedence over theme scopes. Supported modifiers are `bold`, `dim`, `italic`, `underline`, and `reverse`. Modifiers add up from broader scopes, except that `bold` and `dim` replace each other, so the more specific setting wins.
+
+### Activity list
+
+Activity scopes are styled the same way. A dotted scope builds on the scopes before it, so `activity` is the base for every part of the list, `activity.name` styles every name, and `activity.name.nested` styles only nested names. Added in devenv 2.4.1.
+
+| Scope | Styles |
+| --- | --- |
+| `activity` | Every part of the activity list, and the text of info and debug messages |
+| `activity.name` | Activity names and action words such as `Building` |
+| `activity.name.nested` | Names of nested activities other than processes, and the `Downloading` word of download rows |
+| `activity.detail` | Text after a name, such as `pending`, `3 lines`, or `from cache.nixos.org`, download sizes, and error details |
+| `activity.elapsed` | Elapsed time |
+| `activity.tree` | Tree lines and the line beside inline logs |
+| `activity.log` | Inline log previews |
+| `activity.progress` | The filled part of download progress bars |
+| `activity.progress.track` | The unfilled part of download progress bars |
+| `activity.status` | Status marks, and the text of error and warning messages |
+| `activity.status.active` | The spinner of running activities |
+| `activity.status.success` | `✓`, and running or ready processes |
+| `activity.status.failure` | `✗`, failed processes, error messages, and the errors printed after the TUI closes |
+| `activity.status.warning` | Warning messages |
+| `activity.status.info` | The mark of info messages |
+| `activity.status.starting` | Waiting, starting, and restarting processes |
+| `activity.status.inactive` | Processes that are not running, the mark of debug messages, and the faded beat of pulsing marks |
+| `activity.selection` | The selected row |
+| `activity.selection.name`, `activity.selection.detail`, `activity.selection.elapsed` | One part of the selected row |
+| `activity.dimmed` | Processes that do not match a process search |
+
+The selected row takes its background from `activity.selection`, and `activity.selection.*` styles its name, detail, and elapsed time. Setting `activity.selection` replaces the preset's selection styles, so the parts of the row keep their own colors unless you style them too. A background colors only the text its scope styles, and the line beside inline logs uses only the foreground color. Without selection colors, as in the `none` preset, the whole selected row swaps its reverse, so it still stands out when `activity` sets `reverse`. The `none` preset also dims inactive processes, unmatched processes, and the unfilled part of progress bars.
+
+This example shows the selected row on a subtle highlight, with each part in its usual color:
+
+```yaml
+tui:
+  theme:
+    palette:
+      highlight: "#373e47"
+    styles:
+      activity.selection:
+        background: highlight
+```
+
+### Log viewer
+
+The fullscreen log viewer has its own scopes. `logs` is the base for every part of the viewer. Added in devenv 2.4.1.
+
+| Scope | Styles |
+| --- | --- |
+| `logs` | Log lines |
+| `logs.title` | The title above the logs |
+| `logs.line_number` | Line numbers |
+| `logs.filler` | The `~` lines below the end of the logs |
+| `logs.selection` | Text selected with the mouse |
+| `logs.search` | Every search match |
+| `logs.search.match` | Search matches other than the current one |
+| `logs.search.current` | The current search match |
+
+Setting `logs.selection` replaces the preset's selection colors, like `activity.selection`. A selection or current match without colors swaps the reverse of the log text, as in the `none` preset, which also underlines the other matches. The footer of the log viewer uses the statusline scopes.
+
+### Shell status line
+
+The status line inside `devenv shell`, such as `devenv watching 11 files`, uses the `shell` scopes. Added in devenv 2.4.1.
+
+| Scope | Styles |
+| --- | --- |
+| `shell` | Every part of the status line, and the action next to a key |
+| `shell.label` | `devenv`, connecting words such as `in` and `files`, and the watching and paused marks |
+| `shell.value` | Durations, file counts, and changed files |
+| `shell.key` | Keys for pausing, resuming, and showing errors |
+| `shell.state` | The state, such as `building` or `watching` |
+| `shell.status` | Status marks, and the `reloaded` and `failed` states |
+| `shell.status.active` | The spinner while building |
+| `shell.status.success` | `✓` and `reloaded` |
+| `shell.status.failure` | `✗` and `failed` |
 
 ## Keybindings
 

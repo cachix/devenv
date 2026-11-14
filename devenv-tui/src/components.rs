@@ -1,6 +1,7 @@
 //! Reusable UI components for the TUI
 
 use crate::model::{Activity, ActivityVariant, NixActivityState};
+use crate::theme::{ActivityTheme, Highlight, Part, Status, Style};
 use devenv_activity::ProcessStatus;
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
@@ -23,24 +24,19 @@ pub use devenv_shell::{
 /// Manages its own animation state and only re-renders itself.
 #[derive(Default, Props)]
 pub struct SpinnerProps {
-    pub color: Option<Color>,
+    pub style: Style,
 }
 
 #[cfg(feature = "deterministic-tui")]
 #[component]
 pub fn Spinner(_hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'static>> {
-    let color = props.color.unwrap_or(COLOR_ACTIVE);
-
-    element! {
-        Text(content: SPINNER_FRAMES[0], color: color)
-    }
+    props.style.span(SPINNER_FRAMES[0])
 }
 
 #[cfg(not(feature = "deterministic-tui"))]
 #[component]
 pub fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'static>> {
     let mut frame = hooks.use_state(|| 0usize);
-    let color = props.color.unwrap_or(COLOR_ACTIVE);
 
     hooks.use_future(async move {
         loop {
@@ -52,9 +48,7 @@ pub fn Spinner(mut hooks: Hooks, props: &SpinnerProps) -> impl Into<AnyElement<'
         }
     });
 
-    element! {
-        Text(content: SPINNER_FRAMES[frame.get()], color: color)
-    }
+    props.style.span(SPINNER_FRAMES[frame.get()])
 }
 
 /// Reusable status indicator component.
@@ -65,6 +59,7 @@ pub struct StatusIndicatorProps {
     pub completed: Option<bool>,
     /// Whether to show a spinner when active (None). If false, shows a space.
     pub show_spinner: bool,
+    pub style: Style,
 }
 
 #[component]
@@ -73,11 +68,11 @@ pub fn StatusIndicator(
     props: &StatusIndicatorProps,
 ) -> impl Into<AnyElement<'static>> {
     match props.completed {
-        Some(true) => element!(Text(content: CHECKMARK, color: COLOR_COMPLETED)).into_any(),
-        Some(false) => element!(Text(content: XMARK, color: COLOR_FAILED)).into_any(),
+        Some(true) => props.style.span(CHECKMARK),
+        Some(false) => props.style.span(XMARK),
         None => {
             if props.show_spinner {
-                element!(Spinner(color: COLOR_ACTIVE)).into_any()
+                element!(Spinner(style: props.style)).into_any()
             } else {
                 element!(Text(content: " ")).into_any()
             }
@@ -85,7 +80,7 @@ pub fn StatusIndicator(
     }
 }
 
-/// Map a process status to its status-dot glyph, color, and whether it pulses.
+/// Map a process status to its status-dot glyph, status, and whether it pulses.
 ///
 /// Shape carries the lifecycle so the state reads without relying on color
 /// (color only reinforces); `pulse` marks transient states so motion signals
@@ -94,50 +89,46 @@ pub fn process_status_dot(
     status: &ProcessStatus,
     completed: Option<bool>,
     shutting_down: bool,
-) -> (&'static str, Color, bool) {
+) -> (&'static str, Status, bool) {
     // Global shutdown: every still-active process is draining.
     if shutting_down && status.is_active() {
-        return (DOT_HALF, COLOR_HIERARCHY, true);
+        return (DOT_HALF, Status::Inactive, true);
     }
     match status {
-        ProcessStatus::NotStarted => (DOT_INERT, COLOR_HIERARCHY, false),
-        ProcessStatus::Waiting => (DOT_RING, COLOR_TRANSIENT, true),
-        ProcessStatus::Starting | ProcessStatus::Restarting => (DOT_HALF, COLOR_TRANSIENT, true),
-        ProcessStatus::Running => (DOT_RUNNING, COLOR_COMPLETED, false),
-        ProcessStatus::Ready => (DOT_READY, COLOR_COMPLETED, false),
-        ProcessStatus::Stopping => (DOT_HALF, COLOR_HIERARCHY, true),
-        ProcessStatus::Stopped if completed == Some(false) => (XMARK, COLOR_FAILED, false),
-        ProcessStatus::Stopped => (DOT_RING, COLOR_HIERARCHY, false),
-        ProcessStatus::Exited if completed == Some(false) => (XMARK, COLOR_FAILED, false),
-        ProcessStatus::Exited => (DOT_RING, COLOR_HIERARCHY, false),
-        ProcessStatus::GaveUp => (XMARK, COLOR_FAILED, false),
+        ProcessStatus::NotStarted => (DOT_INERT, Status::Inactive, false),
+        ProcessStatus::Waiting => (DOT_RING, Status::Starting, true),
+        ProcessStatus::Starting | ProcessStatus::Restarting => (DOT_HALF, Status::Starting, true),
+        ProcessStatus::Running => (DOT_RUNNING, Status::Success, false),
+        ProcessStatus::Ready => (DOT_READY, Status::Success, false),
+        ProcessStatus::Stopping => (DOT_HALF, Status::Inactive, true),
+        ProcessStatus::Stopped if completed == Some(false) => (XMARK, Status::Failure, false),
+        ProcessStatus::Stopped => (DOT_RING, Status::Inactive, false),
+        ProcessStatus::Exited if completed == Some(false) => (XMARK, Status::Failure, false),
+        ProcessStatus::Exited => (DOT_RING, Status::Inactive, false),
+        ProcessStatus::GaveUp => (XMARK, Status::Failure, false),
     }
 }
 
 /// Process status dot. Static glyph for stable states; transient states
-/// (`pulse = true`) breathe between `color` and gray to signal liveness
-/// without the busy churn of a spinner.
+/// (`pulse = true`) breathe between `style` and `pulse_style` to signal
+/// liveness without the busy churn of a spinner.
 #[derive(Default, Props)]
 pub struct StatusDotProps {
     pub glyph: String,
-    pub color: Option<Color>,
+    pub style: Style,
     pub pulse: bool,
+    pub pulse_style: Style,
 }
 
 #[cfg(feature = "deterministic-tui")]
 #[component]
 pub fn StatusDot(_hooks: Hooks, props: &StatusDotProps) -> impl Into<AnyElement<'static>> {
-    let color = props.color.unwrap_or(COLOR_ACTIVE);
-    element! {
-        Text(content: props.glyph.clone(), color: color)
-    }
+    props.style.span(props.glyph.clone())
 }
 
 #[cfg(not(feature = "deterministic-tui"))]
 #[component]
 pub fn StatusDot(mut hooks: Hooks, props: &StatusDotProps) -> impl Into<AnyElement<'static>> {
-    let color = props.color.unwrap_or(COLOR_ACTIVE);
-
     // Hooks must be called unconditionally and in a stable order every render
     // (iocraft rules of hooks); `pulse` can flip as a process changes state,
     // so always register them and gate only the rendering.
@@ -185,11 +176,11 @@ pub fn StatusDot(mut hooks: Hooks, props: &StatusDotProps) -> impl Into<AnyEleme
     });
 
     let shown = if props.pulse && !bright.get() {
-        COLOR_HIERARCHY
+        props.pulse_style
     } else {
-        color
+        props.style
     };
-    element!(Text(content: props.glyph.clone(), color: shown))
+    shown.span(props.glyph.clone())
 }
 
 /// Build logs viewport height for collapsed preview (press 'e' to expand to fullscreen)
@@ -249,6 +240,58 @@ pub fn format_elapsed_time(elapsed: Duration, high_resolution: bool) -> String {
     }
 }
 
+#[derive(Default)]
+pub struct ReversedRow;
+
+impl Component for ReversedRow {
+    type Props<'a> = NoProps;
+
+    fn new(_props: &Self::Props<'_>) -> Self {
+        Self
+    }
+
+    fn update(
+        &mut self,
+        _props: &mut Self::Props<'_>,
+        _hooks: Hooks,
+        updater: &mut ComponentUpdater,
+    ) {
+        updater.set_layout_style(iocraft::taffy::Style {
+            position: Position::Absolute,
+            inset: iocraft::taffy::Rect::zero(),
+            ..Default::default()
+        });
+    }
+
+    fn draw(&mut self, drawer: &mut ComponentDrawer<'_>) {
+        use unicode_width::UnicodeWidthStr;
+
+        let size = drawer.size();
+        let mut canvas = drawer.canvas();
+        for y in 0..size.height as isize {
+            let mut x = 0;
+            while x < size.width as isize {
+                let (text, mut style) = canvas
+                    .cell(x, y)
+                    .and_then(|cell| Some((cell.text()?.to_string(), *cell.text_style()?)))
+                    .unwrap_or_else(|| (" ".to_string(), CanvasTextStyle::default()));
+                style.invert = !style.invert;
+                canvas.set_text(x, y, &text, style);
+                x += text.width().max(1) as isize;
+            }
+        }
+    }
+}
+
+pub fn selection_overlay(
+    theme: &ActivityTheme,
+    highlight: Highlight,
+) -> Option<AnyElement<'static>> {
+    theme
+        .reverses_row(highlight)
+        .then(|| element!(ReversedRow).into_any())
+}
+
 /// Component for rendering hierarchy structure (indentation + branch) for nested activities.
 /// Only used for nested items (depth > 0). Top-level items don't need hierarchy rendering.
 pub struct HierarchyPrefixComponent {
@@ -268,7 +311,7 @@ impl HierarchyPrefixComponent {
 
     /// Renders the hierarchy prefix: `[indent][branch]`
     /// The indent aligns with parent's content (after their status indicator).
-    pub fn render(&self) -> Vec<AnyElement<'static>> {
+    pub fn render(&self, theme: &ActivityTheme) -> Vec<AnyElement<'static>> {
         if self.depth == 0 {
             return vec![];
         }
@@ -278,11 +321,12 @@ impl HierarchyPrefixComponent {
             total_indent.push_str(if *continues { "│ " } else { "  " });
         }
         let branch = if self.is_last_sibling { "└" } else { "├" };
+        let style = theme.tree;
 
         vec![
-            element!(Text(content: total_indent, color: COLOR_HIERARCHY)).into_any(),
+            style.span(total_indent),
             element!(View(margin_right: 1) {
-                Text(content: branch, color: COLOR_HIERARCHY)
+                #(style.span(branch))
             })
             .into_any(),
         ]
@@ -297,7 +341,6 @@ pub struct ActivityTextComponent {
     pub is_selected: bool,
     pub is_dimmed: bool,
     pub elapsed: String,
-    pub is_completed: bool,
     pub variant: ActivityVariant,
 }
 
@@ -310,7 +353,6 @@ impl ActivityTextComponent {
             is_selected: false,
             is_dimmed: false,
             elapsed,
-            is_completed: false,
             variant,
         }
     }
@@ -336,34 +378,24 @@ impl ActivityTextComponent {
         self
     }
 
-    pub fn with_completed(mut self, completed: bool) -> Self {
-        self.is_completed = completed;
-        self
+    fn highlight(&self) -> Highlight {
+        Highlight::new(self.is_selected, self.is_dimmed)
     }
 
-    fn colors(&self, depth: usize) -> (Color, Color, Color, Option<Color>) {
-        if self.is_selected {
-            (
-                Color::AnsiValue(232),
-                Color::AnsiValue(238),
-                Color::AnsiValue(238),
-                Some(Color::AnsiValue(250)),
-            )
-        } else if self.is_dimmed {
-            (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY, None)
-        } else if self.is_completed && depth == 0 {
-            (Color::Reset, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if self.is_completed {
-            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else if depth == 0 || matches!(self.variant, ActivityVariant::Process(_)) {
-            (COLOR_ACTIVE, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        } else {
-            (COLOR_ACTIVE_NESTED, COLOR_SECONDARY, COLOR_HIERARCHY, None)
-        }
+    fn styles(&self, theme: &ActivityTheme, depth: usize) -> (Style, Style, Style) {
+        let nested = depth > 0 && !matches!(self.variant, ActivityVariant::Process(_));
+        let name = if nested { Part::NestedName } else { Part::Name };
+        let highlight = self.highlight();
+        (
+            theme.part(name, highlight),
+            theme.part(Part::Detail, highlight),
+            theme.part(Part::Elapsed, highlight),
+        )
     }
 
     pub fn render(
         &self,
+        theme: &ActivityTheme,
         terminal_width: u16,
         depth: usize,
         prefix_children: Vec<AnyElement<'static>>,
@@ -387,7 +419,8 @@ impl ActivityTextComponent {
             depth,
         );
 
-        let (name_color, suffix_color, elapsed_color, bg_color) = self.colors(depth);
+        let (name_style, suffix_style, elapsed_style) = self.styles(theme, depth);
+        let name_style = name_style.emphasized();
 
         let mut final_prefix = prefix_children;
 
@@ -410,84 +443,48 @@ impl ActivityTextComponent {
             final_prefix.push(
                 element!(View(width: (action_text.chars().count() + 1) as u32, flex_shrink: 0.0) {
                     View(margin_right: 1) {
-                        Text(content: action_text, color: name_color, weight: Weight::Bold)
+                        #(name_style.span(action_text))
                     }
                 })
                 .into_any(),
             );
         }
 
-        if let Some(bg) = bg_color {
-            element! {
-                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: bg) {
-                    // Fixed left column - never truncates
-                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                        #(final_prefix)
-                    }
-                    // Flexible middle column - can overflow
-                    // Each item uses leading margin (margin_left) to separate from predecessor
-                    View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
-                        #(if !shortened_name.is_empty() {
-                            let has_predecessor = !action.is_empty();
-                            let margin = if has_predecessor { 1 } else { 0 };
-                            vec![element!(View(margin_left: margin) {
-                                Text(content: shortened_name, color: name_color, weight: Weight::Bold)
-                            }).into_any()]
-                        } else {
-                            vec![]
-                        })
-                        #(if let Some(ref suffix_text) = display_suffix {
-                            // Suffix always has a predecessor (action or name)
-                            vec![element!(View(margin_left: 1) {
-                                Text(content: suffix_text, color: suffix_color)
-                            }).into_any()]
-                        } else {
-                            vec![]
-                        })
-                    }
-                    // Fixed right column - never truncates
-                    View(flex_shrink: 0.0) {
-                        Text(content: self.elapsed.clone(), color: elapsed_color)
-                    }
+        element! {
+            View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1, background_color: theme.row_background(self.highlight())) {
+                // Fixed left column - never truncates
+                View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
+                    #(final_prefix)
                 }
-            }
-            .into()
-        } else {
-            element! {
-                View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
-                    // Fixed left column - never truncates
-                    View(flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                        #(final_prefix)
-                    }
-                    // Flexible middle column - can overflow
-                    // Each item uses leading margin (margin_left) to separate from predecessor
-                    View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
-                        #(if !shortened_name.is_empty() {
-                            let has_predecessor = !action.is_empty();
-                            let margin = if has_predecessor { 1 } else { 0 };
-                            vec![element!(View(margin_left: margin) {
-                                Text(content: shortened_name, color: name_color, weight: Weight::Bold)
-                            }).into_any()]
-                        } else {
-                            vec![]
-                        })
-                        #(if let Some(ref suffix_text) = display_suffix {
-                            // Suffix always has a predecessor (action or name)
-                            vec![element!(View(margin_left: 1) {
-                                Text(content: suffix_text, color: suffix_color)
-                            }).into_any()]
-                        } else {
-                            vec![]
-                        })
-                    }
-                    // Fixed right column - never truncates
-                    View(flex_shrink: 0.0) {
-                        Text(content: self.elapsed.clone(), color: elapsed_color)
-                    }
+                // Flexible middle column - can overflow
+                // Each item uses leading margin (margin_left) to separate from predecessor
+                View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden, margin_right: 1, flex_direction: FlexDirection::Row) {
+                    #(if !shortened_name.is_empty() {
+                        let has_predecessor = !action.is_empty();
+                        let margin = if has_predecessor { 1 } else { 0 };
+                        vec![element!(View(margin_left: margin) {
+                            #(name_style.span(shortened_name))
+                        }).into_any()]
+                    } else {
+                        vec![]
+                    })
+                    #(if let Some(ref suffix_text) = display_suffix {
+                        // Suffix always has a predecessor (action or name)
+                        vec![element!(View(margin_left: 1) {
+                            #(suffix_style.span(suffix_text))
+                        }).into_any()]
+                    } else {
+                        vec![]
+                    })
                 }
+                // Fixed right column - never truncates
+                View(flex_shrink: 0.0) {
+                    #(elapsed_style.span(self.elapsed.clone()))
+                }
+                #(selection_overlay(theme, self.highlight()))
             }
-            .into()
         }
+        .into()
     }
 }
 
@@ -516,7 +513,7 @@ impl ProgressBarComponent {
         self
     }
 
-    pub fn render(&self, terminal_width: u16) -> AnyElement<'static> {
+    pub fn render(&self, theme: &ActivityTheme, terminal_width: u16) -> AnyElement<'static> {
         // Progress bar indented more than parent
         let progress_indent = format!("{}    ", self.indent);
 
@@ -553,10 +550,10 @@ impl ProgressBarComponent {
             View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
                 View(flex_direction: FlexDirection::Row) {
                     Text(content: progress_indent)
-                    Text(content: filled_bar, color: COLOR_ACTIVE)
-                    Text(content: empty_bar, color: Color::AnsiValue(238))
+                    #(theme.progress.span(filled_bar))
+                    #(theme.progress_track.span(empty_bar))
                 }
-                Text(content: size_info, color: COLOR_HIERARCHY)
+                #(theme.detail.span(size_info))
             }
         }
         .into_any()
@@ -609,7 +606,7 @@ impl<'a> DownloadActivityComponent<'a> {
         self
     }
 
-    pub fn render(&self, terminal_width: u16) -> AnyElement<'static> {
+    pub fn render(&self, theme: &ActivityTheme, terminal_width: u16) -> AnyElement<'static> {
         let indent = "  ".repeat(self.depth);
         // Use stored duration for completed activities, skip for queued
         let elapsed_str = match &self.activity.state {
@@ -628,10 +625,14 @@ impl<'a> DownloadActivityComponent<'a> {
             &self.ancestor_continuations,
             self.is_last_sibling,
         )
-        .render();
+        .render(theme);
         prefix.push(
             element!(View(margin_right: 1) {
-                StatusIndicator(completed: self.completed, show_spinner: true)
+                StatusIndicator(
+                    completed: self.completed,
+                    show_spinner: true,
+                    style: theme.status(Status::of_completion(self.completed)),
+                )
             })
             .into_any(),
         );
@@ -653,34 +654,20 @@ impl<'a> DownloadActivityComponent<'a> {
             self.depth,
         );
 
-        // Colors for selected vs unselected rows - invert all text when selected
-        let (action_color, name_color, substituter_color, elapsed_color, bg_color) =
-            if self.is_selected {
-                (
-                    COLOR_ACTIVE,
-                    Color::AnsiValue(232),       // Near-black text
-                    Color::AnsiValue(238),       // Dark gray for substituter
-                    Color::AnsiValue(238),       // Dark gray for elapsed
-                    Some(Color::AnsiValue(250)), // Light gray background
-                )
-            } else {
-                (
-                    COLOR_ACTIVE_NESTED,
-                    Color::Reset,
-                    COLOR_SECONDARY,
-                    COLOR_HIERARCHY,
-                    None,
-                )
-            };
+        let highlight = Highlight::new(self.is_selected, false);
+        let action_style = theme.part(Part::NestedName, highlight).emphasized();
+        let name_style = theme.part(Part::Name, highlight);
+        let substituter_style = theme.part(Part::Detail, highlight);
+        let elapsed_style = theme.part(Part::Elapsed, highlight);
 
         let mut line1_children = prefix;
         line1_children.extend(vec![
             element!(View(margin_right: 1) {
-                Text(content: "Downloading", color: action_color, weight: Weight::Bold)
+                #(action_style.span("Downloading"))
             })
             .into_any(),
             element!(View(margin_right: 1) {
-                Text(content: shortened_name, color: name_color)
+                #(name_style.span(shortened_name))
             })
             .into_any(),
         ]);
@@ -688,44 +675,24 @@ impl<'a> DownloadActivityComponent<'a> {
         if let Some(substituter) = &substituter {
             // Only show "from" text on wider terminals
             if terminal_width >= 80 {
-                line1_children.push(
-                    element!(
-                        Text(content: format!("from {}", substituter), color: substituter_color)
-                    )
-                    .into_any(),
-                );
+                line1_children.push(substituter_style.span(format!("from {}", substituter)));
             }
         }
 
-        if let Some(bg) = bg_color {
-            elements.push(
-                element! {
-                    View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct, padding_right: 1, overflow: Overflow::Hidden, background_color: bg) {
-                        View(flex_direction: FlexDirection::Row, width: 100pct, overflow: Overflow::Hidden) {
-                            #(line1_children)
-                        }
-                        View {
-                            Text(content: elapsed_str.clone(), color: elapsed_color)
-                        }
+        elements.push(
+            element! {
+                View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct, padding_right: 1, overflow: Overflow::Hidden, background_color: theme.row_background(highlight)) {
+                    View(flex_direction: FlexDirection::Row, width: 100pct, overflow: Overflow::Hidden) {
+                        #(line1_children)
                     }
-                }
-                .into_any()
-            );
-        } else {
-            elements.push(
-                element! {
-                    View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct, padding_right: 1, overflow: Overflow::Hidden) {
-                        View(flex_direction: FlexDirection::Row, width: 100pct, overflow: Overflow::Hidden) {
-                            #(line1_children)
-                        }
-                        View {
-                            Text(content: elapsed_str.clone(), color: elapsed_color)
-                        }
+                    View {
+                        #(elapsed_style.span(elapsed_str.clone()))
                     }
+                    #(selection_overlay(theme, highlight))
                 }
-                .into_any()
-            );
-        }
+            }
+            .into_any()
+        );
 
         // Second line: progress bar if we have progress data
         if let ActivityVariant::Download(ref download_data) = self.activity.variant {
@@ -744,7 +711,7 @@ impl<'a> DownloadActivityComponent<'a> {
                 let progress_bar =
                     ProgressBarComponent::new(percent, human_downloaded, human_total, indent)
                         .with_speed(speed);
-                elements.push(progress_bar.render(terminal_width));
+                elements.push(progress_bar.render(theme, terminal_width));
             } else if let Some(progress) = &self.activity.progress
                 && progress.total.unwrap_or(0) > 0
             {
@@ -756,7 +723,7 @@ impl<'a> DownloadActivityComponent<'a> {
 
                 let progress_bar =
                     ProgressBarComponent::new(percent, human_done, human_expected, indent);
-                elements.push(progress_bar.render(terminal_width));
+                elements.push(progress_bar.render(theme, terminal_width));
             }
         }
 
@@ -995,7 +962,7 @@ impl<'a> ExpandedContentComponent<'a> {
             .min(INLINE_LOG_MAX_VISUAL_ROWS.saturating_sub(1) as usize)
     }
 
-    pub fn render(&self) -> Vec<AnyElement<'static>> {
+    pub fn render(&self, theme: &ActivityTheme) -> Vec<AnyElement<'static>> {
         let indent = self.border_indent();
 
         let lines = self.visible_lines();
@@ -1006,8 +973,8 @@ impl<'a> ExpandedContentComponent<'a> {
                     .map(|line| {
                         element! {
                             View(flex_direction: FlexDirection::Row, padding_right: 1) {
-                                Text(content: prefix.clone(), color: COLOR_HIERARCHY)
-                                Text(content: format!("  {line}"), color: Color::AnsiValue(245))
+                                #(theme.tree.span(prefix.clone()))
+                                #(theme.log.span(format!("  {line}")))
                             }
                         }
                         .into_any()
@@ -1029,12 +996,7 @@ impl<'a> ExpandedContentComponent<'a> {
 
             let line_elements: Vec<AnyElement<'static>> = lines
                 .into_iter()
-                .map(|line| {
-                    element! {
-                        Text(content: format!(" {line}"), color: Color::AnsiValue(245))
-                    }
-                    .into_any()
-                })
+                .map(|line| theme.log.span(format!(" {line}")))
                 .collect();
 
             return vec![
@@ -1046,7 +1008,7 @@ impl<'a> ExpandedContentComponent<'a> {
                         margin_right: 1,
                         border_style: BorderStyle::Single,
                         border_edges: Edges::Left,
-                        border_color: COLOR_HIERARCHY,
+                        border_color: theme.tree.foreground,
                     ) {
                         #(line_elements)
                     }
@@ -1068,8 +1030,8 @@ impl<'a> ExpandedContentComponent<'a> {
             return vec![
                 element! {
                     View(height: 1, flex_direction: FlexDirection::Row, padding_right: 1) {
-                        Text(content: prefix.clone(), color: COLOR_HIERARCHY)
-                        Text(content: format!("  {empty_message}"), color: Color::AnsiValue(245))
+                        #(theme.tree.span(prefix.clone()))
+                        #(theme.log.span(format!("  {empty_message}")))
                     }
                 }
                 .into_any(),
@@ -1077,7 +1039,7 @@ impl<'a> ExpandedContentComponent<'a> {
         }
         vec![element! {
             View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
-                Text(content: empty_message, color: Color::AnsiValue(245))
+                #(theme.log.span(empty_message))
             }
         }
         .into_any()]
@@ -1094,9 +1056,13 @@ impl<'a> ExpandedContentComponent<'a> {
     /// Render the component with a main activity line. Height is content-sized
     /// up to `INLINE_LOG_MAX_VISUAL_ROWS` so wrapped log lines aren't clipped
     /// but a runaway wrap can't push the rest of the activity tree off-screen.
-    pub fn render_with_main_line(&self, main_line: AnyElement<'static>) -> AnyElement<'static> {
+    pub fn render_with_main_line(
+        &self,
+        theme: &ActivityTheme,
+        main_line: AnyElement<'static>,
+    ) -> AnyElement<'static> {
         let mut elements = vec![main_line];
-        elements.extend(self.render());
+        elements.extend(self.render(theme));
 
         element! {
             View(
@@ -1157,19 +1123,33 @@ mod tests {
             }),
         )
         .with_dimmed(true);
+        let theme = ActivityTheme::default();
+        let foregrounds = |(name, detail, elapsed): (Style, Style, Style)| {
+            (name.foreground, detail.foreground, elapsed.foreground)
+        };
 
         assert_eq!(
-            component.colors(1),
-            (COLOR_HIERARCHY, COLOR_HIERARCHY, COLOR_HIERARCHY, None)
+            foregrounds(component.styles(&theme, 1)),
+            (
+                Some(COLOR_HIERARCHY),
+                Some(COLOR_HIERARCHY),
+                Some(COLOR_HIERARCHY)
+            )
+        );
+        assert_eq!(theme.row_background(component.highlight()), None);
+
+        let component = component.with_selection(true);
+        assert_eq!(
+            foregrounds(component.styles(&theme, 1)),
+            (
+                Some(Color::AnsiValue(232)),
+                Some(Color::AnsiValue(238)),
+                Some(Color::AnsiValue(238))
+            )
         );
         assert_eq!(
-            component.with_selection(true).colors(1),
-            (
-                Color::AnsiValue(232),
-                Color::AnsiValue(238),
-                Color::AnsiValue(238),
-                Some(Color::AnsiValue(250))
-            )
+            theme.row_background(component.highlight()),
+            Some(Color::AnsiValue(250))
         );
     }
 
@@ -1178,20 +1158,23 @@ mod tests {
         for (status, expected) in [
             (
                 ProcessStatus::NotStarted,
-                (DOT_INERT, COLOR_HIERARCHY, false),
+                (DOT_INERT, Status::Inactive, false),
             ),
-            (ProcessStatus::Waiting, (DOT_RING, COLOR_TRANSIENT, true)),
-            (ProcessStatus::Starting, (DOT_HALF, COLOR_TRANSIENT, true)),
+            (ProcessStatus::Waiting, (DOT_RING, Status::Starting, true)),
+            (ProcessStatus::Starting, (DOT_HALF, Status::Starting, true)),
             (
                 ProcessStatus::Running,
-                (DOT_RUNNING, COLOR_COMPLETED, false),
+                (DOT_RUNNING, Status::Success, false),
             ),
-            (ProcessStatus::Ready, (DOT_READY, COLOR_COMPLETED, false)),
-            (ProcessStatus::Restarting, (DOT_HALF, COLOR_TRANSIENT, true)),
-            (ProcessStatus::Stopping, (DOT_HALF, COLOR_HIERARCHY, true)),
-            (ProcessStatus::Stopped, (DOT_RING, COLOR_HIERARCHY, false)),
-            (ProcessStatus::Exited, (DOT_RING, COLOR_HIERARCHY, false)),
-            (ProcessStatus::GaveUp, (XMARK, COLOR_FAILED, false)),
+            (ProcessStatus::Ready, (DOT_READY, Status::Success, false)),
+            (
+                ProcessStatus::Restarting,
+                (DOT_HALF, Status::Starting, true),
+            ),
+            (ProcessStatus::Stopping, (DOT_HALF, Status::Inactive, true)),
+            (ProcessStatus::Stopped, (DOT_RING, Status::Inactive, false)),
+            (ProcessStatus::Exited, (DOT_RING, Status::Inactive, false)),
+            (ProcessStatus::GaveUp, (XMARK, Status::Failure, false)),
         ] {
             assert_eq!(
                 process_status_dot(&status, None, false),
@@ -1202,12 +1185,12 @@ mod tests {
 
         assert_eq!(
             process_status_dot(&ProcessStatus::Ready, None, true),
-            (DOT_HALF, COLOR_HIERARCHY, true),
+            (DOT_HALF, Status::Inactive, true),
             "global shutdown overrides every active phase"
         );
         assert_eq!(
             process_status_dot(&ProcessStatus::GaveUp, None, true),
-            (XMARK, COLOR_FAILED, false),
+            (XMARK, Status::Failure, false),
             "GaveUp remains a stable failure during global shutdown"
         );
     }
@@ -1444,7 +1427,7 @@ mod tests {
             .with_max_lines(3)
             .with_depth(1);
 
-        let elements = component.render();
+        let elements = component.render(&ActivityTheme::default());
         let mut elem = element! {
             View(width: 40u32, flex_direction: FlexDirection::Column) {
                 #(elements)
@@ -1474,7 +1457,7 @@ mod tests {
         let logs = VecDeque::from(["one".to_string()]);
         let elements = ExpandedContentComponent::new(Some(&logs))
             .with_border_indent(2)
-            .render();
+            .render(&ActivityTheme::default());
         let mut element = element! {
             View(width: 40u32, flex_direction: FlexDirection::Column) {
                 #(elements)

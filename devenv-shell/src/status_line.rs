@@ -14,6 +14,7 @@ use std::time::Instant;
 
 use crate::indicators::{Indicator, Indicators};
 use crate::keybindings::{ShellAction, ShellKeybindings};
+use crate::theme::ShellTheme;
 
 // ============================================================================
 // Shared UI constants - used by both devenv-shell and devenv-tui
@@ -269,26 +270,26 @@ fn format_changed_files(changed_files: &[PathBuf], max_len: usize) -> String {
 }
 
 /// Build "in N.Ns" duration elements, or empty if no duration recorded.
-fn duration_elements(state: &StatusState) -> Vec<AnyElement<'static>> {
+fn duration_elements(state: &StatusState, theme: &ShellTheme) -> Vec<AnyElement<'static>> {
     let Some((num, unit)) = state.build_duration.map(format_duration_parts) else {
         return vec![];
     };
     vec![
-        element!(Text(content: " in ", color: COLOR_SECONDARY)).into_any(),
-        element!(Text(content: num, color: COLOR_COMPLETED)).into_any(),
-        element!(Text(content: unit, color: COLOR_SECONDARY)).into_any(),
+        theme.label.span(" in "),
+        theme.value.span(num),
+        theme.label.span(unit),
     ]
 }
 
 /// Build "| watching N files" elements, or empty if no watched files.
-fn watching_elements(count: usize) -> Vec<AnyElement<'static>> {
+fn watching_elements(count: usize, theme: &ShellTheme) -> Vec<AnyElement<'static>> {
     if count == 0 {
         return vec![];
     }
     vec![
-        element!(Text(content: " | watching ", color: COLOR_SECONDARY)).into_any(),
-        element!(Text(content: count.to_string(), color: COLOR_COMPLETED)).into_any(),
-        element!(Text(content: " files", color: COLOR_SECONDARY)).into_any(),
+        theme.label.span(" | watching "),
+        theme.value.span(count.to_string()),
+        theme.label.span(" files"),
     ]
 }
 
@@ -297,6 +298,7 @@ pub struct StatusLine {
     state: StatusState,
     keybindings: ShellKeybindings,
     indicators: Indicators,
+    theme: ShellTheme,
     enabled: bool,
     /// Current spinner frame index (animated manually since we don't use iocraft runtime)
     spinner_frame: usize,
@@ -488,6 +490,7 @@ impl StatusLine {
             state: StatusState::new(),
             keybindings: ShellKeybindings::default(),
             indicators: Indicators::default(),
+            theme: ShellTheme::default(),
             enabled: true,
             spinner_frame: 0,
             last_spinner_update: Instant::now(),
@@ -528,6 +531,11 @@ impl StatusLine {
     /// Select the glyphs used for indicators that have an emoji form.
     pub fn set_indicators(&mut self, indicators: Indicators) {
         self.indicators = indicators;
+        self.cached_state = None;
+    }
+
+    pub fn set_theme(&mut self, theme: ShellTheme) {
+        self.theme = theme;
         self.cached_state = None;
     }
 
@@ -610,6 +618,7 @@ impl StatusLine {
         width: u16,
         build_elapsed: Option<std::time::Duration>,
     ) -> AnyElement<'static> {
+        let theme = &self.theme;
         // Use short keybind notation for narrow terminals
         let use_short = width < 60;
 
@@ -627,23 +636,23 @@ impl StatusLine {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
-                            Text(content: spinner, color: COLOR_ACTIVE)
+                            #(theme.active.span(spinner))
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
-                        Text(content: "building", weight: Weight::Bold, color: COLOR_ACTIVE)
+                        #(theme.label.span("devenv "))
+                        #(theme.state.span("building"))
                         #(if let Some((num, unit)) = elapsed {
                             vec![
-                                element!(Text(content: " for ", color: COLOR_SECONDARY)).into_any(),
-                                element!(Text(content: num, color: COLOR_COMPLETED)).into_any(),
-                                element!(Text(content: unit, color: COLOR_SECONDARY)).into_any(),
+                                theme.label.span(" for "),
+                                theme.value.span(num),
+                                theme.label.span(unit),
                             ]
                         } else {
                             vec![]
                         })
                         #(if has_changed_files {
                             vec![
-                                element!(Text(content: ", changed ", color: COLOR_SECONDARY)).into_any(),
-                                element!(Text(content: files_str, color: COLOR_COMPLETED)).into_any(),
+                                theme.label.span(", changed "),
+                                theme.value.span(files_str),
                             ]
                         } else {
                             vec![]
@@ -654,17 +663,17 @@ impl StatusLine {
             .into_any()
         } else if self.state.reload_ready {
             // Ready state (auto-reloads at next prompt)
-            let duration = duration_elements(&self.state);
-            let watching = watching_elements(self.state.watched_file_count);
+            let duration = duration_elements(&self.state, theme);
+            let watching = watching_elements(self.state.watched_file_count, theme);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
-                            Text(content: CHECKMARK, color: COLOR_COMPLETED)
+                            #(theme.success.span(CHECKMARK))
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
-                        Text(content: "ready", weight: Weight::Bold, color: COLOR_ACTIVE)
+                        #(theme.label.span("devenv "))
+                        #(theme.state.span("ready"))
                         #(duration)
                         #(watching)
                     }
@@ -673,17 +682,17 @@ impl StatusLine {
             .into_any()
         } else if self.state.reloaded {
             // Reloaded state (environment was applied)
-            let duration = duration_elements(&self.state);
-            let watching = watching_elements(self.state.watched_file_count);
+            let duration = duration_elements(&self.state, theme);
+            let watching = watching_elements(self.state.watched_file_count, theme);
 
             element! {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
-                            Text(content: CHECKMARK, color: COLOR_COMPLETED)
+                            #(theme.success.span(CHECKMARK))
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
-                        Text(content: "reloaded", weight: Weight::Bold, color: COLOR_COMPLETED)
+                        #(theme.label.span("devenv "))
+                        #(theme.state_success.span("reloaded"))
                         #(duration)
                         #(watching)
                     }
@@ -692,8 +701,8 @@ impl StatusLine {
             .into_any()
         } else if self.state.error.is_some() {
             // Failed state
-            let duration = duration_elements(&self.state);
-            let watching = watching_elements(self.state.watched_file_count);
+            let duration = duration_elements(&self.state, theme);
+            let watching = watching_elements(self.state.watched_file_count, theme);
             let keybind = self
                 .keybindings
                 .key_label(ShellAction::ToggleError, use_short);
@@ -707,18 +716,18 @@ impl StatusLine {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: 1) {
-                            Text(content: XMARK, color: COLOR_FAILED)
+                            #(theme.failure.span(XMARK))
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
-                        Text(content: "failed", weight: Weight::Bold, color: COLOR_FAILED)
+                        #(theme.label.span("devenv "))
+                        #(theme.state_failure.span("failed"))
                         #(duration)
                         #(watching)
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                         #(if let Some(keybind) = keybind {
                             vec![
-                                element!(Text(content: keybind, color: COLOR_INTERACTIVE)).into_any(),
-                                element!(Text(content: error_action)).into_any(),
+                                theme.key.span(keybind),
+                                theme.text.span(error_action),
                             ]
                         } else {
                             vec![]
@@ -738,16 +747,16 @@ impl StatusLine {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: glyph.gap) {
-                            Text(content: glyph.text, color: COLOR_SECONDARY)
+                            #(theme.label.span(glyph.text))
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
-                        Text(content: "paused", weight: Weight::Bold, color: COLOR_ACTIVE)
+                        #(theme.label.span("devenv "))
+                        #(theme.state.span("paused"))
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                         #(if let Some(keybind) = keybind {
                             vec![
-                                element!(Text(content: keybind, color: COLOR_INTERACTIVE)).into_any(),
-                                element!(Text(content: " resume")).into_any(),
+                                theme.key.span(keybind),
+                                theme.text.span(" resume"),
                             ]
                         } else {
                             vec![]
@@ -768,18 +777,18 @@ impl StatusLine {
                 View(width: width as u32, height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, padding_left: 1, padding_right: 1) {
                     View(flex_direction: FlexDirection::Row, flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
                         View(margin_right: glyph.gap) {
-                            Text(content: glyph.text, color: COLOR_SECONDARY)
+                            #(theme.label.span(glyph.text))
                         }
-                        Text(content: "devenv ", color: COLOR_SECONDARY)
-                        Text(content: "watching ", weight: Weight::Bold, color: COLOR_ACTIVE)
-                        Text(content: count_str, color: COLOR_COMPLETED)
-                        Text(content: " files", color: COLOR_SECONDARY)
+                        #(theme.label.span("devenv "))
+                        #(theme.state.span("watching "))
+                        #(theme.value.span(count_str))
+                        #(theme.label.span(" files"))
                     }
                     View(flex_direction: FlexDirection::Row, flex_shrink: 0.0, margin_left: 2) {
                         #(if let Some(keybind) = keybind {
                             vec![
-                                element!(Text(content: keybind, color: COLOR_INTERACTIVE)).into_any(),
-                                element!(Text(content: " pause")).into_any(),
+                                theme.key.span(keybind),
+                                theme.text.span(" pause"),
                             ]
                         } else {
                             vec![]
@@ -807,6 +816,7 @@ impl Default for StatusLine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::theme::Style;
 
     #[test]
     fn test_status_state_building() {
@@ -1170,6 +1180,30 @@ mod tests {
         status_line.set_indicators(Indicators::new(true));
         assert_draw_matches_fresh_render(&mut status_line, 80);
         assert_eq!(status_line.cached_content, emoji);
+    }
+
+    #[test]
+    fn status_line_draws_with_its_theme() {
+        let mut status_line = StatusLine::new();
+        status_line.state_mut().set_watched_file_count(11);
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        let default = status_line.cached_content.clone();
+
+        status_line.set_theme(ShellTheme {
+            value: Style::foreground(Color::Magenta),
+            ..ShellTheme::default()
+        });
+        assert_draw_matches_fresh_render(&mut status_line, 80);
+        assert_ne!(status_line.cached_content, default);
+
+        let mut element = status_line.build_element(80);
+        let canvas = element.render(Some(80));
+        let row = canvas.get_text(0, 0, 80, 1);
+        let x = row[..row.find("11").unwrap()].chars().count();
+        assert_eq!(
+            canvas.cell(x, 0).unwrap().text_style().unwrap().color,
+            Some(Color::Magenta)
+        );
     }
 
     #[test]

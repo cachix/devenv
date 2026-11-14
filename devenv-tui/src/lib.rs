@@ -15,6 +15,7 @@ pub mod expanded_view;
 mod inline_terminal;
 pub mod model;
 pub mod statusline;
+pub mod theme;
 pub mod view;
 
 pub use app::{TuiApp, TuiConfig};

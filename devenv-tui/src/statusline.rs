@@ -1,12 +1,11 @@
 use crate::{
-    components::{COLOR_COMPLETED, COLOR_HIERARCHY, COLOR_INTERACTIVE},
     config::{
         Action, KeyContext, Keymap, StatusComponentConfig, StatusComponentKind, StatusOverflow,
-        StatuslineLayout, TextModifier, ThemeConfig, ThemePreset, TuiRunContext, builtin_kind,
+        StatuslineLayout, ThemeConfig, TuiRunContext, builtin_kind,
     },
     model::{Activity, ActivitySummary, ActivityVariant, NixActivityState, TaskDisplayStatus},
+    theme::Style,
 };
-use crossterm::style::Color;
 use devenv_activity::ProcessStatus;
 use std::collections::BTreeMap;
 use unicode_segmentation::UnicodeSegmentation;
@@ -40,22 +39,11 @@ pub struct StatuslineData {
     pub key_hints: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SegmentStyle {
-    pub foreground: Option<Color>,
-    pub background: Option<Color>,
-    pub bold: bool,
-    pub dim: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub reverse: bool,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RenderedSegment {
     pub name: String,
     pub content: String,
-    pub style: SegmentStyle,
+    pub style: Style,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -84,7 +72,7 @@ struct Candidate {
     priority: u8,
     required: bool,
     overflow: StatusOverflow,
-    style: SegmentStyle,
+    style: Style,
 }
 
 pub fn render_statusline(
@@ -688,60 +676,10 @@ fn format_elapsed(started_at: std::time::Instant) -> String {
     }
 }
 
-fn resolve_style(
-    theme: &ThemeConfig,
-    name: &str,
-    component: &StatusComponentConfig,
-) -> SegmentStyle {
-    let mut style = SegmentStyle {
-        foreground: match theme.preset {
-            ThemePreset::Devenv => Some(match name {
-                "key_hints" | "pending_key" => COLOR_INTERACTIVE,
-                "summary" | "builds" | "downloads" | "queries" | "tasks" | "processes" => {
-                    COLOR_COMPLETED
-                }
-                _ => Color::Reset,
-            }),
-            ThemePreset::Terminal => Some(match name {
-                "key_hints" | "pending_key" => Color::Yellow,
-                "summary" | "builds" | "downloads" | "queries" | "tasks" | "processes" => {
-                    Color::Green
-                }
-                _ => Color::Reset,
-            }),
-            ThemePreset::None => None,
-        },
-        ..SegmentStyle::default()
-    };
-    for scope in ["statusline", &format!("statusline.{name}")] {
-        if let Some(config) = theme.styles.get(scope) {
-            apply_style(&mut style, theme, config);
-        }
-    }
-    apply_style(&mut style, theme, &component.style);
-    style
-}
-
-fn apply_style(
-    resolved: &mut SegmentStyle,
-    theme: &ThemeConfig,
-    style: &crate::config::StyleConfig,
-) {
-    if let Some(color) = &style.foreground {
-        resolved.foreground = theme.resolve_color(color).ok();
-    }
-    if let Some(color) = &style.background {
-        resolved.background = theme.resolve_color(color).ok();
-    }
-    for modifier in &style.modifiers {
-        match modifier {
-            TextModifier::Bold => resolved.bold = true,
-            TextModifier::Dim => resolved.dim = true,
-            TextModifier::Italic => resolved.italic = true,
-            TextModifier::Underline => resolved.underline = true,
-            TextModifier::Reverse => resolved.reverse = true,
-        }
-    }
+fn resolve_style(theme: &ThemeConfig, name: &str, component: &StatusComponentConfig) -> Style {
+    theme
+        .style(&["statusline", &format!("statusline.{name}")])
+        .layered(theme.configured_style(&component.style))
 }
 
 fn fit(candidates: &mut [Candidate], width: usize, separator: &str) {
@@ -839,27 +777,15 @@ fn truncate(value: &str, width: usize) -> String {
     output
 }
 
-pub fn separator_style(theme: &ThemeConfig) -> SegmentStyle {
-    let mut style = SegmentStyle {
-        foreground: match theme.preset {
-            ThemePreset::Devenv => Some(COLOR_HIERARCHY),
-            ThemePreset::Terminal => Some(Color::DarkGrey),
-            ThemePreset::None => None,
-        },
-        ..SegmentStyle::default()
-    };
-    for scope in ["statusline", "statusline.separator"] {
-        if let Some(config) = theme.styles.get(scope) {
-            apply_style(&mut style, theme, config);
-        }
-    }
-    style
+pub fn separator_style(theme: &ThemeConfig) -> Style {
+    theme.style(&["statusline", "statusline.separator"])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{ColorSpec, TuiPreferences};
+    use crossterm::style::Color;
     use std::path::PathBuf;
 
     fn data() -> StatuslineData {
@@ -1244,5 +1170,26 @@ mod tests {
         let style = separator_style(&theme);
         assert_eq!(style.foreground, Some(Color::Yellow));
         assert_eq!(style.background, Some(Color::Blue));
+    }
+
+    #[test]
+    fn specific_weight_replaces_inherited_weight() {
+        let mut theme = ThemeConfig::default();
+        for (scope, modifier) in [
+            ("statusline", crate::config::TextModifier::Bold),
+            ("statusline.separator", crate::config::TextModifier::Dim),
+        ] {
+            theme.styles.insert(
+                scope.to_string(),
+                crate::config::StyleConfig {
+                    modifiers: vec![modifier],
+                    ..crate::config::StyleConfig::default()
+                },
+            );
+        }
+
+        let style = separator_style(&theme);
+        assert!(style.dim);
+        assert!(!style.bold);
     }
 }

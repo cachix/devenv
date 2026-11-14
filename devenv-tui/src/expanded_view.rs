@@ -16,6 +16,7 @@ use crate::model::{ActivityModel, UiState, ViewMode};
 use crate::statusline::{
     StatuslineData, StatuslineMode, action_key_hints, interrupt_prompt_key_hints, render_statusline,
 };
+use crate::theme::LogTheme;
 use base64::Engine;
 use crossterm::event::MouseButton;
 use human_repr::HumanCount;
@@ -125,6 +126,7 @@ struct ExpandedViewUi<'a> {
 
 struct ExpandedCustomization {
     preferences: Arc<crate::config::TuiPreferences>,
+    log_theme: Arc<LogTheme>,
     keymap: Arc<crate::config::Keymap>,
     context: Arc<crate::config::TuiRunContext>,
     pending_key: Option<String>,
@@ -502,6 +504,7 @@ pub fn ExpandedLogView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     let customization = ui_state.read().ok().map(|ui| ExpandedCustomization {
         preferences: ui.preferences.clone(),
+        log_theme: ui.log_theme().clone(),
         keymap: ui.keymap().clone(),
         context: ui.run_context.clone(),
         pending_key: ui.pending_key.clone(),
@@ -1526,14 +1529,18 @@ fn render_expanded_view_custom(
     let end = (start + viewport_height).min(total_rows);
     let visible_rows: &[VisualRow] = &visual_rows[start..end];
 
+    let theme = customization
+        .map(|customization| *customization.log_theme)
+        .unwrap_or_default();
     let line_elements = build_line_elements(
         visible_rows,
         &state.logs,
         state.buffer_start_line,
         ui.selection,
         ui.search,
+        &theme,
     );
-    let padding_elements = build_padding_elements(visible_rows.len(), viewport_height);
+    let padding_elements = build_padding_elements(visible_rows.len(), viewport_height, &theme);
 
     let mut content_elements = line_elements;
     content_elements.extend(padding_elements);
@@ -1906,11 +1913,7 @@ fn render_expanded_view_custom(
     };
 
     let header = element!(View(height: 1, padding_left: 1, padding_right: 1) {
-        Text(
-            content: format!("\u{2500}\u{2500}\u{2500} {} \u{2500}\u{2500}\u{2500}", state.activity_name),
-            color: Color::Cyan,
-            weight: Weight::Bold
-        )
+        #(theme.title.span(format!("\u{2500}\u{2500}\u{2500} {} \u{2500}\u{2500}\u{2500}", state.activity_name)))
     })
     .into_any();
     let content = element!(View(flex_grow: 1.0_f32, flex_direction: FlexDirection::Column) {
@@ -1952,6 +1955,7 @@ fn build_line_elements(
     buffer_start_line: usize,
     selection: Option<&Selection>,
     search: Option<LogSearchView<'_>>,
+    theme: &LogTheme,
 ) -> Vec<AnyElement<'static>> {
     let mut elements = Vec::with_capacity(visible_rows.len());
 
@@ -2003,111 +2007,64 @@ fn build_line_elements(
             })
             .collect();
 
+        let mut segments = vec![
+            element!(View(flex_shrink: 0.0) {
+                #(theme.line_number.span(line_prefix))
+            })
+            .into_any(),
+        ];
         if let Some((start_col, end_col)) = sel_range {
-            let before = char_slice(&display_segment, 0, start_col);
-            let selected = char_slice(&display_segment, start_col, end_col);
-            let after: String = display_segment.chars().skip(end_col).collect();
-
-            elements.push(
-                element! {
-                    View(height: 1, flex_direction: FlexDirection::Row) {
-                        Text(
-                            content: line_prefix,
-                            color: Color::AnsiValue(250)
-                        )
-                        Text(
-                            content: before,
-                            color: Color::AnsiValue(250)
-                        )
-                        View(background_color: Color::AnsiValue(250)) {
-                            Text(
-                                content: selected,
-                                color: Color::AnsiValue(232)
-                            )
-                        }
-                        Text(
-                            content: after,
-                            color: Color::AnsiValue(250)
-                        )
-                    }
-                }
-                .into_any(),
-            );
-        } else if !search_ranges.is_empty() {
+            segments.extend([
+                theme.text.span(char_slice(&display_segment, 0, start_col)),
+                theme
+                    .selection
+                    .span(char_slice(&display_segment, start_col, end_col)),
+                theme
+                    .text
+                    .span(display_segment.chars().skip(end_col).collect::<String>()),
+            ]);
+        } else {
             let mut cursor = 0;
-            let mut segments = Vec::new();
             for (start, end, current) in search_ranges {
                 if start > cursor {
-                    segments.push(
-                        element!(Text(
-                            content: char_slice(&display_segment, cursor, start),
-                            color: Color::AnsiValue(250)
-                        ))
-                        .into_any(),
-                    );
+                    segments.push(theme.text.span(char_slice(&display_segment, cursor, start)));
                 }
-                let background = if current {
-                    Color::AnsiValue(220)
+                let style = if current {
+                    theme.current_match
                 } else {
-                    Color::AnsiValue(58)
+                    theme.search_match
                 };
-                let foreground = if current {
-                    Color::AnsiValue(232)
-                } else {
-                    Color::AnsiValue(230)
-                };
-                segments.push(
-                    element!(View(background_color: background) {
-                        Text(
-                            content: char_slice(&display_segment, start, end),
-                            color: foreground
-                        )
-                    })
-                    .into_any(),
-                );
+                segments.push(style.span(char_slice(&display_segment, start, end)));
                 cursor = end;
             }
-            if cursor < display_segment.chars().count() {
+            let length = display_segment.chars().count();
+            if cursor < length {
                 segments.push(
-                    element!(Text(
-                        content: char_slice(&display_segment, cursor, display_segment.chars().count()),
-                        color: Color::AnsiValue(250)
-                    ))
-                    .into_any(),
+                    theme
+                        .text
+                        .span(char_slice(&display_segment, cursor, length)),
                 );
             }
-            elements.push(
-                element! {
-                    View(height: 1, flex_direction: FlexDirection::Row) {
-                        Text(
-                            content: line_prefix,
-                            color: Color::AnsiValue(250)
-                        )
-                        #(segments)
-                    }
-                }
-                .into_any(),
-            );
-        } else {
-            elements.push(
-                element! {
-                    View(height: 1) {
-                        Text(
-                            content: format!("{}{}", line_prefix, display_segment),
-                            color: Color::AnsiValue(250)
-                        )
-                    }
-                }
-                .into_any(),
-            );
         }
+        elements.push(
+            element! {
+                View(height: 1, flex_direction: FlexDirection::Row) {
+                    #(segments)
+                }
+            }
+            .into_any(),
+        );
     }
 
     elements
 }
 
 /// Build empty padding elements to fill the viewport
-fn build_padding_elements(filled_lines: usize, viewport_height: usize) -> Vec<AnyElement<'static>> {
+fn build_padding_elements(
+    filled_lines: usize,
+    viewport_height: usize,
+    theme: &LogTheme,
+) -> Vec<AnyElement<'static>> {
     let padding_count = viewport_height.saturating_sub(filled_lines);
     let mut elements = Vec::with_capacity(padding_count);
 
@@ -2115,7 +2072,7 @@ fn build_padding_elements(filled_lines: usize, viewport_height: usize) -> Vec<An
         elements.push(
             element! {
                 View(height: 1) {
-                    Text(content: "~".to_string(), color: Color::AnsiValue(238))
+                    #(theme.filler.span("~"))
                 }
             }
             .into_any(),
@@ -2684,6 +2641,7 @@ mod tests {
         preferences.statusline.enabled = false;
         let customization = ExpandedCustomization {
             preferences: Arc::new(preferences),
+            log_theme: Arc::default(),
             keymap: Arc::new(
                 crate::config::KeybindingsConfig::default()
                     .resolve()
@@ -2733,6 +2691,7 @@ mod tests {
             preferences.statusline.position = position;
             let customization = ExpandedCustomization {
                 preferences: Arc::new(preferences),
+                log_theme: Arc::default(),
                 keymap: Arc::new(
                     crate::config::KeybindingsConfig::default()
                         .resolve()
@@ -2792,6 +2751,7 @@ mod tests {
                 },
                 ..crate::config::TuiPreferences::default()
             }),
+            log_theme: Arc::default(),
             keymap: Arc::new(
                 crate::config::KeybindingsConfig::default()
                     .resolve()
@@ -3020,5 +2980,80 @@ mod tests {
 
         let extracted = extract_selected_text(&logs_for_extract, 0, &selection);
         assert_eq!(extracted, "cdefghijKLM");
+    }
+
+    #[test]
+    fn log_theme_styles_every_part_of_the_view() {
+        let logs: VecDeque<String> = ["unpacking source", "warning: one", "warning: two"]
+            .iter()
+            .map(|line| line.to_string())
+            .collect();
+        let state = ExpandedViewState {
+            activity_name: "hello".to_string(),
+            scroll_offset: 0,
+            logs: Arc::new(logs),
+            buffer_start_line: 0,
+        };
+        let width: u16 = 60;
+        let visual_rows = build_visual_rows(&state.logs, content_width_for(width));
+        let matches = find_log_matches(&state.logs, 0, "warning");
+        let selection = Selection::from_anchor_cursor((0, 0), (0, 9));
+        let mut preferences = crate::config::TuiPreferences::default();
+        preferences.theme.preset = crate::config::ThemePreset::Terminal;
+        let customization = ExpandedCustomization {
+            log_theme: Arc::new(LogTheme::new(&preferences.theme)),
+            preferences: Arc::new(preferences),
+            keymap: Arc::new(
+                crate::config::KeybindingsConfig::default()
+                    .resolve()
+                    .unwrap(),
+            ),
+            context: Arc::new(crate::config::TuiRunContext::default()),
+            pending_key: None,
+        };
+        let mut element = render_expanded_view_custom(
+            &state,
+            &visual_rows,
+            width,
+            8,
+            ExpandedViewUi {
+                selection: Some(&selection),
+                search: Some(LogSearchView {
+                    query: "warning",
+                    matches: &matches,
+                    current: Some(search_cursor(matches[1])),
+                    editing: false,
+                }),
+                copy_notice: None,
+                scroll_mode: ScrollMode {
+                    follow_tail: false,
+                    anchor: None,
+                },
+                interrupt_prompt: (false, false),
+            },
+            Some(&customization),
+        );
+        let canvas = element.render(Some(width as usize));
+        let cells = |text: &str| {
+            (0..canvas.height())
+                .find_map(|y| {
+                    let row = canvas.get_text(0, y, canvas.width(), 1);
+                    row.find(text).map(|x| (row[..x].chars().count(), y))
+                })
+                .map(|(x, y)| canvas.cell(x, y).unwrap())
+                .unwrap_or_else(|| panic!("{text:?} is not rendered"))
+        };
+        let foreground = |text: &str| cells(text).text_style().unwrap().color;
+
+        assert_eq!(foreground("hello"), Some(Color::Cyan));
+        assert_eq!(foreground("1 │"), Some(Color::DarkGrey));
+        assert_eq!(foreground("source"), Some(Color::Reset));
+        assert_eq!(cells("unpacking").background_color, Some(Color::White));
+        assert_eq!(
+            cells("warning: one").background_color,
+            Some(Color::DarkYellow)
+        );
+        assert_eq!(cells("warning: two").background_color, Some(Color::Yellow));
+        assert_eq!(foreground("~"), Some(Color::DarkGrey));
     }
 }
