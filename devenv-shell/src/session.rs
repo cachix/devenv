@@ -1649,6 +1649,12 @@ impl ShellSession {
         self
     }
 
+    /// Show the active profiles in the status line.
+    pub fn with_profiles(mut self, profiles: &[String]) -> Self {
+        self.status_line.set_profiles(profiles);
+        self
+    }
+
     /// Wire a shutdown token. On cancellation the session kills the inner
     /// shell so devenv can exit instead of orphaning it after a terminal
     /// hangup or SIGHUP/SIGINT/SIGTERM.
