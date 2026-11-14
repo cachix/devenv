@@ -11,6 +11,7 @@
 
 ### Bug Fixes
 
+- Fixed `$SHELL` being set to `/bin/bash` inside fish, zsh, and nushell devenv shells on systems whose `/etc/bashrc` resets it, such as Fedora. `$SHELL` now points to the shell you are actually in.
 - Fixed a two-second TUI startup delay on terminals that do not answer keyboard capability queries, including during direnv shell activation. Interactive progress remains available for `direnv-export` and `print-dev-env` ([#3169](https://github.com/cachix/devenv/issues/3169)).
 - Foreground `devenv up` now publishes its manager before service readiness, so other `devenv up` calls can detect it during startup. Failed publication cancels setup tasks before cleaning up.
 - Foreground and detached native process startup now share a lock, preventing simultaneous cold starts from overwriting each other's manager socket and PID file. Waiting for the lock can be cancelled, and competing callers preserve the winning manager's proxy routes.
