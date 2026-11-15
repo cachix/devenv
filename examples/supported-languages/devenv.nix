@@ -20,6 +20,7 @@
   languages.gawk.enable = true;
   languages.gleam.enable = true;
   languages.go.enable = true;
+  languages.groovy.enable = true;
   languages.hare.enable = pkgs.lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.hare;
   languages.haskell.enable = true;
   languages.helm.enable = true;
