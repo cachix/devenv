@@ -25,7 +25,7 @@
     "@astrojs/sitemap": "^3.7.3",
     "@astrojs/starlight": "^0.41.5",
     "@astrojs/starlight-tailwind": "^5.0.0",
-    "@cachix/site-kit": "https://codeload.github.com/cachix/site-kit/tar.gz/7913535ff0c219fcdb6c17733b2687d20bea37db",
+    "@cachix/site-kit": "https://codeload.github.com/cachix/site-kit/tar.gz/2ad59aacdbfc86cd772da9815051bdb04bab554e",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.1.6",
     "hast-util-select": "^6.0.4",
