@@ -1,0 +1,160 @@
+---
+title: "Codex"
+---
+
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
+<VersionCompatibility version="2.4.1" />
+
+[Codex](https://developers.openai.com/codex/) is OpenAI's coding agent. The
+devenv integration generates project configuration for Codex, including hooks,
+MCP servers, reusable agents, and skills. Its options follow the same structure
+as the [Claude Code integration](/integrations/claude-code/) while generating
+Codex's native file formats.
+
+## Basic setup
+
+```nix
+{
+  codex.enable = true;
+}
+```
+
+This creates `.codex/config.toml`. Codex loads project configuration only after
+you trust the project.
+
+## Settings
+
+`codex.settings` maps directly to Codex's native TOML configuration:
+
+```nix
+{
+  codex = {
+    enable = true;
+    settings = {
+      model = "gpt-5.4";
+      model_reasoning_effort = "high";
+      sandbox_mode = "workspace-write";
+    };
+  };
+}
+```
+
+See the [Codex configuration reference](https://developers.openai.com/codex/config-reference/)
+for the available settings.
+
+## MCP servers
+
+Define local or remote MCP servers with a typed transport configuration:
+
+```nix
+{
+  codex = {
+    enable = true;
+
+    mcpServers = {
+      devenv = {
+        type = "stdio";
+        command = "devenv";
+        args = [ "mcp" ];
+      };
+
+      docs = {
+        type = "http";
+        url = "https://mcp.example.com";
+        settings.bearer_token_env_var = "MCP_TOKEN";
+      };
+    };
+  };
+}
+```
+
+`settings` accepts additional native Codex server options. You can also define
+complete servers under `codex.settings.mcp_servers`; those values take
+precedence when both options define the same name.
+
+By default, the integration configures the hosted `mcp.devenv.sh` server, as
+the Claude Code integration does. Setting `codex.mcpServers` replaces that
+default.
+
+## Agents
+
+Reusable agents combine a description with a dedicated Codex configuration
+layer:
+
+```nix
+{
+  codex = {
+    enable = true;
+
+    agents.reviewer = {
+      description = "Review changes for correctness and regressions.";
+      model = "gpt-6.1-sol";
+      effort = "high";
+      prompt = "Report actionable findings first.";
+      settings.features.shell_tool = false;
+    };
+  };
+}
+```
+
+This writes a native standalone agent definition to
+`.codex/agents/reviewer.toml`. Codex discovers project agents from this
+directory automatically. Agent files inherit the parent session's permissions,
+provider, and MCP servers; use supported `features` settings to reduce their
+tool surface.
+
+## Skills
+
+Codex discovers project skills from `.agents/skills`. Define a structured skill
+or provide a complete skill directory:
+
+```nix
+{
+  codex = {
+    enable = true;
+
+    skills = {
+      review = ./skills/review;
+      test = {
+        description = "Run the project's focused test workflow.";
+        content = "Use `devenv test` and report failures with their logs.";
+        resources."references/testing.md" = ./docs/testing.md;
+      };
+    };
+  };
+}
+```
+
+Structured skills generate the required `name` and `description` frontmatter,
+support bundled resources, and use devenv's normal file copy modes. Directory
+values are exposed unchanged. See the [Codex skills documentation](https://developers.openai.com/codex/skills/)
+for the skill format.
+
+## Hooks
+
+Hooks use the same named-hook structure as the Claude Code integration and are
+written as native inline Codex hooks:
+
+```nix
+{
+  codex = {
+    enable = true;
+    hooks.load-context = {
+      hookType = "SessionStart";
+      matcher = "startup|resume";
+      command = "echo session started";
+      timeout = 30;
+      statusMessage = "Loading context";
+    };
+  };
+}
+```
+
+When `git-hooks.enable` is true, `codex.hooks.git-hooks-run` automatically runs
+the configured git hooks after Codex edits a file. Disable it with
+`codex.hooks.git-hooks-run.enable = false`.
+
+Native hook definitions remain available through `codex.settings.hooks` and
+take precedence over typed hooks for the same event. This escape hatch also
+keeps the integration compatible as Codex's native schema evolves.
