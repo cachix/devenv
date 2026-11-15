@@ -6,15 +6,13 @@ title: "groovy"
 
 
 
-[comment]: # (Please add your documentation on top of this line)
+[comment]: # "Please add your documentation on top of this line"
 
 ## Options
 
 ### languages.groovy.enable
 
-
-
-Whether to enable tools for Groovy Language.
+Whether to enable tools for Groovy development.
 
 
 
