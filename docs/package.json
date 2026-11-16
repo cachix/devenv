@@ -27,7 +27,7 @@
     "@astrojs/starlight-tailwind": "^5.0.0",
     "@cachix/site-kit": "https://codeload.github.com/cachix/site-kit/tar.gz/f61f46c72b4e78d0a7d1e5858a4b973c896beb88",
     "@tailwindcss/vite": "^4.3.3",
-    "astro": "^7.1.6",
+    "astro": "^7.4.12",
     "hast-util-select": "^6.0.4",
     "marked": "^18.0.7",
     "rehype-parse": "^9.0.1",
