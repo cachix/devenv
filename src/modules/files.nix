@@ -112,7 +112,8 @@ let
       # Only update symlink if target changed (same content = same store path)
       if [ "$(readlink "${filename}")" != "${fileOption.file}" ]; then
         echo "Updating ${filename}"
-        ln -sf ${fileOption.file} "${filename}"
+        # Do not follow an existing symlink to a directory (GNU and BSD ln).
+        ln -sfn ${fileOption.file} "${filename}"
       fi
       echo "${filename}" >> "$DEVENV_FILES_CREATED"
     elif [ -f "${filename}" ]; then
