@@ -1031,6 +1031,7 @@ in 12.4s`} />
       });
 
       var lines = output.querySelectorAll<HTMLElement>('.landing-code-line');
+      var removeControlBlocks: { control: HTMLButtonElement; iconLine: HTMLElement; finalLine: HTMLElement }[] = [];
       entries.forEach(function (entry) {
         var node = currentNodes.get(entry.id);
         var removeControl = currentRemoveControls.get(entry.id);
@@ -1066,9 +1067,14 @@ in 12.4s`} />
         if (iconLine) iconLine.appendChild(node);
         if (iconLine && finalLine) {
           iconLine.appendChild(removeControl);
-          var blockHeight = finalLine.offsetTop - iconLine.offsetTop + finalLine.offsetHeight;
-          removeControl.style.top = blockHeight / 2 + 'px';
+          removeControlBlocks.push({ control: removeControl, iconLine: iconLine, finalLine: finalLine });
         }
+      });
+
+      removeControlBlocks.map(function (block) {
+        return block.finalLine.offsetTop - block.iconLine.offsetTop + block.finalLine.offsetHeight;
+      }).forEach(function (blockHeight, index) {
+        removeControlBlocks[index].control.style.top = blockHeight / 2 + 'px';
       });
 
       syncPantry(entries);
