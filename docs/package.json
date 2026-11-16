@@ -25,7 +25,7 @@
     "@astrojs/sitemap": "^3.7.3",
     "@astrojs/starlight": "^0.41.5",
     "@astrojs/starlight-tailwind": "^5.0.0",
-    "@cachix/site-kit": "https://codeload.github.com/cachix/site-kit/tar.gz/2ad59aacdbfc86cd772da9815051bdb04bab554e",
+    "@cachix/site-kit": "https://codeload.github.com/cachix/site-kit/tar.gz/f61f46c72b4e78d0a7d1e5858a4b973c896beb88",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.1.6",
     "hast-util-select": "^6.0.4",
@@ -42,7 +42,6 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "astro-vtbot": "3.1.0",
     "simple-icons": "^16.28.0",
     "typescript": "6.0.3"
   }
