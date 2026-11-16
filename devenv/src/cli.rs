@@ -248,7 +248,7 @@ pub struct NixCliArgs {
         long,
         global = true,
         help = "Override the target system.",
-        long_help = "Override the target system.\n\nDefaults to the host system (e.g. aarch64-darwin, x86_64-linux)."
+        long_help = "Override the target system.\n\nDefaults to the host system (e.g. aarch64-darwin, x86_64-linux). For `machines images build`, filters the configured image systems instead; omitting it builds all configured systems."
     )]
     pub system: Option<String>,
 
@@ -1322,6 +1322,11 @@ pub enum ContainerCommand {
     arg_required_else_help(true)
 )]
 pub enum MachinesCommand {
+    #[command(about = "List and build cloud images for configured machines.")]
+    Images {
+        #[command(subcommand)]
+        command: MachineImagesCommand,
+    },
     #[command(about = "Check declared NixOS access changes without building or deploying.")]
     Check {
         #[arg(long, help = "Print structured findings as JSON.")]
@@ -1464,6 +1469,26 @@ pub enum MachinesCommand {
 }
 
 #[derive(Subcommand, Clone)]
+#[command(arg_required_else_help = true)]
+pub enum MachineImagesCommand {
+    #[command(about = "List configured image systems and formats without building.")]
+    List {
+        #[arg(help = "Optional machine name; lists all machines when omitted.")]
+        machine: Option<String>,
+    },
+    #[command(about = "Build cloud images; omitted filters select all configured values.")]
+    Build {
+        #[arg(long, help = "Build only this configured image format.")]
+        image: Option<String>,
+        // Filled from the global --system argument before resolving Nix settings.
+        #[arg(skip)]
+        image_system: Option<String>,
+        #[arg(help = "Machine name, required when multiple machines are configured.")]
+        machine: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Clone)]
 #[clap(about = "Add an input to devenv.yaml. https://devenv.sh/inputs/")]
 pub enum InputsCommand {
     #[command(about = "Add an input to devenv.yaml.")]
@@ -1483,6 +1508,42 @@ pub enum InputsCommand {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn machine_images_cli_filters_and_optional_machine() {
+        use clap::Parser;
+        for (args, expected_system, expected_machine) in [
+            (vec!["devenv", "machines", "images", "build"], None, None),
+            (
+                vec![
+                    "devenv",
+                    "machines",
+                    "images",
+                    "build",
+                    "--image",
+                    "amazon",
+                    "--system",
+                    "aarch64-linux",
+                    "dev",
+                ],
+                Some("aarch64-linux"),
+                Some("dev"),
+            ),
+        ] {
+            let cli = super::Cli::try_parse_from(args).unwrap();
+            assert_eq!(cli.nix_args.system.as_deref(), expected_system);
+            match cli.command {
+                super::Commands::Machines {
+                    command:
+                        super::MachinesCommand::Images {
+                            command: super::MachineImagesCommand::Build { machine, .. },
+                        },
+                } => assert_eq!(machine.as_deref(), expected_machine),
+                _ => panic!("expected an image build command"),
+            }
+        }
+        assert!(super::Cli::try_parse_from(["devenv", "machines", "images", "list"]).is_ok());
+    }
+
     use super::*;
     use clap::{Parser, crate_version};
     use std::sync::{Mutex, MutexGuard};

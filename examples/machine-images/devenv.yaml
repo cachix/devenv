@@ -1,0 +1,3 @@
+inputs:
+  mk-shell-bin:
+    url: github:rrbutani/nix-mk-shell-bin

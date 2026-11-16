@@ -47,8 +47,9 @@ use devenv::{
     SecretSettings, ShellSettings, VerbosityLevel,
     activity::{ActivityGuard, ActivityLevel},
     cli::{
-        Cli, CliOptions, Commands, ContainerCommand, InputsCommand, InstallPhase, MachinesCommand,
-        ProcessesCommand, TasksCommand, TraceOutputSpec, UserConfigCommand,
+        Cli, CliOptions, Commands, ContainerCommand, InputsCommand, InstallPhase,
+        MachineImagesCommand, MachinesCommand, ProcessesCommand, TasksCommand, TraceOutputSpec,
+        UserConfigCommand,
     },
     is_ai_agent,
     reload::{Config as ReloadConfig, DevenvShellBuilder, ShellCoordinator},
@@ -450,7 +451,18 @@ fn prepare_command(mut cli: Cli, invocation: &Invocation) -> Result<PreparedComm
         .user_config
         .as_deref()
         .map(|path| devenv_core::paths::resolve_against(path, start_dir.unwrap_or(Path::new("."))));
-    let command = cli.command;
+    let mut command = cli.command;
+    if let Commands::Machines {
+        command:
+            MachinesCommand::Images {
+                command: MachineImagesCommand::Build { image_system, .. },
+            },
+    } = &mut command
+    {
+        // Image filtering selects target configurations, not the workstation's
+        // package set used to evaluate the project.
+        *image_system = cli.nix_args.system.take();
+    }
     let has_overrides = !cli.input_overrides.nix_module_options.is_empty();
     let mut from_source = cli.from.clone();
     let mut project_root = None;
@@ -1576,6 +1588,24 @@ async fn dispatch_command(
             }
         },
         Commands::Machines { command } => match command {
+            MachinesCommand::Images { command } => match command {
+                MachineImagesCommand::List { machine } => Ok(CommandResult::Print(
+                    devenv.machines_images_list(machine.as_deref()).await?,
+                )),
+                MachineImagesCommand::Build {
+                    image,
+                    image_system,
+                    machine,
+                } => Ok(CommandResult::Print(
+                    devenv
+                        .machines_images_build(
+                            machine.as_deref(),
+                            image_system.as_deref(),
+                            image.as_deref(),
+                        )
+                        .await?,
+                )),
+            },
             MachinesCommand::Check { names, json } => {
                 let (output, failed) = devenv.machines_check(&names, json).await?;
                 Ok(CommandResult::CheckReport(output, failed))
@@ -2015,6 +2045,51 @@ mod tests {
                     Some(home) => env::set_var("DEVENV_HOME", home),
                     None => env::remove_var("DEVENV_HOME"),
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn image_system_filters_do_not_change_the_controller_system() {
+        let _lock = PROCESS_STATE_LOCK.lock().unwrap();
+        let project = TempDir::new().unwrap();
+        fs::write(project.path().join("devenv.nix"), "{ }\n").unwrap();
+        let devenv_home = project.path().join("devenv-home");
+        let _state = ProcessStateGuard::set(project.path(), &devenv_home);
+        let invocation = Invocation::from_parts(None, None, None);
+        let native = NixSettings::default().system;
+        let foreign = if native == "aarch64-linux" {
+            "x86_64-linux"
+        } else {
+            "aarch64-linux"
+        };
+        for args in [
+            vec![
+                "devenv", "machines", "images", "build", "--system", foreign, "dev",
+            ],
+            vec![
+                "devenv", "--system", foreign, "machines", "images", "build", "dev",
+            ],
+        ] {
+            let cli = <Cli as clap::Parser>::parse_from(args);
+            let prepared = prepare_command(cli, &invocation).unwrap();
+            assert_eq!(prepared.backend.devenv.nix_settings.system, native);
+            match prepared.backend.command {
+                Commands::Machines {
+                    command:
+                        MachinesCommand::Images {
+                            command:
+                                MachineImagesCommand::Build {
+                                    image_system,
+                                    machine,
+                                    ..
+                                },
+                        },
+                } => {
+                    assert_eq!(image_system.as_deref(), Some(foreign));
+                    assert_eq!(machine.as_deref(), Some("dev"));
+                }
+                _ => panic!("expected an image build command"),
             }
         }
     }

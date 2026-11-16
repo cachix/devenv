@@ -23,7 +23,7 @@ A machine is a NixOS, nix-darwin, or home-manager configuration defined in `deve
 
 ## Define a machine
 
-A machine needs a name and at least one role. NixOS machines require the disko input, even when you only deploy to an existing host:
+A machine needs a name and at least one role. NixOS machines without image formats require the disko input, even when you only deploy to an existing host:
 
 ```sh
 devenv inputs add disko github:nix-community/disko --follows nixpkgs
@@ -68,6 +68,169 @@ machines.server.target.sshOpts = [ "-o" "IdentitiesOnly=yes" ];
 ```
 
 When an install sends local secrets, encryption keys, or extra files, devenv requires a known host key from its first connection and disables forwarding. Add the host keys for both the original host and the kexec installer if they differ. You can select a dedicated file with `[ "-o" "UserKnownHostsFile=/absolute/path" ]`. The stricter settings cannot be overridden with `sshOpts`.
+
+## Build AWS and GCP images
+
+Define a shared NixOS configuration and the systems and image formats to build:
+
+```nix title="devenv.nix"
+{
+  machines.dev = {
+    systems = [ "x86_64-linux" "aarch64-linux" ];
+    nixos = import ./workspace.nix;
+
+    images.amazon = { pkgs, lib, ... }: {
+      virtualisation.diskSize = 16384;
+      ec2.efi = lib.mkDefault pkgs.stdenv.hostPlatform.isAarch64;
+    };
+    images.google-compute = { pkgs, lib, ... }: {
+      virtualisation.diskSize = 16384;
+      virtualisation.googleComputeImage.efi =
+        lib.mkDefault pkgs.stdenv.hostPlatform.isAarch64;
+    };
+  };
+}
+```
+
+`workspace.nix` is a normal NixOS module containing shared users, packages,
+services, and `system.stateVersion`. Each `images` entry is another NixOS module
+applied only to that format. Format-specific package overlays also apply to the
+deployment executor. NixOS supplies provider-specific boot, storage,
+metadata, and guest-agent configuration. Avoid importing provider image modules
+into the shared configuration yourself.
+
+```sh
+# Inspect the matrix without building or contacting cloud services.
+devenv machines images list
+
+# Build every configured system and image for the sole machine.
+devenv machines images build
+
+# Filter by format, system, or both.
+devenv machines images build --image amazon
+devenv machines images build --system x86_64-linux
+devenv machines images build --image amazon --system x86_64-linux dev
+```
+
+The optional machine name comes last. When multiple machines are configured,
+provide the name explicitly. Omitted filters select all configured values.
+`systems` defaults to `[ system ]`, so existing single-system definitions can
+add `images` without changing their architecture setting. Image systems must be
+`x86_64-linux` or `aarch64-linux`. ARM firmware and provider boot behavior need
+validation for the instance types you intend to use.
+
+Every artifact is printed with its build attribute and output directory. You can
+also build one through the existing output interface:
+
+```sh
+devenv build machines.dev.build.images.x86_64-linux.amazon
+```
+
+Image builds do not need cloud credentials, disko, or a host-specific facter
+report. Images default `hardware.facter` to `null`; an explicitly supplied report
+is still honored. The disk layout comes from the NixOS image builder. Packages
+and the prebaked environment use the image's target system, including when the
+controller is macOS. Configure a suitable Linux Nix builder for each architecture;
+selecting a system does not automatically provide cross compilation or emulation.
+
+### Prebake a development workspace
+
+The [machine-images example](https://github.com/cachix/devenv/tree/main/examples/machine-images)
+includes a shared devenv environment, a small project, and both cloud image
+formats. It evaluates the environment with guest-system packages and the fixed
+path `/home/dev/project`, then captures the shell environment using the same
+`mk-shell-bin` helper used by devenv containers.
+
+The image installs devenv and a `project-shell` command. A first-boot service
+copies the explicitly selected project files into a writable workspace owned by
+`dev`, preserving subsequent edits. The launcher retains the environment's store
+closure through the NixOS system, so garbage collection preserves its tools.
+
+After connecting through the provider's configured SSH access, run:
+
+```sh
+sudo -iu dev
+project-shell
+# Or run a command directly:
+project-shell python hello.py
+```
+
+The example prebakes Nix-provided tools and shell hooks. Mutable task state and
+language dependencies downloaded by shell-entry tasks require additional setup.
+Capture only intended project files; exclude credentials and workstation state.
+A VM test checks workspace initialization, shell hooks, edits, and operation
+after garbage collection:
+
+```sh
+# From examples/machine-images, on a suitable Linux builder:
+devenv build outputs.workspace-vm
+```
+
+### Upload an image
+
+Building produces a local disk image, not a registered cloud resource. Upload
+artifacts separately using credentials available to your provider tools.
+
+For AWS, the output contains a VHD by default and
+`nix-support/image-info.json`. The upstream NixOS AMI uploader can publish it:
+
+```sh
+export AWS_REGION=us-west-2
+export AWS_PROFILE=my-profile
+nix run github:NixOS/amis#upload-ami -- \
+  --image-info /nix/store/REPLACE-WITH-OUTPUT/nix-support/image-info.json
+```
+
+See the [upstream AMI upload instructions](https://github.com/NixOS/nixpkgs/blob/master/nixos/maintainers/scripts/ec2/README.md)
+for current tooling and requirements. Review the uploader's access and sharing
+settings before running it; keep development images private.
+
+For GCP, the output contains a `.raw.tar.gz` archive with a single `disk.raw`:
+
+```sh
+gcloud storage cp /nix/store/REPLACE-WITH-OUTPUT/*.raw.tar.gz gs://YOUR-BUCKET/
+gcloud compute images create YOUR-IMAGE \
+  --source-uri gs://YOUR-BUCKET/YOUR-ARCHIVE.raw.tar.gz \
+  --architecture X86_64
+```
+
+Use `ARM64` for an ARM image, and add `--guest-os-features=UEFI_COMPATIBLE`
+when building with `virtualisation.googleComputeImage.efi = true`.
+See [GCP's manual import requirements](https://cloud.google.com/compute/docs/import/import-existing-image).
+Keep the bucket and image private. Launch a matching instance type and configure
+provider SSH metadata or OS Login and firewall access. AWS images use EC2 key
+metadata; GCP images include the guest agent and OS Login integration. The example
+creates the `dev` workspace user but does not grant it an SSH key automatically.
+
+### Update an instance launched from an image
+
+A deployment destination selects one combination from the matrix:
+
+```nix
+machines.dev.target = {
+  host = "root@dev.example.com";
+  system = "aarch64-linux";
+  image = "amazon";
+};
+```
+
+You can omit `target.system` or `target.image` when its configured matrix axis
+has exactly one value. The SSH host is unnecessary for building images.
+
+```sh
+devenv machines check dev
+devenv machines plan dev
+devenv machines deploy dev
+```
+
+Deployment builds the same provider configuration used by the selected image,
+without rebuilding the disk image. Reviewed plans retain the selected system,
+image identity, and exact outputs. Status and rollback use the executor already
+recorded on the target. Root SSH is required by the deployment executor; arrange
+that access separately when using GCP OS Login.
+
+`machines install` rejects image machines. Launch an instance from the uploaded
+image through your provider instead.
 
 ## Install NixOS on a fresh host
 

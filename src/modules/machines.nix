@@ -115,16 +115,16 @@ let
 
   # Build the NixOS toplevel closure for a machine's `nixos` module.
   #
-  # Requires `inputs.disko` (always, because disko is the declarative
-  # partitioning layer that `devenv machines install` relies on) and, when
-  # `hardware.facter` is non-null, `inputs.nixos-facter-modules`. Both errors
+  # Ordinary machines require disko for installation. Image builders supply
+  # their own disk layout. A non-null hardware.facter also requires
+  # inputs.nixos-facter-modules. Both errors
   # are lazy: evaluation of a home-manager-only machine does not force these.
   # Shared NixOS evaluation for a machine. Returns the full evaluated NixOS
   # system so callers can extract both `.config.system.build.toplevel` and
   # `.config.system.build.diskoScript` (and any future outputs) without
   # evaluating twice — Nix's lazy evaluation handles deduplication.
   nixosEval = machine:
-    if disko == null then
+    if disko == null && machine.images == { } then
       throw (outerConfig.lib._mkInputError diskoInputArgs)
     else
       let
@@ -142,7 +142,6 @@ let
         specialArgs = { inherit inputs self; };
         modules = [
           { nixpkgs.hostPlatform = machine.system; }
-          disko.nixosModules.disko
           ./machines/recovery.nix
           ./machines/facts.nix
           machine.nixos
@@ -178,7 +177,7 @@ let
                 # not pollute the installed machine's global command namespace.
                 environment.systemPackages = [ targetSecretspecLauncher ];
               })
-        ] ++ facterModules;
+        ] ++ lib.optional (disko != null) disko.nixosModules.disko ++ facterModules;
       };
 
   # Build the nix-darwin toplevel closure for a machine's `nix-darwin` module.
@@ -254,13 +253,23 @@ let
 
   targetOptions = lib.types.submodule {
     options = {
+      system = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "System selected for deploying an image machine. May be omitted when systems has one entry.";
+      };
+      image = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Image format selected for deployment. May be omitted when images has one entry.";
+      };
       host = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
         description = ''
           SSH destination used by `devenv machines install` and `devenv machines deploy`.
           Accepts `user@host`, `user@host:port`, or a full `ssh://user@host:port` URI.
-          Leave unset to activate in process on the current host; this is only valid for `home-manager`.
+          Leave unset for image-only builds or to activate home-manager on the current host.
           Setting it to `"localhost"` is not the same as omitting it: `"localhost"` still routes through SSH.
         '';
         example = "root@laptop.local";
@@ -282,471 +291,570 @@ let
     };
   };
 
-  machineOptions = lib.types.submodule ({ name, config, ... }: {
-    options = {
-      system = lib.mkOption {
-        type = lib.types.str;
-        description = "System architecture for the machine.";
-        default = pkgs.stdenv.system;
-        defaultText = lib.literalExpression "pkgs.stdenv.system";
-        example = "x86_64-linux";
-      };
-
-      target = lib.mkOption {
-        type = targetOptions;
-        default = { };
-        description = "SSH destination for install and deploy. See the `target.host` and `target.sshOpts` suboptions.";
-      };
-
-      nixos = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
-        description = "NixOS configuration for the machine.";
-        default = null;
-        example = lib.literalExpression ''
-          {
-            fileSystems."/".device = "/dev/sda1";
-            boot.loader.systemd-boot.enable = true;
-            services.openssh.enable = true;
-          }
-        '';
-      };
-
-      hardware = lib.mkOption {
-        type = lib.types.submodule {
-          options = {
-            facter = lib.mkOption {
-              type = lib.types.nullOr (lib.types.either lib.types.path lib.types.str);
-              default = ".machines/${name}/facter.json";
-              defaultText = lib.literalExpression ''".machines/''${name}/facter.json"'';
-              description = ''
-                Path to the [nixos-facter](https://github.com/nix-community/nixos-facter) hardware report for this machine.
-
-                Accepts either a Nix path literal or a string path relative to the devenv project root.
-                Defaults to `.machines/<name>/facter.json`, which `devenv machines install` generates
-                on first run by probing the target over SSH. The report must be committed to git so that
-                teammates and CI can build the machine closure without reaching the target.
-
-                Set to `null` to opt this machine out of facter, for example when it carries a hand written
-                `hardware-configuration.nix` instead. Only applies to machines with a `nixos` module set;
-                `nix-darwin` and `home-manager` entries ignore this option.
-              '';
-              example = lib.literalExpression "./hardware/web1.json";
-            };
-          };
+  machineOptions = lib.types.submodule ({ name, config, ... }:
+    let
+      imageNames = builtins.attrNames config.images;
+      hasImages = imageNames != [ ];
+      deployable = config.nixos != null && (!hasImages || config.target.host != null);
+      selectedSystem =
+        if !hasImages then config.system
+        else if config.target.system != null && builtins.elem config.target.system config.systems then config.target.system
+        else if config.target.system == null && builtins.length config.systems == 1 then builtins.head config.systems
+        else throw "machines.${name}.target.system must select one of machines.${name}.systems for deployment";
+      selectedImage =
+        if config.target.image != null && builtins.elem config.target.image imageNames then config.target.image
+        else if config.target.image == null && builtins.length imageNames == 1 then builtins.head imageNames
+        else throw "machines.${name}.target.image must select one of machines.${name}.images for deployment";
+    in
+    {
+      options = {
+        system = lib.mkOption {
+          type = lib.types.str;
+          description = "System architecture for the machine.";
+          default = pkgs.stdenv.system;
+          defaultText = lib.literalExpression "pkgs.stdenv.system";
+          example = "x86_64-linux";
         };
-        default = { };
-        description = "Hardware detection settings for this machine.";
-      };
 
-      install = lib.mkOption {
-        type = lib.types.submodule {
-          options = {
-            kexec = lib.mkOption {
-              type = lib.types.submodule {
-                options = {
-                  image = lib.mkOption {
-                    type = lib.types.nullOr lib.types.str;
-                    default = null;
-                    description = ''
-                      Override the default nixos-images kexec tarball URL. Set this for
-                      custom installer images, non-standard architectures, or VPN-enabled
-                      installers. Must be an HTTP(S) URL fetched on the remote target.
-                    '';
-                    example = "https://example.com/custom-kexec-aarch64.tar.gz";
-                  };
+        systems = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ config.system ];
+          defaultText = lib.literalExpression "[ config.system ]";
+          apply = systems:
+            if systems == [ ] || builtins.length systems != builtins.length (lib.unique systems) then
+              throw "machines.${name}.systems must be a nonempty list of distinct systems"
+            else if config.images != { } && lib.any (system: !(builtins.elem system [ "x86_64-linux" "aarch64-linux" ])) systems then
+              throw "machines.${name}.systems only supports x86_64-linux and aarch64-linux for images"
+            else systems;
+          description = "Target systems for the image build matrix. Defaults to the existing machine system.";
+        };
 
-                  postSshPort = lib.mkOption {
-                    type = lib.types.nullOr lib.types.port;
-                    default = null;
-                    description = ''
-                      SSH port to reconnect to after kexec lands in the installer. Set
-                      this when the live sshd on the target listens on a non-22 port. All
-                      subsequent install phases (facter, disko, nixos-install) use this
-                      port.
-                    '';
-                    example = 2222;
-                  };
-                };
+        images = lib.mkOption {
+          type = lib.types.lazyAttrsOf lib.types.deferredModule;
+          default = { };
+          apply = images:
+            if images != { } && config.nixos == null then
+              throw "machines.${name}.images requires a nixos module"
+            else if images != { } && config.nix-darwin != null then
+              throw "machines.${name}.images cannot be combined with nix-darwin"
+            else if lib.any (format: !(builtins.elem format [ "amazon" "google-compute" ])) (builtins.attrNames images) then
+              throw "machines.${name}.images supports amazon and google-compute"
+            else images;
+          description = "Image formats to build, with additional NixOS configuration for each format.";
+        };
+
+        build.images = lib.mkOption {
+          # Keep the lazy merge local. config.lib's `anything` type wraps
+          # functions and recursively merges their results, forcing siblings.
+          type = (lib.types.lazyAttrsOf (lib.types.lazyAttrsOf lib.types.package)) // {
+            name = "outputOf";
+            description = "machine image outputs";
+          };
+          default = { };
+          internal = true;
+          description = "Image artifacts indexed by system and format.";
+        };
+
+        _imageEvals = lib.mkOption {
+          type = lib.types.raw;
+          internal = true;
+          visible = false;
+          description = "Lazy provider-specific configurations for each image system.";
+        };
+
+        target = lib.mkOption {
+          type = targetOptions;
+          default = { };
+          description = "SSH destination for install and deploy. See the `target.host` and `target.sshOpts` suboptions.";
+        };
+
+        nixos = lib.mkOption {
+          type = lib.types.nullOr lib.types.deferredModule;
+          description = "NixOS configuration for the machine.";
+          default = null;
+          example = lib.literalExpression ''
+            {
+              fileSystems."/".device = "/dev/sda1";
+              boot.loader.systemd-boot.enable = true;
+              services.openssh.enable = true;
+            }
+          '';
+        };
+
+        hardware = lib.mkOption {
+          type = lib.types.submodule {
+            options = {
+              facter = lib.mkOption {
+                type = lib.types.nullOr (lib.types.either lib.types.path lib.types.str);
+                default = if config.images != { } then null else ".machines/${name}/facter.json";
+                defaultText = lib.literalExpression ''if config.images != { } then null else ".machines/''${name}/facter.json"'';
+                description = ''
+                  Path to the [nixos-facter](https://github.com/nix-community/nixos-facter) hardware report for this machine.
+
+                  Accepts either a Nix path literal or a string path relative to the devenv project root.
+                      Defaults to `null` for image machines. Otherwise defaults to
+                    `.machines/<name>/facter.json`, which `devenv machines install` generates
+                  on first run by probing the target over SSH. The report must be committed to git so that
+                  teammates and CI can build the machine closure without reaching the target.
+
+                  Set to `null` to opt this machine out of facter, for example when it carries a hand written
+                  `hardware-configuration.nix` instead. Only applies to machines with a `nixos` module set;
+                  `nix-darwin` and `home-manager` entries ignore this option.
+                '';
+                example = lib.literalExpression "./hardware/web1.json";
               };
-              default = { };
-              description = "Kexec override settings for `devenv machines install`.";
             };
+          };
+          default = { };
+          description = "Hardware detection settings for this machine.";
+        };
 
-            extraFiles = lib.mkOption {
-              type = lib.types.attrsOf (lib.types.submodule {
-                options = {
-                  source = lib.mkOption {
-                    type = lib.types.str;
-                    description = ''
-                      Local path to the file to copy onto the installed system.
-                      Accepts an absolute path or a path relative to the devenv project root.
-                      Must be a string (not a Nix path literal) so secrets stay on the host
-                      running `devenv machines install` and never enter `/nix/store`.
-                    '';
-                  };
-                  owner = lib.mkOption {
-                    type = lib.types.str;
-                    default = "0:0";
-                    description = "Numeric owner in `uid:gid` format applied via chown on the target.";
-                  };
-                  mode = lib.mkOption {
-                    type = lib.types.str;
-                    default = "0644";
-                    description = "File mode applied via chmod on the target.";
+        install = lib.mkOption {
+          type = lib.types.submodule {
+            options = {
+              kexec = lib.mkOption {
+                type = lib.types.submodule {
+                  options = {
+                    image = lib.mkOption {
+                      type = lib.types.nullOr lib.types.str;
+                      default = null;
+                      description = ''
+                        Override the default nixos-images kexec tarball URL. Set this for
+                        custom installer images, non-standard architectures, or VPN-enabled
+                        installers. Must be an HTTP(S) URL fetched on the remote target.
+                      '';
+                      example = "https://example.com/custom-kexec-aarch64.tar.gz";
+                    };
+
+                    postSshPort = lib.mkOption {
+                      type = lib.types.nullOr lib.types.port;
+                      default = null;
+                      description = ''
+                        SSH port to reconnect to after kexec lands in the installer. Set
+                        this when the live sshd on the target listens on a non-22 port. All
+                        subsequent install phases (facter, disko, nixos-install) use this
+                        port.
+                      '';
+                      example = 2222;
+                    };
                   };
                 };
-              });
-              default = { };
-              description = ''
-                Files to copy onto the installed system after `nixos-install` but
-                before reboot. Attribute names are absolute target paths (e.g.
-                `"/var/lib/secret-age-key"`). Use this for age/sops master keys,
-                SSH host keys, or `/var/lib/*` seeds that need to exist on first boot.
-                Matches nixos-anywhere's `--extra-files` and `--chown`.
-              '';
-              example = lib.literalExpression ''
-                {
-                  "/var/lib/secret-age-key" = {
-                    source = "secrets/age.key";
-                    owner = "0:0";
-                    mode = "0600";
-                  };
-                }
-              '';
-            };
-
-            secretspec = lib.mkOption {
-              type = lib.types.submodule {
-                options = {
-                  execution = lib.mkOption {
-                    type = lib.types.enum [ "local" "target" ];
-                    default = "local";
-                    description = ''
-                      Where SecretSpec resolves bootstrap values. `local`
-                      resolves on the workstation and streams values over SSH.
-                      `target` sends only a self-contained SecretSpec manifest and
-                      resolves through the provider on the installer machine.
-                    '';
-                  };
-                  provider = lib.mkOption {
-                    type = lib.types.nullOr lib.types.str;
-                    default = null;
-                    description = ''
-                      Explicit target-side provider override. When unset, devenv
-                      does not pass `--provider`; SecretSpec selects providers
-                      from the manifest, target environment, and target-global
-                      configuration. The workstation provider is never inherited.
-                      Provider credentials must be available independently on the
-                      installer and are never forwarded by devenv. This option is
-                      non-secret metadata and must not contain credentials; use a
-                      provider alias or target-global configuration instead.
-                    '';
-                  };
-                  profile = lib.mkOption {
-                    type = lib.types.nullOr lib.types.str;
-                    default = null;
-                    description = ''
-                      Explicit target-side profile override. When unset, devenv
-                      does not pass `--profile`; SecretSpec selects the profile
-                      from the target environment or target-global configuration,
-                      falling back to `default`. The workstation profile is never
-                      inherited.
-                    '';
-                  };
-                  extraPackages = lib.mkOption {
-                    type = lib.types.functionTo (lib.types.listOf lib.types.package);
-                    default = _targetPkgs: [ ];
-                    defaultText = lib.literalExpression "_targetPkgs: [ ]";
-                    example = lib.literalExpression "targetPkgs: [ targetPkgs.sops targetPkgs.pass ]";
-                    description = ''
-                      Function selecting additional target-architecture packages
-                      required by the chosen SecretSpec providers, such as `sops`
-                      or `pass`. These packages are included in a private resolver
-                      runtime for target execution, not the system-wide command
-                      namespace.
-                    '';
-                  };
-                };
+                default = { };
+                description = "Kexec override settings for `devenv machines install`.";
               };
-              default = { };
-              description = "How install-time SecretSpec bootstrap values are resolved.";
-            };
 
-            secrets = lib.mkOption {
-              type = lib.types.attrsOf (lib.types.submodule {
-                options = {
-                  secret = lib.mkOption {
-                    type = lib.types.str;
-                    description = ''
-                      Name of the secret in the active SecretSpec profile. The
-                      value is resolved at install time according to
-                      `install.secretspec.execution` and is never included in
-                      machine metadata or a Nix store path.
-                    '';
-                    example = "WEB1_AGE_KEY";
+              extraFiles = lib.mkOption {
+                type = lib.types.attrsOf (lib.types.submodule {
+                  options = {
+                    source = lib.mkOption {
+                      type = lib.types.str;
+                      description = ''
+                        Local path to the file to copy onto the installed system.
+                        Accepts an absolute path or a path relative to the devenv project root.
+                        Must be a string (not a Nix path literal) so secrets stay on the host
+                        running `devenv machines install` and never enter `/nix/store`.
+                      '';
+                    };
+                    owner = lib.mkOption {
+                      type = lib.types.str;
+                      default = "0:0";
+                      description = "Numeric owner in `uid:gid` format applied via chown on the target.";
+                    };
+                    mode = lib.mkOption {
+                      type = lib.types.str;
+                      default = "0644";
+                      description = "File mode applied via chmod on the target.";
+                    };
                   };
-                  owner = lib.mkOption {
-                    type = lib.types.str;
-                    default = "0:0";
-                    description = "Numeric owner in `uid:gid` format applied via chown on the target.";
-                  };
-                  mode = lib.mkOption {
-                    type = lib.types.str;
-                    default = "0600";
-                    description = ''
-                      File mode applied via chmod on the target. Special and
-                      execute bits, group write, and every permission for
-                      other users are rejected. Modes such as 0400, 0600, and
-                      0640 are accepted.
-                    '';
+                });
+                default = { };
+                description = ''
+                  Files to copy onto the installed system after `nixos-install` but
+                  before reboot. Attribute names are absolute target paths (e.g.
+                  `"/var/lib/secret-age-key"`). Use this for age/sops master keys,
+                  SSH host keys, or `/var/lib/*` seeds that need to exist on first boot.
+                  Matches nixos-anywhere's `--extra-files` and `--chown`.
+                '';
+                example = lib.literalExpression ''
+                  {
+                    "/var/lib/secret-age-key" = {
+                      source = "secrets/age.key";
+                      owner = "0:0";
+                      mode = "0600";
+                    };
+                  }
+                '';
+              };
+
+              secretspec = lib.mkOption {
+                type = lib.types.submodule {
+                  options = {
+                    execution = lib.mkOption {
+                      type = lib.types.enum [ "local" "target" ];
+                      default = "local";
+                      description = ''
+                        Where SecretSpec resolves bootstrap values. `local`
+                        resolves on the workstation and streams values over SSH.
+                        `target` sends only a self-contained SecretSpec manifest and
+                        resolves through the provider on the installer machine.
+                      '';
+                    };
+                    provider = lib.mkOption {
+                      type = lib.types.nullOr lib.types.str;
+                      default = null;
+                      description = ''
+                        Explicit target-side provider override. When unset, devenv
+                        does not pass `--provider`; SecretSpec selects providers
+                        from the manifest, target environment, and target-global
+                        configuration. The workstation provider is never inherited.
+                        Provider credentials must be available independently on the
+                        installer and are never forwarded by devenv. This option is
+                        non-secret metadata and must not contain credentials; use a
+                        provider alias or target-global configuration instead.
+                      '';
+                    };
+                    profile = lib.mkOption {
+                      type = lib.types.nullOr lib.types.str;
+                      default = null;
+                      description = ''
+                        Explicit target-side profile override. When unset, devenv
+                        does not pass `--profile`; SecretSpec selects the profile
+                        from the target environment or target-global configuration,
+                        falling back to `default`. The workstation profile is never
+                        inherited.
+                      '';
+                    };
+                    extraPackages = lib.mkOption {
+                      type = lib.types.functionTo (lib.types.listOf lib.types.package);
+                      default = _targetPkgs: [ ];
+                      defaultText = lib.literalExpression "_targetPkgs: [ ]";
+                      example = lib.literalExpression "targetPkgs: [ targetPkgs.sops targetPkgs.pass ]";
+                      description = ''
+                        Function selecting additional target-architecture packages
+                        required by the chosen SecretSpec providers, such as `sops`
+                        or `pass`. These packages are included in a private resolver
+                        runtime for target execution, not the system-wide command
+                        namespace.
+                      '';
+                    };
                   };
                 };
-              });
-              default = { };
-              description = ''
-                Bootstrap files populated from the active SecretSpec profile
-                after `nixos-install` and before reboot. Attribute names are
-                absolute paths in the installed system. Local execution streams
-                values over strictly authenticated SSH; target execution sends
-                only a self-contained declaration manifest and fetches values
-                on the installer.
-                Both modes atomically install files without placing values in
-                `/nix/store`.
+                default = { };
+                description = "How install-time SecretSpec bootstrap values are resolved.";
+              };
 
-                Local execution requires SecretSpec to be enabled in
-                `devenv.yaml`; use the global `--secretspec-provider` and
-                `--secretspec-profile` flags to select its source. Target
-                execution only requires `secretspec.toml` and leaves provider
-                and profile selection to the target unless explicitly overridden
-                by `install.secretspec`.
-              '';
-              example = lib.literalExpression ''
-                {
-                  "/var/lib/sops-nix/key.txt" = {
-                    secret = "WEB1_AGE_KEY";
-                    owner = "0:0";
-                    mode = "0600";
+              secrets = lib.mkOption {
+                type = lib.types.attrsOf (lib.types.submodule {
+                  options = {
+                    secret = lib.mkOption {
+                      type = lib.types.str;
+                      description = ''
+                        Name of the secret in the active SecretSpec profile. The
+                        value is resolved at install time according to
+                        `install.secretspec.execution` and is never included in
+                        machine metadata or a Nix store path.
+                      '';
+                      example = "WEB1_AGE_KEY";
+                    };
+                    owner = lib.mkOption {
+                      type = lib.types.str;
+                      default = "0:0";
+                      description = "Numeric owner in `uid:gid` format applied via chown on the target.";
+                    };
+                    mode = lib.mkOption {
+                      type = lib.types.str;
+                      default = "0600";
+                      description = ''
+                        File mode applied via chmod on the target. Special and
+                        execute bits, group write, and every permission for
+                        other users are rejected. Modes such as 0400, 0600, and
+                        0640 are accepted.
+                      '';
+                    };
                   };
-                }
-              '';
-            };
+                });
+                default = { };
+                description = ''
+                  Bootstrap files populated from the active SecretSpec profile
+                  after `nixos-install` and before reboot. Attribute names are
+                  absolute paths in the installed system. Local execution streams
+                  values over strictly authenticated SSH; target execution sends
+                  only a self-contained declaration manifest and fetches values
+                  on the installer.
+                  Both modes atomically install files without placing values in
+                  `/nix/store`.
 
-            encryptionKeys = lib.mkOption {
-              type = lib.types.attrsOf lib.types.str;
-              default = { };
-              description = ''
-                Keyfiles dropped onto the installer **before disko runs**, so LUKS
-                layouts with `passwordFile = "/tmp/luks.key"` can unlock. Attribute
-                names are absolute target paths on the installer; values are local
-                source paths (string, absolute or relative to the devenv project root)
-                on the host running `devenv machines install`. Strings — not Nix path
-                literals — so LUKS keys never enter `/nix/store`.
-              '';
-              example = lib.literalExpression ''
-                {
-                  "/tmp/luks.key" = "secrets/luks.key";
-                }
-              '';
-            };
+                  Local execution requires SecretSpec to be enabled in
+                  `devenv.yaml`; use the global `--secretspec-provider` and
+                  `--secretspec-profile` flags to select its source. Target
+                  execution only requires `secretspec.toml` and leaves provider
+                  and profile selection to the target unless explicitly overridden
+                  by `install.secretspec`.
+                '';
+                example = lib.literalExpression ''
+                  {
+                    "/var/lib/sops-nix/key.txt" = {
+                      secret = "WEB1_AGE_KEY";
+                      owner = "0:0";
+                      mode = "0600";
+                    };
+                  }
+                '';
+              };
 
-            copyHostKeys = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = ''
-                Copy `/etc/ssh/ssh_host_*` from the live installer into the
-                installed system before reboot. This keeps the SSH identity
-                stable between the post-kexec installer and the first boot, so
-                that identity's `known_hosts` entry keeps working.
-              '';
-            };
-          };
-        };
-        default = { };
-        description = "Install-time settings for `devenv machines install`.";
-      };
+              encryptionKeys = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                description = ''
+                  Keyfiles dropped onto the installer **before disko runs**, so LUKS
+                  layouts with `passwordFile = "/tmp/luks.key"` can unlock. Attribute
+                  names are absolute target paths on the installer; values are local
+                  source paths (string, absolute or relative to the devenv project root)
+                  on the host running `devenv machines install`. Strings — not Nix path
+                  literals — so LUKS keys never enter `/nix/store`.
+                '';
+                example = lib.literalExpression ''
+                  {
+                    "/tmp/luks.key" = "secrets/luks.key";
+                  }
+                '';
+              };
 
-      home-manager = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
-        description = "Home Manager configuration for the machine.";
-        default = null;
-        example = lib.literalExpression ''
-          {
-            home.username = "jdoe";
-            home.homeDirectory = "/home/jdoe";
-            programs.git.enable = true;
-          }
-        '';
-      };
-
-      nix-darwin = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
-        description = "nix-darwin configuration for the machine.";
-        default = null;
-        example = lib.literalExpression ''
-          { pkgs, ... }: {
-            environment.systemPackages = [
-              pkgs.vim
-            ];
-            services.nix-daemon.enable = true;
-          }
-        '';
-      };
-
-      # Computed build outputs. These are picked up by the `build` walker in
-      # `devenv-nix-backend/bootstrap/bootstrapLib.nix` because the walker
-      # recurses into `attrsOf submodule` options and collects output-typed
-      # sub-options. The result is that
-      #     devenv build machines.<name>
-      # builds every defined role for that machine (flattening to paths like
-      # `machines.<name>.build.nixos`), and
-      #     devenv build machines.<name>.build.<role>
-      # builds a single role.
-      build.nixos = lib.mkOption {
-        type = outputType;
-        default = null;
-        internal = true;
-        description = "Built NixOS system toplevel for this machine, or null if no `nixos` module is set.";
-      };
-
-      build.deployer = lib.mkOption {
-        type = outputType;
-        default = null;
-        internal = true;
-        description = "Target-platform NixOS deployment executor.";
-      };
-
-      deploy.facts = lib.mkOption {
-        type = lib.types.attrs;
-        internal = true;
-        readOnly = true;
-        description = "Evaluated NixOS access facts; reading these does not build the system.";
-      };
-
-      deploy.healthCheck = lib.mkOption {
-        type = lib.types.lines;
-        default = "true";
-        description = ''
-          Root shell commands run on the target after transactional NixOS activation.
-          A nonzero exit or failure to finish before `deploy.rollbackTimeout`
-          prevents confirmation and triggers rollback at the deadline.
-          Use absolute store paths for required tools.
-        '';
-      };
-
-      deploy.rollbackTimeout = lib.mkOption {
-        type = lib.types.ints.between 30 600;
-        default = 300;
-        description = ''
-          Seconds allowed for transactional activation, health checks and SSH
-          confirmation together. A target-side watchdog restores the previous
-          system if this deadline expires without confirmation.
-        '';
-      };
-
-      build.nix-darwin = lib.mkOption {
-        type = outputType;
-        default = null;
-        internal = true;
-        description = "Built nix-darwin system toplevel for this machine, or null if no `nix-darwin` module is set.";
-      };
-
-      build.home-manager = lib.mkOption {
-        type = outputType;
-        default = null;
-        internal = true;
-        description = "Built home-manager activation package for this machine, or null if no `home-manager` module is set.";
-      };
-
-      build.diskoScript = lib.mkOption {
-        type = outputType;
-        default = null;
-        internal = true;
-        description = "Disko partitioning script (destroy + create + mount) for this machine.";
-      };
-
-      build.diskoFormatScript = lib.mkOption {
-        type = outputType;
-        default = null;
-        internal = true;
-        description = "Disko format script (create without destroy) for this machine.";
-      };
-
-      build.diskoMountScript = lib.mkOption {
-        type = outputType;
-        default = null;
-        internal = true;
-        description = "Disko mount script (mount only, no partitioning) for this machine.";
-      };
-
-      # Shared lazy NixOS evaluation, set once per machine when `nixos != null`.
-      # Every `build.*` and `installCheck` consumer reads through this option
-      # so `nixosSystem { … }` runs exactly once, instead of once per output.
-      _nixosEval = lib.mkOption {
-        type = lib.types.unspecified;
-        internal = true;
-        visible = false;
-        default = null;
-        description = "Shared internal NixOS evaluation result for this machine.";
-      };
-
-      installCheck = lib.mkOption {
-        visible = false;
-        type = lib.types.submodule {
-          options = {
-            hasRootAuth = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "Whether the evaluated NixOS root account has a password or authorized SSH key.";
+              copyHostKeys = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  Copy `/etc/ssh/ssh_host_*` from the live installer into the
+                  installed system before reboot. This keeps the SSH identity
+                  stable between the post-kexec installer and the first boot, so
+                  that identity's `known_hosts` entry keeps working.
+                '';
+              };
             };
           };
+          default = { };
+          description = "Install-time settings for `devenv machines install`.";
         };
-        internal = true;
-        default = { };
+
+        home-manager = lib.mkOption {
+          type = lib.types.nullOr lib.types.deferredModule;
+          description = "Home Manager configuration for the machine.";
+          default = null;
+          example = lib.literalExpression ''
+            {
+              home.username = "jdoe";
+              home.homeDirectory = "/home/jdoe";
+              programs.git.enable = true;
+            }
+          '';
+        };
+
+        nix-darwin = lib.mkOption {
+          type = lib.types.nullOr lib.types.deferredModule;
+          description = "nix-darwin configuration for the machine.";
+          default = null;
+          example = lib.literalExpression ''
+            { pkgs, ... }: {
+              environment.systemPackages = [
+                pkgs.vim
+              ];
+              services.nix-daemon.enable = true;
+            }
+          '';
+        };
+
+        # Computed build outputs. These are picked up by the `build` walker in
+        # `devenv-nix-backend/bootstrap/bootstrapLib.nix` because the walker
+        # recurses into `attrsOf submodule` options and collects output-typed
+        # sub-options. The result is that
+        #     devenv build machines.<name>
+        # builds every defined role for that machine (flattening to paths like
+        # `machines.<name>.build.nixos`), and
+        #     devenv build machines.<name>.build.<role>
+        # builds a single role.
+        build.nixos = lib.mkOption {
+          type = outputType;
+          default = null;
+          internal = true;
+          description = "Built NixOS system toplevel for this machine, or null if no `nixos` module is set.";
+        };
+
+        build.deployer = lib.mkOption {
+          type = outputType;
+          default = null;
+          internal = true;
+          description = "Target-platform NixOS deployment executor.";
+        };
+
+        deploy.facts = lib.mkOption {
+          type = lib.types.attrs;
+          internal = true;
+          readOnly = true;
+          description = "Evaluated NixOS access facts; reading these does not build the system.";
+        };
+
+        deploy.healthCheck = lib.mkOption {
+          type = lib.types.lines;
+          default = "true";
+          description = ''
+            Root shell commands run on the target after transactional NixOS activation.
+            A nonzero exit or failure to finish before `deploy.rollbackTimeout`
+            prevents confirmation and triggers rollback at the deadline.
+            Use absolute store paths for required tools.
+          '';
+        };
+
+        deploy.rollbackTimeout = lib.mkOption {
+          type = lib.types.ints.between 30 600;
+          default = 300;
+          description = ''
+            Seconds allowed for transactional activation, health checks and SSH
+            confirmation together. A target-side watchdog restores the previous
+            system if this deadline expires without confirmation.
+          '';
+        };
+
+        build.nix-darwin = lib.mkOption {
+          type = outputType;
+          default = null;
+          internal = true;
+          description = "Built nix-darwin system toplevel for this machine, or null if no `nix-darwin` module is set.";
+        };
+
+        build.home-manager = lib.mkOption {
+          type = outputType;
+          default = null;
+          internal = true;
+          description = "Built home-manager activation package for this machine, or null if no `home-manager` module is set.";
+        };
+
+        build.diskoScript = lib.mkOption {
+          type = outputType;
+          default = null;
+          internal = true;
+          description = "Disko partitioning script (destroy + create + mount) for this machine.";
+        };
+
+        build.diskoFormatScript = lib.mkOption {
+          type = outputType;
+          default = null;
+          internal = true;
+          description = "Disko format script (create without destroy) for this machine.";
+        };
+
+        build.diskoMountScript = lib.mkOption {
+          type = outputType;
+          default = null;
+          internal = true;
+          description = "Disko mount script (mount only, no partitioning) for this machine.";
+        };
+
+        # Shared lazy NixOS evaluation, set once per machine when `nixos != null`.
+        # Every `build.*` and `installCheck` consumer reads through this option
+        # so `nixosSystem { … }` runs exactly once, instead of once per output.
+        _nixosEval = lib.mkOption {
+          type = lib.types.unspecified;
+          internal = true;
+          visible = false;
+          default = null;
+          description = "Shared internal NixOS evaluation result for this machine.";
+        };
+
+        installCheck = lib.mkOption {
+          visible = false;
+          type = lib.types.submodule {
+            options = {
+              hasRootAuth = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Whether the evaluated NixOS root account has a password or authorized SSH key.";
+              };
+            };
+          };
+          internal = true;
+          default = { };
+        };
       };
-    };
 
-    # Evaluate NixOS once per machine. The thunk stays unforced while
-    # `config.nixos == null` because every `build.*` and `installCheck`
-    # consumer guards access behind `lib.mkIf (config.nixos != null) …`.
-    config._nixosEval = lib.mkIf (config.nixos != null) (nixosEval config);
-    config.deploy.facts = if config.nixos != null then config._nixosEval.config.devenvMachineFacts else { };
+      # Evaluate NixOS once per machine. The thunk stays unforced while
+      # `config.nixos == null` because every `build.*` and `installCheck`
+      # consumer guards access behind `lib.mkIf (config.nixos != null) …`.
+      config._imageEvals = lib.genAttrs (if hasImages then config.systems else [ ]) (system:
+        let base = nixosEval (config // { inherit system; });
+        in lib.mapAttrs
+          (format: module:
+            let
+              variant = base.extendModules {
+                modules = [{
+                  image.modules.${format} = { pkgs, ... }: {
+                    imports = [ module ];
+                    # Capture the final provider package set, including overlays.
+                    # The upstream image passthru exports config, not the full
+                    # evaluation result with its pkgs argument.
+                    options._devenvImagePkgs = lib.mkOption {
+                      type = lib.types.raw;
+                      internal = true;
+                      visible = false;
+                      readOnly = true;
+                      default = pkgs;
+                      description = "Final package set used by this image variant.";
+                    };
+                  };
+                }];
+              };
+              image = variant.config.system.build.images.${format} or
+                (throw "The nixpkgs input does not support the ${format} image variant");
+            in
+            {
+              inherit image;
+              config = image.passthru.config;
+              pkgs = image.passthru.config._devenvImagePkgs;
+            }
+          )
+          config.images);
+      config._nixosEval = lib.mkIf deployable (
+        if hasImages then config._imageEvals.${selectedSystem}.${selectedImage}
+        else nixosEval config
+      );
+      config.deploy.facts = if deployable then config._nixosEval.config.devenvMachineFacts else { };
 
-    config.build = {
-      deployer = lib.mkIf (config.nixos != null) (import ./machines/deploy.nix {
-        pkgs = config._nixosEval.pkgs;
-        inherit (config.deploy) healthCheck rollbackTimeout;
-      });
-      nixos = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.toplevel;
-      diskoScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.diskoScript;
-      diskoFormatScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.formatScript;
-      diskoMountScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.mountScript;
-      nix-darwin = lib.mkIf (config.nix-darwin != null) (lib.mkDefault (buildNixDarwinToplevel config));
-      home-manager = lib.mkIf (config.home-manager != null) (lib.mkDefault (buildHomeManagerToplevel config));
-    };
+      config.build = {
+        images = lib.mapAttrs (_system: formats: lib.mapAttrs (_format: evaluated: evaluated.image) formats) config._imageEvals;
+        deployer = lib.mkIf deployable (import ./machines/deploy.nix {
+          pkgs = config._nixosEval.pkgs;
+          inherit (config.deploy) healthCheck rollbackTimeout;
+        });
+        nixos = lib.mkIf deployable config._nixosEval.config.system.build.toplevel;
+        diskoScript = lib.mkIf (config.nixos != null && !hasImages) config._nixosEval.config.system.build.diskoScript;
+        diskoFormatScript = lib.mkIf (config.nixos != null && !hasImages) config._nixosEval.config.system.build.formatScript;
+        diskoMountScript = lib.mkIf (config.nixos != null && !hasImages) config._nixosEval.config.system.build.mountScript;
+        nix-darwin = lib.mkIf (config.nix-darwin != null) (lib.mkDefault (buildNixDarwinToplevel config));
+        home-manager = lib.mkIf (config.home-manager != null) (lib.mkDefault (buildHomeManagerToplevel (config // lib.optionalAttrs (hasImages && deployable) { system = selectedSystem; })));
+      };
 
-    # Lazy: only forced when the CLI reads `installCheck.hasRootAuth`
-    # (i.e. during `devenv machines install`), never during `info`/`deploy`.
-    # For home-manager-only machines the default `hasRootAuth = false` stays.
-    config.installCheck = lib.mkIf (config.nixos != null) {
-      hasRootAuth =
-        let
-          root = config._nixosEval.config.users.users.root or { };
-          keys = root.openssh.authorizedKeys.keys or [ ];
-          keyFiles = root.openssh.authorizedKeys.keyFiles or [ ];
-          hashAllowsLogin = hash:
-            hash != null
-            && !(lib.hasPrefix "!" hash)
-            && !(lib.hasPrefix "*" hash);
-          hasPassword =
-            hashAllowsLogin (root.hashedPassword or null)
-            || hashAllowsLogin (root.initialHashedPassword or null)
-            || (root.hashedPasswordFile or null) != null
-            || (root.password or null) != null
-            || (root.initialPassword or null) != null;
-        in
-        keys != [ ] || keyFiles != [ ] || hasPassword;
-    };
-  });
+      # Lazy: only forced when the CLI reads `installCheck.hasRootAuth`
+      # (i.e. during `devenv machines install`), never during `info`/`deploy`.
+      # For home-manager-only machines the default `hasRootAuth = false` stays.
+      config.installCheck = lib.mkIf (config.nixos != null) {
+        hasRootAuth =
+          let
+            root = config._nixosEval.config.users.users.root or { };
+            keys = root.openssh.authorizedKeys.keys or [ ];
+            keyFiles = root.openssh.authorizedKeys.keyFiles or [ ];
+            hashAllowsLogin = hash:
+              hash != null
+              && !(lib.hasPrefix "!" hash)
+              && !(lib.hasPrefix "*" hash);
+            hasPassword =
+              hashAllowsLogin (root.hashedPassword or null)
+              || hashAllowsLogin (root.initialHashedPassword or null)
+              || (root.hashedPasswordFile or null) != null
+              || (root.password or null) != null
+              || (root.initialPassword or null) != null;
+          in
+          keys != [ ] || keyFiles != [ ] || hasPassword;
+      };
+    });
 in
 {
   imports = [
@@ -773,10 +881,26 @@ in
             type = lib.types.str;
             description = "Machine system copied into CLI metadata.";
           };
+          systems = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            description = "Image target systems.";
+          };
+          imageFormats = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            description = "Configured image formats.";
+          };
           target = lib.mkOption {
             description = "Machine SSH target copied into CLI metadata.";
             type = lib.types.submodule {
               options = {
+                system = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  description = "Explicit image deployment system.";
+                };
+                image = lib.mkOption {
+                  type = lib.types.nullOr lib.types.str;
+                  description = "Explicit image deployment format.";
+                };
                 host = lib.mkOption {
                   type = lib.types.nullOr lib.types.str;
                   description = "SSH host copied into CLI metadata.";
@@ -860,8 +984,14 @@ in
 
   config.machinesMeta = lib.mapAttrs
     (_name: m: {
-      inherit (m) system;
-      target = { inherit (m.target) host sshOpts; };
+      system =
+        if m.images == { } then m.system
+        else if m.target.system != null then m.target.system
+        else if builtins.length m.systems == 1 then builtins.head m.systems
+        else m.system;
+      inherit (m) systems;
+      imageFormats = builtins.attrNames m.images;
+      target = { inherit (m.target) host sshOpts system image; };
       hasNixos = m.nixos != null;
       hasNixDarwin = m.nix-darwin != null;
       hasHomeManager = m.home-manager != null;
