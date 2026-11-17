@@ -3,6 +3,7 @@ mod error;
 pub mod executor;
 mod native_manager;
 mod privileges;
+mod process_owner;
 mod task_cache;
 mod task_state;
 mod tasks;
@@ -14,6 +15,7 @@ pub use error::Error;
 pub use executor::{ExecutionContext, ExecutionResult, OutputCallback};
 pub use native_manager::{NativeApiServer, NativeProcessManager};
 pub use privileges::SudoContext;
+pub use process_owner::ProcessOwner;
 pub use tasks::{Tasks, TasksBuilder, compute_display_hierarchy};
 pub use types::{
     DependencyKind, Outputs, PROCESS_TASK_PREFIX, TaskCompleted, TaskOutputs, TaskStatus, TaskType,

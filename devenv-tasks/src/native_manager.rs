@@ -1,8 +1,8 @@
 use crate::Tasks;
 use devenv_mailbox::{FrontendEvent, ProcessCommand};
 use devenv_processes::{
-    ApiRequest, ApiResponse, AttachEvent, LogStream, ManagerResidence, OnIdle, ProcessInfo,
-    ProcessPhase, ProcessRunner,
+    ApiRequest, ApiResponse, AttachEvent, DependencyInfo, LogStream, ManagerResidence, OnIdle,
+    ProcessInfo, ProcessPhase, ProcessRunner,
 };
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
@@ -272,6 +272,26 @@ impl NativeProcessManager {
             Ok(ApiRequest::Start { names }) => ApiResponse::Start {
                 outcome: manager.tasks.start_with_deps(names).await,
             },
+            Ok(ApiRequest::EnsureStarted { name, restart }) => {
+                match manager.tasks.ensure_started(&name, restart).await {
+                    Ok(()) => ApiResponse::Ok,
+                    Err(error) => ApiResponse::Error {
+                        message: error.to_string(),
+                    },
+                }
+            }
+            Ok(ApiRequest::DependencyStatus { names }) => {
+                let runner = manager.process_runner();
+                let mut processes = Vec::with_capacity(names.len());
+                for name in names {
+                    processes.push(DependencyInfo {
+                        phase: runner.get_dependency_phase(&name).await,
+                        exit_status: runner.get_exit_status(&name).await,
+                        name,
+                    });
+                }
+                ApiResponse::DependencyStatus { processes }
+            }
             Ok(ApiRequest::Residence) => ApiResponse::Residence {
                 residence: manager.residence(),
             },
