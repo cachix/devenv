@@ -544,6 +544,16 @@ in
         defaultText = lib.literalExpression "pkgs.pyright";
         description = "The Python language server package to use.";
       };
+      pyright.pybuiltins.nixosTestDriver = {
+        enable = lib.mkEnableOption "the NixOS test driver types";
+
+        driver = lib.mkOption {
+          type = lib.types.nullOr lib.types.package;
+          default = null;
+          example = lib.literalExpression "inputs.self.checks.$${system}.default.driver";
+          description = "The NixOS test driver package or derivation to use.";
+        };
+      };
     };
 
     poetry = {
@@ -778,6 +788,11 @@ in
         assertion = !(cfg.poetry.install.enable && cfg.uv.sync.enable);
         message = "Error: Both poetry.install.enable and uv.sync.enable cannot be true simultaneously.";
       }
+      {
+        assertion = !(cfg.lsp.pyright.pybuiltins.nixosTestDriver.enable &&
+          cfg.lsp.pyright.pybuiltins.nixosTestDriver.driver == null);
+        message = "Error: The NixOS test driver package is not set while the builtins option is enabled.";
+      }
     ];
 
     tasks = {
@@ -808,5 +823,29 @@ in
         before = [ "devenv:enterShell" ];
       };
     };
+    files =
+      let
+        withTypes =
+          drv:
+          drv.overrideAttrs (old: {
+            buildCommand = ''
+              ${old.buildCommand}
+              mkdir -p $out
+              cp "$NIX_BUILD_TOP/testScriptWithTypes" $out/testScriptWithTypes
+              test_len=$(cat $out/test-script | wc -l)
+              types_len=$(cat $out/testScriptWithTypes | wc -l)
+              only_types_len=$((types_len - test_len))
+              head -n $only_types_len $out/testScriptWithTypes > $out/types
+            '';
+          });
+        driver = withTypes cfg.lsp.pyright.pybuiltins.nixosTestDriver.driver;
+      in
+      lib.mkIf cfg.lsp.pyright.pybuiltins.nixosTestDriver.enable {
+        "__builtins__.pyi".text =
+          ''
+            # ruff: noqa
+            ${builtins.readFile "${driver}/types"}
+          '';
+      };
   };
 }
