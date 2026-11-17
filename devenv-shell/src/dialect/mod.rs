@@ -839,6 +839,61 @@ export DEVENV_RELOAD_TEST_VAR=reload_works
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// The bootstrap bash for non-bash dialects runs interactively, so it
+    /// sources the system bashrc (when compiled with SYS_BASHRC, as nixpkgs
+    /// bash is). Fedora's /etc/bashrc does `SHELL=/bin/bash`, which would leak
+    /// into the target shell unless the rcfile resets SHELL before exec.
+    #[test]
+    fn non_bash_rcfile_resets_shell_before_exec() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = unique_tmp_dir("shell-reset");
+        let init_dir = tmp.join("init");
+        std::fs::create_dir_all(&init_dir).unwrap();
+        // Stand-in for the target shell: report the SHELL it was exec'd with.
+        let fake_shell = tmp.join("fake-shell");
+        std::fs::write(&fake_shell, "#!/bin/sh\nprintf '%s' \"$SHELL\"\n").unwrap();
+        std::fs::set_permissions(&fake_shell, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let fake_shell_str = fake_shell.to_str().unwrap();
+
+        let shell_keybindings = ShellKeybindings::default();
+        let dialects: [&dyn ShellDialect; 3] = [&FishDialect, &ZshDialect, &NushellDialect];
+        for dialect in dialects {
+            let ctx = RcfileContext {
+                env_script_path: Path::new("/dev/null"),
+                env_diff_helpers: dialect.env_diff_helpers(),
+                reload_hook: "",
+                target_shell_path: Some(fake_shell_str),
+                init_dir: &init_dir,
+                shell_keybindings: &shell_keybindings,
+                prompt_prefix: false,
+            };
+            let rcfile = init_dir.join(format!("{}-rcfile.sh", dialect.name()));
+            std::fs::write(&rcfile, dialect.rcfile_content(&ctx)).unwrap();
+
+            // Simulate a system bashrc clobbering SHELL before our rcfile runs.
+            let output = Command::new("bash")
+                .arg("--noprofile")
+                .arg("--norc")
+                .arg("-c")
+                .arg("SHELL=/bin/bash; source \"$1\"")
+                .arg("bash")
+                .arg(&rcfile)
+                .env("SHELL", "/bin/bash")
+                .output()
+                .unwrap();
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                fake_shell_str,
+                "[{}] SHELL not reset to target shell.\nstderr: {}",
+                dialect.name(),
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     #[test]
     fn nu_rcfile_exits_on_cd_out_when_hook_spawned() {
         if Command::new("nu").arg("--version").output().is_err() {

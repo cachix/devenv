@@ -66,6 +66,10 @@ if [ ! -x "{target_shell}" ] && ! command -v "{target_shell}" >/dev/null 2>&1; t
     echo "devenv: add zsh to your devenv.nix packages or set SHELL to an absolute path" >&2
     exit 1
 fi
+# The bootstrap bash is interactive, so it sources the system bashrc
+# before this file; some distros reset SHELL there (Fedora's /etc/bashrc does
+# `SHELL=/bin/bash`). Point SHELL back at the shell we are about to exec.
+export SHELL="$(command -v "{target_shell}")"
 exec "{target_shell}" -i
 echo "devenv: error: failed to exec into {target_shell}" >&2
 exit 1
