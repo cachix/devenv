@@ -50,7 +50,7 @@ export PATH="$PWD/mock-bin:$PATH"
 : > "$MIXED_LOG"
 # A single review includes all remote roles, but excludes local-only entries.
 devenv machines plan --json > plan.json
-jq -e '.version == 4 and .scope == "fleet" and (.machines | keys == ["a-linux", "b-mac", "c-home"]) and
+jq -e '.version == 5 and .scope == "fleet" and (.machines | keys == ["a-linux", "b-mac", "c-home"]) and
   (.machines["a-linux"] | .nixos != null and .homeManager != null) and
   (.machines["b-mac"] | .nixDarwin != null and .homeManager != null) and
   (.machines["c-home"] | .nixos == null and .homeManager != null)' plan.json

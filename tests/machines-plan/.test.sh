@@ -78,7 +78,7 @@ export PATH="$PWD/mock-bin:$PATH"
 
 devenv machines plan --json server > plan.json
 jq -e --arg old "$PLAN_OLD" --arg new "$PLAN_NEW" --arg removed "$PLAN_REMOVED" '
-  .version == 4 and .scope == "fleet" and
+  .version == 5 and .scope == "fleet" and
   (.machines.server | .target == "reader@preview.invalid" and
     (.nixos | .currentSystem == $old and .currentProfile == $new and .requestedSystem == $new and
     .systemChanged and (.profileChanged | not) and
@@ -206,3 +206,16 @@ test ! -s "$PLAN_LOG"
 jq '.machines.server.nixos.findings = []' blocked-plan.json > forged-plan.json
 if APPLY_TEST=1 devenv machines apply forged-plan.json > forged.log 2>&1; then exit 1; fi
 grep -q 'Inconsistent access findings' forged.log
+
+# Image plans record the concrete provider, and changing back to an ordinary
+# machine invalidates the plan before any remote observation or copy.
+cat > devenv.local.nix <<'NIX'
+{ machines.server.images.amazon = {}; }
+NIX
+devenv machines plan --json server > image-plan.json
+jq -e '.version == 5 and .machines.server.image == "amazon"' image-plan.json
+rm devenv.local.nix
+: > "$PLAN_LOG"
+if APPLY_TEST=1 devenv machines apply image-plan.json > stale-image.log 2>&1; then exit 1; fi
+grep -q 'no longer matches.*image' stale-image.log
+test ! -s "$PLAN_LOG"

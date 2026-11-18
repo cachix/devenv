@@ -141,6 +141,8 @@ struct MachinePlan {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct MachinePlanEntry {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    image: Option<String>,
     target: Option<String>,
     ssh_opts: Vec<String>,
     system: String,
@@ -199,6 +201,9 @@ impl MachinePlan {
                 "\n{name} ({})\n",
                 entry.target.as_deref().unwrap_or("local")
             ));
+            if let Some(image) = &entry.image {
+                output.push_str(&format!("  Image: {image} ({})\n", entry.system));
+            }
             if let Some(nixos) = &entry.nixos {
                 output.push_str(&format!("  NixOS: transactional rollback\n  Running:   {}\n  Profile:   {}\n  Requested: {}\n  Executor:  {}\n  Closure: +{} / -{} store paths\n",
                     nixos.current_system, nixos.current_profile, nixos.requested_system,
@@ -223,8 +228,15 @@ impl MachinePlan {
         let value: serde_json::Value = serde_json::from_str(input)
             .into_diagnostic()
             .wrap_err("Invalid deployment plan")?;
-        if value["version"].as_u64() != Some(4) {
-            bail!("Apply requires a version 4 fleet deployment plan; regenerate older plans");
+        if !matches!(value["version"].as_u64(), Some(4 | 5)) {
+            bail!("Apply requires a version 4 or 5 fleet deployment plan; regenerate older plans");
+        }
+        if value["version"].as_u64() == Some(4)
+            && value["machines"]
+                .as_object()
+                .is_some_and(|machines| machines.values().any(|entry| !entry["image"].is_null()))
+        {
+            bail!("Image deployment identities require a version 5 plan");
         }
         let plan: Self = serde_json::from_value(value)
             .into_diagnostic()
@@ -234,6 +246,11 @@ impl MachinePlan {
         }
         for (name, entry) in &plan.machines {
             validate_machine_name(name)?;
+            if let Some(image) = &entry.image
+                && (!matches!(image.as_str(), "amazon" | "google-compute") || entry.nixos.is_none())
+            {
+                bail!("Invalid image deployment identity for {name}");
+            }
             if let Some(target) = &entry.target {
                 SshTarget::parse(target)?;
             }
@@ -336,6 +353,10 @@ struct MachineSecretspec {
 #[derive(Debug, Clone, Deserialize)]
 struct MachineMeta {
     system: String,
+    #[serde(default)]
+    systems: Vec<String>,
+    #[serde(rename = "imageFormats", default)]
+    image_formats: Vec<String>,
     target: MachineTarget,
     #[serde(rename = "hasNixos")]
     has_nixos: bool,
@@ -392,9 +413,95 @@ struct MachineInstallCheck {
 
 #[derive(Debug, Clone, Deserialize)]
 struct MachineTarget {
+    #[serde(default)]
+    system: Option<String>,
+    #[serde(default)]
+    image: Option<String>,
     host: Option<String>,
     #[serde(rename = "sshOpts")]
     ssh_opts: Vec<String>,
+}
+
+impl MachineMeta {
+    fn deployment_system(&self, name: &str) -> Result<&str> {
+        if self.image_formats.is_empty() {
+            return Ok(&self.system);
+        }
+        let system = self.target.system.as_deref().or_else(|| {
+            (self.systems.len() == 1).then(|| self.systems[0].as_str())
+        }).ok_or_else(|| miette!("machines.{name}.target.system is required when multiple image systems are configured"))?;
+        if !self.systems.iter().any(|candidate| candidate == system) {
+            bail!("machines.{name}.target.system must select a configured image system");
+        }
+        Ok(system)
+    }
+
+    fn deployment_image(&self, name: &str) -> Result<Option<String>> {
+        if self.image_formats.is_empty() {
+            return Ok(None);
+        }
+        self.deployment_system(name)?;
+        let image = self.target.image.as_deref().or_else(|| {
+            (self.image_formats.len() == 1).then(|| self.image_formats[0].as_str())
+        }).ok_or_else(|| miette!("machines.{name}.target.image is required when multiple image formats are configured"))?;
+        if !self
+            .image_formats
+            .iter()
+            .any(|candidate| candidate == image)
+        {
+            bail!("machines.{name}.target.image must select a configured image format");
+        }
+        Ok(Some(image.to_owned()))
+    }
+}
+
+// Metadata only: selecting an image must not force a NixOS evaluation or build.
+fn select_machine_images(
+    meta: &BTreeMap<String, MachineMeta>,
+    name: Option<&str>,
+    system: Option<&str>,
+    image: Option<&str>,
+) -> Result<Vec<(String, String, String)>> {
+    let name = match name {
+        Some(name) => name,
+        None if meta.len() == 1 => meta.keys().next().unwrap(),
+        None if meta.is_empty() => bail!("No machines configured in devenv.nix"),
+        None => bail!(
+            "Multiple machines configured; specify the machine name last. Available: {}",
+            meta.keys().cloned().collect::<Vec<_>>().join(", ")
+        ),
+    };
+    validate_machine_name(name)?;
+    let machine = meta
+        .get(name)
+        .ok_or_else(|| miette!("Unknown machine: {name}"))?;
+    if machine.image_formats.is_empty() {
+        bail!("machines.{name} has no images configured");
+    }
+    if let Some(system) = system
+        && !machine.systems.iter().any(|candidate| candidate == system)
+    {
+        bail!("Unknown image system {system:?} for machines.{name}");
+    }
+    if let Some(image) = image
+        && !machine
+            .image_formats
+            .iter()
+            .any(|candidate| candidate == image)
+    {
+        bail!("Unknown image format {image:?} for machines.{name}");
+    }
+    let mut selected = Vec::new();
+    for target_system in &machine.systems {
+        for format in &machine.image_formats {
+            if system.is_none_or(|system| system == target_system)
+                && image.is_none_or(|image| image == format)
+            {
+                selected.push((name.to_owned(), target_system.clone(), format.clone()));
+            }
+        }
+    }
+    Ok(selected)
 }
 
 /// Facts collected from a preflight SSH probe on the install target.
@@ -588,7 +695,11 @@ fn resolve_builders_config(
                      target.sshOpts before using --use-machines-as-builders."
                 );
             }
-            Ok(Some(format!("{} {}", target.nix_copy_uri(), m.system)))
+            Ok(Some(format!(
+                "{} {}",
+                target.nix_copy_uri(),
+                m.deployment_system(name)?
+            )))
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()
@@ -1176,6 +1287,51 @@ fn format_roles(m: &MachineMeta) -> String {
 }
 
 impl Devenv {
+    pub async fn machines_images_list(&self, name: Option<&str>) -> Result<String> {
+        let meta = self.load_machines_meta().await?;
+        if let Some(name) = name
+            && !meta.contains_key(name)
+        {
+            bail!("Unknown machine: {name}");
+        }
+        let mut output = String::from("Machine\tSystem\tImage\n");
+        let mut count = 0;
+        for (machine_name, machine) in &meta {
+            if name.is_some_and(|name| name != machine_name) {
+                continue;
+            }
+            for system in &machine.systems {
+                for image in &machine.image_formats {
+                    output.push_str(&format!("{machine_name}\t{system}\t{image}\n"));
+                    count += 1;
+                }
+            }
+        }
+        if count == 0 {
+            return Ok("No machine images configured.\n".to_owned());
+        }
+        Ok(output)
+    }
+
+    pub async fn machines_images_build(
+        &self,
+        name: Option<&str>,
+        system: Option<&str>,
+        image: Option<&str>,
+    ) -> Result<String> {
+        let meta = self.load_machines_meta().await?;
+        let selected = select_machine_images(&meta, name, system, image)?;
+        let attributes: Vec<_> = selected
+            .iter()
+            .map(|(name, system, image)| format!("machines.{name}.build.images.{system}.{image}"))
+            .collect();
+        let outputs = self.build(&attributes).await?;
+        Ok(outputs
+            .into_iter()
+            .map(|(attribute, path)| format!("{attribute}\t{}\n", path.display()))
+            .collect())
+    }
+
     pub async fn machines_info(&self, names: &[String]) -> Result<String> {
         let meta = self.load_machines_meta().await?;
 
@@ -1273,6 +1429,11 @@ impl Devenv {
         // over SSH. Catch configuration mistakes before starting any work.
         for name in names {
             let m = &meta[name];
+            if !m.image_formats.is_empty() {
+                bail!(
+                    "machines.{name} defines cloud images; build with `devenv machines images build {name}` and launch through the cloud provider instead of machines install"
+                );
+            }
             if !m.has_nixos {
                 bail!(
                     "machines.{name} does not have a `nixos` module set. \
@@ -2524,6 +2685,7 @@ impl Devenv {
             let machine = meta
                 .get(*name)
                 .ok_or_else(|| miette!("Unknown machine: {name}"))?;
+            machine.deployment_image(name)?;
             if !machine.has_nixos && !machine.has_nix_darwin && !machine.has_home_manager {
                 bail!(
                     "machines.{name} has no deployable role set (nixos, nix-darwin, or home-manager)"
@@ -2575,6 +2737,7 @@ impl Devenv {
             machines.insert(
                 name.to_owned(),
                 MachinePlanEntry {
+                    image: machine.deployment_image(name)?,
                     target: machine.target.host.clone(),
                     ssh_opts: machine.target.ssh_opts.clone(),
                     system: machine.system.clone(),
@@ -2587,7 +2750,7 @@ impl Devenv {
         Ok(format!(
             "{}\n",
             serde_json::to_string_pretty(&MachinePlan {
-                version: 4,
+                version: 5,
                 scope: "fleet".into(),
                 machines,
             })
@@ -2744,6 +2907,7 @@ impl Devenv {
             let machine = meta
                 .get(name)
                 .ok_or_else(|| miette!("Unknown machine: {name}"))?;
+            machine.deployment_image(name)?;
             if !machine.has_nixos {
                 bail!("Access checks require a NixOS role on machines.{name}");
             }
@@ -2869,12 +3033,13 @@ impl Devenv {
             if machine.has_nixos != entry.nixos.is_some()
                 || machine.has_nix_darwin != entry.nix_darwin.is_some()
                 || machine.has_home_manager != entry.home_manager.is_some()
+                || machine.deployment_image(name)? != entry.image
                 || machine.system != entry.system
                 || machine.target.host != entry.target
                 || machine.target.ssh_opts != entry.ssh_opts
             {
                 bail!(
-                    "Machine {name} no longer matches the planned roles, target, SSH options, or system; create a new plan"
+                    "Machine {name} no longer matches the planned roles, target, SSH options, system, or image; create a new plan"
                 );
             }
             if let Some(nixos) = &entry.nixos {
@@ -3264,6 +3429,129 @@ impl Devenv {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn image_plans_preserve_legacy_plan_compatibility() {
+        let mut plan = serde_json::json!({
+            "version": 4, "scope": "fleet", "machines": {"dev": {
+                "target": null, "sshOpts": [], "system": "x86_64-linux",
+                "nixos": null, "nixDarwin": null,
+                "homeManager": "/nix/store/00000000000000000000000000000000-home"
+            }}
+        });
+        assert!(super::MachinePlan::parse(&plan.to_string()).is_ok());
+        plan["version"] = 5.into();
+        let parsed = super::MachinePlan::parse(&plan.to_string()).unwrap();
+        assert!(parsed.machines["dev"].image.is_none());
+        assert!(super::MachinePlan::parse(&serde_json::to_string(&parsed).unwrap()).is_ok());
+        // An image identity must have a NixOS role and cannot be smuggled
+        // into the old schema.
+        plan["machines"]["dev"]["image"] = "amazon".into();
+        assert!(super::MachinePlan::parse(&plan.to_string()).is_err());
+        plan["version"] = 4.into();
+        assert!(super::MachinePlan::parse(&plan.to_string()).is_err());
+    }
+
+    fn image_machine() -> super::MachineMeta {
+        serde_json::from_value(serde_json::json!({
+            "system": "x86_64-linux",
+            "systems": ["x86_64-linux", "aarch64-linux"],
+            "imageFormats": ["amazon", "google-compute"],
+            "target": {"host": "root@example.com", "sshOpts": []},
+            "hasNixos": true, "hasNixDarwin": false,
+            "hasHomeManager": false, "copyHostKeys": false
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn image_builders_require_a_concrete_target_system() {
+        let mut machine = image_machine();
+        let mut meta = BTreeMap::from([("dev".to_owned(), machine.clone())]);
+        let error = resolve_builders_config(&meta, &HashSet::new()).unwrap_err();
+        assert!(error.to_string().contains("target.system"));
+        machine.target.system = Some("aarch64-linux".into());
+        meta.insert("dev".to_owned(), machine);
+        let builders = resolve_builders_config(&meta, &HashSet::new())
+            .unwrap()
+            .unwrap();
+        assert!(builders.ends_with(" aarch64-linux"));
+        assert!(!builders.contains("x86_64-linux"));
+    }
+
+    #[test]
+    fn image_selection_expands_and_filters_matrix() {
+        let meta = std::collections::BTreeMap::from([("dev".to_owned(), image_machine())]);
+        let all = super::select_machine_images(&meta, None, None, None).unwrap();
+        assert_eq!(all.len(), 4);
+        assert!(all.contains(&(
+            "dev".into(),
+            "aarch64-linux".into(),
+            "google-compute".into()
+        )));
+        assert_eq!(
+            super::select_machine_images(&meta, None, None, Some("amazon"))
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            super::select_machine_images(&meta, None, Some("aarch64-linux"), None)
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            super::select_machine_images(&meta, Some("dev"), Some("aarch64-linux"), Some("amazon"))
+                .unwrap(),
+            vec![("dev".into(), "aarch64-linux".into(), "amazon".into())]
+        );
+        assert!(super::select_machine_images(&meta, None, Some("aarch64-darwin"), None).is_err());
+        assert!(super::select_machine_images(&meta, None, None, Some("azure")).is_err());
+        assert!(super::select_machine_images(&meta, Some("missing"), None, None).is_err());
+    }
+
+    #[test]
+    fn image_selection_requires_machine_when_ambiguous() {
+        let mut meta = std::collections::BTreeMap::new();
+        assert!(super::select_machine_images(&meta, None, None, None).is_err());
+        meta.insert("dev".to_owned(), image_machine());
+        meta.insert("other".to_owned(), image_machine());
+        assert!(super::select_machine_images(&meta, None, None, None).is_err());
+        assert_eq!(
+            super::select_machine_images(&meta, Some("dev"), None, None)
+                .unwrap()
+                .len(),
+            4
+        );
+        meta.get_mut("dev").unwrap().image_formats.clear();
+        assert!(super::select_machine_images(&meta, Some("dev"), None, None).is_err());
+    }
+
+    #[test]
+    fn image_deployment_requires_one_configured_combination() {
+        let mut machine = image_machine();
+        assert!(machine.deployment_image("dev").is_err());
+        machine.target.system = Some("aarch64-linux".into());
+        assert!(machine.deployment_image("dev").is_err());
+        machine.target.image = Some("amazon".into());
+        assert_eq!(
+            machine.deployment_image("dev").unwrap().as_deref(),
+            Some("amazon")
+        );
+        machine.target.image = Some("azure".into());
+        assert!(machine.deployment_image("dev").is_err());
+        machine.target.image = None;
+        machine.target.system = None;
+        machine.systems = vec!["aarch64-linux".into()];
+        machine.image_formats = vec!["google-compute".into()];
+        assert_eq!(
+            machine.deployment_image("dev").unwrap().as_deref(),
+            Some("google-compute")
+        );
+        machine.target.system = Some("x86_64-linux".into());
+        assert!(machine.deployment_image("dev").is_err());
+    }
+
     #[test]
     fn preview_observation_preserves_profile_drift_and_deduplicates_closure() {
         let running = "/nix/store/00000000000000000000000000000000-system";
@@ -4018,7 +4306,11 @@ remote = "awssm"
         let mut meta = BTreeMap::new();
         let machine = |host: Option<&str>, has_nixos: bool| MachineMeta {
             system: "x86_64-linux".to_string(),
+            systems: vec![],
+            image_formats: vec![],
             target: MachineTarget {
+                system: None,
+                image: None,
                 host: host.map(str::to_string),
                 ssh_opts: vec![],
             },
@@ -4069,7 +4361,11 @@ remote = "awssm"
             "builder".to_string(),
             MachineMeta {
                 system: "x86_64-linux".to_string(),
+                systems: vec![],
+                image_formats: vec![],
                 target: MachineTarget {
+                    system: None,
+                    image: None,
                     host: Some("builder-alias".to_string()),
                     ssh_opts: vec!["-o".to_string(), "ProxyJump=bastion".to_string()],
                 },
