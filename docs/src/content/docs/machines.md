@@ -83,10 +83,8 @@ Define a shared NixOS configuration and the systems and image formats to build:
       virtualisation.diskSize = 16384;
       ec2.efi = lib.mkDefault pkgs.stdenv.hostPlatform.isAarch64;
     };
-    images.google-compute = { pkgs, lib, ... }: {
+    images.google-compute = {
       virtualisation.diskSize = 16384;
-      virtualisation.googleComputeImage.efi =
-        lib.mkDefault pkgs.stdenv.hostPlatform.isAarch64;
     };
   };
 }
@@ -177,13 +175,18 @@ For AWS, the output contains a VHD by default and
 ```sh
 export AWS_REGION=us-west-2
 export AWS_PROFILE=my-profile
+image_dir=/nix/store/REPLACE-WITH-OUTPUT
 nix run github:NixOS/amis#upload-ami -- \
-  --image-info /nix/store/REPLACE-WITH-OUTPUT/nix-support/image-info.json
+  --image-info "$image_dir/nix-support/image-info.json" \
+  --s3-bucket YOUR-PRIVATE-BUCKET \
+  --prefix devenv-dev- \
+  --run-id build-001
 ```
 
-See the [upstream AMI upload instructions](https://github.com/NixOS/nixpkgs/blob/master/nixos/maintainers/scripts/ec2/README.md)
-for current tooling and requirements. Review the uploader's access and sharing
-settings before running it; keep development images private.
+Use a private bucket in the selected AWS region and a distinct `--run-id` for
+each new image build. The uploader uses the `vmimport` IAM role by default to
+import the disk snapshot. See the [upstream uploader](https://github.com/NixOS/amis#can-i-use-this-to-upload-custom-amis)
+for more details.
 
 For GCP, the output contains a `.raw.tar.gz` archive with a single `disk.raw`:
 
@@ -194,8 +197,9 @@ gcloud compute images create YOUR-IMAGE \
   --architecture X86_64
 ```
 
-Use `ARM64` for an ARM image, and add `--guest-os-features=UEFI_COMPATIBLE`
-when building with `virtualisation.googleComputeImage.efi = true`.
+For the default ARM image, use `--architecture ARM64 --guest-os-features=UEFI_COMPATIBLE`.
+GCP image builds enable UEFI by default on ARM. Also add `UEFI_COMPATIBLE` when
+you explicitly enable `virtualisation.googleComputeImage.efi` on x86.
 See [GCP's manual import requirements](https://cloud.google.com/compute/docs/import/import-existing-image).
 Keep the bucket and image private. Launch a matching instance type and configure
 provider SSH metadata or OS Login and firewall access. AWS images use EC2 key

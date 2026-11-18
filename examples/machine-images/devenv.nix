@@ -12,9 +12,8 @@
       virtualisation.diskSize = 16384;
       ec2.efi = lib.mkDefault pkgs.stdenv.hostPlatform.isAarch64;
     };
-    images.google-compute = { pkgs, lib, ... }: {
+    images.google-compute = {
       virtualisation.diskSize = 16384;
-      virtualisation.googleComputeImage.efi = lib.mkDefault pkgs.stdenv.hostPlatform.isAarch64;
     };
   };
 

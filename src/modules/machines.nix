@@ -776,39 +776,24 @@ let
         };
       };
 
-      # Evaluate NixOS once per machine. The thunk stays unforced while
-      # `config.nixos == null` because every `build.*` and `installCheck`
-      # consumer guards access behind `lib.mkIf (config.nixos != null) …`.
+      # Share each provider evaluation between the artifact and deployment.
+      # Deployment reads config and pkgs without evaluating the disk builder.
       config._imageEvals = lib.genAttrs (if hasImages then config.systems else [ ]) (system:
         let base = nixosEval (config // { inherit system; });
         in lib.mapAttrs
           (format: module:
             let
-              variant = base.extendModules {
-                modules = [{
-                  image.modules.${format} = { pkgs, ... }: {
-                    imports = [ module ];
-                    # Capture the final provider package set, including overlays.
-                    # The upstream image passthru exports config, not the full
-                    # evaluation result with its pkgs argument.
-                    options._devenvImagePkgs = lib.mkOption {
-                      type = lib.types.raw;
-                      internal = true;
-                      visible = false;
-                      readOnly = true;
-                      default = pkgs;
-                      description = "Final package set used by this image variant.";
-                    };
-                  };
-                }];
-              };
-              image = variant.config.system.build.images.${format} or
+              provider = base.config.image.modules.${format} or
                 (throw "The nixpkgs input does not support the ${format} image variant");
+              evaluated = base.extendModules {
+                modules = [ provider module ] ++ lib.optional (format == "google-compute" && system == "aarch64-linux") {
+                  virtualisation.googleComputeImage.efi = lib.mkDefault true;
+                };
+              };
             in
             {
-              inherit image;
-              config = image.passthru.config;
-              pkgs = image.passthru.config._devenvImagePkgs;
+              inherit (evaluated) config pkgs;
+              image = evaluated.config.system.build.image;
             }
           )
           config.images);

@@ -70,10 +70,22 @@ NIX
 devenv machines images build --image amazon --system x86_64-linux dev > built.txt
 rm devenv.local.nix
 
+# GCP ARM images need UEFI even when the provider module is empty.
+cat > devenv.local.nix <<'NIX'
+{ lib, ... }: { machines.dev.images = lib.mkForce { google-compute = {}; }; }
+NIX
+devenv eval \
+  machines.dev._imageEvals.aarch64-linux.google-compute.config.virtualisation.googleComputeImage.efi \
+  machines.dev._imageEvals.x86_64-linux.google-compute.config.virtualisation.googleComputeImage.efi |
+  jq -e '
+    .["machines.dev._imageEvals.aarch64-linux.google-compute.config.virtualisation.googleComputeImage.efi"] == true
+    and .["machines.dev._imageEvals.x86_64-linux.google-compute.config.virtualisation.googleComputeImage.efi"] == false
+  '
+rm devenv.local.nix
+
 # Select a concrete deployment combination and inspect the same provider
 # configuration used for its image, without contacting the target.
-# A local module lets this test vary deployment metadata without rewriting the
-# shared matrix definition.
+# The deployment closure and executor must evaluate even if its disk builder fails.
 cat > devenv.local.nix <<'NIX'
 {
   machines.dev.target = {
@@ -81,18 +93,26 @@ cat > devenv.local.nix <<'NIX'
     system = "aarch64-linux";
     image = "amazon";
   };
+  machines.dev.images.amazon = { lib, ... }: {
+    # Override the small test artifact forced by devenv.nix.
+    system.build.image = lib.mkOverride 40 (throw "deployment evaluated the disk builder");
+  };
 }
 NIX
 devenv eval \
   machinesMeta.dev.system \
   machines.dev._nixosEval.config.environment.etc.provider-marker.text \
   machines.dev._nixosEval.pkgs.stdenv.hostPlatform.system \
-  machines.dev._nixosEval.pkgs.imageProviderMarker |
+  machines.dev._nixosEval.pkgs.imageProviderMarker \
+  machines.dev.build.nixos.drvPath \
+  machines.dev.build.deployer.drvPath |
   jq -e '
     .["machinesMeta.dev.system"] == "aarch64-linux"
     and .["machines.dev._nixosEval.config.environment.etc.provider-marker.text"] == "amazon"
     and .["machines.dev._nixosEval.pkgs.stdenv.hostPlatform.system"] == "aarch64-linux"
     and .["machines.dev._nixosEval.pkgs.imageProviderMarker"] == "amazon"
+    and (.["machines.dev.build.nixos.drvPath"] | endswith(".drv"))
+    and (.["machines.dev.build.deployer.drvPath"] | endswith(".drv"))
   '
 
 # Ambiguous deployment selection must fail before any SSH call.
