@@ -12,7 +12,7 @@ title: "groovy"
 
 ### languages.groovy.enable
 
-Whether to enable tools for Groovy development.
+Whether to enable Whether to enable tools for Groovy development…
 
 
 
@@ -64,11 +64,67 @@ pkgs.groovy
 
 
 
+### languages.groovy.linter.enable
+
+
+
+Whether to enable Groovy linter, formatter, and auto-fixer. Using npm-groovy-lint…
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+true
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/groovy.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/groovy.nix)
+
+
+
+### languages.groovy.linter.package
+
+
+
+The Groovy linter package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```nix
+pkgs.npm-groovy-lint
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/groovy.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/groovy.nix)
+
+
+
 ### languages.groovy.lsp.enable
 
 
 
-Whether to enable Groovy Language Server.
+Whether to enable Whether to enable Groovy Language Server…
 
 
 
