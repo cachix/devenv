@@ -9,7 +9,7 @@ let
 in
 {
   options.languages.groovy = {
-    enable = lib.mkEnableOption "Whether to enable tools for Groovy development.";
+    enable = lib.mkEnableOption "tools for Groovy development.";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -19,7 +19,7 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Whether to enable Groovy Language Server." // {
+      enable = lib.mkEnableOption "Groovy Language Server." // {
         default = true;
       };
 
