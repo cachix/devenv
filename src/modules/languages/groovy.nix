@@ -30,6 +30,19 @@ in
         description = "The Groovy language server package to use.";
       };
     };
+
+    linter = {
+      enable = lib.mkEnableOption "Groovy linter, formatter, and auto-fixer. Using npm-groovy-lint" // {
+        default = true;
+      };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.npm-groovy-lint;
+        defaultText = lib.literalExpression "pkgs.npm-groovy-lint";
+        description = "The Groovy linter package to use";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
