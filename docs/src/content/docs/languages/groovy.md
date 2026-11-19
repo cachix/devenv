@@ -12,7 +12,7 @@ title: "groovy"
 
 ### languages.groovy.enable
 
-Whether to enable Whether to enable tools for Groovy development…
+Whether to enable tools for Groovy development…
 
 
 
@@ -124,7 +124,7 @@ pkgs.npm-groovy-lint
 
 
 
-Whether to enable Whether to enable Groovy Language Server…
+Whether to enable Groovy Language Server…
 
 
 
