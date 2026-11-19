@@ -53,6 +53,7 @@ const languageSeeds: ModuleSeed[] = [
   { slug: 'gawk', label: 'GNU Awk', icon: 'gnu', aliases: ['awk'] },
   { slug: 'gleam', label: 'Gleam', icon: 'gleam' },
   { slug: 'go', label: 'Go', icon: 'go', aliases: ['golang'] },
+  { slug: 'groovy', label: 'Groovy', icon: null },
   { slug: 'hare', label: 'Hare', icon: null },
   { slug: 'haskell', label: 'Haskell', icon: 'haskell', aliases: ['ghc'] },
   { slug: 'helm', label: 'Helm', icon: 'helm' },
