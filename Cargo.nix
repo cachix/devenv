@@ -1412,6 +1412,7 @@ rec {
           "serde" = [ "dep:serde" ];
           "zeroize" = [ "dep:zeroize" ];
         };
+        resolvedDefaultFeatures = [ "default" "std" ];
       };
       "asn1-rs" = rec {
         crateName = "asn1-rs";
@@ -15461,19 +15462,6 @@ rec {
         ];
         dependencies = [
           {
-            name = "allocator-api2";
-            packageId = "allocator-api2";
-            optional = true;
-            usesDefaultFeatures = false;
-            features = [ "alloc" ];
-          }
-          {
-            name = "equivalent";
-            packageId = "equivalent";
-            optional = true;
-            usesDefaultFeatures = false;
-          }
-          {
             name = "foldhash";
             packageId = "foldhash 0.1.5";
             optional = true;
@@ -15492,7 +15480,7 @@ rec {
           "rustc-dep-of-std" = [ "nightly" "core" "alloc" "rustc-internal-api" ];
           "serde" = [ "dep:serde" ];
         };
-        resolvedDefaultFeatures = [ "allocator-api2" "default" "default-hasher" "equivalent" "inline-more" "raw-entry" ];
+        resolvedDefaultFeatures = [ "default-hasher" "inline-more" ];
       };
       "hashbrown 0.16.1" = rec {
         crateName = "hashbrown";
@@ -15542,6 +15530,27 @@ rec {
         version = "0.17.1";
         edition = "2024";
         sha256 = "0jmqz7i4yl6cm7rbn0i2ffkfrmwi6xkmzkaldr2v8bcsx2v0jngd";
+        dependencies = [
+          {
+            name = "allocator-api2";
+            packageId = "allocator-api2";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "alloc" ];
+          }
+          {
+            name = "equivalent";
+            packageId = "equivalent";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "foldhash";
+            packageId = "foldhash 0.2.0";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
         features = {
           "alloc" = [ "dep:alloc" ];
           "allocator-api2" = [ "dep:allocator-api2" ];
@@ -15554,6 +15563,7 @@ rec {
           "rustc-dep-of-std" = [ "nightly" "core" "alloc" "rustc-internal-api" ];
           "serde" = [ "dep:serde_core" "dep:serde" ];
         };
+        resolvedDefaultFeatures = [ "allocator-api2" "default" "default-hasher" "equivalent" "inline-more" "raw-entry" ];
       };
       "hashlink" = rec {
         crateName = "hashlink";
@@ -24741,11 +24751,11 @@ rec {
         dependencies = [
           {
             name = "arrayvec";
-            packageId = "arrayvec 0.5.2";
+            packageId = "arrayvec 0.7.7";
           }
           {
             name = "hashbrown";
-            packageId = "hashbrown 0.15.5";
+            packageId = "hashbrown 0.17.1";
           }
           {
             name = "parking_lot";
