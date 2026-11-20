@@ -82,3 +82,7 @@ SVG. An actual empty render is a rejected negative control.
 
 Fence validation rejects indented and tilde forms so no accepted visual source
 can silently escape the renderer count.
+
+Linked detail views in nested design directories receive the same source, link
+and render checks. Exports use separate per-view directories to avoid filename
+collisions between detail views with the same basename.

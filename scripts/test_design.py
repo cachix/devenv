@@ -3,8 +3,9 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from check_design import check_record, check_document, check_svg
+from check_design import check_record, check_document, check_svg, main
 
 
 class DesignControls(unittest.TestCase):
@@ -98,6 +99,19 @@ class DesignControls(unittest.TestCase):
     def test_diagram_only_pr_passes(self):
         self.record['mappings'][0]['sources'] = [self.visual]
         check_record(self.root, self.body(), {self.visual})
+
+    def test_nested_visual_is_validated(self):
+        nested = self.path.parent / 'detail' / 'flow.md'
+        nested.parent.mkdir()
+        nested.write_text('```mermaid\ngraph TD\n```\n')
+        body = self.root / 'body.md'
+        body.write_text(self.body())
+        with patch('sys.argv', ['check_design.py', '--base', 'base', '--body', str(body)]), \
+                patch('check_design.git', side_effect=[str(self.root), 'base']), \
+                patch('check_design.os.chdir'), \
+                patch('check_design.subprocess.check_output', return_value='src/module.py\0docs/design/flow.md\0'):
+            with self.assertRaisesRegex(ValueError, 'unsupported fence'):
+                main()
 
     def test_deleted_source_requires_mapping(self):
         # Deleted paths need not exist, but must be accounted for in the PR.

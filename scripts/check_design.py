@@ -139,11 +139,12 @@ def main():
     changed = set(filter(None, subprocess.check_output(['git', 'diff', '--name-only', '-z', common, 'HEAD'], text=True).split('\0')))
     check_record(root, body, changed)
     diagrams = 0
-    for path in sorted((root / DESIGN).glob('*.md')):
+    for path in sorted((root / DESIGN).rglob('*.md')):
+        repository_path(root, str(path.relative_to(root)))
         count = check_document(root, path)
         diagrams += count
         if args.render and count:
-            output = args.render.resolve()
+            output = args.render.resolve() / path.relative_to(root / DESIGN).with_suffix('')
             if output.is_relative_to(root):
                 raise ValueError('render output must be outside the source checkout')
             version = subprocess.check_output(['documd', '--version'], text=True)
