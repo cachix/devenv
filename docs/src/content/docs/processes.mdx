@@ -100,6 +100,49 @@ override its own hostname independently:
 Port-level hostnames take precedence over the process hostname. Ports without
 an override continue to use the process hostname as their base.
 
+### Listen addresses
+
+Configure the shared proxy's listen addresses in `devenv.nix`:
+
+```nix title="devenv.nix"
+{
+  process.proxy.listen = "127.0.0.1:1080";
+  process.proxy.https.listen = "127.0.0.1:1443";
+}
+```
+
+The defaults remain `127.0.0.1:80` for HTTP and `127.0.0.1:443` for HTTPS.
+Custom ports appear in process URLs, for example
+`http://web.<project-name>.localhost:1080`. On Linux, ports above 1023 avoid
+low-port sudo authentication. If any process uses HTTPS, configure both listeners
+on unprivileged ports to avoid that authentication; installing the local CA may
+still require permission.
+
+Each option accepts a single IP address and port. For IPv6 loopback, use brackets:
+
+```nix title="devenv.nix"
+{
+  process.proxy.listen = "[::1]:1080";
+  process.proxy.https.listen = "[::1]:1443";
+}
+```
+
+This is useful when clients resolve `.localhost` to `::1`. It binds IPv6 only,
+not both address families; choose the loopback address your clients use.
+
+`DEVENV_PROXY_LISTEN` and `DEVENV_PROXY_HTTPS_LISTEN` in the environment of the
+**devenv CLI** override the corresponding Nix options. Setting those variables
+through `env` in `devenv.nix` does not configure the CLI's listener selection.
+The HTTPS listen option does not enable HTTPS by itself.
+
+The daemon is shared across projects. Projects must agree on its HTTP address;
+projects requiring HTTPS must also agree on its HTTPS address. A mismatch fails
+without changing the running proxy's routes. Stop the shared daemon using the
+`kill <pid>` command shown in the error, then run `devenv up` again. This interrupts
+proxy access for other projects too. `devenv down` stops project processes, not
+the shared proxy. A daemon started by an older devenv version that cannot report
+its HTTP address also needs this one-time restart.
+
 ### HTTPS
 
 <VersionCompatibility version="2.3" />
@@ -120,7 +163,7 @@ The first setup may request permission to trust
 the local certificate authority. If trust installation fails, run `mkcert -install`
 inside the development shell.
 
-The shared proxy serves HTTPS on port 443 and continues to serve HTTP on port 80.
+By default, the shared proxy serves HTTPS on port 443 and continues to serve HTTP on port 80.
 Processes continue to receive HTTP, with `X-Forwarded-Proto: https` for HTTPS
 requests. Each project keeps its own certificates; the shared proxy selects the
 certificate for the requested hostname. Restart an existing HTTP-only proxy when
