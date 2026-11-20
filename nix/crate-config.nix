@@ -310,12 +310,10 @@ in
   # libghostty-vt-sys has a pkg-config feature that finds the pre-built
   # library from the ghostty flake, so just provide pkg-config + the library.
   # The bindings default to the static archive on all platforms.
-  libghostty-vt-sys =
-    attrs:
-    {
-      nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
-      buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
-    };
+  libghostty-vt-sys = attrs: {
+    nativeBuildInputs = (attrs.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+    buildInputs = (attrs.buildInputs or [ ]) ++ [ libghostty-vt.dev ];
+  };
 
   nix-bindings-util = nixLibsOverride;
   nix-bindings-store = nixLibsOverride;
