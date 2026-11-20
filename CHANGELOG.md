@@ -4,6 +4,8 @@
 
 ### Improvements
 
+- Maintained fork pull requests now include editable design views, source mappings and diagram preview checks.
+
 - Claude Code skills can now use existing directories, preserving their bundled scripts, references, and assets alongside inline skills.
 - `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.

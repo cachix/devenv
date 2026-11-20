@@ -1,0 +1,23 @@
+name: Design maintenance
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  design:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned preview CLI
+        run: npm install --global @markdown-viewer/documd@6.0.0
+      - name: Exercise positive and negative controls
+        run: python3 scripts/test_design.py
+      - name: Check maintenance record, links, syntax and rendering
+        run: python3 scripts/check_design.py --event "$GITHUB_EVENT_PATH" --render "$RUNNER_TEMP/design-preview"

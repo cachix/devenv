@@ -327,3 +327,8 @@ Global options:
 - [`devenv.yaml` reference](https://devenv.sh/reference/yaml-options/)
 - [`devenv.nix` reference](https://devenv.sh/reference/options/)
 - [Contributing](https://devenv.sh/community/contributing/)
+
+## Design maintenance
+
+See the [maintained design index](docs/design/README.md) and
+[contributor requirements](CONTRIBUTING.md) before preparing or reviewing any PR.
