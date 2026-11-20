@@ -46,6 +46,7 @@ pub mod config;
 pub mod external_manager;
 pub mod force_exit_registry;
 pub mod log_tailer;
+pub mod logs;
 pub mod manager;
 pub mod manager_capabilities;
 pub mod pid;
@@ -61,9 +62,10 @@ pub mod supervisor_state;
 pub use capabilities::start_capability_daemon;
 pub use capabilities::{CapabilityRequest, maybe_run_capability_helper, start_capability_broker};
 pub use config::{
-    HttpGetProbe, HttpProbe, ListenKind, ListenSpec, ProcessConfig, ProcessProxyConfig,
-    ProcessProxyHttpsConfig, ProcessType, ReadyConfig, RestartConfig, RestartPolicy,
-    ShutdownConfig, SocketActivationConfig, SupervisionMode, WatchConfig, WatchdogConfig,
+    HttpGetProbe, HttpProbe, ListenKind, ListenSpec, LogRetentionConfig, ProcessConfig,
+    ProcessProxyConfig, ProcessProxyHttpsConfig, ProcessType, ReadyConfig, RestartConfig,
+    RestartPolicy, ShutdownConfig, SocketActivationConfig, SupervisionMode, WatchConfig,
+    WatchdogConfig,
 };
 pub use devenv_event_sources::{NotifyMessage, NotifySocket};
 pub use devenv_mailbox::ProcessCommand;

@@ -9540,7 +9540,7 @@ rec {
           {
             name = "nix";
             packageId = "nix 0.31.3";
-            features = [ "fs" "poll" "process" "resource" "signal" "term" ];
+            features = [ "fs" "poll" "process" "resource" "signal" "term" "socket" "uio" ];
           }
           {
             name = "portable-pty";
@@ -20436,6 +20436,11 @@ rec {
             packageId = "libc";
             features = [ "extra_traits" ];
           }
+          {
+            name = "memoffset";
+            packageId = "memoffset 0.9.1";
+            optional = true;
+          }
         ];
         buildDependencies = [
           {
@@ -20460,7 +20465,7 @@ rec {
           "user" = [ "feature" ];
           "zerocopy" = [ "fs" "uio" ];
         };
-        resolvedDefaultFeatures = [ "default" "feature" "fs" "poll" "process" "resource" "signal" "term" "user" ];
+        resolvedDefaultFeatures = [ "default" "feature" "fs" "memoffset" "poll" "process" "resource" "signal" "socket" "term" "uio" "user" ];
       };
       "nix-bindings-bindgen-raw" = rec {
         crateName = "nix-bindings-bindgen-raw";

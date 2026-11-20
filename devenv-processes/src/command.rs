@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use miette::{IntoDiagnostic, Result, WrapErr};
-use tracing::warn;
+use miette::Result;
 use watchexec_supervisor::command::{Command, Program, SpawnOptions};
 
 use crate::config::ProcessConfig;
@@ -17,22 +16,6 @@ pub struct BuiltCommand {
     pub env: HashMap<String, String>,
     /// Working directory for the spawned process, set via the spawn hook.
     pub cwd: Option<PathBuf>,
-}
-
-/// Open a log file for appending, creating it if needed.
-/// Returns `None` and logs a warning on failure.
-pub fn open_log_file(path: &Path) -> Option<std::fs::File> {
-    match std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-    {
-        Ok(f) => Some(f),
-        Err(e) => {
-            warn!("Failed to open log file {}: {}", path.display(), e);
-            None
-        }
-    }
 }
 
 /// Compute the stdout/stderr log paths for a process.
@@ -56,11 +39,6 @@ pub fn build_command(
     notify_socket_path: Option<&Path>,
     watchdog_usec: Option<u64>,
 ) -> Result<BuiltCommand> {
-    let log_dir = state_dir.join("logs");
-    std::fs::create_dir_all(&log_dir)
-        .into_diagnostic()
-        .wrap_err("Failed to create logs directory")?;
-
     let (stdout_log, stderr_log) = log_paths(state_dir, &config.name);
 
     // Build the environment: start with config.env, add notify/watchdog vars

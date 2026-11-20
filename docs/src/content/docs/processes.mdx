@@ -659,3 +659,42 @@ for the known managers above. Unknown managers receive no optional capabilities 
 
 See [Alternative process managers](/supported-process-managers/) for the
 tradeoffs and manager-specific options.
+
+## Log retention
+
+The native process manager keeps stdout and stderr logs in the existing process
+runtime directory, under `$DEVENV_RUNTIME`. Each stream defaults to two files of
+at most 1 MiB each: the active file and one rotated file. This limits retained
+log contents to **4 MiB per process**, including stdout and stderr. The oldest
+output is discarded as new output arrives.
+
+Configure project-wide defaults or override either field for an individual process:
+
+```nix
+{
+  process.managers.native.logs = {
+    maxFileSize = 1024 * 1024; # Bytes per file
+    maxFiles = 2;            # Includes the active file
+  };
+
+  processes.api.logs = {
+    maxFileSize = 4 * 1024 * 1024;
+    maxFiles = 3;
+  };
+}
+```
+
+Each per-process field independently inherits the global setting. Both values
+must be positive integers; `maxFiles = 1` keeps only the active file. The maximum
+retained contents per process are `2 * maxFileSize * maxFiles` bytes. This is not a
+shared budget across projects or processes and does not limit other runtime files.
+
+`devenv processes logs` reads recent output across the retained files, while the
+TUI and attached clients receive live output directly. Slow attached clients can
+lose output rather than block the managed process. Very long lines are delivered
+in bounded fragments; the stored files preserve the original bytes.
+
+Restart the process manager to apply changed retention settings. Explicit process
+restarts clear retained logs; automatic restarts keep the rolling history. Logs
+for stopped processes remain available while the manager is running. Runtime
+files are not durable storage and can disappear at logout or reboot.
