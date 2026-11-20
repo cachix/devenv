@@ -1,8 +1,8 @@
 ---
 // Custom Astro page for the full options reference. Replaces the 9MB markdown
 // build with a compact, structured render straight from the JSON. Grouped by
-// top-level namespace; TOC only contains category headings, not the 1768
-// individual options.
+// top-level namespace; TOC only contains category and subgroup headings, not
+// thousands of individual options.
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { marked } from 'marked';
 import { readFile } from 'node:fs/promises';
@@ -24,33 +24,92 @@ type Option = {
   description?: string;
   default?: any;
   example?: any;
-  loc?: string[];
+  loc: string[];
   declarations?: Decl[];
 };
 
-const groups = new Map<string, Array<{ name: string; opt: Option }>>();
-for (const name of Object.keys(options).sort()) {
-  const opt = options[name];
-  const category = opt.loc?.[0] ?? '_root';
-  if (!groups.has(category)) groups.set(category, []);
-  groups.get(category)!.push({ name, opt });
-}
+type Entry = { name: string; opt: Option };
+// A category or subgroup. `own` is the option whose path is the node itself.
+type Group = { name: string; own?: Option; entries: Entry[] };
+type Category = Group & { subgroups: Map<string, Group> };
 
-const sortedCategories = [...groups.keys()].sort((a, b) => a.localeCompare(b));
-
-const headings = sortedCategories.map(c => ({
-  depth: 2,
-  slug: slug(c),
-  text: c,
-}));
-
-function slug(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+function pathKey(loc: string[]) {
+  return JSON.stringify(loc);
 }
 
 // Preserve MkDocs' historical option anchors, which omitted punctuation.
-function optionSlug(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9_-]+/g, '');
+function anchor(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9_-]+/g, '');
+}
+
+const toggles = new Map(
+  Object.entries(options)
+    .filter(([, opt]) => opt.loc.at(-1) === 'enable')
+    .map(([name, opt]) => [pathKey(opt.loc.slice(0, -1)), name.slice(0, -'.enable'.length)]),
+);
+
+// Returns the shortest path of at least two segments that has an `enable` option.
+function subgroupOf(loc: string[]): string[] | null {
+  for (let i = 2; i <= loc.length; i++) {
+    if (toggles.has(pathKey(loc.slice(0, i)))) return loc.slice(0, i);
+  }
+  return null;
+}
+
+const categories = new Map<string, Category>();
+for (const name of Object.keys(options).sort()) {
+  const opt = options[name];
+  const category = opt.loc[0];
+  if (!categories.has(category)) {
+    categories.set(category, { name: category, entries: [], subgroups: new Map() });
+  }
+  const node = categories.get(category)!;
+  if (opt.loc.length === 1) {
+    node.own = opt;
+    continue;
+  }
+  const subgroup = subgroupOf(opt.loc);
+  if (subgroup === null) {
+    node.entries.push({ name, opt });
+    continue;
+  }
+  const key = pathKey(subgroup);
+  if (!node.subgroups.has(key)) node.subgroups.set(key, { name: toggles.get(key)!, entries: [] });
+  const child = node.subgroups.get(key)!;
+  if (subgroup.length === opt.loc.length) child.own = opt;
+  else child.entries.push({ name, opt });
+}
+
+const sortedCategories = [...categories.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+// The TOC attributes each option to the nearest heading above it, so a group's
+// own option and ungrouped options must come before the first subgroup heading.
+type Row = { subgroup: Group } | { entry: Entry; heading: boolean };
+function rows(group: Group): Row[] {
+  return [
+    ...(group.own ? [{ entry: { name: group.name, opt: group.own }, heading: false }] : []),
+    ...group.entries.map(entry => ({ entry, heading: true })),
+  ];
+}
+function categoryRows(category: Category): Row[] {
+  return [
+    ...rows(category),
+    ...[...category.subgroups.values()].flatMap(subgroup => [{ subgroup }, ...rows(subgroup)]),
+  ];
+}
+
+const headings = sortedCategories.flatMap(category => [
+  { depth: 2, slug: anchor(category.name), text: category.name },
+  ...[...category.subgroups.values()].map(s => ({ depth: 3, slug: anchor(s.name), text: s.name })),
+]);
+
+const optionAnchors = sortedCategories
+  .flatMap(categoryRows)
+  .flatMap(row => ('entry' in row && row.heading ? [anchor(row.entry.name)] : []));
+const anchors = new Set<string>();
+for (const id of [...headings.map(h => h.slug), ...optionAnchors]) {
+  if (anchors.has(id)) throw new Error(`duplicate options anchor #${id}`);
+  anchors.add(id);
 }
 
 function extractText(v: any): string | null {
@@ -86,34 +145,40 @@ const frontmatter = {
 
   {sortedCategories.map(category => (
     <section class="option-category">
-      <h2 id={slug(category)}>{category}</h2>
-      {groups.get(category)!.map(({ name, opt }) => {
+      <h2 id={anchor(category.name)}>{category.name}</h2>
+      {categoryRows(category).map(row => {
+        if ('subgroup' in row) {
+          return <h3 class="option-subgroup" id={anchor(row.subgroup.name)}><code>{row.subgroup.name}</code></h3>;
+        }
+        const { entry: { name, opt }, heading } = row;
         const defaultText = opt.default !== undefined ? extractText(opt.default) : null;
         const exampleText = opt.example !== undefined ? extractText(opt.example) : null;
         return (
-          <section class="option-block" id={optionSlug(name)}>
-            <h3>
-              <a href={`#${optionSlug(name)}`} class="opt-anchor">
-                <code class="opt-name">{name}</code>
-                <span class="opt-hash" aria-hidden="true">#</span>
-              </a>
-            </h3>
+          <section class="option-block">
+            {heading && (
+              <h4 id={anchor(name)}>
+                <a href={`#${anchor(name)}`} class="opt-anchor">
+                  <code class="opt-name">{name}</code>
+                  <span class="opt-hash" aria-hidden="true" data-pagefind-ignore>#</span>
+                </a>
+              </h4>
+            )}
             {opt.description && <div class="opt-desc" set:html={md(opt.description.trim())} />}
             {opt.type && (
               <p class="opt-meta">
-                <span class="opt-label">Type</span>
+                <span class="opt-label">Type</span>{' '}
                 <code>{opt.type}</code>
               </p>
             )}
             {defaultText !== null && (
               defaultText.includes('\n') ? (
                 <div class="opt-meta">
-                  <span class="opt-label">Default</span>
+                  <span class="opt-label">Default</span>{' '}
                   <pre class="opt-pre"><code>{defaultText}</code></pre>
                 </div>
               ) : (
                 <p class="opt-meta">
-                  <span class="opt-label">Default</span>
+                  <span class="opt-label">Default</span>{' '}
                   <code>{defaultText}</code>
                 </p>
               )
@@ -121,19 +186,19 @@ const frontmatter = {
             {exampleText !== null && (
               exampleText.includes('\n') ? (
                 <div class="opt-meta">
-                  <span class="opt-label">Example</span>
+                  <span class="opt-label">Example</span>{' '}
                   <pre class="opt-pre"><code>{exampleText}</code></pre>
                 </div>
               ) : (
                 <p class="opt-meta">
-                  <span class="opt-label">Example</span>
+                  <span class="opt-label">Example</span>{' '}
                   <code>{exampleText}</code>
                 </p>
               )
             )}
             {opt.declarations && opt.declarations.length > 0 && (
               <p class="opt-meta">
-                <span class="opt-label">Declared in</span>
+                <span class="opt-label">Declared in</span>{' '}
                 {opt.declarations.map((d, i) => (
                   <>
                     {i > 0 && ', '}
@@ -158,9 +223,14 @@ const frontmatter = {
     contain-intrinsic-size: auto 220px;
     margin-block: 0.75rem 1.5rem;
     padding-block: 0.25rem;
-    scroll-margin-top: 5rem;
   }
-  .option-block h3 {
+  .option-subgroup {
+    scroll-margin-top: 5rem;
+    margin-top: 2rem;
+    font-size: 1.125rem;
+  }
+  .option-block h4 {
+    scroll-margin-top: 5rem;
     margin-top: 0.5rem;
     font-size: 1rem;
   }
@@ -179,16 +249,18 @@ const frontmatter = {
   }
   .option-block:hover .opt-hash,
   .opt-anchor:focus-visible .opt-hash,
-  .option-block:target .opt-hash {
+  .option-block:has(h4:target) .opt-hash {
     opacity: 1;
   }
-  .option-block:target {
+  .option-block:has(h4:target),
+  :is(h2, h3):target + .option-block {
     background: var(--sl-color-gray-6);
     border-radius: 6px;
     padding-inline: 0.75rem;
     margin-inline: -0.75rem;
   }
-  :global([data-theme='light']) .option-block:target {
+  :global([data-theme='light']) .option-block:has(h4:target),
+  :global([data-theme='light']) :is(h2, h3):target + .option-block {
     background: #f4f5f7;
   }
   .opt-name {
@@ -203,7 +275,7 @@ const frontmatter = {
     min-width: 5rem;
     color: var(--sl-color-gray-3);
     font-weight: 500;
-    margin-right: 0.5rem;
+    margin-right: 0.25rem;
   }
   .opt-desc :is(p):first-child { margin-top: 0; }
   .opt-desc :is(p):last-child { margin-bottom: 0.5rem; }
@@ -234,3 +306,49 @@ const frontmatter = {
     color: #1f2933;
   }
 </style>
+
+<style is:global>
+  :is(starlight-toc, mobile-starlight-toc) li:has(> ul) {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    transition: grid-template-rows 200ms ease;
+  }
+  :is(starlight-toc, mobile-starlight-toc) li > ul {
+    min-height: 0;
+    overflow: hidden;
+  }
+  :is(starlight-toc, mobile-starlight-toc) li:has(> ul):not(:has([aria-current='true'])) {
+    grid-template-rows: auto 0fr;
+  }
+  :is(starlight-toc, mobile-starlight-toc) li:not(:has([aria-current='true'])) > ul {
+    visibility: hidden;
+    transition: visibility 0s 200ms;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :is(starlight-toc, mobile-starlight-toc) li:has(> ul),
+    :is(starlight-toc, mobile-starlight-toc) li > ul {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  const sidebar = document.querySelector<HTMLElement>('.right-sidebar');
+  const toc = document.querySelector<HTMLElement>('starlight-toc');
+  if (sidebar && toc) {
+    const keepCurrentInView = () => {
+      const current = toc.querySelector<HTMLElement>('a[aria-current="true"]');
+      if (!current) return;
+      const { top, bottom } = current.getBoundingClientRect();
+      const visibleTop = sidebar.getBoundingClientRect().top + parseFloat(getComputedStyle(sidebar).paddingTop);
+      if (top < visibleTop || bottom > window.innerHeight) {
+        sidebar.scrollTop += top - visibleTop - sidebar.clientHeight / 3;
+      }
+    };
+    new MutationObserver(keepCurrentInView).observe(toc, { subtree: true, attributeFilter: ['aria-current'] });
+    // Expanding and collapsing sections move the current link until the transition ends.
+    toc.addEventListener('transitionend', event => {
+      if (event.propertyName === 'grid-template-rows') keepCurrentInView();
+    });
+  }
+</script>
