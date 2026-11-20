@@ -112,7 +112,7 @@ def check_document(root, path):
 
 def check_svg(path):
     tree = ET.parse(path)
-    if not any(e.tag.rsplit('}', 1)[-1] == 'text' and ''.join(e.itertext()).strip() for e in tree.iter()):
+    if not any(e.tag.rsplit('}', 1)[-1] in {'text', 'foreignObject'} and ''.join(e.itertext()).strip() for e in tree.iter()):
         raise ValueError(f'{path}: renderer produced an empty/unlabelled diagram')
 
 

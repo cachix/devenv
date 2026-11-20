@@ -74,3 +74,7 @@ checker/tests and its workflow. Their invariant is that every PR has a meaningfu
 mapping to maintained visual source and independent semantic review before
 acceptance. Initial policy implementation adds that contract; CI is structural
 and rendering evidence, while reviewers own semantic verification.
+
+Preview validation also checks labelled SVG foreignObject output, which is how
+documd represents UML text; a valid HTML label must not be mistaken for an empty
+SVG. An actual empty render is a rejected negative control.

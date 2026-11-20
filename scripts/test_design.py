@@ -64,6 +64,11 @@ class DesignControls(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unbalanced'):
             check_document(self.root, self.path)
 
+    def test_labelled_foreign_object_render_passes(self):
+        svg = self.root / 'labelled.svg'
+        svg.write_text('<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div xmlns="http://www.w3.org/1999/xhtml">Caller</div></foreignObject></svg>')
+        check_svg(svg)
+
     def test_empty_render_fails(self):
         svg = self.root / 'empty.svg'
         svg.write_text('<svg xmlns="http://www.w3.org/2000/svg"><g/></svg>')
