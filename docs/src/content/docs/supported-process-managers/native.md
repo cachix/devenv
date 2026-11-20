@@ -137,3 +137,75 @@ boolean
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process.managers.native.logs
+
+
+
+Default stdout/stderr log retention for native-managed processes.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process.managers.native.logs.maxFileSize
+
+
+
+Maximum bytes per retained stdout/stderr log file. Only applies to the native process manager.
+
+
+
+*Type:*
+positive integer, meaning >0
+
+
+
+*Default:*
+
+```nix
+1048576
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
+
+
+
+### process.managers.native.logs.maxFiles
+
+
+
+Number of retained files per stream, including the active file. Only applies to the native process manager.
+
+
+
+*Type:*
+positive integer, meaning >0
+
+
+
+*Default:*
+
+```nix
+2
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/native.nix)
