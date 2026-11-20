@@ -61,7 +61,8 @@ documented render path is docu.md / documd, not a GitHub image asset tree.
 The `Design maintenance` GitHub Actions workflow runs on every PR (including body
 edits), validates the record, changed source mapping, supported fences and local
 links, exercises negative controls, and renders all views with documd 6.0.0, rejecting empty SVG output.
-Syntax checks cover fences, UML delimiters and balanced braces; the permissive
+Syntax checks require canonical unindented triple-backtick fences and check UML
+delimiters and balanced braces; the permissive
 renderer is not a complete PlantUML language validator.
 This is repository-local CI once merged. No organization-wide enforcement,
 required branch-protection status, installed runtime or activated host changes
@@ -78,3 +79,6 @@ and rendering evidence, while reviewers own semantic verification.
 Preview validation also checks labelled SVG foreignObject output, which is how
 documd represents UML text; a valid HTML label must not be mistaken for an empty
 SVG. An actual empty render is a rejected negative control.
+
+Fence validation rejects indented and tilde forms so no accepted visual source
+can silently escape the renderer count.

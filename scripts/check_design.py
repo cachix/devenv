@@ -76,6 +76,8 @@ def check_document(root, path):
             if in_fence:
                 block.append(line)
             continue
+        if match[1] != '```' or line[:1].isspace():
+            raise ValueError(f'{path}: use canonical unindented triple-backtick fences')
         if not in_fence:
             language = match[2].strip()
             if language not in {'plantuml', 'puml', 'sh'}:

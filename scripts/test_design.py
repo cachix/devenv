@@ -54,6 +54,16 @@ class DesignControls(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unsupported fence'):
             check_document(self.root, self.path)
 
+    def test_tilde_diagram_fence_fails(self):
+        self.path.write_text('~~~plantuml\n@startuml\nA -> B\n@enduml\n~~~\n')
+        with self.assertRaisesRegex(ValueError, 'canonical unindented'):
+            check_document(self.root, self.path)
+
+    def test_indented_diagram_fence_fails(self):
+        self.path.write_text('  ```plantuml\n@startuml\nA -> B\n@enduml\n  ```\n')
+        with self.assertRaisesRegex(ValueError, 'canonical unindented'):
+            check_document(self.root, self.path)
+
     def test_incomplete_diagram_fails(self):
         self.path.write_text('```plantuml\n@startuml\nA -> B\n```\n')
         with self.assertRaisesRegex(ValueError, 'complete UML'):
