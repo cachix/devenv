@@ -45,7 +45,7 @@ Consider using the Flake integration when:
 | Protection from garbage-collection | ✓ | ✗ |
 | Faster evaluation (lazy trees) | ✓ | ✗ |
 | Evaluation caching | ✓ | ✗ |
-| Pure evaluation | ✓ | ✗ (`impure` by default) |
+| Pure evaluation | ✗ (`impure` by default) | ✓ |
 | Cross-project references | ✓ | ✓ |
 | secretspec.dev | ✓ | ✗ |
 | Running processes when testing | ✓ | ✗ |
