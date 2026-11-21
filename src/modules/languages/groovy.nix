@@ -9,7 +9,7 @@ let
 in
 {
   options.languages.groovy = {
-    enable = lib.mkEnableOption "tools for Groovy development";
+    enable = lib.mkEnableOption "tools for Groovy development.";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -19,7 +19,7 @@ in
     };
 
     lsp = {
-      enable = lib.mkEnableOption "Groovy Language Server" // {
+      enable = lib.mkEnableOption "Groovy Language Server." // {
         default = true;
       };
 
@@ -28,6 +28,19 @@ in
         default = pkgs.groovy-language-server;
         defaultText = lib.literalExpression "pkgs.groovy-language-server";
         description = "The Groovy language server package to use.";
+      };
+    };
+
+    linter = {
+      enable = lib.mkEnableOption "Groovy linter, formatter, and auto-fixer. Using npm-groovy-lint." // {
+        default = true;
+      };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.npm-groovy-lint;
+        defaultText = lib.literalExpression "pkgs.npm-groovy-lint";
+        description = "The Groovy linter package to use.";
       };
     };
   };
