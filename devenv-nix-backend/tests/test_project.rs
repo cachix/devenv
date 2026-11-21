@@ -255,6 +255,77 @@ async fn root_and_nested_follows_can_target_remote_yaml_inputs() {
 }
 
 #[nix_test]
+async fn deep_follows_can_target_inputs_discovered_through_an_import() {
+    let root = TempDir::new().unwrap();
+    for (name, contents) in [
+        ("devenv.nix", "{ ... }: {}"),
+        (
+            "devenv.yaml",
+            r#"inputs:
+  nixpkgs:
+    url: path:./replacement
+  devenv:
+    follows: nixpkgs
+  shared:
+    url: path:./shared
+    flake: false
+  a:
+    url: path:./a
+    inputs:
+      b:
+        inputs:
+          c:
+            follows: imported
+imports:
+  - shared
+"#,
+        ),
+        (
+            "shared/devenv.yaml",
+            "inputs:\n  imported:\n    follows: nixpkgs\n",
+        ),
+        ("replacement/flake.nix", "{ outputs = _: {}; }"),
+        (
+            "a/flake.nix",
+            r#"{ inputs.b.url = "path:./b"; outputs = _: {}; }"#,
+        ),
+        (
+            "a/b/flake.nix",
+            r#"{ inputs.c.url = "path:./c"; outputs = _: {}; }"#,
+        ),
+        ("a/b/c/flake.nix", "{ outputs = _: {}; }"),
+    ] {
+        let path = root.path().join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, contents).unwrap();
+    }
+    let _cwd = common::CwdGuard::enter(root.path());
+    let project = ProjectConfig::new(root.path());
+    for policy in [UpdatePolicy::Preserve, UpdatePolicy::Input("a/b/c")] {
+        resolve_project(
+            &project,
+            NixOptions {
+                offline: Some(true),
+                ..Default::default()
+            },
+            policy,
+        )
+        .expect("resolve deep follows after loading imported configuration")
+        .write_lock()
+        .unwrap();
+
+        let lock = fs::read_to_string(root.path().join("devenv.lock")).unwrap();
+        let a = input_node(&lock, "a");
+        let lock: Value = serde_json::from_str(&lock).unwrap();
+        let b = a["inputs"]["b"].as_str().unwrap();
+        assert_eq!(
+            lock["nodes"][b]["inputs"]["c"],
+            serde_json::json!(["imported"])
+        );
+    }
+}
+
+#[nix_test]
 async fn imported_alias_can_be_resolved_after_its_remote_target_is_discovered() {
     let fixture = Fixture::new();
     fs::write(

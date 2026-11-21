@@ -68,53 +68,37 @@ pub mod umask_guard;
 // Helpers for shaping Nix errors into miette diagnostics
 mod error;
 
-fn create_flake_input_base(
-    fetch_settings: &FetchersSettings,
-    flake_settings: &FlakeSettings,
-    parse_flags: &FlakeReferenceParseFlags,
-    input: &Input,
-) -> Result<Option<FlakeInput>> {
-    let (flake_ref, is_flake) = if let Some(url) = &input.url {
-        let (flake_ref, _fragment) =
-            FlakeReference::parse_with_fragment(fetch_settings, flake_settings, parse_flags, url)?;
-        (flake_ref, input.flake)
-    } else if let Some(follows_target) = &input.follows {
-        let (placeholder_ref, _) = FlakeReference::parse_with_fragment(
-            fetch_settings,
-            flake_settings,
-            parse_flags,
-            follows_target,
-        )?;
-        (placeholder_ref, true)
-    } else {
-        return Ok(None);
-    };
-
-    let mut flake_input = FlakeInput::new(&flake_ref, is_flake)?;
-    if let Some(follows_path) = &input.follows {
-        flake_input.set_follows(follows_path)?;
-    }
-    Ok(Some(flake_input))
-}
-
 fn create_flake_input(
     fetch_settings: &FetchersSettings,
     flake_settings: &FlakeSettings,
     parse_flags: &FlakeReferenceParseFlags,
     input: &Input,
+    nested: bool,
 ) -> Result<Option<FlakeInput>> {
-    let Some(mut flake_input) =
-        create_flake_input_base(fetch_settings, flake_settings, parse_flags, input)?
-    else {
+    let mut flake_input = if let Some(url) = &input.url {
+        let (flake_ref, _fragment) =
+            FlakeReference::parse_with_fragment(fetch_settings, flake_settings, parse_flags, url)?;
+        FlakeInput::new(&flake_ref, input.flake)?
+    } else if input.follows.is_some() || (nested && !input.inputs.is_empty()) {
+        FlakeInput::new_empty()?
+    } else {
         return Ok(None);
     };
+
+    if let Some(follows_path) = &input.follows {
+        flake_input.set_follows(follows_path)?;
+    }
 
     if !input.inputs.is_empty() {
         let mut overrides = FlakeInputs::new()?;
         for (nested_name, nested_input) in &input.inputs {
-            if let Some(nested_flake_input) =
-                create_flake_input_base(fetch_settings, flake_settings, parse_flags, nested_input)?
-            {
+            if let Some(nested_flake_input) = create_flake_input(
+                fetch_settings,
+                flake_settings,
+                parse_flags,
+                nested_input,
+                true,
+            )? {
                 overrides.add(nested_name, nested_flake_input)?;
             }
         }
@@ -143,7 +127,7 @@ pub fn create_flake_inputs(
 
     for (name, input) in inputs {
         if let Some(flake_input) =
-            create_flake_input(fetch_settings, flake_settings, &parse_flags, input)?
+            create_flake_input(fetch_settings, flake_settings, &parse_flags, input, false)?
         {
             flake_inputs.add(name, flake_input)?;
         }
@@ -191,9 +175,14 @@ pub fn lock_source_input(
     let mut parse_flags = FlakeReferenceParseFlags::new(flake_settings)?;
     parse_flags.set_preserve_relative_paths(true)?;
 
-    let source_input =
-        create_flake_input(fetch_settings, flake_settings, &parse_flags, source_input)?
-            .context("Source input requires a URL or follows target")?;
+    let source_input = create_flake_input(
+        fetch_settings,
+        flake_settings,
+        &parse_flags,
+        source_input,
+        false,
+    )?
+    .context("Source input requires a URL or follows target")?;
     let mut flake_inputs = FlakeInputs::new()?;
     flake_inputs.add("from", source_input)?;
 
