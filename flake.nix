@@ -54,9 +54,7 @@
   };
   inputs.ghostty = {
     # Keep this in sync with the Ghostty revision pinned by libghostty-rs.
-    # libghostty-vt is pre-1.0 and its C ABI changes without compatibility
-    # guarantees.
-    url = "github:ghostty-org/ghostty/22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018";
+    url = "github:ghostty-org/ghostty/108cacb17ed8990840cd14abfce43d8ed8503ca1";
     flake = false;
   };
 
