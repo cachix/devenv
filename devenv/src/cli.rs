@@ -516,7 +516,11 @@ pub struct CliOptions {
         short,
         long,
         global = true,
+        env = "DEVENV_QUIET",
         conflicts_with = "verbose",
+        num_args = 0..=1,
+        default_missing_value = "true",
+        value_parser = clap::builder::BoolishValueParser::new(),
         help = "Silence all logs"
     )]
     pub quiet: bool,
