@@ -1,0 +1,7 @@
+{
+  "name": "devenv-typescript-bun-test",
+  "private": true,
+  "dependencies": {
+    "local-tool": "file:./tool"
+  }
+}

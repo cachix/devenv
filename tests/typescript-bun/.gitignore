@@ -1,0 +1,4 @@
+.devenv*
+devenv.lock
+frontend/node_modules/
+frontend/bun.lock
