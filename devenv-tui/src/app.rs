@@ -769,6 +769,8 @@ fn activity_navigation_action(
         Action::MoveUp => (false, 1),
         Action::HalfPageDown => (true, half_page),
         Action::HalfPageUp => (false, half_page),
+        Action::PageDown => (true, viewport_height.max(1)),
+        Action::PageUp => (false, viewport_height.max(1)),
         _ => return None,
     };
     Some(ActivityNavigation::Relative { forward, steps })
@@ -831,7 +833,14 @@ fn scroll_selected_into_view(
         .unwrap_or(1);
 
     let vp = handle.viewport_height() as i32;
-    let current = handle.scroll_offset();
+    // Auto-scroll renders at the bottom without updating the stored offset.
+    // Compare against the visible position so selecting the first row also
+    // disengages following and scrolls it into view.
+    let current = if handle.is_auto_scroll_pinned() {
+        (i32::from(handle.content_height()) - vp).max(0)
+    } else {
+        handle.scroll_offset()
+    };
     if offset < current {
         handle.scroll_to(offset);
     } else if offset + target_height > current + vp {
@@ -1706,6 +1715,137 @@ mod tests {
         }
         .apply(&mut ui_state, &[]);
         assert_eq!(ui_state.selected_activity, Some(1));
+    }
+
+    #[test]
+    fn page_navigation_uses_viewport_height_and_clamps_selection() {
+        let selectable = [10, 20, 30, 40, 50];
+        let mut ui = UiState::new();
+        let navigate = |ui: &mut UiState, action, height| {
+            activity_navigation_action(Some(action), height)
+                .unwrap()
+                .apply(ui, &selectable);
+        };
+
+        navigate(&mut ui, Action::PageUp, 3);
+        assert_eq!(ui.selected_activity, Some(50));
+        ui.selected_activity = None;
+        navigate(&mut ui, Action::PageDown, 3);
+        assert_eq!(ui.selected_activity, Some(10));
+        ui.inline_logs_activity = Some(10);
+        navigate(&mut ui, Action::PageDown, 3);
+        assert_eq!(ui.selected_activity, Some(40));
+        assert_eq!(ui.inline_logs_activity, None);
+        for _ in 0..2 {
+            navigate(&mut ui, Action::PageDown, 3);
+            assert_eq!(ui.selected_activity, Some(50));
+        }
+        navigate(&mut ui, Action::PageUp, 3);
+        assert_eq!(ui.selected_activity, Some(20));
+        for _ in 0..2 {
+            navigate(&mut ui, Action::PageUp, 3);
+            assert_eq!(ui.selected_activity, Some(10));
+        }
+        navigate(&mut ui, Action::PageDown, 0);
+        assert_eq!(ui.selected_activity, Some(20));
+        navigate(&mut ui, Action::PageUp, 0);
+        assert_eq!(ui.selected_activity, Some(10));
+        ui.selected_activity = Some(99);
+        navigate(&mut ui, Action::PageDown, 3);
+        assert_eq!(ui.selected_activity, Some(10));
+
+        for action in [Action::PageDown, Action::PageUp] {
+            let mut ui = UiState::new();
+            activity_navigation_action(Some(action), 3)
+                .unwrap()
+                .apply(&mut ui, &[]);
+            assert_eq!(ui.selected_activity, None);
+            activity_navigation_action(Some(action), 3)
+                .unwrap()
+                .apply(&mut ui, &[10]);
+            assert_eq!(ui.selected_activity, Some(10));
+        }
+    }
+
+    async fn assert_main_navigation_visible(keys: &[(KeyCode, u64)]) {
+        use futures::StreamExt;
+
+        let config = Arc::new(TuiConfig::default());
+        let mut model = ActivityModel::with_config(config.clone());
+        for id in 1..=30 {
+            model.apply_activity_event(devenv_activity::test_helpers::task_hierarchy_single(
+                id,
+                format!("package-{id:02}"),
+                None,
+                true,
+                false,
+            ));
+            model.apply_activity_event(devenv_activity::test_helpers::task_start(id));
+            model.build_logs.insert(
+                id,
+                Arc::new(["preview one".to_string(), "preview two".to_string()].into()),
+            );
+        }
+        let model = Arc::new(RwLock::new(model));
+        let ui = Arc::new(RwLock::new(UiState::new()));
+        let mut element = element! {
+            ContextProvider(value: Context::owned(config)) {
+                ContextProvider(value: Context::owned(Shutdown::new())) {
+                    ContextProvider(value: Context::owned(Arc::new(Notify::new()))) {
+                        ContextProvider(value: Context::owned(ModelVersion(Arc::new(AtomicU64::new(0))))) {
+                            ContextProvider(value: Context::owned(RenderShutdown(Arc::new(Notify::new())))) {
+                                ContextProvider(value: Context::owned(model)) {
+                                    ContextProvider(value: Context::owned(ui.clone())) {
+                                        ContextProvider(value: Context::owned(None::<ProcessCommandSender>)) {
+                                            ContextProvider(value: Context::owned(ExitFlag::new())) {
+                                                ContextProvider(value: Context::owned(PauseFlag::new())) {
+                                                    MainView
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        let (tx, rx) = futures::channel::mpsc::unbounded();
+        let mut frames = element.mock_terminal_render_loop(MockTerminalConfig::with_events(rx));
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            frames.next().await.unwrap();
+            tx.unbounded_send(TerminalEvent::Resize(80, 10)).unwrap();
+            while ui.read().unwrap().terminal_size.height != 10 {
+                frames.next().await.unwrap();
+            }
+            for &(code, expected_id) in keys {
+                tx.unbounded_send(TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code)))
+                    .unwrap();
+                loop {
+                    let output = frames.next().await.unwrap().to_string();
+                    if ui.read().unwrap().selected_activity == Some(expected_id)
+                        && output.contains(&format!("package-{expected_id:02}"))
+                    {
+                        break;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("navigation should select and scroll the destination into view");
+    }
+
+    #[tokio::test]
+    async fn page_keys_select_and_scroll_multiline_activities() {
+        assert_main_navigation_visible(&[
+            (KeyCode::PageDown, 1),
+            (KeyCode::PageDown, 9),
+            (KeyCode::PageDown, 17),
+            (KeyCode::PageUp, 9),
+            (KeyCode::PageUp, 1),
+        ])
+        .await;
     }
 
     #[test]
