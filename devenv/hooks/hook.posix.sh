@@ -21,8 +21,25 @@ if [[ -n "${_DEVENV_HOOK_DIR:-}" ]]; then
     unset _DEVENV_HOOK_DIR
 fi
 
+# Set while `_devenv_hook` is running, so a prompt hook firing from inside the
+# activation (ble.sh can redraw mid-command) cannot recurse into it.
+_devenv_hook_running=""
+
 _devenv_hook() {
     local previous_exit_status=$?
+
+    if [[ -n "$_devenv_hook_running" ]]; then
+        return $previous_exit_status
+    fi
+
+    # A hook-spawned shell whose devenv environment hasn't been sourced yet:
+    # `_devenv_hook_dir` is set but `DEVENV_ROOT` is not. Happens under ble.sh (and potentially other similar tools),
+    # which draws its first prompt from inside `~/.bashrc`, before the rcfile
+    # applies the devenv environment. Activating here would spawn shells in a
+    # loop.
+    if [[ -z "${DEVENV_ROOT:-}" && -n "${_devenv_hook_dir:-}" ]]; then
+        return $previous_exit_status
+    fi
 
     # `DEVENV_ROOT` set means a devenv shell is already active — hook does
     # nothing. Hook-spawned shells (marked by `_devenv_hook_dir`) additionally
@@ -45,10 +62,12 @@ _devenv_hook() {
     # activates now rather than on the next prompt (#3129). A loop rather than
     # recursion, so hopping between projects doesn't grow the call stack.
     local checked_dir=""
+    _devenv_hook_running=1
     while [[ "$PWD" != "$checked_dir" ]]; do
         checked_dir="$PWD"
         _devenv_hook_check
     done
+    _devenv_hook_running=""
     return $previous_exit_status
 }
 
