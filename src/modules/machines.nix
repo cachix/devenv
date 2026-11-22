@@ -113,18 +113,66 @@ let
     if lib.hasPrefix "/" value then value
     else "${outerConfig.devenv.root}/${value}";
 
-  # Build the NixOS toplevel closure for a machine's `nixos` module.
-  #
-  # Requires `inputs.disko` (always, because disko is the declarative
-  # partitioning layer that `devenv machines install` relies on) and, when
-  # `hardware.facter` is non-null, `inputs.nixos-facter-modules`. Both errors
-  # are lazy: evaluation of a home-manager-only machine does not force these.
-  # Shared NixOS evaluation for a machine. Returns the full evaluated NixOS
-  # system so callers can extract both `.config.system.build.toplevel` and
-  # `.config.system.build.diskoScript` (and any future outputs) without
-  # evaluating twice — Nix's lazy evaluation handles deduplication.
+  isConfiguration = value: value._type or null == "configuration";
+
+  configurationType = class: lib.mkOptionType {
+    name = "${class}Configuration";
+    description = "evaluated ${class} configuration";
+    descriptionClass = "noun";
+    check = isConfiguration;
+    merge = loc: defs:
+      let
+        value = lib.options.mergeOneOption loc defs;
+      in
+      if value ? class && value.class != class then
+        throw "The option `${lib.showOption loc}' expects a ${class} configuration, but it is a ${value.class} configuration."
+      else
+        value;
+  };
+
+  roleType = class: lib.types.nullOr (lib.types.either (configurationType class) lib.types.deferredModule);
+
+  devenvNixosModules = machine: [
+    ./machines/recovery.nix
+    ./machines/facts.nix
+    ({ pkgs, ... }:
+      let
+        targetDevenv = devenvPackageFor machine.system;
+        # Copy only the bundled resolver out of the target-architecture
+        # devenv package. The installed system therefore does not retain
+        # devenv's larger runtime closure just to run SecretSpec once.
+        targetSecretspec = pkgs.runCommand "devenv-bundled-secretspec" { } ''
+          install -Dm755 ${targetDevenv}/bin/secretspec $out/bin/secretspec
+        '';
+        targetSecretspecPackages = machine.install.secretspec.extraPackages pkgs;
+        targetSecretspecRuntime = pkgs.buildEnv {
+          name = "devenv-machines-secretspec-runtime";
+          paths = [ targetSecretspec ] ++ targetSecretspecPackages;
+          pathsToLink = [ "/bin" ];
+          ignoreCollisions = true;
+        };
+        targetSecretspecLauncher = pkgs.writeShellScriptBin "devenv-machines-secretspec" ''
+          export PATH=${targetSecretspecRuntime}/bin:$PATH
+          exec ${targetSecretspec}/bin/secretspec "$@"
+        '';
+      in
+      lib.mkIf
+        (machine.install.secrets != { } && machine.install.secretspec.execution == "target")
+        {
+          # Target-side bootstrap resolution runs after nixos-install but
+          # before reboot. The private launcher calls devenv's bundled
+          # resolver by exact store path and exposes helpers through its
+          # own PATH. Only that launcher enters the system profile:
+          # another package cannot replace the resolver, and helpers do
+          # not pollute the installed machine's global command namespace.
+          environment.systemPackages = [ targetSecretspecLauncher ];
+        })
+  ];
+
   nixosEval = machine:
-    if disko == null then
+    if isConfiguration machine.nixos then
+      machine.nixos.extendModules { modules = devenvNixosModules machine; }
+    else if disko == null then
       throw (outerConfig.lib._mkInputError diskoInputArgs)
     else
       let
@@ -143,47 +191,15 @@ let
         modules = [
           { nixpkgs.hostPlatform = machine.system; }
           disko.nixosModules.disko
-          ./machines/recovery.nix
-          ./machines/facts.nix
           machine.nixos
-          ({ pkgs, ... }:
-            let
-              targetDevenv = devenvPackageFor machine.system;
-              # Copy only the bundled resolver out of the target-architecture
-              # devenv package. The installed system therefore does not retain
-              # devenv's larger runtime closure just to run SecretSpec once.
-              targetSecretspec = pkgs.runCommand "devenv-bundled-secretspec" { } ''
-                install -Dm755 ${targetDevenv}/bin/secretspec $out/bin/secretspec
-              '';
-              targetSecretspecPackages = machine.install.secretspec.extraPackages pkgs;
-              targetSecretspecRuntime = pkgs.buildEnv {
-                name = "devenv-machines-secretspec-runtime";
-                paths = [ targetSecretspec ] ++ targetSecretspecPackages;
-                pathsToLink = [ "/bin" ];
-                ignoreCollisions = true;
-              };
-              targetSecretspecLauncher = pkgs.writeShellScriptBin "devenv-machines-secretspec" ''
-                export PATH=${targetSecretspecRuntime}/bin:$PATH
-                exec ${targetSecretspec}/bin/secretspec "$@"
-              '';
-            in
-            lib.mkIf
-              (machine.install.secrets != { } && machine.install.secretspec.execution == "target")
-              {
-                # Target-side bootstrap resolution runs after nixos-install but
-                # before reboot. The private launcher calls devenv's bundled
-                # resolver by exact store path and exposes helpers through its
-                # own PATH. Only that launcher enters the system profile:
-                # another package cannot replace the resolver, and helpers do
-                # not pollute the installed machine's global command namespace.
-                environment.systemPackages = [ targetSecretspecLauncher ];
-              })
-        ] ++ facterModules;
+        ] ++ devenvNixosModules machine ++ facterModules;
       };
 
   # Build the nix-darwin toplevel closure for a machine's `nix-darwin` module.
   buildNixDarwinToplevel = machine:
-    if nixDarwin == null then
+    if isConfiguration machine.nix-darwin then
+      machine.nix-darwin.config.system.build.toplevel
+    else if nixDarwin == null then
       throw (outerConfig.lib._mkInputError nixDarwinInputArgs)
     else
       (nixDarwin.lib.darwinSystem {
@@ -192,65 +208,70 @@ let
         modules = [ machine.nix-darwin ];
       }).config.system.build.toplevel;
 
+  homeManagerEval = machine:
+    if isConfiguration machine.home-manager then
+      machine.home-manager
+    else if homeManager == null then
+      throw (outerConfig.lib._mkInputError homeManagerInputArgs)
+    else
+      homeManager.lib.homeManagerConfiguration {
+        # devenv's default nixpkgs input is the devenv-nixpkgs flake, whose
+        # root is not itself importable as a nixpkgs package set. Both it and
+        # a regular nixpkgs flake expose the package set through
+        # legacyPackages.
+        pkgs = inputs.nixpkgs.legacyPackages.${machine.system};
+        extraSpecialArgs = { inherit inputs self; };
+        modules = [ machine.home-manager ];
+      };
+
   # Build the home-manager activation package for a machine's `home-manager`
   # module. A machine has one shared SSH target, which is commonly root for a
   # combined NixOS + home-manager deployment. Wrap the upstream activation so
   # it always runs as the configured home-manager user with the matching HOME.
   buildHomeManagerToplevel = machine:
-    if homeManager == null then
-      throw (outerConfig.lib._mkInputError homeManagerInputArgs)
-    else
-      let
-        # devenv's default nixpkgs input is the devenv-nixpkgs flake, whose
-        # root is not itself importable as a nixpkgs package set. Both it and
-        # a regular nixpkgs flake expose the package set through
-        # legacyPackages.
-        machinePkgs = inputs.nixpkgs.legacyPackages.${machine.system};
-        evaluated = homeManager.lib.homeManagerConfiguration {
-          pkgs = machinePkgs;
-          extraSpecialArgs = { inherit inputs self; };
-          modules = [ machine.home-manager ];
-        };
-        activationPackage = evaluated.activationPackage;
-        homeUser = evaluated.config.home.username;
-        homeDirectory = toString evaluated.config.home.homeDirectory;
-        activationDriver = machinePkgs.writeShellScript "devenv-home-manager-activate" ''
-          set -eu
+    let
+      evaluated = homeManagerEval machine;
+      machinePkgs = evaluated.pkgs;
+      activationPackage = evaluated.activationPackage;
+      homeUser = evaluated.config.home.username;
+      homeDirectory = toString evaluated.config.home.homeDirectory;
+      activationDriver = machinePkgs.writeShellScript "devenv-home-manager-activate" ''
+        set -eu
 
-          user=${lib.escapeShellArg homeUser}
-          home=${lib.escapeShellArg homeDirectory}
-          activate=${lib.escapeShellArg "${activationPackage}/activate"}
+        user=${lib.escapeShellArg homeUser}
+        home=${lib.escapeShellArg homeDirectory}
+        activate=${lib.escapeShellArg "${activationPackage}/activate"}
 
-          if [ "$(id -un)" = "$user" ]; then
-            exec env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
-          fi
+        if [ "$(id -un)" = "$user" ]; then
+          exec env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+        fi
 
-          if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
-            exec runuser -u "$user" -- \
-              env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
-          fi
+        if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
+          exec runuser -u "$user" -- \
+            env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+        fi
 
-          if command -v sudo >/dev/null 2>&1; then
-            exec sudo -H -u "$user" -- \
-              env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
-          fi
+        if command -v sudo >/dev/null 2>&1; then
+          exec sudo -H -u "$user" -- \
+            env USER="$user" LOGNAME="$user" HOME="$home" "$activate" "$@"
+        fi
 
-          echo "home-manager activation must run as $user, but the current user is $(id -un) and neither runuser nor sudo is available" >&2
-          exit 1
-        '';
-      in
-      machinePkgs.symlinkJoin {
-        name = "devenv-home-manager-generation";
-        paths = [ activationPackage ];
-        postBuild = ''
-          rm -f "$out/activate"
-          ln -s ${activationDriver} "$out/activate"
-          if [ -d "$out/bin" ]; then
-            rm -f "$out/bin/home-manager-generation"
-            ln -s ${activationDriver} "$out/bin/home-manager-generation"
-          fi
-        '';
-      };
+        echo "home-manager activation must run as $user, but the current user is $(id -un) and neither runuser nor sudo is available" >&2
+        exit 1
+      '';
+    in
+    machinePkgs.symlinkJoin {
+      name = "devenv-home-manager-generation";
+      paths = [ activationPackage ];
+      postBuild = ''
+        rm -f "$out/activate"
+        ln -s ${activationDriver} "$out/activate"
+        if [ -d "$out/bin" ]; then
+          rm -f "$out/bin/home-manager-generation"
+          ln -s ${activationDriver} "$out/bin/home-manager-generation"
+        fi
+      '';
+    };
 
   targetOptions = lib.types.submodule {
     options = {
@@ -286,9 +307,23 @@ let
     options = {
       system = lib.mkOption {
         type = lib.types.str;
+        apply = system:
+          assert lib.assertMsg
+            (lib.all
+              (role: !(isConfiguration role) || role.pkgs.stdenv.hostPlatform.system == system)
+              [ config.nixos config.nix-darwin config.home-manager ])
+            "machines.${name}.system must match every supplied configuration's architecture.";
+          system;
         description = "System architecture for the machine.";
-        default = pkgs.stdenv.system;
-        defaultText = lib.literalExpression "pkgs.stdenv.system";
+        default =
+          let
+            configuration = lib.findFirst
+              isConfiguration
+              null
+              [ config.nixos config.nix-darwin config.home-manager ];
+          in
+          if configuration != null then configuration.pkgs.stdenv.hostPlatform.system else pkgs.stdenv.system;
+        defaultText = lib.literalExpression "configuration.pkgs.stdenv.hostPlatform.system or pkgs.stdenv.system";
         example = "x86_64-linux";
       };
 
@@ -299,7 +334,7 @@ let
       };
 
       nixos = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
+        type = roleType "nixos";
         description = "NixOS configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
@@ -566,7 +601,7 @@ let
       };
 
       home-manager = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
+        type = roleType "homeManager";
         description = "Home Manager configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
@@ -579,7 +614,7 @@ let
       };
 
       nix-darwin = lib.mkOption {
-        type = lib.types.nullOr lib.types.deferredModule;
+        type = roleType "darwin";
         description = "nix-darwin configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
@@ -698,6 +733,11 @@ let
               default = false;
               description = "Whether the evaluated NixOS root account has a password or authorized SSH key.";
             };
+            hasDisko = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Whether the evaluated NixOS configuration includes disko.";
+            };
           };
         };
         internal = true;
@@ -711,23 +751,30 @@ let
     config._nixosEval = lib.mkIf (config.nixos != null) (nixosEval config);
     config.deploy.facts = if config.nixos != null then config._nixosEval.config.devenvMachineFacts else { };
 
-    config.build = {
-      deployer = lib.mkIf (config.nixos != null) (import ./machines/deploy.nix {
-        pkgs = config._nixosEval.pkgs;
-        inherit (config.deploy) healthCheck rollbackTimeout;
-      });
-      nixos = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.toplevel;
-      diskoScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.diskoScript;
-      diskoFormatScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.formatScript;
-      diskoMountScript = lib.mkIf (config.nixos != null) config._nixosEval.config.system.build.mountScript;
-      nix-darwin = lib.mkIf (config.nix-darwin != null) (lib.mkDefault (buildNixDarwinToplevel config));
-      home-manager = lib.mkIf (config.home-manager != null) (lib.mkDefault (buildHomeManagerToplevel config));
-    };
+    config.build =
+      let
+        diskoOutput = output:
+          config._nixosEval.config.system.build.${output}
+            or (throw "machines.${name}: `devenv machines install` needs disko in the NixOS configuration");
+      in
+      {
+        deployer = lib.mkIf (config.nixos != null) (lib.mkDefault (import ./machines/deploy.nix {
+          pkgs = config._nixosEval.pkgs;
+          inherit (config.deploy) healthCheck rollbackTimeout;
+        }));
+        nixos = lib.mkIf (config.nixos != null) (lib.mkDefault config._nixosEval.config.system.build.toplevel);
+        diskoScript = lib.mkIf (config.nixos != null) (lib.mkDefault (diskoOutput "diskoScript"));
+        diskoFormatScript = lib.mkIf (config.nixos != null) (lib.mkDefault (diskoOutput "formatScript"));
+        diskoMountScript = lib.mkIf (config.nixos != null) (lib.mkDefault (diskoOutput "mountScript"));
+        nix-darwin = lib.mkIf (config.nix-darwin != null) (lib.mkDefault (buildNixDarwinToplevel config));
+        home-manager = lib.mkIf (config.home-manager != null) (lib.mkDefault (buildHomeManagerToplevel config));
+      };
 
     # Lazy: only forced when the CLI reads `installCheck.hasRootAuth`
     # (i.e. during `devenv machines install`), never during `info`/`deploy`.
     # For home-manager-only machines the default `hasRootAuth = false` stays.
     config.installCheck = lib.mkIf (config.nixos != null) {
+      hasDisko = config._nixosEval.options ? disko;
       hasRootAuth =
         let
           root = config._nixosEval.config.users.users.root or { };

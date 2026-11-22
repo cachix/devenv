@@ -388,6 +388,8 @@ struct TargetBootstrapInstall<'a> {
 struct MachineInstallCheck {
     #[serde(rename = "hasRootAuth")]
     has_root_auth: bool,
+    #[serde(rename = "hasDisko")]
+    has_disko: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1668,9 +1670,15 @@ impl Devenv {
         // usable root authentication. The check runs after facter because the
         // evaluated NixOS configuration may consume its freshly written report,
         // but before encryption keys or disko can touch the target.
-        if phases.contains(&InstallPhase::Install) {
+        if phases.contains(&InstallPhase::Install) || phases.contains(&InstallPhase::Disko) {
             let check = self.load_machine_install_check(name).await?;
-            if !check.has_root_auth {
+            if phases.contains(&InstallPhase::Disko) && !check.has_disko {
+                bail!(
+                    "machines.{name}: refusing to install. Its NixOS configuration does not \
+                     include disko, which `devenv machines install` uses to partition disks."
+                );
+            }
+            if phases.contains(&InstallPhase::Install) && !check.has_root_auth {
                 bail!(
                     "machines.{name}: refusing to install. The NixOS config \
                      declares no authentication for root, and `nixos-install` \
