@@ -743,20 +743,35 @@ fn rendered_activity_height(
     }
 }
 
-fn activity_navigation_action(
-    key_event: &KeyEvent,
-    viewport_height: usize,
-) -> Option<(bool, usize)> {
-    let control = key_event.modifiers.contains(KeyModifiers::CONTROL);
-    let half_page = viewport_height.div_ceil(2).max(1);
+#[derive(Debug, PartialEq, Eq)]
+enum ActivityNavigation {
+    Relative { forward: bool, steps: usize },
+}
 
-    match key_event.code {
-        KeyCode::Down | KeyCode::Char('j') => Some((true, 1)),
-        KeyCode::Up | KeyCode::Char('k') => Some((false, 1)),
-        KeyCode::Char('d') if control => Some((true, half_page)),
-        KeyCode::Char('u') if control => Some((false, half_page)),
-        _ => None,
+impl ActivityNavigation {
+    fn apply(self, ui_state: &mut UiState, selectable: &[u64]) {
+        match self {
+            Self::Relative { forward, steps } => {
+                ui_state.select_activity_by(selectable, steps, forward);
+            }
+        }
+        ui_state.inline_logs_activity = None;
     }
+}
+
+fn activity_navigation_action(
+    action: Option<Action>,
+    viewport_height: usize,
+) -> Option<ActivityNavigation> {
+    let half_page = viewport_height.div_ceil(2).max(1);
+    let (forward, steps) = match action? {
+        Action::MoveDown => (true, 1),
+        Action::MoveUp => (false, 1),
+        Action::HalfPageDown => (true, half_page),
+        Action::HalfPageUp => (false, half_page),
+        _ => return None,
+    };
+    Some(ActivityNavigation::Relative { forward, steps })
 }
 
 fn canonical_key_event(action: Action) -> KeyEvent {
@@ -1320,7 +1335,7 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 collapse_selected_activity(&model, &mut ui);
                             }
                         }
-                        _ if activity_navigation_action(&key_event, terminal_height as usize)
+                        _ if activity_navigation_action(action, terminal_height as usize)
                             .is_some() =>
                         {
                             if let Ok(model) = activity_model.read()
@@ -1329,13 +1344,12 @@ fn MainView(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                                 let display = model.get_display_activities(&ui);
                                 let selectable =
                                     model.get_selectable_activity_ids_from_display(&display, &ui);
-                                let (forward, steps) = activity_navigation_action(
-                                    &key_event,
+                                let navigation = activity_navigation_action(
+                                    action,
                                     available_activity_height(&ui),
                                 )
                                 .unwrap();
-                                ui.select_activity_by(&selectable, steps, forward);
-                                ui.inline_logs_activity = None;
+                                navigation.apply(&mut ui, &selectable);
                                 if let Some(selected_id) = ui.selected_activity
                                     && *scroll_view_active.read()
                                 {
@@ -1638,29 +1652,59 @@ mod tests {
     }
 
     #[test]
-    fn activity_navigation_supports_arrow_vim_and_half_page_keys() {
-        let action = |code, control| {
-            let mut event = KeyEvent::new(KeyEventKind::Press, code);
-            if control {
-                event.modifiers = KeyModifiers::CONTROL;
-            }
-            activity_navigation_action(&event, 21)
-        };
+    fn activity_navigation_resolves_direction_and_half_page_steps() {
+        for (action, forward, steps) in [
+            (Action::MoveDown, true, 1),
+            (Action::MoveUp, false, 1),
+            (Action::HalfPageDown, true, 11),
+            (Action::HalfPageUp, false, 11),
+        ] {
+            assert_eq!(
+                activity_navigation_action(Some(action), 21),
+                Some(ActivityNavigation::Relative { forward, steps })
+            );
+        }
+        assert_eq!(activity_navigation_action(None, 21), None);
+        assert_eq!(activity_navigation_action(Some(Action::Activate), 21), None);
+        assert_eq!(
+            activity_navigation_action(Some(Action::HalfPageDown), 0),
+            Some(ActivityNavigation::Relative {
+                forward: true,
+                steps: 1
+            })
+        );
+    }
 
-        assert_eq!(action(KeyCode::Down, false), Some((true, 1)));
-        assert_eq!(action(KeyCode::Up, false), Some((false, 1)));
-        assert_eq!(action(KeyCode::Char('j'), false), Some((true, 1)));
-        assert_eq!(action(KeyCode::Char('k'), false), Some((false, 1)));
-        assert_eq!(action(KeyCode::Char('d'), true), Some((true, 11)));
-        assert_eq!(action(KeyCode::Char('u'), true), Some((false, 11)));
-        assert_eq!(action(KeyCode::Char('d'), false), None);
-
+    #[test]
+    fn relative_activity_navigation_preserves_selection_behavior() {
         let selectable: Vec<_> = (1..=20).collect();
         let mut ui_state = UiState::new();
+        let navigate = |ui: &mut UiState, forward, steps| {
+            ActivityNavigation::Relative { forward, steps }.apply(ui, &selectable);
+        };
+
+        navigate(&mut ui_state, true, 6);
+        assert_eq!(ui_state.selected_activity, Some(1));
+        ui_state.selected_activity = None;
+        navigate(&mut ui_state, false, 6);
+        assert_eq!(ui_state.selected_activity, Some(20));
         ui_state.selected_activity = Some(10);
-        ui_state.select_activity_by(&selectable, 6, true);
+        ui_state.inline_logs_activity = Some(10);
+        navigate(&mut ui_state, true, 6);
         assert_eq!(ui_state.selected_activity, Some(16));
-        ui_state.select_activity_by(&selectable, 50, false);
+        assert_eq!(ui_state.inline_logs_activity, None);
+        navigate(&mut ui_state, false, 50);
+        assert_eq!(ui_state.selected_activity, Some(1));
+        navigate(&mut ui_state, true, 50);
+        assert_eq!(ui_state.selected_activity, Some(20));
+        ui_state.selected_activity = Some(99);
+        navigate(&mut ui_state, false, 6);
+        assert_eq!(ui_state.selected_activity, Some(1));
+        ActivityNavigation::Relative {
+            forward: true,
+            steps: 1,
+        }
+        .apply(&mut ui_state, &[]);
         assert_eq!(ui_state.selected_activity, Some(1));
     }
 
