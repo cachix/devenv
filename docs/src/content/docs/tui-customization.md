@@ -241,7 +241,7 @@ The contexts and actions are:
 
 | Context | Actions |
 | --- | --- |
-| `main` | `move_down`, `move_up`, `half_page_down`, `half_page_up`, `page_down`, `page_up`, `activate`, `expand`, `collapse`, `open_logs`, `search`, `restart_process`, `stop_process`, `toggle_stopped`, `cancel` |
+| `main` | `move_down`, `move_up`, `half_page_down`, `half_page_up`, `page_down`, `page_up`, `top`, `bottom`, `activate`, `expand`, `collapse`, `open_logs`, `search`, `restart_process`, `stop_process`, `toggle_stopped`, `cancel` |
 | `process_search` | `next_match`, `previous_match`, `accept`, `cancel` |
 | `logs` | `line_down`, `line_up`, `half_page_down`, `half_page_up`, `page_down`, `page_up`, `top`, `bottom`, `search`, `next_match`, `previous_match`, `copy`, `back` |
 | `log_search` | `accept`, `cancel` |
@@ -253,7 +253,7 @@ Displayed key hints are derived from the resolved bindings. When a multi-key seq
 
 Terminal input protocols differ. Basic characters, arrows, and common control chords are broadly portable, while multiple modifiers and modified special keys require support from the terminal emulator. Validation proves that a binding is well-formed, not that every terminal can emit it distinctly.
 
-In the main view, Page Up/Down move by the available viewport height in selectable activities, not rendered preview rows, and stop at the first/last activity. Without a selection, Page Down selects the first activity and Page Up selects the last.
+In the main view, Page Up/Down move by the available viewport height in selectable activities, not rendered preview rows, and stop at the first/last activity. Without a selection, Page Down selects the first activity and Page Up selects the last. Home/End select the first/last activity in the displayed selectable list, respecting collapsed trees and hidden-process filters. These keys dismiss an explicitly opened inline preview and scroll the destination into view.
 
 ### Default keybindings
 
@@ -267,6 +267,8 @@ tui:
       half_page_up: ["ctrl+u"]
       page_down: [page_down]
       page_up: [page_up]
+      top: [home]
+      bottom: [end]
       activate: [enter]
       expand: [right, l]
       collapse: [left, h]

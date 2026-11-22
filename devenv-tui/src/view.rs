@@ -1948,6 +1948,8 @@ fn build_summary_view_impl(ctx: &SummaryViewContext, terminal_width: u16) -> Any
                     crate::config::Action::HalfPageUp,
                     crate::config::Action::PageDown,
                     crate::config::Action::PageUp,
+                    crate::config::Action::Top,
+                    crate::config::Action::Bottom,
                 ];
                 if has_selection {
                     actions.push(crate::config::Action::Activate);
@@ -2640,7 +2642,7 @@ mod tests {
     }
 
     #[test]
-    fn configured_statusline_page_hints_follow_bindings() {
+    fn configured_statusline_navigation_hints_follow_bindings() {
         let mut ctx = summary_ctx(false, false, 0);
         let mut preferences = crate::config::TuiPreferences::default();
         preferences.statusline.layouts.main.right = vec!["key_hints".to_string()];
@@ -2652,12 +2654,23 @@ mod tests {
             .keybindings
             .main
             .insert("page_up".to_string(), vec![]);
+        preferences
+            .keybindings
+            .main
+            .insert("top".to_string(), vec!["f7".to_string()]);
+        preferences
+            .keybindings
+            .main
+            .insert("bottom".to_string(), vec![]);
         ctx.keymap = Arc::new(preferences.keybindings.resolve().unwrap());
         ctx.preferences = Arc::new(preferences);
         let output = build_summary_view_impl(&ctx, 400)
             .render(Some(400))
             .to_string();
         assert!(output.contains("F6 page"), "{output:?}");
+        assert!(output.contains("F7 top"), "{output:?}");
+        assert!(!output.contains("Home"), "{output:?}");
+        assert!(!output.contains("End"), "{output:?}");
         assert!(!output.contains("PageDown"), "{output:?}");
         assert!(!output.contains("PageUp"), "{output:?}");
     }

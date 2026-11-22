@@ -1049,6 +1049,8 @@ fn actions_for(context: KeyContext) -> &'static [Action] {
             Action::HalfPageUp,
             Action::PageDown,
             Action::PageUp,
+            Action::Top,
+            Action::Bottom,
             Action::Activate,
             Action::Expand,
             Action::Collapse,
@@ -1404,6 +1406,8 @@ fn default_bindings() -> Vec<(KeyContext, Action, Vec<&'static str>)> {
         (Main, HalfPageUp, vec!["ctrl+u"]),
         (Main, PageDown, vec!["page_down"]),
         (Main, PageUp, vec!["page_up"]),
+        (Main, Top, vec!["home"]),
+        (Main, Bottom, vec!["end"]),
         (Main, Activate, vec!["enter"]),
         (Main, Expand, vec!["right", "l"]),
         (Main, Collapse, vec!["left", "h"]),
@@ -2100,10 +2104,12 @@ tui:
     }
 
     #[test]
-    fn main_page_navigation_bindings_are_configurable_and_contextual() {
+    fn main_navigation_bindings_are_configurable_and_contextual() {
         for (action, key) in [
             (Action::PageDown, KeyCode::PageDown),
             (Action::PageUp, KeyCode::PageUp),
+            (Action::Top, KeyCode::Home),
+            (Action::Bottom, KeyCode::End),
         ] {
             let mut config = KeybindingsConfig::default();
             let defaults = config.resolve().unwrap();
@@ -2152,7 +2158,7 @@ tui:
             );
         }
         let schema = serde_json::to_value(schemars::schema_for!(UserConfig)).unwrap();
-        for action in ["page_down", "page_up"] {
+        for action in ["page_down", "page_up", "top", "bottom"] {
             assert!(
                 schema
                     .pointer(&format!(

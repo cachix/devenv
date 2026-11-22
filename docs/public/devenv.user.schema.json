@@ -601,6 +601,20 @@
               },
               "uniqueItems": true
             },
+            "top": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
+            "bottom": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeySequence"
+              },
+              "uniqueItems": true
+            },
             "activate": {
               "type": "array",
               "items": {

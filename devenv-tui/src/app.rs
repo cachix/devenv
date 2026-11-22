@@ -746,6 +746,8 @@ fn rendered_activity_height(
 #[derive(Debug, PartialEq, Eq)]
 enum ActivityNavigation {
     Relative { forward: bool, steps: usize },
+    First,
+    Last,
 }
 
 impl ActivityNavigation {
@@ -754,6 +756,8 @@ impl ActivityNavigation {
             Self::Relative { forward, steps } => {
                 ui_state.select_activity_by(selectable, steps, forward);
             }
+            Self::First => ui_state.selected_activity = selectable.first().copied(),
+            Self::Last => ui_state.selected_activity = selectable.last().copied(),
         }
         ui_state.inline_logs_activity = None;
     }
@@ -771,6 +775,8 @@ fn activity_navigation_action(
         Action::HalfPageUp => (false, half_page),
         Action::PageDown => (true, viewport_height.max(1)),
         Action::PageUp => (false, viewport_height.max(1)),
+        Action::Top => return Some(ActivityNavigation::First),
+        Action::Bottom => return Some(ActivityNavigation::Last),
         _ => return None,
     };
     Some(ActivityNavigation::Relative { forward, steps })
@@ -1846,6 +1852,90 @@ mod tests {
             (KeyCode::PageUp, 1),
         ])
         .await;
+    }
+
+    #[tokio::test]
+    async fn home_and_end_select_and_scroll_multiline_activities() {
+        assert_main_navigation_visible(&[
+            (KeyCode::End, 30),
+            (KeyCode::Home, 1),
+            (KeyCode::PageDown, 9),
+            (KeyCode::End, 30),
+        ])
+        .await;
+    }
+
+    #[test]
+    fn boundary_navigation_selects_endpoints_without_requiring_a_current_selection() {
+        for (action, expected) in [(Action::Top, 10), (Action::Bottom, 50)] {
+            for selected in [None, Some(10), Some(30), Some(50), Some(99)] {
+                let mut ui = UiState::new();
+                ui.selected_activity = selected;
+                ui.inline_logs_activity = selected;
+                for _ in 0..2 {
+                    activity_navigation_action(Some(action), 0)
+                        .unwrap()
+                        .apply(&mut ui, &[10, 30, 50]);
+                    assert_eq!(ui.selected_activity, Some(expected));
+                    assert_eq!(ui.inline_logs_activity, None);
+                }
+                activity_navigation_action(Some(action), 0)
+                    .unwrap()
+                    .apply(&mut ui, &[30]);
+                assert_eq!(ui.selected_activity, Some(30));
+                activity_navigation_action(Some(action), 0)
+                    .unwrap()
+                    .apply(&mut ui, &[]);
+                assert_eq!(ui.selected_activity, None);
+            }
+        }
+    }
+
+    #[test]
+    fn activity_navigation_respects_collapsed_trees_and_hidden_processes() {
+        use devenv_activity::ProcessStatus;
+        use devenv_activity::test_helpers::process_status;
+
+        let mut model = ActivityModel::new();
+        model.apply_activity_event(operation_start(1, "Building shell"));
+        model.apply_activity_event(evaluate_start_with(
+            2,
+            "Evaluating Nix",
+            ActivityLevel::Info,
+            Some(1),
+        ));
+        model.apply_activity_event(build_start_with(3, "hello", Some(2)));
+        model
+            .build_logs
+            .insert(3, Arc::new(["output".to_string()].into()));
+        model.apply_activity_event(build_complete(3, ActivityOutcome::Success));
+        model.apply_activity_event(evaluate_complete(2, ActivityOutcome::Success));
+        model.apply_activity_event(operation_complete(1, ActivityOutcome::Success));
+        model.apply_activity_event(process_start(10, "api"));
+        model.apply_activity_event(process_start(20, "stopped"));
+        model.apply_activity_event(process_status(20, ProcessStatus::Stopping));
+        model.apply_activity_event(process_status(20, ProcessStatus::Stopped));
+
+        let mut ui = UiState::new();
+        ui.hide_stopped_processes = true;
+        let display = model.get_display_activities(&ui);
+        let selectable = model.get_selectable_activity_ids_from_display(&display, &ui);
+        assert!(selectable.contains(&1));
+        assert!(selectable.contains(&10));
+        assert!(!selectable.contains(&3));
+        assert!(!selectable.contains(&20));
+        for (action, expected) in [
+            (Action::Top, selectable.first()),
+            (Action::Bottom, selectable.last()),
+            (Action::PageUp, selectable.first()),
+            (Action::PageDown, selectable.last()),
+        ] {
+            ui.selected_activity = Some(10);
+            activity_navigation_action(Some(action), 100)
+                .unwrap()
+                .apply(&mut ui, &selectable);
+            assert_eq!(ui.selected_activity, expected.copied());
+        }
     }
 
     #[test]
