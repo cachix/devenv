@@ -138,6 +138,8 @@ triage.
 ### Main View
 - `↑/↓` or `j/k`: Navigate activities
 - `Ctrl+D/Ctrl+U`: Navigate half a page
+- `PgUp/PgDn`: Navigate a full page (the available viewport height in selectable activities), clamped at the first/last activity
+- `Home/End`: Select the first/last visible selectable activity
 - `Enter`: Toggle the selected activity or process log preview
 - `→` or `l`: Expand the selected activity or show its process log preview
 - `←` or `h`: Collapse the selected activity or hide process log previews

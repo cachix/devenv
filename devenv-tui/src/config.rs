@@ -1047,6 +1047,10 @@ fn actions_for(context: KeyContext) -> &'static [Action] {
             Action::MoveUp,
             Action::HalfPageDown,
             Action::HalfPageUp,
+            Action::PageDown,
+            Action::PageUp,
+            Action::Top,
+            Action::Bottom,
             Action::Activate,
             Action::Expand,
             Action::Collapse,
@@ -1400,6 +1404,10 @@ fn default_bindings() -> Vec<(KeyContext, Action, Vec<&'static str>)> {
         (Main, MoveUp, vec!["up", "k"]),
         (Main, HalfPageDown, vec!["ctrl+d"]),
         (Main, HalfPageUp, vec!["ctrl+u"]),
+        (Main, PageDown, vec!["page_down"]),
+        (Main, PageUp, vec!["page_up"]),
+        (Main, Top, vec!["home"]),
+        (Main, Bottom, vec!["end"]),
         (Main, Activate, vec!["enter"]),
         (Main, Expand, vec!["right", "l"]),
         (Main, Collapse, vec!["left", "h"]),
@@ -2093,6 +2101,72 @@ tui:
             ColorSpec("default".to_string()).parse_direct().unwrap(),
             Color::Reset
         );
+    }
+
+    #[test]
+    fn main_navigation_bindings_are_configurable_and_contextual() {
+        for (action, key) in [
+            (Action::PageDown, KeyCode::PageDown),
+            (Action::PageUp, KeyCode::PageUp),
+            (Action::Top, KeyCode::Home),
+            (Action::Bottom, KeyCode::End),
+        ] {
+            let mut config = KeybindingsConfig::default();
+            let defaults = config.resolve().unwrap();
+            let mut sequence = KeySequenceState::default();
+            assert_eq!(
+                sequence.input_key(&defaults, KeyContext::Main, key, KeyModifiers::NONE),
+                KeyMatch::Action(action)
+            );
+            for context in [
+                KeyContext::ProcessSearch,
+                KeyContext::LogSearch,
+                KeyContext::Prompt,
+            ] {
+                assert_eq!(
+                    sequence.input_key(&defaults, context, key, KeyModifiers::NONE),
+                    KeyMatch::None
+                );
+            }
+            config
+                .main
+                .insert(action.as_str().to_string(), vec!["f6".to_string()]);
+            let rebound = config.resolve().unwrap();
+            assert_eq!(
+                sequence.input_key(
+                    &rebound,
+                    KeyContext::Main,
+                    KeyCode::F(6),
+                    KeyModifiers::NONE
+                ),
+                KeyMatch::Action(action)
+            );
+            assert_eq!(
+                sequence.input_key(&rebound, KeyContext::Main, key, KeyModifiers::NONE),
+                KeyMatch::None
+            );
+            assert_eq!(
+                sequence.input_key(&rebound, KeyContext::Logs, key, KeyModifiers::NONE),
+                KeyMatch::Action(action)
+            );
+            config.main.insert(action.as_str().to_string(), vec![]);
+            let unbound = config.resolve().unwrap();
+            assert!(unbound.bindings(KeyContext::Main, action).is_empty());
+            assert_eq!(
+                sequence.input_key(&unbound, KeyContext::Main, key, KeyModifiers::NONE),
+                KeyMatch::None
+            );
+        }
+        let schema = serde_json::to_value(schemars::schema_for!(UserConfig)).unwrap();
+        for action in ["page_down", "page_up", "top", "bottom"] {
+            assert!(
+                schema
+                    .pointer(&format!(
+                        "/$defs/KeybindingsConfig/properties/main/properties/{action}"
+                    ))
+                    .is_some()
+            );
+        }
     }
 
     #[test]
