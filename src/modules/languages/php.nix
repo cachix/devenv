@@ -18,7 +18,7 @@ let
 
   configurePackage = package:
     package.buildEnv {
-      extensions = { all, enabled }: with all; (builtins.filter filterDefaultExtensions (enabled ++ attrValues (getAttrs cfg.extensions package.extensions)));
+      extensions = { all, enabled }: with all; (builtins.filter filterDefaultExtensions (enabled ++ attrValues (getAttrs cfg.extensions all)));
       extraConfig = cfg.ini;
     };
 
