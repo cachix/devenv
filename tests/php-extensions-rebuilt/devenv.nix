@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   # languages.php.package rebuilt as another variant: the thread-safe PHP with the embed SAPI that
