@@ -30,6 +30,7 @@ let
         fi
         ;;
       *" confirm "*)
+        echo confirm >> /run/devenv-test-confirms
         if test "$mode" = lost-confirm; then
           ${pkgs.bash}/bin/bash -c "$SSH_ORIGINAL_COMMAND" > /run/devenv-test-response
           kill -KILL "$PPID"
@@ -42,12 +43,35 @@ let
         fi
         ;;
       *" status")
-        if test "$mode" = during-switch; then
-          while ! ${pkgs.jq}/bin/jq -e '.phase == "switching"' /var/lib/devenv-machines/current.json >/dev/null; do sleep 0.05; done
-          touch /run/devenv-test-switch-disconnect
-          kill -KILL "$PPID"
-          exit 255
-        fi
+        case "$mode" in
+          status-transient|status-persistent)
+            if test ! -e /run/devenv-test-status-fault; then
+              # Wait until activation owns the target, so the interruption
+              # observes a real switch rather than a still-queued request.
+              phase=
+              n=0
+              while test "$n" -lt 400; do
+                phase=$(${pkgs.jq}/bin/jq -r '.phase' /var/lib/devenv-machines/current.json 2>/dev/null || true)
+                case "$phase" in
+                  switching|checking|awaiting-confirmation) break ;;
+                esac
+                n=$((n + 1))
+                sleep 0.05
+              done
+              printf '%s\n' "''${phase:-unobserved}" > /run/devenv-test-fault-phase
+              # Latch the fault. A transient interruption lets later polls
+              # through; a persistent one fails every later poll immediately
+              # instead of waiting for a phase that has already passed.
+              touch /run/devenv-test-status-fault
+              kill -KILL "$PPID"
+              exit 255
+            fi
+            if test "$mode" = status-persistent; then
+              kill -KILL "$PPID"
+              exit 255
+            fi
+            ;;
+        esac
         ;;
     esac
     exec ${pkgs.bash}/bin/bash -c "$SSH_ORIGINAL_COMMAND"

@@ -75,6 +75,142 @@ const NIXOS_FACTER_COMMAND: &str = "nixos-facter";
 const MACHINE_EXECUTOR: &str =
     "/nix/var/nix/gcroots/devenv-machines/executor/bin/devenv-machine-deploy";
 
+/// Overall bound on watching one target-side transaction.
+const TRANSACTION_OBSERVATION_DEADLINE: std::time::Duration = std::time::Duration::from_secs(900);
+/// How often the controller re-reads the target's view of the transaction.
+const TRANSACTION_OBSERVATION_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+/// Bound on one captured request to a machine over SSH.
+const MACHINE_SSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+/// How long the controller keeps watching this transaction without a positive
+/// answer about its own ID. The executor answers `unknown` while it cannot see
+/// the activation unit (start, switch, health check, reboot), and a status
+/// round trip can fail while the target is busy; both are gaps in observation,
+/// not decisions. The window leaves room for several full SSH attempts; past
+/// it the controller stops guessing.
+const TRANSACTION_OBSERVATION_GAP: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// What one validated status document says about the transaction.
+///
+/// Only terminal outcomes are decisions about the deployment. `unknown` means
+/// the target answered for this transaction but could not report its progress.
+#[derive(Debug, PartialEq)]
+enum TransactionDecision {
+    Succeeded,
+    RolledBack(String),
+    RollbackFailed(String),
+    Failed(String),
+    AwaitingConfirmation,
+    Pending,
+    Unknown(Option<String>),
+}
+
+impl TransactionDecision {
+    /// Interpret a status document. The version and the ID bind the answer to
+    /// this transaction, so a malformed, unsupported, or foreign response must
+    /// fail closed instead of being read as progress.
+    fn from_status(status: &serde_json::Value, id: &str, name: &str) -> Result<Self> {
+        if status["version"].as_u64() != Some(1) {
+            bail!(
+                "Unsupported executor status version on {name}; inspect the target before retrying"
+            );
+        }
+        if status["id"].as_str() != Some(id) {
+            bail!(
+                "Target reports a different transaction; inspect `devenv machines status {name}`"
+            );
+        }
+        Ok(match status["outcome"].as_str() {
+            Some("succeeded") => Self::Succeeded,
+            Some("rolled-back") => Self::RolledBack(
+                status["error"]
+                    .as_str()
+                    .unwrap_or("deployment was not confirmed")
+                    .to_string(),
+            ),
+            Some("rollback-failed") => Self::RollbackFailed(
+                status["rollbackError"]
+                    .as_str()
+                    .unwrap_or("previous system could not be restored")
+                    .to_string(),
+            ),
+            Some("failed") => Self::Failed(
+                status["error"]
+                    .as_str()
+                    .unwrap_or("activation failed")
+                    .to_string(),
+            ),
+            Some("pending") if status["phase"].as_str() == Some("awaiting-confirmation") => {
+                Self::AwaitingConfirmation
+            }
+            Some("pending") => Self::Pending,
+            Some("unknown") => {
+                Self::Unknown(status["observationError"].as_str().map(str::to_string))
+            }
+            _ => bail!(
+                "Transaction {id} has an unknown outcome; inspect `devenv machines status {name}`"
+            ),
+        })
+    }
+}
+
+/// The result of one read-only look at a target-side transaction.
+enum TransactionObservation {
+    /// The target answered for this transaction.
+    Decision(TransactionDecision),
+    /// The status round trip failed; nothing is known about progress.
+    Unreachable(String),
+}
+
+/// The time left to observe a transaction, never negative.
+///
+/// Observation ends at the earlier of the overall deadline and the tolerated
+/// gap since the last positive observation. Nothing is issued, acted on, or
+/// slept past that point, so both bounds share this one calculation.
+fn transaction_observation_window(
+    last_positive: tokio::time::Instant,
+    deadline: tokio::time::Instant,
+) -> std::time::Duration {
+    (last_positive + TRANSACTION_OBSERVATION_GAP)
+        .min(deadline)
+        .saturating_duration_since(tokio::time::Instant::now())
+}
+
+/// Why watching this transaction must stop, if it must.
+///
+/// Called before a status round trip is issued and again before its answer is
+/// acted on: an answer that arrives after the window closed is not progress,
+/// and must not confirm or succeed a deployment. When both cutoffs have
+/// passed, the closed overall deadline is reported ahead of a lost gap.
+fn transaction_observation_expired(
+    id: &str,
+    name: &str,
+    deadline: tokio::time::Instant,
+    last_positive: tokio::time::Instant,
+    gap_reason: &str,
+) -> Option<miette::Report> {
+    if !transaction_observation_window(last_positive, deadline).is_zero() {
+        return None;
+    }
+    if tokio::time::Instant::now() >= deadline {
+        return Some(miette!(
+            "Timed out observing transaction {id}; it may still be running. Inspect `devenv machines status {name}`"
+        ));
+    }
+    Some(miette!(
+        "Lost observation of transaction {id} on {name} for {}s: {gap_reason}. Activation runs on the target; reconnect with `devenv machines status {name}`.",
+        TRANSACTION_OBSERVATION_GAP.as_secs()
+    ))
+}
+
+/// Whether a confirm reply proves this transaction succeeded.
+///
+/// The executor persists the terminal state before it answers.
+fn transaction_confirmation(status: &serde_json::Value, id: &str) -> bool {
+    status["version"].as_u64() == Some(1)
+        && status["id"].as_str() == Some(id)
+        && status["phase"].as_str() == Some("succeeded")
+}
+
 // Observe a fixed running generation, and reject an observable concurrent
 // profile/switch change. No helper installation or target mutation is needed.
 const MACHINE_PLAN_OBSERVATION: &str = r#"set -eu
@@ -2309,13 +2445,15 @@ impl Devenv {
             )
     }
 
-    /// Like `ssh_run` but captures stdout into a String.
-    async fn ssh_run_capture(
-        &self,
+    /// The SSH invocation shared by every captured executor round trip.
+    ///
+    /// `kill_on_drop` terminates `ssh` itself when the future is abandoned, so
+    /// an attempt that outlives its observation window leaves nothing behind.
+    fn ssh_capture_command(
         target: &SshTarget,
         user_ssh_opts: &[String],
         script: &str,
-    ) -> Result<String> {
+    ) -> process::Command {
         let mut cmd = process::Command::new("ssh");
         for opt in ssh_opts_argv(user_ssh_opts) {
             cmd.arg(opt);
@@ -2328,7 +2466,17 @@ impl Devenv {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .kill_on_drop(true);
-        let output = cmd
+        cmd
+    }
+
+    /// Like `ssh_run` but captures stdout into a String.
+    async fn ssh_run_capture(
+        &self,
+        target: &SshTarget,
+        user_ssh_opts: &[String],
+        script: &str,
+    ) -> Result<String> {
+        let output = Self::ssh_capture_command(target, user_ssh_opts, script)
             .output()
             .await
             .into_diagnostic()
@@ -3117,58 +3265,256 @@ impl Devenv {
                      inspect `devenv machines status {name}` before retrying."
                 ))?;
 
-            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(900);
+            let deadline = tokio::time::Instant::now() + TRANSACTION_OBSERVATION_DEADLINE;
+            // The target only answers about this transaction while it can see
+            // the activation unit. A start, switch, health check, or reboot can
+            // make that answer unavailable, and a status round trip can fail
+            // while the target is busy; neither is a decision. Keep watching the
+            // same ID, and stop guessing once a gap this long passes without a
+            // positive observation.
+            let mut last_positive = tokio::time::Instant::now();
+            let mut gap_reason = String::from("no status was observed");
+            let mut confirmation_requested = false;
             loop {
-                let output = self.executor_ssh_capture(target, ssh_opts, &format!("{executable} status"))
-                    .await
-                    .wrap_err_with(|| format!(
-                        "Lost observation of transaction {id} on {name}. Activation runs on the target; \
-                         reconnect with `devenv machines status {name}`."
-                    ))?;
-                let status: serde_json::Value = serde_json::from_str(&output).into_diagnostic()?;
-                if status["version"].as_u64() != Some(1) {
-                    bail!("Unsupported executor status version on {name}; inspect the target before retrying");
+                // Nothing is issued or acted on outside the window that remains
+                // for watching this transaction.
+                if let Some(report) = transaction_observation_expired(
+                    id.as_ref(),
+                    name,
+                    deadline,
+                    last_positive,
+                    &gap_reason,
+                ) {
+                    return Err(report);
                 }
-                if status["id"].as_str() != Some(id.as_ref()) {
-                    bail!("Target reports a different transaction; inspect `devenv machines status {name}`");
+                let limit = MACHINE_SSH_TIMEOUT
+                    .min(transaction_observation_window(last_positive, deadline));
+                let observation = self
+                    .observe_transaction(target, ssh_opts, name, &executable, id.as_ref(), limit)
+                    .await?;
+                // An answer that arrives after the window closed is history, not
+                // a decision: check before confirming or reporting success.
+                if let TransactionObservation::Unreachable(error) = &observation {
+                    gap_reason = format!("the target could not be observed ({error})");
                 }
-                match status["outcome"].as_str() {
-                    Some("succeeded") => return Ok(()),
-                    Some("rolled-back") => bail!(
-                        "Transaction {id} was rolled back on {name}: {}",
-                        status["error"].as_str().unwrap_or("deployment was not confirmed")
-                    ),
-                    Some("rollback-failed") => bail!(
-                        "Transaction {id} failed and automatic rollback failed on {name}: {}. Inspect `devenv machines status {name}` before recovery.",
-                        status["rollbackError"].as_str().unwrap_or("previous system could not be restored")
-                    ),
-                    Some("failed") => bail!(
-                        "Transaction {id} failed on {name}: {}. Inspect \
-                         `devenv machines status {name}` before deciding whether to roll back or create a new plan.",
-                        status["error"].as_str().unwrap_or("activation failed")
-                    ),
-                    Some("pending") => {
-                        if status["phase"].as_str() == Some("awaiting-confirmation") {
-                            // A fresh SSH round trip after target-side health checks
-                            // confirms that the controller can reach this generation.
-                            self.executor_ssh_capture(target, ssh_opts,
-                                &format!("{executable} confirm {}", shell_quote(&id)))
-                                .await
-                                .wrap_err_with(|| format!(
-                                    "Could not acknowledge confirmation of {id}; inspect `devenv machines status {name}`"
-                                ))?;
+                if let Some(report) = transaction_observation_expired(
+                    id.as_ref(),
+                    name,
+                    deadline,
+                    last_positive,
+                    &gap_reason,
+                ) {
+                    return Err(report);
+                }
+                match observation {
+                    TransactionObservation::Decision(decision) => match decision {
+                        TransactionDecision::Succeeded => return Ok(()),
+                        TransactionDecision::RolledBack(error) => bail!(
+                            "Transaction {id} was rolled back on {name}: {error}"
+                        ),
+                        TransactionDecision::RollbackFailed(error) => bail!(
+                            "Transaction {id} failed and automatic rollback failed on {name}: {error}. Inspect `devenv machines status {name}` before recovery."
+                        ),
+                        TransactionDecision::Failed(error) => bail!(
+                            "Transaction {id} failed on {name}: {error}. Inspect \
+                             `devenv machines status {name}` before deciding whether to roll back or create a new plan."
+                        ),
+                        TransactionDecision::AwaitingConfirmation => {
+                            last_positive = tokio::time::Instant::now();
+                            if confirmation_requested {
+                                // Confirming is a write. A target that still
+                                // reports the transaction as awaiting
+                                // confirmation after one was sent is read back
+                                // instead: a second write can collide with the
+                                // handler that holds the executor's lock and
+                                // report a fault for a deployment that
+                                // succeeded.
+                                gap_reason = format!(
+                                    "confirmation of {id} has no acknowledged result"
+                                );
+                            } else {
+                                confirmation_requested = true;
+                                // A fresh SSH round trip after target-side health
+                                // checks confirms that the controller can reach
+                                // this generation. The reply is the executor's
+                                // own record, so it ends observation when it
+                                // proves success.
+                                let limit = MACHINE_SSH_TIMEOUT.min(
+                                    transaction_observation_window(last_positive, deadline),
+                                );
+                                let confirmed = self
+                                    .confirm_transaction(
+                                        target,
+                                        ssh_opts,
+                                        name,
+                                        &executable,
+                                        id.as_ref(),
+                                        limit,
+                                    )
+                                    .await
+                                    .wrap_err_with(|| format!(
+                                        "Could not acknowledge confirmation of {id}; inspect `devenv machines status {name}`"
+                                    ))?;
+                                // A reply that arrives after the window closed
+                                // is history, not a decision.
+                                if let Some(report) = transaction_observation_expired(
+                                    id.as_ref(),
+                                    name,
+                                    deadline,
+                                    last_positive,
+                                    &gap_reason,
+                                ) {
+                                    return Err(report);
+                                }
+                                if confirmed {
+                                    return Ok(());
+                                }
+                                gap_reason = format!(
+                                    "confirmation of {id} has no acknowledged result"
+                                );
+                            }
+                        }
+                        TransactionDecision::Pending => {
+                            last_positive = tokio::time::Instant::now();
+                        }
+                        TransactionDecision::Unknown(detail) => {
+                            gap_reason = match detail {
+                                Some(detail) => format!(
+                                    "the target reports the transaction without its progress ({detail})"
+                                ),
+                                None => String::from(
+                                    "the target reports the transaction without its progress",
+                                ),
+                            };
                         }
                     },
-                    _ => bail!("Transaction {id} has an unknown outcome; inspect `devenv machines status {name}`"),
+                    // Recorded above, where the window check needs it.
+                    TransactionObservation::Unreachable(_) => {}
                 }
-                if tokio::time::Instant::now() >= deadline {
-                    bail!("Timed out observing transaction {id}; it may still be running. Inspect `devenv machines status {name}`");
+                let pause = TRANSACTION_OBSERVATION_INTERVAL
+                    .min(transaction_observation_window(last_positive, deadline));
+                if pause.is_zero() {
+                    continue;
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                tokio::time::sleep(pause).await;
             }
         }
         .in_activity(&activity)
         .await
+    }
+
+    /// Run one captured executor request, bounded by the time it may take.
+    ///
+    /// `None` means the round trip produced no answer before its bound elapsed.
+    async fn executor_round_trip(
+        &self,
+        target: &SshTarget,
+        ssh_opts: &[String],
+        script: &str,
+        limit: std::time::Duration,
+    ) -> Result<Option<std::process::Output>> {
+        let mut round_trip = Self::ssh_capture_command(target, ssh_opts, script);
+        match tokio::time::timeout(limit, round_trip.output()).await {
+            Err(_) => Ok(None),
+            Ok(Err(error)) => Err(error).into_diagnostic().wrap_err("Failed to spawn ssh"),
+            Ok(Ok(output)) => Ok(Some(output)),
+        }
+    }
+
+    /// Read the target's view of the transaction without changing it.
+    ///
+    /// A document that answers for this ID is classified, and one that does not
+    /// is a contract violation. A round trip that times out, or that OpenSSH
+    /// reports as 255 for a dropped connection, is a gap in observation; any
+    /// other failure is a fault on the target and is reported at once. The
+    /// caller names the shell-quoted executor, and this asks only for its
+    /// `status`, bounded by the time this one answer may take.
+    async fn observe_transaction(
+        &self,
+        target: &SshTarget,
+        ssh_opts: &[String],
+        name: &str,
+        executable: &str,
+        id: &str,
+        limit: std::time::Duration,
+    ) -> Result<TransactionObservation> {
+        let script = format!("{executable} status");
+        let output = match self
+            .executor_round_trip(target, ssh_opts, &script, limit)
+            .await?
+        {
+            None => {
+                return Ok(TransactionObservation::Unreachable(format!(
+                    "no status within {}s",
+                    limit.as_secs()
+                )));
+            }
+            Some(output) => output,
+        };
+        if output.status.code() == Some(255) {
+            return Ok(TransactionObservation::Unreachable(format!(
+                "ssh to {} exited with {}",
+                target.ssh_destination(),
+                output.status
+            )));
+        }
+        if !output.status.success() {
+            bail!(
+                "Executor on {name} could not report transaction {id}: ssh {} '{}' exited with {}",
+                target.ssh_destination(),
+                script,
+                output.status
+            );
+        }
+        let stdout = String::from_utf8(output.stdout)
+            .into_diagnostic()
+            .wrap_err_with(|| {
+                format!("Executor on {name} returned a status that is not valid UTF-8")
+            })?;
+        let status: serde_json::Value = serde_json::from_str(&stdout)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Executor on {name} returned a malformed status"))?;
+        Ok(TransactionObservation::Decision(
+            TransactionDecision::from_status(&status, id, name)?,
+        ))
+    }
+
+    /// Ask the target to confirm the transaction and read its reply.
+    ///
+    /// The executor persists that state before it answers, so a reply that
+    /// proves success is the result; an unanswered round trip is left to a
+    /// status read.
+    async fn confirm_transaction(
+        &self,
+        target: &SshTarget,
+        ssh_opts: &[String],
+        name: &str,
+        executable: &str,
+        id: &str,
+        limit: std::time::Duration,
+    ) -> Result<bool> {
+        let script = format!("{executable} confirm {}", shell_quote(&id));
+        let output = match self
+            .executor_round_trip(target, ssh_opts, &script, limit)
+            .await?
+        {
+            None => return Ok(false),
+            Some(output) => output,
+        };
+        if output.status.code() == Some(255) {
+            return Ok(false);
+        }
+        if !output.status.success() {
+            bail!(
+                "Executor on {name} could not confirm transaction {id}: ssh {} '{}' exited with {}",
+                target.ssh_destination(),
+                script,
+                output.status
+            );
+        }
+        let reply: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or(serde_json::Value::Null);
+        Ok(transaction_confirmation(&reply, id))
     }
 
     async fn executor_ssh_capture(
@@ -3178,7 +3524,7 @@ impl Devenv {
         script: &str,
     ) -> Result<String> {
         tokio::time::timeout(
-            std::time::Duration::from_secs(30),
+            MACHINE_SSH_TIMEOUT,
             self.ssh_run_capture(target, ssh_opts, script),
         )
         .await
@@ -4112,5 +4458,142 @@ remote = "awssm"
             identity("root@[2001:0db8:0:0:0:0:0:1]"),
             identity("builder@[2001:db8::1]:2222")
         );
+    }
+
+    fn transaction_status(id: &str, outcome: &str) -> serde_json::Value {
+        serde_json::json!({ "version": 1, "id": id, "outcome": outcome })
+    }
+
+    fn decision(status: &serde_json::Value) -> super::TransactionDecision {
+        super::TransactionDecision::from_status(status, "deployment-a", "server").unwrap()
+    }
+
+    #[test]
+    fn transaction_status_separates_progress_from_decisions() {
+        assert_eq!(
+            decision(&serde_json::json!({
+                "version": 1,
+                "id": "deployment-a",
+                "outcome": "pending",
+                "phase": "switching",
+            })),
+            super::TransactionDecision::Pending
+        );
+        assert_eq!(
+            decision(&serde_json::json!({
+                "version": 1,
+                "id": "deployment-a",
+                "outcome": "pending",
+                "phase": "awaiting-confirmation",
+            })),
+            super::TransactionDecision::AwaitingConfirmation
+        );
+        // While the target cannot observe the activation unit it reports the
+        // transaction without a verdict; that is a gap, not a decision.
+        assert_eq!(
+            decision(&serde_json::json!({
+                "version": 1,
+                "id": "deployment-a",
+                "outcome": "unknown",
+                "observationError": "cannot observe activation service",
+            })),
+            super::TransactionDecision::Unknown(Some(
+                "cannot observe activation service".to_string()
+            ))
+        );
+        assert_eq!(
+            decision(&transaction_status("deployment-a", "succeeded")),
+            super::TransactionDecision::Succeeded
+        );
+        assert_eq!(
+            decision(&serde_json::json!({
+                "version": 1,
+                "id": "deployment-a",
+                "outcome": "rolled-back",
+                "error": "activation failed",
+            })),
+            super::TransactionDecision::RolledBack("activation failed".to_string())
+        );
+        assert_eq!(
+            decision(&transaction_status("deployment-a", "rolled-back")),
+            super::TransactionDecision::RolledBack("deployment was not confirmed".to_string())
+        );
+    }
+
+    #[test]
+    fn transaction_status_fails_closed_on_unsupported_or_foreign_documents() {
+        let rejected = |status: serde_json::Value| {
+            super::TransactionDecision::from_status(&status, "deployment-a", "server").is_err()
+        };
+
+        assert!(rejected(transaction_status("deployment-b", "succeeded")));
+        assert!(rejected(transaction_status("deployment-b", "unknown")));
+        assert!(rejected(serde_json::json!({
+            "version": 2,
+            "id": "deployment-a",
+            "outcome": "pending",
+        })));
+        assert!(rejected(serde_json::json!({
+            "id": "deployment-a",
+            "outcome": "pending",
+        })));
+        assert!(rejected(transaction_status("deployment-a", "wedged")));
+        assert!(rejected(
+            serde_json::json!({"version": 1, "id": "deployment-a"})
+        ));
+    }
+
+    #[test]
+    fn transaction_confirmation_accepts_only_this_transactions_success() {
+        let confirmed =
+            |reply: serde_json::Value| super::transaction_confirmation(&reply, "deployment-a");
+
+        assert!(confirmed(serde_json::json!({
+            "version": 1,
+            "id": "deployment-a",
+            "phase": "succeeded",
+        })));
+        // The executor only records success after the target-side checks ran,
+        // so anything else must be read back instead of being trusted.
+        assert!(!confirmed(serde_json::json!({
+            "version": 1,
+            "id": "deployment-b",
+            "phase": "succeeded",
+        })));
+        assert!(!confirmed(serde_json::json!({
+            "version": 2,
+            "id": "deployment-a",
+            "phase": "succeeded",
+        })));
+        assert!(!confirmed(serde_json::json!({
+            "version": 1,
+            "id": "deployment-a",
+            "phase": "awaiting-confirmation",
+        })));
+        assert!(!confirmed(serde_json::json!({})));
+    }
+
+    #[test]
+    fn observation_window_closes_before_a_stale_answer_is_used() {
+        let now = tokio::time::Instant::now();
+        let deadline = now + super::TRANSACTION_OBSERVATION_DEADLINE;
+
+        assert!(
+            super::transaction_observation_expired("deployment-a", "server", deadline, now, "none")
+                .is_none()
+        );
+        let stale = super::transaction_observation_expired(
+            "deployment-a",
+            "server",
+            deadline,
+            now - super::TRANSACTION_OBSERVATION_GAP,
+            "no status was observed",
+        )
+        .unwrap();
+        assert!(format!("{stale}").contains("Lost observation"));
+        let expired =
+            super::transaction_observation_expired("deployment-a", "server", now, now, "none")
+                .unwrap();
+        assert!(format!("{expired}").contains("Timed out observing"));
     }
 }
