@@ -45,7 +45,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@v32
         with:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
@@ -97,7 +97,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@v32
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
@@ -143,7 +143,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@v32
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
