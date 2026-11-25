@@ -7,6 +7,7 @@
   languages.ansible.enable = true;
   languages.c.enable = true;
   languages.clojure.enable = true;
+  languages.coffeescript.enable = true;
   languages.cplusplus.enable = true;
   languages.crystal.enable = true;
   languages.cue.enable = true;
