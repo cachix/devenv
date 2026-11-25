@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::{trace, warn};
-use watchexec::{Config, WatchedPath};
+use watchexec::{Config, WatchedPath, filter::Filterer};
 use watchexec_events::{
-    Tag,
+    Event, Priority, Tag,
     filekind::{FileEventKind, ModifyKind},
 };
 use watchexec_filterer_globset::GlobsetFilterer;
@@ -1140,8 +1140,6 @@ impl FileWatcher {
         let event_registrations = registrations;
         let event_handle = handle.clone();
         let filter_task = tokio::spawn(async move {
-            use watchexec::filter::Filterer;
-
             let mut batch = Vec::new();
             let mut raw_event_paths = HashMap::new();
             let mut event_paths = HashMap::new();
@@ -1176,30 +1174,8 @@ impl FileWatcher {
                     }
                 }
 
-                let mut rescan = false;
-                for (event, priority) in &batch {
-                    if !filterer.check_event(event, *priority).unwrap_or(true) {
-                        continue;
-                    }
-                    if !is_restart_worthy_event(event) {
-                        continue;
-                    }
-                    let may_invalidate_watch = event_may_invalidate_watch(event);
-                    let mut saw_path = false;
-                    for (path, _) in event.paths() {
-                        saw_path = true;
-                        raw_event_paths
-                            .entry(path.to_path_buf())
-                            .and_modify(|invalidate| *invalidate |= may_invalidate_watch)
-                            .or_insert(may_invalidate_watch);
-                    }
-                    if !saw_path {
-                        // inotify queue overflows are pathless. Preserve that
-                        // information as one rescan instead of enqueueing every
-                        // watched path separately.
-                        rescan = true;
-                    }
-                }
+                let rescan_mode = collect_batch_paths(&batch, &filterer, &mut raw_event_paths);
+                let rescan = rescan_mode != RescanMode::None;
 
                 // Native backends often emit several event kinds for the same
                 // path. Deduplicate before the comparatively expensive
@@ -1215,21 +1191,21 @@ impl FileWatcher {
 
                 let (paths, refresh_targets) = {
                     let state = event_registrations.lock().unwrap();
-                    if !rescan {
-                        for (path, may_invalidate_watch) in &event_paths {
-                            event_affected.clear();
-                            state.affected_targets(path, &mut event_affected);
-                            state.targets_needing_refresh(
-                                &event_affected,
-                                *may_invalidate_watch,
-                                &mut refresh,
-                            );
+                    for (path, may_invalidate_watch) in &event_paths {
+                        event_affected.clear();
+                        state.affected_targets(path, &mut event_affected);
+                        state.targets_needing_refresh(
+                            &event_affected,
+                            *may_invalidate_watch,
+                            &mut refresh,
+                        );
+                        if !rescan {
                             affected.extend(event_affected.iter().copied());
-                            if *may_invalidate_watch
-                                && let Some(anchor) = state.invalidated_anchor(path)
-                            {
-                                invalidated.insert(anchor);
-                            }
+                        }
+                        if *may_invalidate_watch
+                            && let Some(anchor) = state.invalidated_anchor(path)
+                        {
+                            invalidated.insert(anchor);
                         }
                     }
                     (
@@ -1238,7 +1214,7 @@ impl FileWatcher {
                     )
                 };
 
-                if rescan {
+                if rescan_mode == RescanMode::RewatchAll {
                     event_handle.rewatch_all().await;
                 } else {
                     event_handle.refresh_logical_targets(refresh_targets).await;
@@ -1329,7 +1305,60 @@ impl FileWatcher {
     }
 }
 
-fn is_restart_worthy_event(event: &watchexec_events::Event) -> bool {
+#[derive(Debug, PartialEq, Eq)]
+enum RescanMode {
+    None,
+    CheckPaths,
+    RewatchAll,
+}
+
+fn collect_batch_paths(
+    batch: &[(Event, Priority)],
+    filterer: &GlobsetFilterer,
+    raw_event_paths: &mut HashMap<PathBuf, bool>,
+) -> RescanMode {
+    let mut rescan = RescanMode::None;
+    for (event, priority) in batch {
+        // Watchexec forwards notify's FSEvents drop hints in metadata.
+        // The event path may be outside the filters and does not identify the
+        // changes that were lost, so rescan all dependencies on the live stream.
+        if event.metadata.get("file-event-info").is_some_and(|hints| {
+            hints.iter().any(|hint| {
+                matches!(
+                    hint.as_str(),
+                    "rescan: user dropped" | "rescan: kernel dropped"
+                )
+            })
+        }) {
+            rescan = RescanMode::CheckPaths;
+            continue;
+        }
+        if !filterer.check_event(event, *priority).unwrap_or(true)
+            || !is_restart_worthy_event(event)
+        {
+            continue;
+        }
+
+        let mut paths = event.paths().peekable();
+        if paths.peek().is_none() {
+            // Inotify queue overflows are pathless. Keep the existing native
+            // recovery behavior, which supersedes individual path changes.
+            raw_event_paths.clear();
+            return RescanMode::RewatchAll;
+        }
+
+        let may_invalidate_watch = event_may_invalidate_watch(event);
+        for (path, _) in paths {
+            raw_event_paths
+                .entry(path.to_path_buf())
+                .and_modify(|invalidate| *invalidate |= may_invalidate_watch)
+                .or_insert(may_invalidate_watch);
+        }
+    }
+    rescan
+}
+
+fn is_restart_worthy_event(event: &Event) -> bool {
     event.tags.iter().any(|tag| match tag {
         Tag::FileEventKind(kind) => is_restart_worthy_kind(kind),
         _ => false,
@@ -1444,6 +1473,85 @@ mod tests {
         assert!(!is_restart_worthy_kind(&FileEventKind::Modify(
             ModifyKind::Metadata(MetadataKind::Any),
         )));
+    }
+
+    #[tokio::test]
+    async fn test_fsevents_overflow_rescans_without_invalidating_its_path() {
+        use watchexec_events::filekind::{RemoveKind, RenameMode};
+
+        let dir = TempDir::new().unwrap();
+        let ignored = dir.path().join("ignored");
+        let watched = dir.path().join("watched.nix");
+        let filterer = GlobsetFilterer::new(
+            dir.path(),
+            [],
+            [("**/ignored".to_owned(), None)],
+            [],
+            [],
+            [],
+        )
+        .await
+        .unwrap();
+
+        let path_event = |kind, path| Event {
+            tags: vec![
+                Tag::FileEventKind(kind),
+                Tag::Path {
+                    path,
+                    file_type: None,
+                },
+            ],
+            ..Event::default()
+        };
+        let replacement = path_event(
+            FileEventKind::Modify(ModifyKind::Name(RenameMode::To)),
+            watched.clone(),
+        );
+        let ordinary_ignored = path_event(FileEventKind::Remove(RemoveKind::File), ignored.clone());
+        assert!(
+            !filterer
+                .check_event(&ordinary_ignored, Priority::Normal)
+                .unwrap()
+        );
+
+        for hint in ["rescan: user dropped", "rescan: kernel dropped"] {
+            for path in [dir.path().to_path_buf(), ignored.clone()] {
+                let mut overflow = path_event(FileEventKind::Other, path);
+                overflow
+                    .metadata
+                    .insert("file-event-info".into(), vec![hint.into()]);
+                let batch = [
+                    (overflow, Priority::Normal),
+                    (replacement.clone(), Priority::Normal),
+                ];
+                let mut paths = HashMap::new();
+
+                assert_eq!(
+                    collect_batch_paths(&batch, &filterer, &mut paths),
+                    RescanMode::CheckPaths
+                );
+                assert_eq!(paths, HashMap::from([(watched.clone(), true)]));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pathless_overflow_still_rewatches_all() {
+        let dir = TempDir::new().unwrap();
+        let filterer = GlobsetFilterer::new(dir.path(), [], [], [], [], [])
+            .await
+            .unwrap();
+        let overflow = Event {
+            tags: vec![Tag::FileEventKind(FileEventKind::Other)],
+            ..Event::default()
+        };
+        let mut paths = HashMap::from([(dir.path().join("watched.nix"), true)]);
+
+        assert_eq!(
+            collect_batch_paths(&[(overflow, Priority::Normal)], &filterer, &mut paths),
+            RescanMode::RewatchAll
+        );
+        assert!(paths.is_empty());
     }
 
     #[test]
