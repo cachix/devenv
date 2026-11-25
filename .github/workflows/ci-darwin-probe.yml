@@ -1,0 +1,55 @@
+name: Darwin process and RabbitMQ diagnostics
+
+on:
+  push:
+    branches:
+      - probe/ci-darwin-20261125
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      DEVENV_CI_BINARY: /nix/store/1yjrzh09rbj4nad0yinkgixn8fp4k3cm-devenv-wrapped-2.4.1
+      NIXPKGS_INPUT: github:cachix/devenv-nixpkgs/958ba64a6f8820ccb96a433a2e28bfd5f5e91fd7
+      DEVENV_NO_AI_AGENT: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v32
+        with:
+          extra_nix_config: |
+            extra-substituters = https://devenv.cachix.org https://cachix.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
+            accept-flake-config = true
+
+      - name: Install the binary from the original PR
+        id: binary
+        run: |
+          sw_vers
+          uname -m
+          nix-store --realise "$DEVENV_CI_BINARY"
+          echo "$DEVENV_CI_BINARY/bin" >> "$GITHUB_PATH"
+
+      - name: Run process dependency attach and stop
+        if: ${{ !cancelled() && steps.binary.outcome == 'success' }}
+        run: devenv-run-tests run tests --only process-up-attach-deps --override-input nixpkgs "$NIXPKGS_INPUT"
+
+      - name: Run RabbitMQ twice and inspect EPMD listeners
+        if: ${{ !cancelled() && steps.binary.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          status=0
+          for attempt in 1 2; do
+            echo "EPMD listeners before RabbitMQ run $attempt"
+            lsof -nP -iTCP:4369-4469 -sTCP:LISTEN || true
+            devenv-run-tests run examples --only rabbitmq --override-input nixpkgs "$NIXPKGS_INPUT" || status=1
+            echo "EPMD listeners after RabbitMQ run $attempt"
+            lsof -nP -iTCP:4369-4469 -sTCP:LISTEN || true
+          done
+          exit "$status"
