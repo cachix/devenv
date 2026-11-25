@@ -2,6 +2,15 @@
 
 Describe the concrete problem and resulting behavior.
 
+<!--
+For dependency updates, list the old and new versions and the focused checks you ran.
+Keep generated dependency definitions in sync with lockfiles. For the Ruby LSP,
+update `src/modules/lib/ruby-lsp/gemset.nix` alongside `Gemfile.lock` and verify
+that Nix resolves the new gem version.
+Report any pending checks. If CI failures also occur on the target branch, link
+to the matching runs.
+-->
+
 ## Diagram maintenance
 
 Replace all example values. Add mappings until every changed implementation,
