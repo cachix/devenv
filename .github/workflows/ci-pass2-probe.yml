@@ -1,0 +1,70 @@
+name: Targeted RabbitMQ and SSH VM CI checks
+
+on:
+  push:
+    branches:
+      - probe/ci-regressions-pass2-20261125
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ${{ fromJSON(matrix.runner) }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: RabbitMQ on a fresh Mac
+            runner: '"macos-26"'
+            binary: /nix/store/1yjrzh09rbj4nad0yinkgixn8fp4k3cm-devenv-wrapped-2.4.1
+          - name: SSH deployment confirmation on Linux
+            runner: '["self-hosted", "linux", "X64"]'
+            binary: /nix/store/xd6r4b2kag46m3ryjpkzp1d95v4vjl2r-devenv-wrapped-2.4.1
+    env:
+      DEVENV_CI_BINARY: ${{ matrix.binary }}
+      NIXPKGS_INPUT: github:cachix/devenv-nixpkgs/958ba64a6f8820ccb96a433a2e28bfd5f5e91fd7
+      DEVENV_NO_AI_AGENT: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v32
+        with:
+          extra_nix_config: |
+            extra-substituters = https://devenv.cachix.org https://cachix.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
+            accept-flake-config = true
+
+      - name: Restore the devenv binary from CI
+        run: |
+          nix-store --realise "$DEVENV_CI_BINARY"
+          echo "$DEVENV_CI_BINARY/bin" >> "$GITHUB_PATH"
+
+      - name: Run RabbitMQ with the original allocation range occupied
+        if: runner.os == 'macOS'
+        run: |
+          python3 -u - <<'PY'
+          import os
+          from contextlib import ExitStack
+          from socket import socket
+          from subprocess import run
+
+          with ExitStack() as stack:
+              for port in range(4369, 4469):
+                  listener = stack.enter_context(socket())
+                  listener.bind(("127.0.0.1", port))
+                  listener.listen()
+              print("Occupied EPMD ports 4369 through 4468")
+              run([
+                  "devenv-run-tests", "run", "tests", "examples", "--only", "rabbitmq*",
+                  "--override-input", "nixpkgs", os.environ["NIXPKGS_INPUT"],
+              ], check=True, timeout=900)
+          PY
+
+      - name: Run the SSH deployment VM fixture
+        if: runner.os == 'Linux'
+        run: devenv-run-tests run tests --only machines-deploy-ssh-vm --override-input nixpkgs "$NIXPKGS_INPUT"
