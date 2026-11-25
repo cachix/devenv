@@ -14,6 +14,11 @@ let
   allocatedManagementPort = config.processes.rabbitmq.ports.management.value;
   allocatedDistributionPort = config.processes.rabbitmq.ports.distribution.value;
   allocatedEpmdPort = config.processes.rabbitmq.ports.epmd.value;
+  # Nixpkgs builds RabbitMQ against Erlang. Reuse that runtime when the package
+  # exposes it so the service does not pull in a second Erlang installation.
+  erlang = lib.findFirst (input: (input.pname or null) == "erlang")
+    pkgs.beamPackages.erlang
+    (cfg.package.buildInputs or [ ]);
 
   config_file_content = lib.generators.toKeyValue { } cfg.configItems;
   config_file = pkgs.writeText "rabbitmq.conf" config_file_content;
@@ -161,6 +166,16 @@ in
             when running multiple environments.
           '';
         }
+        {
+          date = "2026-11-25";
+          title = "RabbitMQ releases its EPMD port on shutdown";
+          when = cfg.enable;
+          description = ''
+            devenv now starts the Erlang Port Mapper Daemon alongside RabbitMQ
+            and stops it with the service. Repeated starts can reuse the port
+            after shutdown, including in strict port mode.
+          '';
+        }
       ];
     }
     (mkIf cfg.enable {
@@ -195,14 +210,51 @@ in
         ports.main.allocate = basePort;
         ports.management.allocate = baseManagementPort;
         ports.distribution.allocate = basePort + 20000;
-        ports.epmd.allocate = 4369;
-        exec = "exec ${cfg.package}/bin/rabbitmq-server";
+        ports.epmd.allocate = mkDefault 4369;
+        exec = ''
+          epmd=${lib.getExe' erlang "epmd"}
+          "$epmd" &
+          epmd_pid=$!
+
+          cleanup() {
+            if [ -n "''${server_pid:-}" ]; then
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+            fi
+            kill "$epmd_pid" 2>/dev/null || true
+            wait "$epmd_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          # Start EPMD in this process group so the process manager owns both
+          # children. Erlang would otherwise start a detached daemon.
+          deadline=$((SECONDS + 10))
+          until "$epmd" -names >/dev/null 2>&1; do
+            if [ "$SECONDS" -ge "$deadline" ] || ! kill -0 "$epmd_pid" 2>/dev/null; then
+              echo "EPMD did not start on port $ERL_EPMD_PORT" >&2
+              exit 1
+            fi
+            sleep 0.1
+          done
+
+          RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="''${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS:-} -start_epmd false" \
+            ${cfg.package}/bin/rabbitmq-server &
+          server_pid=$!
+          status=0
+          wait "$server_pid" || status=$?
+          unset server_pid
+          exit "$status"
+        '';
 
         ready = {
           # `check_running` succeeds only after the `rabbit` Erlang application
           # has fully started, which catches plugin boot failures that `ping`
           # (TCP/Erlang VM only) silently ignores.
-          exec = "${cfg.package}/bin/rabbitmq-diagnostics -q check_running";
+          exec = ''
+            ERL_FLAGS="''${ERL_FLAGS:-} -start_epmd false" ${cfg.package}/bin/rabbitmq-diagnostics -q check_running
+          '';
           initial_delay = 10;
           period = 3;
           probe_timeout = 5;
