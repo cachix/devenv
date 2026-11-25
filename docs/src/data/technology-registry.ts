@@ -40,6 +40,7 @@ const languageSeeds: ModuleSeed[] = [
   { slug: 'ansible', label: 'Ansible', icon: 'ansible' },
   { slug: 'c', label: 'C', icon: 'c', aliases: ['c language', 'gcc', 'clang'] },
   { slug: 'clojure', label: 'Clojure', icon: 'clojure' },
+  { slug: 'coffeescript', label: 'CoffeeScript', icon: 'coffeescript', aliases: ['coffee', 'coffeescript'] },
   { slug: 'cplusplus', label: 'C++', icon: 'cplusplus', aliases: ['cpp'] },
   { slug: 'crystal', label: 'Crystal', icon: 'crystal' },
   { slug: 'cue', label: 'CUE', icon: null },
