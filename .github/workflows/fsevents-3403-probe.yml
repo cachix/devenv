@@ -1,0 +1,42 @@
+name: macOS FSEvents overflow probe (#3403)
+
+on:
+  push:
+    branches:
+      - probe/3403-fsevents-macos
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      BASELINE: /nix/store/kaxp0ycbmay6wypy1fqly1c35dvf0ly8-devenv-wrapped-2.4.0
+      PATCHED: /nix/store/1yjrzh09rbj4nad0yinkgixn8fp4k3cm-devenv-wrapped-2.4.1
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v32
+        with:
+          extra_nix_config: |
+            extra-substituters = https://devenv.cachix.org https://cachix.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
+            accept-flake-config = true
+
+      - name: Fetch 2.4.0 and the PR build from Cachix
+        id: binaries
+        run: |
+          sw_vers
+          uname -m
+          nix copy --from https://devenv.cachix.org "$BASELINE" "$PATCHED"
+
+      - name: Reproduce with devenv 2.4.0
+        run: python3 -u .github/diagnostics/3403-fsevents.py baseline "$BASELINE/bin/devenv"
+
+      - name: Verify the PR build
+        if: always() && steps.binaries.outcome == 'success'
+        run: python3 -u .github/diagnostics/3403-fsevents.py patched "$PATCHED/bin/devenv"
