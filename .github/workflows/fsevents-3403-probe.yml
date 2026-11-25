@@ -31,12 +31,12 @@ jobs:
             extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
             accept-flake-config = true
 
-      - name: Fetch 2.4.0 and the PR build from Cachix
+      - name: Fetch 2.4.0 and the PR build from Nix binary caches
         id: binaries
         run: |
           sw_vers
           uname -m
-          nix copy --from https://devenv.cachix.org "$BASELINE" "$PATCHED"
+          nix-store --realise "$BASELINE" "$PATCHED"
 
       - name: Reproduce with devenv 2.4.0
         run: python3 -u .github/diagnostics/3403-fsevents.py baseline "$BASELINE/bin/devenv"

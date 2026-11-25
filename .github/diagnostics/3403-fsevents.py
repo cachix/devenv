@@ -61,7 +61,7 @@ def start_project(root, repo):
     (project / "devenv.nix").write_text(
         "{ ... }: {\n"
         "  env.PROBE_VALUE = builtins.readFile ./value;\n"
-        "  env.PROBE_ENTRIES = toString (builtins.length (builtins.attrNames (builtins.readDir ./tracked)));\n"
+        "  env.PROBE_ENTRIES = toString (builtins.length (builtins.attrNames (builtins.readDir ./tracked/churn)));\n"
         "  enterShell = ''echo GH_FSEVENTS_PROBE_READY'';\n"
         "}\n"
     )
@@ -124,6 +124,7 @@ def run_trial(label, binary, repo, root):
         before = trace.stat().st_size
         deadline = time.monotonic() + seconds
         count = 0
+        churn_time = churn.stat()
         os.kill(pid, signal.SIGSTOP)
         try:
             if new_value is not None:
@@ -133,6 +134,7 @@ def run_trial(label, binary, repo, root):
                 path.write_bytes(b"x")
                 path.unlink()
                 count += 1
+            os.utime(churn, ns=(churn_time.st_atime_ns, churn_time.st_mtime_ns))
         finally:
             os.kill(pid, signal.SIGCONT)
         pull(6)
