@@ -5,6 +5,10 @@ on:
     branches:
       - probe/3403-fsevents-macos
 
+concurrency:
+  group: fsevents-3403-probe
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

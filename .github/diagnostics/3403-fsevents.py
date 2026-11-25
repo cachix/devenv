@@ -77,6 +77,8 @@ def run_trial(label, binary, repo, root):
         env.pop(key, None)
     env.update(
         TERM="xterm-256color", DEVENV_NO_AI_AGENT="1", TMPDIR=str(root),
+        RUST_LOG=("warn,watchexec::sources::fs=trace,watchexec::sources::fs::recursor=warn,"
+                  "watchexec::config=debug,devenv_reload::coordinator=debug"),
         XDG_CONFIG_HOME=str(root / "config"), XDG_DATA_HOME=str(root / "data"),
         DEVENV_HOME=str(root / "devenv-home"),
         PATH=f"{Path(binary).parent}:{env['PATH']}",
@@ -134,7 +136,7 @@ def run_trial(label, binary, repo, root):
         finally:
             os.kill(pid, signal.SIGCONT)
         pull(6)
-        with trace.open() as log:
+        with trace.open(errors="replace") as log:
             log.seek(before)
             lines = log.read().splitlines()
         drops = [line for line in lines if "processed notify event into watchexec event" in line
