@@ -13,6 +13,9 @@
 //!   `_DEVENV_HOOK_ACTIVATED` after a follow-cd (`nu_` variant for nushell)
 //! - `fish_hook_bypasses_user_functions_shadowing_external_tools` — #3222
 //! - `activation_from_subdirectory_keeps_the_caller_directory` — #3041
+//! - `no_respawn_before_the_devenv_environment_is_sourced` — executing during `rc` execution must not stack
+//! - `bash_registers_through_blehook_under_blesh` — ble.sh owns PROMPT_COMMAND
+//! - `bash_registers_once_in_prompt_command` — re-sourcing must not stack
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -986,5 +989,102 @@ fn nu_no_respawn_inside_devenv_shell() {
         recorded.is_empty(),
         "[nu] hook re-invoked devenv from inside a manually-entered shell.\n\
          Recorded:\n{recorded}",
+    );
+}
+
+#[test]
+fn no_respawn_before_the_devenv_environment_is_sourced() {
+    // A hook-spawned shell sources `~/.bashrc` before the devenv environment,
+    // so `_DEVENV_HOOK_DIR` is set while `DEVENV_ROOT` is not yet.
+    for (shell, src) in posix_shells() {
+        let project = fake_project();
+        let (_shim_dir, calls) = argv_recording_devenv_shim(project.path());
+        let script = format!(
+            "unset DEVENV_ROOT\nexport _DEVENV_HOOK_DIR={root:?}\n\
+             {src}\n{po}\ncd {root:?}\n_devenv_hook\necho DONE\n",
+            root = project.path(),
+            po = posix_path_override(calls.parent().unwrap()),
+        );
+        let out = run(shell, &script);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains("DONE"),
+            "[{shell}] hook hung or exited unexpectedly.\nstdout: {stdout}\nstderr: {}",
+            String::from_utf8_lossy(&out.stderr),
+        );
+        assert!(
+            !calls.exists(),
+            "[{shell}] hook spawned a devenv shell from inside a hook-spawned shell \
+             that had not sourced its environment yet.\nRecorded:\n{}",
+            fs::read_to_string(&calls).unwrap_or_default(),
+        );
+    }
+}
+
+/// A stand-in for ble.sh: enough of its API for the hook to detect it and
+/// record what it registers.
+fn blesh_stub(log: &Path) -> String {
+    format!(
+        "BLE_VERSION=0.4.0\n_ble_version=400\n\
+         blehook() {{ printf 'blehook %s\\n' \"$*\" >> {log:?}; }}\n\
+         bleopt() {{ printf 'bleopt %s\\n' \"$*\" >> {log:?}; }}\n",
+    )
+}
+
+#[test]
+fn bash_registers_through_blehook_under_blesh() {
+    if !have("bash") {
+        return;
+    }
+    let bin = devenv_bin();
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("blesh");
+    let script = format!(
+        "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+         {stub}\nPROMPT_COMMAND=user_prompt_command\n\
+         eval \"$({bin} hook bash)\"\n\
+         printf 'PROMPT_COMMAND=%s\\n' \"$PROMPT_COMMAND\"\n",
+        stub = blesh_stub(&log),
+    );
+    let out = run("bash", &script);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let recorded = fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        recorded.contains("blehook PRECMD!=_devenv_hook"),
+        "[bash] hook did not register through blehook.\nRecorded:\n{recorded}",
+    );
+    assert!(
+        recorded.contains("bleopt prompt_command_changes_layout=1"),
+        "[bash] hook did not tell ble.sh that it changes the prompt layout.\n\
+         Recorded:\n{recorded}",
+    );
+    assert!(
+        stdout.contains("PROMPT_COMMAND=user_prompt_command"),
+        "[bash] hook touched PROMPT_COMMAND while ble.sh owns it.\nstdout: {stdout}",
+    );
+}
+
+#[test]
+fn bash_registers_once_in_prompt_command() {
+    if !have("bash") {
+        return;
+    }
+    let bin = devenv_bin();
+    let script = format!(
+        "unset DEVENV_ROOT _DEVENV_HOOK_DIR\n\
+         eval \"$({bin} hook bash)\"\n\
+         eval \"$({bin} hook bash)\"\n\
+         printf 'PROMPT_COMMAND=%s\\n' \"${{PROMPT_COMMAND[*]}}\"\n",
+    );
+    let out = run("bash", &script);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("PROMPT_COMMAND="))
+        .unwrap_or_default();
+    assert_eq!(
+        line.matches("_devenv_hook").count(),
+        1,
+        "[bash] re-sourcing the hook stacked another PROMPT_COMMAND entry.\nstdout: {stdout}",
     );
 }
