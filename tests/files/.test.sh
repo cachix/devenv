@@ -37,5 +37,18 @@ assert_file script.sh <<EOF
 echo hello
 EOF
 
+# Test source with a file
+test -L src.txt
+assert_file src.txt <<EOF
+foo
+EOF
+
+# Test source with a directory
+test -L src-dir
+test -d src-dir
+assert_file src-dir/foo.txt <<EOF
+foo
+EOF
+
 # Verify state tracking
 test -f .devenv/state/files.json
