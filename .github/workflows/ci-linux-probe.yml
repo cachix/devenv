@@ -1,0 +1,63 @@
+name: Linux checks for the CI follow-up
+
+on:
+  push:
+    branches:
+      - probe/ci-linux-20261125
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [opencode, php-extensions-rebuilt, varnish, opentelemetry-collector, pkl-example]
+    env:
+      DEVENV_CI_BINARY: /nix/store/kqkdz4ah9xw2dqr3agam45f9fjkrql5q-devenv-wrapped-2.4.1
+      NIXPKGS_INPUT: github:cachix/devenv-nixpkgs/958ba64a6f8820ccb96a433a2e28bfd5f5e91fd7
+      DEVENV_NO_AI_AGENT: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v32
+        with:
+          extra_nix_config: |
+            extra-substituters = https://devenv.cachix.org https://cachix.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
+            accept-flake-config = true
+
+      - name: Install the binary from the original PR
+        run: |
+          nix-store --realise "$DEVENV_CI_BINARY"
+          echo "$DEVENV_CI_BINARY/bin" >> "$GITHUB_PATH"
+
+      - name: Run the affected fixture or example
+        if: matrix.check != 'pkl-example'
+        env:
+          TEST: ${{ matrix.check }}
+        run: devenv-run-tests run tests examples --only "$TEST" --override-input nixpkgs "$NIXPKGS_INPUT"
+
+      - name: Run the Pkl build selected by the supported-languages example
+        if: matrix.check == 'pkl-example'
+        run: |
+          set -euo pipefail
+          modules="path:$PWD/src/modules"
+          probe=$(mktemp -d)
+          cp examples/supported-languages/{devenv.nix,devenv.yaml,.patch.sh} "$probe"/
+          cd "$probe"
+          bash .patch.sh
+          devenv eval --override-input devenv "$modules" --override-input nixpkgs "$NIXPKGS_INPUT" \
+            languages.pkl.package.outPath languages.pkl.package.drvPath > pkl-package.json
+          package=$(jq -er '."languages.pkl.package.outPath"' pkl-package.json)
+          test "$package" = /nix/store/smb43p1mdgh4s3jcqga505nvpbx1l30h-pkl-0.32.1
+          nix-store --realise "$(jq -er '."languages.pkl.package.drvPath"' pkl-package.json)"
+          printf '%s\n' 'answer = 42' > probe.pkl
+          "$package/bin/pkl" eval probe.pkl | tee pkl-output.txt
+          grep -Fx 'answer = 42' pkl-output.txt
