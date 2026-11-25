@@ -1,4 +1,4 @@
-name: Darwin process and RabbitMQ diagnostics
+name: Darwin process fixture with occupied ports
 
 on:
   push:
@@ -36,20 +36,29 @@ jobs:
           nix-store --realise "$DEVENV_CI_BINARY"
           echo "$DEVENV_CI_BINARY/bin" >> "$GITHUB_PATH"
 
-      - name: Run process dependency attach and stop
-        if: ${{ !cancelled() && steps.binary.outcome == 'success' }}
-        run: devenv-run-tests run tests --only process-up-attach-deps --override-input nixpkgs "$NIXPKGS_INPUT"
-
-      - name: Run RabbitMQ twice and inspect EPMD listeners
-        if: ${{ !cancelled() && steps.binary.outcome == 'success' }}
+      - name: Verify process dependency attach and stop with the old ports occupied
         run: |
-          set -euo pipefail
-          status=0
-          for attempt in 1 2; do
-            echo "EPMD listeners before RabbitMQ run $attempt"
-            lsof -nP -iTCP:4369-4469 -sTCP:LISTEN || true
-            devenv-run-tests run examples --only rabbitmq --override-input nixpkgs "$NIXPKGS_INPUT" || status=1
-            echo "EPMD listeners after RabbitMQ run $attempt"
-            lsof -nP -iTCP:4369-4469 -sTCP:LISTEN || true
-          done
-          exit "$status"
+          python3 -u - <<'PY'
+          import os
+          from contextlib import ExitStack
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+          from subprocess import run
+          from threading import Thread
+
+          class Listener(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.end_headers()
+
+          with ExitStack() as stack:
+              for port in (18581, 18582, 18583):
+                  server = ThreadingHTTPServer(("127.0.0.1", port), Listener)
+                  Thread(target=server.serve_forever, daemon=True).start()
+                  stack.callback(server.server_close)
+                  stack.callback(server.shutdown)
+                  print(f"Simulating a stale HTTP listener on {port}")
+              run([
+                  "devenv-run-tests", "run", "tests", "--only", "process-up-attach-deps",
+                  "--override-input", "nixpkgs", os.environ["NIXPKGS_INPUT"],
+              ], check=True, timeout=600)
+          PY
