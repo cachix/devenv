@@ -103,9 +103,10 @@ kill -0 "$DAEMON_PID"
 # E04: plain interactive `devenv up` attaches and a second Ctrl-C detaches.
 # Readiness probes can push the startup line out of the visible log backlog.
 # Check readiness directly, then synchronize on a fresh request marker.
+# Allow for lock validation and evaluation before the attach client opens.
 http_is_ready "$PORT_ALPHA"
 set +e
-devenv-run-tests pty plain-up.typescript "devenv up" >/dev/null <<EOF
+devenv-run-tests pty --step-timeout 90 plain-up.typescript "devenv up" >/dev/null <<EOF
 expect:Attached to the running process manager
 run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/plain-up-marker
 expect:plain-up-marker
