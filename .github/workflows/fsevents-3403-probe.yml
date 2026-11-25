@@ -3,10 +3,10 @@ name: macOS FSEvents overflow probe (#3403)
 on:
   push:
     branches:
-      - probe/3403-fsevents-macos
+      - probe/3403-fsevents-org
 
 concurrency:
-  group: fsevents-3403-probe
+  group: fsevents-3403-org-probe
   cancel-in-progress: true
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   reproduce:
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 25
     env:
       BASELINE: /nix/store/kaxp0ycbmay6wypy1fqly1c35dvf0ly8-devenv-wrapped-2.4.0
