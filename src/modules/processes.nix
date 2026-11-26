@@ -609,6 +609,12 @@ in
             || implementation == "native";
           message = "The native-api client adapter can only be used by the native process manager.";
         }
+        {
+          assertion =
+            config.process.managers.${implementation}.adapter.client != "process-compose"
+            || implementation == "process-compose";
+          message = "The process-compose client adapter can only be used by the process-compose process manager.";
+        }
       ];
 
       process.managers.${implementation}.enable = lib.mkDefault true;
