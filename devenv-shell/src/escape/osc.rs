@@ -6,6 +6,39 @@
 //! Produces events for any well-formed OSC sequence so terminal features like
 //! hyperlinks and title updates survive the PTY renderer.
 
+use std::io::{self, Write};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OscEvent {
+    pub raw_bytes: Vec<u8>,
+}
+
+impl OscEvent {
+    pub(crate) fn write_to_outer_terminal(&self, stdout: &mut impl Write) -> io::Result<()> {
+        let Some((osc, b"")) = parse_default_color_osc(&self.raw_bytes) else {
+            return stdout.write_all(&self.raw_bytes);
+        };
+        let operations = (osc.code..=19).zip(osc.value.split(|byte| *byte == b';'));
+        let is_virtual_query = |(code, value): (u8, &[u8])| code <= 12 && value == b"?";
+        if !operations.clone().any(is_virtual_query) {
+            return stdout.write_all(&self.raw_bytes);
+        }
+
+        // A dynamic-color OSC can set one color and query another. Let
+        // libghostty answer OSC 10–12 queries while the outer terminal receives
+        // the remaining operations with their original color numbers.
+        for (code, value) in operations {
+            if value.is_empty() || is_virtual_query((code, value)) {
+                continue;
+            }
+            write!(stdout, "\x1b]{code};")?;
+            stdout.write_all(value)?;
+            stdout.write_all(osc.terminator)?;
+        }
+        Ok(())
+    }
+}
+
 pub(crate) struct DefaultColorOsc<'a> {
     pub code: u8,
     pub value: &'a [u8],
@@ -74,6 +107,29 @@ impl OscParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forward_osc_without_virtual_color_queries() {
+        let mut stdout = Vec::new();
+        for bytes in [
+            b"\x1b]0;window title\x07".as_slice(),
+            b"\x1b]11;?\x1b\\",
+            b"\x1b]10;?;rgb:12/34/56;?;?\x07",
+            b"\x1b]10;?;;blue\x1b\\",
+            b"\x1b]111\x07",
+            b"\x1b]4;0;?\x1b\\",
+        ] {
+            OscEvent {
+                raw_bytes: bytes.to_vec(),
+            }
+            .write_to_outer_terminal(&mut stdout)
+            .unwrap();
+        }
+        assert_eq!(
+            stdout,
+            b"\x1b]0;window title\x07\x1b]11;rgb:12/34/56\x07\x1b]13;?\x07\x1b]12;blue\x1b\\\x1b]111\x07\x1b]4;0;?\x1b\\"
+        );
+    }
 
     #[test]
     fn query_with_bel() {

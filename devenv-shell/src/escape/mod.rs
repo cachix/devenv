@@ -7,6 +7,7 @@
 mod dec_mode;
 mod osc;
 
+pub use osc::OscEvent;
 pub(crate) use osc::parse_default_color_osc;
 
 use dec_mode::{DecModeAction, DecModeParser, DecModeResult};
@@ -175,11 +176,6 @@ fn append_decimal(output: &mut Vec<u8>, value: u16) {
     }
 
     output.extend_from_slice(&digits[start..]);
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OscEvent {
-    pub raw_bytes: Vec<u8>,
 }
 
 /// A query whose reply must describe the virtual terminal, not the physical
