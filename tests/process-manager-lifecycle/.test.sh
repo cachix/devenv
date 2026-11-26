@@ -170,7 +170,7 @@ echo "Checking selected capability declarations"
 assert_capabilities native \
   '{"background_start":true,"devenv_attach":true,"wait_ready":true,"individual_control":true,"cold_start_subset":true}'
 assert_capabilities process-compose \
-  '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"cold_start_subset":true}'
+  '{"background_start":true,"devenv_attach":false,"wait_ready":true,"individual_control":false,"cold_start_subset":true}'
 assert_capabilities overmind \
   '{"background_start":true,"devenv_attach":false,"wait_ready":false,"individual_control":false,"cold_start_subset":true}'
 assert_capabilities honcho \
@@ -182,7 +182,7 @@ assert_capabilities mprocs \
 
 echo "Checking selected adapter declarations"
 assert_adapter native '{"terminal":"none","stop":"native-api","client":"native-api"}'
-assert_adapter process-compose '{"terminal":"none","stop":"process-scope","client":"none"}'
+assert_adapter process-compose '{"terminal":"none","stop":"process-scope","client":"process-compose"}'
 assert_adapter overmind '{"terminal":"none","stop":"command","client":"none"}'
 assert_adapter honcho '{"terminal":"none","stop":"process-scope","client":"none"}'
 assert_adapter hivemind '{"terminal":"none","stop":"process-scope","client":"none"}'

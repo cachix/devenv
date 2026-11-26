@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- `devenv processes list` and `devenv processes wait` now work with process-compose, so those projects no longer need to call `process-compose` directly for status and readiness ([#2950](https://github.com/cachix/devenv/issues/2950)).
 - Machines now accept existing NixOS, nix-darwin, and Home Manager configurations from flake inputs.
 - Added Groovy language support via `languages.groovy.enable`. Provides the Groovy CLI, and the language server.
 - `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).

@@ -39,7 +39,7 @@ in
         description = "Adapter used to stop the running manager.";
       };
       client = lib.mkOption {
-        type = types.enum [ "none" "native-api" ];
+        type = types.enum [ "none" "native-api" "process-compose" ];
         description = "Client protocol used for attach, readiness, and individual process control.";
       };
     };
