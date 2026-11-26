@@ -3,7 +3,7 @@
 //! This module provides the main `ShellSession` type that orchestrates
 //! PTY lifecycle, terminal I/O, and status line rendering.
 
-use crate::escape::EscapeScanner;
+use crate::escape::{EscapeScanner, parse_default_color_osc};
 use crate::escape_state::{
     EscapeState, cleanup_forwarded_modes as escape_state_cleanup,
     process_escape_events as escape_state_process,
@@ -13,7 +13,7 @@ use crate::keybindings::{ShellAction, ShellKeybindings};
 use crate::protocol::{ShellCommand, ShellEvent};
 use crate::pty::{Pty, PtyError, get_terminal_size};
 use crate::status_line::{SPINNER_INTERVAL_MS, StatusLine};
-use crate::terminal::RawModeGuard;
+use crate::terminal::{RawModeGuard, TerminalProbe, probe_terminal};
 use crate::terminal_commands::{
     InBandResizeNotification, ORIGIN_MODE, ResetDecMode, ResetScrollRegion, SetScrollRegion,
 };
@@ -762,12 +762,9 @@ impl VtInputFilter {
 /// output. The callback is deliberately a deny-by-default capability: it only
 /// accepts responses that we know must describe the virtual terminal.
 ///
-/// Installing `on_pty_write` enables libghostty-vt responses for several
-/// protocols (OSC colors, DA, XTVERSION, DECRQM, resize reports, …). Most of
-/// those remain coupled to the physical terminal in this mux, so allowing the
-/// callback to write them wholesale would duplicate or contradict the mature
-/// stdout passthrough path. See `VirtualTerminalQuery` in `escape` for the
-/// two queries we intentionally take ownership of.
+/// Default-color and cursor reports share this callback, preserving their
+/// order in the child's input. Physical-terminal queries such as DA and
+/// XTVERSION still use the passthrough path.
 #[derive(Default)]
 struct VirtualPtyReplies {
     bytes: Vec<u8>,
@@ -796,7 +793,24 @@ impl VirtualPtyReplies {
 /// accepting a merely similar CSI response would make an unrelated physical
 /// query leak back to the child PTY.
 fn is_virtual_terminal_reply(data: &[u8]) -> bool {
-    data == b"\x1b[0n" || is_cpr_reply(data) || is_in_band_resize_mode_report(data)
+    data == b"\x1b[0n"
+        || is_cpr_reply(data)
+        || is_in_band_resize_mode_report(data)
+        || is_default_color_reply(data)
+}
+
+fn is_default_color_reply(mut data: &[u8]) -> bool {
+    // Ghostty can return several color reports in one callback.
+    while let Some((color, rest)) = parse_default_color_osc(data) {
+        if !color.value.starts_with(b"rgb:") {
+            return false;
+        }
+        if rest.is_empty() {
+            return true;
+        }
+        data = rest;
+    }
+    false
 }
 
 fn is_cpr_reply(data: &[u8]) -> bool {
@@ -1712,29 +1726,22 @@ impl ShellSession {
         let _raw_guard = RawModeGuard::new()?;
         tracing::trace!("session: raw mode active");
 
-        let injected_stdin = io.stdin.is_some();
+        let native_terminal_io = io.stdin.is_none() && io.stdout.is_none();
         let stdout_raw: Box<dyn Write + Send> = io.stdout.unwrap_or_else(|| Box::new(io::stdout()));
         let mut stdout: Box<dyn Write + Send> = Box::new(io::BufWriter::new(stdout_raw));
         let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
 
-        // Ask the terminal where its cursor is — everything above it (build
-        // summary, prior output) stays on screen, and the renderer starts
-        // below. Done FIRST, before any terminal resets. Skip when stdin is
-        // injected (not a real terminal) — the DSR response comes via stdin,
-        // so this would hang if stdin is not a TTY. crossterm handles the
-        // query, parsing, and a built-in 2s timeout for environments that
-        // don't respond (Docker, CI).
-        let cursor_row = if !injected_stdin && io::stdin().is_terminal() {
-            match crossterm::cursor::position() {
-                Ok((_col, row)) => row + 1, // crossterm returns 0-based, we need 1-based
-                Err(e) => {
-                    tracing::debug!("session: cursor position query failed: {e}, assuming row 1");
-                    1
-                }
-            }
+        // Sample the outer terminal's colors and cursor before resetting its
+        // modes. The cursor marks where the renderer can start drawing.
+        let probe = if native_terminal_io && io::stdin().is_terminal() && io::stdout().is_terminal()
+        {
+            probe_terminal(&mut stdout)
         } else {
-            1
+            TerminalProbe::default()
         };
+        let cursor_row = probe.cursor_row.unwrap_or(1);
+        let [foreground, background, cursor_color] = probe.colors;
+        let stdin_source = io::Cursor::new(probe.input).chain(stdin_source);
         tracing::trace!("session: cursor position at takeover: row {}", cursor_row);
 
         // Renderers may leave a non-default scroll region/origin mode.
@@ -1930,6 +1937,15 @@ impl ShellSession {
             vt.set_scrollback_max_bytes(Some(DEFAULT_MAX_SCROLLBACK))
                 .map_err(|source| SessionError::TerminalOperation {
                     operation: "scrollback setup",
+                    cols: pty_size.cols,
+                    rows: pty_size.rows,
+                    source,
+                })?;
+            vt.set_default_fg_color(foreground)
+                .and_then(|vt| vt.set_default_bg_color(background))
+                .and_then(|vt| vt.set_default_cursor_color(cursor_color))
+                .map_err(|source| SessionError::TerminalOperation {
+                    operation: "default color setup",
                     cols: pty_size.cols,
                     rows: pty_size.rows,
                     source,
@@ -3820,7 +3836,8 @@ mod tests {
             // child through the virtual hook.
             (b"\x1b[?7;1$y", false),
             (b"\x1b[?2048;5$y", false),
-            (b"\x1b]10;rgb:0000/0000/0000\x1b\\", false),
+            (b"\x1b]10;rgb:0000/0000/0000\x1b\\", true),
+            (b"\x1b]4;0;rgb:0000/0000/0000\x1b\\", false),
             (b"\x1bP>|libghostty\x1b\\", false),
             (b"\x1b[48;23;80;0;0t", false),
             (b"\x1b[;80R", false),
@@ -3867,6 +3884,47 @@ mod tests {
         replies.borrow_mut().bytes.clear();
         vt.resize(COLS + 1, ROWS, 0, 0).unwrap();
         assert!(replies.borrow().bytes.is_empty());
+    }
+
+    #[test]
+    fn virtual_color_and_cursor_replies_follow_query_order() {
+        for background in [
+            None,
+            Some(RgbColor {
+                r: 0x12,
+                g: 0x34,
+                b: 0x56,
+            }),
+        ] {
+            let replies = RefCell::new(VirtualPtyReplies::default());
+            let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+            vt.set_default_bg_color(background).unwrap();
+            vt.on_pty_write(|_, data| replies.borrow_mut().capture(data))
+                .unwrap();
+
+            vt.vt_write(b"\x1b[3;4H\x1b]11;");
+            vt.vt_write(b"?\x1b\\\x1b[6n");
+            let expected = if background.is_some() {
+                b"\x1b]11;rgb:1212/3434/5656\x1b\\\x1b[3;4R".as_slice()
+            } else {
+                b"\x1b[3;4R".as_slice()
+            };
+            assert_eq!(replies.borrow().bytes, expected);
+
+            let foreground = RgbColor {
+                r: 0xff,
+                g: 0,
+                b: 0,
+            };
+            vt.set_default_fg_color(Some(foreground)).unwrap();
+            vt.set_default_cursor_color(Some(foreground)).unwrap();
+            replies.borrow_mut().bytes.clear();
+            vt.vt_write(b"\x1b]10;?;rgb:00/ff/00;?\x07\x1b]11;?\x07");
+            assert_eq!(
+                replies.borrow().bytes,
+                b"\x1b]10;rgb:ffff/0000/0000\x07\x1b]12;rgb:ffff/0000/0000\x07\x1b]11;rgb:0000/ffff/0000\x07"
+            );
+        }
     }
 
     /// Regression test for devenv#2845: when the process-wide shutdown token is

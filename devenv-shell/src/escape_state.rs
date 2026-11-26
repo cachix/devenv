@@ -5,7 +5,9 @@
 //! kitty keyboard, etc.) so the host can reset them when the shell exits or
 //! when a hot-reload swaps PTYs.
 
-use crate::escape::{CLEANUP_MODES, DecModeEvent, EscapeScanner, SequenceEvent};
+use crate::escape::{
+    CLEANUP_MODES, DecModeEvent, EscapeScanner, SequenceEvent, parse_default_color_osc,
+};
 use crate::pty::Pty;
 use crate::terminal_commands::{
     ReportTextAreaSize, ResetDecMode, ResetModifyOtherKeys, SetKeypadMode,
@@ -213,7 +215,7 @@ pub fn process_escape_events(
                 }
             }
             SequenceEvent::Osc(event) => {
-                stdout.write_all(&event.raw_bytes)?;
+                forward_osc(stdout, &event.raw_bytes)?;
             }
             SequenceEvent::EraseDisplay { .. } => {
                 esc.erase_display = true;
@@ -265,6 +267,31 @@ pub fn process_escape_events(
     Ok(())
 }
 
+fn forward_osc(stdout: &mut impl Write, bytes: &[u8]) -> io::Result<()> {
+    let Some((osc, b"")) = parse_default_color_osc(bytes) else {
+        return stdout.write_all(bytes);
+    };
+    let colors = (osc.code..=19).zip(osc.value.split(|byte| *byte == b';'));
+    if !colors
+        .clone()
+        .any(|(code, value)| code <= 12 && value == b"?")
+    {
+        return stdout.write_all(bytes);
+    }
+    // A dynamic-color OSC can set one color and query another. Ghostty
+    // answers the default-color queries. Keep the other operations in order
+    // on the outer terminal, using their explicit color numbers.
+    for (code, value) in colors {
+        if code <= 12 && value == b"?" {
+            continue;
+        }
+        write!(stdout, "\x1b]{code};")?;
+        stdout.write_all(value)?;
+        stdout.write_all(osc.terminator)?;
+    }
+    Ok(())
+}
+
 /// Reset any forwarded DEC modes on exit so the terminal is left clean.
 ///
 /// XTSHIFTESCAPE and DECSCUSR are forwarded without explicit cleanup:
@@ -301,6 +328,19 @@ pub fn cleanup_forwarded_modes(esc: &EscapeState, stdout: &mut impl Write) -> io
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forward_osc_preserves_sets_and_only_removes_virtual_queries() {
+        let mut stdout = Vec::new();
+        forward_osc(&mut stdout, b"\x1b]11;?\x1b\\").unwrap();
+        forward_osc(&mut stdout, b"\x1b]10;?;rgb:12/34/56;?;?\x07").unwrap();
+        forward_osc(&mut stdout, b"\x1b]111\x07").unwrap();
+        forward_osc(&mut stdout, b"\x1b]4;0;?\x1b\\").unwrap();
+        assert_eq!(
+            stdout,
+            b"\x1b]11;rgb:12/34/56\x07\x1b]13;?\x07\x1b]111\x07\x1b]4;0;?\x1b\\"
+        );
+    }
 
     /// Feed raw bytes through scanner and apply events to state.
     /// Returns bytes that would be forwarded to stdout.

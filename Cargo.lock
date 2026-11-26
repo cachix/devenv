@@ -2898,6 +2898,7 @@ dependencies = [
  "libc",
  "libghostty-vt",
  "libghostty-vt-sys",
+ "nix 0.31.3",
  "portable-pty",
  "shell-escape",
  "thiserror 2.0.18",

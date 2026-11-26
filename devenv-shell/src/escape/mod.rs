@@ -7,6 +7,8 @@
 mod dec_mode;
 mod osc;
 
+pub(crate) use osc::parse_default_color_osc;
+
 use dec_mode::{DecModeAction, DecModeParser, DecModeResult};
 use osc::{OscParser, OscResult};
 

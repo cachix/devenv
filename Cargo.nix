@@ -9930,6 +9930,12 @@ rec {
             features = [ "pkg-config" ];
           }
           {
+            name = "nix";
+            packageId = "nix 0.31.3";
+            target = { target, features }: (target."unix" or false);
+            features = [ "poll" ];
+          }
+          {
             name = "portable-pty";
             packageId = "portable-pty";
           }
