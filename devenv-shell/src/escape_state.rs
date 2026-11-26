@@ -198,68 +198,78 @@ pub fn process_escape_events(
     events_buf.clear();
     scanner.scan_into(data, events_buf);
     for event in events_buf.drain(..) {
-        match event {
-            SequenceEvent::DecMode(event) => {
-                // A program can release then immediately re-enter mode 2026
-                // in one PTY batch. End the old physical transaction before
-                // forwarding the next entry, otherwise the deferred reset
-                // would incorrectly win and leave the terminal unsynced.
-                if event.enables_synchronized_output() {
-                    esc.flush_deferred_synchronized_output_reset(stdout)?;
-                }
-                let forward = esc.apply_dec_mode(&event);
-                if !forward.is_empty() {
-                    stdout.write_all(forward)?;
-                }
+        if matches!(event, SequenceEvent::TextAreaSizeQuery) {
+            pty.write_all(text_area_size_reply(pty_size).as_bytes())?;
+            pty.flush()?;
+        }
+        forward_escape_event(event, esc, stdout)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn text_area_size_reply(pty_size: PtySize) -> String {
+    let mut buf = String::new();
+    ReportTextAreaSize {
+        rows: pty_size.rows,
+        cols: pty_size.cols,
+    }
+    .write_ansi(&mut buf)
+    .unwrap();
+    buf
+}
+
+pub(crate) fn forward_escape_event(
+    event: SequenceEvent,
+    esc: &mut EscapeState,
+    stdout: &mut impl Write,
+) -> io::Result<()> {
+    match event {
+        SequenceEvent::DecMode(event) => {
+            // A program can release then immediately re-enter mode 2026
+            // in one PTY batch. End the old physical transaction before
+            // forwarding the next entry, otherwise the deferred reset
+            // would incorrectly win and leave the terminal unsynced.
+            if event.enables_synchronized_output() {
+                esc.flush_deferred_synchronized_output_reset(stdout)?;
             }
-            SequenceEvent::Osc(event) => {
-                event.write_to_outer_terminal(stdout)?;
+            let forward = esc.apply_dec_mode(&event);
+            if !forward.is_empty() {
+                stdout.write_all(forward)?;
             }
-            SequenceEvent::EraseDisplay { .. } => {
-                esc.erase_display = true;
-            }
-            SequenceEvent::ClearScrollback { .. } => {
-                esc.clear_scrollback = true;
-            }
-            SequenceEvent::ForwardCsi { raw_bytes } => {
-                stdout.write_all(&raw_bytes)?;
-            }
-            SequenceEvent::ForwardDcs { raw_bytes } => {
-                stdout.write_all(&raw_bytes)?;
-            }
-            SequenceEvent::ForwardScreenTitle { raw_bytes } => {
-                stdout.write_all(&raw_bytes)?;
-            }
-            SequenceEvent::KittyKeyboard {
-                raw_bytes,
-                stack_delta,
-            } => {
-                stdout.write_all(&raw_bytes)?;
-                esc.apply_kitty_keyboard(stack_delta);
-            }
-            SequenceEvent::ModifyOtherKeys { raw_bytes, enabled } => {
-                stdout.write_all(&raw_bytes)?;
-                esc.apply_modify_other_keys(enabled);
-            }
-            SequenceEvent::TextAreaSizeQuery => {
-                let cmd = ReportTextAreaSize {
-                    rows: pty_size.rows,
-                    cols: pty_size.cols,
-                };
-                let mut buf = String::new();
-                cmd.write_ansi(&mut buf).unwrap();
-                pty.write_all(buf.as_bytes())?;
-                pty.flush()?;
-            }
-            // The raw bytes still reach libghostty-vt, whose narrowly
-            // filtered `on_pty_write` effect responds from virtual state.
-            // Do not pass these through to stdout: the physical terminal
-            // includes the status row and can have a renderer-owned cursor.
-            SequenceEvent::VirtualTerminalQuery(_) => {}
-            SequenceEvent::KeypadMode { application } => {
-                queue!(stdout, SetKeypadMode { application })?;
-                esc.keypad_application_mode = application;
-            }
+        }
+        SequenceEvent::Osc(event) => {
+            stdout.write_all(&event.raw_bytes)?;
+        }
+        SequenceEvent::EraseDisplay { .. } => {
+            esc.erase_display = true;
+        }
+        SequenceEvent::ClearScrollback { .. } => {
+            esc.clear_scrollback = true;
+        }
+        SequenceEvent::ForwardCsi { raw_bytes } => {
+            stdout.write_all(&raw_bytes)?;
+        }
+        SequenceEvent::ForwardDcs { raw_bytes } => {
+            stdout.write_all(&raw_bytes)?;
+        }
+        SequenceEvent::ForwardScreenTitle { raw_bytes } => {
+            stdout.write_all(&raw_bytes)?;
+        }
+        SequenceEvent::KittyKeyboard {
+            raw_bytes,
+            stack_delta,
+        } => {
+            stdout.write_all(&raw_bytes)?;
+            esc.apply_kitty_keyboard(stack_delta);
+        }
+        SequenceEvent::ModifyOtherKeys { raw_bytes, enabled } => {
+            stdout.write_all(&raw_bytes)?;
+            esc.apply_modify_other_keys(enabled);
+        }
+        SequenceEvent::TextAreaSizeQuery | SequenceEvent::VirtualTerminalQuery(_) => {}
+        SequenceEvent::KeypadMode { application } => {
+            queue!(stdout, SetKeypadMode { application })?;
+            esc.keypad_application_mode = application;
         }
     }
     Ok(())

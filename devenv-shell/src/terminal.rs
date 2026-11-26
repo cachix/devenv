@@ -3,8 +3,7 @@
 //! Provides utilities for managing terminal state, including raw mode handling.
 
 #[cfg(unix)]
-use crate::escape::parse_default_color_osc;
-use libghostty_vt::style::RgbColor;
+use crate::terminal_replies::{STATUS_QUERY, STATUS_REPLY};
 use std::io::{self, IsTerminal, Write};
 
 /// Check if stdin is a TTY.
@@ -15,8 +14,7 @@ pub fn is_tty() -> bool {
 #[derive(Default)]
 pub(crate) struct TerminalProbe {
     pub cursor_row: Option<u16>,
-    /// Default foreground, background, and cursor colors, in OSC order.
-    pub colors: [Option<RgbColor>; 3],
+    pub status_reports: bool,
     /// Input read during takeover that belongs to the child, including typeahead.
     pub input: Vec<u8>,
 }
@@ -47,10 +45,9 @@ fn probe_terminal_fd(
     use std::time::Instant;
 
     let mut probe = TerminalProbe::default();
-    // CPR is the final reply. It lets us finish immediately on terminals
-    // that don't answer some or all of the color queries.
-    let requests = b"\x1b]10;?\x1b\\\x1b]11;?\x1b\\\x1b]12;?\x1b\\\x1b[6n";
-    if let Err(error) = stdout.write_all(requests).and_then(|()| stdout.flush()) {
+    // CPR ends the probe even if this terminal ignores the status request.
+    let requests = [STATUS_QUERY, b"\x1b[6n"].concat();
+    if let Err(error) = stdout.write_all(&requests).and_then(|()| stdout.flush()) {
         tracing::debug!(%error, "could not send terminal takeover probe");
         return probe;
     }
@@ -96,8 +93,8 @@ fn probe_terminal_fd(
 impl TerminalProbe {
     fn collect_replies(&mut self, pending: &mut Vec<u8>) {
         // Only the tail can contain an incomplete report. Retain enough bytes
-        // for the full RGB or cursor report while preserving longer typeahead.
-        const MAX_REPORT_LEN: usize = 128;
+        // for the full cursor report while preserving longer typeahead.
+        const MAX_REPORT_LEN: usize = 16;
         let mut offset = 0;
         for (start, _) in pending
             .iter()
@@ -108,12 +105,9 @@ impl TerminalProbe {
                 continue;
             }
             let data = &pending[start..];
-            let end = if let Some((color, rest)) = parse_default_color_osc(data) {
-                let slot = &mut self.colors[usize::from(color.code - 10)];
-                *slot = std::str::from_utf8(color.value)
-                    .ok()
-                    .and_then(|value| RgbColor::parse(value).ok());
-                pending.len() - rest.len()
+            let end = if !self.status_reports && data.starts_with(STATUS_REPLY) {
+                self.status_reports = true;
+                start + STATUS_REPLY.len()
             } else if self.cursor_row.is_none()
                 && let Some((row, len)) = parse_cursor_report(data)
             {
@@ -229,59 +223,34 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn takeover_probe_collects_colors_and_preserves_typeahead() {
-        let (stdin, mut terminal) = io::pipe().unwrap();
-        terminal
-            .write_all(
-                b"before\x1b]10;rgb:12/34/56\x1b\\\x1b]11;rgb:abcd/1234/0000\x07\x1b[7;2Rafter",
-            )
-            .unwrap();
-        let mut stdout = Vec::new();
-        let probe = probe_terminal_fd(&stdin, &mut stdout, std::time::Duration::from_secs(1));
-        assert_eq!(
-            stdout,
-            b"\x1b]10;?\x1b\\\x1b]11;?\x1b\\\x1b]12;?\x1b\\\x1b[6n"
-        );
-        assert_eq!(probe.cursor_row, Some(7));
-        assert_eq!(
-            probe.colors,
-            [
-                Some(RgbColor {
-                    r: 0x12,
-                    g: 0x34,
-                    b: 0x56
-                }),
-                Some(RgbColor {
-                    r: 0xab,
-                    g: 0x12,
-                    b: 0
-                }),
-                None,
-            ]
-        );
-        assert_eq!(probe.input, b"beforeafter");
+    fn takeover_probe_preserves_typeahead() {
+        for status_reports in [true, false] {
+            let (stdin, mut terminal) = io::pipe().unwrap();
+            terminal.write_all(b"before").unwrap();
+            if status_reports {
+                terminal.write_all(STATUS_REPLY).unwrap();
+            }
+            terminal.write_all(b"\x1b[7;2Rafter").unwrap();
+            let mut stdout = Vec::new();
+            let probe = probe_terminal_fd(&stdin, &mut stdout, std::time::Duration::from_secs(1));
+
+            assert_eq!(stdout, b"\x1b[5n\x1b[6n");
+            assert_eq!(probe.status_reports, status_reports);
+            assert_eq!(probe.cursor_row, Some(7));
+            assert_eq!(probe.input, b"beforeafter");
+        }
     }
 
     #[cfg(unix)]
     #[test]
     fn takeover_probe_handles_fragmented_replies() {
         let mut probe = TerminalProbe::default();
-        let mut pending = b"\x1b]11;rgb:1212/3434/".to_vec();
+        let mut pending = b"\x1b[0".to_vec();
         probe.collect_replies(&mut pending);
-        assert_eq!(probe.colors[1], None);
-        pending.extend_from_slice(b"5656\x1b");
+        assert!(!probe.status_reports);
+        pending.extend_from_slice(b"n\x1b[7;");
         probe.collect_replies(&mut pending);
-        assert_eq!(probe.colors[1], None);
-        pending.extend_from_slice(b"\\\x1b[7;");
-        probe.collect_replies(&mut pending);
-        assert_eq!(
-            probe.colors[1],
-            Some(RgbColor {
-                r: 0x12,
-                g: 0x34,
-                b: 0x56
-            })
-        );
+        assert!(probe.status_reports);
         assert_eq!(probe.cursor_row, None);
         pending.extend_from_slice(b"2Rkey");
         probe.collect_replies(&mut pending);

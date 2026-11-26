@@ -7,9 +7,6 @@
 mod dec_mode;
 mod osc;
 
-pub use osc::OscEvent;
-pub(crate) use osc::parse_default_color_osc;
-
 use dec_mode::{DecModeAction, DecModeParser, DecModeResult};
 use osc::{OscParser, OscResult};
 
@@ -176,6 +173,11 @@ fn append_decimal(output: &mut Vec<u8>, value: u16) {
     }
 
     output.extend_from_slice(&digits[start..]);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OscEvent {
+    pub raw_bytes: Vec<u8>,
 }
 
 /// A query whose reply must describe the virtual terminal, not the physical
@@ -515,7 +517,17 @@ impl EscapeScanner {
     /// Unlike `scan`, this avoids allocating a new Vec on every call.
     /// The caller can reuse the Vec across invocations.
     pub fn scan_into(&mut self, data: &[u8], events: &mut Vec<SequenceEvent>) {
-        for &byte in data {
+        self.scan_events(data, |_, event| events.push(event));
+    }
+
+    /// Report escape sequences and their end offsets in this chunk.
+    pub(crate) fn scan_events(
+        &mut self,
+        data: &[u8],
+        mut on_event: impl FnMut(usize, SequenceEvent),
+    ) {
+        for (offset, &byte) in data.iter().enumerate() {
+            let mut emit = |event| on_event(offset + 1, event);
             match self.state {
                 RouterState::Ground => {
                     if byte == 0x1b {
@@ -546,7 +558,7 @@ impl EscapeScanner {
                         b'=' | b'>' => {
                             // DECKPAM (ESC =) / DECKPNM (ESC >)
                             self.seq_bytes.clear();
-                            events.push(SequenceEvent::KeypadMode {
+                            emit(SequenceEvent::KeypadMode {
                                 application: byte == b'=',
                             });
                             self.state = RouterState::Ground;
@@ -580,7 +592,7 @@ impl EscapeScanner {
                             self.state = RouterState::CsiParams;
                         } else if let Some(final_byte) = self.csi_params.feed(byte) {
                             // Immediate final byte (e.g. CSI c)
-                            self.handle_csi_final(final_byte, events);
+                            self.handle_csi_final(final_byte, emit);
                         } else if byte.is_ascii_digit()
                             || byte == b';'
                             || matches!(byte, b'>' | b'=' | b'<' | b'$')
@@ -616,7 +628,7 @@ impl EscapeScanner {
                                             DecModeEvent::Reset { modes, raw_bytes }
                                         }
                                     };
-                                    events.push(SequenceEvent::DecMode(event));
+                                    emit(SequenceEvent::DecMode(event));
                                     self.state = RouterState::Ground;
                                     continue;
                                 }
@@ -634,7 +646,7 @@ impl EscapeScanner {
                         }
 
                         if let Some(final_byte) = self.csi_params.feed(byte) {
-                            self.handle_csi_final(final_byte, events);
+                            self.handle_csi_final(final_byte, emit);
                         }
                     }
                 }
@@ -649,7 +661,7 @@ impl EscapeScanner {
                             OscResult::Pending => {}
                             OscResult::Complete => {
                                 let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                                events.push(SequenceEvent::Osc(OscEvent { raw_bytes }));
+                                emit(SequenceEvent::Osc(OscEvent { raw_bytes }));
                                 self.state = RouterState::Ground;
                             }
                             OscResult::Reject => {
@@ -665,7 +677,7 @@ impl EscapeScanner {
                         match self.osc_parser.finish() {
                             OscResult::Complete => {
                                 let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                                events.push(SequenceEvent::Osc(OscEvent { raw_bytes }));
+                                emit(SequenceEvent::Osc(OscEvent { raw_bytes }));
                                 self.state = RouterState::Ground;
                             }
                             _ => {
@@ -711,7 +723,7 @@ impl EscapeScanner {
                         // ST (ESC \) terminates the DCS
                         self.seq_bytes.push(byte);
                         let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                        events.push(SequenceEvent::ForwardDcs { raw_bytes });
+                        emit(SequenceEvent::ForwardDcs { raw_bytes });
                         self.state = RouterState::Ground;
                     } else if byte == 0x1b {
                         // Another ESC — abort DCS, start new sequence
@@ -761,7 +773,7 @@ impl EscapeScanner {
                         // ST (ESC \) terminates the title string
                         self.seq_bytes.push(byte);
                         let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                        events.push(SequenceEvent::ForwardScreenTitle { raw_bytes });
+                        emit(SequenceEvent::ForwardScreenTitle { raw_bytes });
                         self.state = RouterState::Ground;
                     } else if byte == 0x1b {
                         // Another ESC — abort title string, start new sequence
@@ -801,7 +813,7 @@ impl EscapeScanner {
     }
 
     /// Handle a complete CSI sequence (final byte received).
-    fn handle_csi_final(&mut self, final_byte: u8, events: &mut Vec<SequenceEvent>) {
+    fn handle_csi_final(&mut self, final_byte: u8, emit: impl FnOnce(SequenceEvent)) {
         let class = classify_csi(
             self.csi_params.intermediates(),
             &self.csi_params.params,
@@ -812,32 +824,32 @@ impl EscapeScanner {
         match class {
             CsiClass::Forward => {
                 let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                events.push(SequenceEvent::ForwardCsi { raw_bytes });
+                emit(SequenceEvent::ForwardCsi { raw_bytes });
             }
             CsiClass::EraseDisplay => {
                 let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                events.push(SequenceEvent::EraseDisplay { raw_bytes });
+                emit(SequenceEvent::EraseDisplay { raw_bytes });
             }
             CsiClass::ClearScrollback => {
                 let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                events.push(SequenceEvent::ClearScrollback { raw_bytes });
+                emit(SequenceEvent::ClearScrollback { raw_bytes });
             }
             CsiClass::KittyKeyboard { stack_delta } => {
                 let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                events.push(SequenceEvent::KittyKeyboard {
+                emit(SequenceEvent::KittyKeyboard {
                     raw_bytes,
                     stack_delta,
                 });
             }
             CsiClass::ModifyOtherKeys { enabled } => {
                 let raw_bytes = std::mem::take(&mut self.seq_bytes);
-                events.push(SequenceEvent::ModifyOtherKeys { raw_bytes, enabled });
+                emit(SequenceEvent::ModifyOtherKeys { raw_bytes, enabled });
             }
             CsiClass::TextAreaSizeQuery => {
-                events.push(SequenceEvent::TextAreaSizeQuery);
+                emit(SequenceEvent::TextAreaSizeQuery);
             }
             CsiClass::VirtualTerminalQuery(query) => {
-                events.push(SequenceEvent::VirtualTerminalQuery(query));
+                emit(SequenceEvent::VirtualTerminalQuery(query));
             }
             CsiClass::Ignore => {}
         }

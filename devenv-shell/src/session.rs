@@ -3,10 +3,10 @@
 //! This module provides the main `ShellSession` type that orchestrates
 //! PTY lifecycle, terminal I/O, and status line rendering.
 
-use crate::escape::{EscapeScanner, parse_default_color_osc};
+use crate::escape::{EscapeScanner, SequenceEvent};
 use crate::escape_state::{
-    EscapeState, cleanup_forwarded_modes as escape_state_cleanup,
-    process_escape_events as escape_state_process,
+    EscapeState, cleanup_forwarded_modes as escape_state_cleanup, forward_escape_event,
+    text_area_size_reply,
 };
 use crate::indicators::Indicators;
 use crate::keybindings::{ShellAction, ShellKeybindings};
@@ -17,6 +17,7 @@ use crate::terminal::{RawModeGuard, TerminalProbe, probe_terminal};
 use crate::terminal_commands::{
     InBandResizeNotification, ORIGIN_MODE, ResetDecMode, ResetScrollRegion, SetScrollRegion,
 };
+use crate::terminal_replies::{STATUS_REPLY, TerminalReplies};
 use crate::vt_utils::{
     CursorState, DEFAULT_MAX_SCROLLBACK, active_point, point_with_x, screen_point,
 };
@@ -40,7 +41,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::{self, IsTerminal, Read, Write};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_util::sync::CancellationToken;
@@ -761,10 +762,6 @@ impl VtInputFilter {
 /// Replies emitted synchronously by libghostty-vt while it processes raw PTY
 /// output. The callback is deliberately a deny-by-default capability: it only
 /// accepts responses that we know must describe the virtual terminal.
-///
-/// Default-color and cursor reports share this callback, preserving their
-/// order in the child's input. Physical-terminal queries such as DA and
-/// XTVERSION still use the passthrough path.
 #[derive(Default)]
 struct VirtualPtyReplies {
     bytes: Vec<u8>,
@@ -776,41 +773,10 @@ impl VirtualPtyReplies {
             self.bytes.extend_from_slice(data);
         }
     }
-
-    fn flush_to_pty(&mut self, pty: &Pty) -> io::Result<()> {
-        if self.bytes.is_empty() {
-            return Ok(());
-        }
-        pty.write_all(&self.bytes)?;
-        pty.flush()?;
-        self.bytes.clear();
-        Ok(())
-    }
 }
 
-/// Whether a libghostty-vt `on_pty_write` callback payload can only be the
-/// answer to one of the virtual-owned queries. Keep this intentionally exact:
-/// accepting a merely similar CSI response would make an unrelated physical
-/// query leak back to the child PTY.
 fn is_virtual_terminal_reply(data: &[u8]) -> bool {
-    data == b"\x1b[0n"
-        || is_cpr_reply(data)
-        || is_in_band_resize_mode_report(data)
-        || is_default_color_reply(data)
-}
-
-fn is_default_color_reply(mut data: &[u8]) -> bool {
-    // Ghostty can return several color reports in one callback.
-    while let Some((color, rest)) = parse_default_color_osc(data) {
-        if !color.value.starts_with(b"rgb:") {
-            return false;
-        }
-        if rest.is_empty() {
-            return true;
-        }
-        data = rest;
-    }
-    false
+    data == STATUS_REPLY || is_cpr_reply(data) || is_in_band_resize_mode_report(data)
 }
 
 fn is_cpr_reply(data: &[u8]) -> bool {
@@ -842,8 +808,79 @@ fn is_ascii_decimal(bytes: &[u8]) -> bool {
     !bytes.is_empty() && bytes.iter().all(u8::is_ascii_digit)
 }
 
-fn flush_virtual_pty_replies(replies: &RefCell<VirtualPtyReplies>, pty: &Pty) -> io::Result<()> {
-    replies.borrow_mut().flush_to_pty(pty)
+fn write_child_input(pty: &Pty, data: &[u8]) -> io::Result<()> {
+    pty.write_all(data)?;
+    pty.flush()
+}
+
+struct PtyOutput<'a> {
+    pty: &'a Pty,
+    virtual_replies: &'a RefCell<VirtualPtyReplies>,
+    scanner: EscapeScanner,
+    input_filter: VtInputFilter,
+    events: Vec<(usize, SequenceEvent)>,
+    input: Vec<u8>,
+    escape: EscapeState,
+    replies: TerminalReplies,
+}
+
+impl PtyOutput<'_> {
+    fn process(
+        &mut self,
+        data: &[u8],
+        stdout: &mut impl Write,
+        pty_size: PtySize,
+        vt: &mut Terminal<'_, '_>,
+        renderer: &mut Renderer<'_>,
+    ) -> Result<(), SessionError> {
+        self.scanner
+            .scan_events(data, |end, event| self.events.push((end, event)));
+        let mut offset = 0;
+        let mut feed = |bytes| -> io::Result<()> {
+            self.virtual_replies.borrow_mut().bytes.clear();
+            let filtered = self.input_filter.filter(bytes, &mut self.input);
+            renderer.feed(vt, filtered.as_bytes())?;
+            Ok(())
+        };
+        for (end, event) in self.events.drain(..) {
+            match event {
+                SequenceEvent::VirtualTerminalQuery(_) => {
+                    feed(&data[offset..end])?;
+                    offset = end;
+                    self.replies.send_virtual(
+                        &self.virtual_replies.borrow().bytes,
+                        stdout,
+                        |data| write_child_input(self.pty, data),
+                    )?;
+                }
+                SequenceEvent::TextAreaSizeQuery => {
+                    self.replies.send_virtual(
+                        text_area_size_reply(pty_size).as_bytes(),
+                        stdout,
+                        |data| write_child_input(self.pty, data),
+                    )?;
+                }
+                SequenceEvent::ForwardCsi { .. } => {
+                    // A forwarded CSI can resemble one of our virtual
+                    // queries. End the feed here to discard any such reply
+                    // before accepting replies at virtual query boundaries.
+                    feed(&data[offset..end])?;
+                    offset = end;
+                    forward_escape_event(event, &mut self.escape, stdout)?;
+                    self.replies.forwarded_request();
+                }
+                SequenceEvent::Osc(_) | SequenceEvent::ForwardDcs { .. } => {
+                    forward_escape_event(event, &mut self.escape, stdout)?;
+                    self.replies.forwarded_request();
+                }
+                _ => forward_escape_event(event, &mut self.escape, stdout)?,
+            }
+        }
+        if offset < data.len() {
+            feed(&data[offset..])?;
+        }
+        Ok(())
+    }
 }
 
 /// Differential renderer that draws VT state to a bounded terminal region.
@@ -1547,6 +1584,7 @@ struct EventLoopContext<'a> {
     coordinator_tx: &'a tokio_mpsc::Sender<FrontendEvent>,
     stdout: &'a mut Box<dyn Write + Send>,
     virtual_pty_replies: &'a RefCell<VirtualPtyReplies>,
+    status_reports: bool,
     pty_buffer_return_tx: &'a std::sync::mpsc::SyncSender<Vec<u8>>,
 }
 
@@ -1731,7 +1769,7 @@ impl ShellSession {
         let mut stdout: Box<dyn Write + Send> = Box::new(io::BufWriter::new(stdout_raw));
         let stdin_source: Box<dyn Read + Send> = io.stdin.unwrap_or_else(|| Box::new(io::stdin()));
 
-        // Sample the outer terminal's colors and cursor before resetting its
+        // Check status-report support and the cursor before resetting terminal
         // modes. The cursor marks where the renderer can start drawing.
         let probe = if native_terminal_io && io::stdin().is_terminal() && io::stdout().is_terminal()
         {
@@ -1740,7 +1778,7 @@ impl ShellSession {
             TerminalProbe::default()
         };
         let cursor_row = probe.cursor_row.unwrap_or(1);
-        let [foreground, background, cursor_color] = probe.colors;
+        let status_reports = probe.status_reports;
         let stdin_source = io::Cursor::new(probe.input).chain(stdin_source);
         tracing::trace!("session: cursor position at takeover: row {}", cursor_row);
 
@@ -1941,15 +1979,6 @@ impl ShellSession {
                     rows: pty_size.rows,
                     source,
                 })?;
-            vt.set_default_fg_color(foreground)
-                .and_then(|vt| vt.set_default_bg_color(background))
-                .and_then(|vt| vt.set_default_cursor_color(cursor_color))
-                .map_err(|source| SessionError::TerminalOperation {
-                    operation: "default color setup",
-                    cols: pty_size.cols,
-                    rows: pty_size.rows,
-                    source,
-                })?;
             vt.on_pty_write({
                 let virtual_pty_replies = &virtual_pty_replies;
                 move |_term, data| virtual_pty_replies.borrow_mut().capture(data)
@@ -1996,6 +2025,7 @@ impl ShellSession {
                     coordinator_tx: &coordinator_tx,
                     stdout: &mut stdout,
                     virtual_pty_replies: &virtual_pty_replies,
+                    status_reports,
                     pty_buffer_return_tx: &pty_buffer_return_tx_for_loop,
                 },
             )
@@ -2035,49 +2065,56 @@ impl ShellSession {
             coordinator_tx,
             stdout,
             virtual_pty_replies,
+            status_reports,
             pty_buffer_return_tx,
         } = context;
         let spinner_interval = Duration::from_millis(SPINNER_INTERVAL_MS);
-        let mut scanner = EscapeScanner::new();
-        let mut vt_input_filter = VtInputFilter::new();
-        let mut esc = EscapeState::new();
+        let mut output = PtyOutput {
+            pty,
+            virtual_replies: virtual_pty_replies,
+            scanner: EscapeScanner::new(),
+            input_filter: VtInputFilter::new(),
+            events: Vec::new(),
+            input: Vec::new(),
+            escape: EscapeState::new(),
+            replies: TerminalReplies::new(status_reports),
+        };
         let mut resize_pending = false;
-        let mut esc_events = Vec::new();
-        let mut vt_input = Vec::new();
 
         loop {
-            // Use select! to handle both events and spinner animation
+            let now = Instant::now();
+            output
+                .replies
+                .expire(now, |data| write_child_input(pty, data))?;
+            let building = self.status_line.state().building;
+            let status_timeout = if building {
+                Some(spinner_interval)
+            } else {
+                self.status_line.state().reloaded_remaining()
+            };
+            let timeout = status_timeout
+                .into_iter()
+                .chain(output.replies.next_timeout(now))
+                .min();
             let event = if resize_pending {
                 resize_pending = false;
                 Some(Event::Resize)
-            } else if self.status_line.state().building {
-                match event_rx.recv_timeout(spinner_interval) {
+            } else if let Some(timeout) = timeout {
+                match event_rx.recv_timeout(timeout) {
                     Ok(event) => Some(event),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        if self.config.show_status_line && !synchronized_output_active(vt) {
-                            queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                            self.status_line
-                                .draw(stdout, self.size.cols, self.size.rows)?;
-                            renderer.write_cursor(stdout, vt)?;
-                            queue!(stdout, terminal::EndSynchronizedUpdate)?;
-                            stdout.flush()?;
-                        }
-                        continue;
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => None,
-                }
-            } else if let Some(remaining) = self.status_line.state().reloaded_remaining() {
-                match event_rx.recv_timeout(remaining) {
-                    Ok(event) => Some(event),
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        self.status_line.state_mut().clear_reloaded();
-                        if self.config.show_status_line && !synchronized_output_active(vt) {
-                            queue!(stdout, terminal::BeginSynchronizedUpdate)?;
-                            self.status_line
-                                .draw(stdout, self.size.cols, self.size.rows)?;
-                            renderer.write_cursor(stdout, vt)?;
-                            queue!(stdout, terminal::EndSynchronizedUpdate)?;
-                            stdout.flush()?;
+                        if status_timeout == Some(timeout) {
+                            if !building {
+                                self.status_line.state_mut().clear_reloaded();
+                            }
+                            if self.config.show_status_line && !synchronized_output_active(vt) {
+                                queue!(stdout, terminal::BeginSynchronizedUpdate)?;
+                                self.status_line
+                                    .draw(stdout, self.size.cols, self.size.rows)?;
+                                renderer.write_cursor(stdout, vt)?;
+                                queue!(stdout, terminal::EndSynchronizedUpdate)?;
+                                stdout.flush()?;
+                            }
                         }
                         continue;
                     }
@@ -2093,46 +2130,33 @@ impl ShellSession {
 
             match event {
                 Event::Stdin(data) => {
-                    self.dispatch_stdin_event(
-                        &data,
-                        !esc.in_alternate_screen,
-                        StdinPresentation::Immediate,
-                        StdinEventContext {
-                            pty,
-                            coordinator_tx,
-                            stdout,
-                            vt,
-                            renderer,
-                        },
-                    )?;
+                    let local_keybindings_enabled = !output.escape.in_alternate_screen;
+                    output.replies.forward_input(&data, |data| {
+                        self.dispatch_stdin_event(
+                            data,
+                            local_keybindings_enabled,
+                            StdinPresentation::Immediate,
+                            StdinEventContext {
+                                pty,
+                                coordinator_tx,
+                                stdout,
+                                vt,
+                                renderer,
+                            },
+                        )
+                    })?;
                 }
 
                 Event::PtyOutput(data) => {
                     let mut batch_budget = RenderBatchBudget::for_initial_pty_output(data.len());
-                    let was_in_alt = esc.in_alternate_screen;
+                    let was_in_alt = output.escape.in_alternate_screen;
                     // Preserve deferred erase/scrollback flags across an
                     // application-controlled synchronized-output window.
                     // They are consumed when mode 2026 is released.
                     if !synchronized_output_active(vt) {
-                        esc.reset_batch();
+                        output.escape.reset_batch();
                     }
-                    escape_state_process(
-                        &mut scanner,
-                        &data,
-                        &mut esc,
-                        stdout,
-                        pty,
-                        self.pty_size(),
-                        &mut esc_events,
-                    )?;
-
-                    // Feed output into VT; `feed` tracks scrolled-off lines
-                    // in the renderer's own `pending_scroll`.
-                    {
-                        let filtered = vt_input_filter.filter(&data, &mut vt_input);
-                        renderer.feed(vt, filtered.as_bytes())?;
-                    }
-                    flush_virtual_pty_replies(virtual_pty_replies, pty)?;
+                    output.process(&data, stdout, self.pty_size(), vt, renderer)?;
                     return_pty_read_buffer(pty_buffer_return_tx, data);
 
                     // Bound this render batch so sustained PTY output cannot
@@ -2142,59 +2166,51 @@ impl ShellSession {
                     while let Some(event) = batch_budget.try_recv(&event_rx) {
                         match event {
                             Event::PtyOutput(more) => {
-                                escape_state_process(
-                                    &mut scanner,
-                                    &more,
-                                    &mut esc,
-                                    stdout,
-                                    pty,
-                                    self.pty_size(),
-                                    &mut esc_events,
-                                )?;
-                                {
-                                    let filtered = vt_input_filter.filter(&more, &mut vt_input);
-                                    renderer.feed(vt, filtered.as_bytes())?;
-                                }
-                                flush_virtual_pty_replies(virtual_pty_replies, pty)?;
+                                output.process(&more, stdout, self.pty_size(), vt, renderer)?;
                                 return_pty_read_buffer(pty_buffer_return_tx, more);
                             }
                             Event::PtyExit(exit_code) => {
                                 let synchronized = synchronized_output_active(vt);
-                                let deferred_release = esc.has_deferred_synchronized_output_reset();
-                                self.clear_status_row(stdout, esc.in_alternate_screen)?;
-                                escape_state_cleanup(&esc, stdout)?;
+                                let deferred_release =
+                                    output.escape.has_deferred_synchronized_output_reset();
+                                self.clear_status_row(stdout, output.escape.in_alternate_screen)?;
+                                escape_state_cleanup(&output.escape, stdout)?;
                                 if !synchronized && !deferred_release {
                                     begin_renderer_transaction(stdout, false)?;
                                 }
                                 renderer.render_with_scroll(stdout, vt)?;
-                                finish_renderer_transaction(stdout, &mut esc, true)?;
+                                finish_renderer_transaction(stdout, &mut output.escape, true)?;
                                 stdout.flush()?;
                                 return Ok(exit_code);
                             }
                             Event::Stdin(stdin_data) => {
-                                self.dispatch_stdin_event(
-                                    &stdin_data,
-                                    !esc.in_alternate_screen,
-                                    StdinPresentation::Deferred,
-                                    StdinEventContext {
-                                        pty,
-                                        coordinator_tx,
-                                        stdout,
-                                        vt,
-                                        renderer,
-                                    },
-                                )?;
+                                let local_keybindings_enabled = !output.escape.in_alternate_screen;
+                                output.replies.forward_input(&stdin_data, |data| {
+                                    self.dispatch_stdin_event(
+                                        data,
+                                        local_keybindings_enabled,
+                                        StdinPresentation::Deferred,
+                                        StdinEventContext {
+                                            pty,
+                                            coordinator_tx,
+                                            stdout,
+                                            vt,
+                                            renderer,
+                                        },
+                                    )
+                                })?;
                             }
                             Event::Command(ShellCommand::Shutdown) => {
                                 let synchronized = synchronized_output_active(vt);
-                                let deferred_release = esc.has_deferred_synchronized_output_reset();
-                                self.clear_status_row(stdout, esc.in_alternate_screen)?;
-                                escape_state_cleanup(&esc, stdout)?;
+                                let deferred_release =
+                                    output.escape.has_deferred_synchronized_output_reset();
+                                self.clear_status_row(stdout, output.escape.in_alternate_screen)?;
+                                escape_state_cleanup(&output.escape, stdout)?;
                                 if !synchronized && !deferred_release {
                                     begin_renderer_transaction(stdout, false)?;
                                 }
                                 renderer.render_with_scroll(stdout, vt)?;
-                                finish_renderer_transaction(stdout, &mut esc, true)?;
+                                finish_renderer_transaction(stdout, &mut output.escape, true)?;
                                 stdout.flush()?;
                                 return Ok(None);
                             }
@@ -2221,20 +2237,20 @@ impl ShellSession {
                     // transaction, but `EscapeState` intentionally kept the
                     // physical reset pending. Render into that same physical
                     // transaction, then make the reset the final byte.
-                    let deferred_release = esc.has_deferred_synchronized_output_reset();
+                    let deferred_release = output.escape.has_deferred_synchronized_output_reset();
 
                     // Begin synchronized output so the terminal buffers
                     // all writes atomically (mode 2026).
                     begin_renderer_transaction(stdout, deferred_release)?;
 
                     // Handle alternate screen transitions
-                    if was_in_alt != esc.in_alternate_screen {
+                    if was_in_alt != output.escape.in_alternate_screen {
                         renderer.invalidate();
                     }
 
-                    renderer.make_room(stdout, vt, &esc)?;
+                    renderer.make_room(stdout, vt, &output.escape)?;
 
-                    if esc.clear_scrollback {
+                    if output.escape.clear_scrollback {
                         queue!(stdout, Clear(ClearType::Purge))?;
                     }
 
@@ -2249,23 +2265,23 @@ impl ShellSession {
                     // End synchronized output and flush. For an
                     // application-owned transaction, its original reset is
                     // deliberately emitted only after the completed frame.
-                    finish_renderer_transaction(stdout, &mut esc, true)?;
+                    finish_renderer_transaction(stdout, &mut output.escape, true)?;
                     stdout.flush()?;
                 }
 
                 Event::PtyExit(exit_code) => {
                     let synchronized = synchronized_output_active(vt);
-                    let deferred_release = esc.has_deferred_synchronized_output_reset();
+                    let deferred_release = output.escape.has_deferred_synchronized_output_reset();
                     if synchronized {
                         // Present the final deferred frame before releasing
                         // mode 2026, even if the child exits without doing so.
                         renderer.render_with_scroll(stdout, vt)?;
                     }
-                    self.clear_status_row(stdout, esc.in_alternate_screen)?;
-                    escape_state_cleanup(&esc, stdout)?;
+                    self.clear_status_row(stdout, output.escape.in_alternate_screen)?;
+                    escape_state_cleanup(&output.escape, stdout)?;
                     finish_renderer_transaction(
                         stdout,
-                        &mut esc,
+                        &mut output.escape,
                         synchronized || deferred_release,
                     )?;
                     stdout.flush()?;
@@ -2318,7 +2334,7 @@ impl ShellSession {
                         // enabled mode 2048. Sending it unconditionally
                         // causes shells that don't understand it to display
                         // the raw escape sequence as input text.
-                        if esc.in_band_resize {
+                        if output.escape.in_band_resize {
                             let cmd = InBandResizeNotification {
                                 rows: pty_size.rows,
                                 cols: pty_size.cols,
@@ -2342,7 +2358,7 @@ impl ShellSession {
                         renderer.invalidate();
                         if !synchronized_output_active(vt) {
                             renderer.render_with_scroll(stdout, vt)?;
-                            if self.config.show_status_line && !esc.in_alternate_screen {
+                            if self.config.show_status_line && !output.escape.in_alternate_screen {
                                 self.status_line.draw(stdout, cols, rows)?;
                             }
                             renderer.write_cursor(stdout, vt)?;
@@ -2362,13 +2378,13 @@ impl ShellSession {
         }
 
         let synchronized = synchronized_output_active(vt);
-        let deferred_release = esc.has_deferred_synchronized_output_reset();
+        let deferred_release = output.escape.has_deferred_synchronized_output_reset();
         if synchronized {
             renderer.render_with_scroll(stdout, vt)?;
         }
-        self.clear_status_row(stdout, esc.in_alternate_screen)?;
-        escape_state_cleanup(&esc, stdout)?;
-        finish_renderer_transaction(stdout, &mut esc, synchronized || deferred_release)?;
+        self.clear_status_row(stdout, output.escape.in_alternate_screen)?;
+        escape_state_cleanup(&output.escape, stdout)?;
+        finish_renderer_transaction(stdout, &mut output.escape, synchronized || deferred_release)?;
         stdout.flush()?;
         Ok(None)
     }
@@ -3836,8 +3852,7 @@ mod tests {
             // child through the virtual hook.
             (b"\x1b[?7;1$y", false),
             (b"\x1b[?2048;5$y", false),
-            (b"\x1b]10;rgb:0000/0000/0000\x1b\\", true),
-            (b"\x1b]4;0;rgb:0000/0000/0000\x1b\\", false),
+            (b"\x1b]10;rgb:0000/0000/0000\x1b\\", false),
             (b"\x1bP>|libghostty\x1b\\", false),
             (b"\x1b[48;23;80;0;0t", false),
             (b"\x1b[;80R", false),
@@ -3886,45 +3901,70 @@ mod tests {
         assert!(replies.borrow().bytes.is_empty());
     }
 
+    #[cfg(unix)]
     #[test]
-    fn virtual_color_and_cursor_replies_follow_query_order() {
-        for background in [
-            None,
-            Some(RgbColor {
-                r: 0x12,
-                g: 0x34,
-                b: 0x56,
-            }),
-        ] {
-            let replies = RefCell::new(VirtualPtyReplies::default());
-            let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
-            vt.set_default_bg_color(background).unwrap();
-            vt.on_pty_write(|_, data| replies.borrow_mut().capture(data))
-                .unwrap();
+    fn pty_output_places_status_requests_after_outer_queries() {
+        let mut command = CommandBuilder::new("sleep");
+        command.arg("5");
+        let size = PtySize {
+            cols: COLS,
+            rows: ROWS,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        let pty = Pty::spawn(command, size).unwrap();
+        let virtual_replies = RefCell::new(VirtualPtyReplies::default());
+        let mut vt = test_vt(DEFAULT_MAX_SCROLLBACK);
+        vt.on_pty_write(|_, bytes| virtual_replies.borrow_mut().capture(bytes))
+            .unwrap();
+        let mut renderer = test_renderer(&vt);
+        let mut output = PtyOutput {
+            pty: &pty,
+            virtual_replies: &virtual_replies,
+            scanner: EscapeScanner::new(),
+            input_filter: VtInputFilter::new(),
+            events: Vec::new(),
+            input: Vec::new(),
+            escape: EscapeState::new(),
+            replies: TerminalReplies::new(true),
+        };
+        let mut outer = Vec::new();
+        output
+            .process(
+                b"\x1b]11;?\x1b\\\x1b[c\x1b[3;4H\x1b[",
+                &mut outer,
+                size,
+                &mut vt,
+                &mut renderer,
+            )
+            .unwrap();
+        output
+            .process(
+                b"6n\x1b[18t\x1bP+q544e\x1b\\\x1b[4;5H\x1b[6n",
+                &mut outer,
+                size,
+                &mut vt,
+                &mut renderer,
+            )
+            .unwrap();
+        assert_eq!(
+            outer,
+            b"\x1b]11;?\x1b\\\x1b[c\x1b[5n\x1bP+q544e\x1b\\\x1b[5n"
+        );
 
-            vt.vt_write(b"\x1b[3;4H\x1b]11;");
-            vt.vt_write(b"?\x1b\\\x1b[6n");
-            let expected = if background.is_some() {
-                b"\x1b]11;rgb:1212/3434/5656\x1b\\\x1b[3;4R".as_slice()
-            } else {
-                b"\x1b[3;4R".as_slice()
-            };
-            assert_eq!(replies.borrow().bytes, expected);
-
-            let foreground = RgbColor {
-                r: 0xff,
-                g: 0,
-                b: 0,
-            };
-            vt.set_default_fg_color(Some(foreground)).unwrap();
-            vt.set_default_cursor_color(Some(foreground)).unwrap();
-            replies.borrow_mut().bytes.clear();
-            vt.vt_write(b"\x1b]10;?;rgb:00/ff/00;?\x07\x1b]11;?\x07");
-            assert_eq!(
-                replies.borrow().bytes,
-                b"\x1b]10;rgb:ffff/0000/0000\x07\x1b]12;rgb:ffff/0000/0000\x07\x1b]11;rgb:0000/ffff/0000\x07"
-            );
-        }
+        let mut received = Vec::new();
+        output
+            .replies
+            .forward_input(
+                b"\x1b]11;rgb:1212/3434/5656\x1b\\\x1b[?62;1c\x1b[0n\x1bP1+r544e=7874\x1b\\\x1b[0n",
+                |bytes| received.write_all(bytes),
+            )
+            .unwrap();
+        assert_eq!(
+            received,
+            b"\x1b]11;rgb:1212/3434/5656\x1b\\\x1b[?62;1c\x1b[3;4R\x1b[8;5;20t\x1bP1+r544e=7874\x1b\\\x1b[4;5R"
+        );
+        pty.kill().unwrap();
     }
 
     /// Regression test for devenv#2845: when the process-wide shutdown token is
