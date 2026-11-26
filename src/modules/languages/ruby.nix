@@ -20,13 +20,33 @@ let
     done
   '';
 
-  # Build solargraph LSP with the user's Ruby using bundlerEnv.
-  # This ensures native extensions are compiled against the correct Ruby.
-  lspEnv = pkgs.bundlerEnv {
-    name = "solargraph-lsp";
-    ruby = cfg.package;
-    gemdir = ../lib/ruby-lsp;
+  lspGemset = import ../lib/ruby-lsp/gemset.nix;
+
+  # Nokogiri 1.19 requires Ruby 3.2. Keep the gem and lockfile in sync on older Ruby.
+  legacyNokogiri = lspGemset.nokogiri // {
+    version = "1.18.10";
+    source = lspGemset.nokogiri.source // {
+      sha256 = "1hcwwr2h8jnqqxmf8mfb52b0dchr7pm064ingflb78wa00qhgk6m";
+    };
   };
+
+  # Build native extensions against the user's Ruby.
+  lspEnv = pkgs.bundlerEnv (
+    {
+      name = "solargraph-lsp";
+      ruby = cfg.package;
+      gemdir = ../lib/ruby-lsp;
+    }
+    // lib.optionalAttrs (lib.versionOlder (toString cfg.package.version) "3.2") {
+      gemset = lspGemset // { nokogiri = legacyNokogiri; };
+      lockfile = pkgs.writeText "Gemfile.lock" (
+        builtins.replaceStrings
+          [ "    nokogiri (${lspGemset.nokogiri.version})\n" ]
+          [ "    nokogiri (${legacyNokogiri.version})\n" ]
+          (builtins.readFile ../lib/ruby-lsp/Gemfile.lock)
+      );
+    }
+  );
 
   lspPackage =
     if usingCustomRuby
