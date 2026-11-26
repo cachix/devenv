@@ -14,6 +14,7 @@ mod session;
 mod status_line;
 mod terminal;
 pub mod terminal_commands;
+mod terminal_replies;
 pub mod vt_utils;
 
 // Protocol types

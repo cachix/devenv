@@ -13,6 +13,7 @@
 
 ### Bug Fixes
 
+- Fixed terminal replies arriving out of order in `devenv shell`, which could break color detection in commands such as `gh`.
 - On macOS, `devenv shell` rescans watched files after FSEvents drops notifications without restarting the event stream ([#3403](https://github.com/cachix/devenv/issues/3403)).
 - Fixed a two-second TUI startup delay on terminals that do not answer keyboard capability queries, including during direnv shell activation. Interactive progress remains available for `direnv-export` and `print-dev-env` ([#3169](https://github.com/cachix/devenv/issues/3169)).
 - Foreground `devenv up` now publishes its manager before service readiness, so other `devenv up` calls can detect it during startup. Failed publication cancels setup tasks before cleaning up.
