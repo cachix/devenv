@@ -218,10 +218,13 @@ assert machine.succeed("cat /run/devenv-test-fault-phase").strip() == "switching
 assert_recovery("rolled-back", (1, 0), original)
 
 # A controller that dies while waiting for confirmation must not keep the
-# target from rolling back when nobody confirms.
+# target from rolling back when nobody confirms. Allow the same activation
+# budget as the following scenarios that need to reach confirmation.
+plan["machines"]["server"]["nixos"]["executor"] = confirmation_executor_package
+plan_file.write_text(json.dumps(plan))
 begin_fault("controller-exit")
 proc, log = start_cli("apply", str(plan_file))
-machine.wait_until_succeeds("test -e /run/devenv-test-confirm-waiting", timeout=60)
+machine.wait_until_succeeds("test -e /run/devenv-test-confirm-waiting", timeout=120)
 proc.terminate()
 finish(proc, log, False)
 assert_recovery("rolled-back", (1, 1), original)
@@ -229,8 +232,6 @@ assert_recovery("rolled-back", (1, 1), original)
 # One dropped status round trip is a gap, not a decision: the controller keeps
 # watching the same transaction, confirms it, and starts nothing twice. The
 # fault fires once while the target is switching; later polls pass through.
-plan["machines"]["server"]["nixos"]["executor"] = confirmation_executor_package
-plan_file.write_text(json.dumps(plan))
 begin_fault("status-transient")
 proc, log = start_cli("apply", str(plan_file))
 output = finish(proc, log, True)

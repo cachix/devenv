@@ -15,8 +15,16 @@ set -eux
 
 export DEVENV_NO_AI_AGENT=1
 
-PORT_ALPHA=18641
-PORT_BETA=18642
+PORT_ALPHA=
+ALPHA_PORT_FILE=.devenv/state/alpha-port
+
+start_daemon() {
+  rm -f "$ALPHA_PORT_FILE"
+  devenv up -d >/dev/null 2>&1
+  devenv processes wait
+  wait_until 30 test -s "$ALPHA_PORT_FILE"
+  read -r PORT_ALPHA < "$ALPHA_PORT_FILE"
+}
 
 PROCESS_RUNTIME_DIR="$(devenv_runtime_dir)/processes"
 PID_FILE="$PROCESS_RUNTIME_DIR/native-manager.pid"
@@ -57,18 +65,9 @@ cleanup() {
     echo "alpha port remained bound after cleanup" >&2
     status=1
   fi
-  if http_is_ready "$PORT_BETA"; then
-    echo "beta port remained bound after cleanup" >&2
-    status=1
-  fi
   exit "$status"
 }
 trap cleanup EXIT INT TERM
-
-if http_is_ready "$PORT_ALPHA" || http_is_ready "$PORT_BETA"; then
-  echo "test ports are already in use" >&2
-  exit 1
-fi
 
 # The attach pane shows only the newest log lines, so sessions may only
 # expect text that is near the tail: fresh markers, or a "Serving HTTP" the
@@ -97,17 +96,17 @@ EOF
   esac
 }
 
-devenv up -d >/dev/null 2>&1
-devenv processes wait
+start_daemon
 DAEMON_PID=$(sed -n '1p' "$PID_FILE")
 kill -0 "$DAEMON_PID"
 
 # E04: plain interactive `devenv up` attaches and a second Ctrl-C detaches.
 # Readiness probes can push the startup line out of the visible log backlog.
 # Check readiness directly, then synchronize on a fresh request marker.
+# Allow for lock validation and evaluation before the attach client opens.
 http_is_ready "$PORT_ALPHA"
 set +e
-devenv-run-tests pty plain-up.typescript "devenv up" >/dev/null <<EOF
+devenv-run-tests pty --step-timeout 90 plain-up.typescript "devenv up" >/dev/null <<EOF
 expect:Attached to the running process manager
 run:curl -s -o /dev/null http://127.0.0.1:$PORT_ALPHA/plain-up-marker
 expect:plain-up-marker
@@ -255,7 +254,7 @@ grep -q "different configuration" config-skew.txt
 grep -q "devenv processes down" config-skew.txt
 test "$(sed -n '1p' "$PID_FILE")" = "$DAEMON_PID"
 http_is_ready "$PORT_ALPHA"
-if http_is_ready "$PORT_BETA"; then
+if [ -e .devenv/state/beta-started ]; then
   echo "unknown beta process launched in the old graph" >&2
   exit 1
 fi
@@ -284,8 +283,7 @@ wait_for_path_gone "$PID_FILE"
 wait_for_path_gone "$SOCKET_FILE"
 
 # E08: losing the daemon externally is reported as an error, not a detach.
-devenv up -d >/dev/null 2>&1
-devenv processes wait
+start_daemon
 DAEMON_PID=$(sed -n '1p' "$PID_FILE")
 set +e
 devenv-run-tests pty manager-loss.typescript "devenv processes attach" >/dev/null <<EOF

@@ -4,6 +4,22 @@ let
   cfg = config.services.opentelemetry-collector;
   types = lib.types;
 
+  # This release depends on cockroachdb/swiss, which uses Go runtime internals
+  # and does not build with Go 1.27. Keep the Nixpkgs package on other releases.
+  defaultPackage =
+    if
+      pkgs.opentelemetry-collector-contrib.version == "0.155.0"
+      && pkgs ? buildGo126Module
+      && pkgs ? opentelemetry-collector-releases
+      && pkgs.opentelemetry-collector-releases ? override
+      && lib.versions.majorMinor pkgs.go.version == "1.27"
+    then
+      (pkgs.opentelemetry-collector-releases.override {
+        buildGoModule = pkgs.buildGo126Module;
+      }).otelcol-contrib
+    else
+      pkgs.opentelemetry-collector-contrib;
+
   settingsFormat = pkgs.formats.yaml { };
 
   defaultSettings = {
@@ -142,7 +158,7 @@ in
     package = lib.mkOption {
       type = types.package;
       description = "The OpenTelemetry Collector package to use";
-      default = pkgs.opentelemetry-collector-contrib;
+      default = defaultPackage;
       defaultText = lib.literalExpression "pkgs.opentelemetry-collector-contrib";
     };
 

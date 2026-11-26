@@ -25,11 +25,11 @@ echo "=== Testing file content integrity ==="
 
 # Test opencode.jsonc structure
 echo "Validating opencode.jsonc structure..."
-assert_file_contains "opencode.jsonc" '"$schema"'
-assert_file_contains "opencode.jsonc" '"editor"'
-assert_file_contains "opencode.jsonc" '"theme"'
-assert_file_contains "opencode.jsonc" '"mcp"'
-assert_file_contains "opencode.jsonc" '"local-dev"'
+assert_file_contains ".opencode/opencode.jsonc" '"$schema"'
+assert_file_contains ".opencode/opencode.jsonc" '"editor"'
+assert_file_contains ".opencode/opencode.jsonc" '"theme"'
+assert_file_contains ".opencode/opencode.jsonc" '"mcp"'
+assert_file_contains ".opencode/opencode.jsonc" '"local-dev"'
 
 # Test that external file content matches source exactly
 echo "Validating directory command file matches source..."

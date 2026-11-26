@@ -2,6 +2,7 @@
 set -ex
 
 wait_for_port $VARNISH_PORT
+varnishadm ping
 
 caddy=$(curl http://localhost:8001)
 varnish=$(curl http://localhost:$VARNISH_PORT)
