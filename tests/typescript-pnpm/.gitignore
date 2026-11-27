@@ -1,0 +1,4 @@
+.devenv*
+devenv.lock
+node_modules/
+pnpm-lock.yaml
