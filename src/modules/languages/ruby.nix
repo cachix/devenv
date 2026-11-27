@@ -20,13 +20,20 @@ let
     done
   '';
 
-  # Build solargraph LSP with the user's Ruby using bundlerEnv.
-  # This ensures native extensions are compiled against the correct Ruby.
-  lspEnv = pkgs.bundlerEnv {
-    name = "solargraph-lsp";
-    ruby = cfg.package;
-    gemdir = ../lib/ruby-lsp;
-  };
+  lspBundle = import ../lib/ruby-lsp/bundle.nix (toString cfg.package.version);
+
+  # Build native extensions against the user's Ruby.
+  lspEnv = pkgs.bundlerEnv (
+    {
+      name = "solargraph-lsp";
+      ruby = cfg.package;
+      gemdir = ../lib/ruby-lsp;
+    }
+    // lib.optionalAttrs lspBundle.legacy {
+      inherit (lspBundle) gemset;
+      lockfile = pkgs.writeText "Gemfile.lock" lspBundle.lockfile;
+    }
+  );
 
   lspPackage =
     if usingCustomRuby
