@@ -31,5 +31,8 @@
       text = "#!/bin/bash\necho hello";
       executable = true;
     };
+
+    "src.txt".source = pkgs.writeText "src.txt" "foo";
+    "src-dir".source = pkgs.writeTextDir "foo.txt" "foo";
   };
 }
