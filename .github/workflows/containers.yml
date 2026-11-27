@@ -107,7 +107,7 @@ jobs:
           EOF
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@v32
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v17

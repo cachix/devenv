@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Machines now accept existing NixOS, nix-darwin, and Home Manager configurations from flake inputs.
 - Added Groovy language support via `languages.groovy.enable`. Provides the Groovy CLI, and the language server.
 - `q` now detaches from `devenv processes attach` straight away, leaving the processes running, and detaches from its interrupt prompt too. In a foreground `devenv up`, where quitting stops the processes, `q` opens the quit prompt ([#3264](https://github.com/cachix/devenv/issues/3264)).
 - Added the `tui.emoji` user setting. Set it to `false` to replace the emoji in the interactive shell status line, such as the eye in `devenv watching 11 files`, with non-emoji Unicode glyphs. It defaults to `true`, and the status line stays visible with file watching and automatic reload unchanged.
@@ -13,6 +14,7 @@
 ### Bug Fixes
 
 - Fixed nested input overrides in `devenv.yaml` being silently ignored below the first level ([#3378](https://github.com/cachix/devenv/issues/3378)).
+- On macOS, `devenv shell` rescans watched files after FSEvents drops notifications without restarting the event stream ([#3403](https://github.com/cachix/devenv/issues/3403)).
 - Fixed a two-second TUI startup delay on terminals that do not answer keyboard capability queries, including during direnv shell activation. Interactive progress remains available for `direnv-export` and `print-dev-env` ([#3169](https://github.com/cachix/devenv/issues/3169)).
 - Foreground `devenv up` now publishes its manager before service readiness, so other `devenv up` calls can detect it during startup. Failed publication cancels setup tasks before cleaning up.
 - Foreground and detached native process startup now share a lock, preventing simultaneous cold starts from overwriting each other's manager socket and PID file. Waiting for the lock can be cancelled, and competing callers preserve the winning manager's proxy routes.

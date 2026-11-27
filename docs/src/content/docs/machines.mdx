@@ -2,6 +2,8 @@
 title: "Machines"
 ---
 
+import VersionCompatibility from '@cachix/site-kit/ui/VersionCompatibility.astro';
+
 :::caution[Experimental]
 
 Machines are new in devenv 2.4. The interface may change before it is declared stable.
@@ -23,7 +25,7 @@ A machine is a NixOS, nix-darwin, or home-manager configuration defined in `deve
 
 ## Define a machine
 
-A machine needs a name and at least one role. NixOS machines require the disko input, even when you only deploy to an existing host:
+A machine needs a name and at least one role. When devenv evaluates a NixOS module for you, add the disko input:
 
 ```sh
 devenv inputs add disko github:nix-community/disko --follows nixpkgs
@@ -43,6 +45,25 @@ This example updates a host whose NixOS module already includes its hardware con
 ```
 
 The imported file is a normal NixOS module. Give it the services, users, bootloader, and hardware configuration that the host needs. You can also define the module inline.
+
+### Use an existing configuration
+
+<VersionCompatibility version="2.4.1" />
+
+You can pass an evaluated configuration from another input directly:
+
+```nix title="devenv.nix"
+{ inputs, ... }: {
+  machines.server = {
+    target.host = "root@server.example.com";
+    nixos = inputs.infrastructure.nixosConfigurations.server;
+  };
+}
+```
+
+The same interface accepts `darwinConfigurations.<name>` under `nix-darwin` and `homeConfigurations.<name>` under `home-manager`. Add the input containing those configurations to `devenv.yaml`. Devenv infers the machine architecture from the configuration.
+
+For NixOS, devenv extends the original module graph with its recovery and access-check modules. It preserves the configuration's Nixpkgs, overlays, and module arguments. The resulting system can differ from the original output. Existing configurations own their disk layout and hardware configuration: devenv does not add disko or wire in a facter report for them. Deployment does not require disko, but `machines install` requires disko in the supplied configuration.
 
 `target.host` is the SSH destination: `user@host`, `user@host:port`, or `ssh://user@host:port`. NixOS deployment and installation require root SSH. A nix-darwin deployment can use an administrator with passwordless `sudo`. A home-manager-only machine can omit `target.host` to activate locally. Setting it to `localhost` still uses SSH.
 

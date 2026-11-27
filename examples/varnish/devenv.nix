@@ -1,8 +1,7 @@
-{ pkgs, ... }:
+{ ... }:
 {
   services.varnish = {
     enable = true;
-    package = pkgs.varnish;
     vcl = ''
       vcl 4.0;
 

@@ -6,3 +6,5 @@ inputs:
     inputs:
       nixpkgs:
         follows: nixpkgs
+  pkl-nixpkgs:
+    url: github:cachix/devenv-nixpkgs/d97234e58d4e90e3bf77c082fc3b546e51200938

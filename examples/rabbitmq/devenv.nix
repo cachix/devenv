@@ -1,6 +1,9 @@
 { pkgs, lib, ... }:
 
 {
+  # Keep the example clear of the standard EPMD ports on shared runners.
+  processes.rabbitmq.ports.epmd.allocate = 24369;
+
   services.rabbitmq = {
     enable = true;
     managementPlugin = {

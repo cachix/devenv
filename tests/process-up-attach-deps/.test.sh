@@ -22,11 +22,16 @@ set -ex
 # The assertions below grep info-level messages ("Scheduled: ..."); the
 # AI-agent auto-quiet mode would suppress them, so opt out.
 export DEVENV_NO_AI_AGENT=1
-export DEVENV_RUNTIME="$PWD/.runtime"
+PROCESS_RUNTIME_DIR="$(devenv_runtime_dir)/processes"
 
-PORT_ALPHA=18581
-PORT_BETA=18582
-PORT_GAMMA=18583
+PORT_ALPHA=
+PORT_BETA=
+PORT_GAMMA=
+
+load_port() {
+  local port_file=".devenv/state/$1-port"
+  wait_until 30 test -s "$port_file" && read -r "$2" < "$port_file"
+}
 
 cleanup() {
   status=$?
@@ -39,7 +44,7 @@ cleanup() {
         cat "$file" >&2 || true
       fi
     done
-    for file in .runtime/processes/daemon.log .runtime/processes/logs/*; do
+    for file in "$PROCESS_RUNTIME_DIR"/daemon.log "$PROCESS_RUNTIME_DIR"/logs/*; do
       if [ -f "$file" ]; then
         echo "==> $file <==" >&2
         tail -n 80 "$file" >&2 || true
@@ -57,6 +62,9 @@ trap cleanup EXIT INT TERM
 # Start all three; beta comes up once gamma is ready.
 devenv up -d
 devenv processes wait
+load_port alpha PORT_ALPHA
+load_port beta PORT_BETA
+load_port gamma PORT_GAMMA
 wait_for_http_ready "$PORT_ALPHA" || { echo "FAIL: alpha did not start"; devenv processes down || true; exit 1; }
 wait_for_http_ready "$PORT_GAMMA" || { echo "FAIL: gamma did not start"; devenv processes down || true; exit 1; }
 wait_for_http_ready "$PORT_BETA"  || { echo "FAIL: beta did not start"; devenv processes down || true; exit 1; }

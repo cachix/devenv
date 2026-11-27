@@ -44,7 +44,7 @@ true
 
 
 
-Which Varnish package to use.
+Which Varnish or Vinyl Cache package to use.
 
 
 
@@ -54,10 +54,7 @@ package
 
 
 *Default:*
-
-```nix
-pkgs.varnish
-```
+` pkgs.varnish ` when available, otherwise ` pkgs.vinyl-cache `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
