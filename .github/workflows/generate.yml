@@ -16,6 +16,9 @@ jobs:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check Ruby LSP gem versions
+        run: nix eval --offline --file src/modules/lib/ruby-lsp/check.nix
+
       - uses: cachix/cachix-action@v17
         with:
           name: devenv
