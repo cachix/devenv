@@ -232,7 +232,12 @@ pub fn load_lock_file(
 
 /// Write a lock file to disk, only if content changed (to preserve mtime for direnv)
 pub fn write_lock_file(lock_file: &LockFile, output_path: &Path) -> Result<()> {
-    let lock_json = lock_file.to_string()?;
+    // Nix serializes the lock without a trailing newline; like `nix flake lock`,
+    // append one so the file is a valid POSIX text file.
+    let mut lock_json = lock_file.to_string()?;
+    if !lock_json.ends_with('\n') {
+        lock_json.push('\n');
+    }
     // Compare with existing content to avoid updating mtime unnecessarily.
     // direnv watches the lock file and uses mtime to detect changes.
     if let Ok(existing) = std::fs::read_to_string(output_path)
