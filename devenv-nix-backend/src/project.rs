@@ -258,7 +258,10 @@ pub fn resolve_project(
         .into_iter()
         // A deferred alias has no node to update until its target is known.
         .filter(|name: &String| {
-            !pending_follows.contains_key(name.split('/').next().unwrap_or(name))
+            !pending_follows.contains_key(name)
+                && !name
+                    .match_indices('/')
+                    .any(|(i, _)| pending_follows.contains_key(&name[..i]))
         })
         .collect();
         let candidate = crate::resolve_lock_file(
@@ -362,19 +365,29 @@ fn discovery_inputs(
             *input = Input::default();
             continue;
         }
-        input.inputs.retain(|nested_name, nested| {
-            if let Some(target) = &nested.follows
-                && !target.is_empty()
-                && !available.contains(target.split('/').next().unwrap())
-            {
-                pending.insert(format!("{name}/{nested_name}"), target.clone());
-                false
-            } else {
-                true
-            }
-        });
+        defer_nested_follows(&mut input.inputs, name, &available, &mut pending);
     }
     (discovery, pending)
+}
+
+fn defer_nested_follows(
+    inputs: &mut BTreeMap<String, Input>,
+    parent: &str,
+    available: &BTreeSet<&str>,
+    pending: &mut BTreeMap<String, String>,
+) {
+    inputs.retain(|name, input| {
+        let path = format!("{parent}/{name}");
+        if let Some(target) = &input.follows
+            && !target.is_empty()
+            && !available.contains(target.split('/').next().unwrap())
+        {
+            pending.insert(path, target.clone());
+            return false;
+        }
+        defer_nested_follows(&mut input.inputs, &path, available, pending);
+        true
+    });
 }
 
 /// Keep root edges absent from an incomplete candidate. Node IDs are local to

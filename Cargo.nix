@@ -20491,8 +20491,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/nix-bindings-rust.git";
-          rev = "53ba0ed2962ceb18303f5b2fbca1cd0fb88df135";
-          sha256 = "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk";
+          rev = "bae083c5ac2a71cf6564f17e1fee4ee17a5eb51f";
+          sha256 = "02g5fgw2fy4m9hq93yysjynsyx2md2k5y5bdypgs6600kllk4xka";
         };
         libName = "nix_bindings_bindgen_raw";
         buildDependencies = [
@@ -20514,8 +20514,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/nix-bindings-rust.git";
-          rev = "53ba0ed2962ceb18303f5b2fbca1cd0fb88df135";
-          sha256 = "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk";
+          rev = "bae083c5ac2a71cf6564f17e1fee4ee17a5eb51f";
+          sha256 = "02g5fgw2fy4m9hq93yysjynsyx2md2k5y5bdypgs6600kllk4xka";
         };
         libName = "nix_bindings_expr";
         dependencies = [
@@ -20565,8 +20565,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/nix-bindings-rust.git";
-          rev = "53ba0ed2962ceb18303f5b2fbca1cd0fb88df135";
-          sha256 = "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk";
+          rev = "bae083c5ac2a71cf6564f17e1fee4ee17a5eb51f";
+          sha256 = "02g5fgw2fy4m9hq93yysjynsyx2md2k5y5bdypgs6600kllk4xka";
         };
         libName = "nix_bindings_fetchers";
         dependencies = [
@@ -20608,8 +20608,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/nix-bindings-rust.git";
-          rev = "53ba0ed2962ceb18303f5b2fbca1cd0fb88df135";
-          sha256 = "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk";
+          rev = "bae083c5ac2a71cf6564f17e1fee4ee17a5eb51f";
+          sha256 = "02g5fgw2fy4m9hq93yysjynsyx2md2k5y5bdypgs6600kllk4xka";
         };
         libName = "nix_bindings_flake";
         dependencies = [
@@ -20663,8 +20663,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/nix-bindings-rust.git";
-          rev = "53ba0ed2962ceb18303f5b2fbca1cd0fb88df135";
-          sha256 = "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk";
+          rev = "bae083c5ac2a71cf6564f17e1fee4ee17a5eb51f";
+          sha256 = "02g5fgw2fy4m9hq93yysjynsyx2md2k5y5bdypgs6600kllk4xka";
         };
         libName = "nix_bindings_store";
         dependencies = [
@@ -20700,8 +20700,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/nix-bindings-rust.git";
-          rev = "53ba0ed2962ceb18303f5b2fbca1cd0fb88df135";
-          sha256 = "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk";
+          rev = "bae083c5ac2a71cf6564f17e1fee4ee17a5eb51f";
+          sha256 = "02g5fgw2fy4m9hq93yysjynsyx2md2k5y5bdypgs6600kllk4xka";
         };
         libName = "nix_bindings_util";
         dependencies = [
@@ -20727,8 +20727,8 @@ rec {
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/cachix/nix-bindings-rust.git";
-          rev = "53ba0ed2962ceb18303f5b2fbca1cd0fb88df135";
-          sha256 = "1d1pgia2g2wiy0q392jgfmqsxlkiba2p4vk9ffzp5rjxx0cla3bk";
+          rev = "bae083c5ac2a71cf6564f17e1fee4ee17a5eb51f";
+          sha256 = "02g5fgw2fy4m9hq93yysjynsyx2md2k5y5bdypgs6600kllk4xka";
         };
         libName = "nix_cmd";
         dependencies = [

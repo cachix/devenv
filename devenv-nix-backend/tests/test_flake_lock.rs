@@ -2,6 +2,7 @@
 //! Integration tests for flake locking.
 
 use devenv_core::{Config, NixOptions};
+use devenv_nix_backend::project::{ProjectConfig, UpdatePolicy, resolve_project};
 use devenv_nix_backend::{load_lock_file, lock};
 use devenv_nix_backend_macros::nix_test;
 use nix_bindings_fetchers::FetchersSettings;
@@ -112,6 +113,95 @@ async fn test_full_workflow() {
         lock.ends_with("}\n"),
         "lock should end with a single trailing newline"
     );
+}
+
+#[nix_test]
+async fn nested_follows_preserve_the_upstream_parent_in_fresh_and_existing_locks() {
+    let root = TempDir::new().unwrap();
+    let shallow_yaml = r#"inputs:
+  nixpkgs:
+    url: path:./replacement
+  devenv:
+    follows: nixpkgs
+  a:
+    url: path:./a
+    inputs:
+      direct:
+        follows: nixpkgs
+"#;
+    let yaml = format!(
+        "{shallow_yaml}      b:\n        inputs:\n          c:\n            follows: nixpkgs\n"
+    );
+    let yaml_path = root.path().join("devenv.yaml");
+    fs::write(&yaml_path, &yaml).unwrap();
+    fs::write(root.path().join("devenv.nix"), common::DEFAULT_NIX).unwrap();
+
+    for (dir, flake) in [
+        (
+            "a",
+            r#"{
+                inputs.b.url = "path:./b";
+                inputs.direct.url = "path:./b/c";
+                outputs = _: {};
+            }"#,
+        ),
+        ("a/b", r#"{ inputs.c.url = "path:./c"; outputs = _: {}; }"#),
+        ("a/b/c", "{ outputs = _: {}; }"),
+        ("replacement", "{ outputs = _: {}; }"),
+    ] {
+        let dir = root.path().join(dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("flake.nix"), flake).unwrap();
+    }
+
+    let _cwd = common::CwdGuard::enter(root.path());
+    let project = ProjectConfig::new(root.path());
+    let update = |policy| {
+        resolve_project(
+            &project,
+            NixOptions {
+                offline: Some(true),
+                ..Default::default()
+            },
+            policy,
+        )
+        .expect("resolve project")
+        .write_lock()
+        .expect("write lock");
+    };
+    let lock_path = root.path().join("devenv.lock");
+    let read_lock = || -> serde_json::Value {
+        serde_json::from_slice(&fs::read(&lock_path).expect("read lock")).expect("parse lock")
+    };
+    let assert_follows = || {
+        let lock = read_lock();
+        let nodes = &lock["nodes"];
+        let root = lock["root"].as_str().unwrap();
+        let a = nodes[root]["inputs"]["a"].as_str().unwrap();
+        let b = nodes[a]["inputs"]["b"].as_str().unwrap();
+        assert_eq!(nodes[a]["inputs"]["direct"], serde_json::json!(["nixpkgs"]));
+        assert_eq!(nodes[b]["original"]["path"], "./b");
+        assert_eq!(nodes[b]["parent"], serde_json::json!(["a"]));
+        assert_eq!(nodes[b]["inputs"]["c"], serde_json::json!(["nixpkgs"]));
+    };
+
+    update(UpdatePolicy::All);
+    assert_follows();
+
+    // Recreate the old lock graph, which lost the override for a/b/c.
+    fs::remove_file(&lock_path).unwrap();
+    fs::write(&yaml_path, shallow_yaml).unwrap();
+    update(UpdatePolicy::All);
+    let stale = read_lock();
+    let nodes = &stale["nodes"];
+    let root = stale["root"].as_str().unwrap();
+    let a = nodes[root]["inputs"]["a"].as_str().unwrap();
+    let b = nodes[a]["inputs"]["b"].as_str().unwrap();
+    assert!(nodes[b]["inputs"]["c"].is_string());
+
+    fs::write(&yaml_path, &yaml).unwrap();
+    update(UpdatePolicy::Input("nixpkgs"));
+    assert_follows();
 }
 
 #[nix_test]
