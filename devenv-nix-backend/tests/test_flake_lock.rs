@@ -108,6 +108,10 @@ async fn test_full_workflow() {
     let lock = fs::read_to_string(env.path().join("devenv.lock")).expect("read lock");
     assert!(lock.contains("\"nodes\""), "lock should have nodes");
     assert!(lock.contains("nixpkgs"));
+    assert!(
+        lock.ends_with("}\n"),
+        "lock should end with a single trailing newline"
+    );
 }
 
 #[nix_test]
