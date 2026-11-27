@@ -864,6 +864,8 @@ mod tests {
             while started.elapsed() < shutdown_delay {
                 match control.accept() {
                     Ok((mut stream, _)) => {
+                        // On macOS an accepted stream can inherit the listener's nonblocking mode.
+                        stream.set_nonblocking(false).unwrap();
                         stream.set_read_timeout(Some(START_TIMEOUT)).unwrap();
                         let mut line = String::new();
                         BufReader::new(&stream).read_line(&mut line).unwrap();
