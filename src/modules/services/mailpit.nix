@@ -81,7 +81,7 @@ in
         before = [ "devenv:processes:mailpit" ];
       };
 
-      processes.mailpit.exec = "exec ${cfg.package}/bin/mailpit --db-file $DEVENV_STATE/mailpit/db.sqlite3 --listen ${lib.escapeShellArg uiAddr} --smtp ${lib.escapeShellArg smtpAddr} ${lib.escapeShellArgs cfg.additionalArgs}";
+      processes.mailpit.exec = "exec ${cfg.package}/bin/mailpit --database $DEVENV_STATE/mailpit/db.sqlite3 --listen ${lib.escapeShellArg uiAddr} --smtp ${lib.escapeShellArg smtpAddr} ${lib.escapeShellArgs cfg.additionalArgs}";
     }
 
     # An undeclared port is one devenv never allocates.
